@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Daylie</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_calendar">Calendar</string>
+    <string name="nav_stats">Stats</string>
+    <string name="nav_settings">More</string>
+
+    <!-- Entry editor -->
+    <string name="add_entry">Add entry</string>
+    <string name="edit_entry">Edit entry</string>
+    <string name="how_are_you">How are you?</string>
+    <string name="activities">Activities</string>
+    <string name="note">Note</string>
+    <string name="note_hint">Write something…</string>
+    <string name="save">Save</string>
+    <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
+
+    <!-- Reminders -->
+    <string name="reminder_channel_name">Daily reminder</string>
+    <string name="reminder_channel_desc">Reminds you to log your day</string>
+    <string name="reminder_title">How was your day?</string>
+    <string name="reminder_text">Take a moment to log how you feel.</string>
+</resources>
