@@ -1,0 +1,119 @@
+package com.daylie.app.ui
+
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import com.daylie.app.ui.activities.ActivitiesScreen
+import com.daylie.app.ui.calendar.CalendarScreen
+import com.daylie.app.ui.entry.EntryEditorScreen
+import com.daylie.app.ui.home.HomeScreen
+import com.daylie.app.ui.navigation.Routes
+import com.daylie.app.ui.navigation.TopLevelDestination
+import com.daylie.app.ui.settings.SettingsScreen
+import com.daylie.app.ui.stats.StatsScreen
+import kotlinx.coroutines.launch
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DaylieAppScaffold() {
+    val navController = rememberNavController()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route
+    val topLevelRoutes = TopLevelDestination.entries.map { it.route }
+    val showChrome = currentRoute in topLevelRoutes || currentRoute == null
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            if (showChrome) {
+                val title = TopLevelDestination.entries.firstOrNull { it.route == currentRoute }?.label
+                    ?: "Daylie"
+                TopAppBar(title = { Text(title) })
+            }
+        },
+        bottomBar = {
+            if (showChrome) {
+                NavigationBar {
+                    val destination = backStackEntry?.destination
+                    TopLevelDestination.entries.forEach { dest ->
+                        NavigationBarItem(
+                            selected = destination?.hierarchy?.any { it.route == dest.route } == true,
+                            onClick = {
+                                navController.navigate(dest.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            icon = { Icon(dest.icon, contentDescription = dest.label) },
+                            label = { Text(dest.label) },
+                        )
+                    }
+                }
+            }
+        },
+        floatingActionButton = {
+            if (currentRoute == Routes.HOME) {
+                FloatingActionButton(onClick = { navController.navigate(Routes.entry()) }) {
+                    Icon(Icons.Filled.Add, contentDescription = "Add entry")
+                }
+            }
+        },
+    ) { padding ->
+        NavHost(
+            navController = navController,
+            startDestination = Routes.HOME,
+            modifier = Modifier,
+        ) {
+            composable(Routes.HOME) {
+                HomeScreen(
+                    onEntryClick = { id -> navController.navigate(Routes.entry(id)) },
+                    modifier = Modifier.padding(padding),
+                )
+            }
+            composable(Routes.CALENDAR) {
+                CalendarScreen(modifier = Modifier.padding(padding))
+            }
+            composable(Routes.STATS) {
+                StatsScreen(modifier = Modifier.padding(padding))
+            }
+            composable(Routes.SETTINGS) {
+                SettingsScreen(
+                    onManageActivities = { navController.navigate(Routes.ACTIVITIES) },
+                    onShowMessage = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+                    modifier = Modifier.padding(padding),
+                )
+            }
+            composable(Routes.ENTRY_PATTERN) {
+                EntryEditorScreen(onDone = { navController.popBackStack() })
+            }
+            composable(Routes.ACTIVITIES) {
+                ActivitiesScreen(onBack = { navController.popBackStack() })
+            }
+        }
+    }
+}
