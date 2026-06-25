@@ -6,6 +6,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -13,6 +14,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.daylie.app.data.SettingsRepository
 import com.daylie.app.ui.DaylieAppScaffold
 import com.daylie.app.ui.lock.LockScreen
@@ -40,6 +44,18 @@ class MainActivity : FragmentActivity() {
             val lockEnabled = prefs?.let { settings.lockEnabled } ?: settings.lockEnabled
 
             var unlocked by remember { mutableStateOf(false) }
+
+            // Re-lock whenever the whole app goes to the background.
+            if (lockEnabled) {
+                DisposableEffect(Unit) {
+                    val owner = ProcessLifecycleOwner.get()
+                    val observer = LifecycleEventObserver { _, event ->
+                        if (event == Lifecycle.Event.ON_STOP) unlocked = false
+                    }
+                    owner.lifecycle.addObserver(observer)
+                    onDispose { owner.lifecycle.removeObserver(observer) }
+                }
+            }
 
             DaylieTheme(dynamicColor = dynamicColor) {
                 Surface(

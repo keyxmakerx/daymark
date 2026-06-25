@@ -3,6 +3,9 @@ package com.daylie.app.di
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.room.Room
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
+import javax.inject.Named
 import com.daylie.app.data.AppDatabase
 import com.daylie.app.data.dao.ActivityDao
 import com.daylie.app.data.dao.EntryDao
@@ -43,4 +46,21 @@ object AppModule {
     @Singleton
     fun provideSharedPreferences(@ApplicationContext context: Context): SharedPreferences =
         context.getSharedPreferences("daylie_settings", Context.MODE_PRIVATE)
+
+    /** AES-256 encrypted store for sensitive material (the PIN hash). */
+    @Provides
+    @Singleton
+    @Named("secure")
+    fun provideSecurePreferences(@ApplicationContext context: Context): SharedPreferences {
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        return EncryptedSharedPreferences.create(
+            context,
+            "daylie_secure",
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+        )
+    }
 }

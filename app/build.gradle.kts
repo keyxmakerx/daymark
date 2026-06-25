@@ -78,6 +78,8 @@ dependencies {
     ksp(libs.androidx.room.compiler)
 
     implementation(libs.androidx.biometric)
+    implementation(libs.androidx.security.crypto)
+    implementation(libs.androidx.lifecycle.process)
 
     implementation(libs.androidx.glance.appwidget)
 
