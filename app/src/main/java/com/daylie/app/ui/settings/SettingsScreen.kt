@@ -62,9 +62,10 @@ fun SettingsScreen(
         ActivityResultContracts.CreateDocument("application/json"),
     ) { uri -> uri?.let(viewModel::exportTo) }
 
+    var pendingImport by remember { mutableStateOf<android.net.Uri?>(null) }
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
-    ) { uri -> uri?.let(viewModel::importFrom) }
+    ) { uri -> pendingImport = uri }
 
     val csvLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/csv"),
@@ -152,7 +153,7 @@ fun SettingsScreen(
         )
         ListItem(
             headlineContent = { Text("Restore backup") },
-            supportingContent = { Text("Replace all data from a JSON file") },
+            supportingContent = { Text("Replace or merge from a JSON file") },
             modifier = Modifier.clickable { importLauncher.launch(arrayOf("application/json", "text/*")) },
         )
         ListItem(
@@ -204,6 +205,26 @@ fun SettingsScreen(
             onConfirm = { pin ->
                 viewModel.setPin(pin)
                 showPinDialog = false
+            },
+        )
+    }
+
+    pendingImport?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { pendingImport = null },
+            title = { Text("Restore backup") },
+            text = { Text("Replace all current data, or merge the backup's entries alongside what you have?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.importFrom(uri, com.daylie.app.backup.BackupManager.ImportMode.MERGE)
+                    pendingImport = null
+                }) { Text("Merge") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    viewModel.importFrom(uri, com.daylie.app.backup.BackupManager.ImportMode.REPLACE)
+                    pendingImport = null
+                }) { Text("Replace all") }
             },
         )
     }

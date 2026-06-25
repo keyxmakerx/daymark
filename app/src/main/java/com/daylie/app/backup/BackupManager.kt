@@ -114,10 +114,27 @@ class BackupManager @Inject constructor(
         return sb.toString()
     }
 
-    /** Replaces all current data with the backup's contents. */
-    suspend fun importFromJson(jsonText: String) {
-        val data = json.decodeFromString<BackupData>(jsonText)
+    /** How [importFromJson] reconciles a backup with existing data. */
+    enum class ImportMode { REPLACE, MERGE }
 
+    /**
+     * Imports a backup. [ImportMode.REPLACE] wipes current data first (ids preserved);
+     * [ImportMode.MERGE] keeps current data and adds the backup's rows with fresh ids
+     * (remapping foreign keys), so nothing collides.
+     */
+    suspend fun importFromJson(jsonText: String, mode: ImportMode = ImportMode.REPLACE) {
+        val data = runCatching { json.decodeFromString<BackupData>(jsonText) }
+            .getOrElse { throw IllegalArgumentException("Not a valid Daylie backup file") }
+        require(data.version <= CURRENT_VERSION) {
+            "This backup was made by a newer version of Daylie (v${data.version}). Please update the app."
+        }
+        when (mode) {
+            ImportMode.REPLACE -> importReplace(data)
+            ImportMode.MERGE -> importMerge(data)
+        }
+    }
+
+    private suspend fun importReplace(data: BackupData) {
         entryDao.deleteAllCrossRefs()
         entryDao.deleteAllEntries()
         activityDao.deleteAll()
@@ -133,5 +150,42 @@ class BackupManager @Inject constructor(
         data.goals.forEach {
             goalDao.insert(Goal(it.id, it.title, it.activityId, it.targetPerWeek, it.createdAt, it.archived))
         }
+    }
+
+    /** Adds backup rows alongside existing data, assigning new ids and remapping links. */
+    private suspend fun importMerge(data: BackupData) {
+        val activityIdMap = HashMap<Long, Long>()
+        data.activities.forEach { a ->
+            val newId = activityDao.insert(ActivityEntity(0, a.name, a.iconKey, a.sortOrder, a.archived))
+            activityIdMap[a.id] = newId
+        }
+
+        val entryIdMap = HashMap<Long, Long>()
+        data.entries.forEach { e ->
+            val newId = entryDao.insert(MoodEntry(0, e.dateTime, e.moodLevel, e.note))
+            entryIdMap[e.id] = newId
+        }
+
+        val remappedRefs = data.refs.mapNotNull { ref ->
+            val newEntry = entryIdMap[ref.entryId]
+            val newActivity = activityIdMap[ref.activityId]
+            if (newEntry != null && newActivity != null) {
+                EntryActivityCrossRef(newEntry, newActivity)
+            } else {
+                null
+            }
+        }
+        entryDao.insertCrossRefs(remappedRefs)
+
+        data.journal.forEach { j -> journalDao.insert(JournalEntry(0, j.dateTime, j.title, j.body)) }
+        data.goals.forEach { g ->
+            goalDao.insert(
+                Goal(0, g.title, g.activityId?.let { activityIdMap[it] }, g.targetPerWeek, g.createdAt, g.archived),
+            )
+        }
+    }
+
+    companion object {
+        const val CURRENT_VERSION = 3
     }
 }

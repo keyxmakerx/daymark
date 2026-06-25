@@ -20,7 +20,7 @@ import com.daylie.app.data.entity.MoodEntry
         JournalEntry::class, Goal::class,
     ],
     version = 3,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun entryDao(): EntryDao

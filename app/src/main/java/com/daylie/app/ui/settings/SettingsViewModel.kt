@@ -124,15 +124,17 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun importFrom(uri: Uri) {
+    fun importFrom(uri: Uri, mode: BackupManager.ImportMode) {
         viewModelScope.launch {
             runCatching {
                 val text = withContext(Dispatchers.IO) {
                     context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                 } ?: error("Could not read file")
-                backupManager.importFromJson(text)
-            }.onSuccess { _messages.tryEmit("Backup restored") }
-                .onFailure { _messages.tryEmit("Import failed: ${it.message}") }
+                backupManager.importFromJson(text, mode)
+            }.onSuccess {
+                val verb = if (mode == BackupManager.ImportMode.MERGE) "merged" else "restored"
+                _messages.tryEmit("Backup $verb")
+            }.onFailure { _messages.tryEmit("Import failed: ${it.message}") }
         }
     }
 }
