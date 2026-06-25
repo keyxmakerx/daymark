@@ -6,6 +6,7 @@ import androidx.room.Room
 import com.daylie.app.data.AppDatabase
 import com.daylie.app.data.dao.ActivityDao
 import com.daylie.app.data.dao.EntryDao
+import com.daylie.app.data.dao.GoalDao
 import com.daylie.app.data.dao.JournalDao
 import dagger.Module
 import dagger.Provides
@@ -23,7 +24,7 @@ object AppModule {
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.NAME)
             .addCallback(AppDatabase.SeedCallback())
-            .addMigrations(AppDatabase.MIGRATION_1_2)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
             .build()
 
     @Provides
@@ -34,6 +35,9 @@ object AppModule {
 
     @Provides
     fun provideJournalDao(db: AppDatabase): JournalDao = db.journalDao()
+
+    @Provides
+    fun provideGoalDao(db: AppDatabase): GoalDao = db.goalDao()
 
     @Provides
     @Singleton

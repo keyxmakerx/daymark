@@ -29,6 +29,8 @@ import com.daylie.app.R
 import com.daylie.app.ui.activities.ActivitiesScreen
 import com.daylie.app.ui.calendar.CalendarScreen
 import com.daylie.app.ui.calendar.YearPixelsScreen
+import com.daylie.app.ui.goals.GoalEditorScreen
+import com.daylie.app.ui.goals.GoalsScreen
 import com.daylie.app.ui.entry.EntryEditorScreen
 import com.daylie.app.ui.home.HomeScreen
 import com.daylie.app.ui.journal.JournalEditorScreen
@@ -150,9 +152,20 @@ fun DaylieAppScaffold() {
             composable(Routes.SETTINGS) {
                 SettingsScreen(
                     onManageActivities = { navController.navigate(Routes.ACTIVITIES) },
+                    onManageGoals = { navController.navigate(Routes.GOALS) },
                     onShowMessage = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                     modifier = Modifier.padding(padding),
                 )
+            }
+            composable(Routes.GOALS) {
+                GoalsScreen(
+                    onBack = { navController.popBackStack() },
+                    onGoalClick = { id -> navController.navigate(Routes.goal(id)) },
+                    onAddGoal = { navController.navigate(Routes.goal()) },
+                )
+            }
+            composable(Routes.GOAL_PATTERN) {
+                GoalEditorScreen(onDone = { navController.popBackStack() })
             }
             composable(Routes.ENTRY_PATTERN) {
                 EntryEditorScreen(onDone = { navController.popBackStack() })

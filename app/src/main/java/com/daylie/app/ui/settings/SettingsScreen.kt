@@ -42,6 +42,7 @@ import java.time.ZoneId
 @Composable
 fun SettingsScreen(
     onManageActivities: () -> Unit,
+    onManageGoals: () -> Unit,
     onShowMessage: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel(),
@@ -138,6 +139,11 @@ fun SettingsScreen(
         ListItem(
             headlineContent = { Text("Manage activities") },
             modifier = Modifier.clickable { onManageActivities() },
+        )
+        ListItem(
+            headlineContent = { Text("Goals") },
+            supportingContent = { Text("Weekly habit goals") },
+            modifier = Modifier.clickable { onManageGoals() },
         )
         ListItem(
             headlineContent = { Text("Export backup") },

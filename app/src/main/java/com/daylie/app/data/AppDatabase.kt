@@ -6,21 +6,27 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.daylie.app.data.dao.ActivityDao
 import com.daylie.app.data.dao.EntryDao
+import com.daylie.app.data.dao.GoalDao
 import com.daylie.app.data.dao.JournalDao
 import com.daylie.app.data.entity.ActivityEntity
 import com.daylie.app.data.entity.EntryActivityCrossRef
+import com.daylie.app.data.entity.Goal
 import com.daylie.app.data.entity.JournalEntry
 import com.daylie.app.data.entity.MoodEntry
 
 @Database(
-    entities = [MoodEntry::class, ActivityEntity::class, EntryActivityCrossRef::class, JournalEntry::class],
-    version = 2,
+    entities = [
+        MoodEntry::class, ActivityEntity::class, EntryActivityCrossRef::class,
+        JournalEntry::class, Goal::class,
+    ],
+    version = 3,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun entryDao(): EntryDao
     abstract fun activityDao(): ActivityDao
     abstract fun journalDao(): JournalDao
+    abstract fun goalDao(): GoalDao
 
     /** Seeds a sensible set of starter activities on first install. */
     class SeedCallback : Callback() {
@@ -51,6 +57,21 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_journal_entries_dateTime` " +
                         "ON `journal_entries` (`dateTime`)",
+                )
+            }
+        }
+
+        /** v3 adds the goals table; existing data is preserved. */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `goals` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`title` TEXT NOT NULL, " +
+                        "`activityId` INTEGER, " +
+                        "`targetPerWeek` INTEGER NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL, " +
+                        "`archived` INTEGER NOT NULL)",
                 )
             }
         }

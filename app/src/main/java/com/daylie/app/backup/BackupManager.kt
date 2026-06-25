@@ -2,9 +2,11 @@ package com.daylie.app.backup
 
 import com.daylie.app.data.dao.ActivityDao
 import com.daylie.app.data.dao.EntryDao
+import com.daylie.app.data.dao.GoalDao
 import com.daylie.app.data.dao.JournalDao
 import com.daylie.app.data.entity.ActivityEntity
 import com.daylie.app.data.entity.EntryActivityCrossRef
+import com.daylie.app.data.entity.Goal
 import com.daylie.app.data.entity.JournalEntry
 import com.daylie.app.data.entity.MoodEntry
 import com.daylie.app.model.Mood
@@ -37,14 +39,26 @@ data class BackupRef(val entryId: Long, val activityId: Long)
 data class BackupJournal(val id: Long, val dateTime: Long, val title: String, val body: String)
 
 @Serializable
+data class BackupGoal(
+    val id: Long,
+    val title: String,
+    val activityId: Long?,
+    val targetPerWeek: Int,
+    val createdAt: Long,
+    val archived: Boolean,
+)
+
+@Serializable
 data class BackupData(
-    val version: Int = 2,
+    val version: Int = 3,
     val exportedAt: Long,
     val entries: List<BackupEntry>,
     val activities: List<BackupActivity>,
     val refs: List<BackupRef>,
-    // Added in v2. Defaulted so older (v1) backups still deserialize.
+    // Added in v2. Defaulted so older backups still deserialize.
     val journal: List<BackupJournal> = emptyList(),
+    // Added in v3.
+    val goals: List<BackupGoal> = emptyList(),
 )
 
 /**
@@ -56,6 +70,7 @@ class BackupManager @Inject constructor(
     private val entryDao: EntryDao,
     private val activityDao: ActivityDao,
     private val journalDao: JournalDao,
+    private val goalDao: GoalDao,
 ) {
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
 
@@ -68,6 +83,9 @@ class BackupManager @Inject constructor(
             },
             refs = entryDao.getAllCrossRefs().map { BackupRef(it.entryId, it.activityId) },
             journal = journalDao.getAll().map { BackupJournal(it.id, it.dateTime, it.title, it.body) },
+            goals = goalDao.getAll().map {
+                BackupGoal(it.id, it.title, it.activityId, it.targetPerWeek, it.createdAt, it.archived)
+            },
         )
         return json.encodeToString(data)
     }
@@ -104,6 +122,7 @@ class BackupManager @Inject constructor(
         entryDao.deleteAllEntries()
         activityDao.deleteAll()
         journalDao.deleteAll()
+        goalDao.deleteAll()
 
         activityDao.insertAll(
             data.activities.map { ActivityEntity(it.id, it.name, it.iconKey, it.sortOrder, it.archived) },
@@ -111,5 +130,8 @@ class BackupManager @Inject constructor(
         data.entries.forEach { entryDao.insert(MoodEntry(it.id, it.dateTime, it.moodLevel, it.note)) }
         entryDao.insertCrossRefs(data.refs.map { EntryActivityCrossRef(it.entryId, it.activityId) })
         data.journal.forEach { journalDao.insert(JournalEntry(it.id, it.dateTime, it.title, it.body)) }
+        data.goals.forEach {
+            goalDao.insert(Goal(it.id, it.title, it.activityId, it.targetPerWeek, it.createdAt, it.archived))
+        }
     }
 }

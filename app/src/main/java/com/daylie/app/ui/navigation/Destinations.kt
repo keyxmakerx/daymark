@@ -13,10 +13,16 @@ object Routes {
     const val ENTRY = "entry"
     const val JOURNAL_ENTRY = "journal_entry"
     const val YEAR_PIXELS = "year_pixels"
+    const val GOALS = "goals"
+    const val GOAL = "goal"
 
     /** Editor route; pass 0 to create a new entry. */
     fun entry(id: Long = 0L) = "$ENTRY/$id"
     const val ENTRY_PATTERN = "$ENTRY/{entryId}"
+
+    /** Goal editor route; pass 0 to create a new goal. */
+    fun goal(id: Long = 0L) = "$GOAL/$id"
+    const val GOAL_PATTERN = "$GOAL/{goalId}"
 
     /** Journal editor route; pass 0 to create a new journal entry. */
     fun journalEntry(id: Long = 0L) = "$JOURNAL_ENTRY/$id"
