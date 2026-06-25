@@ -76,11 +76,26 @@ fun LockScreen(
         )
         Button(
             onClick = {
-                if (viewModel.verify(pin)) onUnlocked() else { error = true; pin = "" }
+                if (viewModel.isLockedOut()) {
+                    error = true
+                } else if (viewModel.verify(pin)) {
+                    onUnlocked()
+                } else {
+                    error = true
+                    pin = ""
+                }
             },
             modifier = Modifier.padding(top = 16.dp),
         ) {
             Text("Unlock")
+        }
+        if (error && viewModel.isLockedOut()) {
+            Text(
+                "Too many attempts. Try again in ${viewModel.lockRemainingSeconds()}s.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 8.dp),
+            )
         }
         if (viewModel.biometricEnabled && activity != null) {
             OutlinedButton(

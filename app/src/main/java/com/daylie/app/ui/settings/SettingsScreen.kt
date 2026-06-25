@@ -148,7 +148,7 @@ fun SettingsScreen(
         )
         ListItem(
             headlineContent = { Text("Export backup") },
-            supportingContent = { Text("Save all data to a JSON file") },
+            supportingContent = { Text("Unencrypted JSON — keep it somewhere safe") },
             modifier = Modifier.clickable { exportLauncher.launch("daylie-backup.json") },
         )
         ListItem(
@@ -158,7 +158,7 @@ fun SettingsScreen(
         )
         ListItem(
             headlineContent = { Text("Export as CSV") },
-            supportingContent = { Text("Spreadsheet-friendly export of all entries") },
+            supportingContent = { Text("Unencrypted spreadsheet of all entries") },
             modifier = Modifier.clickable { csvLauncher.launch("daylie-entries.csv") },
         )
 

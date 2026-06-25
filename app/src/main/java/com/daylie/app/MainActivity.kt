@@ -1,6 +1,7 @@
 package com.daylie.app
 
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,6 +19,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.daylie.app.data.SettingsRepository
+import com.daylie.app.security.PinManager
 import com.daylie.app.ui.DaylieAppScaffold
 import com.daylie.app.ui.lock.LockScreen
 import com.daylie.app.ui.theme.DaylieTheme
@@ -28,6 +30,7 @@ import javax.inject.Inject
 class MainActivity : FragmentActivity() {
 
     @Inject lateinit var settings: SettingsRepository
+    @Inject lateinit var pinManager: PinManager
 
     companion object {
         const val EXTRA_PREFILL_MOOD = "prefill_mood"
@@ -36,12 +39,18 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Keep private content out of screenshots and the recents thumbnail when locking is on.
+        if (settings.lockEnabled && pinManager.isPinSet) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
         val initialMood = intent?.getIntExtra(EXTRA_PREFILL_MOOD, -1) ?: -1
         setContent {
             val prefs by settings.changes().collectAsState(initial = null)
             // Re-read on any preference change.
             val dynamicColor = prefs?.let { settings.dynamicColor } ?: settings.dynamicColor
-            val lockEnabled = prefs?.let { settings.lockEnabled } ?: settings.lockEnabled
+            // Only lock when a PIN actually exists (avoids a lock-out with no way in).
+            val lockEnabled = (prefs?.let { settings.lockEnabled } ?: settings.lockEnabled) &&
+                pinManager.isPinSet
 
             var unlocked by remember { mutableStateOf(false) }
 

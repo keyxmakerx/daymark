@@ -15,5 +15,8 @@ class LockViewModel @Inject constructor(
     val lockEnabled: Boolean get() = settings.lockEnabled && pinManager.isPinSet
     val biometricEnabled: Boolean get() = settings.biometricEnabled
 
+    fun isLockedOut(): Boolean = pinManager.isLockedOut()
+    fun lockRemainingSeconds(): Int = ((pinManager.lockRemainingMillis() + 999) / 1000).toInt()
+
     fun verify(pin: String): Boolean = pinManager.verify(pin)
 }

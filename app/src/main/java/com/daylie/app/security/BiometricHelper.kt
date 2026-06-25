@@ -8,7 +8,8 @@ import androidx.fragment.app.FragmentActivity
 /** Small wrapper around AndroidX [BiometricPrompt]. */
 object BiometricHelper {
 
-    private const val AUTHENTICATORS = BiometricManager.Authenticators.BIOMETRIC_WEAK
+    // Class 3 (strong) biometrics only — required for gating sensitive data.
+    private const val AUTHENTICATORS = BiometricManager.Authenticators.BIOMETRIC_STRONG
 
     fun canAuthenticate(activity: FragmentActivity): Boolean =
         BiometricManager.from(activity).canAuthenticate(AUTHENTICATORS) ==
