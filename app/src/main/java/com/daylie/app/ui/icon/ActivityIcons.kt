@@ -1,50 +1,34 @@
 package com.daylie.app.ui.icon
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DirectionsRun
-import androidx.compose.material.icons.filled.Bedtime
-import androidx.compose.material.icons.filled.Book
-import androidx.compose.material.icons.filled.Brush
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.LocalMovies
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Pets
-import androidx.compose.material.icons.filled.Restaurant
-import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.SelfImprovement
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.SportsEsports
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Work
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.annotation.DrawableRes
+import com.daylie.app.R
 
-/** Maps a stable [ActivityEntity.iconKey] string to a Material icon. */
+/** Maps a stable [ActivityEntity.iconKey] string to a hand-drawn "paper" vector drawable. */
 object ActivityIcons {
 
-    private val map: Map<String, ImageVector> = mapOf(
-        "work" to Icons.Filled.Work,
-        "family" to Icons.Filled.Home,
-        "friends" to Icons.Filled.Group,
-        "exercise" to Icons.Filled.DirectionsRun,
-        "sleep" to Icons.Filled.Bedtime,
-        "food" to Icons.Filled.Restaurant,
-        "reading" to Icons.Filled.Book,
-        "gaming" to Icons.Filled.SportsEsports,
-        "movie" to Icons.Filled.LocalMovies,
-        "relax" to Icons.Filled.SelfImprovement,
-        "study" to Icons.Filled.School,
-        "shopping" to Icons.Filled.ShoppingCart,
-        "music" to Icons.Filled.MusicNote,
-        "love" to Icons.Filled.Favorite,
-        "pets" to Icons.Filled.Pets,
-        "art" to Icons.Filled.Brush,
-        "star" to Icons.Filled.Star,
+    private val map: Map<String, Int> = mapOf(
+        "work" to R.drawable.ic_act_work,
+        "family" to R.drawable.ic_act_family,
+        "friends" to R.drawable.ic_act_friends,
+        "exercise" to R.drawable.ic_act_exercise,
+        "sleep" to R.drawable.ic_act_sleep,
+        "food" to R.drawable.ic_act_food,
+        "reading" to R.drawable.ic_act_reading,
+        "gaming" to R.drawable.ic_act_gaming,
+        "movie" to R.drawable.ic_act_movie,
+        "relax" to R.drawable.ic_act_relax,
+        "study" to R.drawable.ic_act_study,
+        "shopping" to R.drawable.ic_act_shopping,
+        "music" to R.drawable.ic_act_music,
+        "love" to R.drawable.ic_act_love,
+        "pets" to R.drawable.ic_act_pets,
+        "art" to R.drawable.ic_act_art,
+        "star" to R.drawable.ic_act_star,
     )
 
     /** All keys offered when creating/editing an activity. */
     val keys: List<String> = map.keys.toList()
 
-    fun forKey(key: String): ImageVector = map[key] ?: Icons.Filled.Star
+    @DrawableRes
+    fun forKey(key: String): Int = map[key] ?: R.drawable.ic_act_star
 }

@@ -36,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -79,7 +80,7 @@ fun ActivitiesScreen(
                         { Text("Archived") }
                     } else null,
                     leadingContent = {
-                        Icon(ActivityIcons.forKey(activity.iconKey), contentDescription = null)
+                        Icon(painterResource(ActivityIcons.forKey(activity.iconKey)), contentDescription = null)
                     },
                     trailingContent = {
                         IconButton(onClick = { viewModel.toggleArchived(activity) }) {
@@ -139,7 +140,7 @@ private fun ActivityEditorDialog(
                     ActivityIcons.keys.forEach { key ->
                         IconButton(onClick = { iconKey = key }) {
                             Icon(
-                                ActivityIcons.forKey(key),
+                                painterResource(ActivityIcons.forKey(key)),
                                 contentDescription = key,
                                 tint = if (key == iconKey) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(24.dp),

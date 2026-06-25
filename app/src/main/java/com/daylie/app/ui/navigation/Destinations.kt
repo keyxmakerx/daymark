@@ -1,11 +1,7 @@
 package com.daylie.app.ui.navigation
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.annotation.DrawableRes
+import com.daylie.app.R
 
 object Routes {
     const val HOME = "home"
@@ -23,10 +19,10 @@ object Routes {
 enum class TopLevelDestination(
     val route: String,
     val label: String,
-    val icon: ImageVector,
+    @param:DrawableRes val icon: Int,
 ) {
-    HOME(Routes.HOME, "Home", Icons.Filled.Home),
-    CALENDAR(Routes.CALENDAR, "Calendar", Icons.Filled.CalendarMonth),
-    STATS(Routes.STATS, "Stats", Icons.Filled.BarChart),
-    SETTINGS(Routes.SETTINGS, "More", Icons.Filled.MoreHoriz),
+    HOME(Routes.HOME, "Home", R.drawable.ic_ui_home),
+    CALENDAR(Routes.CALENDAR, "Calendar", R.drawable.ic_ui_calendar),
+    STATS(Routes.STATS, "Stats", R.drawable.ic_ui_chart),
+    SETTINGS(Routes.SETTINGS, "More", R.drawable.ic_ui_more),
 }

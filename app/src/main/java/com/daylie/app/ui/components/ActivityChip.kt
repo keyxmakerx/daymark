@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.daylie.app.data.entity.ActivityEntity
@@ -32,7 +33,7 @@ fun ActivityChip(
         label = { Text(activity.name) },
         leadingIcon = {
             Icon(
-                imageVector = ActivityIcons.forKey(activity.iconKey),
+                painter = painterResource(ActivityIcons.forKey(activity.iconKey)),
                 contentDescription = null,
                 modifier = Modifier.size(FilterChipDefaults.IconSize),
             )
@@ -55,7 +56,7 @@ fun ActivityBadge(activity: ActivityEntity, modifier: Modifier = Modifier) {
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
         ) {
             Icon(
-                imageVector = ActivityIcons.forKey(activity.iconKey),
+                painter = painterResource(ActivityIcons.forKey(activity.iconKey)),
                 contentDescription = activity.name,
                 modifier = Modifier.size(18.dp),
             )
