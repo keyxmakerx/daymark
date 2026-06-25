@@ -1,5 +1,11 @@
 package com.daylie.app.ui
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -126,10 +132,17 @@ fun DaylieAppScaffold(initialMood: Int = -1) {
             }
         },
     ) { padding ->
+        val motion = tween<Float>(durationMillis = 240, easing = FastOutSlowInEasing)
+        val slideMotion = tween<androidx.compose.ui.unit.IntOffset>(durationMillis = 240, easing = FastOutSlowInEasing)
         NavHost(
             navController = navController,
             startDestination = Routes.HOME,
             modifier = Modifier,
+            // Purposeful, directional motion (shared-axis style) instead of a plain crossfade.
+            enterTransition = { slideInHorizontally(slideMotion) { it / 4 } + fadeIn(motion) },
+            exitTransition = { slideOutHorizontally(slideMotion) { -it / 8 } + fadeOut(motion) },
+            popEnterTransition = { slideInHorizontally(slideMotion) { -it / 8 } + fadeIn(motion) },
+            popExitTransition = { slideOutHorizontally(slideMotion) { it / 4 } + fadeOut(motion) },
         ) {
             composable(Routes.HOME) {
                 HomeScreen(

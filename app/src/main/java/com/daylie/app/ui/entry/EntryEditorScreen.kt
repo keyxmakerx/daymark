@@ -1,5 +1,6 @@
 package com.daylie.app.ui.entry
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -36,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -99,15 +102,14 @@ fun EntryEditorScreen(
                 Mood.ascending.forEach { mood ->
                     val selected = state.moodLevel == mood.level
                     Column(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { viewModel.setMood(mood.level) }
+                            .padding(horizontal = 6.dp, vertical = 8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(7.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        MoodFace(
-                            mood = mood,
-                            size = 52,
-                            selected = selected,
-                            onClick = { viewModel.setMood(mood.level) },
-                        )
+                        MoodFace(mood = mood, size = 52, selected = selected)
                         Text(
                             text = mood.label,
                             style = MaterialTheme.typography.labelSmall,
