@@ -12,6 +12,7 @@ object Routes {
     const val ACTIVITIES = "activities"
     const val ENTRY = "entry"
     const val JOURNAL_ENTRY = "journal_entry"
+    const val YEAR_PIXELS = "year_pixels"
 
     /** Editor route; pass 0 to create a new entry. */
     fun entry(id: Long = 0L) = "$ENTRY/$id"

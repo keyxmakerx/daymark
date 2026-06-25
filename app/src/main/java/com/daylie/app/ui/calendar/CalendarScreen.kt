@@ -49,12 +49,21 @@ private sealed interface Cell {
 
 @Composable
 fun CalendarScreen(
+    onYearView: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: CalendarViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     Column(modifier = modifier.fillMaxWidth().padding(16.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            androidx.compose.material3.TextButton(onClick = onYearView) {
+                Text("Year in Pixels")
+            }
+        }
         // Month header with navigation
         Row(
             modifier = Modifier.fillMaxWidth(),

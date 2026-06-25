@@ -28,6 +28,7 @@ import androidx.navigation.compose.rememberNavController
 import com.daylie.app.R
 import com.daylie.app.ui.activities.ActivitiesScreen
 import com.daylie.app.ui.calendar.CalendarScreen
+import com.daylie.app.ui.calendar.YearPixelsScreen
 import com.daylie.app.ui.entry.EntryEditorScreen
 import com.daylie.app.ui.home.HomeScreen
 import com.daylie.app.ui.journal.JournalEditorScreen
@@ -126,7 +127,13 @@ fun DaylieAppScaffold() {
                 )
             }
             composable(Routes.CALENDAR) {
-                CalendarScreen(modifier = Modifier.padding(padding))
+                CalendarScreen(
+                    onYearView = { navController.navigate(Routes.YEAR_PIXELS) },
+                    modifier = Modifier.padding(padding),
+                )
+            }
+            composable(Routes.YEAR_PIXELS) {
+                YearPixelsScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.STATS) {
                 StatsScreen(modifier = Modifier.padding(padding))
