@@ -7,13 +7,19 @@ object Routes {
     const val HOME = "home"
     const val CALENDAR = "calendar"
     const val STATS = "stats"
+    const val JOURNAL = "journal"
     const val SETTINGS = "settings"
     const val ACTIVITIES = "activities"
     const val ENTRY = "entry"
+    const val JOURNAL_ENTRY = "journal_entry"
 
     /** Editor route; pass 0 to create a new entry. */
     fun entry(id: Long = 0L) = "$ENTRY/$id"
     const val ENTRY_PATTERN = "$ENTRY/{entryId}"
+
+    /** Journal editor route; pass 0 to create a new journal entry. */
+    fun journalEntry(id: Long = 0L) = "$JOURNAL_ENTRY/$id"
+    const val JOURNAL_ENTRY_PATTERN = "$JOURNAL_ENTRY/{journalId}"
 }
 
 enum class TopLevelDestination(
@@ -23,6 +29,7 @@ enum class TopLevelDestination(
 ) {
     HOME(Routes.HOME, "Home", R.drawable.ic_ui_home),
     CALENDAR(Routes.CALENDAR, "Calendar", R.drawable.ic_ui_calendar),
+    JOURNAL(Routes.JOURNAL, "Journal", R.drawable.ic_ui_journal),
     STATS(Routes.STATS, "Stats", R.drawable.ic_ui_chart),
     SETTINGS(Routes.SETTINGS, "More", R.drawable.ic_ui_more),
 }

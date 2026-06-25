@@ -2,8 +2,10 @@ package com.daylie.app.backup
 
 import com.daylie.app.data.dao.ActivityDao
 import com.daylie.app.data.dao.EntryDao
+import com.daylie.app.data.dao.JournalDao
 import com.daylie.app.data.entity.ActivityEntity
 import com.daylie.app.data.entity.EntryActivityCrossRef
+import com.daylie.app.data.entity.JournalEntry
 import com.daylie.app.data.entity.MoodEntry
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -22,12 +24,17 @@ data class BackupActivity(val id: Long, val name: String, val iconKey: String, v
 data class BackupRef(val entryId: Long, val activityId: Long)
 
 @Serializable
+data class BackupJournal(val id: Long, val dateTime: Long, val title: String, val body: String)
+
+@Serializable
 data class BackupData(
-    val version: Int = 1,
+    val version: Int = 2,
     val exportedAt: Long,
     val entries: List<BackupEntry>,
     val activities: List<BackupActivity>,
     val refs: List<BackupRef>,
+    // Added in v2. Defaulted so older (v1) backups still deserialize.
+    val journal: List<BackupJournal> = emptyList(),
 )
 
 /**
@@ -38,6 +45,7 @@ data class BackupData(
 class BackupManager @Inject constructor(
     private val entryDao: EntryDao,
     private val activityDao: ActivityDao,
+    private val journalDao: JournalDao,
 ) {
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
 
@@ -49,6 +57,7 @@ class BackupManager @Inject constructor(
                 BackupActivity(it.id, it.name, it.iconKey, it.sortOrder, it.archived)
             },
             refs = entryDao.getAllCrossRefs().map { BackupRef(it.entryId, it.activityId) },
+            journal = journalDao.getAll().map { BackupJournal(it.id, it.dateTime, it.title, it.body) },
         )
         return json.encodeToString(data)
     }
@@ -60,11 +69,13 @@ class BackupManager @Inject constructor(
         entryDao.deleteAllCrossRefs()
         entryDao.deleteAllEntries()
         activityDao.deleteAll()
+        journalDao.deleteAll()
 
         activityDao.insertAll(
             data.activities.map { ActivityEntity(it.id, it.name, it.iconKey, it.sortOrder, it.archived) },
         )
         data.entries.forEach { entryDao.insert(MoodEntry(it.id, it.dateTime, it.moodLevel, it.note)) }
         entryDao.insertCrossRefs(data.refs.map { EntryActivityCrossRef(it.entryId, it.activityId) })
+        data.journal.forEach { journalDao.insert(JournalEntry(it.id, it.dateTime, it.title, it.body)) }
     }
 }

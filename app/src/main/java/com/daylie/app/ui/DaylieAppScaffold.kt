@@ -30,6 +30,8 @@ import com.daylie.app.ui.activities.ActivitiesScreen
 import com.daylie.app.ui.calendar.CalendarScreen
 import com.daylie.app.ui.entry.EntryEditorScreen
 import com.daylie.app.ui.home.HomeScreen
+import com.daylie.app.ui.journal.JournalEditorScreen
+import com.daylie.app.ui.journal.JournalScreen
 import com.daylie.app.ui.navigation.Routes
 import com.daylie.app.ui.navigation.TopLevelDestination
 import com.daylie.app.ui.settings.SettingsScreen
@@ -94,12 +96,19 @@ fun DaylieAppScaffold() {
             }
         },
         floatingActionButton = {
-            if (currentRoute == Routes.HOME) {
-                ExtendedFloatingActionButton(
+            when (currentRoute) {
+                Routes.HOME -> ExtendedFloatingActionButton(
                     onClick = { navController.navigate(Routes.entry()) },
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                     text = { Text("Entry") },
+                    icon = { Icon(painterResource(R.drawable.ic_ui_plus), contentDescription = null) },
+                )
+                Routes.JOURNAL -> ExtendedFloatingActionButton(
+                    onClick = { navController.navigate(Routes.journalEntry()) },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    text = { Text("Write") },
                     icon = { Icon(painterResource(R.drawable.ic_ui_plus), contentDescription = null) },
                 )
             }
@@ -121,6 +130,15 @@ fun DaylieAppScaffold() {
             }
             composable(Routes.STATS) {
                 StatsScreen(modifier = Modifier.padding(padding))
+            }
+            composable(Routes.JOURNAL) {
+                JournalScreen(
+                    onEntryClick = { id -> navController.navigate(Routes.journalEntry(id)) },
+                    modifier = Modifier.padding(padding),
+                )
+            }
+            composable(Routes.JOURNAL_ENTRY_PATTERN) {
+                JournalEditorScreen(onDone = { navController.popBackStack() })
             }
             composable(Routes.SETTINGS) {
                 SettingsScreen(
