@@ -146,7 +146,7 @@ private fun MoodDistribution(counts: Map<Int, Int>) {
         Mood.ascending.reversed().forEach { mood ->
             val count = counts[mood.level] ?: 0
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(mood.emoji)
+                com.daylie.app.ui.components.MoodFaceIcon(level = mood.level, size = 22.dp)
                 Box(modifier = Modifier.weight(1f).height(18.dp)) {
                     Canvas(modifier = Modifier.fillMaxWidth().height(18.dp)) {
                         val barWidth = size.width * (count.toFloat() / max)
