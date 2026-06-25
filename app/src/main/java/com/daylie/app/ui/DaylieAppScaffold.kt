@@ -2,8 +2,9 @@ package com.daylie.app.ui
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -11,6 +12,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -50,9 +52,24 @@ fun DaylieAppScaffold() {
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             if (showChrome) {
-                val title = TopLevelDestination.entries.firstOrNull { it.route == currentRoute }?.label
-                    ?: "Daylie"
-                TopAppBar(title = { Text(title) })
+                val onHome = currentRoute == Routes.HOME || currentRoute == null
+                val title = if (onHome) {
+                    "Daylie"
+                } else {
+                    TopLevelDestination.entries.firstOrNull { it.route == currentRoute }?.label ?: "Daylie"
+                }
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.headlineMedium,
+                        )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        titleContentColor = MaterialTheme.colorScheme.onBackground,
+                    ),
+                )
             }
         },
         bottomBar = {
@@ -78,9 +95,13 @@ fun DaylieAppScaffold() {
         },
         floatingActionButton = {
             if (currentRoute == Routes.HOME) {
-                FloatingActionButton(onClick = { navController.navigate(Routes.entry()) }) {
-                    Icon(painterResource(R.drawable.ic_ui_plus), contentDescription = "Add entry")
-                }
+                ExtendedFloatingActionButton(
+                    onClick = { navController.navigate(Routes.entry()) },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    text = { Text("Entry") },
+                    icon = { Icon(painterResource(R.drawable.ic_ui_plus), contentDescription = null) },
+                )
             }
         },
     ) { padding ->
