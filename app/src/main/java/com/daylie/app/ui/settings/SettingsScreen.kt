@@ -65,6 +65,10 @@ fun SettingsScreen(
         ActivityResultContracts.OpenDocument(),
     ) { uri -> uri?.let(viewModel::importFrom) }
 
+    val csvLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv"),
+    ) { uri -> uri?.let(viewModel::exportCsvTo) }
+
     var showTimePicker by remember { mutableStateOf(false) }
     var showPinDialog by remember { mutableStateOf(false) }
 
@@ -144,6 +148,11 @@ fun SettingsScreen(
             headlineContent = { Text("Restore backup") },
             supportingContent = { Text("Replace all data from a JSON file") },
             modifier = Modifier.clickable { importLauncher.launch(arrayOf("application/json", "text/*")) },
+        )
+        ListItem(
+            headlineContent = { Text("Export as CSV") },
+            supportingContent = { Text("Spreadsheet-friendly export of all entries") },
+            modifier = Modifier.clickable { csvLauncher.launch("daylie-entries.csv") },
         )
 
         Divider()

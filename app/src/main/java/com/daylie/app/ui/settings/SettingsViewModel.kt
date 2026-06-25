@@ -112,6 +112,18 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun exportCsvTo(uri: Uri) {
+        viewModelScope.launch {
+            runCatching {
+                val csv = backupManager.exportEntriesCsv()
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri)?.use { it.write(csv.toByteArray()) }
+                }
+            }.onSuccess { _messages.tryEmit("CSV exported") }
+                .onFailure { _messages.tryEmit("CSV export failed: ${it.message}") }
+        }
+    }
+
     fun importFrom(uri: Uri) {
         viewModelScope.launch {
             runCatching {

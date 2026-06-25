@@ -7,12 +7,22 @@ import com.daylie.app.data.entity.ActivityEntity
 import com.daylie.app.data.entity.EntryActivityCrossRef
 import com.daylie.app.data.entity.JournalEntry
 import com.daylie.app.data.entity.MoodEntry
+import com.daylie.app.model.Mood
+import com.daylie.app.util.DateUtils
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/** RFC-4180-style CSV escaping: quote fields containing a comma, quote, or newline. */
+internal fun csvField(value: String): String =
+    if (value.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) {
+        "\"" + value.replace("\"", "\"\"") + "\""
+    } else {
+        value
+    }
 
 @Serializable
 data class BackupEntry(val id: Long, val dateTime: Long, val moodLevel: Int, val note: String)
@@ -60,6 +70,30 @@ class BackupManager @Inject constructor(
             journal = journalDao.getAll().map { BackupJournal(it.id, it.dateTime, it.title, it.body) },
         )
         return json.encodeToString(data)
+    }
+
+    /** Exports all mood entries as a spreadsheet-friendly CSV. */
+    suspend fun exportEntriesCsv(): String {
+        val activities = activityDao.getAllOnce().associateBy { it.id }
+        val refsByEntry = entryDao.getAllCrossRefs().groupBy { it.entryId }
+        val entries = entryDao.getAllEntries().sortedByDescending { it.dateTime }
+
+        val sb = StringBuilder()
+        sb.append("date,time,mood,activities,note\n")
+        for (e in entries) {
+            val names = refsByEntry[e.id].orEmpty()
+                .mapNotNull { activities[it.activityId]?.name }
+                .joinToString("; ")
+            val row = listOf(
+                DateUtils.formatDate(e.dateTime),
+                DateUtils.formatTime(e.dateTime),
+                Mood.fromLevel(e.moodLevel).label,
+                names,
+                e.note,
+            ).joinToString(",") { csvField(it) }
+            sb.append(row).append("\n")
+        }
+        return sb.toString()
     }
 
     /** Replaces all current data with the backup's contents. */
