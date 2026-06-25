@@ -25,9 +25,14 @@ class MainActivity : FragmentActivity() {
 
     @Inject lateinit var settings: SettingsRepository
 
+    companion object {
+        const val EXTRA_PREFILL_MOOD = "prefill_mood"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        val initialMood = intent?.getIntExtra(EXTRA_PREFILL_MOOD, -1) ?: -1
         setContent {
             val prefs by settings.changes().collectAsState(initial = null)
             // Re-read on any preference change.
@@ -44,7 +49,7 @@ class MainActivity : FragmentActivity() {
                     if (lockEnabled && !unlocked) {
                         LockScreen(onUnlocked = { unlocked = true })
                     } else {
-                        DaylieAppScaffold()
+                        DaylieAppScaffold(initialMood = initialMood)
                     }
                 }
             }

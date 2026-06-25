@@ -34,8 +34,14 @@ class EntryEditorViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val entryId: Long = savedStateHandle.get<String>("entryId")?.toLongOrNull() ?: 0L
+    private val prefillMood: Int = savedStateHandle.get<String>("mood")?.toIntOrNull() ?: -1
 
-    private val _uiState = MutableStateFlow(EntryEditorUiState(entryId = entryId))
+    private val _uiState = MutableStateFlow(
+        EntryEditorUiState(
+            entryId = entryId,
+            moodLevel = if (entryId == 0L && prefillMood in 1..5) prefillMood else 3,
+        ),
+    )
     val uiState: StateFlow<EntryEditorUiState> = _uiState.asStateFlow()
 
     init {

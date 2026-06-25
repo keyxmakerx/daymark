@@ -79,6 +79,8 @@ dependencies {
 
     implementation(libs.androidx.biometric)
 
+    implementation(libs.androidx.glance.appwidget)
+
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
 }

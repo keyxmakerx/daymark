@@ -21,8 +21,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.daylie.app.R
@@ -43,10 +45,17 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DaylieAppScaffold() {
+fun DaylieAppScaffold(initialMood: Int = -1) {
     val navController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+
+    // From the home-screen widget: jump straight into a new entry with the tapped mood.
+    androidx.compose.runtime.LaunchedEffect(initialMood) {
+        if (initialMood in 1..5) {
+            navController.navigate(Routes.entry(mood = initialMood))
+        }
+    }
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -167,7 +176,13 @@ fun DaylieAppScaffold() {
             composable(Routes.GOAL_PATTERN) {
                 GoalEditorScreen(onDone = { navController.popBackStack() })
             }
-            composable(Routes.ENTRY_PATTERN) {
+            composable(
+                Routes.ENTRY_PATTERN,
+                arguments = listOf(
+                    navArgument("entryId") { type = NavType.StringType },
+                    navArgument("mood") { type = NavType.StringType; defaultValue = "-1" },
+                ),
+            ) {
                 EntryEditorScreen(onDone = { navController.popBackStack() })
             }
             composable(Routes.ACTIVITIES) {

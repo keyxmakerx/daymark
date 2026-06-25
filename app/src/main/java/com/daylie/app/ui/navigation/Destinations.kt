@@ -16,9 +16,9 @@ object Routes {
     const val GOALS = "goals"
     const val GOAL = "goal"
 
-    /** Editor route; pass 0 to create a new entry. */
-    fun entry(id: Long = 0L) = "$ENTRY/$id"
-    const val ENTRY_PATTERN = "$ENTRY/{entryId}"
+    /** Editor route; pass 0 to create a new entry, and an optional 1..5 mood to preselect. */
+    fun entry(id: Long = 0L, mood: Int = -1) = "$ENTRY/$id?mood=$mood"
+    const val ENTRY_PATTERN = "$ENTRY/{entryId}?mood={mood}"
 
     /** Goal editor route; pass 0 to create a new goal. */
     fun goal(id: Long = 0L) = "$GOAL/$id"
