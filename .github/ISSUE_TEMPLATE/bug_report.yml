@@ -1,0 +1,38 @@
+name: Bug report
+description: Report something that isn't working
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to …
+        2. Tap …
+        3. See …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      placeholder: "e.g. 0.1.0 (see More ▸ About)"
+  - type: input
+    id: device
+    attributes:
+      label: Device & Android version
+      placeholder: "e.g. Pixel 7, Android 14"
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy
+      options:
+        - label: I have not pasted any private journal/mood content I don't want public.
+          required: true
