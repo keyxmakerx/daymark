@@ -18,6 +18,7 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -87,18 +88,33 @@ fun EntryEditorScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            Text("How are you?", style = androidx.compose.material3.MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                "How are you?",
+                style = MaterialTheme.typography.headlineSmall,
+            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Mood.ascending.forEach { mood ->
-                    MoodFace(
-                        mood = mood,
-                        size = 56,
-                        selected = state.moodLevel == mood.level,
-                        onClick = { viewModel.setMood(mood.level) },
-                    )
+                    val selected = state.moodLevel == mood.level
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        MoodFace(
+                            mood = mood,
+                            size = 52,
+                            selected = selected,
+                            onClick = { viewModel.setMood(mood.level) },
+                        )
+                        Text(
+                            text = mood.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (selected) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.tertiary,
+                        )
+                    }
                 }
             }
 
@@ -112,7 +128,7 @@ fun EntryEditorScreen(
                 }
             }
 
-            Text("Activities", style = androidx.compose.material3.MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("What have you been up to?", style = MaterialTheme.typography.titleMedium)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 state.activities.forEach { activity ->
                     ActivityChip(
@@ -123,13 +139,13 @@ fun EntryEditorScreen(
                 }
             }
 
+            Text("Why do you feel this way?", style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(
                 value = state.note,
                 onValueChange = viewModel::setNote,
-                label = { Text("Note") },
-                placeholder = { Text("Write something…") },
+                placeholder = { Text("What happened, what's on your mind…") },
                 modifier = Modifier.fillMaxWidth(),
-                minLines = 3,
+                minLines = 4,
             )
 
             Button(

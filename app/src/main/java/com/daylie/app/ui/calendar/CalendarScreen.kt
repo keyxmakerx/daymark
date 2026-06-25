@@ -6,13 +6,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -100,26 +103,32 @@ fun CalendarScreen(
 
 @Composable
 private fun DayCell(cell: Cell.Day) {
-    val color = cell.moodLevel?.let { moodColor(it) } ?: Color.Transparent
+    val hasMood = cell.moodLevel != null
+    val fill = if (hasMood) moodColor(cell.moodLevel!!) else MaterialTheme.colorScheme.surfaceVariant
     val isToday = cell.date == LocalDate.now()
+    val shape = RoundedCornerShape(11.dp)
     Box(
         modifier = Modifier
             .aspectRatio(1f)
-            .padding(2.dp),
+            .padding(3.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             modifier = Modifier
-                .clip(CircleShape)
-                .background(if (cell.moodLevel != null) color else Color.Transparent)
-                .padding(8.dp),
+                .fillMaxSize()
+                .clip(shape)
+                .background(fill)
+                .then(
+                    if (isToday) Modifier.border(2.dp, MaterialTheme.colorScheme.onSurface, shape)
+                    else Modifier,
+                ),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = cell.date.dayOfMonth.toString(),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
-                color = if (cell.moodLevel != null) Color.White else MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
+                color = if (hasMood) Color.White else MaterialTheme.colorScheme.tertiary,
             )
         }
     }
@@ -132,13 +141,14 @@ private fun MoodLegend(modifier: Modifier = Modifier) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .clip(CircleShape)
-                        .background(mood.color)
-                        .padding(6.dp),
+                        .size(11.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(mood.color),
                 )
                 Text(
                     text = " ${mood.label}",
                     style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

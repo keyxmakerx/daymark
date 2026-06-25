@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,11 +20,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.daylie.app.model.Mood
+import com.daylie.app.ui.components.MoodFaceIcon
+import com.daylie.app.ui.components.PaperSurface
 import java.util.Locale
 
 @Composable
@@ -87,20 +88,30 @@ fun StatsScreen(
 
 @Composable
 private fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier) {
+    PaperSurface(modifier = modifier) {
         Column(Modifier.padding(16.dp)) {
-            Text(value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.headlineMedium)
+            Text(
+                label.uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                letterSpacing = 0.8.sp,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
         }
     }
 }
 
 @Composable
 private fun SectionCard(title: String, content: @Composable () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Box(Modifier.padding(top = 12.dp)) { content() }
+    PaperSurface(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(17.dp)) {
+            Text(
+                title.uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                letterSpacing = 0.8.sp,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
+            Box(Modifier.padding(top = 14.dp)) { content() }
         }
     }
 }
