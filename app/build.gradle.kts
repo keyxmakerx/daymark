@@ -20,11 +20,11 @@ val releaseStorePath: String? =
     keystoreProps.getProperty("storeFile") ?: System.getenv("KEYSTORE_FILE")
 
 android {
-    namespace = "com.daylie.app"
+    namespace = "com.daymark.app"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.daylie.app"
+        applicationId = "com.daymark.app"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
