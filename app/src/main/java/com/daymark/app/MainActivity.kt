@@ -49,12 +49,14 @@ class MainActivity : FragmentActivity() {
             val prefs by settings.changes().collectAsState(initial = null)
             // Re-read on any preference change.
             val dynamicColor = prefs?.let { settings.dynamicColor } ?: settings.dynamicColor
-            val onboarded = prefs?.let { settings.onboardingComplete } ?: settings.onboardingComplete
             // Only lock when a PIN actually exists (avoids a lock-out with no way in).
             val lockEnabled = (prefs?.let { settings.lockEnabled } ?: settings.lockEnabled) &&
                 pinManager.isPinSet
 
             var unlocked by remember { mutableStateOf(false) }
+            // Local state so finishing the wizard advances immediately (the prefs-change
+            // flow re-emits the same instance, which doesn't trigger recomposition).
+            var onboarded by remember { mutableStateOf(settings.onboardingComplete) }
 
             // Re-lock whenever the whole app goes to the background.
             if (lockEnabled) {
@@ -74,7 +76,7 @@ class MainActivity : FragmentActivity() {
                     color = MaterialTheme.colorScheme.background,
                 ) {
                     when {
-                        !onboarded -> OnboardingScreen(onFinish = { /* prefs change re-composes */ })
+                        !onboarded -> OnboardingScreen(onFinish = { unlocked = true; onboarded = true })
                         lockEnabled && !unlocked -> LockScreen(onUnlocked = { unlocked = true })
                         else -> DaymarkAppScaffold(initialMood = initialMood)
                     }
