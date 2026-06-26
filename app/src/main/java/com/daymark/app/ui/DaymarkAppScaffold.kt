@@ -1,13 +1,20 @@
 package com.daymark.app.ui
 
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.navigation.NavBackStackEntry
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -132,17 +139,35 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
             }
         },
     ) { padding ->
-        val motion = tween<Float>(durationMillis = 240, easing = FastOutSlowInEasing)
-        val slideMotion = tween<androidx.compose.ui.unit.IntOffset>(durationMillis = 240, easing = FastOutSlowInEasing)
+        // Spring specs for spatial motion — alive & interruptible, unlike a fixed tween.
+        val floatSpring = spring<Float>(dampingRatio = 0.9f, stiffness = Spring.StiffnessMediumLow)
+        val offsetSpring =
+            spring<androidx.compose.ui.unit.IntOffset>(dampingRatio = 0.9f, stiffness = Spring.StiffnessMediumLow)
+
+        // Drill into a detail/list = shared-axis Z (scale up from depth).
+        val zEnter: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
+            scaleIn(floatSpring, initialScale = 0.85f) + fadeIn(tween(150))
+        }
+        val zPopExit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
+            scaleOut(floatSpring, targetScale = 0.85f) + fadeOut(tween(150))
+        }
+        // Create/edit an entry = a sheet rising from the bottom (a different metaphor).
+        val sheetEnter: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
+            slideInVertically(offsetSpring) { it / 6 } + fadeIn(tween(150))
+        }
+        val sheetPopExit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
+            slideOutVertically(offsetSpring) { it / 6 } + fadeOut(tween(150))
+        }
+
         NavHost(
             navController = navController,
             startDestination = Routes.HOME,
             modifier = Modifier,
-            // Purposeful, directional motion (shared-axis style) instead of a plain crossfade.
-            enterTransition = { slideInHorizontally(slideMotion) { it / 4 } + fadeIn(motion) },
-            exitTransition = { slideOutHorizontally(slideMotion) { -it / 8 } + fadeOut(motion) },
-            popEnterTransition = { slideInHorizontally(slideMotion) { -it / 8 } + fadeIn(motion) },
-            popExitTransition = { slideOutHorizontally(slideMotion) { it / 4 } + fadeOut(motion) },
+            // Default = top-level tabs, which are siblings: a non-directional fade-through.
+            enterTransition = { fadeIn(tween(220, delayMillis = 90)) + scaleIn(tween(220, delayMillis = 90), initialScale = 0.92f) },
+            exitTransition = { fadeOut(tween(110)) },
+            popEnterTransition = { fadeIn(tween(220, delayMillis = 90)) + scaleIn(tween(220, delayMillis = 90), initialScale = 0.92f) },
+            popExitTransition = { fadeOut(tween(110)) },
         ) {
             composable(Routes.HOME) {
                 HomeScreen(
@@ -156,7 +181,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
                     modifier = Modifier.padding(padding),
                 )
             }
-            composable(Routes.YEAR_PIXELS) {
+            composable(Routes.YEAR_PIXELS, enterTransition = zEnter, popExitTransition = zPopExit) {
                 YearPixelsScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.STATS) {
@@ -168,7 +193,11 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
                     modifier = Modifier.padding(padding),
                 )
             }
-            composable(Routes.JOURNAL_ENTRY_PATTERN) {
+            composable(
+                Routes.JOURNAL_ENTRY_PATTERN,
+                enterTransition = sheetEnter,
+                popExitTransition = sheetPopExit,
+            ) {
                 JournalEditorScreen(onDone = { navController.popBackStack() })
             }
             composable(Routes.SETTINGS) {
@@ -179,14 +208,14 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
                     modifier = Modifier.padding(padding),
                 )
             }
-            composable(Routes.GOALS) {
+            composable(Routes.GOALS, enterTransition = zEnter, popExitTransition = zPopExit) {
                 GoalsScreen(
                     onBack = { navController.popBackStack() },
                     onGoalClick = { id -> navController.navigate(Routes.goal(id)) },
                     onAddGoal = { navController.navigate(Routes.goal()) },
                 )
             }
-            composable(Routes.GOAL_PATTERN) {
+            composable(Routes.GOAL_PATTERN, enterTransition = sheetEnter, popExitTransition = sheetPopExit) {
                 GoalEditorScreen(onDone = { navController.popBackStack() })
             }
             composable(
@@ -195,10 +224,12 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
                     navArgument("entryId") { type = NavType.StringType },
                     navArgument("mood") { type = NavType.StringType; defaultValue = "-1" },
                 ),
+                enterTransition = sheetEnter,
+                popExitTransition = sheetPopExit,
             ) {
                 EntryEditorScreen(onDone = { navController.popBackStack() })
             }
-            composable(Routes.ACTIVITIES) {
+            composable(Routes.ACTIVITIES, enterTransition = zEnter, popExitTransition = zPopExit) {
                 ActivitiesScreen(onBack = { navController.popBackStack() })
             }
         }

@@ -1,9 +1,13 @@
 package com.daymark.app.ui.components
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -11,6 +15,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.daymark.app.model.Mood
@@ -32,8 +37,18 @@ fun MoodFaceIcon(
     onClick: (() -> Unit)? = null,
 ) {
     val moodColor = LightMoodColors.forLevel(level)
+    // A subtle, bouncy "pop" when this face becomes the selected one.
+    val scale by animateFloatAsState(
+        targetValue = if (selected) 1.08f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "moodFaceScale",
+    )
     val clickable = if (onClick != null) modifier.clickable { onClick() } else modifier
-    Canvas(modifier = clickable.size(size)) {
+    Canvas(
+        modifier = clickable
+            .size(size)
+            .graphicsLayer { scaleX = scale; scaleY = scale },
+    ) {
         drawMoodFace(level = level, moodColor = moodColor, selected = selected)
     }
 }

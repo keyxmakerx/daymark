@@ -99,12 +99,16 @@ fun EntryEditorScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
+                val view = androidx.compose.ui.platform.LocalView.current
                 Mood.ascending.forEach { mood ->
                     val selected = state.moodLevel == mood.level
                     Column(
                         modifier = Modifier
                             .clip(RoundedCornerShape(16.dp))
-                            .clickable { viewModel.setMood(mood.level) }
+                            .clickable {
+                                view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+                                viewModel.setMood(mood.level)
+                            }
                             .padding(horizontal = 6.dp, vertical = 8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(8.dp),
