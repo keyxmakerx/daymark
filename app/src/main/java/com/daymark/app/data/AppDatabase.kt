@@ -19,7 +19,7 @@ import com.daymark.app.data.entity.MoodEntry
         MoodEntry::class, ActivityEntity::class, EntryActivityCrossRef::class,
         JournalEntry::class, Goal::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -76,13 +76,20 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v4 renames the default "Eat healthy" activity to "Eat" (only if still unedited). */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("UPDATE activities SET name = 'Eat' WHERE name = 'Eat healthy'")
+            }
+        }
+
         val DEFAULT_ACTIVITIES = listOf(
             "Work" to "work",
             "Family" to "family",
             "Friends" to "friends",
             "Exercise" to "exercise",
             "Sleep" to "sleep",
-            "Eat healthy" to "food",
+            "Eat" to "food",
             "Reading" to "reading",
             "Gaming" to "gaming",
             "Movies" to "movie",

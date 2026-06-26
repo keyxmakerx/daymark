@@ -55,6 +55,7 @@ fun SettingsScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val activity = context as? androidx.fragment.app.FragmentActivity
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { onShowMessage(it) }
@@ -138,10 +139,26 @@ fun SettingsScreen(
         if (state.lockEnabled) {
             ListItem(
                 headlineContent = { Text("Unlock with biometrics") },
+                supportingContent = { Text("Confirm your fingerprint/face to turn this on") },
                 trailingContent = {
                     Switch(
                         checked = state.biometricEnabled,
-                        onCheckedChange = viewModel::setBiometricEnabled,
+                        onCheckedChange = { enable ->
+                            if (!enable) {
+                                viewModel.setBiometricEnabled(false)
+                            } else if (activity == null) {
+                                onShowMessage("Biometrics unavailable")
+                            } else if (!com.daymark.app.security.BiometricHelper.canAuthenticate(activity)) {
+                                onShowMessage("No biometrics enrolled on this device")
+                            } else {
+                                // Only enable after a successful biometric check, so we know it works.
+                                com.daymark.app.security.BiometricHelper.prompt(
+                                    activity = activity,
+                                    onSuccess = { viewModel.setBiometricEnabled(true) },
+                                    onError = { onShowMessage("Biometric check failed — not enabled") },
+                                )
+                            }
+                        },
                     )
                 },
             )
