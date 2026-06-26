@@ -59,6 +59,8 @@ import com.daymark.app.ui.journal.JournalScreen
 import com.daymark.app.ui.more.MoreHubScreen
 import com.daymark.app.ui.navigation.Routes
 import com.daymark.app.ui.navigation.TopLevelDestination
+import com.daymark.app.ui.sleep.ScreenerScreen
+import com.daymark.app.ui.sleep.SleepScreen
 import com.daymark.app.ui.settings.SettingsScreen
 import com.daymark.app.ui.stats.StatsScreen
 import kotlinx.coroutines.launch
@@ -223,8 +225,26 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
                     onGoals = { navController.navigate(Routes.GOALS) },
                     onActivities = { navController.navigate(Routes.ACTIVITIES) },
                     onYearPixels = { navController.navigate(Routes.YEAR_PIXELS) },
+                    onSleep = { navController.navigate(Routes.SLEEP) },
                     onSettings = { navController.navigate(Routes.SETTINGS) },
                     modifier = Modifier.padding(padding),
+                )
+            }
+            composable(Routes.SLEEP, enterTransition = zEnter, popExitTransition = zPopExit) {
+                SleepScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenScreener = { key -> navController.navigate(Routes.screener(key)) },
+                )
+            }
+            composable(
+                Routes.SCREENER_PATTERN,
+                arguments = listOf(navArgument("screenerKey") { type = NavType.StringType }),
+                enterTransition = sheetEnter,
+                popExitTransition = sheetPopExit,
+            ) { entry ->
+                ScreenerScreen(
+                    screenerKey = entry.arguments?.getString("screenerKey") ?: "",
+                    onDone = { navController.popBackStack() },
                 )
             }
             composable(Routes.SETTINGS, enterTransition = zEnter, popExitTransition = zPopExit) {

@@ -32,6 +32,7 @@ fun MoreHubScreen(
     onGoals: () -> Unit,
     onActivities: () -> Unit,
     onYearPixels: () -> Unit,
+    onSleep: () -> Unit,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -63,13 +64,19 @@ fun MoreHubScreen(
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
         ) {
             HubCard(
+                icon = R.drawable.ic_act_sleep,
+                title = "Sleep check-ins",
+                subtitle = "Quick self-checks",
+                onClick = onSleep,
+                modifier = Modifier.weight(1f),
+            )
+            HubCard(
                 icon = R.drawable.ic_ui_more,
                 title = "Settings",
                 subtitle = "Reminders, lock, backup",
                 onClick = onSettings,
                 modifier = Modifier.weight(1f),
             )
-            Spacer(Modifier.weight(1f))
         }
     }
 }

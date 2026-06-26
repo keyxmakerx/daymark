@@ -13,6 +13,12 @@ object Routes {
     const val ACTIVITIES = "activities"
     const val ACTIVITY_LIBRARY = "activity_library"
     const val MORE = "more"
+    const val SLEEP = "sleep"
+    const val SCREENER = "screener"
+
+    /** Sleep self-check questionnaire route, keyed by screener id. */
+    fun screener(key: String) = "$SCREENER/$key"
+    const val SCREENER_PATTERN = "$SCREENER/{screenerKey}"
     const val ENTRY = "entry"
     const val JOURNAL_ENTRY = "journal_entry"
     const val YEAR_PIXELS = "year_pixels"
