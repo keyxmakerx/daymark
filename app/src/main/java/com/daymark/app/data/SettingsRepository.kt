@@ -46,6 +46,11 @@ class SettingsRepository @Inject constructor(
         get() = prefs.getBoolean(KEY_DYNAMIC_COLOR, true)
         set(value) = prefs.edit().putBoolean(KEY_DYNAMIC_COLOR, value).apply()
 
+    // --- Onboarding ---
+    var onboardingComplete: Boolean
+        get() = prefs.getBoolean(KEY_ONBOARDING_DONE, false)
+        set(value) = prefs.edit().putBoolean(KEY_ONBOARDING_DONE, value).apply()
+
     /** Emits the current preferences object whenever any value changes. */
     fun changes(): Flow<SharedPreferences> = callbackFlow {
         trySend(prefs)
@@ -62,5 +67,6 @@ class SettingsRepository @Inject constructor(
         private const val KEY_PIN_HASH = "pin_hash"
         private const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"
         private const val KEY_DYNAMIC_COLOR = "dynamic_color"
+        private const val KEY_ONBOARDING_DONE = "onboarding_complete"
     }
 }

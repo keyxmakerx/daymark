@@ -12,7 +12,8 @@ All notable changes to this project are documented here. The format is based on
 - **Goals**: weekly habit goals with progress, optionally linked to an activity.
 - **CSV export** of mood entries; **merge** option when restoring a JSON backup.
 - **Home-screen widget** (Glance) to quick-log a mood.
-- First-run onboarding wizard — _planned_.
+- **Export PDF for therapist** — a printable clinical report with a SHA-256 + QR authenticity stamp.
+- **First-run onboarding wizard** (skippable): daily-reminder setup, optional PIN lock.
 
 ### Changed
 - Renamed the app from "Daylie" to **Daymark** (package `com.daymark.app`).

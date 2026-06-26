@@ -22,6 +22,7 @@ import com.daymark.app.data.SettingsRepository
 import com.daymark.app.security.PinManager
 import com.daymark.app.ui.DaymarkAppScaffold
 import com.daymark.app.ui.lock.LockScreen
+import com.daymark.app.ui.onboarding.OnboardingScreen
 import com.daymark.app.ui.theme.DaymarkTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -48,6 +49,7 @@ class MainActivity : FragmentActivity() {
             val prefs by settings.changes().collectAsState(initial = null)
             // Re-read on any preference change.
             val dynamicColor = prefs?.let { settings.dynamicColor } ?: settings.dynamicColor
+            val onboarded = prefs?.let { settings.onboardingComplete } ?: settings.onboardingComplete
             // Only lock when a PIN actually exists (avoids a lock-out with no way in).
             val lockEnabled = (prefs?.let { settings.lockEnabled } ?: settings.lockEnabled) &&
                 pinManager.isPinSet
@@ -71,10 +73,10 @@ class MainActivity : FragmentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    if (lockEnabled && !unlocked) {
-                        LockScreen(onUnlocked = { unlocked = true })
-                    } else {
-                        DaymarkAppScaffold(initialMood = initialMood)
+                    when {
+                        !onboarded -> OnboardingScreen(onFinish = { /* prefs change re-composes */ })
+                        lockEnabled && !unlocked -> LockScreen(onUnlocked = { unlocked = true })
+                        else -> DaymarkAppScaffold(initialMood = initialMood)
                     }
                 }
             }
