@@ -14,6 +14,8 @@ object Routes {
     const val ACTIVITY_LIBRARY = "activity_library"
     const val MORE = "more"
     const val SLEEP = "sleep"
+    const val SLEEP_LOG = "sleep_log"
+    const val SLEEP_SETUP = "sleep_setup"
     const val SCREENER = "screener"
 
     /** Sleep self-check questionnaire route, keyed by screener id. */

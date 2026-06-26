@@ -60,6 +60,8 @@ import com.daymark.app.ui.more.MoreHubScreen
 import com.daymark.app.ui.navigation.Routes
 import com.daymark.app.ui.navigation.TopLevelDestination
 import com.daymark.app.ui.sleep.ScreenerScreen
+import com.daymark.app.ui.sleep.SleepLogScreen
+import com.daymark.app.ui.sleep.SleepProfileScreen
 import com.daymark.app.ui.sleep.SleepScreen
 import com.daymark.app.ui.settings.SettingsScreen
 import com.daymark.app.ui.stats.StatsScreen
@@ -234,7 +236,15 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
                 SleepScreen(
                     onBack = { navController.popBackStack() },
                     onOpenScreener = { key -> navController.navigate(Routes.screener(key)) },
+                    onLogNight = { navController.navigate(Routes.SLEEP_LOG) },
+                    onOpenSetup = { navController.navigate(Routes.SLEEP_SETUP) },
                 )
+            }
+            composable(Routes.SLEEP_LOG, enterTransition = sheetEnter, popExitTransition = sheetPopExit) {
+                SleepLogScreen(onDone = { navController.popBackStack() })
+            }
+            composable(Routes.SLEEP_SETUP, enterTransition = zEnter, popExitTransition = zPopExit) {
+                SleepProfileScreen(onBack = { navController.popBackStack() })
             }
             composable(
                 Routes.SCREENER_PATTERN,

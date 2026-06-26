@@ -8,18 +8,20 @@ import com.daymark.app.data.dao.ActivityDao
 import com.daymark.app.data.dao.EntryDao
 import com.daymark.app.data.dao.GoalDao
 import com.daymark.app.data.dao.JournalDao
+import com.daymark.app.data.dao.SleepLogDao
 import com.daymark.app.data.entity.ActivityEntity
 import com.daymark.app.data.entity.EntryActivityCrossRef
 import com.daymark.app.data.entity.Goal
 import com.daymark.app.data.entity.JournalEntry
 import com.daymark.app.data.entity.MoodEntry
+import com.daymark.app.data.entity.SleepLog
 
 @Database(
     entities = [
         MoodEntry::class, ActivityEntity::class, EntryActivityCrossRef::class,
-        JournalEntry::class, Goal::class,
+        JournalEntry::class, Goal::class, SleepLog::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -27,6 +29,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun activityDao(): ActivityDao
     abstract fun journalDao(): JournalDao
     abstract fun goalDao(): GoalDao
+    abstract fun sleepLogDao(): SleepLogDao
 
     /** Seeds a sensible set of starter activities on first install. */
     class SeedCallback : Callback() {
@@ -80,6 +83,26 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("UPDATE activities SET name = 'Eat' WHERE name = 'Eat healthy'")
+            }
+        }
+
+        /** v5 adds the manual sleep-diary table; existing data is preserved. */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `sleep_logs` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`night` INTEGER NOT NULL, " +
+                        "`bedTime` INTEGER NOT NULL, " +
+                        "`wakeTime` INTEGER NOT NULL, " +
+                        "`sleepLatencyMin` INTEGER NOT NULL, " +
+                        "`awakeMin` INTEGER NOT NULL, " +
+                        "`quality` INTEGER NOT NULL, " +
+                        "`note` TEXT NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_sleep_logs_night` ON `sleep_logs` (`night`)",
+                )
             }
         }
 
