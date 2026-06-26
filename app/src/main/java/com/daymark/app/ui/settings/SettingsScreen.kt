@@ -161,17 +161,23 @@ fun SettingsScreen(
         ListItem(
             headlineContent = { Text("Export backup") },
             supportingContent = { Text("Unencrypted JSON — keep it somewhere safe") },
-            modifier = Modifier.clickable { exportLauncher.launch("daymark-backup.json") },
+            modifier = Modifier.clickable {
+                viewModel.prepareForFilePicker(); exportLauncher.launch("daymark-backup.json")
+            },
         )
         ListItem(
             headlineContent = { Text("Restore backup") },
             supportingContent = { Text("Replace or merge from a JSON file") },
-            modifier = Modifier.clickable { importLauncher.launch(arrayOf("application/json", "text/*")) },
+            modifier = Modifier.clickable {
+                viewModel.prepareForFilePicker(); importLauncher.launch(arrayOf("application/json", "text/*"))
+            },
         )
         ListItem(
             headlineContent = { Text("Export as CSV") },
             supportingContent = { Text("Unencrypted spreadsheet of all entries") },
-            modifier = Modifier.clickable { csvLauncher.launch("daymark-entries.csv") },
+            modifier = Modifier.clickable {
+                viewModel.prepareForFilePicker(); csvLauncher.launch("daymark-entries.csv")
+            },
         )
         ListItem(
             headlineContent = { Text("Export PDF for therapist") },
@@ -232,6 +238,7 @@ fun SettingsScreen(
             onExport = { options ->
                 pdfOptions = options
                 showPdfDialog = false
+                viewModel.prepareForFilePicker()
                 pdfLauncher.launch("daymark-report.pdf")
             },
         )
@@ -262,7 +269,7 @@ fun SettingsScreen(
 private fun PinDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var pin by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
-    val valid = pin.length in 4..8 && pin == confirm
+    val valid = pin.length in 3..8 && pin == confirm
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -271,14 +278,14 @@ private fun PinDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
             Column {
                 OutlinedTextField(
                     value = pin,
-                    onValueChange = { if (it.all(Char::isDigit)) pin = it },
-                    label = { Text("PIN (4–8 digits)") },
+                    onValueChange = { if (it.all(Char::isDigit) && it.length <= 8) pin = it },
+                    label = { Text("PIN (3–8 digits, 4 recommended)") },
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                 )
                 OutlinedTextField(
                     value = confirm,
-                    onValueChange = { if (it.all(Char::isDigit)) confirm = it },
+                    onValueChange = { if (it.all(Char::isDigit) && it.length <= 8) confirm = it },
                     label = { Text("Confirm PIN") },
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.NumberPassword),

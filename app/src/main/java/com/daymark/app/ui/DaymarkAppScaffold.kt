@@ -153,10 +153,10 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
         }
         // Create/edit an entry = a sheet rising from the bottom (a different metaphor).
         val sheetEnter: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
-            slideInVertically(offsetSpring) { it / 6 } + fadeIn(tween(150))
+            slideInVertically(offsetSpring) { it / 3 } + fadeIn(tween(120))
         }
         val sheetPopExit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
-            slideOutVertically(offsetSpring) { it / 6 } + fadeOut(tween(150))
+            slideOutVertically(offsetSpring) { it / 3 } + fadeOut(tween(160))
         }
 
         NavHost(

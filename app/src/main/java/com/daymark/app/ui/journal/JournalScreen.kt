@@ -72,7 +72,11 @@ fun JournalScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 items(entries, key = { it.id }) { entry ->
-                    JournalCard(entry = entry, onClick = { onEntryClick(entry.id) })
+                    JournalCard(
+                        entry = entry,
+                        onClick = { onEntryClick(entry.id) },
+                        modifier = Modifier.animateItem(),
+                    )
                 }
             }
         }
@@ -80,8 +84,8 @@ fun JournalScreen(
 }
 
 @Composable
-private fun JournalCard(entry: JournalEntry, onClick: () -> Unit) {
-    PaperSurface(modifier = Modifier.fillMaxWidth()) {
+private fun JournalCard(entry: JournalEntry, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    PaperSurface(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

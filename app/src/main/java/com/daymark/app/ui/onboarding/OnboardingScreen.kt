@@ -181,7 +181,7 @@ private fun ReminderStep(onEnable: (Int, Int) -> Unit, onSkip: () -> Unit) {
 private fun LockStep(onSetPin: (String) -> Unit, onSkip: () -> Unit) {
     var pin by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
-    val valid = pin.length in 4..8 && pin == confirm
+    val valid = pin.length in 3..8 && pin == confirm
 
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Text("Lock your journal", style = MaterialTheme.typography.headlineSmall)
@@ -195,7 +195,7 @@ private fun LockStep(onSetPin: (String) -> Unit, onSkip: () -> Unit) {
         OutlinedTextField(
             value = pin,
             onValueChange = { if (it.all(Char::isDigit) && it.length <= 8) pin = it },
-            label = { Text("PIN (4–8 digits)") },
+            label = { Text("PIN (3–8 digits, 4 recommended)") },
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
             modifier = Modifier.fillMaxWidth(),

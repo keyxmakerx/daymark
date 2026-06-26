@@ -63,6 +63,7 @@ fun HomeScreen(
                     label = DateUtils.formatDate(DateUtils.startOfDay(date)),
                     entries = entries,
                     onEntryClick = onEntryClick,
+                    modifier = Modifier.animateItem(),
                 )
             }
         }
@@ -74,8 +75,9 @@ private fun DaySheet(
     label: String,
     entries: List<EntryWithActivities>,
     onEntryClick: (Long) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    PaperSurface(modifier = Modifier.fillMaxWidth()) {
+    PaperSurface(modifier = modifier.fillMaxWidth()) {
         Column {
             Text(
                 text = label.uppercase(),

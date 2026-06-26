@@ -10,6 +10,7 @@ import com.daymark.app.export.PdfExportOptions
 import com.daymark.app.export.PdfReportGenerator
 import com.daymark.app.export.ReportDataBuilder
 import com.daymark.app.notifications.ReminderScheduler
+import com.daymark.app.security.AutoLockController
 import com.daymark.app.security.PinManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -44,7 +45,11 @@ class SettingsViewModel @Inject constructor(
     private val backupManager: BackupManager,
     private val reportDataBuilder: ReportDataBuilder,
     private val pdfReportGenerator: PdfReportGenerator,
+    private val autoLock: AutoLockController,
 ) : ViewModel() {
+
+    /** Call right before opening a file picker so returning doesn't trigger the app lock. */
+    fun prepareForFilePicker() = autoLock.suppressNextBackgroundLock()
 
     private val _uiState = MutableStateFlow(readState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()

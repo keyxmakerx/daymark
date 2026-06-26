@@ -88,15 +88,17 @@ fun GoalsScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(goals, key = { it.goal.id }) { ui -> GoalCard(ui, onClick = { onGoalClick(ui.goal.id) }) }
+                items(goals, key = { it.goal.id }) { ui ->
+                    GoalCard(ui, onClick = { onGoalClick(ui.goal.id) }, modifier = Modifier.animateItem())
+                }
             }
         }
     }
 }
 
 @Composable
-private fun GoalCard(ui: GoalProgressUi, onClick: () -> Unit) {
-    PaperSurface(modifier = Modifier.fillMaxWidth()) {
+private fun GoalCard(ui: GoalProgressUi, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    PaperSurface(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()

@@ -19,6 +19,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.daymark.app.data.SettingsRepository
+import com.daymark.app.security.AutoLockController
 import com.daymark.app.security.PinManager
 import com.daymark.app.ui.DaymarkAppScaffold
 import com.daymark.app.ui.lock.LockScreen
@@ -32,6 +33,7 @@ class MainActivity : FragmentActivity() {
 
     @Inject lateinit var settings: SettingsRepository
     @Inject lateinit var pinManager: PinManager
+    @Inject lateinit var autoLock: AutoLockController
 
     companion object {
         const val EXTRA_PREFILL_MOOD = "prefill_mood"
@@ -63,7 +65,10 @@ class MainActivity : FragmentActivity() {
                 DisposableEffect(Unit) {
                     val owner = ProcessLifecycleOwner.get()
                     val observer = LifecycleEventObserver { _, event ->
-                        if (event == Lifecycle.Event.ON_STOP) unlocked = false
+                        // Skip the re-lock once if we intentionally backgrounded for a file picker.
+                        if (event == Lifecycle.Event.ON_STOP && !autoLock.consumeSkip()) {
+                            unlocked = false
+                        }
                     }
                     owner.lifecycle.addObserver(observer)
                     onDispose { owner.lifecycle.removeObserver(observer) }
