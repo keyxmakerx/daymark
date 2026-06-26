@@ -63,6 +63,8 @@ import com.daymark.app.ui.sleep.ScreenerScreen
 import com.daymark.app.ui.sleep.SleepLogScreen
 import com.daymark.app.ui.sleep.SleepProfileScreen
 import com.daymark.app.ui.sleep.SleepScreen
+import com.daymark.app.ui.sleep.TreatmentDetailScreen
+import com.daymark.app.ui.sleep.TreatmentsScreen
 import com.daymark.app.ui.settings.SettingsScreen
 import com.daymark.app.ui.stats.StatsScreen
 import kotlinx.coroutines.launch
@@ -238,6 +240,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
                     onOpenScreener = { key -> navController.navigate(Routes.screener(key)) },
                     onLogNight = { navController.navigate(Routes.SLEEP_LOG) },
                     onOpenSetup = { navController.navigate(Routes.SLEEP_SETUP) },
+                    onOpenTreatments = { navController.navigate(Routes.TREATMENTS) },
                 )
             }
             composable(Routes.SLEEP_LOG, enterTransition = sheetEnter, popExitTransition = sheetPopExit) {
@@ -245,6 +248,20 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
             }
             composable(Routes.SLEEP_SETUP, enterTransition = zEnter, popExitTransition = zPopExit) {
                 SleepProfileScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Routes.TREATMENTS, enterTransition = zEnter, popExitTransition = zPopExit) {
+                TreatmentsScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenTreatment = { id -> navController.navigate(Routes.treatment(id)) },
+                )
+            }
+            composable(
+                Routes.TREATMENT_PATTERN,
+                arguments = listOf(navArgument("treatmentId") { type = NavType.StringType }),
+                enterTransition = zEnter,
+                popExitTransition = zPopExit,
+            ) {
+                TreatmentDetailScreen(onBack = { navController.popBackStack() })
             }
             composable(
                 Routes.SCREENER_PATTERN,

@@ -9,19 +9,21 @@ import com.daymark.app.data.dao.EntryDao
 import com.daymark.app.data.dao.GoalDao
 import com.daymark.app.data.dao.JournalDao
 import com.daymark.app.data.dao.SleepLogDao
+import com.daymark.app.data.dao.TreatmentDao
 import com.daymark.app.data.entity.ActivityEntity
 import com.daymark.app.data.entity.EntryActivityCrossRef
 import com.daymark.app.data.entity.Goal
 import com.daymark.app.data.entity.JournalEntry
 import com.daymark.app.data.entity.MoodEntry
 import com.daymark.app.data.entity.SleepLog
+import com.daymark.app.data.entity.Treatment
 
 @Database(
     entities = [
         MoodEntry::class, ActivityEntity::class, EntryActivityCrossRef::class,
-        JournalEntry::class, Goal::class, SleepLog::class,
+        JournalEntry::class, Goal::class, SleepLog::class, Treatment::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -30,6 +32,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun journalDao(): JournalDao
     abstract fun goalDao(): GoalDao
     abstract fun sleepLogDao(): SleepLogDao
+    abstract fun treatmentDao(): TreatmentDao
 
     /** Seeds a sensible set of starter activities on first install. */
     class SeedCallback : Callback() {
@@ -102,6 +105,19 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_sleep_logs_night` ON `sleep_logs` (`night`)",
+                )
+            }
+        }
+
+        /** v6 adds the treatments table (for before/after self-tracking); data is preserved. */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `treatments` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`kind` TEXT NOT NULL, " +
+                        "`startedAt` INTEGER NOT NULL, " +
+                        "`note` TEXT NOT NULL)",
                 )
             }
         }

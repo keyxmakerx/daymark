@@ -16,7 +16,13 @@ object Routes {
     const val SLEEP = "sleep"
     const val SLEEP_LOG = "sleep_log"
     const val SLEEP_SETUP = "sleep_setup"
+    const val TREATMENTS = "treatments"
+    const val TREATMENT = "treatment"
     const val SCREENER = "screener"
+
+    /** Treatment before/after detail, keyed by treatment id. */
+    fun treatment(id: Long) = "$TREATMENT/$id"
+    const val TREATMENT_PATTERN = "$TREATMENT/{treatmentId}"
 
     /** Sleep self-check questionnaire route, keyed by screener id. */
     fun screener(key: String) = "$SCREENER/$key"
