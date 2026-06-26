@@ -14,10 +14,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -40,6 +42,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.daymark.app.R
 import com.daymark.app.data.entity.ActivityEntity
 import com.daymark.app.ui.icon.ActivityIcons
 
@@ -47,6 +50,7 @@ import com.daymark.app.ui.icon.ActivityIcons
 @Composable
 fun ActivitiesScreen(
     onBack: () -> Unit,
+    onBrowseLibrary: () -> Unit = {},
     viewModel: ActivitiesViewModel = hiltViewModel(),
 ) {
     val activities by viewModel.activities.collectAsStateWithLifecycle()
@@ -71,6 +75,20 @@ fun ActivitiesScreen(
         },
     ) { padding ->
         LazyColumn(contentPadding = PaddingValues(top = 0.dp), modifier = Modifier.padding(padding)) {
+            item(key = "browse_library") {
+                ListItem(
+                    headlineContent = { Text("Add from library") },
+                    supportingContent = { Text("Browse activities by category") },
+                    leadingContent = {
+                        Icon(painterResource(R.drawable.ic_ui_plus), contentDescription = null)
+                    },
+                    trailingContent = {
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
+                    },
+                    modifier = Modifier.clickable { onBrowseLibrary() },
+                )
+                HorizontalDivider()
+            }
             items(activities, key = { it.id }) { activity ->
                 ListItem(
                     headlineContent = {

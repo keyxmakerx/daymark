@@ -10,6 +10,7 @@ object Routes {
     const val JOURNAL = "journal"
     const val SETTINGS = "settings"
     const val ACTIVITIES = "activities"
+    const val ACTIVITY_LIBRARY = "activity_library"
     const val ENTRY = "entry"
     const val JOURNAL_ENTRY = "journal_entry"
     const val YEAR_PIXELS = "year_pixels"

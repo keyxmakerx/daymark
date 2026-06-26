@@ -42,6 +42,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.daymark.app.R
 import com.daymark.app.ui.activities.ActivitiesScreen
+import com.daymark.app.ui.activities.ActivityLibraryScreen
 import com.daymark.app.ui.calendar.CalendarScreen
 import com.daymark.app.ui.calendar.YearPixelsScreen
 import com.daymark.app.ui.goals.GoalEditorScreen
@@ -230,7 +231,16 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
                 EntryEditorScreen(onDone = { navController.popBackStack() })
             }
             composable(Routes.ACTIVITIES, enterTransition = zEnter, popExitTransition = zPopExit) {
-                ActivitiesScreen(onBack = { navController.popBackStack() })
+                ActivitiesScreen(
+                    onBack = { navController.popBackStack() },
+                    onBrowseLibrary = { navController.navigate(Routes.ACTIVITY_LIBRARY) },
+                )
+            }
+            composable(Routes.ACTIVITY_LIBRARY, enterTransition = zEnter, popExitTransition = zPopExit) {
+                ActivityLibraryScreen(
+                    onBack = { navController.popBackStack() },
+                    onShowMessage = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+                )
             }
         }
     }
