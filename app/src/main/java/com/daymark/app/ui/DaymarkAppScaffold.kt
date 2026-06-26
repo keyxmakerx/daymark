@@ -13,10 +13,13 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.navigation.NavBackStackEntry
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -51,6 +54,7 @@ import com.daymark.app.ui.entry.EntryEditorScreen
 import com.daymark.app.ui.home.HomeScreen
 import com.daymark.app.ui.journal.JournalEditorScreen
 import com.daymark.app.ui.journal.JournalScreen
+import com.daymark.app.ui.more.MoreHubScreen
 import com.daymark.app.ui.navigation.Routes
 import com.daymark.app.ui.navigation.TopLevelDestination
 import com.daymark.app.ui.settings.SettingsScreen
@@ -74,17 +78,21 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val topLevelRoutes = TopLevelDestination.entries.map { it.route }
-    val showChrome = currentRoute in topLevelRoutes || currentRoute == null
+    val isTopLevel = currentRoute in topLevelRoutes || currentRoute == null
+    // Settings is a drill-down (reached from the More hub) that still reuses the app's top bar.
+    val drillWithChrome = currentRoute == Routes.SETTINGS
+    val showTopBar = isTopLevel || drillWithChrome
+    val showBottomBar = isTopLevel
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            if (showChrome) {
+            if (showTopBar) {
                 val onHome = currentRoute == Routes.HOME || currentRoute == null
-                val title = if (onHome) {
-                    "Daymark"
-                } else {
-                    TopLevelDestination.entries.firstOrNull { it.route == currentRoute }?.label ?: "Daymark"
+                val title = when {
+                    onHome -> "Daymark"
+                    currentRoute == Routes.SETTINGS -> "Settings"
+                    else -> TopLevelDestination.entries.firstOrNull { it.route == currentRoute }?.label ?: "Daymark"
                 }
                 TopAppBar(
                     title = {
@@ -92,6 +100,16 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
                             text = title,
                             style = MaterialTheme.typography.headlineMedium,
                         )
+                    },
+                    navigationIcon = {
+                        if (drillWithChrome) {
+                            IconButton(onClick = { navController.popBackStack() }) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
+                                )
+                            }
+                        }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background,
@@ -101,7 +119,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
             }
         },
         bottomBar = {
-            if (showChrome) {
+            if (showBottomBar) {
                 NavigationBar {
                     val destination = backStackEntry?.destination
                     TopLevelDestination.entries.forEach { dest ->
@@ -201,7 +219,16 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
             ) {
                 JournalEditorScreen(onDone = { navController.popBackStack() })
             }
-            composable(Routes.SETTINGS) {
+            composable(Routes.MORE) {
+                MoreHubScreen(
+                    onGoals = { navController.navigate(Routes.GOALS) },
+                    onActivities = { navController.navigate(Routes.ACTIVITIES) },
+                    onYearPixels = { navController.navigate(Routes.YEAR_PIXELS) },
+                    onSettings = { navController.navigate(Routes.SETTINGS) },
+                    modifier = Modifier.padding(padding),
+                )
+            }
+            composable(Routes.SETTINGS, enterTransition = zEnter, popExitTransition = zPopExit) {
                 SettingsScreen(
                     onManageActivities = { navController.navigate(Routes.ACTIVITIES) },
                     onManageGoals = { navController.navigate(Routes.GOALS) },

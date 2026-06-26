@@ -11,6 +11,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val ACTIVITIES = "activities"
     const val ACTIVITY_LIBRARY = "activity_library"
+    const val MORE = "more"
     const val ENTRY = "entry"
     const val JOURNAL_ENTRY = "journal_entry"
     const val YEAR_PIXELS = "year_pixels"
@@ -39,5 +40,5 @@ enum class TopLevelDestination(
     CALENDAR(Routes.CALENDAR, "Calendar", R.drawable.ic_ui_calendar),
     JOURNAL(Routes.JOURNAL, "Journal", R.drawable.ic_ui_journal),
     STATS(Routes.STATS, "Stats", R.drawable.ic_ui_chart),
-    SETTINGS(Routes.SETTINGS, "More", R.drawable.ic_ui_more),
+    MORE(Routes.MORE, "More", R.drawable.ic_ui_more),
 }
