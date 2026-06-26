@@ -116,6 +116,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.process)
 
     implementation(libs.androidx.glance.appwidget)
+    implementation(libs.nayuki.qrcodegen)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

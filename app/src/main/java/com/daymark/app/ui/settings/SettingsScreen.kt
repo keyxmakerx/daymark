@@ -6,6 +6,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -14,6 +18,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -26,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
@@ -71,8 +77,14 @@ fun SettingsScreen(
         ActivityResultContracts.CreateDocument("text/csv"),
     ) { uri -> uri?.let(viewModel::exportCsvTo) }
 
+    var pdfOptions by remember { mutableStateOf<com.daymark.app.export.PdfExportOptions?>(null) }
+    val pdfLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf"),
+    ) { uri -> val o = pdfOptions; if (uri != null && o != null) viewModel.exportPdfTo(uri, o) }
+
     var showTimePicker by remember { mutableStateOf(false) }
     var showPinDialog by remember { mutableStateOf(false) }
+    var showPdfDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -161,6 +173,11 @@ fun SettingsScreen(
             supportingContent = { Text("Unencrypted spreadsheet of all entries") },
             modifier = Modifier.clickable { csvLauncher.launch("daymark-entries.csv") },
         )
+        ListItem(
+            headlineContent = { Text("Export PDF for therapist") },
+            supportingContent = { Text("A printable mood report with an authenticity stamp") },
+            modifier = Modifier.clickable { showPdfDialog = true },
+        )
 
         Divider()
         SectionHeader("Appearance")
@@ -205,6 +222,17 @@ fun SettingsScreen(
             onConfirm = { pin ->
                 viewModel.setPin(pin)
                 showPinDialog = false
+            },
+        )
+    }
+
+    if (showPdfDialog) {
+        PdfOptionsDialog(
+            onDismiss = { showPdfDialog = false },
+            onExport = { options ->
+                pdfOptions = options
+                showPdfDialog = false
+                pdfLauncher.launch("daymark-report.pdf")
             },
         )
     }
@@ -261,6 +289,67 @@ private fun PinDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
         confirmButton = { TextButton(enabled = valid, onClick = { onConfirm(pin) }) { Text("Save") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+@Composable
+private fun PdfOptionsDialog(
+    onDismiss: () -> Unit,
+    onExport: (com.daymark.app.export.PdfExportOptions) -> Unit,
+) {
+    var days by remember { mutableStateOf(90) } // 0 = all time
+    var notes by remember { mutableStateOf(true) }
+    var charts by remember { mutableStateOf(true) }
+    var journal by remember { mutableStateOf(false) }
+    val ranges = listOf(30 to "Last 30 days", 90 to "Last 90 days", 365 to "Last 12 months", 0 to "All time")
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Export PDF report") },
+        text = {
+            Column {
+                Text("Date range", style = MaterialTheme.typography.labelLarge)
+                ranges.forEach { (d, label) ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().clickable { days = d },
+                    ) {
+                        RadioButton(selected = days == d, onClick = { days = d })
+                        Text(label)
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                ToggleRow("Include notes", notes) { notes = it }
+                ToggleRow("Include charts", charts) { charts = it }
+                ToggleRow("Include journal entries", journal) { journal = it }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val now = System.currentTimeMillis()
+                val from = if (days == 0) 0L else now - days.toLong() * 86_400_000L
+                val label = ranges.first { it.first == days }.second
+                onExport(
+                    com.daymark.app.export.PdfExportOptions(
+                        fromMillis = from,
+                        toMillis = now,
+                        rangeLabel = label,
+                        includeNotes = notes,
+                        includeCharts = charts,
+                        includeJournal = journal,
+                    ),
+                )
+            }) { Text("Export") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Text(label, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
 }
 
 @Composable

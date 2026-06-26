@@ -27,6 +27,10 @@ interface EntryDao {
     @Query("SELECT * FROM mood_entries WHERE id = :id")
     suspend fun getById(id: Long): EntryWithActivities?
 
+    @Transaction
+    @Query("SELECT * FROM mood_entries WHERE dateTime BETWEEN :from AND :to ORDER BY dateTime ASC")
+    suspend fun getBetween(from: Long, to: Long): List<EntryWithActivities>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entry: MoodEntry): Long
 
