@@ -51,7 +51,9 @@ import com.daymark.app.ui.calendar.YearPixelsScreen
 import com.daymark.app.ui.goals.GoalEditorScreen
 import com.daymark.app.ui.goals.GoalsScreen
 import com.daymark.app.ui.entry.EntryEditorScreen
+import com.daymark.app.ui.components.RaisedCenterNavBar
 import com.daymark.app.ui.home.HomeScreen
+import com.daymark.app.ui.insights.InsightsScreen
 import com.daymark.app.ui.journal.JournalEditorScreen
 import com.daymark.app.ui.journal.JournalScreen
 import com.daymark.app.ui.more.MoreHubScreen
@@ -120,23 +122,19 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
         },
         bottomBar = {
             if (showBottomBar) {
-                NavigationBar {
-                    val destination = backStackEntry?.destination
-                    TopLevelDestination.entries.forEach { dest ->
-                        NavigationBarItem(
-                            selected = destination?.hierarchy?.any { it.route == dest.route } == true,
-                            onClick = {
-                                navController.navigate(dest.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = { Icon(painterResource(dest.icon), contentDescription = dest.label) },
-                            label = { Text(dest.label) },
-                        )
-                    }
-                }
+                val destination = backStackEntry?.destination
+                RaisedCenterNavBar(
+                    currentRoute = destination?.hierarchy
+                        ?.firstOrNull { entry -> TopLevelDestination.entries.any { it.route == entry.route } }
+                        ?.route ?: currentRoute,
+                    onNavigate = { route ->
+                        navController.navigate(route) {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
             }
         },
         floatingActionButton = {
@@ -153,6 +151,13 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                     text = { Text("Write") },
+                    icon = { Icon(painterResource(R.drawable.ic_ui_plus), contentDescription = null) },
+                )
+                Routes.GOALS -> ExtendedFloatingActionButton(
+                    onClick = { navController.navigate(Routes.goal()) },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    text = { Text("New goal") },
                     icon = { Icon(painterResource(R.drawable.ic_ui_plus), contentDescription = null) },
                 )
             }
@@ -194,17 +199,11 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
                     modifier = Modifier.padding(padding),
                 )
             }
-            composable(Routes.CALENDAR) {
-                CalendarScreen(
-                    onYearView = { navController.navigate(Routes.YEAR_PIXELS) },
-                    modifier = Modifier.padding(padding),
-                )
+            composable(Routes.INSIGHTS) {
+                InsightsScreen(modifier = Modifier.padding(padding))
             }
             composable(Routes.YEAR_PIXELS, enterTransition = zEnter, popExitTransition = zPopExit) {
                 YearPixelsScreen(onBack = { navController.popBackStack() })
-            }
-            composable(Routes.STATS) {
-                StatsScreen(modifier = Modifier.padding(padding))
             }
             composable(Routes.JOURNAL) {
                 JournalScreen(
@@ -236,11 +235,10 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
                     modifier = Modifier.padding(padding),
                 )
             }
-            composable(Routes.GOALS, enterTransition = zEnter, popExitTransition = zPopExit) {
+            composable(Routes.GOALS) {
                 GoalsScreen(
-                    onBack = { navController.popBackStack() },
                     onGoalClick = { id -> navController.navigate(Routes.goal(id)) },
-                    onAddGoal = { navController.navigate(Routes.goal()) },
+                    modifier = Modifier.padding(padding),
                 )
             }
             composable(Routes.GOAL_PATTERN, enterTransition = sheetEnter, popExitTransition = sheetPopExit) {

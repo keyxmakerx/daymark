@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -43,10 +44,10 @@ fun MoreHubScreen(
         SectionLabel("Track")
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             HubCard(
-                icon = R.drawable.ic_ui_target,
-                title = "Goals",
-                subtitle = "Weekly habit goals",
-                onClick = onGoals,
+                icon = R.drawable.ic_act_star,
+                title = "Activities",
+                subtitle = "Manage & library",
+                onClick = onActivities,
                 modifier = Modifier.weight(1f),
             )
             HubCard(
@@ -62,19 +63,13 @@ fun MoreHubScreen(
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
         ) {
             HubCard(
-                icon = R.drawable.ic_act_star,
-                title = "Activities",
-                subtitle = "Manage & library",
-                onClick = onActivities,
-                modifier = Modifier.weight(1f),
-            )
-            HubCard(
                 icon = R.drawable.ic_ui_more,
                 title = "Settings",
                 subtitle = "Reminders, lock, backup",
                 onClick = onSettings,
                 modifier = Modifier.weight(1f),
             )
+            Spacer(Modifier.weight(1f))
         }
     }
 }

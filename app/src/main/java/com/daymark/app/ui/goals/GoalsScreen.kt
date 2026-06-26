@@ -43,54 +43,31 @@ import com.daymark.app.ui.theme.moodColors
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GoalsScreen(
-    onBack: () -> Unit,
     onGoalClick: (Long) -> Unit,
-    onAddGoal: () -> Unit,
+    modifier: Modifier = Modifier,
     viewModel: GoalsViewModel = hiltViewModel(),
 ) {
     val goals by viewModel.goals.collectAsStateWithLifecycle()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Goals") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-            )
-        },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onAddGoal,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                text = { Text("New goal") },
-                icon = { Icon(painterResource(R.drawable.ic_ui_plus), contentDescription = null) },
-            )
-        },
-    ) { padding ->
-        if (goals.isEmpty()) {
-            Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("No goals yet", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Tap + to set a weekly habit goal.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+    if (goals.isEmpty()) {
+        Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("No goals yet", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Tap + to set a weekly habit goal.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.padding(padding).fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(goals, key = { it.goal.id }) { ui ->
-                    GoalCard(ui, onClick = { onGoalClick(ui.goal.id) }, modifier = Modifier.animateItem())
-                }
+        }
+    } else {
+        LazyColumn(
+            modifier = modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(goals, key = { it.goal.id }) { ui ->
+                GoalCard(ui, onClick = { onGoalClick(ui.goal.id) }, modifier = Modifier.animateItem())
             }
         }
     }

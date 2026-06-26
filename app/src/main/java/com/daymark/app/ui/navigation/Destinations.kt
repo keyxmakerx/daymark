@@ -7,6 +7,7 @@ object Routes {
     const val HOME = "home"
     const val CALENDAR = "calendar"
     const val STATS = "stats"
+    const val INSIGHTS = "insights"
     const val JOURNAL = "journal"
     const val SETTINGS = "settings"
     const val ACTIVITIES = "activities"
@@ -36,9 +37,9 @@ enum class TopLevelDestination(
     val label: String,
     @param:DrawableRes val icon: Int,
 ) {
-    HOME(Routes.HOME, "Home", R.drawable.ic_ui_home),
-    CALENDAR(Routes.CALENDAR, "Calendar", R.drawable.ic_ui_calendar),
+    INSIGHTS(Routes.INSIGHTS, "Insights", R.drawable.ic_ui_chart),
     JOURNAL(Routes.JOURNAL, "Journal", R.drawable.ic_ui_journal),
-    STATS(Routes.STATS, "Stats", R.drawable.ic_ui_chart),
+    HOME(Routes.HOME, "Home", R.drawable.ic_ui_home),
+    GOALS(Routes.GOALS, "Goals", R.drawable.ic_ui_target),
     MORE(Routes.MORE, "More", R.drawable.ic_ui_more),
 }
