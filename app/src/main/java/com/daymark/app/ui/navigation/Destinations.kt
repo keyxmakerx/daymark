@@ -12,6 +12,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val ACTIVITIES = "activities"
     const val ACTIVITY_LIBRARY = "activity_library"
+    const val SEARCH = "search"
     const val MORE = "more"
     const val GENTLE_SUPPORT = "gentle_support"
     const val SUPPORT = "support"

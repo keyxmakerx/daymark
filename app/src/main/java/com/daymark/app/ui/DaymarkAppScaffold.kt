@@ -15,6 +15,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.navigation.NavBackStackEntry
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -60,6 +61,7 @@ import com.daymark.app.ui.journal.JournalScreen
 import com.daymark.app.ui.more.MoreHubScreen
 import com.daymark.app.ui.navigation.Routes
 import com.daymark.app.ui.navigation.TopLevelDestination
+import com.daymark.app.ui.search.SearchScreen
 import com.daymark.app.ui.sleep.BreathingCaptureScreen
 import com.daymark.app.ui.sleep.ScreenerScreen
 import com.daymark.app.ui.sleep.SleepLogScreen
@@ -122,6 +124,13 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
                                     Icons.AutoMirrored.Filled.ArrowBack,
                                     contentDescription = "Back",
                                 )
+                            }
+                        }
+                    },
+                    actions = {
+                        if (onHome) {
+                            IconButton(onClick = { navController.navigate(Routes.SEARCH) }) {
+                                Icon(Icons.Filled.Search, contentDescription = "Search notes")
                             }
                         }
                     },
@@ -224,6 +233,12 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
                 popExitTransition = zPopExit,
             ) {
                 DayDetailScreen(
+                    onBack = { navController.popBackStack() },
+                    onEditEntry = { id -> navController.navigate(Routes.entry(id)) },
+                )
+            }
+            composable(Routes.SEARCH, enterTransition = zEnter, popExitTransition = zPopExit) {
+                SearchScreen(
                     onBack = { navController.popBackStack() },
                     onEditEntry = { id -> navController.navigate(Routes.entry(id)) },
                 )

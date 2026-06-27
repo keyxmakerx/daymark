@@ -18,6 +18,9 @@ class EntryRepository @Inject constructor(
 
     suspend fun getById(id: Long): EntryWithActivities? = entryDao.getById(id)
 
+    /** Full-text-ish search across entry notes. Blank query returns nothing. */
+    fun search(query: String): Flow<List<EntryWithActivities>> = entryDao.search(query)
+
     suspend fun count(): Int = entryDao.count()
 
     /** Creates or updates an entry and its activity links in one operation. */
