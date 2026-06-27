@@ -7,6 +7,18 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Photo attachments**: optionally attach a photo to a mood entry via the Android Photo Picker
+  (no storage permission). Photos are downscaled and stored app-private, shown as thumbnails on the
+  Home timeline and Day Detail, and embedded (base64) in JSON backups so a backup stays a single
+  portable file.
+- **Swipe-to-delete with undo**: swipe a Home-timeline entry to delete it, with a 5-second **Undo**
+  snackbar that restores the entry (and its activity links).
+- **Multiple reminders**: replace the single daily reminder with a list, each reminder having its
+  own time, on/off toggle, and optional label, managed under **Settings → Reminders**.
+- **Notification quick-log**: tapping a reminder notification — or its **Log now** action — opens a
+  fresh entry straight away.
+- **Auto-lock timeout**: when the PIN lock is on, choose to re-lock immediately (default) or after
+  1 / 5 / 15 minutes in the background.
 - **Journal**: a separate free-form diary, distinct from per-entry mood notes.
 - **Global note search**: search across mood notes and journal entries from one place.
 - **Activity library**: browse 100+ ready-made activities by category and add the ones you use.
@@ -36,6 +48,9 @@ All notable changes to this project are documented here. The format is based on
   hand-drawn mood + activity icons (replacing emoji and Material icons).
 - Consolidated navigation around the unified Insights tab.
 - Snappier, directional navigation transitions; larger mood-picker tap targets.
+- Database schema is now **v9** (`photoPath` on entries; a `reminders` table) with Room migrations;
+  the backup format is now **v7** (entry photos round-trip; reminders round-trip). Older backups
+  still import, and an existing single reminder is migrated automatically on upgrade.
 
 ### Security
 - PIN moved to PBKDF2 (210k iterations, random salt) in AES-256 `EncryptedSharedPreferences`,

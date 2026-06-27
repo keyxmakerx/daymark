@@ -36,9 +36,31 @@ like.
 3. (Optional) Adjust the **date and time** if you're logging for an earlier moment.
 4. (Optional) Tag any **activities** you did (see below).
 5. (Optional) Write a short **note** under *"Why do you feel this way?"*.
-6. Tap **Save**.
+6. (Optional) **Add a photo** (see below).
+7. Tap **Save**.
 
 Your entry appears on the Home timeline, newest first.
+
+### Adding a photo
+
+You can attach one photo to a mood entry — a sunset, a meal, whatever marked the
+moment.
+
+1. In the entry editor, tap **Add photo**.
+2. Pick an image with the **Android Photo Picker**. Daymark doesn't need any
+   storage or media permission for this — the picker hands over just the one
+   image you choose.
+3. A thumbnail appears with a remove button; tap it to drop the photo.
+
+The photo is shrunk down and copied into Daymark's private storage, so it stays
+on your device. Thumbnails show on the Home timeline and on a day's detail view,
+and photos are included when you export a JSON backup.
+
+### Deleting an entry from the timeline
+
+To remove an entry quickly, **swipe it left** on the Home timeline. A 5-second
+**Undo** snackbar appears — tap **Undo** to bring the entry back (with its
+activities intact). If you don't, the entry, and any photo on it, is removed.
 
 ### Mood note vs. Journal — what's the difference?
 
@@ -146,20 +168,30 @@ no longer want can be archived.
 
 ---
 
-## The daily reminder
+## Reminders
 
-A gentle, optional notification can nudge you to check in each day.
+Gentle, optional notifications can nudge you to check in. You can set up **as
+many reminders as you like** — for example a morning and an evening nudge — each
+with its own time and label.
 
-**To turn it on:**
+**To add a reminder:**
 
 1. Go to **Settings → Reminders**.
-2. Switch **Daily reminder** on (on Android 13+ you'll be asked to allow
-   notifications).
-3. Tap **Reminder time** to choose when it arrives.
+2. Tap **Add reminder** (on Android 13+ you'll be asked to allow notifications
+   the first time).
+3. Pick a **time**, and optionally give it a **label** (e.g. "Morning check-in").
 
-Daymark aims to deliver the reminder at the exact time you picked, and
-re-schedules it automatically after you restart your phone. To turn reminders
-off, just switch them back off.
+Each reminder has its own **on/off toggle**, and you can edit its time or label
+or **delete** it at any time. Daymark aims to deliver each one at the exact time
+you picked, and re-schedules them all automatically after you restart your phone.
+
+**Quick-log from a notification:**
+
+- Tapping a reminder notification — or its **Log now** action — opens a fresh
+  mood entry straight away, so you can check in without hunting for the app.
+
+> If you used a single daily reminder in an older version, it's moved into this
+> list automatically when you upgrade.
 
 ---
 
@@ -178,6 +210,14 @@ phone, you can lock the app.
 - With a PIN set, turn on **Unlock with biometrics**. Daymark will offer your
   fingerprint or face unlock when you open the app, and fall back to the PIN if
   that doesn't work.
+
+**Auto-lock timeout:**
+
+- With the PIN lock on, an **Auto-lock** option appears in Settings. By default
+  Daymark re-locks **immediately** every time it goes to the background. If you'd
+  rather not re-enter your PIN after briefly switching apps, choose a grace
+  period of **1, 5, or 15 minutes** — Daymark only re-locks once that much time
+  has passed in the background.
 
 **How the lock behaves:**
 
@@ -208,7 +248,8 @@ backup file goes using your phone's file picker.
 2. Choose where to save the file.
 
 This writes a single JSON file containing **everything** — moods, notes,
-activities, journal entries, and goals.
+activities, journal entries, goals, your reminders, and any **photos** you've
+attached (embedded in the file, so it stays one portable backup).
 
 ### Restore a backup (Replace vs. Merge)
 

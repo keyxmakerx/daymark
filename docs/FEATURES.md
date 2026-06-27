@@ -11,6 +11,12 @@ network, nothing leaves your device. See [PRIVACY.md](PRIVACY.md) for the privac
 
 - **Mood logging** — entries on a 5-level scale (awful → rad), with activities/tags and a note
   for *why*. Multiple entries per day.
+- **Photo attachments** — optionally attach a photo to a mood entry via the Android Photo Picker
+  (which needs **no** storage permission). The image is downscaled and copied into the app's
+  private storage, shown as a thumbnail on the Home timeline and Day Detail, and embedded in JSON
+  backups so the backup stays one portable file.
+- **Swipe to delete + undo** — swipe a Home-timeline entry away to delete it, with a 5-second
+  **Undo** snackbar that restores the entry (and its activity links).
 - **Journal** — a separate free-form diary, distinct from per-entry mood notes.
 - **Global note search** — search across mood notes and journal entries from one place.
 - **Tap a day to view/edit** — open any calendar day to review or edit its entries.
@@ -62,11 +68,15 @@ network, nothing leaves your device. See [PRIVACY.md](PRIVACY.md) for the privac
 
 ## Everyday
 
-- **Daily reminder** — an optional notification at a time you choose.
+- **Reminders + quick-log** — set up multiple daily reminders, each with its own time, on/off
+  toggle, and optional label, managed under **Settings → Reminders**. Tapping a reminder
+  notification (or its **Log now** action) opens a fresh entry straight away.
 - **App lock** — a PIN (PBKDF2, encrypted at rest, with failed-attempt lockout) plus optional
-  strong (Class 3) biometrics; contents are hidden from the recents thumbnail when locked.
-- **Backup & export** — JSON export/import (replace **or** merge), CSV export of entries, and a
-  printable PDF report.
+  strong (Class 3) biometrics; contents are hidden from the recents thumbnail when locked. An
+  **auto-lock timeout** lets you re-lock immediately (default) or after 1 / 5 / 15 minutes in the
+  background.
+- **Backup & export** — JSON export/import (replace **or** merge, with entry photos embedded as
+  base64 in a single portable file), CSV export of entries, and a printable PDF report.
 - **Home-screen widget** — tap a mood to log it in one step.
 - **Modern paper design** — a warm, flat, paper-like Material 3 theme with original hand-drawn
   icons, in light & dark.
