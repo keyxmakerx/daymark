@@ -4,15 +4,18 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -23,74 +26,59 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.daymark.app.util.Haptics
 
 /**
- * Full-screen, breathing-synced pacer meant to gently pull attention away from the moment.
- * A soft orb grows on the in-breath and shrinks on the out-breath at ~6 breaths/min, with the
- * phase word synced to the motion. Deliberately calm and low-stimulation (soft, slow, muted) —
- * the UX research is clear that bright/fast motion overstimulates distressed users.
+ * A simple, calm breathing pacer (~6 breaths/min): a circle that grows on the in-breath and
+ * shrinks on the out-breath, with haptic cues (one pulse in, two out) so it can be followed
+ * eyes-closed or with the phone on the chest. Low-stimulation by design.
  */
 @Composable
 fun BreathingPacerScreen(onDone: () -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val scale = remember { Animatable(0.42f) }
+    val context = LocalContext.current
+    val scale = remember { Animatable(0.45f) }
     var phase by remember { mutableStateOf("Breathe in") }
 
     LaunchedEffect(Unit) {
-        // 5s in + 5s out = 10s cycle = 6 breaths/min. Haptic cues let you follow it eyes-closed
-        // or with the phone on your chest.
+        // 5s in + 5s out = 10s cycle = 6 breaths/min.
         while (true) {
             phase = "Breathe in"
-            com.daymark.app.util.Haptics.pulse(context)
+            Haptics.pulse(context)
             scale.animateTo(1f, tween(5000, easing = FastOutSlowInEasing))
             phase = "Breathe out"
-            com.daymark.app.util.Haptics.doublePulse(context)
-            scale.animateTo(0.42f, tween(5000, easing = FastOutSlowInEasing))
+            Haptics.doublePulse(context)
+            scale.animateTo(0.45f, tween(5000, easing = FastOutSlowInEasing))
         }
     }
 
-    val bg = MaterialTheme.colorScheme.surfaceVariant
-    val orb = MaterialTheme.colorScheme.primary
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(bg, MaterialTheme.colorScheme.background),
-                ),
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        // The orb.
-        Box(
-            modifier = Modifier
-                .size(300.dp)
-                .scale(scale.value)
-                .clip(CircleShape)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(orb.copy(alpha = 0.55f), orb.copy(alpha = 0.12f)),
-                    ),
-                ),
-        )
-        // Phase word, centred over the orb.
-        Text(
-            text = phase,
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center,
-        )
-
-        // Unobtrusive exit at the bottom.
-        TextButton(
-            onClick = onDone,
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = 24.dp),
+    Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text("I'm done", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "$phase — follow the circle. No need to force it.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 24.dp),
+            )
+            Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .size(220.dp)
+                        .scale(scale.value)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+                )
+            }
+            OutlinedButton(onClick = onDone, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                Text("Done")
+            }
         }
     }
 }

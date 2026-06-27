@@ -263,6 +263,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
             composable(Routes.SUPPORT, enterTransition = sheetEnter, popExitTransition = sheetPopExit) {
                 SupportScreen(
                     onClose = { navController.popBackStack() },
+                    onTalk = { navController.navigate(Routes.journalEntry()) },
                     onBreathe = { navController.navigate(Routes.SUPPORT_BREATHE) },
                     onCrisis = { navController.navigate(Routes.CRISIS) },
                 )
