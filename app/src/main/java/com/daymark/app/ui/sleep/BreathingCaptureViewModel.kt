@@ -82,14 +82,15 @@ class BreathingCaptureViewModel @Inject constructor(
         val z = event.values[2]
         if (startNanos == 0L) startNanos = event.timestamp
         lastNanos = event.timestamp
-        samples.add(sqrt((x * x + y * y + z * z).toDouble()))
+        val magnitude = sqrt((x * x + y * y + z * z).toDouble())
+        synchronized(samples) { samples.add(magnitude) }
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     /** Std-dev of the last ~1.5 s of magnitude, mapped to 0..1 (breathing motion is tiny). */
     private fun recentMovementLevel(): Float {
-        val window = samples.takeLast(75)
+        val window = synchronized(samples) { samples.takeLast(75) }
         if (window.size < 8) return 0f
         val mean = window.average()
         val sd = sqrt(window.sumOf { (it - mean) * (it - mean) } / window.size)
@@ -100,8 +101,9 @@ class BreathingCaptureViewModel @Inject constructor(
     private fun finish() {
         sensorManager.unregisterListener(this)
         val durSec = if (startNanos > 0 && lastNanos > startNanos) (lastNanos - startNanos) / 1e9 else durationSec.toDouble()
-        val rate = if (durSec > 0) samples.size / durSec else 0.0
-        _state.value = State.Done(BreathingDetector.analyze(samples.toDoubleArray(), rate))
+        val snapshot = synchronized(samples) { samples.toDoubleArray() }
+        val rate = if (durSec > 0) snapshot.size / durSec else 0.0
+        _state.value = State.Done(BreathingDetector.analyze(snapshot, rate))
         // Two buzzes to say "done — you can pick me up and look now".
         com.daymark.app.util.Haptics.doublePulse(context)
     }

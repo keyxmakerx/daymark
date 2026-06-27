@@ -28,10 +28,11 @@ object TreatmentStats {
         logs: List<SleepLog>,
         moods: List<Pair<Long, Int>>,
     ): Comparison {
+        // Equal-length windows on each side of the date, so the comparison is apples-to-apples.
         val beforeLogs = logs.filter { it.wakeTime in (startedAt - WINDOW_MS) until startedAt }
-        val afterLogs = logs.filter { it.wakeTime >= startedAt }
+        val afterLogs = logs.filter { it.wakeTime in startedAt..(startedAt + WINDOW_MS) }
         val beforeMoods = moods.filter { it.first in (startedAt - WINDOW_MS) until startedAt }.map { it.second }
-        val afterMoods = moods.filter { it.first >= startedAt }.map { it.second }
+        val afterMoods = moods.filter { it.first in startedAt..(startedAt + WINDOW_MS) }.map { it.second }
         return Comparison(side(beforeLogs, beforeMoods), side(afterLogs, afterMoods))
     }
 

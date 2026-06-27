@@ -76,7 +76,7 @@ data class BackupTrackerLog(val id: Long, val trackerId: Long, val dateTime: Lon
 
 @Serializable
 data class BackupData(
-    val version: Int = 4,
+    val version: Int = 5,
     val exportedAt: Long,
     val entries: List<BackupEntry>,
     val activities: List<BackupActivity>,
@@ -112,6 +112,7 @@ class BackupManager @Inject constructor(
 
     suspend fun exportToJson(nowMillis: Long): String {
         val data = BackupData(
+            version = CURRENT_VERSION,
             exportedAt = nowMillis,
             entries = entryDao.getAllEntries().map { BackupEntry(it.id, it.dateTime, it.moodLevel, it.note) },
             activities = activityDao.getAllOnce().map {

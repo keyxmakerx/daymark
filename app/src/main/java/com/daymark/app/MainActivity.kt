@@ -42,10 +42,6 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        // Keep private content out of screenshots and the recents thumbnail when locking is on.
-        if (settings.lockEnabled && pinManager.isPinSet) {
-            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        }
         val initialMood = intent?.getIntExtra(EXTRA_PREFILL_MOOD, -1) ?: -1
         setContent {
             val prefs by settings.changes().collectAsState(initial = null)
@@ -54,6 +50,17 @@ class MainActivity : FragmentActivity() {
             // Only lock when a PIN actually exists (avoids a lock-out with no way in).
             val lockEnabled = (prefs?.let { settings.lockEnabled } ?: settings.lockEnabled) &&
                 pinManager.isPinSet
+
+            // Keep private content out of screenshots and the recents thumbnail whenever locking
+            // is on. Reactive (not onCreate-only) so toggling the lock applies/clears immediately.
+            DisposableEffect(lockEnabled) {
+                if (lockEnabled) {
+                    window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                } else {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                }
+                onDispose { }
+            }
 
             var unlocked by remember { mutableStateOf(false) }
             // Local state so finishing the wizard advances immediately (the prefs-change
