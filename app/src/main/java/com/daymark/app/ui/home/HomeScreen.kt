@@ -41,8 +41,10 @@ fun HomeScreen(
     onEntryClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
+    memoriesViewModel: MemoriesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val memories by memoriesViewModel.memories.collectAsStateWithLifecycle()
 
     if (!state.loading && state.entries.isEmpty()) {
         EmptyState(modifier)
@@ -57,6 +59,11 @@ fun HomeScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        if (memories.isNotEmpty()) {
+            item(key = "on-this-day") {
+                OnThisDayCard(memories, onEntryClick, modifier = Modifier.animateItem())
+            }
+        }
         grouped.forEach { (date, entries) ->
             item(key = "day-$date") {
                 DaySheet(
@@ -65,6 +72,56 @@ fun HomeScreen(
                     onEntryClick = onEntryClick,
                     modifier = Modifier.animateItem(),
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun OnThisDayCard(
+    memories: List<EntryWithActivities>,
+    onEntryClick: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val thisYear = java.time.LocalDate.now().year
+    PaperSurface(modifier = modifier.fillMaxWidth()) {
+        Column(Modifier.padding(vertical = 4.dp)) {
+            Text(
+                "ON THIS DAY",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.tertiary,
+                letterSpacing = 1.2.sp,
+                modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 4.dp),
+            )
+            memories.take(4).forEach { m ->
+                val mood = Mood.fromLevel(m.entry.moodLevel)
+                val yearsAgo = thisYear - DateUtils.toLocalDate(m.entry.dateTime).year
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onEntryClick(m.entry.id) }
+                        .padding(horizontal = 18.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(13.dp),
+                ) {
+                    MoodFaceIcon(level = mood.level, size = 34.dp)
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            if (yearsAgo == 1) "1 year ago" else "$yearsAgo years ago",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                        if (m.entry.note.isNotBlank()) {
+                            Text(
+                                "“${m.entry.note}”",
+                                style = LocalDaymarkTextStyles.current.diaryNote,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
             }
         }
     }
