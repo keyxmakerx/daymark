@@ -1,13 +1,17 @@
 package com.daymark.app.ui.sleep
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
@@ -120,16 +124,53 @@ private fun CapturingContent(s: BreathingCaptureViewModel.State.Capturing, onCan
             Text("Lie still, breathe normally.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+    // Live "is it sensing anything?" indicator — helps tell a weak signal from a dead one.
+    PaperSurface(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                if (s.level < 0.08f) "Barely any movement detected" else "Sensing movement",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Box(
+                Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+            ) {
+                Box(
+                    Modifier.fillMaxWidth(s.level.coerceIn(0.02f, 1f)).height(10.dp)
+                        .clip(RoundedCornerShape(5.dp)).background(MaterialTheme.colorScheme.primary),
+                )
+            }
+            if (s.level < 0.08f) {
+                Text(
+                    "Make sure the phone lies flat on your chest (not your belt/pocket) so it rises " +
+                        "and falls as you breathe.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
     OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("Stop") }
 }
 
 @Composable
 private fun DoneContent(result: BreathingDetector.Result, onAgain: () -> Unit, onDone: () -> Unit) {
-    val clear = result.breathingRatePerMin != null && result.confidence > 0.4
+    // Show any plausible rate; flag low-confidence rather than hiding it (helps tuning/validation).
+    val rate = result.breathingRatePerMin
+    val hasRate = rate != null && rate in 5.0..40.0
     PaperSurface(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (clear) {
-                Text("About ${result.breathingRatePerMin!!.roundToInt()} breaths/min", style = MaterialTheme.typography.headlineSmall)
+            if (hasRate) {
+                Text("About ${rate!!.roundToInt()} breaths/min", style = MaterialTheme.typography.headlineSmall)
+                if (result.confidence <= 0.4) {
+                    Text(
+                        "Faint signal — treat this as rough. A clearer reading comes from lying " +
+                            "flat and still with the phone on your chest.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 if (result.pauses.isEmpty()) {
                     Text("No breathing pauses were flagged in this reading.", style = MaterialTheme.typography.bodyMedium)
                 } else {

@@ -35,7 +35,8 @@ class BreathingCaptureViewModel @Inject constructor(
     sealed interface State {
         data object Idle : State
         data object NoSensor : State
-        data class Capturing(val progress: Float, val secondsLeft: Int) : State
+        /** [level] is a 0..1 indicator of how much chest movement is currently being sensed. */
+        data class Capturing(val progress: Float, val secondsLeft: Int, val level: Float) : State
         data class Done(val result: BreathingDetector.Result) : State
     }
 
@@ -64,6 +65,7 @@ class BreathingCaptureViewModel @Inject constructor(
                 _state.value = State.Capturing(
                     progress = (elapsed / durationSec).toFloat().coerceIn(0f, 1f),
                     secondsLeft = ceil((durationSec - elapsed).coerceAtLeast(0.0)).toInt(),
+                    level = recentMovementLevel(),
                 )
                 if (elapsed >= durationSec) { finish(); break }
                 delay(200)
@@ -81,6 +83,16 @@ class BreathingCaptureViewModel @Inject constructor(
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+
+    /** Std-dev of the last ~1.5 s of magnitude, mapped to 0..1 (breathing motion is tiny). */
+    private fun recentMovementLevel(): Float {
+        val window = samples.takeLast(75)
+        if (window.size < 8) return 0f
+        val mean = window.average()
+        val sd = sqrt(window.sumOf { (it - mean) * (it - mean) } / window.size)
+        // ~0.03 m/s² of variation is already meaningful chest movement; scale so that reads full.
+        return (sd / 0.05).toFloat().coerceIn(0f, 1f)
+    }
 
     private fun finish() {
         sensorManager.unregisterListener(this)
