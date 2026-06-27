@@ -36,6 +36,10 @@ object Routes {
     const val JOURNAL_ENTRY = "journal_entry"
     const val YEAR_PIXELS = "year_pixels"
     const val GOALS = "goals"
+
+    /** A single day's entries, keyed by epoch-day. */
+    fun day(epochDay: Long) = "day/$epochDay"
+    const val DAY_PATTERN = "day/{epochDay}"
     const val GOAL = "goal"
 
     /** Editor route; pass 0 to create a new entry, and an optional 1..5 mood to preselect. */

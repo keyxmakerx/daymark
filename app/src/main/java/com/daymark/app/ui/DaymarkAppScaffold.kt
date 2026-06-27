@@ -47,6 +47,7 @@ import com.daymark.app.R
 import com.daymark.app.ui.activities.ActivitiesScreen
 import com.daymark.app.ui.activities.ActivityLibraryScreen
 import com.daymark.app.ui.calendar.CalendarScreen
+import com.daymark.app.ui.calendar.DayDetailScreen
 import com.daymark.app.ui.calendar.YearPixelsScreen
 import com.daymark.app.ui.goals.GoalEditorScreen
 import com.daymark.app.ui.goals.GoalsScreen
@@ -211,7 +212,21 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
                 )
             }
             composable(Routes.INSIGHTS) {
-                InsightsScreen(modifier = Modifier.padding(padding))
+                InsightsScreen(
+                    modifier = Modifier.padding(padding),
+                    onDayClick = { date -> navController.navigate(Routes.day(date.toEpochDay())) },
+                )
+            }
+            composable(
+                Routes.DAY_PATTERN,
+                arguments = listOf(navArgument("epochDay") { type = NavType.StringType }),
+                enterTransition = zEnter,
+                popExitTransition = zPopExit,
+            ) {
+                DayDetailScreen(
+                    onBack = { navController.popBackStack() },
+                    onEditEntry = { id -> navController.navigate(Routes.entry(id)) },
+                )
             }
             composable(Routes.YEAR_PIXELS, enterTransition = zEnter, popExitTransition = zPopExit) {
                 YearPixelsScreen(onBack = { navController.popBackStack() })

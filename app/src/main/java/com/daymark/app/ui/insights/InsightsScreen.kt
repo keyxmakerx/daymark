@@ -3,14 +3,17 @@ package com.daymark.app.ui.insights
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -56,7 +59,7 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.util.Locale
 
-private enum class Scope { Month, Year }
+private enum class Scope { Week, Month, Year }
 
 /**
  * Unified "Insights" tab — merges the former Stats, Calendar and Year-in-Pixels screens.
@@ -66,6 +69,7 @@ private enum class Scope { Month, Year }
 @Composable
 fun InsightsScreen(
     modifier: Modifier = Modifier,
+    onDayClick: (LocalDate) -> Unit = {},
     statsViewModel: StatsViewModel = hiltViewModel(),
     calendarViewModel: CalendarViewModel = hiltViewModel(),
     yearViewModel: YearPixelsViewModel = hiltViewModel(),
@@ -116,6 +120,12 @@ fun InsightsScreen(
 
         // Period view
         when (scope) {
+            Scope.Week -> PaperSurface(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(14.dp)) {
+                    Text("This week", style = MaterialTheme.typography.titleMedium)
+                    WeekBars(stats.trend, modifier = Modifier.padding(top = 12.dp))
+                }
+            }
             Scope.Month -> PaperSurface(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(14.dp)) {
                     PeriodHeader(
@@ -123,7 +133,7 @@ fun InsightsScreen(
                         onPrev = calendarViewModel::previousMonth,
                         onNext = calendarViewModel::nextMonth,
                     )
-                    MonthGrid(calendar.month, calendar.dayMoods)
+                    MonthGrid(calendar.month, calendar.dayMoods, onDayClick)
                     MoodLegend(modifier = Modifier.padding(top = 14.dp))
                 }
             }
@@ -180,7 +190,7 @@ private fun PeriodHeader(label: String, onPrev: () -> Unit, onNext: () -> Unit) 
 
 /** Non-lazy month grid (safe inside a scrolling Column, unlike LazyVerticalGrid). */
 @Composable
-private fun MonthGrid(month: java.time.YearMonth, dayMoods: Map<LocalDate, Double>) {
+private fun MonthGrid(month: java.time.YearMonth, dayMoods: Map<LocalDate, Double>, onDayClick: (LocalDate) -> Unit) {
     Column {
         Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
             DayOfWeek.entries.forEach { dow ->
@@ -201,7 +211,7 @@ private fun MonthGrid(month: java.time.YearMonth, dayMoods: Map<LocalDate, Doubl
             Row(Modifier.fillMaxWidth()) {
                 week.forEach { date ->
                     Box(Modifier.weight(1f)) {
-                        if (date != null) DayCell(date, dayMoods[date])
+                        if (date != null) DayCell(date, dayMoods[date], onClick = { onDayClick(date) })
                     }
                 }
             }
@@ -209,8 +219,38 @@ private fun MonthGrid(month: java.time.YearMonth, dayMoods: Map<LocalDate, Doubl
     }
 }
 
+/** Last 7 days of average mood as simple bars. */
 @Composable
-private fun DayCell(date: LocalDate, moodLevel: Double?) {
+private fun WeekBars(trend: List<Double?>, modifier: Modifier = Modifier) {
+    val week = trend.takeLast(7)
+    val today = LocalDate.now()
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        week.forEachIndexed { i, v ->
+            val date = today.minusDays((week.size - 1 - i).toLong())
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.height(110.dp).width(26.dp), contentAlignment = Alignment.BottomCenter) {
+                    val frac = v?.let { ((it - 1.0) / 4.0).toFloat().coerceIn(0.06f, 1f) } ?: 0.05f
+                    Box(
+                        Modifier.fillMaxWidth().fillMaxHeight(frac).clip(RoundedCornerShape(6.dp))
+                            .background(v?.let { moodColor(it) } ?: MaterialTheme.colorScheme.surfaceVariant),
+                    )
+                }
+                Text(
+                    date.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale.getDefault()).take(1),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DayCell(date: LocalDate, moodLevel: Double?, onClick: () -> Unit) {
     val hasMood = moodLevel != null
     val fill = if (hasMood) moodColor(moodLevel!!) else MaterialTheme.colorScheme.surfaceVariant
     val isToday = date == LocalDate.now()
@@ -218,6 +258,8 @@ private fun DayCell(date: LocalDate, moodLevel: Double?) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(shape)
+            .clickable { onClick() }
             .padding(3.dp),
         contentAlignment = Alignment.Center,
     ) {
