@@ -36,13 +36,20 @@ class MoodWidget : GlanceAppWidget() {
 
     @Composable
     private fun Content(context: Context) {
-        // Muted paper mood palette (awful → rad), matching the app theme.
+        // Muted paper mood palette (awful → rad), matching the app theme. Glance can't read the
+        // Compose theme, so any user overrides are read straight from the same SharedPreferences
+        // that MoodCustomizationStore writes (keys mirror it).
+        val prefs = context.getSharedPreferences("daylie_settings", Context.MODE_PRIVATE)
+        fun label(level: Int, default: String): String =
+            prefs.getString("mood_label_$level", null)?.ifBlank { null } ?: default
+        fun color(level: Int, default: Color): Color =
+            if (prefs.contains("mood_color_$level")) Color(prefs.getInt("mood_color_$level", 0)) else default
         val moods = listOf(
-            1 to (Color(0xFFAE5747) to "Awful"),
-            2 to (Color(0xFFC27C46) to "Bad"),
-            3 to (Color(0xFFC6A24E) to "Meh"),
-            4 to (Color(0xFF8FA268) to "Good"),
-            5 to (Color(0xFF5E8A66) to "Rad"),
+            1 to (color(1, Color(0xFFAE5747)) to label(1, "Awful")),
+            2 to (color(2, Color(0xFFC27C46)) to label(2, "Bad")),
+            3 to (color(3, Color(0xFFC6A24E)) to label(3, "Meh")),
+            4 to (color(4, Color(0xFF8FA268)) to label(4, "Good")),
+            5 to (color(5, Color(0xFF5E8A66)) to label(5, "Rad")),
         )
         Column(
             modifier = GlanceModifier

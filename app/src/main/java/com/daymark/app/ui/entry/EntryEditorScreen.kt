@@ -52,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.daymark.app.ui.theme.moodLabels
 import com.daymark.app.model.Mood
 import com.daymark.app.ui.components.ActivityChip
 import com.daymark.app.ui.components.EntryPhoto
@@ -132,7 +133,7 @@ fun EntryEditorScreen(
                     ) {
                         MoodFace(mood = mood, size = 52, selected = selected)
                         Text(
-                            text = mood.label,
+                            text = MaterialTheme.moodLabels.forLevel(mood.level),
                             style = MaterialTheme.typography.labelSmall,
                             color = if (selected) MaterialTheme.colorScheme.onSurface
                             else MaterialTheme.colorScheme.tertiary,

@@ -52,6 +52,7 @@ fun SettingsScreen(
     onManageActivities: () -> Unit,
     onManageGoals: () -> Unit,
     onManageReminders: () -> Unit,
+    onCustomizeMoods: () -> Unit,
     onShowMessage: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel(),
@@ -213,6 +214,11 @@ fun SettingsScreen(
 
         Divider()
         SectionHeader("Appearance")
+        ListItem(
+            headlineContent = { Text("Customize moods") },
+            supportingContent = { Text("Rename and recolor the five mood levels") },
+            modifier = Modifier.clickable { onCustomizeMoods() },
+        )
         ListItem(
             headlineContent = { Text("Dynamic color") },
             supportingContent = { Text("Use wallpaper-based colors (Android 12+)") },

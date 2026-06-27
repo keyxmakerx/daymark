@@ -87,7 +87,7 @@ data class BackupReminder(val id: Long, val hour: Int, val minute: Int, val enab
 
 @Serializable
 data class BackupData(
-    val version: Int = 7,
+    val version: Int = 8,
     val exportedAt: Long,
     val entries: List<BackupEntry>,
     val activities: List<BackupActivity>,
@@ -106,6 +106,9 @@ data class BackupData(
     val photos: Map<String, String> = emptyMap(),
     // Added in v7.
     val reminders: List<BackupReminder> = emptyList(),
+    // Added in v8: per-level mood label/colour overrides (kept in prefs, not the DB).
+    val moodLabels: Map<Int, String> = emptyMap(),
+    val moodColors: Map<Int, Int> = emptyMap(),
 )
 
 /**
@@ -125,6 +128,7 @@ class BackupManager @Inject constructor(
     private val reminderDao: com.daymark.app.data.dao.ReminderDao,
     private val reminderRepository: com.daymark.app.data.ReminderRepository,
     private val photoStore: com.daymark.app.data.PhotoStore,
+    private val moodCustomization: com.daymark.app.data.MoodCustomizationStore,
 ) {
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
 
@@ -156,6 +160,8 @@ class BackupManager @Inject constructor(
             },
             trackerLogs = trackerLogDao.getAll().map { BackupTrackerLog(it.id, it.trackerId, it.dateTime, it.value, it.note) },
             reminders = reminderDao.getAll().map { BackupReminder(it.id, it.hour, it.minute, it.enabled, it.label) },
+            moodLabels = moodCustomization.labels(),
+            moodColors = moodCustomization.colors(),
         )
         return json.encodeToString(data)
     }
@@ -175,7 +181,7 @@ class BackupManager @Inject constructor(
             val row = listOf(
                 DateUtils.formatDate(e.dateTime),
                 DateUtils.formatTime(e.dateTime),
-                Mood.fromLevel(e.moodLevel).label,
+                moodCustomization.labelFor(e.moodLevel) ?: Mood.fromLevel(e.moodLevel).label,
                 names,
                 e.note,
             ).joinToString(",") { csvField(it) }
@@ -204,6 +210,10 @@ class BackupManager @Inject constructor(
         }
         // Re-arm alarms for whatever reminder set we now hold.
         reminderRepository.rescheduleAll()
+        // Restore mood label/colour overrides. REPLACE starts clean; MERGE overlays.
+        if (mode == ImportMode.REPLACE) moodCustomization.reset()
+        data.moodLabels.forEach { (lvl, label) -> moodCustomization.setLabel(lvl, label) }
+        data.moodColors.forEach { (lvl, color) -> moodCustomization.setColor(lvl, color) }
     }
 
     private suspend fun importReplace(data: BackupData) {
@@ -312,6 +322,6 @@ class BackupManager @Inject constructor(
         android.util.Base64.decode(text, android.util.Base64.NO_WRAP)
 
     companion object {
-        const val CURRENT_VERSION = 7
+        const val CURRENT_VERSION = 8
     }
 }

@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.daymark.app.ui.theme.moodLabels
 import com.daymark.app.data.entity.EntryWithActivities
 import com.daymark.app.model.Mood
 import com.daymark.app.ui.components.EntryPhoto
@@ -241,7 +242,7 @@ private fun EntryRow(entry: EntryWithActivities, onClick: () -> Unit) {
         ) {
             MoodFaceIcon(level = mood.level, size = 42.dp)
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = mood.label, style = MaterialTheme.typography.titleMedium)
+                Text(text = MaterialTheme.moodLabels.forLevel(mood.level), style = MaterialTheme.typography.titleMedium)
                 Text(
                     text = DateUtils.formatTime(entry.entry.dateTime),
                     style = MaterialTheme.typography.bodySmall,

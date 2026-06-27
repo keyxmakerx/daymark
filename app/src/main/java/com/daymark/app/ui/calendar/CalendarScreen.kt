@@ -34,6 +34,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.daymark.app.ui.theme.moodColors
+import com.daymark.app.ui.theme.moodLabels
 import com.daymark.app.model.Mood
 import com.daymark.app.util.DateUtils
 import java.time.DayOfWeek
@@ -113,7 +115,7 @@ fun CalendarScreen(
 @Composable
 private fun DayCell(cell: Cell.Day) {
     val hasMood = cell.moodLevel != null
-    val fill = if (hasMood) moodColor(cell.moodLevel!!) else MaterialTheme.colorScheme.surfaceVariant
+    val fill = if (hasMood) moodColor(cell.moodLevel!!, MaterialTheme.moodColors) else MaterialTheme.colorScheme.surfaceVariant
     val isToday = cell.date == LocalDate.now()
     val shape = RoundedCornerShape(11.dp)
     Box(
@@ -152,10 +154,10 @@ private fun MoodLegend(modifier: Modifier = Modifier) {
                     modifier = Modifier
                         .size(11.dp)
                         .clip(RoundedCornerShape(3.dp))
-                        .background(mood.color),
+                        .background(MaterialTheme.moodColors.forLevel(mood.level)),
                 )
                 Text(
-                    text = " ${mood.label}",
+                    text = " ${MaterialTheme.moodLabels.forLevel(mood.level)}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -165,12 +167,12 @@ private fun MoodLegend(modifier: Modifier = Modifier) {
 }
 
 /** Linearly interpolate between adjacent mood colors for fractional averages. */
-private fun moodColor(level: Double): Color {
+private fun moodColor(level: Double, colors: com.daymark.app.ui.theme.MoodColors): Color {
     val lower = level.toInt().coerceIn(1, 5)
     val upper = (lower + 1).coerceAtMost(5)
     val t = (level - lower).toFloat().coerceIn(0f, 1f)
-    val a = Mood.fromLevel(lower).color
-    val b = Mood.fromLevel(upper).color
+    val a = colors.forLevel(lower)
+    val b = colors.forLevel(upper)
     return Color(
         red = a.red + (b.red - a.red) * t,
         green = a.green + (b.green - a.green) * t,

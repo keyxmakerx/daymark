@@ -77,6 +77,7 @@ import com.daymark.app.ui.support.GentleSupportScreen
 import com.daymark.app.ui.support.SupportScreen
 import com.daymark.app.ui.trackers.TrackerDetailScreen
 import com.daymark.app.ui.trackers.TrackersScreen
+import com.daymark.app.ui.settings.CustomizeMoodsScreen
 import com.daymark.app.ui.settings.RemindersScreen
 import com.daymark.app.ui.settings.SettingsScreen
 import com.daymark.app.ui.stats.StatsScreen
@@ -374,12 +375,16 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                     onManageActivities = { navController.navigate(Routes.ACTIVITIES) },
                     onManageGoals = { navController.navigate(Routes.GOALS) },
                     onManageReminders = { navController.navigate(Routes.REMINDERS) },
+                    onCustomizeMoods = { navController.navigate(Routes.CUSTOMIZE_MOODS) },
                     onShowMessage = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                     modifier = Modifier.padding(padding),
                 )
             }
             composable(Routes.REMINDERS, enterTransition = zEnter, popExitTransition = zPopExit) {
                 RemindersScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Routes.CUSTOMIZE_MOODS, enterTransition = zEnter, popExitTransition = zPopExit) {
+                CustomizeMoodsScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.GOALS) {
                 GoalsScreen(

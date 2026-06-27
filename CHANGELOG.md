@@ -19,6 +19,10 @@ All notable changes to this project are documented here. The format is based on
   fresh entry straight away.
 - **Auto-lock timeout**: when the PIN lock is on, choose to re-lock immediately (default) or after
   1 / 5 / 15 minutes in the background.
+- **Customize moods**: rename and recolor any of the five mood levels (**Settings → Customize
+  moods**). The 1–5 level stays the stable key, so existing entries keep their place on the scale;
+  custom names/colors flow through the timeline, calendar, insights, widget, and CSV export, and
+  ride along in JSON backups.
 - **Journal**: a separate free-form diary, distinct from per-entry mood notes.
 - **Global note search**: search across mood notes and journal entries from one place.
 - **Activity library**: browse 100+ ready-made activities by category and add the ones you use.
@@ -49,8 +53,9 @@ All notable changes to this project are documented here. The format is based on
 - Consolidated navigation around the unified Insights tab.
 - Snappier, directional navigation transitions; larger mood-picker tap targets.
 - Database schema is now **v9** (`photoPath` on entries; a `reminders` table) with Room migrations;
-  the backup format is now **v7** (entry photos round-trip; reminders round-trip). Older backups
-  still import, and an existing single reminder is migrated automatically on upgrade.
+  the backup format is now **v8** (entry photos round-trip; reminders round-trip; mood label/color
+  customizations round-trip). Older backups still import, and an existing single reminder is
+  migrated automatically on upgrade.
 
 ### Security
 - PIN moved to PBKDF2 (210k iterations, random salt) in AES-256 `EncryptedSharedPreferences`,

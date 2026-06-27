@@ -73,6 +73,9 @@ fun DaymarkTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // The paper identity is the point of the app, so dynamic colour is OFF by default.
     dynamicColor: Boolean = false,
+    // User overrides for mood colours (level -> ARGB) and labels (level -> text).
+    moodColorOverrides: Map<Int, Int> = emptyMap(),
+    moodLabelOverrides: Map<Int, String> = emptyMap(),
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
@@ -83,11 +86,14 @@ fun DaymarkTheme(
         darkTheme -> DarkPaperColors
         else -> LightPaperColors
     }
-    // Mood colours never recolour from the wallpaper, even when dynamic colour is opted in.
-    val moods = if (darkTheme) DarkMoodColors else LightMoodColors
+    // Mood colours never recolour from the wallpaper, even when dynamic colour is opted in;
+    // user overrides take precedence over the built-in palette.
+    val moods = (if (darkTheme) DarkMoodColors else LightMoodColors)
+        .withOverrides(moodColorOverrides, darkTheme)
 
     CompositionLocalProvider(
         LocalMoodColors provides moods,
+        LocalMoodLabels provides MoodLabels(moodLabelOverrides),
         LocalDaymarkTextStyles provides DefaultDaymarkTextStyles,
     ) {
         MaterialTheme(

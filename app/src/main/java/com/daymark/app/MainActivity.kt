@@ -34,6 +34,7 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var settings: SettingsRepository
     @Inject lateinit var pinManager: PinManager
     @Inject lateinit var autoLock: AutoLockController
+    @Inject lateinit var moodCustomization: com.daymark.app.data.MoodCustomizationStore
 
     companion object {
         const val EXTRA_PREFILL_MOOD = "prefill_mood"
@@ -49,6 +50,9 @@ class MainActivity : FragmentActivity() {
             val prefs by settings.changes().collectAsState(initial = null)
             // Re-read on any preference change.
             val dynamicColor = prefs?.let { settings.dynamicColor } ?: settings.dynamicColor
+            // Mood label/colour overrides live in the same prefs, so they re-read here too.
+            val moodColorOverrides = prefs.let { moodCustomization.colors() }
+            val moodLabelOverrides = prefs.let { moodCustomization.labels() }
             // Only lock when a PIN actually exists (avoids a lock-out with no way in).
             val lockEnabled = (prefs?.let { settings.lockEnabled } ?: settings.lockEnabled) &&
                 pinManager.isPinSet
@@ -90,7 +94,11 @@ class MainActivity : FragmentActivity() {
                 }
             }
 
-            DaymarkTheme(dynamicColor = dynamicColor) {
+            DaymarkTheme(
+                dynamicColor = dynamicColor,
+                moodColorOverrides = moodColorOverrides,
+                moodLabelOverrides = moodLabelOverrides,
+            ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,

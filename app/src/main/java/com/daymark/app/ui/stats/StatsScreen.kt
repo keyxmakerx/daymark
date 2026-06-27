@@ -156,13 +156,14 @@ private fun MoodDistribution(counts: Map<Int, Int>) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Mood.ascending.reversed().forEach { mood ->
             val count = counts[mood.level] ?: 0
+            val barColor = com.daymark.app.ui.theme.LocalMoodColors.current.forLevel(mood.level)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 com.daymark.app.ui.components.MoodFaceIcon(level = mood.level, size = 22.dp)
                 Box(modifier = Modifier.weight(1f).height(18.dp)) {
                     Canvas(modifier = Modifier.fillMaxWidth().height(18.dp)) {
                         val barWidth = size.width * (count.toFloat() / max)
                         drawRoundRect(
-                            color = mood.color,
+                            color = barColor,
                             size = androidx.compose.ui.geometry.Size(barWidth.coerceAtLeast(2f), size.height),
                             cornerRadius = androidx.compose.ui.geometry.CornerRadius(8f, 8f),
                         )

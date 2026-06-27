@@ -78,5 +78,9 @@ network, nothing leaves your device. See [PRIVACY.md](PRIVACY.md) for the privac
 - **Backup & export** — JSON export/import (replace **or** merge, with entry photos embedded as
   base64 in a single portable file), CSV export of entries, and a printable PDF report.
 - **Home-screen widget** — tap a mood to log it in one step.
+- **Customize moods** — rename and recolor any of the five mood levels (Settings → Customize
+  moods). The 1–5 level stays the stable key, so existing entries keep their place; custom
+  names/colors appear everywhere (timeline, calendar, insights, widget, CSV) and ride along in
+  backups.
 - **Modern paper design** — a warm, flat, paper-like Material 3 theme with original hand-drawn
   icons, in light & dark.

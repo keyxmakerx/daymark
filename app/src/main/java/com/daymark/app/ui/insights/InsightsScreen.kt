@@ -47,6 +47,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.daymark.app.ui.theme.moodColors
+import com.daymark.app.ui.theme.moodLabels
 import com.daymark.app.model.Mood
 import com.daymark.app.ui.calendar.CalendarViewModel
 import com.daymark.app.ui.calendar.YearPixelsViewModel
@@ -236,7 +238,7 @@ private fun WeekBars(trend: List<Double?>, modifier: Modifier = Modifier) {
                     val frac = v?.let { ((it - 1.0) / 4.0).toFloat().coerceIn(0.06f, 1f) } ?: 0.05f
                     Box(
                         Modifier.fillMaxWidth().fillMaxHeight(frac).clip(RoundedCornerShape(6.dp))
-                            .background(v?.let { moodColor(it) } ?: MaterialTheme.colorScheme.surfaceVariant),
+                            .background(v?.let { moodColor(it, MaterialTheme.moodColors) } ?: MaterialTheme.colorScheme.surfaceVariant),
                     )
                 }
                 Text(
@@ -252,7 +254,7 @@ private fun WeekBars(trend: List<Double?>, modifier: Modifier = Modifier) {
 @Composable
 private fun DayCell(date: LocalDate, moodLevel: Double?, onClick: () -> Unit) {
     val hasMood = moodLevel != null
-    val fill = if (hasMood) moodColor(moodLevel!!) else MaterialTheme.colorScheme.surfaceVariant
+    val fill = if (hasMood) moodColor(moodLevel!!, MaterialTheme.moodColors) else MaterialTheme.colorScheme.surfaceVariant
     val isToday = date == LocalDate.now()
     val shape = RoundedCornerShape(11.dp)
     Box(
@@ -341,13 +343,14 @@ private fun MoodDistribution(counts: Map<Int, Int>) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Mood.ascending.reversed().forEach { mood ->
             val count = counts[mood.level] ?: 0
+            val barColor = MaterialTheme.moodColors.forLevel(mood.level)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MoodFaceIcon(level = mood.level, size = 22.dp)
                 Box(modifier = Modifier.weight(1f).height(18.dp)) {
                     Canvas(modifier = Modifier.fillMaxWidth().height(18.dp)) {
                         val barWidth = size.width * (count.toFloat() / max)
                         drawRoundRect(
-                            color = mood.color,
+                            color = barColor,
                             size = Size(barWidth.coerceAtLeast(2f), size.height),
                             cornerRadius = CornerRadius(8f, 8f),
                         )
@@ -364,19 +367,19 @@ private fun MoodLegend(modifier: Modifier = Modifier) {
     Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
         Mood.ascending.forEach { mood ->
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(11.dp).clip(RoundedCornerShape(3.dp)).background(mood.color))
-                Text(" ${mood.label}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Box(Modifier.size(11.dp).clip(RoundedCornerShape(3.dp)).background(MaterialTheme.moodColors.forLevel(mood.level)))
+                Text(" ${MaterialTheme.moodLabels.forLevel(mood.level)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
 }
 
-private fun moodColor(level: Double): Color {
+private fun moodColor(level: Double, colors: com.daymark.app.ui.theme.MoodColors): Color {
     val lower = level.toInt().coerceIn(1, 5)
     val upper = (lower + 1).coerceAtMost(5)
     val t = (level - lower).toFloat().coerceIn(0f, 1f)
-    val a = Mood.fromLevel(lower).color
-    val b = Mood.fromLevel(upper).color
+    val a = colors.forLevel(lower)
+    val b = colors.forLevel(upper)
     return Color(
         red = a.red + (b.red - a.red) * t,
         green = a.green + (b.green - a.green) * t,

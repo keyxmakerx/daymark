@@ -19,7 +19,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.daymark.app.model.Mood
-import com.daymark.app.ui.theme.LightMoodColors
+import com.daymark.app.ui.theme.LocalMoodColors
 
 /**
  * Hand-drawn "paper" mood face: a stroked circle, two dot eyes and a mouth curve that varies
@@ -36,7 +36,7 @@ fun MoodFaceIcon(
     selected: Boolean = false,
     onClick: (() -> Unit)? = null,
 ) {
-    val moodColor = LightMoodColors.forLevel(level)
+    val moodColor = LocalMoodColors.current.forLevel(level)
     // A subtle, bouncy "pop" when this face becomes the selected one.
     val scale by animateFloatAsState(
         targetValue = if (selected) 1.08f else 1f,
