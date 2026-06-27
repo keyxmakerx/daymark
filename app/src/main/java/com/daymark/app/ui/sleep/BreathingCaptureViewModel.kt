@@ -29,7 +29,7 @@ import kotlin.math.sqrt
  */
 @HiltViewModel
 class BreathingCaptureViewModel @Inject constructor(
-    @ApplicationContext context: Context,
+    @ApplicationContext private val context: Context,
 ) : ViewModel(), SensorEventListener {
 
     sealed interface State {
@@ -59,6 +59,9 @@ class BreathingCaptureViewModel @Inject constructor(
         startNanos = 0L
         lastNanos = 0L
         sensorManager.registerListener(this, accel, SensorManager.SENSOR_DELAY_GAME)
+        // A single buzz to confirm it started, then silence — vibrating mid-capture would corrupt
+        // the accelerometer reading. (Live "is it sensing you" feedback should be AUDIO, future.)
+        com.daymark.app.util.Haptics.pulse(context)
         ticker = viewModelScope.launch {
             while (isActive) {
                 val elapsed = if (startNanos == 0L) 0.0 else (lastNanos - startNanos) / 1e9
@@ -99,6 +102,8 @@ class BreathingCaptureViewModel @Inject constructor(
         val durSec = if (startNanos > 0 && lastNanos > startNanos) (lastNanos - startNanos) / 1e9 else durationSec.toDouble()
         val rate = if (durSec > 0) samples.size / durSec else 0.0
         _state.value = State.Done(BreathingDetector.analyze(samples.toDoubleArray(), rate))
+        // Two buzzes to say "done — you can pick me up and look now".
+        com.daymark.app.util.Haptics.doublePulse(context)
     }
 
     fun cancel() {

@@ -35,15 +35,19 @@ import androidx.compose.ui.unit.dp
  */
 @Composable
 fun BreathingPacerScreen(onDone: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val scale = remember { Animatable(0.42f) }
     var phase by remember { mutableStateOf("Breathe in") }
 
     LaunchedEffect(Unit) {
-        // 5s in + 5s out = 10s cycle = 6 breaths/min.
+        // 5s in + 5s out = 10s cycle = 6 breaths/min. Haptic cues let you follow it eyes-closed
+        // or with the phone on your chest.
         while (true) {
             phase = "Breathe in"
+            com.daymark.app.util.Haptics.pulse(context)
             scale.animateTo(1f, tween(5000, easing = FastOutSlowInEasing))
             phase = "Breathe out"
+            com.daymark.app.util.Haptics.doublePulse(context)
             scale.animateTo(0.42f, tween(5000, easing = FastOutSlowInEasing))
         }
     }
