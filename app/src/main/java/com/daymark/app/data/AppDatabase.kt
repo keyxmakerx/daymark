@@ -28,7 +28,7 @@ import com.daymark.app.data.entity.Treatment
         JournalEntry::class, Goal::class, SleepLog::class, Treatment::class,
         Tracker::class, TrackerLog::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -154,6 +154,13 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_tracker_logs_trackerId` ON `tracker_logs` (`trackerId`)",
                 )
+            }
+        }
+
+        /** v8 adds an optional photo attachment to mood entries; existing data is preserved. */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE mood_entries ADD COLUMN photoPath TEXT")
             }
         }
 

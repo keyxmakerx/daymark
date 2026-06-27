@@ -221,7 +221,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
             composable(Routes.HOME) {
                 HomeScreen(
                     onEntryClick = { id -> navController.navigate(Routes.entry(id)) },
-                    onUndoableDelete = { onUndo ->
+                    onUndoableDelete = { onUndo, onExpire ->
                         scope.launch {
                             val result = snackbarHostState.showSnackbar(
                                 message = "Entry deleted",
@@ -229,7 +229,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
                                 withDismissAction = true,
                                 duration = SnackbarDuration.Short,
                             )
-                            if (result == SnackbarResult.ActionPerformed) onUndo()
+                            if (result == SnackbarResult.ActionPerformed) onUndo() else onExpire()
                         }
                     },
                     modifier = Modifier.padding(padding),

@@ -15,4 +15,10 @@ data class MoodEntry(
     /** 1..5, see [com.daymark.app.model.Mood]. */
     val moodLevel: Int,
     val note: String = "",
+    /**
+     * Relative filename of an optional attached photo, stored under the app's private
+     * entry-photos directory (see [com.daymark.app.data.PhotoStore]). Null = no photo.
+     * Relative (not absolute) so it survives the app data dir moving or a backup restore.
+     */
+    val photoPath: String? = null,
 )

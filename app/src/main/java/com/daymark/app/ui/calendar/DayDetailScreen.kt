@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.daymark.app.ui.components.EntryPhoto
 import com.daymark.app.ui.components.MoodFaceIcon
 import com.daymark.app.ui.components.PaperSurface
 import com.daymark.app.util.DateUtils
@@ -87,6 +88,9 @@ fun DayDetailScreen(
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                 }
+                            }
+                            ewa.entry.photoPath?.let { path ->
+                                EntryPhoto(photoPath = path, size = 56.dp, cornerRadius = 10.dp)
                             }
                         }
                     }

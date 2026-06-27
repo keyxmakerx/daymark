@@ -40,4 +40,9 @@ class HomeViewModel @Inject constructor(
             entryRepository.restore(entry.entry, entry.activities.map { it.id })
         }
     }
+
+    /** Finalizes a swipe-delete once undo is no longer possible: drop the photo file. */
+    fun purgePhoto(entry: EntryWithActivities) {
+        entryRepository.deletePhoto(entry.entry.photoPath)
+    }
 }

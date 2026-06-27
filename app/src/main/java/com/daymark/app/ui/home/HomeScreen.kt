@@ -38,6 +38,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.daymark.app.data.entity.EntryWithActivities
 import com.daymark.app.model.Mood
+import com.daymark.app.ui.components.EntryPhoto
 import com.daymark.app.ui.components.MoodFaceIcon
 import com.daymark.app.ui.components.PaperSurface
 import com.daymark.app.ui.icon.ActivityIcons
@@ -48,7 +49,7 @@ import com.daymark.app.util.DateUtils
 fun HomeScreen(
     onEntryClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
-    onUndoableDelete: (onUndo: () -> Unit) -> Unit = {},
+    onUndoableDelete: (onUndo: () -> Unit, onExpire: () -> Unit) -> Unit = { _, _ -> },
     viewModel: HomeViewModel = hiltViewModel(),
     memoriesViewModel: MemoriesViewModel = hiltViewModel(),
 ) {
@@ -81,7 +82,10 @@ fun HomeScreen(
                     onEntryClick = onEntryClick,
                     onDelete = { entry ->
                         viewModel.delete(entry)
-                        onUndoableDelete { viewModel.restore(entry) }
+                        onUndoableDelete(
+                            { viewModel.restore(entry) },
+                            { viewModel.purgePhoto(entry) },
+                        )
                     },
                     modifier = Modifier.animateItem(),
                 )
@@ -253,6 +257,9 @@ private fun EntryRow(entry: EntryWithActivities, onClick: () -> Unit) {
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
+        }
+        entry.entry.photoPath?.let { path ->
+            EntryPhoto(photoPath = path, size = 84.dp, cornerRadius = 12.dp)
         }
         if (entry.activities.isNotEmpty()) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {

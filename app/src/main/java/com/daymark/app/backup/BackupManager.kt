@@ -35,7 +35,14 @@ internal fun csvField(value: String): String =
     }
 
 @Serializable
-data class BackupEntry(val id: Long, val dateTime: Long, val moodLevel: Int, val note: String)
+data class BackupEntry(
+    val id: Long,
+    val dateTime: Long,
+    val moodLevel: Int,
+    val note: String,
+    // Added in v6: relative filename of an attached photo (bytes live in BackupData.photos).
+    val photoPath: String? = null,
+)
 
 @Serializable
 data class BackupActivity(val id: Long, val name: String, val iconKey: String, val sortOrder: Int, val archived: Boolean)
@@ -76,7 +83,7 @@ data class BackupTrackerLog(val id: Long, val trackerId: Long, val dateTime: Lon
 
 @Serializable
 data class BackupData(
-    val version: Int = 5,
+    val version: Int = 6,
     val exportedAt: Long,
     val entries: List<BackupEntry>,
     val activities: List<BackupActivity>,
@@ -91,6 +98,8 @@ data class BackupData(
     // Added in v5.
     val trackers: List<BackupTracker> = emptyList(),
     val trackerLogs: List<BackupTrackerLog> = emptyList(),
+    // Added in v6: entry photos as filename -> base64-encoded JPEG bytes, kept in the one file.
+    val photos: Map<String, String> = emptyMap(),
 )
 
 /**
@@ -107,14 +116,21 @@ class BackupManager @Inject constructor(
     private val treatmentDao: TreatmentDao,
     private val trackerDao: TrackerDao,
     private val trackerLogDao: TrackerLogDao,
+    private val photoStore: com.daymark.app.data.PhotoStore,
 ) {
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
 
     suspend fun exportToJson(nowMillis: Long): String {
+        val allEntries = entryDao.getAllEntries()
+        // Embed each referenced photo's bytes as base64 so the backup stays a single portable file.
+        val photos = allEntries.mapNotNull { it.photoPath }.distinct()
+            .mapNotNull { path -> photoStore.readBytes(path)?.let { path to encodeBase64(it) } }
+            .toMap()
         val data = BackupData(
             version = CURRENT_VERSION,
             exportedAt = nowMillis,
-            entries = entryDao.getAllEntries().map { BackupEntry(it.id, it.dateTime, it.moodLevel, it.note) },
+            entries = allEntries.map { BackupEntry(it.id, it.dateTime, it.moodLevel, it.note, it.photoPath) },
+            photos = photos,
             activities = activityDao.getAllOnce().map {
                 BackupActivity(it.id, it.name, it.iconKey, it.sortOrder, it.archived)
             },
@@ -188,10 +204,14 @@ class BackupManager @Inject constructor(
         sleepLogDao.deleteAll()
         treatmentDao.deleteAll()
 
+        // Restore photos under their original filenames (entries reference them by name).
+        photoStore.clearAll()
+        data.photos.forEach { (name, b64) -> runCatching { photoStore.writeBytes(name, decodeBase64(b64)) } }
+
         activityDao.insertAll(
             data.activities.map { ActivityEntity(it.id, it.name, it.iconKey, it.sortOrder, it.archived) },
         )
-        data.entries.forEach { entryDao.insert(MoodEntry(it.id, it.dateTime, it.moodLevel, it.note)) }
+        data.entries.forEach { entryDao.insert(MoodEntry(it.id, it.dateTime, it.moodLevel, it.note, it.photoPath)) }
         entryDao.insertCrossRefs(data.refs.map { EntryActivityCrossRef(it.entryId, it.activityId) })
         data.journal.forEach { journalDao.insert(JournalEntry(it.id, it.dateTime, it.title, it.body)) }
         data.goals.forEach {
@@ -217,9 +237,19 @@ class BackupManager @Inject constructor(
             activityIdMap[a.id] = newId
         }
 
+        // Write the backup's photos under fresh names when they'd collide with existing files,
+        // building old-name -> stored-name so merged entries point at the right file.
+        val photoNameMap = HashMap<String, String>()
+        data.photos.forEach { (name, b64) ->
+            val target = if (photoStore.exists(name)) photoStore.freshName() else name
+            runCatching { photoStore.writeBytes(target, decodeBase64(b64)) }
+                .onSuccess { photoNameMap[name] = target }
+        }
+
         val entryIdMap = HashMap<Long, Long>()
         data.entries.forEach { e ->
-            val newId = entryDao.insert(MoodEntry(0, e.dateTime, e.moodLevel, e.note))
+            val photo = e.photoPath?.let { photoNameMap[it] ?: it }
+            val newId = entryDao.insert(MoodEntry(0, e.dateTime, e.moodLevel, e.note, photo))
             entryIdMap[e.id] = newId
         }
 
@@ -258,7 +288,13 @@ class BackupManager @Inject constructor(
         }
     }
 
+    private fun encodeBase64(bytes: ByteArray): String =
+        android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+
+    private fun decodeBase64(text: String): ByteArray =
+        android.util.Base64.decode(text, android.util.Base64.NO_WRAP)
+
     companion object {
-        const val CURRENT_VERSION = 5
+        const val CURRENT_VERSION = 6
     }
 }
