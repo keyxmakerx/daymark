@@ -13,6 +13,12 @@ object Routes {
     const val ACTIVITIES = "activities"
     const val ACTIVITY_LIBRARY = "activity_library"
     const val SEARCH = "search"
+    const val TRACKERS = "trackers"
+    const val TRACKER = "tracker"
+
+    /** Tracker detail/log screen, keyed by tracker id. */
+    fun tracker(id: Long) = "$TRACKER/$id"
+    const val TRACKER_PATTERN = "$TRACKER/{trackerId}"
     const val MORE = "more"
     const val GENTLE_SUPPORT = "gentle_support"
     const val SUPPORT = "support"

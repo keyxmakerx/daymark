@@ -5,6 +5,8 @@ import com.daymark.app.data.dao.EntryDao
 import com.daymark.app.data.dao.GoalDao
 import com.daymark.app.data.dao.JournalDao
 import com.daymark.app.data.dao.SleepLogDao
+import com.daymark.app.data.dao.TrackerDao
+import com.daymark.app.data.dao.TrackerLogDao
 import com.daymark.app.data.dao.TreatmentDao
 import com.daymark.app.data.entity.ActivityEntity
 import com.daymark.app.data.entity.EntryActivityCrossRef
@@ -12,6 +14,8 @@ import com.daymark.app.data.entity.Goal
 import com.daymark.app.data.entity.JournalEntry
 import com.daymark.app.data.entity.MoodEntry
 import com.daymark.app.data.entity.SleepLog
+import com.daymark.app.data.entity.Tracker
+import com.daymark.app.data.entity.TrackerLog
 import com.daymark.app.data.entity.Treatment
 import com.daymark.app.model.Mood
 import com.daymark.app.util.DateUtils
@@ -62,6 +66,15 @@ data class BackupSleepLog(
 data class BackupTreatment(val id: Long, val kind: String, val startedAt: Long, val note: String)
 
 @Serializable
+data class BackupTracker(
+    val id: Long, val name: String, val type: String, val minValue: Int, val maxValue: Int,
+    val unit: String, val sortOrder: Int, val archived: Boolean,
+)
+
+@Serializable
+data class BackupTrackerLog(val id: Long, val trackerId: Long, val dateTime: Long, val value: Double, val note: String)
+
+@Serializable
 data class BackupData(
     val version: Int = 4,
     val exportedAt: Long,
@@ -75,6 +88,9 @@ data class BackupData(
     // Added in v4.
     val sleepLogs: List<BackupSleepLog> = emptyList(),
     val treatments: List<BackupTreatment> = emptyList(),
+    // Added in v5.
+    val trackers: List<BackupTracker> = emptyList(),
+    val trackerLogs: List<BackupTrackerLog> = emptyList(),
 )
 
 /**
@@ -89,6 +105,8 @@ class BackupManager @Inject constructor(
     private val goalDao: GoalDao,
     private val sleepLogDao: SleepLogDao,
     private val treatmentDao: TreatmentDao,
+    private val trackerDao: TrackerDao,
+    private val trackerLogDao: TrackerLogDao,
 ) {
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
 
@@ -108,6 +126,10 @@ class BackupManager @Inject constructor(
                 BackupSleepLog(it.id, it.night, it.bedTime, it.wakeTime, it.sleepLatencyMin, it.awakeMin, it.quality, it.note)
             },
             treatments = treatmentDao.getAll().map { BackupTreatment(it.id, it.kind, it.startedAt, it.note) },
+            trackers = trackerDao.getAll().map {
+                BackupTracker(it.id, it.name, it.type, it.minValue, it.maxValue, it.unit, it.sortOrder, it.archived)
+            },
+            trackerLogs = trackerLogDao.getAll().map { BackupTrackerLog(it.id, it.trackerId, it.dateTime, it.value, it.note) },
         )
         return json.encodeToString(data)
     }
@@ -178,6 +200,12 @@ class BackupManager @Inject constructor(
             sleepLogDao.insert(SleepLog(it.id, it.night, it.bedTime, it.wakeTime, it.sleepLatencyMin, it.awakeMin, it.quality, it.note))
         }
         data.treatments.forEach { treatmentDao.insert(Treatment(it.id, it.kind, it.startedAt, it.note)) }
+        trackerDao.deleteAll()
+        trackerLogDao.deleteAll()
+        data.trackers.forEach {
+            trackerDao.insert(Tracker(it.id, it.name, it.type, it.minValue, it.maxValue, it.unit, it.sortOrder, it.archived))
+        }
+        data.trackerLogs.forEach { trackerLogDao.insert(TrackerLog(it.id, it.trackerId, it.dateTime, it.value, it.note)) }
     }
 
     /** Adds backup rows alongside existing data, assigning new ids and remapping links. */
@@ -216,9 +244,20 @@ class BackupManager @Inject constructor(
             sleepLogDao.insert(SleepLog(0, s.night, s.bedTime, s.wakeTime, s.sleepLatencyMin, s.awakeMin, s.quality, s.note))
         }
         data.treatments.forEach { t -> treatmentDao.insert(Treatment(0, t.kind, t.startedAt, t.note)) }
+
+        val trackerIdMap = HashMap<Long, Long>()
+        data.trackers.forEach { t ->
+            val newId = trackerDao.insert(Tracker(0, t.name, t.type, t.minValue, t.maxValue, t.unit, t.sortOrder, t.archived))
+            trackerIdMap[t.id] = newId
+        }
+        data.trackerLogs.forEach { l ->
+            trackerIdMap[l.trackerId]?.let { newTrackerId ->
+                trackerLogDao.insert(TrackerLog(0, newTrackerId, l.dateTime, l.value, l.note))
+            }
+        }
     }
 
     companion object {
-        const val CURRENT_VERSION = 4
+        const val CURRENT_VERSION = 5
     }
 }

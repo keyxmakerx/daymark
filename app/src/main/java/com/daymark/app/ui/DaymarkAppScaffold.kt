@@ -73,6 +73,8 @@ import com.daymark.app.ui.support.BreathingPacerScreen
 import com.daymark.app.ui.support.CrisisResourcesScreen
 import com.daymark.app.ui.support.GentleSupportScreen
 import com.daymark.app.ui.support.SupportScreen
+import com.daymark.app.ui.trackers.TrackerDetailScreen
+import com.daymark.app.ui.trackers.TrackersScreen
 import com.daymark.app.ui.settings.SettingsScreen
 import com.daymark.app.ui.stats.StatsScreen
 import kotlinx.coroutines.launch
@@ -243,6 +245,20 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
                     onEditEntry = { id -> navController.navigate(Routes.entry(id)) },
                 )
             }
+            composable(Routes.TRACKERS, enterTransition = zEnter, popExitTransition = zPopExit) {
+                TrackersScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenTracker = { id -> navController.navigate(Routes.tracker(id)) },
+                )
+            }
+            composable(
+                Routes.TRACKER_PATTERN,
+                arguments = listOf(navArgument("trackerId") { type = NavType.StringType }),
+                enterTransition = zEnter,
+                popExitTransition = zPopExit,
+            ) {
+                TrackerDetailScreen(onBack = { navController.popBackStack() })
+            }
             composable(Routes.YEAR_PIXELS, enterTransition = zEnter, popExitTransition = zPopExit) {
                 YearPixelsScreen(onBack = { navController.popBackStack() })
             }
@@ -265,6 +281,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
                     onActivities = { navController.navigate(Routes.ACTIVITIES) },
                     onYearPixels = { navController.navigate(Routes.YEAR_PIXELS) },
                     onSleep = { navController.navigate(Routes.SLEEP) },
+                    onTrackers = { navController.navigate(Routes.TRACKERS) },
                     onGentleSupport = { navController.navigate(Routes.GENTLE_SUPPORT) },
                     onSettings = { navController.navigate(Routes.SETTINGS) },
                     modifier = Modifier.padding(padding),

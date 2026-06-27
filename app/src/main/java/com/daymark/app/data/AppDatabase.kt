@@ -9,6 +9,8 @@ import com.daymark.app.data.dao.EntryDao
 import com.daymark.app.data.dao.GoalDao
 import com.daymark.app.data.dao.JournalDao
 import com.daymark.app.data.dao.SleepLogDao
+import com.daymark.app.data.dao.TrackerDao
+import com.daymark.app.data.dao.TrackerLogDao
 import com.daymark.app.data.dao.TreatmentDao
 import com.daymark.app.data.entity.ActivityEntity
 import com.daymark.app.data.entity.EntryActivityCrossRef
@@ -16,14 +18,17 @@ import com.daymark.app.data.entity.Goal
 import com.daymark.app.data.entity.JournalEntry
 import com.daymark.app.data.entity.MoodEntry
 import com.daymark.app.data.entity.SleepLog
+import com.daymark.app.data.entity.Tracker
+import com.daymark.app.data.entity.TrackerLog
 import com.daymark.app.data.entity.Treatment
 
 @Database(
     entities = [
         MoodEntry::class, ActivityEntity::class, EntryActivityCrossRef::class,
         JournalEntry::class, Goal::class, SleepLog::class, Treatment::class,
+        Tracker::class, TrackerLog::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -33,6 +38,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun goalDao(): GoalDao
     abstract fun sleepLogDao(): SleepLogDao
     abstract fun treatmentDao(): TreatmentDao
+    abstract fun trackerDao(): TrackerDao
+    abstract fun trackerLogDao(): TrackerLogDao
 
     /** Seeds a sensible set of starter activities on first install. */
     class SeedCallback : Callback() {
@@ -118,6 +125,34 @@ abstract class AppDatabase : RoomDatabase() {
                         "`kind` TEXT NOT NULL, " +
                         "`startedAt` INTEGER NOT NULL, " +
                         "`note` TEXT NOT NULL)",
+                )
+            }
+        }
+
+        /** v7 adds custom trackers + their logs; existing data is preserved. */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `trackers` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`type` TEXT NOT NULL, " +
+                        "`minValue` INTEGER NOT NULL, " +
+                        "`maxValue` INTEGER NOT NULL, " +
+                        "`unit` TEXT NOT NULL, " +
+                        "`sortOrder` INTEGER NOT NULL, " +
+                        "`archived` INTEGER NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `tracker_logs` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`trackerId` INTEGER NOT NULL, " +
+                        "`dateTime` INTEGER NOT NULL, " +
+                        "`value` REAL NOT NULL, " +
+                        "`note` TEXT NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_tracker_logs_trackerId` ON `tracker_logs` (`trackerId`)",
                 )
             }
         }

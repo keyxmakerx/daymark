@@ -33,6 +33,7 @@ fun MoreHubScreen(
     onActivities: () -> Unit,
     onYearPixels: () -> Unit,
     onSleep: () -> Unit,
+    onTrackers: () -> Unit,
     onGentleSupport: () -> Unit,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
@@ -84,13 +85,19 @@ fun MoreHubScreen(
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
         ) {
             HubCard(
+                icon = R.drawable.ic_act_star,
+                title = "Trackers",
+                subtitle = "Track anything vs. mood",
+                onClick = onTrackers,
+                modifier = Modifier.weight(1f),
+            )
+            HubCard(
                 icon = R.drawable.ic_ui_more,
                 title = "Settings",
                 subtitle = "Reminders, lock, backup",
                 onClick = onSettings,
                 modifier = Modifier.weight(1f),
             )
-            Spacer(Modifier.weight(1f))
         }
     }
 }
