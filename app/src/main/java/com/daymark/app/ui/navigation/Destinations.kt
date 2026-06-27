@@ -16,6 +16,7 @@ object Routes {
     const val SLEEP = "sleep"
     const val SLEEP_LOG = "sleep_log"
     const val SLEEP_SETUP = "sleep_setup"
+    const val BREATHING = "breathing"
     const val TREATMENTS = "treatments"
     const val TREATMENT = "treatment"
     const val SCREENER = "screener"

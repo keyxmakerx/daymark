@@ -48,6 +48,7 @@ fun SleepScreen(
     onLogNight: () -> Unit,
     onOpenSetup: () -> Unit,
     onOpenTreatments: () -> Unit,
+    onOpenBreathing: () -> Unit,
     viewModel: SleepViewModel = hiltViewModel(),
 ) {
     val results by viewModel.results.collectAsStateWithLifecycle()
@@ -131,6 +132,7 @@ fun SleepScreen(
                     }
                 }
             }
+            item { NavCard("Breathing check", "Experimental · phone on chest", onOpenBreathing) }
             item { NavCard("Treatments", "Is something helping? Track before & since", onOpenTreatments) }
             item { NavCard("Sleep setup", "Partner, pets, phone placement", onOpenSetup) }
 
