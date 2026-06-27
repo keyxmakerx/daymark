@@ -20,8 +20,10 @@ import javax.inject.Singleton
 @Singleton
 class AutoLockController @Inject constructor() {
 
+    /** elapsedRealtime() when a skip was armed, or -1 if none. Skips expire so an abandoned
+     *  picker launch can't silently swallow a later, genuine re-lock. */
     @Volatile
-    private var skip = false
+    private var skipArmedAtMs: Long = -1L
 
     /** elapsedRealtime() at the moment we backgrounded, or -1 if there's nothing to evaluate. */
     @Volatile
@@ -29,16 +31,17 @@ class AutoLockController @Inject constructor() {
 
     /** Call right before launching a file/photo picker or other external activity. */
     fun suppressNextBackgroundLock() {
-        skip = true
+        skipArmedAtMs = SystemClock.elapsedRealtime()
     }
 
     /**
-     * Record that the app went to the background. If a skip was armed it is consumed here and
-     * the background is treated as intentional (no re-lock on return).
+     * Record that the app went to the background. If a skip was armed recently it is consumed
+     * here and the background is treated as intentional (no re-lock on return).
      */
     fun onBackgrounded() {
-        if (skip) {
-            skip = false
+        val armed = skipArmedAtMs
+        skipArmedAtMs = -1L
+        if (armed >= 0 && SystemClock.elapsedRealtime() - armed <= SKIP_WINDOW_MS) {
             backgroundedAtMs = -1L
             return
         }
@@ -56,5 +59,10 @@ class AutoLockController @Inject constructor() {
         if (timeoutMinutes <= 0) return true
         val elapsed = SystemClock.elapsedRealtime() - bg
         return elapsed >= timeoutMinutes * 60_000L
+    }
+
+    private companion object {
+        /** How long an armed picker-skip stays valid before it's ignored. */
+        const val SKIP_WINDOW_MS = 60_000L
     }
 }

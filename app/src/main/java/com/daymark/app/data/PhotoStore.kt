@@ -26,6 +26,12 @@ class PhotoStore @Inject constructor(
     fun fileFor(relPath: String): File = File(dir, relPath)
 
     /**
+     * Guards against path traversal: photo names come from our own UUIDs, but on import they
+     * arrive as untrusted JSON map keys. Only accept a bare `<uuid>.jpg` filename — never a path.
+     */
+    private fun isSafeName(relPath: String): Boolean = SAFE_NAME.matches(relPath)
+
+    /**
      * Copies the picked image into private storage (downscaled), returning the new relative
      * filename. Throws if the source can't be read.
      */
@@ -48,15 +54,16 @@ class PhotoStore @Inject constructor(
 
     /** Raw bytes of a stored photo (for embedding in a backup), or null if it's gone. */
     fun readBytes(relPath: String): ByteArray? =
-        runCatching { File(dir, relPath).readBytes() }.getOrNull()
+        if (!isSafeName(relPath)) null else runCatching { File(dir, relPath).readBytes() }.getOrNull()
 
-    /** Writes bytes for a relative filename (restoring from a backup). */
+    /** Writes bytes for a relative filename (restoring from a backup). Ignores unsafe names. */
     fun writeBytes(relPath: String, bytes: ByteArray) {
+        if (!isSafeName(relPath)) return
         File(dir, relPath).writeBytes(bytes)
     }
 
     /** True if a stored photo with this filename already exists. */
-    fun exists(relPath: String): Boolean = File(dir, relPath).exists()
+    fun exists(relPath: String): Boolean = isSafeName(relPath) && File(dir, relPath).exists()
 
     /** A fresh unique filename, used when a backup-supplied name would collide on merge. */
     fun freshName(): String = "${UUID.randomUUID()}.jpg"
@@ -85,6 +92,8 @@ class PhotoStore @Inject constructor(
 
     companion object {
         const val DIR = "entry_photos"
+        /** A bare `<uuid>.jpg` filename — no directory separators, so it can't escape the dir. */
+        private val SAFE_NAME = Regex("^[0-9a-fA-F-]{36}\\.jpg$")
         /** Longest edge after downscaling; plenty for a journal thumbnail and full-view. */
         private const val MAX_DIMEN = 1600
         private const val JPEG_QUALITY = 85

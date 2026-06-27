@@ -43,6 +43,12 @@ class ReminderRepository @Inject constructor(
         dao.getAll().forEach { if (it.enabled) scheduler.schedule(it) else scheduler.cancel(it.id) }
     }
 
+    /** Cancels the alarm for every current reminder (used before a REPLACE import wipes the table,
+     *  so alarms for ids that won't exist afterwards don't linger). */
+    suspend fun cancelAllAlarms() {
+        dao.getAll().forEach { scheduler.cancel(it.id) }
+    }
+
     /**
      * Moves the old single-reminder preference into the reminders table once. Idempotent via a
      * flag, so it runs only on the first launch after upgrading.

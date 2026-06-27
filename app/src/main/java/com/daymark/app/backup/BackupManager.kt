@@ -207,6 +207,8 @@ class BackupManager @Inject constructor(
     }
 
     private suspend fun importReplace(data: BackupData) {
+        // Cancel alarms for the reminders we're about to wipe, so stale ids don't keep firing.
+        reminderRepository.cancelAllAlarms()
         entryDao.deleteAllCrossRefs()
         entryDao.deleteAllEntries()
         activityDao.deleteAll()
