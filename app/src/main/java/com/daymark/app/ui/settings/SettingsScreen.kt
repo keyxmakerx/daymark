@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Divider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -86,6 +88,7 @@ fun SettingsScreen(
     var showTimePicker by remember { mutableStateOf(false) }
     var showPinDialog by remember { mutableStateOf(false) }
     var showPdfDialog by remember { mutableStateOf(false) }
+    var showAutoLockMenu by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -160,6 +163,31 @@ fun SettingsScreen(
                             }
                         },
                     )
+                },
+            )
+            ListItem(
+                headlineContent = { Text("Auto-lock") },
+                supportingContent = { Text(autoLockLabel(state.autoLockTimeoutMinutes)) },
+                trailingContent = {
+                    androidx.compose.foundation.layout.Box {
+                        TextButton(onClick = { showAutoLockMenu = true }) {
+                            Text(autoLockLabel(state.autoLockTimeoutMinutes))
+                        }
+                        DropdownMenu(
+                            expanded = showAutoLockMenu,
+                            onDismissRequest = { showAutoLockMenu = false },
+                        ) {
+                            AUTO_LOCK_OPTIONS.forEach { minutes ->
+                                DropdownMenuItem(
+                                    text = { Text(autoLockLabel(minutes)) },
+                                    onClick = {
+                                        viewModel.setAutoLockTimeout(minutes)
+                                        showAutoLockMenu = false
+                                    },
+                                )
+                            }
+                        }
+                    }
                 },
             )
         }
@@ -385,4 +413,12 @@ private fun SectionHeader(text: String) {
         color = MaterialTheme.colorScheme.tertiary,
         modifier = Modifier.padding(start = 18.dp, top = 18.dp, bottom = 6.dp),
     )
+}
+
+private val AUTO_LOCK_OPTIONS = listOf(0, 1, 5, 15)
+
+private fun autoLockLabel(minutes: Int): String = when (minutes) {
+    0 -> "Immediately"
+    1 -> "After 1 minute"
+    else -> "After $minutes minutes"
 }

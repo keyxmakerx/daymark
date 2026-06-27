@@ -41,6 +41,14 @@ class SettingsRepository @Inject constructor(
         get() = prefs.getBoolean(KEY_BIOMETRIC_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_BIOMETRIC_ENABLED, value).apply()
 
+    /**
+     * Minutes the app may sit in the background before it re-locks. 0 = lock immediately
+     * (the original behaviour). Lets people step away briefly without re-entering their PIN.
+     */
+    var autoLockTimeoutMinutes: Int
+        get() = prefs.getInt(KEY_AUTO_LOCK_TIMEOUT, 0)
+        set(value) = prefs.edit().putInt(KEY_AUTO_LOCK_TIMEOUT, value).apply()
+
     // --- Appearance ---
     var dynamicColor: Boolean
         get() = prefs.getBoolean(KEY_DYNAMIC_COLOR, true)
@@ -71,6 +79,7 @@ class SettingsRepository @Inject constructor(
         private const val KEY_LOCK_ENABLED = "lock_enabled"
         private const val KEY_PIN_HASH = "pin_hash"
         private const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"
+        private const val KEY_AUTO_LOCK_TIMEOUT = "auto_lock_timeout_minutes"
         private const val KEY_DYNAMIC_COLOR = "dynamic_color"
         private const val KEY_ONBOARDING_DONE = "onboarding_complete"
         private const val KEY_GENTLE_SUPPORT = "gentle_support_enabled"

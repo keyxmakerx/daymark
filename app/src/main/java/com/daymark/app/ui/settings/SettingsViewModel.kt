@@ -33,6 +33,7 @@ data class SettingsUiState(
     val lockEnabled: Boolean = false,
     val hasPin: Boolean = false,
     val biometricEnabled: Boolean = false,
+    val autoLockTimeoutMinutes: Int = 0,
     val dynamicColor: Boolean = true,
 )
 
@@ -64,6 +65,7 @@ class SettingsViewModel @Inject constructor(
         lockEnabled = settings.lockEnabled,
         hasPin = pinManager.isPinSet,
         biometricEnabled = settings.biometricEnabled,
+        autoLockTimeoutMinutes = settings.autoLockTimeoutMinutes,
         dynamicColor = settings.dynamicColor,
     )
 
@@ -100,6 +102,11 @@ class SettingsViewModel @Inject constructor(
 
     fun setBiometricEnabled(enabled: Boolean) {
         settings.biometricEnabled = enabled
+        refresh()
+    }
+
+    fun setAutoLockTimeout(minutes: Int) {
+        settings.autoLockTimeoutMinutes = minutes
         refresh()
     }
 

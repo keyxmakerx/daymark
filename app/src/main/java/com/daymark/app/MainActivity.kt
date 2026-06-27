@@ -67,14 +67,20 @@ class MainActivity : FragmentActivity() {
             // flow re-emits the same instance, which doesn't trigger recomposition).
             var onboarded by remember { mutableStateOf(settings.onboardingComplete) }
 
-            // Re-lock whenever the whole app goes to the background.
+            // Re-lock when the app returns from the background, but only after the user's chosen
+            // grace period (auto-lock timeout). A file-picker round trip is exempted via the skip.
             if (lockEnabled) {
                 DisposableEffect(Unit) {
                     val owner = ProcessLifecycleOwner.get()
                     val observer = LifecycleEventObserver { _, event ->
-                        // Skip the re-lock once if we intentionally backgrounded for a file picker.
-                        if (event == Lifecycle.Event.ON_STOP && !autoLock.consumeSkip()) {
-                            unlocked = false
+                        when (event) {
+                            Lifecycle.Event.ON_STOP -> autoLock.onBackgrounded()
+                            Lifecycle.Event.ON_START -> {
+                                if (autoLock.shouldLockOnForeground(settings.autoLockTimeoutMinutes)) {
+                                    unlocked = false
+                                }
+                            }
+                            else -> {}
                         }
                     }
                     owner.lifecycle.addObserver(observer)
