@@ -53,6 +53,7 @@ fun SleepScreen(
 ) {
     val results by viewModel.results.collectAsStateWithLifecycle()
     val logs by viewModel.logs.collectAsStateWithLifecycle()
+    val sleepMood by viewModel.sleepMood.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { viewModel.refresh() }
 
     Scaffold(
@@ -104,6 +105,25 @@ fun SleepScreen(
                         }
                         Button(onClick = onLogNight, modifier = Modifier.fillMaxWidth()) {
                             Text("Log last night")
+                        }
+                    }
+                }
+            }
+            sleepMood?.let { sm ->
+                item {
+                    PaperSurface(modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Sleep & mood", style = MaterialTheme.typography.titleMedium)
+                            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                                Stat("Better-sleep nights", String.format(java.util.Locale.getDefault(), "%.1f", sm.betterSleepMood))
+                                Stat("Rougher nights", String.format(java.util.Locale.getDefault(), "%.1f", sm.worseSleepMood))
+                            }
+                            Text(
+                                "Average mood the day after, across ${sm.nights} nights. A pattern, " +
+                                    "not proof of cause.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
                 }

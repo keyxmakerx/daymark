@@ -4,11 +4,15 @@ import com.daymark.app.data.dao.ActivityDao
 import com.daymark.app.data.dao.EntryDao
 import com.daymark.app.data.dao.GoalDao
 import com.daymark.app.data.dao.JournalDao
+import com.daymark.app.data.dao.SleepLogDao
+import com.daymark.app.data.dao.TreatmentDao
 import com.daymark.app.data.entity.ActivityEntity
 import com.daymark.app.data.entity.EntryActivityCrossRef
 import com.daymark.app.data.entity.Goal
 import com.daymark.app.data.entity.JournalEntry
 import com.daymark.app.data.entity.MoodEntry
+import com.daymark.app.data.entity.SleepLog
+import com.daymark.app.data.entity.Treatment
 import com.daymark.app.model.Mood
 import com.daymark.app.util.DateUtils
 import kotlinx.serialization.Serializable
@@ -49,8 +53,17 @@ data class BackupGoal(
 )
 
 @Serializable
+data class BackupSleepLog(
+    val id: Long, val night: Long, val bedTime: Long, val wakeTime: Long,
+    val sleepLatencyMin: Int, val awakeMin: Int, val quality: Int, val note: String,
+)
+
+@Serializable
+data class BackupTreatment(val id: Long, val kind: String, val startedAt: Long, val note: String)
+
+@Serializable
 data class BackupData(
-    val version: Int = 3,
+    val version: Int = 4,
     val exportedAt: Long,
     val entries: List<BackupEntry>,
     val activities: List<BackupActivity>,
@@ -59,6 +72,9 @@ data class BackupData(
     val journal: List<BackupJournal> = emptyList(),
     // Added in v3.
     val goals: List<BackupGoal> = emptyList(),
+    // Added in v4.
+    val sleepLogs: List<BackupSleepLog> = emptyList(),
+    val treatments: List<BackupTreatment> = emptyList(),
 )
 
 /**
@@ -71,6 +87,8 @@ class BackupManager @Inject constructor(
     private val activityDao: ActivityDao,
     private val journalDao: JournalDao,
     private val goalDao: GoalDao,
+    private val sleepLogDao: SleepLogDao,
+    private val treatmentDao: TreatmentDao,
 ) {
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
 
@@ -86,6 +104,10 @@ class BackupManager @Inject constructor(
             goals = goalDao.getAll().map {
                 BackupGoal(it.id, it.title, it.activityId, it.targetPerWeek, it.createdAt, it.archived)
             },
+            sleepLogs = sleepLogDao.getAll().map {
+                BackupSleepLog(it.id, it.night, it.bedTime, it.wakeTime, it.sleepLatencyMin, it.awakeMin, it.quality, it.note)
+            },
+            treatments = treatmentDao.getAll().map { BackupTreatment(it.id, it.kind, it.startedAt, it.note) },
         )
         return json.encodeToString(data)
     }
@@ -140,6 +162,8 @@ class BackupManager @Inject constructor(
         activityDao.deleteAll()
         journalDao.deleteAll()
         goalDao.deleteAll()
+        sleepLogDao.deleteAll()
+        treatmentDao.deleteAll()
 
         activityDao.insertAll(
             data.activities.map { ActivityEntity(it.id, it.name, it.iconKey, it.sortOrder, it.archived) },
@@ -150,6 +174,10 @@ class BackupManager @Inject constructor(
         data.goals.forEach {
             goalDao.insert(Goal(it.id, it.title, it.activityId, it.targetPerWeek, it.createdAt, it.archived))
         }
+        data.sleepLogs.forEach {
+            sleepLogDao.insert(SleepLog(it.id, it.night, it.bedTime, it.wakeTime, it.sleepLatencyMin, it.awakeMin, it.quality, it.note))
+        }
+        data.treatments.forEach { treatmentDao.insert(Treatment(it.id, it.kind, it.startedAt, it.note)) }
     }
 
     /** Adds backup rows alongside existing data, assigning new ids and remapping links. */
@@ -183,9 +211,14 @@ class BackupManager @Inject constructor(
                 Goal(0, g.title, g.activityId?.let { activityIdMap[it] }, g.targetPerWeek, g.createdAt, g.archived),
             )
         }
+        // Sleep logs and treatments have no foreign keys, so merge is a plain insert with fresh ids.
+        data.sleepLogs.forEach { s ->
+            sleepLogDao.insert(SleepLog(0, s.night, s.bedTime, s.wakeTime, s.sleepLatencyMin, s.awakeMin, s.quality, s.note))
+        }
+        data.treatments.forEach { t -> treatmentDao.insert(Treatment(0, t.kind, t.startedAt, t.note)) }
     }
 
     companion object {
-        const val CURRENT_VERSION = 3
+        const val CURRENT_VERSION = 4
     }
 }

@@ -21,4 +21,7 @@ interface SleepLogDao {
 
     @Query("SELECT * FROM sleep_logs")
     suspend fun getAll(): List<SleepLog>
+
+    @Query("DELETE FROM sleep_logs")
+    suspend fun deleteAll()
 }

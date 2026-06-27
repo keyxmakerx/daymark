@@ -20,4 +20,10 @@ interface TreatmentDao {
 
     @Delete
     suspend fun delete(treatment: Treatment)
+
+    @Query("SELECT * FROM treatments")
+    suspend fun getAll(): List<Treatment>
+
+    @Query("DELETE FROM treatments")
+    suspend fun deleteAll()
 }
