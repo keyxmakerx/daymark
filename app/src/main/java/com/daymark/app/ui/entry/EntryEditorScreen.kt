@@ -54,12 +54,15 @@ import java.time.ZoneId
 @Composable
 fun EntryEditorScreen(
     onDone: () -> Unit,
+    onOfferSupport: () -> Unit = {},
     viewModel: EntryEditorViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(state.saved) {
-        if (state.saved) onDone()
+        if (state.saved) {
+            if (state.offerSupport) onOfferSupport() else onDone()
+        }
     }
 
     var showDatePicker by remember { mutableStateOf(false) }

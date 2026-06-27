@@ -51,6 +51,11 @@ class SettingsRepository @Inject constructor(
         get() = prefs.getBoolean(KEY_ONBOARDING_DONE, false)
         set(value) = prefs.edit().putBoolean(KEY_ONBOARDING_DONE, value).apply()
 
+    // --- Gentle support (opt-in in-the-moment help offered after a low mood) ---
+    var gentleSupportEnabled: Boolean
+        get() = prefs.getBoolean(KEY_GENTLE_SUPPORT, false)
+        set(value) = prefs.edit().putBoolean(KEY_GENTLE_SUPPORT, value).apply()
+
     /** Emits the current preferences object whenever any value changes. */
     fun changes(): Flow<SharedPreferences> = callbackFlow {
         trySend(prefs)
@@ -68,5 +73,6 @@ class SettingsRepository @Inject constructor(
         private const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"
         private const val KEY_DYNAMIC_COLOR = "dynamic_color"
         private const val KEY_ONBOARDING_DONE = "onboarding_complete"
+        private const val KEY_GENTLE_SUPPORT = "gentle_support_enabled"
     }
 }

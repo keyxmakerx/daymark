@@ -66,6 +66,10 @@ import com.daymark.app.ui.sleep.SleepProfileScreen
 import com.daymark.app.ui.sleep.SleepScreen
 import com.daymark.app.ui.sleep.TreatmentDetailScreen
 import com.daymark.app.ui.sleep.TreatmentsScreen
+import com.daymark.app.ui.support.BreathingPacerScreen
+import com.daymark.app.ui.support.CrisisResourcesScreen
+import com.daymark.app.ui.support.GentleSupportScreen
+import com.daymark.app.ui.support.SupportScreen
 import com.daymark.app.ui.settings.SettingsScreen
 import com.daymark.app.ui.stats.StatsScreen
 import kotlinx.coroutines.launch
@@ -231,6 +235,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
                     onActivities = { navController.navigate(Routes.ACTIVITIES) },
                     onYearPixels = { navController.navigate(Routes.YEAR_PIXELS) },
                     onSleep = { navController.navigate(Routes.SLEEP) },
+                    onGentleSupport = { navController.navigate(Routes.GENTLE_SUPPORT) },
                     onSettings = { navController.navigate(Routes.SETTINGS) },
                     modifier = Modifier.padding(padding),
                 )
@@ -247,6 +252,26 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
             }
             composable(Routes.BREATHING, enterTransition = zEnter, popExitTransition = zPopExit) {
                 BreathingCaptureScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Routes.GENTLE_SUPPORT, enterTransition = zEnter, popExitTransition = zPopExit) {
+                GentleSupportScreen(
+                    onBack = { navController.popBackStack() },
+                    onPreview = { navController.navigate(Routes.SUPPORT) },
+                    onCrisis = { navController.navigate(Routes.CRISIS) },
+                )
+            }
+            composable(Routes.SUPPORT, enterTransition = sheetEnter, popExitTransition = sheetPopExit) {
+                SupportScreen(
+                    onClose = { navController.popBackStack() },
+                    onBreathe = { navController.navigate(Routes.SUPPORT_BREATHE) },
+                    onCrisis = { navController.navigate(Routes.CRISIS) },
+                )
+            }
+            composable(Routes.SUPPORT_BREATHE, enterTransition = sheetEnter, popExitTransition = sheetPopExit) {
+                BreathingPacerScreen(onDone = { navController.popBackStack() })
+            }
+            composable(Routes.CRISIS, enterTransition = zEnter, popExitTransition = zPopExit) {
+                CrisisResourcesScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.SLEEP_LOG, enterTransition = sheetEnter, popExitTransition = sheetPopExit) {
                 SleepLogScreen(onDone = { navController.popBackStack() })
@@ -305,7 +330,13 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
                 enterTransition = sheetEnter,
                 popExitTransition = sheetPopExit,
             ) {
-                EntryEditorScreen(onDone = { navController.popBackStack() })
+                EntryEditorScreen(
+                    onDone = { navController.popBackStack() },
+                    onOfferSupport = {
+                        navController.popBackStack()
+                        navController.navigate(Routes.SUPPORT)
+                    },
+                )
             }
             composable(Routes.ACTIVITIES, enterTransition = zEnter, popExitTransition = zPopExit) {
                 ActivitiesScreen(

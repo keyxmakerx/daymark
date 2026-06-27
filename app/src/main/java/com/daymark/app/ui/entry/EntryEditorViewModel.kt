@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.daymark.app.data.ActivityRepository
 import com.daymark.app.data.EntryRepository
+import com.daymark.app.data.SettingsRepository
 import com.daymark.app.data.entity.ActivityEntity
 import com.daymark.app.data.entity.MoodEntry
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -24,12 +25,15 @@ data class EntryEditorUiState(
     val activities: List<ActivityEntity> = emptyList(),
     val isEditing: Boolean = false,
     val saved: Boolean = false,
+    /** True when this save should *offer* (never force) gentle support — a low mood + opt-in. */
+    val offerSupport: Boolean = false,
 )
 
 @HiltViewModel
 class EntryEditorViewModel @Inject constructor(
     private val entryRepository: EntryRepository,
     private val activityRepository: ActivityRepository,
+    private val settingsRepository: SettingsRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -93,7 +97,8 @@ class EntryEditorViewModel @Inject constructor(
                 ),
                 s.selectedActivityIds.toList(),
             )
-            _uiState.update { it.copy(saved = true) }
+            val offer = s.moodLevel <= 2 && settingsRepository.gentleSupportEnabled
+            _uiState.update { it.copy(saved = true, offerSupport = offer) }
         }
     }
 

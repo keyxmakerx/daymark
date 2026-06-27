@@ -33,6 +33,7 @@ fun MoreHubScreen(
     onActivities: () -> Unit,
     onYearPixels: () -> Unit,
     onSleep: () -> Unit,
+    onGentleSupport: () -> Unit,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -71,12 +72,25 @@ fun MoreHubScreen(
                 modifier = Modifier.weight(1f),
             )
             HubCard(
+                icon = R.drawable.ic_act_relax,
+                title = "Gentle support",
+                subtitle = "In-the-moment help · opt-in",
+                onClick = onGentleSupport,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+        ) {
+            HubCard(
                 icon = R.drawable.ic_ui_more,
                 title = "Settings",
                 subtitle = "Reminders, lock, backup",
                 onClick = onSettings,
                 modifier = Modifier.weight(1f),
             )
+            Spacer(Modifier.weight(1f))
         }
     }
 }
