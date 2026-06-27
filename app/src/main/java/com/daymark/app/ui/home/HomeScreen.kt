@@ -1,5 +1,6 @@
 package com.daymark.app.ui.home
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,12 +15,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -40,6 +48,7 @@ import com.daymark.app.util.DateUtils
 fun HomeScreen(
     onEntryClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    onUndoableDelete: (onUndo: () -> Unit) -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
     memoriesViewModel: MemoriesViewModel = hiltViewModel(),
 ) {
@@ -70,6 +79,10 @@ fun HomeScreen(
                     label = DateUtils.formatDate(DateUtils.startOfDay(date)),
                     entries = entries,
                     onEntryClick = onEntryClick,
+                    onDelete = { entry ->
+                        viewModel.delete(entry)
+                        onUndoableDelete { viewModel.restore(entry) }
+                    },
                     modifier = Modifier.animateItem(),
                 )
             }
@@ -132,6 +145,7 @@ private fun DaySheet(
     label: String,
     entries: List<EntryWithActivities>,
     onEntryClick: (Long) -> Unit,
+    onDelete: (EntryWithActivities) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     PaperSurface(modifier = modifier.fillMaxWidth()) {
@@ -144,7 +158,13 @@ private fun DaySheet(
                 modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 16.dp),
             )
             entries.forEachIndexed { index, entry ->
-                EntryRow(entry = entry, onClick = { onEntryClick(entry.entry.id) })
+                key(entry.entry.id) {
+                    SwipeableEntryRow(
+                        entry = entry,
+                        onClick = { onEntryClick(entry.entry.id) },
+                        onDelete = { onDelete(entry) },
+                    )
+                }
                 if (index < entries.lastIndex) {
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outlineVariant,
@@ -152,6 +172,50 @@ private fun DaySheet(
                     )
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SwipeableEntryRow(
+    entry: EntryWithActivities,
+    onClick: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.EndToStart) {
+                onDelete()
+                true
+            } else {
+                false
+            }
+        },
+    )
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = false,
+        backgroundContent = {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.errorContainer)
+                    .padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Delete,
+                    contentDescription = "Delete",
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+        },
+    ) {
+        // Opaque surface so the row fully covers the red background until swiped.
+        Box(modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
+            EntryRow(entry = entry, onClick = onClick)
         }
     }
 }

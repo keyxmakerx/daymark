@@ -39,4 +39,10 @@ class EntryRepository @Inject constructor(
         entryDao.clearCrossRefs(entry.id)
         entryDao.delete(entry)
     }
+
+    /** Re-inserts a previously deleted entry with its original id and activity links (undo). */
+    suspend fun restore(entry: MoodEntry, activityIds: List<Long>) {
+        entryDao.insert(entry)
+        entryDao.setActivities(entry.id, activityIds)
+    }
 }

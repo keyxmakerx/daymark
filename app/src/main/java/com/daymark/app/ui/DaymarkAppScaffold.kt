@@ -25,8 +25,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -219,6 +221,17 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
             composable(Routes.HOME) {
                 HomeScreen(
                     onEntryClick = { id -> navController.navigate(Routes.entry(id)) },
+                    onUndoableDelete = { onUndo ->
+                        scope.launch {
+                            val result = snackbarHostState.showSnackbar(
+                                message = "Entry deleted",
+                                actionLabel = "Undo",
+                                withDismissAction = true,
+                                duration = SnackbarDuration.Short,
+                            )
+                            if (result == SnackbarResult.ActionPerformed) onUndo()
+                        }
+                    },
                     modifier = Modifier.padding(padding),
                 )
             }
