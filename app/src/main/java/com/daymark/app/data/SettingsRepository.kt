@@ -28,6 +28,11 @@ class SettingsRepository @Inject constructor(
         get() = prefs.getInt(KEY_REMINDER_MINUTE, 0)
         set(value) = prefs.edit().putInt(KEY_REMINDER_MINUTE, value).apply()
 
+    /** Set once the legacy single reminder has been migrated into the reminders table. */
+    var legacyReminderMigrated: Boolean
+        get() = prefs.getBoolean(KEY_LEGACY_REMINDER_MIGRATED, false)
+        set(value) = prefs.edit().putBoolean(KEY_LEGACY_REMINDER_MIGRATED, value).apply()
+
     // --- App lock ---
     var lockEnabled: Boolean
         get() = prefs.getBoolean(KEY_LOCK_ENABLED, false)
@@ -76,6 +81,7 @@ class SettingsRepository @Inject constructor(
         private const val KEY_REMINDER_ENABLED = "reminder_enabled"
         private const val KEY_REMINDER_HOUR = "reminder_hour"
         private const val KEY_REMINDER_MINUTE = "reminder_minute"
+        private const val KEY_LEGACY_REMINDER_MIGRATED = "legacy_reminder_migrated"
         private const val KEY_LOCK_ENABLED = "lock_enabled"
         private const val KEY_PIN_HASH = "pin_hash"
         private const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"

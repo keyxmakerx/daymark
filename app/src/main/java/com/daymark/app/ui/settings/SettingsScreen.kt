@@ -51,6 +51,7 @@ import java.time.ZoneId
 fun SettingsScreen(
     onManageActivities: () -> Unit,
     onManageGoals: () -> Unit,
+    onManageReminders: () -> Unit,
     onShowMessage: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel(),
@@ -62,10 +63,6 @@ fun SettingsScreen(
     LaunchedEffect(Unit) {
         viewModel.messages.collect { onShowMessage(it) }
     }
-
-    val notifPermission = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted -> viewModel.setReminderEnabled(granted) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json"),
@@ -85,7 +82,6 @@ fun SettingsScreen(
         ActivityResultContracts.CreateDocument("application/pdf"),
     ) { uri -> val o = pdfOptions; if (uri != null && o != null) viewModel.exportPdfTo(uri, o) }
 
-    var showTimePicker by remember { mutableStateOf(false) }
     var showPinDialog by remember { mutableStateOf(false) }
     var showPdfDialog by remember { mutableStateOf(false) }
     var showAutoLockMenu by remember { mutableStateOf(false) }
@@ -96,34 +92,19 @@ fun SettingsScreen(
             .padding(vertical = 8.dp),
     ) {
         SectionHeader("Reminders")
-        val reminderTimeMillis = remember(state.reminderHour, state.reminderMinute) {
-            LocalDateTime.now()
-                .withHour(state.reminderHour).withMinute(state.reminderMinute)
-                .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        }
         ListItem(
-            headlineContent = { Text("Daily reminder") },
-            supportingContent = { Text(if (state.reminderEnabled) "On" else "Off") },
-            trailingContent = {
-                Switch(
-                    checked = state.reminderEnabled,
-                    onCheckedChange = { enabled ->
-                        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                        } else {
-                            viewModel.setReminderEnabled(enabled)
-                        }
+            headlineContent = { Text("Reminders") },
+            supportingContent = {
+                Text(
+                    when (state.reminderCount) {
+                        0 -> "None set"
+                        1 -> "1 reminder"
+                        else -> "${state.reminderCount} reminders"
                     },
                 )
             },
+            modifier = Modifier.clickable { onManageReminders() },
         )
-        if (state.reminderEnabled) {
-            ListItem(
-                headlineContent = { Text("Reminder time") },
-                supportingContent = { Text(DateUtils.formatTime(reminderTimeMillis)) },
-                modifier = Modifier.clickable { showTimePicker = true },
-            )
-        }
 
         Divider()
         SectionHeader("Privacy")
@@ -245,25 +226,6 @@ fun SettingsScreen(
         ListItem(
             headlineContent = { Text("Daymark") },
             supportingContent = { Text("Open-source mood tracker · all data stays on your device") },
-        )
-    }
-
-    if (showTimePicker) {
-        val tpState = rememberTimePickerState(
-            initialHour = state.reminderHour,
-            initialMinute = state.reminderMinute,
-            is24Hour = false,
-        )
-        AlertDialog(
-            onDismissRequest = { showTimePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.setReminderTime(tpState.hour, tpState.minute)
-                    showTimePicker = false
-                }) { Text("OK") }
-            },
-            dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text("Cancel") } },
-            text = { TimePicker(state = tpState) },
         )
     }
 

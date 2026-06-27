@@ -35,6 +35,7 @@ object AppModule {
                 AppDatabase.MIGRATION_5_6,
                 AppDatabase.MIGRATION_6_7,
                 AppDatabase.MIGRATION_7_8,
+                AppDatabase.MIGRATION_8_9,
             )
             .build()
 
@@ -61,6 +62,9 @@ object AppModule {
 
     @Provides
     fun provideTrackerLogDao(db: AppDatabase): com.daymark.app.data.dao.TrackerLogDao = db.trackerLogDao()
+
+    @Provides
+    fun provideReminderDao(db: AppDatabase): com.daymark.app.data.dao.ReminderDao = db.reminderDao()
 
     @Provides
     @Singleton

@@ -17,6 +17,7 @@ import com.daymark.app.data.entity.EntryActivityCrossRef
 import com.daymark.app.data.entity.Goal
 import com.daymark.app.data.entity.JournalEntry
 import com.daymark.app.data.entity.MoodEntry
+import com.daymark.app.data.entity.Reminder
 import com.daymark.app.data.entity.SleepLog
 import com.daymark.app.data.entity.Tracker
 import com.daymark.app.data.entity.TrackerLog
@@ -26,9 +27,9 @@ import com.daymark.app.data.entity.Treatment
     entities = [
         MoodEntry::class, ActivityEntity::class, EntryActivityCrossRef::class,
         JournalEntry::class, Goal::class, SleepLog::class, Treatment::class,
-        Tracker::class, TrackerLog::class,
+        Tracker::class, TrackerLog::class, Reminder::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -40,6 +41,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun treatmentDao(): TreatmentDao
     abstract fun trackerDao(): TrackerDao
     abstract fun trackerLogDao(): TrackerLogDao
+    abstract fun reminderDao(): com.daymark.app.data.dao.ReminderDao
 
     /** Seeds a sensible set of starter activities on first install. */
     class SeedCallback : Callback() {
@@ -161,6 +163,20 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_7_8 = object : Migration(7, 8) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE mood_entries ADD COLUMN photoPath TEXT")
+            }
+        }
+
+        /** v9 adds the reminders table (multiple daily reminders); existing data is preserved. */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `reminders` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`hour` INTEGER NOT NULL, " +
+                        "`minute` INTEGER NOT NULL, " +
+                        "`enabled` INTEGER NOT NULL, " +
+                        "`label` TEXT NOT NULL)",
+                )
             }
         }
 

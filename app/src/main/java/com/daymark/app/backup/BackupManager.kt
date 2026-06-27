@@ -13,6 +13,7 @@ import com.daymark.app.data.entity.EntryActivityCrossRef
 import com.daymark.app.data.entity.Goal
 import com.daymark.app.data.entity.JournalEntry
 import com.daymark.app.data.entity.MoodEntry
+import com.daymark.app.data.entity.Reminder
 import com.daymark.app.data.entity.SleepLog
 import com.daymark.app.data.entity.Tracker
 import com.daymark.app.data.entity.TrackerLog
@@ -82,8 +83,11 @@ data class BackupTracker(
 data class BackupTrackerLog(val id: Long, val trackerId: Long, val dateTime: Long, val value: Double, val note: String)
 
 @Serializable
+data class BackupReminder(val id: Long, val hour: Int, val minute: Int, val enabled: Boolean, val label: String)
+
+@Serializable
 data class BackupData(
-    val version: Int = 6,
+    val version: Int = 7,
     val exportedAt: Long,
     val entries: List<BackupEntry>,
     val activities: List<BackupActivity>,
@@ -100,6 +104,8 @@ data class BackupData(
     val trackerLogs: List<BackupTrackerLog> = emptyList(),
     // Added in v6: entry photos as filename -> base64-encoded JPEG bytes, kept in the one file.
     val photos: Map<String, String> = emptyMap(),
+    // Added in v7.
+    val reminders: List<BackupReminder> = emptyList(),
 )
 
 /**
@@ -116,6 +122,8 @@ class BackupManager @Inject constructor(
     private val treatmentDao: TreatmentDao,
     private val trackerDao: TrackerDao,
     private val trackerLogDao: TrackerLogDao,
+    private val reminderDao: com.daymark.app.data.dao.ReminderDao,
+    private val reminderRepository: com.daymark.app.data.ReminderRepository,
     private val photoStore: com.daymark.app.data.PhotoStore,
 ) {
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
@@ -147,6 +155,7 @@ class BackupManager @Inject constructor(
                 BackupTracker(it.id, it.name, it.type, it.minValue, it.maxValue, it.unit, it.sortOrder, it.archived)
             },
             trackerLogs = trackerLogDao.getAll().map { BackupTrackerLog(it.id, it.trackerId, it.dateTime, it.value, it.note) },
+            reminders = reminderDao.getAll().map { BackupReminder(it.id, it.hour, it.minute, it.enabled, it.label) },
         )
         return json.encodeToString(data)
     }
@@ -193,6 +202,8 @@ class BackupManager @Inject constructor(
             ImportMode.REPLACE -> importReplace(data)
             ImportMode.MERGE -> importMerge(data)
         }
+        // Re-arm alarms for whatever reminder set we now hold.
+        reminderRepository.rescheduleAll()
     }
 
     private suspend fun importReplace(data: BackupData) {
@@ -227,6 +238,8 @@ class BackupManager @Inject constructor(
             trackerDao.insert(Tracker(it.id, it.name, it.type, it.minValue, it.maxValue, it.unit, it.sortOrder, it.archived))
         }
         data.trackerLogs.forEach { trackerLogDao.insert(TrackerLog(it.id, it.trackerId, it.dateTime, it.value, it.note)) }
+        reminderDao.deleteAll()
+        data.reminders.forEach { reminderDao.insert(Reminder(it.id, it.hour, it.minute, it.enabled, it.label)) }
     }
 
     /** Adds backup rows alongside existing data, assigning new ids and remapping links. */
@@ -286,6 +299,8 @@ class BackupManager @Inject constructor(
                 trackerLogDao.insert(TrackerLog(0, newTrackerId, l.dateTime, l.value, l.note))
             }
         }
+        // Reminders have no foreign keys, so merge is a plain insert with fresh ids.
+        data.reminders.forEach { r -> reminderDao.insert(Reminder(0, r.hour, r.minute, r.enabled, r.label)) }
     }
 
     private fun encodeBase64(bytes: ByteArray): String =
@@ -295,6 +310,6 @@ class BackupManager @Inject constructor(
         android.util.Base64.decode(text, android.util.Base64.NO_WRAP)
 
     companion object {
-        const val CURRENT_VERSION = 6
+        const val CURRENT_VERSION = 7
     }
 }

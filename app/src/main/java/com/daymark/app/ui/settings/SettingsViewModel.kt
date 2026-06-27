@@ -9,7 +9,6 @@ import com.daymark.app.data.SettingsRepository
 import com.daymark.app.export.PdfExportOptions
 import com.daymark.app.export.PdfReportGenerator
 import com.daymark.app.export.ReportDataBuilder
-import com.daymark.app.notifications.ReminderScheduler
 import com.daymark.app.security.AutoLockController
 import com.daymark.app.security.PinManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -27,9 +26,7 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 data class SettingsUiState(
-    val reminderEnabled: Boolean = false,
-    val reminderHour: Int = 20,
-    val reminderMinute: Int = 0,
+    val reminderCount: Int = 0,
     val lockEnabled: Boolean = false,
     val hasPin: Boolean = false,
     val biometricEnabled: Boolean = false,
@@ -41,7 +38,7 @@ data class SettingsUiState(
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settings: SettingsRepository,
-    private val reminderScheduler: ReminderScheduler,
+    private val reminderRepository: com.daymark.app.data.ReminderRepository,
     private val pinManager: PinManager,
     private val backupManager: BackupManager,
     private val reportDataBuilder: ReportDataBuilder,
@@ -58,10 +55,15 @@ class SettingsViewModel @Inject constructor(
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val messages: SharedFlow<String> = _messages.asSharedFlow()
 
+    init {
+        viewModelScope.launch {
+            reminderRepository.observeAll().collect { list ->
+                _uiState.update { it.copy(reminderCount = list.size) }
+            }
+        }
+    }
+
     private fun readState() = SettingsUiState(
-        reminderEnabled = settings.reminderEnabled,
-        reminderHour = settings.reminderHour,
-        reminderMinute = settings.reminderMinute,
         lockEnabled = settings.lockEnabled,
         hasPin = pinManager.isPinSet,
         biometricEnabled = settings.biometricEnabled,
@@ -69,21 +71,8 @@ class SettingsViewModel @Inject constructor(
         dynamicColor = settings.dynamicColor,
     )
 
-    private fun refresh() = _uiState.update { readState() }
-
-    // --- Reminders ---
-    fun setReminderEnabled(enabled: Boolean) {
-        settings.reminderEnabled = enabled
-        if (enabled) reminderScheduler.schedule(settings.reminderHour, settings.reminderMinute)
-        else reminderScheduler.cancel()
-        refresh()
-    }
-
-    fun setReminderTime(hour: Int, minute: Int) {
-        settings.reminderHour = hour
-        settings.reminderMinute = minute
-        if (settings.reminderEnabled) reminderScheduler.schedule(hour, minute)
-        refresh()
+    private fun refresh() = _uiState.update {
+        readState().copy(reminderCount = it.reminderCount)
     }
 
     // --- App lock ---

@@ -37,12 +37,14 @@ class MainActivity : FragmentActivity() {
 
     companion object {
         const val EXTRA_PREFILL_MOOD = "prefill_mood"
+        const val EXTRA_OPEN_EDITOR = "open_editor"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val initialMood = intent?.getIntExtra(EXTRA_PREFILL_MOOD, -1) ?: -1
+        val openEditor = intent?.getBooleanExtra(EXTRA_OPEN_EDITOR, false) ?: false
         setContent {
             val prefs by settings.changes().collectAsState(initial = null)
             // Re-read on any preference change.
@@ -96,7 +98,7 @@ class MainActivity : FragmentActivity() {
                     when {
                         !onboarded -> OnboardingScreen(onFinish = { unlocked = true; onboarded = true })
                         lockEnabled && !unlocked -> LockScreen(onUnlocked = { unlocked = true })
-                        else -> DaymarkAppScaffold(initialMood = initialMood)
+                        else -> DaymarkAppScaffold(initialMood = initialMood, openEditor = openEditor)
                     }
                 }
             }

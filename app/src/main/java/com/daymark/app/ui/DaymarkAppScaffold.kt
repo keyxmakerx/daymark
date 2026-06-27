@@ -77,21 +77,25 @@ import com.daymark.app.ui.support.GentleSupportScreen
 import com.daymark.app.ui.support.SupportScreen
 import com.daymark.app.ui.trackers.TrackerDetailScreen
 import com.daymark.app.ui.trackers.TrackersScreen
+import com.daymark.app.ui.settings.RemindersScreen
 import com.daymark.app.ui.settings.SettingsScreen
 import com.daymark.app.ui.stats.StatsScreen
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DaymarkAppScaffold(initialMood: Int = -1) {
+fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
     val navController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
     // From the home-screen widget: jump straight into a new entry with the tapped mood.
-    androidx.compose.runtime.LaunchedEffect(initialMood) {
+    // From a reminder notification (openEditor): open a blank new entry.
+    androidx.compose.runtime.LaunchedEffect(initialMood, openEditor) {
         if (initialMood in 1..5) {
             navController.navigate(Routes.entry(mood = initialMood))
+        } else if (openEditor) {
+            navController.navigate(Routes.entry())
         }
     }
 
@@ -369,9 +373,13 @@ fun DaymarkAppScaffold(initialMood: Int = -1) {
                 SettingsScreen(
                     onManageActivities = { navController.navigate(Routes.ACTIVITIES) },
                     onManageGoals = { navController.navigate(Routes.GOALS) },
+                    onManageReminders = { navController.navigate(Routes.REMINDERS) },
                     onShowMessage = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                     modifier = Modifier.padding(padding),
                 )
+            }
+            composable(Routes.REMINDERS, enterTransition = zEnter, popExitTransition = zPopExit) {
+                RemindersScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.GOALS) {
                 GoalsScreen(

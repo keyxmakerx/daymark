@@ -11,6 +11,7 @@ object Routes {
     const val JOURNAL = "journal"
     const val SETTINGS = "settings"
     const val ACTIVITIES = "activities"
+    const val REMINDERS = "reminders"
     const val ACTIVITY_LIBRARY = "activity_library"
     const val SEARCH = "search"
     const val TRACKERS = "trackers"
