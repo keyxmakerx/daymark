@@ -34,10 +34,19 @@ Timestamps are stored as epoch-millis `Long` (no timezone ambiguity; keeps `stat
 
 ## Migrations
 
-The schema is versioned and **exported** to `app/schemas/`. Migrations are additive and
-non-destructive (`MIGRATION_1_2` added journal, `MIGRATION_2_3` added goals); destructive
-fallback is never used. A `MigrationTestHelper` instrumented test is planned (requires an
-emulator).
+The schema is versioned (currently **v9**) and **exported** to `app/schemas/`. Migrations are
+additive and non-destructive (e.g. journal, goals, sleep logs, treatments, trackers, the
+`mood_entries.photoPath` column in v8, the `reminders` table in v9); destructive fallback is
+never used.
+
+`app/src/androidTest/.../MigrationTest.kt` validates every hop with an exported start schema
+(**3 → 9**) plus a full 3→latest chain, using `MigrationTestHelper`. These are **instrumented**
+tests — they run on a device/emulator (and CI), not in the local JVM unit-test run.
+
+Known gap: `1.json` / `2.json` do not exist (export was enabled at v3), so `MIGRATION_1_2` and
+`MIGRATION_2_3` cannot be validated by `MigrationTestHelper`. They are retained for correctness
+and **must never be deleted**; only v1/v2 installs from the earliest pre-release builds are
+affected.
 
 ## Reactive & async
 
