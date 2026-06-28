@@ -39,6 +39,7 @@ fun MoreHubScreen(
     onAchievements: () -> Unit,
     onActivation: () -> Unit,
     onThoughtRecords: () -> Unit,
+    onMovement: () -> Unit,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -102,6 +103,19 @@ fun MoreHubScreen(
                 onClick = onThoughtRecords,
                 modifier = Modifier.weight(1f),
             )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+        ) {
+            HubCard(
+                icon = R.drawable.ic_act_exercise,
+                title = "Move",
+                subtitle = "Gentle yoga & stretches",
+                onClick = onMovement,
+                modifier = Modifier.weight(1f),
+            )
+            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
         }
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),

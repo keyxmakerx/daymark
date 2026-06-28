@@ -81,6 +81,8 @@ import com.daymark.app.ui.achievements.AchievementsScreen
 import com.daymark.app.ui.activation.BehavioralActivationScreen
 import com.daymark.app.ui.cbt.ThoughtRecordEditorScreen
 import com.daymark.app.ui.cbt.ThoughtRecordListScreen
+import com.daymark.app.ui.movement.MovementHubScreen
+import com.daymark.app.ui.movement.MovementSessionScreen
 import com.daymark.app.ui.assessments.AssessmentScreen
 import com.daymark.app.ui.assessments.AssessmentsHubScreen
 import com.daymark.app.ui.settings.CustomizeMoodsScreen
@@ -314,6 +316,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                     onAchievements = { navController.navigate(Routes.ACHIEVEMENTS) },
                     onActivation = { navController.navigate(Routes.ACTIVATION) },
                     onThoughtRecords = { navController.navigate(Routes.THOUGHT_RECORDS) },
+                    onMovement = { navController.navigate(Routes.MOVEMENT) },
                     onSettings = { navController.navigate(Routes.SETTINGS) },
                     modifier = Modifier.padding(padding),
                 )
@@ -440,6 +443,23 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                 popExitTransition = sheetPopExit,
             ) {
                 ThoughtRecordEditorScreen(onDone = { navController.popBackStack() })
+            }
+            composable(Routes.MOVEMENT, enterTransition = zEnter, popExitTransition = zPopExit) {
+                MovementHubScreen(
+                    onBack = { navController.popBackStack() },
+                    onStart = { id -> navController.navigate(Routes.movementSession(id)) },
+                )
+            }
+            composable(
+                Routes.MOVEMENT_SESSION_PATTERN,
+                arguments = listOf(navArgument("routineId") { type = NavType.StringType }),
+                enterTransition = sheetEnter,
+                popExitTransition = sheetPopExit,
+            ) { entry ->
+                MovementSessionScreen(
+                    routineId = entry.arguments?.getString("routineId") ?: "",
+                    onDone = { navController.popBackStack() },
+                )
             }
             composable(Routes.GOALS) {
                 GoalsScreen(

@@ -33,6 +33,14 @@ class TrackerRepository @Inject constructor(
         )
     }
 
+    /** Returns the id of an existing NUMERIC tracker with [name], creating one if absent. */
+    suspend fun findOrCreateNumeric(name: String, unit: String = ""): Long {
+        trackerDao.getAll().firstOrNull { it.name == name && !it.archived }?.let { return it.id }
+        return trackerDao.insert(
+            Tracker(name = name, type = Tracker.NUMERIC, minValue = 0, maxValue = 0, unit = unit, sortOrder = 0, archived = false),
+        )
+    }
+
     suspend fun update(tracker: Tracker) = trackerDao.update(tracker)
 
     suspend fun setArchived(tracker: Tracker, archived: Boolean) =
