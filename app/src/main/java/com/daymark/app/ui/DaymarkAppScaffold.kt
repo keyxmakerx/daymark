@@ -58,6 +58,7 @@ import com.daymark.app.ui.entry.EntryEditorScreen
 import com.daymark.app.ui.components.RaisedCenterNavBar
 import com.daymark.app.ui.home.HomeScreen
 import com.daymark.app.ui.insights.InsightsScreen
+import com.daymark.app.ui.insights.ReviewYearScreen
 import com.daymark.app.ui.journal.JournalEditorScreen
 import com.daymark.app.ui.journal.JournalScreen
 import com.daymark.app.ui.more.MoreHubScreen
@@ -256,7 +257,16 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                     modifier = Modifier.padding(padding),
                     onDayClick = { date -> navController.navigate(Routes.day(date.toEpochDay())) },
                     onSignalAction = { action -> navController.navigate(signalActionRoute(action)) },
+                    onReviewYear = { year -> navController.navigate(Routes.reviewYear(year)) },
                 )
+            }
+            composable(
+                Routes.REVIEW_YEAR_PATTERN,
+                arguments = listOf(navArgument("year") { type = NavType.StringType }),
+                enterTransition = sheetEnter,
+                popExitTransition = sheetPopExit,
+            ) {
+                ReviewYearScreen(onDone = { navController.popBackStack() })
             }
             composable(
                 Routes.DAY_PATTERN,

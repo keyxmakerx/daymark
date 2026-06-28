@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -76,6 +77,7 @@ fun InsightsScreen(
     modifier: Modifier = Modifier,
     onDayClick: (LocalDate) -> Unit = {},
     onSignalAction: (com.daymark.app.stats.Signals.Action) -> Unit = {},
+    onReviewYear: (Int) -> Unit = {},
     statsViewModel: StatsViewModel = hiltViewModel(),
     calendarViewModel: CalendarViewModel = hiltViewModel(),
     yearViewModel: YearPixelsViewModel = hiltViewModel(),
@@ -188,6 +190,10 @@ fun InsightsScreen(
                             modifier = Modifier.padding(top = 8.dp),
                         )
                     }
+                    Button(
+                        onClick = { onReviewYear(year.year) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+                    ) { Text("▶  Review my year") }
                 }
             }
         }

@@ -32,9 +32,9 @@ import kotlin.math.roundToInt
 
 // Fixed "night paper" palette — this card is always dark, even in the light app theme (matches the
 // approved Year-in-Stars mockup). Mood colours come from the theme so custom palettes carry over.
-private val NightBg = Color(0xFF16150F)
-private val NightInk = Color(0xFFEBE5D8)
-private val NightFaint = Color(0xFF8E887A)
+internal val NightBg = Color(0xFF16150F)
+internal val NightInk = Color(0xFFEBE5D8)
+internal val NightFaint = Color(0xFF8E887A)
 
 /**
  * A whole year as a night sky: one row per month, each logged day a star whose size & brightness
@@ -83,7 +83,7 @@ fun YearInStarsGrid(
                                 drawCircle(NightInk.copy(alpha = 0.12f), radius = 1.2.dp.toPx(), center = Offset(cx, cy))
                             } else {
                                 val level = avg.roundToInt().coerceIn(1, 5)
-                                star(cx, cy, level, moods.forLevel(level))
+                                drawMoodStar(cx, cy, level, moods.forLevel(level))
                             }
                         }
                     }
@@ -94,7 +94,7 @@ fun YearInStarsGrid(
 }
 
 /** Draws one star: a soft glowing dot for ordinary days, a brighter cross-ray glint for the best. */
-private fun DrawScope.star(cx: Float, cy: Float, level: Int, moodColor: Color) {
+internal fun DrawScope.drawMoodStar(cx: Float, cy: Float, level: Int, moodColor: Color) {
     val center = Offset(cx, cy)
     // Lighten the mood colour a touch so it reads as luminous against the night background.
     val color = lerp(moodColor, Color.White, 0.18f)

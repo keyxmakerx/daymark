@@ -58,6 +58,11 @@ object Routes {
     const val ENTRY = "entry"
     const val JOURNAL_ENTRY = "journal_entry"
     const val YEAR_PIXELS = "year_pixels"
+
+    /** Full-screen "Review my year" walkthrough, keyed by year. */
+    const val REVIEW_YEAR = "review_year"
+    fun reviewYear(year: Int) = "$REVIEW_YEAR/$year"
+    const val REVIEW_YEAR_PATTERN = "$REVIEW_YEAR/{year}"
     const val GOALS = "goals"
 
     /** A single day's entries, keyed by epoch-day. */
