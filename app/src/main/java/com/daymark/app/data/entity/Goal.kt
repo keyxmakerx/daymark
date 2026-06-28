@@ -1,5 +1,6 @@
 package com.daymark.app.data.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -19,6 +20,6 @@ data class Goal(
      * Optional implementation intention ("when [cue], I will [routine]") — a simple, well-evidenced
      * way to turn an intention into action. Empty when unset.
      */
-    val cue: String = "",
-    val routine: String = "",
+    @ColumnInfo(defaultValue = "") val cue: String = "",
+    @ColumnInfo(defaultValue = "") val routine: String = "",
 )

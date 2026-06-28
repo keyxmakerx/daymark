@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 12,
-    "identityHash": "a7b3d25d1dee93bb6d86eb65f75f5db8",
+    "identityHash": "e9bbbc411d96b9ffca6bd0c860802c15",
     "entities": [
       {
         "tableName": "mood_entries",
@@ -179,7 +179,7 @@
       },
       {
         "tableName": "goals",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `title` TEXT NOT NULL, `activityId` INTEGER, `targetPerWeek` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `archived` INTEGER NOT NULL, `cue` TEXT NOT NULL, `routine` TEXT NOT NULL)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `title` TEXT NOT NULL, `activityId` INTEGER, `targetPerWeek` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `archived` INTEGER NOT NULL, `cue` TEXT NOT NULL DEFAULT '', `routine` TEXT NOT NULL DEFAULT '')",
         "fields": [
           {
             "fieldPath": "id",
@@ -221,13 +221,15 @@
             "fieldPath": "cue",
             "columnName": "cue",
             "affinity": "TEXT",
-            "notNull": true
+            "notNull": true,
+            "defaultValue": "''"
           },
           {
             "fieldPath": "routine",
             "columnName": "routine",
             "affinity": "TEXT",
-            "notNull": true
+            "notNull": true,
+            "defaultValue": "''"
           }
         ],
         "primaryKey": {
@@ -651,7 +653,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'a7b3d25d1dee93bb6d86eb65f75f5db8')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'e9bbbc411d96b9ffca6bd0c860802c15')"
     ]
   }
 }

@@ -14,6 +14,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -56,7 +57,9 @@ class InsightsExtrasViewModel @Inject constructor(
         trackerRepository.observeAllLogs(),
     ) { entries, trackers, logs ->
         compute(entries, trackers, logs)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), InsightsExtrasState())
+    }
+        .flowOn(kotlinx.coroutines.Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), InsightsExtrasState())
 
     private fun compute(
         entries: List<EntryWithActivities>,

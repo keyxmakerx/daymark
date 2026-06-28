@@ -32,10 +32,18 @@ class AchievementsStore @Inject constructor(
         return newly.toSet()
     }
 
-    /** Restores unlock times from a backup (does not clear existing ones). */
+    /**
+     * Restores unlock times from a backup, keeping the EARLIEST known time for each achievement
+     * (so a merge can't push an already-earned badge's "unlocked at" date later).
+     */
     fun restore(map: Map<String, Long>) {
         if (map.isEmpty()) return
-        prefs.edit().apply { map.forEach { (id, at) -> putLong(key(id), at) } }.apply()
+        prefs.edit().apply {
+            map.forEach { (id, at) ->
+                val existing = unlockedAt(id)
+                if (existing == null || at < existing) putLong(key(id), at)
+            }
+        }.apply()
     }
 
     private fun key(id: String) = "$PREFIX$id"
