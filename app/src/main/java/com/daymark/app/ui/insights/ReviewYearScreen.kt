@@ -1,5 +1,8 @@
 package com.daymark.app.ui.insights
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -35,6 +38,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -71,6 +76,21 @@ fun ReviewYearScreen(
     val review = remember(state) {
         YearReview.build(state.year, state.dayMoods, { labels.forLevel(it) })
     }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val moodArgb = remember(moods) { IntArray(5) { moods.forLevel(it + 1).toArgb() } }
+    val saveLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("image/png"),
+    ) { uri ->
+        if (uri != null) scope.launch {
+            val ok = viewModel.saveKeepsake(uri, review, moodArgb)
+            Toast.makeText(
+                context,
+                if (ok) "Keepsake saved" else "Couldn’t save keepsake",
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
 
     Surface(color = NightBg, modifier = Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize()) {
@@ -83,7 +103,6 @@ fun ReviewYearScreen(
 
             val pageCount = review.chapters.size + 2 // intro + chapters + finale
             val pagerState = rememberPagerState(pageCount = { pageCount })
-            val scope = rememberCoroutineScope()
             fun advance() {
                 if (pagerState.currentPage >= pageCount - 1) onDone()
                 else scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
@@ -102,7 +121,10 @@ fun ReviewYearScreen(
                 when (page) {
                     0 -> IntroPage(review, appear, tapModifier) { advance() }
                     // The finale is a place to dwell — a stray tap shouldn't close it; only "Done".
-                    pageCount - 1 -> FinalePage(review, appear, Modifier.fillMaxSize(), onDone)
+                    pageCount - 1 -> FinalePage(
+                        review, appear, Modifier.fillMaxSize(), onDone,
+                        onSaveKeepsake = { saveLauncher.launch("daymark-${review.year}-keepsake.png") },
+                    )
                     else -> ChapterPage(review.chapters[page - 1], moods, appear, page, tapModifier)
                 }
             }
@@ -189,7 +211,13 @@ private fun ChapterPage(
 }
 
 @Composable
-private fun FinalePage(review: YearReview.Review, appear: Float, modifier: Modifier, onDone: () -> Unit) {
+private fun FinalePage(
+    review: YearReview.Review,
+    appear: Float,
+    modifier: Modifier,
+    onDone: () -> Unit,
+    onSaveKeepsake: () -> Unit,
+) {
     Column(
         modifier = modifier.padding(horizontal = 28.dp).alpha(appear),
         verticalArrangement = Arrangement.Center,
@@ -219,7 +247,10 @@ private fun FinalePage(review: YearReview.Review, appear: Float, modifier: Modif
             Stat(review.longestStreak.toString(), "longest streak", Modifier.weight(1f))
         }
         Spacer16()
-        NightButton("Done", onDone)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            NightButton("Save keepsake", onSaveKeepsake)
+            TextButton(onClick = onDone) { Text("Done", color = NightInk) }
+        }
     }
 }
 
