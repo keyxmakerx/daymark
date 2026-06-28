@@ -74,6 +74,17 @@ class YearReviewTest {
     }
 
     @Test
+    fun brightestMonth_tieResolvesToEarliestMonth() {
+        // March and August both average exactly 4.0 — March (earlier) should win, deterministically.
+        val moods = mapOf(
+            LocalDate.of(2026, 3, 1) to 4.0,
+            LocalDate.of(2026, 8, 1) to 4.0,
+        )
+        val r = YearReview.build(2026, moods, label, Locale.US)
+        assertEquals("March", r.brightestMonthLabel)
+    }
+
+    @Test
     fun ignoresEntriesOutsideTheYear() {
         val moods = mapOf(
             LocalDate.of(2025, 12, 31) to 5.0,

@@ -24,6 +24,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -34,8 +35,10 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -98,9 +101,18 @@ fun ReviewYearScreen(
                     ) { advance() }
                 when (page) {
                     0 -> IntroPage(review, appear, tapModifier) { advance() }
-                    pageCount - 1 -> FinalePage(review, appear, tapModifier, onDone)
+                    // The finale is a place to dwell — a stray tap shouldn't close it; only "Done".
+                    pageCount - 1 -> FinalePage(review, appear, Modifier.fillMaxSize(), onDone)
                     else -> ChapterPage(review.chapters[page - 1], moods, appear, page, tapModifier)
                 }
+            }
+
+            // Honour "skip anytime" with a visible control (the finale has its own Done button).
+            if (pagerState.currentPage < pageCount - 1) {
+                TextButton(
+                    onClick = onDone,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+                ) { Text("Skip", color = NightFaint) }
             }
 
             ProgressDots(
@@ -136,7 +148,7 @@ private fun IntroPage(review: YearReview.Review, appear: Float, modifier: Modifi
             textAlign = TextAlign.Center,
         )
         Spacer16()
-        NightButton("Begin ✦", onBegin)
+        NightButton("Begin", onBegin)
         Spacer(8)
         Text("tap to continue · skip anytime", style = MaterialTheme.typography.labelSmall, color = NightFaint)
     }
@@ -151,7 +163,7 @@ private fun ChapterPage(
     modifier: Modifier,
 ) {
     Column(
-        modifier = modifier.padding(horizontal = 26.dp),
+        modifier = modifier.padding(horizontal = 26.dp).alpha(appear),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -161,7 +173,7 @@ private fun ChapterPage(
             Text(it, style = MaterialTheme.typography.titleMedium, color = NightInk, textAlign = TextAlign.Center)
         }
         Spacer16()
-        StarCluster(chapter.starLevels, moods, seed, modifier = Modifier.size(240.dp).alpha(appear))
+        StarCluster(chapter.starLevels, moods, seed, modifier = Modifier.size(240.dp))
         Spacer16()
         chapter.highlight?.let {
             Box(
@@ -200,11 +212,11 @@ private fun FinalePage(review: YearReview.Review, appear: Float, modifier: Modif
         Spacer16()
         Row(
             Modifier.fillMaxWidth().padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Stat(review.avgMoodLabel ?: "–", "avg mood")
-            Stat(review.brightestMonthLabel ?: "–", "brightest month")
-            Stat(review.longestStreak.toString(), "longest streak")
+            Stat(review.avgMoodLabel ?: "–", "avg mood", Modifier.weight(1f))
+            Stat(review.brightestMonthLabel ?: "–", "brightest month", Modifier.weight(1f))
+            Stat(review.longestStreak.toString(), "longest streak", Modifier.weight(1f))
         }
         Spacer16()
         NightButton("Done", onDone)
@@ -220,7 +232,8 @@ private fun StarCluster(
 ) {
     // Sunflower (golden-angle) layout for an even, organic cluster; deterministic per seed.
     val shown = levels.take(120)
-    Canvas(modifier = modifier) {
+    // Decorative — the chapter's summary text already conveys the meaning to screen readers.
+    Canvas(modifier = modifier.clearAndSetSemantics {}) {
         val cx = size.width / 2f
         val cy = size.height / 2f
         val spacing = (size.minDimension / 2f) / sqrt(shown.size.coerceAtLeast(1).toFloat() + 1f)
@@ -234,7 +247,7 @@ private fun StarCluster(
 
 @Composable
 private fun StarfieldBackground() {
-    Canvas(Modifier.fillMaxSize()) {
+    Canvas(Modifier.fillMaxSize().clearAndSetSemantics {}) {
         for (i in 0 until 70) {
             // Deterministic faint specks.
             var h = i * 374761393
@@ -273,10 +286,25 @@ private fun EmptyReview(year: Int, onDone: () -> Unit) {
 }
 
 @Composable
-private fun Stat(value: String, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = MaterialTheme.typography.titleLarge, color = NightInk)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = NightFaint)
+private fun Stat(value: String, label: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            value,
+            style = MaterialTheme.typography.titleMedium,
+            color = NightInk,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = NightFaint,
+            maxLines = 1,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 

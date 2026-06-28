@@ -51,11 +51,14 @@ object YearReview {
         val overallAvg = if (inYear.isEmpty()) null else inYear.values.average()
         val avgLabel = overallAvg?.let { moodLabel(it.roundToInt().coerceIn(1, 5)) }
 
-        // Brightest month by mean day-mood.
+        // Brightest month by mean day-mood. Ties resolve to the earliest month (calendar-stable,
+        // not dependent on map/entry order).
         val brightestMonth = inYear.entries
             .groupBy({ it.key.monthValue }, { it.value })
             .mapValues { it.value.average() }
-            .maxByOrNull { it.value }?.key
+            .entries
+            .sortedWith(compareByDescending<Map.Entry<Int, Double>> { it.value }.thenBy { it.key })
+            .firstOrNull()?.key
         val brightestLabel = brightestMonth?.let { Month.of(it).getDisplayName(TextStyle.FULL, locale) }
 
         // Longest run of consecutive logged days within the year, and where it began.

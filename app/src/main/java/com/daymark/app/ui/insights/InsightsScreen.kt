@@ -193,7 +193,7 @@ fun InsightsScreen(
                     Button(
                         onClick = { onReviewYear(year.year) },
                         modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
-                    ) { Text("▶  Review my year") }
+                    ) { Text("Review my year") }
                 }
             }
         }

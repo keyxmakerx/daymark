@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -22,8 +23,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.daymark.app.ui.theme.moodColors
+import com.daymark.app.ui.theme.moodLabels
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
@@ -55,7 +59,11 @@ fun YearInStarsGrid(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(NightBg)
-            .padding(vertical = 12.dp, horizontal = 10.dp),
+            .padding(vertical = 12.dp, horizontal = 10.dp)
+            .semantics {
+                contentDescription =
+                    "Year $year as a night sky — ${dayMoods.size} days logged. Switch to Grid for a labelled view."
+            },
     ) {
         Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             for (month in 1..12) {
@@ -126,18 +134,39 @@ private fun hash(month: Int, day: Int): Float {
     return ((h ushr 8) and 0xFFFF) / 65536f
 }
 
-/** Legend for the stars view, on the dark card. */
+/** Colour-to-mood key for the stars view, on the dark card (mirrors the grid's legend). */
 @Composable
 fun StarsLegend(modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier.fillMaxWidth().padding(top = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    val moods = MaterialTheme.moodColors
+    val labels = MaterialTheme.moodLabels
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            for (level in 1..5) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .size(9.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(lerp(moods.forLevel(level), Color.White, 0.18f)),
+                    )
+                    Text(
+                        " ${labels.forLevel(level)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = NightFaint,
+                    )
+                }
+            }
+        }
         Text(
             "a soft dot most days · a glint on the bright ones",
             style = MaterialTheme.typography.labelSmall,
             color = NightFaint,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
     }
 }
