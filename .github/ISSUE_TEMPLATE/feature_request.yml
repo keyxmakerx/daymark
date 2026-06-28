@@ -1,0 +1,24 @@
+name: Feature request
+description: Suggest an idea for Daymark
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+  - type: dropdown
+    id: local-first
+    attributes:
+      label: Does this require a network/backend?
+      description: Daymark is local-first; backend-dependent features won't be merged into core.
+      options:
+        - "No — fully on-device"
+        - "Yes — and here's why it could still fit (explain above)"
+    validations:
+      required: true
