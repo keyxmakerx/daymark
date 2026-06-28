@@ -35,6 +35,7 @@ fun MoreHubScreen(
     onSleep: () -> Unit,
     onTrackers: () -> Unit,
     onGentleSupport: () -> Unit,
+    onCheckins: () -> Unit,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -92,12 +93,25 @@ fun MoreHubScreen(
                 modifier = Modifier.weight(1f),
             )
             HubCard(
+                icon = R.drawable.ic_act_sleep,
+                title = "Check-ins",
+                subtitle = "PHQ-9 · GAD-7 · WHO-5",
+                onClick = onCheckins,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+        ) {
+            HubCard(
                 icon = R.drawable.ic_ui_more,
                 title = "Settings",
                 subtitle = "Reminders, lock, backup",
                 onClick = onSettings,
                 modifier = Modifier.weight(1f),
             )
+            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
         }
     }
 }

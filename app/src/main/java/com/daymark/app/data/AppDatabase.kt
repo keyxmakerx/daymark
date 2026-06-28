@@ -13,6 +13,7 @@ import com.daymark.app.data.dao.TrackerDao
 import com.daymark.app.data.dao.TrackerLogDao
 import com.daymark.app.data.dao.TreatmentDao
 import com.daymark.app.data.entity.ActivityEntity
+import com.daymark.app.data.entity.AssessmentResult
 import com.daymark.app.data.entity.EntryActivityCrossRef
 import com.daymark.app.data.entity.Goal
 import com.daymark.app.data.entity.JournalEntry
@@ -27,9 +28,9 @@ import com.daymark.app.data.entity.Treatment
     entities = [
         MoodEntry::class, ActivityEntity::class, EntryActivityCrossRef::class,
         JournalEntry::class, Goal::class, SleepLog::class, Treatment::class,
-        Tracker::class, TrackerLog::class, Reminder::class,
+        Tracker::class, TrackerLog::class, Reminder::class, AssessmentResult::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -42,6 +43,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun trackerDao(): TrackerDao
     abstract fun trackerLogDao(): TrackerLogDao
     abstract fun reminderDao(): com.daymark.app.data.dao.ReminderDao
+    abstract fun assessmentDao(): com.daymark.app.data.dao.AssessmentDao
 
     /** Seeds a sensible set of starter activities on first install. */
     class SeedCallback : Callback() {
@@ -176,6 +178,23 @@ abstract class AppDatabase : RoomDatabase() {
                         "`minute` INTEGER NOT NULL, " +
                         "`enabled` INTEGER NOT NULL, " +
                         "`label` TEXT NOT NULL)",
+                )
+            }
+        }
+
+        /** v10 adds the assessment_results table (PHQ-9/GAD-7/WHO-5 history); data is preserved. */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `assessment_results` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`key` TEXT NOT NULL, " +
+                        "`dateTime` INTEGER NOT NULL, " +
+                        "`score` INTEGER NOT NULL, " +
+                        "`bandLabel` TEXT NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_assessment_results_key` ON `assessment_results` (`key`)",
                 )
             }
         }

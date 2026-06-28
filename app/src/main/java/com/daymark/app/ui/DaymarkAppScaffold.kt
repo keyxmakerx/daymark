@@ -77,6 +77,8 @@ import com.daymark.app.ui.support.GentleSupportScreen
 import com.daymark.app.ui.support.SupportScreen
 import com.daymark.app.ui.trackers.TrackerDetailScreen
 import com.daymark.app.ui.trackers.TrackersScreen
+import com.daymark.app.ui.assessments.AssessmentScreen
+import com.daymark.app.ui.assessments.AssessmentsHubScreen
 import com.daymark.app.ui.settings.CustomizeMoodsScreen
 import com.daymark.app.ui.settings.RemindersScreen
 import com.daymark.app.ui.settings.SettingsScreen
@@ -301,6 +303,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                     onSleep = { navController.navigate(Routes.SLEEP) },
                     onTrackers = { navController.navigate(Routes.TRACKERS) },
                     onGentleSupport = { navController.navigate(Routes.GENTLE_SUPPORT) },
+                    onCheckins = { navController.navigate(Routes.ASSESSMENTS) },
                     onSettings = { navController.navigate(Routes.SETTINGS) },
                     modifier = Modifier.padding(padding),
                 )
@@ -368,6 +371,24 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                 ScreenerScreen(
                     screenerKey = entry.arguments?.getString("screenerKey") ?: "",
                     onDone = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.ASSESSMENTS, enterTransition = zEnter, popExitTransition = zPopExit) {
+                AssessmentsHubScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpen = { key -> navController.navigate(Routes.assessment(key)) },
+                )
+            }
+            composable(
+                Routes.ASSESSMENT_PATTERN,
+                arguments = listOf(navArgument("assessmentKey") { type = NavType.StringType }),
+                enterTransition = sheetEnter,
+                popExitTransition = sheetPopExit,
+            ) { entry ->
+                AssessmentScreen(
+                    assessmentKey = entry.arguments?.getString("assessmentKey") ?: "",
+                    onDone = { navController.popBackStack() },
+                    onOpenSupport = { navController.navigate(Routes.CRISIS) },
                 )
             }
             composable(Routes.SETTINGS, enterTransition = zEnter, popExitTransition = zPopExit) {

@@ -22,6 +22,8 @@ data class Screener(
     val intro: String,
     val questions: List<ScreenerQuestion>,
     val bands: List<Band>,
+    /** Optional source/attribution line (used by bundled validated questionnaires). */
+    val citation: String = "",
 ) {
     fun bandFor(score: Int): Band = bands.last { score >= it.minScore }
 }

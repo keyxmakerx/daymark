@@ -41,6 +41,10 @@ object Routes {
     /** Sleep self-check questionnaire route, keyed by screener id. */
     fun screener(key: String) = "$SCREENER/$key"
     const val SCREENER_PATTERN = "$SCREENER/{screenerKey}"
+    const val ASSESSMENTS = "assessments"
+    const val ASSESSMENT = "assessment"
+    fun assessment(key: String) = "$ASSESSMENT/$key"
+    const val ASSESSMENT_PATTERN = "$ASSESSMENT/{assessmentKey}"
     const val ENTRY = "entry"
     const val JOURNAL_ENTRY = "journal_entry"
     const val YEAR_PIXELS = "year_pixels"

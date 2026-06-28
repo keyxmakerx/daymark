@@ -33,7 +33,7 @@ class MigrationTest {
     private val allMigrations = arrayOf(
         AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4,
         AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7,
-        AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_8_9,
+        AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_8_9, AppDatabase.MIGRATION_9_10,
     )
 
     @Test
@@ -70,13 +70,30 @@ class MigrationTest {
     }
 
     @Test
+    fun migrate9To10_createsAssessmentTable() {
+        helper.createDatabase(TEST_DB, 9).close()
+        helper.runMigrationsAndValidate(TEST_DB, 10, true, AppDatabase.MIGRATION_9_10).use { db ->
+            db.execSQL(
+                "INSERT INTO assessment_results (id, key, dateTime, score, bandLabel) " +
+                    "VALUES (1, 'phq9', 1000, 7, 'Mild')",
+            )
+            db.query("SELECT key, score, bandLabel FROM assessment_results WHERE id = 1").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("phq9", c.getString(0))
+                assertEquals(7, c.getInt(1))
+                assertEquals("Mild", c.getString(2))
+            }
+        }
+    }
+
+    @Test
     fun migrateAll_from3_toLatest() {
         helper.createDatabase(TEST_DB, 3).use { db ->
             db.execSQL(
                 "INSERT INTO mood_entries (id, dateTime, moodLevel, note) VALUES (7, 5000, 5, 'kept')",
             )
         }
-        helper.runMigrationsAndValidate(TEST_DB, 9, true, *allMigrations).use { db ->
+        helper.runMigrationsAndValidate(TEST_DB, 10, true, *allMigrations).use { db ->
             db.query("SELECT note FROM mood_entries WHERE id = 7").use { c ->
                 assertTrue(c.moveToFirst())
                 assertEquals("kept", c.getString(0))

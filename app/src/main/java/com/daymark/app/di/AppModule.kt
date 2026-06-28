@@ -36,6 +36,7 @@ object AppModule {
                 AppDatabase.MIGRATION_6_7,
                 AppDatabase.MIGRATION_7_8,
                 AppDatabase.MIGRATION_8_9,
+                AppDatabase.MIGRATION_9_10,
             )
             .build()
 
@@ -65,6 +66,9 @@ object AppModule {
 
     @Provides
     fun provideReminderDao(db: AppDatabase): com.daymark.app.data.dao.ReminderDao = db.reminderDao()
+
+    @Provides
+    fun provideAssessmentDao(db: AppDatabase): com.daymark.app.data.dao.AssessmentDao = db.assessmentDao()
 
     @Provides
     @Singleton

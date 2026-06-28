@@ -12,6 +12,7 @@ import com.daymark.app.data.entity.ActivityEntity
 import com.daymark.app.data.entity.EntryActivityCrossRef
 import com.daymark.app.data.entity.Goal
 import com.daymark.app.data.entity.JournalEntry
+import com.daymark.app.data.entity.AssessmentResult
 import com.daymark.app.data.entity.MoodEntry
 import com.daymark.app.data.entity.Reminder
 import com.daymark.app.data.entity.SleepLog
@@ -86,8 +87,11 @@ data class BackupTrackerLog(val id: Long, val trackerId: Long, val dateTime: Lon
 data class BackupReminder(val id: Long, val hour: Int, val minute: Int, val enabled: Boolean, val label: String)
 
 @Serializable
+data class BackupAssessment(val id: Long, val key: String, val dateTime: Long, val score: Int, val bandLabel: String)
+
+@Serializable
 data class BackupData(
-    val version: Int = 8,
+    val version: Int = 9,
     val exportedAt: Long,
     val entries: List<BackupEntry>,
     val activities: List<BackupActivity>,
@@ -109,6 +113,8 @@ data class BackupData(
     // Added in v8: per-level mood label/colour overrides (kept in prefs, not the DB).
     val moodLabels: Map<Int, String> = emptyMap(),
     val moodColors: Map<Int, Int> = emptyMap(),
+    // Added in v9.
+    val assessments: List<BackupAssessment> = emptyList(),
 )
 
 /**
@@ -129,6 +135,7 @@ class BackupManager @Inject constructor(
     private val reminderRepository: com.daymark.app.data.ReminderRepository,
     private val photoStore: com.daymark.app.data.PhotoStore,
     private val moodCustomization: com.daymark.app.data.MoodCustomizationStore,
+    private val assessmentDao: com.daymark.app.data.dao.AssessmentDao,
 ) {
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
 
@@ -162,6 +169,7 @@ class BackupManager @Inject constructor(
             reminders = reminderDao.getAll().map { BackupReminder(it.id, it.hour, it.minute, it.enabled, it.label) },
             moodLabels = moodCustomization.labels(),
             moodColors = moodCustomization.colors(),
+            assessments = assessmentDao.getAll().map { BackupAssessment(it.id, it.key, it.dateTime, it.score, it.bandLabel) },
         )
         return json.encodeToString(data)
     }
@@ -252,6 +260,10 @@ class BackupManager @Inject constructor(
         data.trackerLogs.forEach { trackerLogDao.insert(TrackerLog(it.id, it.trackerId, it.dateTime, it.value, it.note)) }
         reminderDao.deleteAll()
         data.reminders.forEach { reminderDao.insert(Reminder(it.id, it.hour, it.minute, it.enabled, it.label)) }
+        assessmentDao.deleteAll()
+        data.assessments.forEach {
+            assessmentDao.insert(AssessmentResult(it.id, it.key, it.dateTime, it.score, it.bandLabel))
+        }
     }
 
     /** Adds backup rows alongside existing data, assigning new ids and remapping links. */
@@ -313,6 +325,9 @@ class BackupManager @Inject constructor(
         }
         // Reminders have no foreign keys, so merge is a plain insert with fresh ids.
         data.reminders.forEach { r -> reminderDao.insert(Reminder(0, r.hour, r.minute, r.enabled, r.label)) }
+        data.assessments.forEach { a ->
+            assessmentDao.insert(AssessmentResult(0, a.key, a.dateTime, a.score, a.bandLabel))
+        }
     }
 
     private fun encodeBase64(bytes: ByteArray): String =
@@ -322,6 +337,6 @@ class BackupManager @Inject constructor(
         android.util.Base64.decode(text, android.util.Base64.NO_WRAP)
 
     companion object {
-        const val CURRENT_VERSION = 8
+        const val CURRENT_VERSION = 9
     }
 }
