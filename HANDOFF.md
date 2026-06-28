@@ -32,7 +32,7 @@ Corollaries that are also hard rules:
 micro-journaling + wellbeing toolkit. A clean-room alternative to Daylio (no Daylio code/assets ever;
 "Daylio" only as nominative comparison). Targets **F-Droid**.
 
-- Package: `com.daymark.app` · Repo: `keyxmakerx/daylie` · License: **GPL-3.0**.
+- Package: `com.daymark.app` · Repo: `keyxmakerx/daymark` · License: **GPL-3.0**.
 - **No `INTERNET` permission. No `RECORD_AUDIO`. `allowBackup="false"`.** (Verified in manifest.)
   The privacy claim is *verifiable* because the app literally cannot reach the network.
 - 100% local: no backend, no accounts, no ads, no trackers, no telemetry. Data leaves the device

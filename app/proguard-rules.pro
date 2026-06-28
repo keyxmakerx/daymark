@@ -2,14 +2,14 @@
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.**
 -keepclassmembers class **$$serializer { *; }
--keepclasseswithmembers class com.daylie.app.** {
+-keepclasseswithmembers class com.daymark.app.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
 # Keep the Companion of every @Serializable model so its serializer resolves under R8.
--keepclassmembers @kotlinx.serialization.Serializable class com.daylie.app.** {
+-keepclassmembers @kotlinx.serialization.Serializable class com.daymark.app.** {
     *** Companion;
 }
--keepclasseswithmembers class com.daylie.app.** {
+-keepclasseswithmembers class com.daymark.app.** {
     public static ** INSTANCE;
 }
 
