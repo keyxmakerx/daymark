@@ -21,6 +21,9 @@ interface TrackerLogDao {
     @Query("SELECT * FROM tracker_logs")
     suspend fun getAll(): List<TrackerLog>
 
+    @Query("SELECT * FROM tracker_logs")
+    fun observeAll(): Flow<List<TrackerLog>>
+
     @Query("DELETE FROM tracker_logs")
     suspend fun deleteAll()
 }

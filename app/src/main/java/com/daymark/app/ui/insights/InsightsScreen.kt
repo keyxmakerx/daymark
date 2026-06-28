@@ -75,10 +75,12 @@ fun InsightsScreen(
     statsViewModel: StatsViewModel = hiltViewModel(),
     calendarViewModel: CalendarViewModel = hiltViewModel(),
     yearViewModel: YearPixelsViewModel = hiltViewModel(),
+    extrasViewModel: InsightsExtrasViewModel = hiltViewModel(),
 ) {
     val stats by statsViewModel.uiState.collectAsStateWithLifecycle()
     val calendar by calendarViewModel.uiState.collectAsStateWithLifecycle()
     val year by yearViewModel.uiState.collectAsStateWithLifecycle()
+    val extras by extrasViewModel.uiState.collectAsStateWithLifecycle()
     var scope by remember { mutableStateOf(Scope.Month) }
 
     if (stats.totalEntries == 0) {
@@ -168,6 +170,119 @@ fun InsightsScreen(
                         }
                     }
                 }
+            }
+        }
+
+        // --- Correlations & patterns (associations, not causes) ---
+        val periodCompare = when (scope) {
+            Scope.Week -> extras.weekCompare
+            Scope.Month -> extras.monthCompare
+            Scope.Year -> extras.yearCompare
+        }
+        periodCompare?.let { PeriodCompareCard(scope.name.lowercase(Locale.getDefault()), it) }
+
+        if (extras.topUp.isNotEmpty() || extras.topDown.isNotEmpty()) {
+            SectionCard("What goes with your mood") {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Things logged alongside higher or lower moods. This shows association, not cause.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (extras.topUp.isNotEmpty()) {
+                        FactorList("Lifts you up", extras.topUp, MaterialTheme.moodColors.forLevel(5))
+                    }
+                    if (extras.topDown.isNotEmpty()) {
+                        FactorList("Weighs you down", extras.topDown, MaterialTheme.moodColors.forLevel(1))
+                    }
+                    extras.trackerCorrelations.takeIf { it.isNotEmpty() }?.let { corrs ->
+                        Text("Trackers", style = MaterialTheme.typography.labelLarge)
+                        corrs.forEach { c ->
+                            val dir = if (c.r >= 0) "higher mood" else "lower mood"
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("${c.name} (${c.n}d)")
+                                Text("$dir  r=${String.format(Locale.getDefault(), "%+.2f", c.r)}")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (extras.dayOfWeek.isNotEmpty()) {
+            SectionCard("By day of week") {
+                LabeledMoodBars(
+                    DayOfWeek.entries.mapNotNull { dow ->
+                        extras.dayOfWeek[dow]?.let {
+                            dow.getDisplayName(java.time.format.TextStyle.SHORT, Locale.getDefault()) to it
+                        }
+                    },
+                )
+            }
+        }
+
+        if (extras.timeOfDay.isNotEmpty()) {
+            SectionCard("By time of day") {
+                LabeledMoodBars(
+                    com.daymark.app.stats.MoodPatterns.TimeBucket.entries.mapNotNull { b ->
+                        extras.timeOfDay[b]?.let { b.label to it }
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PeriodCompareCard(periodName: String, c: com.daymark.app.stats.MoodPatterns.PeriodComparison) {
+    SectionCard("This $periodName vs last") {
+        val cur = c.currentAvg
+        if (cur == null) {
+            Text("Not enough entries yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            return@SectionCard
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Avg mood ${String.format(Locale.getDefault(), "%.1f", cur)} (${c.currentCount} entries)")
+            c.deltaPct?.let { pct ->
+                val up = pct >= 0
+                Text(
+                    "${if (up) "▲" else "▼"} ${String.format(Locale.getDefault(), "%.0f", kotlin.math.abs(pct))}%",
+                    color = if (up) MaterialTheme.moodColors.forLevel(5) else MaterialTheme.moodColors.forLevel(2),
+                    fontWeight = FontWeight.SemiBold,
+                )
+            } ?: Text("—", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun FactorList(title: String, rows: List<FactorRow>, accent: Color) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, style = MaterialTheme.typography.labelLarge, color = accent)
+        rows.forEach { r ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("${r.name} (${r.n})")
+                Text(String.format(Locale.getDefault(), "%+.1f", r.delta), color = accent)
+            }
+        }
+    }
+}
+
+/** Simple horizontal bars for mood values on the 1–5 scale. */
+@Composable
+private fun LabeledMoodBars(values: List<Pair<String, Double>>) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        values.forEach { (label, mood) ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(label, modifier = Modifier.width(40.dp), style = MaterialTheme.typography.bodySmall)
+                Box(Modifier.weight(1f).height(14.dp)) {
+                    val frac = ((mood - 1.0) / 4.0).toFloat().coerceIn(0.04f, 1f)
+                    Box(
+                        Modifier.fillMaxHeight().fillMaxWidth(frac).clip(RoundedCornerShape(4.dp))
+                            .background(MaterialTheme.moodColors.forLevel(mood.toInt().coerceIn(1, 5))),
+                    )
+                }
+                Text(String.format(Locale.getDefault(), "%.1f", mood), style = MaterialTheme.typography.bodySmall)
             }
         }
     }

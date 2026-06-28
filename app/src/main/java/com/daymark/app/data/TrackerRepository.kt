@@ -19,6 +19,8 @@ class TrackerRepository @Inject constructor(
 
     fun observeLogs(trackerId: Long): Flow<List<TrackerLog>> = trackerLogDao.observeForTracker(trackerId)
 
+    fun observeAllLogs(): Flow<List<TrackerLog>> = trackerLogDao.observeAll()
+
     suspend fun add(tracker: Tracker): Long = trackerDao.insert(tracker)
 
     suspend fun update(tracker: Tracker) = trackerDao.update(tracker)
