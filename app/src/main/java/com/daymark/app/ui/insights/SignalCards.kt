@@ -14,8 +14,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -26,8 +29,12 @@ import com.daymark.app.ui.components.PaperSurface
 /**
  * The "For you" strip at the top of Insights — the ranked [Signals] for the Insights surface,
  * rendered as paper cards. Each card's copy is fixed (no AI); an optional action button maps to
- * navigation via [onAction]. Dismissible cards can be waved away for this viewing (kept in-memory;
- * the engine will re-surface them next session if still relevant).
+ * navigation via [onAction]. Dismissible cards can be waved away for this viewing (kept in a
+ * config-change-surviving set; the engine re-surfaces them next session if still relevant).
+ *
+ * The visible window is taken once ([max]) and dismissed cards stay in the list so their exit
+ * animation can play and no lower-ranked card pops in to fill the gap — a calm wave-away, not a
+ * feed that argues back.
  */
 @Composable
 fun SignalCards(
@@ -36,13 +43,10 @@ fun SignalCards(
     modifier: Modifier = Modifier,
     max: Int = 4,
 ) {
-    val dismissed = remember { mutableStateMapOf<String, Boolean>() }
-    val shown = Signals
-        .forSurface(signals, Signals.Surface.Insights, limit = Int.MAX_VALUE)
-        .filter { dismissed[it.kind] != true }
-        .take(max)
+    var dismissed by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf(emptySet<String>()) }
+    val window = Signals.forSurface(signals, Signals.Surface.Insights, limit = max)
 
-    if (shown.isEmpty()) return
+    if (window.isEmpty()) return
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
@@ -50,25 +54,33 @@ fun SignalCards(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.tertiary,
         )
-        shown.forEach { signal ->
-            AnimatedVisibility(
-                visible = dismissed[signal.kind] != true,
-                exit = fadeOut() + shrinkVertically(),
-                enter = fadeIn(),
-            ) {
-                SignalCard(
-                    signal = signal,
-                    onAction = onAction,
-                    onDismiss = if (signal.dismissible) {
-                        { dismissed[signal.kind] = true }
-                    } else {
-                        null
-                    },
-                )
+        window.forEach { signal ->
+            key(signal.kind) {
+                AnimatedVisibility(
+                    visible = signal.kind !in dismissed,
+                    exit = fadeOut() + shrinkVertically(),
+                    enter = fadeIn(),
+                ) {
+                    SignalCard(
+                        signal = signal,
+                        onAction = onAction,
+                        onDismiss = if (signal.dismissible) {
+                            { dismissed = dismissed + signal.kind }
+                        } else {
+                            null
+                        },
+                    )
+                }
             }
         }
     }
 }
+
+/** Saves the dismissed-kinds set across configuration changes (rotation, etc.). */
+private val StringSetSaver = listSaver<Set<String>, String>(
+    save = { it.toList() },
+    restore = { it.toSet() },
+)
 
 @Composable
 private fun SignalCard(

@@ -16,7 +16,6 @@ class SignalsTest {
         loggedToday = true,
         currentStreak = 1,
         longestStreak = 5,
-        daysLoggedThisWeek = 3,
         topLift = null,
         topDrag = null,
         monthDeltaPct = null,

@@ -33,6 +33,10 @@ import kotlin.math.roundToInt
  *
  * Like the other view-models it owns Room and the time zone, and hands the pure engine
  * already-computed facts.
+ *
+ * Note: deriving the achievement signal also idempotently records newly-earned achievement unlock
+ * times (the same sticky write the Achievements screen performs) so a genuine new unlock can be
+ * celebrated app-wide. It never writes anything else and nothing leaves the device.
  */
 @HiltViewModel
 class SignalsViewModel @Inject constructor(
@@ -58,7 +62,7 @@ class SignalsViewModel @Inject constructor(
         if (entries.isEmpty()) {
             return Signals.Inputs(
                 totalEntries = 0, avgMood = null, moodTodayLevel = null, loggedToday = false,
-                currentStreak = 0, longestStreak = 0, daysLoggedThisWeek = 0,
+                currentStreak = 0, longestStreak = 0,
                 topLift = null, topDrag = null, monthDeltaPct = null,
                 newlyUnlockedAchievement = null, dueCheckin = null, onThisDayNote = null,
             )
@@ -71,8 +75,6 @@ class SignalsViewModel @Inject constructor(
 
         val todayLevels = byDay[today]?.map { it.entry.moodLevel }
         val moodTodayLevel = todayLevels?.average()?.roundToInt()?.coerceIn(1, 5)
-
-        val daysThisWeek = days.count { !it.isBefore(today.minusDays(6)) && !it.isAfter(today) }
 
         // Strongest positive / negative factor associations (past the sample gate).
         val pairs = entries.map { it.entry.moodLevel to it.activities.map { a -> a.id } }
@@ -90,7 +92,6 @@ class SignalsViewModel @Inject constructor(
             loggedToday = days.contains(today),
             currentStreak = MoodStats.currentStreak(days, today),
             longestStreak = longestStreak,
-            daysLoggedThisWeek = daysThisWeek,
             topLift = lift(up.firstOrNull()),
             topDrag = lift(down.firstOrNull()),
             monthDeltaPct = periodDeltaPct(entries, today, 30),
@@ -113,13 +114,18 @@ class SignalsViewModel @Inject constructor(
                 !d.isBefore(prevStart) && d.isBefore(curStart) -> prev.add(e.entry.moodLevel)
             }
         }
-        return MoodPatterns.periodCompare(cur, prev).deltaPct
+        // Gate like every other input: a month card shouldn't fire off a near-empty window.
+        val cmp = MoodPatterns.periodCompare(cur, prev)
+        if (cmp.currentCount < MIN_PERIOD_ENTRIES || cmp.previousCount < MIN_PERIOD_ENTRIES) return null
+        return cmp.deltaPct
     }
 
     /**
      * Marks any newly-earned achievements as unlocked (sticky, idempotent — same as the
-     * Achievements screen) and returns the title of one unlocked within the recent window to
-     * celebrate, preferring the most advanced. Returns null if nothing was earned recently.
+     * Achievements screen) and, only when **exactly one** was earned by this call, returns its title
+     * to celebrate. The single-crossing rule is deliberate: a genuine milestone is crossed one at a
+     * time, whereas the first run for a pre-existing user records *many* already-earned badges at
+     * once — those must be stamped but never surprise-celebrated as "new". Returns null otherwise.
      */
     private fun recentlyUnlockedAchievement(
         entries: List<EntryWithActivities>,
@@ -133,16 +139,9 @@ class SignalsViewModel @Inject constructor(
             distinctActivities = entries.flatMap { it.activities.map { a -> a.id } }.distinct().size,
             checkInsTaken = assessments.size,
         )
-        achievementsStore.markUnlocked(Achievements.evaluate(inputs), nowMillis)
-        val catalogOrder = Achievements.CATALOG.withIndex().associate { (i, a) -> a.id to i }
-        val recent = achievementsStore.all()
-            .filter { (_, at) -> nowMillis - at in 0..RECENT_UNLOCK_MS }
-        // Prefer the most recently unlocked; break ties toward the more advanced (later in catalog).
-        val winner = recent.entries
-            .sortedWith(compareByDescending<Map.Entry<String, Long>> { it.value }
-                .thenByDescending { catalogOrder[it.key] ?: -1 })
-            .firstOrNull()?.key ?: return null
-        return Achievements.CATALOG.firstOrNull { it.id == winner }?.title
+        val justUnlocked = achievementsStore.markUnlocked(Achievements.evaluate(inputs), nowMillis)
+        val singleNew = justUnlocked.singleOrNull() ?: return null
+        return Achievements.CATALOG.firstOrNull { it.id == singleNew }?.title
     }
 
     /**
@@ -166,8 +165,8 @@ class SignalsViewModel @Inject constructor(
 
     private companion object {
         const val MIN_OCCURRENCES = 5
+        const val MIN_PERIOD_ENTRIES = 5
         const val MIN_ENTRIES_FOR_CHECKIN = 14
         const val WEEK_MS = 7L * 24 * 60 * 60 * 1000
-        const val RECENT_UNLOCK_MS = 3L * 24 * 60 * 60 * 1000
     }
 }

@@ -33,7 +33,11 @@ object Signals {
      * stays fixed in [Signal]. Kept as a closed set so every action is reviewable.
      */
     sealed interface Action {
-        /** Offer to turn a positive factor into a gentle goal. */
+        /**
+         * Offer to turn a positive factor into a gentle goal. [factor] names the factor for the
+         * card copy; the router currently opens a blank goal editor (factor prefill is a planned
+         * follow-up).
+         */
         data class CreateGoalFromFactor(val factor: String) : Action
         /** Open the daily check-in / mood logger. */
         object LogToday : Action
@@ -47,7 +51,7 @@ object Signals {
         object OpenJournal : Action
         /** Open a movement / stretch session. */
         object OpenMovement : Action
-        /** Open a specific self-check questionnaire (e.g. "WHO-5"). */
+        /** Open a self-check by name (known names route to that questionnaire; others to the hub). */
         data class TakeCheckin(val name: String) : Action
         /** Open crisis resources. */
         object OpenCrisisResources : Action
@@ -83,7 +87,6 @@ object Signals {
         val loggedToday: Boolean,
         val currentStreak: Int,
         val longestStreak: Int,
-        val daysLoggedThisWeek: Int,
         /** Strongest positive association past the sample gate, or null. */
         val topLift: FactorLift?,
         /** Strongest negative association past the sample gate, or null. */

@@ -62,6 +62,7 @@ import com.daymark.app.ui.journal.JournalEditorScreen
 import com.daymark.app.ui.journal.JournalScreen
 import com.daymark.app.ui.more.MoreHubScreen
 import com.daymark.app.stats.Signals
+import com.daymark.app.ui.assessments.Assessments
 import com.daymark.app.ui.navigation.Routes
 import com.daymark.app.ui.navigation.TopLevelDestination
 import com.daymark.app.ui.search.SearchScreen
@@ -510,7 +511,8 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
 /** Maps a [Signals.Action] (from a "For you" card) to a navigation route. */
 private fun signalActionRoute(action: Signals.Action): String = when (action) {
     is Signals.Action.CreateGoalFromFactor -> Routes.goal()
-    is Signals.Action.TakeCheckin -> Routes.ASSESSMENTS
+    is Signals.Action.TakeCheckin -> Assessments.ALL.firstOrNull { it.title.startsWith(action.name) }
+        ?.let { Routes.assessment(it.key) } ?: Routes.ASSESSMENTS
     Signals.Action.OpenSupport -> Routes.SUPPORT
     Signals.Action.OpenBreathing -> Routes.BREATHING
     Signals.Action.OpenThoughtRecord -> Routes.thoughtRecord()
