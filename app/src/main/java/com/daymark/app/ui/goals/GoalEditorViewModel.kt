@@ -22,6 +22,8 @@ data class GoalEditorUiState(
     val activityId: Long? = null,
     val targetPerWeek: Int = 3,
     val createdAt: Long = 0,
+    val cue: String = "",
+    val routine: String = "",
     val activities: List<ActivityEntity> = emptyList(),
     val isEditing: Boolean = false,
     val saved: Boolean = false,
@@ -48,7 +50,8 @@ class GoalEditorViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             id = g.id, title = g.title, activityId = g.activityId,
-                            targetPerWeek = g.targetPerWeek, createdAt = g.createdAt, isEditing = true,
+                            targetPerWeek = g.targetPerWeek, createdAt = g.createdAt,
+                            cue = g.cue, routine = g.routine, isEditing = true,
                         )
                     }
                 }
@@ -59,6 +62,8 @@ class GoalEditorViewModel @Inject constructor(
     fun setTitle(value: String) = _uiState.update { it.copy(title = value) }
     fun setActivity(id: Long?) = _uiState.update { it.copy(activityId = id) }
     fun setTarget(value: Int) = _uiState.update { it.copy(targetPerWeek = value.coerceIn(1, 7)) }
+    fun setCue(value: String) = _uiState.update { it.copy(cue = value) }
+    fun setRoutine(value: String) = _uiState.update { it.copy(routine = value) }
 
     val canSave: Boolean get() = _uiState.value.title.isNotBlank()
 
@@ -73,6 +78,8 @@ class GoalEditorViewModel @Inject constructor(
                     activityId = s.activityId,
                     targetPerWeek = s.targetPerWeek,
                     createdAt = if (s.createdAt == 0L) System.currentTimeMillis() else s.createdAt,
+                    cue = s.cue.trim(),
+                    routine = s.routine.trim(),
                 ),
             )
             _uiState.update { it.copy(saved = true) }

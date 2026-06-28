@@ -63,6 +63,9 @@ data class BackupGoal(
     val targetPerWeek: Int,
     val createdAt: Long,
     val archived: Boolean,
+    // Added in v11.
+    val cue: String = "",
+    val routine: String = "",
 )
 
 @Serializable
@@ -91,7 +94,7 @@ data class BackupAssessment(val id: Long, val key: String, val dateTime: Long, v
 
 @Serializable
 data class BackupData(
-    val version: Int = 10,
+    val version: Int = 11,
     val exportedAt: Long,
     val entries: List<BackupEntry>,
     val activities: List<BackupActivity>,
@@ -159,7 +162,7 @@ class BackupManager @Inject constructor(
             refs = entryDao.getAllCrossRefs().map { BackupRef(it.entryId, it.activityId) },
             journal = journalDao.getAll().map { BackupJournal(it.id, it.dateTime, it.title, it.body) },
             goals = goalDao.getAll().map {
-                BackupGoal(it.id, it.title, it.activityId, it.targetPerWeek, it.createdAt, it.archived)
+                BackupGoal(it.id, it.title, it.activityId, it.targetPerWeek, it.createdAt, it.archived, it.cue, it.routine)
             },
             sleepLogs = sleepLogDao.getAll().map {
                 BackupSleepLog(it.id, it.night, it.bedTime, it.wakeTime, it.sleepLatencyMin, it.awakeMin, it.quality, it.note)
@@ -251,7 +254,7 @@ class BackupManager @Inject constructor(
         entryDao.insertCrossRefs(data.refs.map { EntryActivityCrossRef(it.entryId, it.activityId) })
         data.journal.forEach { journalDao.insert(JournalEntry(it.id, it.dateTime, it.title, it.body)) }
         data.goals.forEach {
-            goalDao.insert(Goal(it.id, it.title, it.activityId, it.targetPerWeek, it.createdAt, it.archived))
+            goalDao.insert(Goal(it.id, it.title, it.activityId, it.targetPerWeek, it.createdAt, it.archived, it.cue, it.routine))
         }
         data.sleepLogs.forEach {
             sleepLogDao.insert(SleepLog(it.id, it.night, it.bedTime, it.wakeTime, it.sleepLatencyMin, it.awakeMin, it.quality, it.note))
@@ -309,7 +312,7 @@ class BackupManager @Inject constructor(
         data.journal.forEach { j -> journalDao.insert(JournalEntry(0, j.dateTime, j.title, j.body)) }
         data.goals.forEach { g ->
             goalDao.insert(
-                Goal(0, g.title, g.activityId?.let { activityIdMap[it] }, g.targetPerWeek, g.createdAt, g.archived),
+                Goal(0, g.title, g.activityId?.let { activityIdMap[it] }, g.targetPerWeek, g.createdAt, g.archived, g.cue, g.routine),
             )
         }
         // Sleep logs and treatments have no foreign keys, so merge is a plain insert with fresh ids.
@@ -342,6 +345,6 @@ class BackupManager @Inject constructor(
         android.util.Base64.decode(text, android.util.Base64.NO_WRAP)
 
     companion object {
-        const val CURRENT_VERSION = 10
+        const val CURRENT_VERSION = 11
     }
 }

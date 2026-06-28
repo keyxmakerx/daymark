@@ -111,6 +111,29 @@ fun GoalEditorScreen(
                 OutlinedButton(onClick = { viewModel.setTarget(state.targetPerWeek + 1) }) { Text("+") }
             }
 
+            Text("If-then plan (optional)", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "A simple, well-evidenced nudge: link a cue to the action.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedTextField(
+                value = state.cue,
+                onValueChange = viewModel::setCue,
+                label = { Text("When… (cue)") },
+                placeholder = { Text("e.g. after breakfast") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = state.routine,
+                onValueChange = viewModel::setRoutine,
+                label = { Text("…I will (action)") },
+                placeholder = { Text("e.g. take a 10-min walk") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
             Button(
                 onClick = viewModel::save,
                 enabled = state.title.isNotBlank(),

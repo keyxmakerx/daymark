@@ -30,7 +30,7 @@ import com.daymark.app.data.entity.Treatment
         JournalEntry::class, Goal::class, SleepLog::class, Treatment::class,
         Tracker::class, TrackerLog::class, Reminder::class, AssessmentResult::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -196,6 +196,14 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_assessment_results_key` ON `assessment_results` (`key`)",
                 )
+            }
+        }
+
+        /** v11 adds optional if-then (cue/routine) fields to goals; existing data is preserved. */
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE goals ADD COLUMN cue TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE goals ADD COLUMN routine TEXT NOT NULL DEFAULT ''")
             }
         }
 

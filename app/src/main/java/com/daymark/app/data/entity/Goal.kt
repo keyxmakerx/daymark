@@ -15,4 +15,10 @@ data class Goal(
     val targetPerWeek: Int = 3,
     val createdAt: Long = 0,
     val archived: Boolean = false,
+    /**
+     * Optional implementation intention ("when [cue], I will [routine]") — a simple, well-evidenced
+     * way to turn an intention into action. Empty when unset.
+     */
+    val cue: String = "",
+    val routine: String = "",
 )

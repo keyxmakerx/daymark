@@ -34,6 +34,7 @@ class MigrationTest {
         AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4,
         AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7,
         AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_8_9, AppDatabase.MIGRATION_9_10,
+        AppDatabase.MIGRATION_10_11,
     )
 
     @Test
@@ -87,13 +88,31 @@ class MigrationTest {
     }
 
     @Test
+    fun migrate10To11_addsGoalCueRoutine_preservesGoals() {
+        helper.createDatabase(TEST_DB, 10).use { db ->
+            db.execSQL(
+                "INSERT INTO goals (id, title, activityId, targetPerWeek, createdAt, archived) " +
+                    "VALUES (1, 'Walk', NULL, 3, 100, 0)",
+            )
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 11, true, AppDatabase.MIGRATION_10_11).use { db ->
+            db.query("SELECT title, cue, routine FROM goals WHERE id = 1").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("Walk", c.getString(0))
+                assertEquals("", c.getString(1))
+                assertEquals("", c.getString(2))
+            }
+        }
+    }
+
+    @Test
     fun migrateAll_from3_toLatest() {
         helper.createDatabase(TEST_DB, 3).use { db ->
             db.execSQL(
                 "INSERT INTO mood_entries (id, dateTime, moodLevel, note) VALUES (7, 5000, 5, 'kept')",
             )
         }
-        helper.runMigrationsAndValidate(TEST_DB, 10, true, *allMigrations).use { db ->
+        helper.runMigrationsAndValidate(TEST_DB, 11, true, *allMigrations).use { db ->
             db.query("SELECT note FROM mood_entries WHERE id = 7").use { c ->
                 assertTrue(c.moveToFirst())
                 assertEquals("kept", c.getString(0))
