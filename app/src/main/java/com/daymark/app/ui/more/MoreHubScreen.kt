@@ -36,6 +36,7 @@ fun MoreHubScreen(
     onTrackers: () -> Unit,
     onGentleSupport: () -> Unit,
     onCheckins: () -> Unit,
+    onAchievements: () -> Unit,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -105,13 +106,19 @@ fun MoreHubScreen(
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
         ) {
             HubCard(
+                icon = R.drawable.ic_act_star,
+                title = "Achievements",
+                subtitle = "Milestones for showing up",
+                onClick = onAchievements,
+                modifier = Modifier.weight(1f),
+            )
+            HubCard(
                 icon = R.drawable.ic_ui_more,
                 title = "Settings",
                 subtitle = "Reminders, lock, backup",
                 onClick = onSettings,
                 modifier = Modifier.weight(1f),
             )
-            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
         }
     }
 }

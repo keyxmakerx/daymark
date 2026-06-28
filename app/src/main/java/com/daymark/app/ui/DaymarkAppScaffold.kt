@@ -77,6 +77,7 @@ import com.daymark.app.ui.support.GentleSupportScreen
 import com.daymark.app.ui.support.SupportScreen
 import com.daymark.app.ui.trackers.TrackerDetailScreen
 import com.daymark.app.ui.trackers.TrackersScreen
+import com.daymark.app.ui.achievements.AchievementsScreen
 import com.daymark.app.ui.assessments.AssessmentScreen
 import com.daymark.app.ui.assessments.AssessmentsHubScreen
 import com.daymark.app.ui.settings.CustomizeMoodsScreen
@@ -304,6 +305,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                     onTrackers = { navController.navigate(Routes.TRACKERS) },
                     onGentleSupport = { navController.navigate(Routes.GENTLE_SUPPORT) },
                     onCheckins = { navController.navigate(Routes.ASSESSMENTS) },
+                    onAchievements = { navController.navigate(Routes.ACHIEVEMENTS) },
                     onSettings = { navController.navigate(Routes.SETTINGS) },
                     modifier = Modifier.padding(padding),
                 )
@@ -406,6 +408,9 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
             }
             composable(Routes.CUSTOMIZE_MOODS, enterTransition = zEnter, popExitTransition = zPopExit) {
                 CustomizeMoodsScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Routes.ACHIEVEMENTS, enterTransition = zEnter, popExitTransition = zPopExit) {
+                AchievementsScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.GOALS) {
                 GoalsScreen(

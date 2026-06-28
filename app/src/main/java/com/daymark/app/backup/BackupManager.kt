@@ -91,7 +91,7 @@ data class BackupAssessment(val id: Long, val key: String, val dateTime: Long, v
 
 @Serializable
 data class BackupData(
-    val version: Int = 9,
+    val version: Int = 10,
     val exportedAt: Long,
     val entries: List<BackupEntry>,
     val activities: List<BackupActivity>,
@@ -115,6 +115,8 @@ data class BackupData(
     val moodColors: Map<Int, Int> = emptyMap(),
     // Added in v9.
     val assessments: List<BackupAssessment> = emptyList(),
+    // Added in v10: achievement unlock times (id -> epoch millis), kept in prefs.
+    val achievements: Map<String, Long> = emptyMap(),
 )
 
 /**
@@ -136,6 +138,7 @@ class BackupManager @Inject constructor(
     private val photoStore: com.daymark.app.data.PhotoStore,
     private val moodCustomization: com.daymark.app.data.MoodCustomizationStore,
     private val assessmentDao: com.daymark.app.data.dao.AssessmentDao,
+    private val achievementsStore: com.daymark.app.data.AchievementsStore,
 ) {
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
 
@@ -170,6 +173,7 @@ class BackupManager @Inject constructor(
             moodLabels = moodCustomization.labels(),
             moodColors = moodCustomization.colors(),
             assessments = assessmentDao.getAll().map { BackupAssessment(it.id, it.key, it.dateTime, it.score, it.bandLabel) },
+            achievements = achievementsStore.all(),
         )
         return json.encodeToString(data)
     }
@@ -222,6 +226,7 @@ class BackupManager @Inject constructor(
         if (mode == ImportMode.REPLACE) moodCustomization.reset()
         data.moodLabels.forEach { (lvl, label) -> moodCustomization.setLabel(lvl, label) }
         data.moodColors.forEach { (lvl, color) -> moodCustomization.setColor(lvl, color) }
+        achievementsStore.restore(data.achievements)
     }
 
     private suspend fun importReplace(data: BackupData) {
@@ -337,6 +342,6 @@ class BackupManager @Inject constructor(
         android.util.Base64.decode(text, android.util.Base64.NO_WRAP)
 
     companion object {
-        const val CURRENT_VERSION = 9
+        const val CURRENT_VERSION = 10
     }
 }

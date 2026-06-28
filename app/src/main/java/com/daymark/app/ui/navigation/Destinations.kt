@@ -42,6 +42,7 @@ object Routes {
     fun screener(key: String) = "$SCREENER/$key"
     const val SCREENER_PATTERN = "$SCREENER/{screenerKey}"
     const val ASSESSMENTS = "assessments"
+    const val ACHIEVEMENTS = "achievements"
     const val ASSESSMENT = "assessment"
     fun assessment(key: String) = "$ASSESSMENT/$key"
     const val ASSESSMENT_PATTERN = "$ASSESSMENT/{assessmentKey}"
