@@ -180,4 +180,15 @@ object PoseLibrary {
     )
 
     fun byId(id: String): Pose = ALL.firstOrNull { it.id == id } ?: MOUNTAIN
+
+    /** Linearly interpolates joint positions from [a] to [b] (t in 0..1) so a figure can flow
+     *  smoothly between two poses. Uses [b]'s joint set; missing joints fall back to b. */
+    fun lerp(a: Pose, b: Pose, t: Float): Pose {
+        val f = t.coerceIn(0f, 1f)
+        val joints = b.joints.mapValues { (joint, target) ->
+            val from = a.joints[joint] ?: target
+            Pt(from.x + (target.x - from.x) * f, from.y + (target.y - from.y) * f)
+        }
+        return Pose(b.id, b.name, joints)
+    }
 }
