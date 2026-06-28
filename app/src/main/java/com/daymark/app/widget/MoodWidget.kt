@@ -39,7 +39,7 @@ class MoodWidget : GlanceAppWidget() {
         // Muted paper mood palette (awful → rad), matching the app theme. Glance can't read the
         // Compose theme, so any user overrides are read straight from the same SharedPreferences
         // that MoodCustomizationStore writes (keys mirror it).
-        val prefs = context.getSharedPreferences("daylie_settings", Context.MODE_PRIVATE)
+        val prefs = context.getSharedPreferences("daymark_settings", Context.MODE_PRIVATE)
         fun label(level: Int, default: String): String =
             prefs.getString("mood_label_$level", null)?.ifBlank { null } ?: default
         fun color(level: Int, default: Color): Color =

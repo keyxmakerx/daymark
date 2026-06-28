@@ -78,7 +78,7 @@ object AppModule {
     @Provides
     @Singleton
     fun provideSharedPreferences(@ApplicationContext context: Context): SharedPreferences =
-        context.getSharedPreferences("daylie_settings", Context.MODE_PRIVATE)
+        context.getSharedPreferences("daymark_settings", Context.MODE_PRIVATE)
 
     /** AES-256 encrypted store for sensitive material (the PIN hash). */
     @Provides
@@ -90,7 +90,7 @@ object AppModule {
             .build()
         return EncryptedSharedPreferences.create(
             context,
-            "daylie_secure",
+            "daymark_secure",
             masterKey,
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,

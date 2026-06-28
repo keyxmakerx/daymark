@@ -121,7 +121,7 @@ class PinManager @Inject constructor(
         const val SALT_BYTES = 16
         const val ITERATIONS = 210_000
         const val KEY_BITS = 256
-        const val LEGACY_SALT = "daylie::pin::v1::"
+        const val LEGACY_SALT = "daymark::pin::v1::"
 
         // Lockout policy: 5 free tries, then exponential backoff capped at 5 minutes.
         const val FREE_ATTEMPTS = 5

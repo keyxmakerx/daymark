@@ -61,7 +61,7 @@ abstract class AppDatabase : RoomDatabase() {
     }
 
     companion object {
-        const val NAME = "daylie.db"
+        const val NAME = "daymark.db"
 
         /** v2 adds the standalone journal table; existing data is preserved. */
         val MIGRATION_1_2 = object : Migration(1, 2) {
