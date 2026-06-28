@@ -37,6 +37,7 @@ fun MoreHubScreen(
     onGentleSupport: () -> Unit,
     onCheckins: () -> Unit,
     onAchievements: () -> Unit,
+    onActivation: () -> Unit,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -81,6 +82,19 @@ fun MoreHubScreen(
                 onClick = onGentleSupport,
                 modifier = Modifier.weight(1f),
             )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+        ) {
+            HubCard(
+                icon = R.drawable.ic_act_exercise,
+                title = "Do one thing",
+                subtitle = "Behavioral activation",
+                onClick = onActivation,
+                modifier = Modifier.weight(1f),
+            )
+            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
         }
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),

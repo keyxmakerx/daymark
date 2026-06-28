@@ -78,6 +78,7 @@ import com.daymark.app.ui.support.SupportScreen
 import com.daymark.app.ui.trackers.TrackerDetailScreen
 import com.daymark.app.ui.trackers.TrackersScreen
 import com.daymark.app.ui.achievements.AchievementsScreen
+import com.daymark.app.ui.activation.BehavioralActivationScreen
 import com.daymark.app.ui.assessments.AssessmentScreen
 import com.daymark.app.ui.assessments.AssessmentsHubScreen
 import com.daymark.app.ui.settings.CustomizeMoodsScreen
@@ -309,6 +310,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                     onGentleSupport = { navController.navigate(Routes.GENTLE_SUPPORT) },
                     onCheckins = { navController.navigate(Routes.ASSESSMENTS) },
                     onAchievements = { navController.navigate(Routes.ACHIEVEMENTS) },
+                    onActivation = { navController.navigate(Routes.ACTIVATION) },
                     onSettings = { navController.navigate(Routes.SETTINGS) },
                     modifier = Modifier.padding(padding),
                 )
@@ -414,6 +416,12 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
             }
             composable(Routes.ACHIEVEMENTS, enterTransition = zEnter, popExitTransition = zPopExit) {
                 AchievementsScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Routes.ACTIVATION, enterTransition = zEnter, popExitTransition = zPopExit) {
+                BehavioralActivationScreen(
+                    onBack = { navController.popBackStack() },
+                    onShowMessage = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+                )
             }
             composable(Routes.GOALS) {
                 GoalsScreen(
