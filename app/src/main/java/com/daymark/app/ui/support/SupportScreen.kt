@@ -33,13 +33,20 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.daymark.app.stats.Signals
 import com.daymark.app.ui.components.PaperSurface
+import com.daymark.app.ui.insights.SignalsViewModel
 import com.daymark.app.util.Haptics
 
 /**
  * "Take a moment" — a calm, full-screen, gently-animated space offered (never forced) after a low
  * mood. Validates first, the options softly float in, and every path is optional. No cheering, no
  * generic affirmations. Non-diagnostic general wellness.
+ *
+ * The option list is the Signals engine's Support menu (rules-based, no AI): ranked and lightly
+ * personalised — e.g. "Move a little" rises to the top with tailored copy when movement is a known
+ * lift for this person. The behavioural-activation "do one small thing" and the always-present
+ * crisis + "not right now" rows are appended.
  */
 @Composable
 fun SupportScreen(
@@ -50,8 +57,10 @@ fun SupportScreen(
     onMove: () -> Unit,
     onCrisis: () -> Unit,
     viewModel: SupportViewModel = hiltViewModel(),
+    signalsViewModel: SignalsViewModel = hiltViewModel(),
 ) {
     val activity by viewModel.suggestedActivity.collectAsStateWithLifecycle()
+    val supportSignals by signalsViewModel.supportSignals.collectAsStateWithLifecycle()
     var shown by remember { mutableStateOf(false) }
     val appear by animateFloatAsState(if (shown) 1f else 0f, tween(700), label = "appear")
     androidx.compose.runtime.LaunchedEffect(Unit) { shown = true }
@@ -78,15 +87,41 @@ fun SupportScreen(
                 modifier = Modifier.padding(bottom = 6.dp),
             )
 
-            FloatingOption(0, "I'd like to talk about it", "Write out what's on your mind.", onTalk)
-            FloatingOption(1, "Breathe with me", "A minute of slow, paced breathing.", onBreathe)
-            FloatingOption(2, "Untangle a thought", "Look at a tough thought, gently.", onReframe)
-            SmallThingOption(3, activity, onClose)
-            FloatingOption(4, "Move a little", "A short, gentle stretch.", onMove)
-            FloatingOption(5, "I could use more support", "Crisis resources and someone to reach.", onCrisis)
-            FloatingOption(6, "Not right now", "That's okay too.", onClose)
+            // Contextual, rules-based picks from the engine (crisis is appended separately, last).
+            val mainOptions = supportSignals.filter { it.kind != "support_crisis" }
+            val crisis = supportSignals.firstOrNull { it.kind == "support_crisis" }
+            mainOptions.forEachIndexed { i, signal ->
+                FloatingOption(
+                    i, signal.title, signal.body,
+                    supportClick(signal.action, onTalk, onBreathe, onReframe, onMove, onCrisis, onClose),
+                )
+            }
+            // A tiny behavioural-activation step using one of the user's own activities.
+            SmallThingOption(mainOptions.size, activity, onClose)
+            crisis?.let {
+                FloatingOption(mainOptions.size + 1, it.title, it.body, onCrisis)
+            }
+            FloatingOption(mainOptions.size + 2, "Not right now", "That's okay too.", onClose)
         }
     }
+}
+
+/** Maps a support signal's action to the screen's existing, support-context navigation callbacks. */
+private fun supportClick(
+    action: Signals.Action?,
+    onTalk: () -> Unit,
+    onBreathe: () -> Unit,
+    onReframe: () -> Unit,
+    onMove: () -> Unit,
+    onCrisis: () -> Unit,
+    onClose: () -> Unit,
+): () -> Unit = when (action) {
+    Signals.Action.OpenMovement -> onMove
+    Signals.Action.OpenBreathing -> onBreathe
+    Signals.Action.OpenThoughtRecord -> onReframe
+    Signals.Action.OpenJournal -> onTalk
+    Signals.Action.OpenCrisisResources -> onCrisis
+    else -> onClose
 }
 
 /** A gently bobbing, tappable option. The bob period varies by [index] so they drift organically. */

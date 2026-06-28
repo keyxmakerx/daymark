@@ -289,20 +289,25 @@ object Signals {
 
         // 10. Support-screen options ("what might help"). These live only on the Support surface;
         //     a couple are contextual (a movement nudge appears when movement is a known lift).
-        out.addAll(supportOptions(inputs))
+        out.addAll(supportMenu(inputs.topLift))
 
         return out.sortedWith(compareByDescending<Signal> { it.score }.thenBy { it.kind })
     }
 
-    /** The fixed menu of supportive options for the "what might help" screen, lightly contextual. */
-    private fun supportOptions(inputs: Inputs): List<Signal> {
+    /**
+     * The fixed menu of supportive options for the "what might help" screen, lightly contextual on
+     * [topLift] (a movement nudge ranks first and personalises its copy when movement-like activity
+     * is a known lift). Always available — independent of how much has been logged — so the support
+     * space is never empty. Sorted best-first.
+     */
+    fun supportMenu(topLift: FactorLift?): List<Signal> {
         val s = ArrayList<Signal>()
         val sup = setOf(Surface.Support)
         // A movement nudge ranks first when movement-like activity is a known lift for this person.
-        if (inputs.topLift != null && inputs.topLift.delta >= LIFT_MIN_DELTA) {
+        if (topLift != null && topLift.delta >= LIFT_MIN_DELTA) {
             s.add(Signal("support_move", Category.Support, 64.0,
                 "Move a little",
-                "A short, gentle stretch or a few minutes of \"${inputs.topLift.name}\" — no pressure.",
+                "A short, gentle stretch or a few minutes of \"${topLift.name}\" — no pressure.",
                 Action.OpenMovement, false, sup))
         } else {
             s.add(Signal("support_move", Category.Support, 56.0,

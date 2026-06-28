@@ -54,6 +54,30 @@ class SignalsViewModel @Inject constructor(
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /**
+     * The "what might help" support menu, ordered & lightly personalised (movement rises when it's
+     * a known lift). Deliberately separate from [signals]: it has no side effects (no achievement
+     * write) and is always available even with no history, so the support space is never empty.
+     */
+    val supportSignals: StateFlow<List<Signals.Signal>> = entryRepository.observeAll()
+        .map { entries -> Signals.supportMenu(topFactors(entries).first) }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Strongest positive and negative factor associations past the sample gate (lift to drag). */
+    private fun topFactors(
+        entries: List<EntryWithActivities>,
+    ): Pair<Signals.FactorLift?, Signals.FactorLift?> {
+        val pairs = entries.map { it.entry.moodLevel to it.activities.map { a -> a.id } }
+        val nameById = entries.flatMap { it.activities }.associate { it.id to it.name }
+        val (up, down) = MoodCorrelations.rankLifts(
+            MoodCorrelations.factorDeltas(pairs, MIN_OCCURRENCES), topN = 1,
+        )
+        fun lift(d: MoodCorrelations.FactorDelta?) =
+            d?.let { nameById[it.id]?.let { name -> Signals.FactorLift(name, it.delta, it.n) } }
+        return lift(up.firstOrNull()) to lift(down.firstOrNull())
+    }
+
     private fun buildInputs(
         entries: List<EntryWithActivities>,
         assessments: List<AssessmentResult>,
@@ -77,13 +101,7 @@ class SignalsViewModel @Inject constructor(
         val moodTodayLevel = todayLevels?.average()?.roundToInt()?.coerceIn(1, 5)
 
         // Strongest positive / negative factor associations (past the sample gate).
-        val pairs = entries.map { it.entry.moodLevel to it.activities.map { a -> a.id } }
-        val nameById = entries.flatMap { it.activities }.associate { it.id to it.name }
-        val (up, down) = MoodCorrelations.rankLifts(
-            MoodCorrelations.factorDeltas(pairs, MIN_OCCURRENCES), topN = 1,
-        )
-        fun lift(d: MoodCorrelations.FactorDelta?) =
-            d?.let { nameById[it.id]?.let { name -> Signals.FactorLift(name, it.delta, it.n) } }
+        val (topLift, topDrag) = topFactors(entries)
 
         return Signals.Inputs(
             totalEntries = entries.size,
@@ -92,8 +110,8 @@ class SignalsViewModel @Inject constructor(
             loggedToday = days.contains(today),
             currentStreak = MoodStats.currentStreak(days, today),
             longestStreak = longestStreak,
-            topLift = lift(up.firstOrNull()),
-            topDrag = lift(down.firstOrNull()),
+            topLift = topLift,
+            topDrag = topDrag,
             monthDeltaPct = periodDeltaPct(entries, today, 30),
             newlyUnlockedAchievement = recentlyUnlockedAchievement(entries, assessments, longestStreak, nowMillis),
             dueCheckin = dueCheckin(entries.size, assessments, nowMillis),

@@ -157,4 +157,24 @@ class SignalsTest {
         val b = Signals.build(inputs, Locale.US)
         assertEquals(a.map { it.kind to it.body }, b.map { it.kind to it.body })
     }
+
+    @Test
+    fun supportMenu_alwaysAvailable_evenWithNoLift() {
+        val menu = Signals.supportMenu(null)
+        assertTrue(menu.isNotEmpty())
+        assertTrue(menu.all { Signals.Surface.Support in it.surfaces })
+        // Crisis resources are present and listed last (lowest score).
+        assertEquals("support_crisis", menu.minByOrNull { it.score }!!.kind)
+        // With no known lift, the move option uses generic (un-quoted) copy.
+        assertFalse("\"" in menu.first { it.kind == "support_move" }.body)
+    }
+
+    @Test
+    fun supportMenu_personalisesAndPrioritisesMove_whenMovementIsALift() {
+        val menu = Signals.supportMenu(Signals.FactorLift("Running", 0.6, 8))
+        val move = menu.first { it.kind == "support_move" }
+        assertTrue("Running" in move.body)
+        // Move now ranks above breathing.
+        assertTrue(move.score > menu.first { it.kind == "support_breathe" }.score)
+    }
 }
