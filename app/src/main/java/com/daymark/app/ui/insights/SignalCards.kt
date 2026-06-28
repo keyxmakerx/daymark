@@ -13,43 +13,40 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.listSaver
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.daymark.app.stats.Signals
 import com.daymark.app.ui.components.PaperSurface
 
 /**
- * The "For you" strip at the top of Insights — the ranked [Signals] for the Insights surface,
- * rendered as paper cards. Each card's copy is fixed (no AI); an optional action button maps to
- * navigation via [onAction]. Dismissible cards can be waved away for this viewing (kept in a
- * config-change-surviving set; the engine re-surfaces them next session if still relevant).
+ * The "For you" strip — the ranked [Signals] for [surface], rendered as paper cards. Each card's
+ * copy is fixed (no AI); an optional action button maps to navigation via [onAction]. Dismissible
+ * cards can be waved away via [onDismiss]; the engine re-surfaces them next session if still relevant.
  *
- * The visible window is taken once ([max]) and dismissed cards stay in the list so their exit
- * animation can play and no lower-ranked card pops in to fill the gap — a calm wave-away, not a
- * feed that argues back.
+ * Dismissal state is **hoisted** ([dismissed] / [onDismiss]) so the caller can decide whether to
+ * render this strip at all — that lets the surrounding layout drop the slot cleanly once everything
+ * is dismissed (see [visibleSignalCount]). The visible window is taken once ([max]) and dismissed
+ * cards stay in the list so their exit animation can play and no lower-ranked card pops in to fill
+ * the gap — a calm wave-away, not a feed that argues back.
  */
 @Composable
 fun SignalCards(
     signals: List<Signals.Signal>,
     onAction: (Signals.Action) -> Unit,
+    dismissed: Set<String>,
+    onDismiss: (String) -> Unit,
     modifier: Modifier = Modifier,
     surface: Signals.Surface = Signals.Surface.Insights,
     max: Int = 4,
     exclude: Set<String> = emptySet(),
     header: String? = "FOR YOU",
 ) {
-    var dismissed by rememberSaveable(
-        surface,
-        stateSaver = StringSetSaver,
-    ) { mutableStateOf(emptySet<String>()) }
     val window = Signals.forSurface(signals, surface, limit = Int.MAX_VALUE)
         .filterNot { it.kind in exclude }
         .take(max)
@@ -75,7 +72,7 @@ fun SignalCards(
                         signal = signal,
                         onAction = onAction,
                         onDismiss = if (signal.dismissible) {
-                            { dismissed = dismissed + signal.kind }
+                            { onDismiss(signal.kind) }
                         } else {
                             null
                         },
@@ -86,11 +83,27 @@ fun SignalCards(
     }
 }
 
-/** Saves the dismissed-kinds set across configuration changes (rotation, etc.). */
-private val StringSetSaver = listSaver<Set<String>, String>(
+/** Saver for a hoisted dismissed-kinds set (survives configuration changes / scroll-off). */
+val SignalDismissalSaver = listSaver<Set<String>, String>(
     save = { it.toList() },
     restore = { it.toSet() },
 )
+
+/**
+ * How many of [surface]'s cards (after [exclude] and the [max] window) are currently NOT in
+ * [dismissed] — i.e. how many would actually be visible. Lets a caller skip the whole strip (and
+ * its surrounding spacing) when everything has been waved away.
+ */
+fun visibleSignalCount(
+    signals: List<Signals.Signal>,
+    surface: Signals.Surface,
+    dismissed: Set<String>,
+    max: Int = 4,
+    exclude: Set<String> = emptySet(),
+): Int = Signals.forSurface(signals, surface, limit = Int.MAX_VALUE)
+    .filterNot { it.kind in exclude }
+    .take(max)
+    .count { it.kind !in dismissed }
 
 @Composable
 private fun SignalCard(
@@ -117,7 +130,10 @@ private fun SignalCard(
                         TextButton(onClick = { signal.action?.let(onAction) }) { Text(label) }
                     }
                     if (onDismiss != null) {
-                        TextButton(onClick = onDismiss) {
+                        TextButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.semantics { contentDescription = "Dismiss: ${signal.title}" },
+                        ) {
                             Text("Dismiss", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }

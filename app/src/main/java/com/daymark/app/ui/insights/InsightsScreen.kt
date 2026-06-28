@@ -84,6 +84,9 @@ fun InsightsScreen(
     val year by yearViewModel.uiState.collectAsStateWithLifecycle()
     val extras by extrasViewModel.uiState.collectAsStateWithLifecycle()
     val signals by signalsViewModel.signals.collectAsStateWithLifecycle()
+    var insightsDismissed by androidx.compose.runtime.saveable.rememberSaveable(
+        stateSaver = SignalDismissalSaver,
+    ) { mutableStateOf(emptySet<String>()) }
     var scope by remember { mutableStateOf(Scope.Month) }
 
     if (stats.totalEntries == 0) {
@@ -100,8 +103,16 @@ fun InsightsScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        // "For you" — the ranked Signals (rules-based, no AI), most relevant first.
-        SignalCards(signals = signals, onAction = onSignalAction)
+        // "For you" — the ranked Signals (rules-based, no AI), most relevant first. Skipped entirely
+        // (no empty slot/spacing) once every card has been dismissed.
+        if (visibleSignalCount(signals, com.daymark.app.stats.Signals.Surface.Insights, insightsDismissed) > 0) {
+            SignalCards(
+                signals = signals,
+                onAction = onSignalAction,
+                dismissed = insightsDismissed,
+                onDismiss = { insightsDismissed = insightsDismissed + it },
+            )
+        }
 
         // Time-scale toggle
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {

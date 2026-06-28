@@ -28,6 +28,9 @@ import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -59,6 +62,11 @@ fun HomeScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val memories by memoriesViewModel.memories.collectAsStateWithLifecycle()
     val signals by signalsViewModel.signals.collectAsStateWithLifecycle()
+    // Hoisted so the item below is only emitted when a card is actually visible — dismissing the
+    // last feed card then drops the slot cleanly instead of leaving a stray gap.
+    var feedDismissed by rememberSaveable(stateSaver = com.daymark.app.ui.insights.SignalDismissalSaver) {
+        mutableStateOf(emptySet<String>())
+    }
 
     if (!state.loading && state.entries.isEmpty()) {
         EmptyState(modifier)
@@ -67,6 +75,10 @@ fun HomeScreen(
 
     // Group entries by calendar day, preserving the DESC ordering.
     val grouped = state.entries.groupBy { DateUtils.toLocalDate(it.entry.dateTime) }
+    val feedExclude = setOf("on_this_day") // Home owns its richer "On this day" card below.
+    val feedVisible = com.daymark.app.ui.insights.visibleSignalCount(
+        signals, com.daymark.app.stats.Signals.Surface.Feed, feedDismissed, max = 3, exclude = feedExclude,
+    )
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -74,19 +86,17 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         // The "quiet feed" cards: a gentle check-in invitation, a low-mood support offer, and a
-        // few rules-based wins/insights — most relevant first. Home owns its own richer "On this
-        // day" card below, so the engine's on_this_day signal is excluded here to avoid duplication.
-        val hasFeedCards = com.daymark.app.stats.Signals
-            .forSurface(signals, com.daymark.app.stats.Signals.Surface.Feed)
-            .any { it.kind != "on_this_day" }
-        if (hasFeedCards) {
+        // few rules-based wins/insights — most relevant first.
+        if (feedVisible > 0) {
             item(key = "signals") {
                 com.daymark.app.ui.insights.SignalCards(
                     signals = signals,
                     onAction = onSignalAction,
+                    dismissed = feedDismissed,
+                    onDismiss = { feedDismissed = feedDismissed + it },
                     surface = com.daymark.app.stats.Signals.Surface.Feed,
                     max = 3,
-                    exclude = setOf("on_this_day"),
+                    exclude = feedExclude,
                     header = null,
                     modifier = Modifier.animateItem(),
                 )
@@ -114,17 +124,21 @@ fun HomeScreen(
                 )
             }
         }
-        // A finite, calm ending — the feed doesn't scroll forever.
-        item(key = "caught-up") {
-            Text(
-                text = "You’re all caught up.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 6.dp, bottom = 2.dp),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            )
+        // A finite, calm ending — the feed doesn't scroll forever. Only shown once there's an
+        // actual timeline above it (never alone during the initial load flash).
+        if (grouped.isNotEmpty()) {
+            item(key = "caught-up") {
+                Text(
+                    text = "You’re all caught up.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp, bottom = 2.dp)
+                        .animateItem(),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+            }
         }
     }
 }
