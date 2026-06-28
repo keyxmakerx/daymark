@@ -40,6 +40,17 @@ and no tracking. Because there's no backend, the app is free for everyone, forev
   Year in Pixels, with a **Week / Month / Year** toggle. See your mood trend, current & longest
   streaks, mood distribution, and average mood per activity, plus the month grid tinted by mood
   and the whole year at a glance.
+- 🔗 **What goes with your mood** — on-device correlations between your mood and the activities
+  and trackers you log, ranked into "lifts you up / weighs you down". Computed locally with a
+  minimum-sample gate, and always labeled **association, not cause**.
+- 📅 **By day-of-week & time-of-day** — see your average mood across weekdays and across morning /
+  afternoon / evening / night.
+- ↔️ **This period vs. last** — a simple comparison that follows the Week / Month / Year toggle.
+- 📰 **"In review" summary** — a short, rules-based recap (entries, average, best/worst weekday,
+  top mood-lifting factor, current streak), also rendered in the PDF report. Worded as
+  association, never cause.
+- 🔥 **Logging-consistency heatmap** — a GitHub-style entries-per-day grid showing how
+  consistently you've checked in.
 
 ### Tracking
 - 🎯 **Goals & habits** — weekly habit goals (e.g. "exercise 5× / week") with progress,
@@ -62,9 +73,39 @@ and no tracking. Because there's no backend, the app is free for everyone, forev
   **accelerometer** to estimate your breathing rhythm and flag pauses. **No audio is recorded**;
   only the derived result is shown. This is an experimental wellbeing aid, **not** an apnea test.
 
+### Wellbeing skills (non-diagnostic)
+- 🧮 **Check-ins** — three free, widely-used wellbeing self-checks — **PHQ-9**, **GAD-7**, and
+  **WHO-5** — with score history and a trend chart (**More → Check-ins**). Strictly
+  **non-diagnostic**; only the score and band are stored (never the individual item answers), and
+  PHQ-9 surfaces the offline crisis flow if the self-harm item is non-zero — never a verdict.
+  PHQ-9/GAD-7 are free to reproduce (Pfizer); WHO-5 is © WHO, free for non-commercial use. See
+  [docs/INSTRUMENTS.md](docs/INSTRUMENTS.md).
+- 🏅 **Achievements** — gentle milestones for showing up (first entry, entry counts, longest
+  streaks, activity variety, first check-in), **More → Achievements**. No streak-shaming; earned
+  badges are sticky.
+- 🧠 **Thought records (CBT)** — a guided record: situation → automatic thought → optional
+  thinking-trap tags → evidence for/against → a balanced thought, with mood before/after. Framed
+  as reflection, not a verdict (**More → Thought records**).
+- 🌱 **Do one thing (behavioral activation)** — plan a small pleasure/mastery activity, optionally
+  set a reminder, then rate **enjoyment** and **mastery** (logged to auto-created trackers so they
+  show up against mood in Insights).
+- 📔 **Journal writing templates** — starters on a fresh entry: **Three Good Things** (gratitude),
+  a timed **Expressive Writing** prompt (with a gentle "this may surface hard feelings" note and a
+  link to support), and a reflect-on-the-day prompt.
+- 🤸 **Move** — gentle yoga/stretch and bodyweight interval routines with **original hand-drawn
+  pose figures** and haptic-cued timers that work eyes-closed; each session logs to a "Movement
+  minutes" tracker. No video, no network (**More → Move**).
+
+### Goals & intentions
+- 🪄 **Implementation intentions** — give any goal an optional "when X, I will Y" plan, a simple,
+  well-evidenced way to turn an intention into action.
+
 ### Gentle support
 - 🌿 **"Take a moment"** — an opt-in, validate-first support flow for hard moments, with a
   guided **breathing pacer** and **offline crisis resources**. No content is sent anywhere.
+- 🫁 **Breathing presets** — choose a cadence for the pacer: **slow ~6/min** (gentle default), **box
+  4·4·4·4**, or **4·7·8**, with proper hold phases and in/out haptics. Described generically — no
+  brand names, no health claims.
 
 ### Everyday
 - 🔔 **Reminders + quick-log** — set up multiple daily reminders, each with its own time, on/off

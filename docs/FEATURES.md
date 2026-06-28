@@ -18,6 +18,10 @@ network, nothing leaves your device. See [PRIVACY.md](PRIVACY.md) for the privac
 - **Swipe to delete + undo** — swipe a Home-timeline entry away to delete it, with a 5-second
   **Undo** snackbar that restores the entry (and its activity links).
 - **Journal** — a separate free-form diary, distinct from per-entry mood notes.
+- **Journal writing templates** — optional starters on a fresh entry: **Three Good Things**
+  (gratitude), a timed **Expressive Writing** prompt, and a reflect-on-the-day prompt — all
+  evidence-informed methods worded in our own words. The expressive-writing starter shows a gentle
+  "this may surface hard feelings" note with a link to support.
 - **Global note search** — search across mood notes and journal entries from one place.
 - **Tap a day to view/edit** — open any calendar day to review or edit its entries.
 - **"On this day" memories** — gently resurfaces what you logged on this date in past months and
@@ -37,6 +41,19 @@ network, nothing leaves your device. See [PRIVACY.md](PRIVACY.md) for the privac
     activity.
   - **Month** — a calendar grid where each day is tinted by its mood.
   - **Year** — the whole year as a grid of mood-colored squares (Year in Pixels).
+- **What goes with your mood** — per-factor correlations between your mood and the activities and
+  numeric trackers you log, ranked into "lifts you up / weighs you down". Computed **on-device**
+  from data you already have, with a minimum-sample gate (≥5 occurrences for an activity, ≥14 days
+  for a tracker) to keep noise out. Always labeled **association, not cause** — never causation.
+- **By day-of-week & by time-of-day** — your average mood across weekdays and across morning /
+  afternoon / evening / night buckets.
+- **This period vs. last** — a comparison of the current period against the previous one, which
+  follows the Week / Month / Year toggle.
+- **"In review"** — a short, rules-based recap (entries, average, best/worst weekday, top
+  mood-lifting factor, current streak), worded as association rather than cause. The same summary
+  is rendered as an "In review" section in the PDF report.
+- **Logging consistency** — a GitHub-style entries-per-day heatmap (a single accent hue, distinct
+  from the mood-tinted Year in Pixels) showing how consistently you've been checking in.
 
 ## Goals & custom trackers
 
@@ -44,6 +61,39 @@ network, nothing leaves your device. See [PRIVACY.md](PRIVACY.md) for the privac
   linked to an activity.
 - **Custom trackers** — track anything alongside mood as a **scale**, a **number** (with a unit),
   or a simple **yes / no**, and review its history over time.
+- **Implementation intentions** — give any goal an optional **"when [cue], I will [routine]"**
+  plan, a simple, well-evidenced way to turn an intention into action. Existing goals are
+  unaffected.
+
+## Wellbeing skills (non-diagnostic)
+
+Optional, self-help skills reached from the **More** screen. None of these is treatment or a
+diagnosis, and nothing leaves your device.
+
+- **Check-ins (PHQ-9 / GAD-7 / WHO-5)** — three free, widely-used wellbeing self-checks, with
+  score history and a small trend chart (**More → Check-ins**). Each is **strictly
+  non-diagnostic**. Only the **score and band** are stored — never the individual item answers
+  (the PHQ-9 self-harm item never persists). If the PHQ-9 self-harm item is non-zero, the app
+  gently surfaces the offline crisis flow — never a risk verdict. WHO-5 is shown as a 0–100
+  percentage. PHQ-9 and GAD-7 are **free to reproduce (Pfizer)**; WHO-5 is **© WHO, free for
+  non-commercial use** (cited in-app). See [INSTRUMENTS.md](INSTRUMENTS.md) for the license
+  ledger.
+- **Achievements** — gentle milestones for showing up: first entry, entry counts, longest
+  streaks, activity variety, first check-in (**More → Achievements**), shown with original
+  hand-drawn badge art. Gentle by design — no streak-shaming, and earned badges are sticky.
+- **Thought records (CBT)** — a guided record (**More → Thought records**): situation → automatic
+  thought → optional **thinking-trap** tags → evidence for/against → a **balanced thought**, with
+  **mood before/after** to gauge any shift. The cognitive-distortion list is **self-authored** (our
+  own names and definitions). Framed as reflection, not a verdict or diagnosis.
+- **Do one thing (behavioral activation)** — plan a small pleasure/mastery activity (from
+  self-authored suggestions or your own), optionally set a reminder to do it, then rate
+  **enjoyment** and a sense of accomplishment (**mastery**). Both log to auto-created 0–10
+  trackers, so they show up against your mood in Insights. Framed as a skill, not treatment.
+- **Move** — gentle yoga/stretch and bodyweight interval routines (**More → Move**) with
+  **original hand-drawn pose figures** and a haptic-cued timer (a pulse on each step, a double
+  pulse to finish) so it works even with your eyes closed. The sequences are described in our own
+  words, with no branded programs and no video; each session logs to an auto-created "Movement
+  minutes" tracker so it shows up against mood in Insights.
 
 ## Sleep (non-diagnostic)
 
@@ -65,6 +115,9 @@ network, nothing leaves your device. See [PRIVACY.md](PRIVACY.md) for the privac
 
 - **"Take a moment"** — an opt-in, validate-first flow for hard moments, with a guided
   **breathing pacer** and **offline crisis resources**. No content is sent anywhere.
+- **Breathing presets** — choose the pacer cadence: **slow ~6/min** (gentle default), **box
+  4·4·4·4**, or **4·7·8**, with proper hold phases and in/out haptics. Described generically — no
+  brand names, no health claims.
 
 ## Everyday
 

@@ -118,6 +118,20 @@ The journal is your free-form diary, kept separate from mood notes.
 - Use the **search** on the Journal screen to look through your journal entries
   by their text.
 
+### Writing templates (optional starters)
+
+If a blank page is hard, a fresh journal entry offers a few optional starters:
+
+- **Three Good Things** — jot down three things that went well (a gratitude
+  exercise).
+- **Expressive Writing** — a timed prompt for writing freely about something on
+  your mind. It shows a gentle note that this may surface hard feelings, with a
+  link to support.
+- **Reflect on the day** — a simple end-of-day prompt.
+
+Pick one to pre-fill the entry, then write in your own words — or ignore them and
+start from scratch.
+
 ---
 
 ## Calendar & Year in Pixels
@@ -165,6 +179,90 @@ Goals are simple weekly habit targets — for example, *"Exercise 5× a week."*
 If you link a goal to an activity, Daymark counts how many times you've tagged
 that activity this week and shows your **progress** toward the target. Goals you
 no longer want can be archived.
+
+### Implementation intentions ("when X, I will Y")
+
+When editing a goal you can add an optional **"when [cue], I will [routine]"**
+plan — for example, *"when I finish breakfast, I will go for a 10-minute walk."*
+Tying a new habit to an existing cue is a simple, well-evidenced way to follow
+through. Leave the fields blank to skip it; existing goals are unaffected.
+
+---
+
+## Wellbeing skills (More)
+
+The **More** screen gathers a set of optional, self-help skills. None of these is
+treatment or a diagnosis, and — like everything in Daymark — nothing leaves your
+device.
+
+### Check-ins (PHQ-9 / GAD-7 / WHO-5)
+
+Three short, widely-used wellbeing self-checks you can take whenever you like.
+
+1. Open **More → Check-ins** and pick one.
+2. Answer the questions; Daymark shows your **score and band** and a small
+   **trend** of past scores.
+
+Only the score and band are saved — **not** your individual answers. These are
+**non-diagnostic** self-checks, not a clinical assessment. If the PHQ-9 self-harm
+question is anything other than "not at all", Daymark gently shows the offline
+crisis resources — it never makes a risk judgment about you. (Source/license
+details are in [INSTRUMENTS.md](INSTRUMENTS.md).)
+
+### Thought records (CBT)
+
+A guided way to step back from an upsetting thought.
+
+1. Open **More → Thought records** and tap **+**.
+2. Note the **situation** and the **automatic thought**, optionally tag any
+   **thinking traps**, list **evidence for and against**, then write a more
+   **balanced thought**.
+3. Set your **mood before and after** to see whether anything shifted.
+
+It's a reflection tool, not a verdict.
+
+### Do one thing (behavioral activation)
+
+A small, doable plan for low days.
+
+1. Open **More → Do one thing**.
+2. Pick a small activity (a suggestion or your own), optionally set a reminder.
+3. Afterwards, rate how much you **enjoyed** it and your sense of
+   **accomplishment** (mastery).
+
+Those ratings log to trackers, so they show up against your mood in Insights.
+
+### Move
+
+Gentle yoga/stretch and bodyweight interval routines you can follow with the
+phone face-up.
+
+1. Open **More → Move** and pick a routine.
+2. Follow the **hand-drawn pose figures** and the timer; a **vibration** cues each
+   step (and a double buzz at the end), so it works even with your eyes closed.
+
+Each finished session logs to a **"Movement minutes"** tracker, so movement shows
+up alongside your mood in Insights. There's no video and no network involved.
+
+### Achievements
+
+**More → Achievements** marks gentle milestones for showing up — your first
+entry, entry counts, longest streaks, activity variety, and your first check-in.
+There's no streak-shaming, and once a badge is earned it stays earned.
+
+---
+
+## Breathing pacer presets
+
+In the **"Take a moment"** support flow, the **breathing pacer** lets you pick a
+cadence:
+
+- **Slow (~6 breaths/min)** — the gentle default.
+- **Box (4·4·4·4)** — equal in, hold, out, hold.
+- **4·7·8** — a longer exhale pattern.
+
+Each uses gentle in/out haptics so you can pace your breathing without watching
+the screen. It's a relaxation aid, not a medical treatment.
 
 ---
 
@@ -248,8 +346,10 @@ backup file goes using your phone's file picker.
 2. Choose where to save the file.
 
 This writes a single JSON file containing **everything** — moods, notes,
-activities, journal entries, goals, your reminders, and any **photos** you've
-attached (embedded in the file, so it stays one portable backup).
+activities, journal entries, goals (including any "when X, I will Y" plan),
+your reminders, **check-in scores**, **achievements**, **thought records**,
+movement and other tracker logs, and any **photos** you've attached (embedded in
+the file, so it stays one portable backup).
 
 ### Restore a backup (Replace vs. Merge)
 
