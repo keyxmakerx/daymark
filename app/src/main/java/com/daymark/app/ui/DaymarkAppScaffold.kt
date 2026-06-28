@@ -294,7 +294,10 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                 enterTransition = sheetEnter,
                 popExitTransition = sheetPopExit,
             ) {
-                JournalEditorScreen(onDone = { navController.popBackStack() })
+                JournalEditorScreen(
+                    onDone = { navController.popBackStack() },
+                    onOpenSupport = { navController.navigate(Routes.CRISIS) },
+                )
             }
             composable(Routes.MORE) {
                 MoreHubScreen(

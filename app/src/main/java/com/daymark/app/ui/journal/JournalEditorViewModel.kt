@@ -51,6 +51,11 @@ class JournalEditorViewModel @Inject constructor(
     fun setTitle(value: String) = _uiState.update { it.copy(title = value) }
     fun setBody(value: String) = _uiState.update { it.copy(body = value) }
 
+    /** Prefills the editor from a writing template (only meaningful for a new entry). */
+    fun applyTemplate(template: JournalTemplate) = _uiState.update {
+        it.copy(title = template.title, body = template.body)
+    }
+
     fun save() {
         val s = _uiState.value
         if (s.title.isBlank() && s.body.isBlank()) {
