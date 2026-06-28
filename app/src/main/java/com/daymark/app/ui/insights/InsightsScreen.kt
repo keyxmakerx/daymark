@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -54,7 +55,9 @@ import com.daymark.app.ui.calendar.CalendarViewModel
 import com.daymark.app.ui.calendar.YearPixelsViewModel
 import com.daymark.app.ui.components.MoodFaceIcon
 import com.daymark.app.ui.components.PaperSurface
+import com.daymark.app.ui.components.StarsLegend
 import com.daymark.app.ui.components.YearInPixelsGrid
+import com.daymark.app.ui.components.YearInStarsGrid
 import com.daymark.app.ui.stats.StatsViewModel
 import com.daymark.app.util.DateUtils
 import java.time.DayOfWeek
@@ -88,6 +91,7 @@ fun InsightsScreen(
         stateSaver = SignalDismissalSaver,
     ) { mutableStateOf(emptySet<String>()) }
     var scope by remember { mutableStateOf(Scope.Month) }
+    var yearStars by remember { mutableStateOf(true) }
 
     if (stats.totalEntries == 0) {
         Box(modifier = modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -165,11 +169,25 @@ fun InsightsScreen(
                         onPrev = yearViewModel::previousYear,
                         onNext = yearViewModel::nextYear,
                     )
-                    YearInPixelsGrid(
-                        year = year.year,
-                        dayMoods = year.dayMoods,
-                        modifier = Modifier.padding(top = 8.dp),
+                    StarsGridToggle(
+                        starsSelected = yearStars,
+                        onSelect = { yearStars = it },
+                        modifier = Modifier.padding(bottom = 4.dp),
                     )
+                    if (yearStars) {
+                        YearInStarsGrid(
+                            year = year.year,
+                            dayMoods = year.dayMoods,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                        StarsLegend(modifier = Modifier.padding(top = 8.dp))
+                    } else {
+                        YearInPixelsGrid(
+                            year = year.year,
+                            dayMoods = year.dayMoods,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
                 }
             }
         }
@@ -314,6 +332,18 @@ private fun LabeledMoodBars(values: List<Pair<String, Double>>) {
                 Text(String.format(Locale.getDefault(), "%.1f", mood), style = MaterialTheme.typography.bodySmall)
             }
         }
+    }
+}
+
+/** Compact toggle between the night-sky "Stars" view and the dense "Grid" view of the year. */
+@Composable
+private fun StarsGridToggle(starsSelected: Boolean, onSelect: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+    ) {
+        FilterChip(selected = starsSelected, onClick = { onSelect(true) }, label = { Text("Stars") })
+        FilterChip(selected = !starsSelected, onClick = { onSelect(false) }, label = { Text("Grid") })
     }
 }
 
