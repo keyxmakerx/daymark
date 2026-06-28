@@ -236,6 +236,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
             composable(Routes.HOME) {
                 HomeScreen(
                     onEntryClick = { id -> navController.navigate(Routes.entry(id)) },
+                    onSignalAction = { action -> navController.navigate(signalActionRoute(action)) },
                     onUndoableDelete = { onUndo, onExpire ->
                         scope.launch {
                             val result = snackbarHostState.showSnackbar(

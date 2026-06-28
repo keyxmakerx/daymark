@@ -41,19 +41,29 @@ fun SignalCards(
     signals: List<Signals.Signal>,
     onAction: (Signals.Action) -> Unit,
     modifier: Modifier = Modifier,
+    surface: Signals.Surface = Signals.Surface.Insights,
     max: Int = 4,
+    exclude: Set<String> = emptySet(),
+    header: String? = "FOR YOU",
 ) {
-    var dismissed by rememberSaveable(stateSaver = StringSetSaver) { mutableStateOf(emptySet<String>()) }
-    val window = Signals.forSurface(signals, Signals.Surface.Insights, limit = max)
+    var dismissed by rememberSaveable(
+        surface,
+        stateSaver = StringSetSaver,
+    ) { mutableStateOf(emptySet<String>()) }
+    val window = Signals.forSurface(signals, surface, limit = Int.MAX_VALUE)
+        .filterNot { it.kind in exclude }
+        .take(max)
 
     if (window.isEmpty()) return
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            "FOR YOU",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.tertiary,
-        )
+        if (header != null) {
+            Text(
+                header,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
+        }
         window.forEach { signal ->
             key(signal.kind) {
                 AnimatedVisibility(

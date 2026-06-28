@@ -50,12 +50,15 @@ import com.daymark.app.util.DateUtils
 fun HomeScreen(
     onEntryClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    onSignalAction: (com.daymark.app.stats.Signals.Action) -> Unit = {},
     onUndoableDelete: (onUndo: () -> Unit, onExpire: () -> Unit) -> Unit = { _, _ -> },
     viewModel: HomeViewModel = hiltViewModel(),
     memoriesViewModel: MemoriesViewModel = hiltViewModel(),
+    signalsViewModel: com.daymark.app.ui.insights.SignalsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val memories by memoriesViewModel.memories.collectAsStateWithLifecycle()
+    val signals by signalsViewModel.signals.collectAsStateWithLifecycle()
 
     if (!state.loading && state.entries.isEmpty()) {
         EmptyState(modifier)
@@ -70,6 +73,25 @@ fun HomeScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        // The "quiet feed" cards: a gentle check-in invitation, a low-mood support offer, and a
+        // few rules-based wins/insights — most relevant first. Home owns its own richer "On this
+        // day" card below, so the engine's on_this_day signal is excluded here to avoid duplication.
+        val hasFeedCards = com.daymark.app.stats.Signals
+            .forSurface(signals, com.daymark.app.stats.Signals.Surface.Feed)
+            .any { it.kind != "on_this_day" }
+        if (hasFeedCards) {
+            item(key = "signals") {
+                com.daymark.app.ui.insights.SignalCards(
+                    signals = signals,
+                    onAction = onSignalAction,
+                    surface = com.daymark.app.stats.Signals.Surface.Feed,
+                    max = 3,
+                    exclude = setOf("on_this_day"),
+                    header = null,
+                    modifier = Modifier.animateItem(),
+                )
+            }
+        }
         if (memories.isNotEmpty()) {
             item(key = "on-this-day") {
                 OnThisDayCard(memories, onEntryClick, modifier = Modifier.animateItem())
@@ -91,6 +113,18 @@ fun HomeScreen(
                     modifier = Modifier.animateItem(),
                 )
             }
+        }
+        // A finite, calm ending — the feed doesn't scroll forever.
+        item(key = "caught-up") {
+            Text(
+                text = "You’re all caught up.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp, bottom = 2.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
         }
     }
 }
