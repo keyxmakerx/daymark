@@ -27,6 +27,7 @@ class PdfReportGenerator @Inject constructor() {
 
         ctx.coverHeader(data, options)
         ctx.summaryStrip(data)
+        ctx.reviewSection(data)
         if (options.includeCharts) {
             ctx.trendChart(data)
             ctx.distribution(data)
@@ -149,6 +150,15 @@ private class PageCtx(
             canvas.drawText(label.uppercase(), x, y + 30f, paint(7.5f, FAINT))
         }
         y += 48f
+    }
+
+    fun reviewSection(data: ReportData) {
+        if (data.periodReview.isBlank()) return
+        val lines = wrap(data.periodReview, paint(9f, INK), contentW)
+        ensure(20f + lines.size * 12f)
+        sectionLabel("In review")
+        lines.forEach { canvas.drawText(it, margin, y + 9f, paint(9f, INK)); y += 12f }
+        y += 8f
     }
 
     fun trendChart(data: ReportData) {

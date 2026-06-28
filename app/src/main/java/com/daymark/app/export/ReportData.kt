@@ -38,6 +38,8 @@ data class ReportData(
     val activityStats: List<ReportActivityStat>,
     val entries: List<ReportEntry>,
     val journal: List<ReportJournalEntry>,
+    /** A short rules-based narrative summary (derived; not part of the authenticity hash). */
+    val periodReview: String,
     val sha256Hex: String,
 )
 
@@ -90,6 +92,24 @@ class ReportDataBuilder @Inject constructor(
             TrendPoint(day, byDay[day]?.map { it.entry.moodLevel }?.average())
         }
 
+        // Rules-based narrative summary (reuses the same pure helpers as the Insights tab).
+        val dow = com.daymark.app.stats.MoodPatterns.byDayOfWeek(
+            ewas.map { DateUtils.toLocalDate(it.entry.dateTime).dayOfWeek to it.entry.moodLevel },
+        )
+        val topUp = com.daymark.app.stats.MoodCorrelations
+            .rankLifts(com.daymark.app.stats.MoodCorrelations.factorDeltas(pairs, 3), 1).first
+            .firstOrNull()?.let { nameById[it.id] }
+        val periodReview = com.daymark.app.stats.PeriodReview.build(
+            com.daymark.app.stats.PeriodReview.Inputs(
+                totalEntries = ewas.size,
+                avgMood = MoodStats.averageMood(levels),
+                bestDay = dow.maxByOrNull { it.value }?.key,
+                worstDay = dow.minByOrNull { it.value }?.key,
+                topFactorUp = topUp,
+                currentStreak = MoodStats.currentStreak(days, today),
+            ),
+        )
+
         return ReportData(
             patientName = options.patientName,
             rangeLabel = options.rangeLabel,
@@ -105,6 +125,7 @@ class ReportDataBuilder @Inject constructor(
             activityStats = activityStats,
             entries = reportEntries,
             journal = journal,
+            periodReview = periodReview,
             sha256Hex = sha256Hex(canonicalPayload(options.fromMillis, options.toMillis, reportEntries, journal)),
         )
     }

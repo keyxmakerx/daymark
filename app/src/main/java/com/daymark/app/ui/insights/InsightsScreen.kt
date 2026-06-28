@@ -173,6 +173,18 @@ fun InsightsScreen(
             }
         }
 
+        // --- Period in review + consistency ---
+        if (extras.review.isNotBlank()) {
+            SectionCard("In review") {
+                Text(extras.review, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        if (extras.entriesByDay.isNotEmpty()) {
+            SectionCard("Logging consistency") {
+                com.daymark.app.ui.components.ConsistencyHeatmap(extras.entriesByDay)
+            }
+        }
+
         // --- Correlations & patterns (associations, not causes) ---
         val periodCompare = when (scope) {
             Scope.Week -> extras.weekCompare

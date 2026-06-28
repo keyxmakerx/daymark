@@ -34,6 +34,9 @@ data class InsightsExtrasState(
     val weekCompare: MoodPatterns.PeriodComparison? = null,
     val monthCompare: MoodPatterns.PeriodComparison? = null,
     val yearCompare: MoodPatterns.PeriodComparison? = null,
+    /** Entries logged per day (for the consistency heatmap). */
+    val entriesByDay: Map<LocalDate, Int> = emptyMap(),
+    val review: String = "",
 )
 
 /**
@@ -111,8 +114,23 @@ class InsightsExtrasViewModel @Inject constructor(
             return MoodPatterns.periodCompare(cur, prev)
         }
 
+        // --- Consistency heatmap + period review ---
+        val entriesByDay = entries.groupingBy { DateUtils.toLocalDate(it.entry.dateTime) }.eachCount()
+        val streak = com.daymark.app.stats.MoodStats.currentStreak(entriesByDay.keys, today)
+        val upRows = rows(up)
+        val review = com.daymark.app.stats.PeriodReview.build(
+            com.daymark.app.stats.PeriodReview.Inputs(
+                totalEntries = entries.size,
+                avgMood = entries.map { it.entry.moodLevel }.average(),
+                bestDay = dow.maxByOrNull { it.value }?.key,
+                worstDay = dow.minByOrNull { it.value }?.key,
+                topFactorUp = upRows.firstOrNull()?.name,
+                currentStreak = streak,
+            ),
+        )
+
         return InsightsExtrasState(
-            topUp = rows(up),
+            topUp = upRows,
             topDown = rows(down),
             trackerCorrelations = trackerCorrs,
             dayOfWeek = dow,
@@ -120,6 +138,8 @@ class InsightsExtrasViewModel @Inject constructor(
             weekCompare = compareWindow(7),
             monthCompare = compareWindow(30),
             yearCompare = compareWindow(365),
+            entriesByDay = entriesByDay,
+            review = review,
         )
     }
 
