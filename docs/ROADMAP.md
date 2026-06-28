@@ -31,3 +31,8 @@ Mood logging, calendar, statistics, daily reminder, PIN + biometric lock, JSON b
 ## Beyond
 - Opt-in self-hosted sync (Nextcloud/WebDAV) behind a separate flavor so the F-Droid core stays
   trackerless; photo attachments; shareable monthly summary; Wear OS quick-tile.
+- **Daymark Companion** (optional, self-hosted, zero-knowledge server; Docker/Compose) — design
+  complete, not yet built. Three pillars: E2EE multi-device sync, revocable MFA-protected therapist
+  access, and therapist-authored "game plans". See [COMPANION_README.md](COMPANION_README.md).
+  Likely sequencing: **sync-only first**, with the multi-party therapist tracks gated on maintainer
+  sign-off (see the open questions in [COMPANION_SCOPE.md](COMPANION_SCOPE.md)).

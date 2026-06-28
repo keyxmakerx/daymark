@@ -1,5 +1,12 @@
 # Daymark Companion (self-hosted) — Plan, Scope & Security
 
+> **Superseded / expanded:** this was the original single-user plan. The companion has since been
+> scoped to a **multi-party** design (owner + therapist + zero-knowledge server) covering sync,
+> revocable MFA-protected therapist access, and therapist-authored game plans. See the expanded
+> doc set starting at **[COMPANION_README.md](COMPANION_README.md)**
+> (SCOPE · ARCHITECTURE · SECURITY · THERAPIST · DEPLOYMENT). This file is kept as the original
+> reference; where they differ, the new doc set is authoritative.
+
 > Status: **design / not yet built.** This document scopes the optional, self-hosted companion
 > the user runs on their **own** machine (NAS, home server, mini-PC). It is a *companion*, not a
 > backend: the phone app works fully without it and ships **no network access by default**.
