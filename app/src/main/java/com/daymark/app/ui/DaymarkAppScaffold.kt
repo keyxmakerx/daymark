@@ -79,6 +79,8 @@ import com.daymark.app.ui.trackers.TrackerDetailScreen
 import com.daymark.app.ui.trackers.TrackersScreen
 import com.daymark.app.ui.achievements.AchievementsScreen
 import com.daymark.app.ui.activation.BehavioralActivationScreen
+import com.daymark.app.ui.cbt.ThoughtRecordEditorScreen
+import com.daymark.app.ui.cbt.ThoughtRecordListScreen
 import com.daymark.app.ui.assessments.AssessmentScreen
 import com.daymark.app.ui.assessments.AssessmentsHubScreen
 import com.daymark.app.ui.settings.CustomizeMoodsScreen
@@ -311,6 +313,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                     onCheckins = { navController.navigate(Routes.ASSESSMENTS) },
                     onAchievements = { navController.navigate(Routes.ACHIEVEMENTS) },
                     onActivation = { navController.navigate(Routes.ACTIVATION) },
+                    onThoughtRecords = { navController.navigate(Routes.THOUGHT_RECORDS) },
                     onSettings = { navController.navigate(Routes.SETTINGS) },
                     modifier = Modifier.padding(padding),
                 )
@@ -422,6 +425,21 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                     onBack = { navController.popBackStack() },
                     onShowMessage = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                 )
+            }
+            composable(Routes.THOUGHT_RECORDS, enterTransition = zEnter, popExitTransition = zPopExit) {
+                ThoughtRecordListScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpen = { id -> navController.navigate(Routes.thoughtRecord(id)) },
+                    onNew = { navController.navigate(Routes.thoughtRecord()) },
+                )
+            }
+            composable(
+                Routes.THOUGHT_RECORD_PATTERN,
+                arguments = listOf(navArgument("recordId") { type = NavType.StringType }),
+                enterTransition = sheetEnter,
+                popExitTransition = sheetPopExit,
+            ) {
+                ThoughtRecordEditorScreen(onDone = { navController.popBackStack() })
             }
             composable(Routes.GOALS) {
                 GoalsScreen(

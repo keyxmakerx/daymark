@@ -14,6 +14,7 @@ import com.daymark.app.data.entity.Goal
 import com.daymark.app.data.entity.JournalEntry
 import com.daymark.app.data.entity.AssessmentResult
 import com.daymark.app.data.entity.MoodEntry
+import com.daymark.app.data.entity.ThoughtRecord
 import com.daymark.app.data.entity.Reminder
 import com.daymark.app.data.entity.SleepLog
 import com.daymark.app.data.entity.Tracker
@@ -93,8 +94,15 @@ data class BackupReminder(val id: Long, val hour: Int, val minute: Int, val enab
 data class BackupAssessment(val id: Long, val key: String, val dateTime: Long, val score: Int, val bandLabel: String)
 
 @Serializable
+data class BackupThoughtRecord(
+    val id: Long, val dateTime: Long, val situation: String, val automaticThought: String,
+    val evidenceFor: String, val evidenceAgainst: String, val balancedThought: String,
+    val moodBefore: Int, val moodAfter: Int, val distortions: String,
+)
+
+@Serializable
 data class BackupData(
-    val version: Int = 11,
+    val version: Int = 12,
     val exportedAt: Long,
     val entries: List<BackupEntry>,
     val activities: List<BackupActivity>,
@@ -120,6 +128,8 @@ data class BackupData(
     val assessments: List<BackupAssessment> = emptyList(),
     // Added in v10: achievement unlock times (id -> epoch millis), kept in prefs.
     val achievements: Map<String, Long> = emptyMap(),
+    // Added in v12.
+    val thoughtRecords: List<BackupThoughtRecord> = emptyList(),
 )
 
 /**
@@ -142,6 +152,7 @@ class BackupManager @Inject constructor(
     private val moodCustomization: com.daymark.app.data.MoodCustomizationStore,
     private val assessmentDao: com.daymark.app.data.dao.AssessmentDao,
     private val achievementsStore: com.daymark.app.data.AchievementsStore,
+    private val thoughtRecordDao: com.daymark.app.data.dao.ThoughtRecordDao,
 ) {
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
 
@@ -177,6 +188,10 @@ class BackupManager @Inject constructor(
             moodColors = moodCustomization.colors(),
             assessments = assessmentDao.getAll().map { BackupAssessment(it.id, it.key, it.dateTime, it.score, it.bandLabel) },
             achievements = achievementsStore.all(),
+            thoughtRecords = thoughtRecordDao.getAll().map {
+                BackupThoughtRecord(it.id, it.dateTime, it.situation, it.automaticThought, it.evidenceFor,
+                    it.evidenceAgainst, it.balancedThought, it.moodBefore, it.moodAfter, it.distortions)
+            },
         )
         return json.encodeToString(data)
     }
@@ -272,6 +287,11 @@ class BackupManager @Inject constructor(
         data.assessments.forEach {
             assessmentDao.insert(AssessmentResult(it.id, it.key, it.dateTime, it.score, it.bandLabel))
         }
+        thoughtRecordDao.deleteAll()
+        data.thoughtRecords.forEach {
+            thoughtRecordDao.insert(ThoughtRecord(it.id, it.dateTime, it.situation, it.automaticThought,
+                it.evidenceFor, it.evidenceAgainst, it.balancedThought, it.moodBefore, it.moodAfter, it.distortions))
+        }
     }
 
     /** Adds backup rows alongside existing data, assigning new ids and remapping links. */
@@ -336,6 +356,10 @@ class BackupManager @Inject constructor(
         data.assessments.forEach { a ->
             assessmentDao.insert(AssessmentResult(0, a.key, a.dateTime, a.score, a.bandLabel))
         }
+        data.thoughtRecords.forEach { t ->
+            thoughtRecordDao.insert(ThoughtRecord(0, t.dateTime, t.situation, t.automaticThought,
+                t.evidenceFor, t.evidenceAgainst, t.balancedThought, t.moodBefore, t.moodAfter, t.distortions))
+        }
     }
 
     private fun encodeBase64(bytes: ByteArray): String =
@@ -345,6 +369,6 @@ class BackupManager @Inject constructor(
         android.util.Base64.decode(text, android.util.Base64.NO_WRAP)
 
     companion object {
-        const val CURRENT_VERSION = 11
+        const val CURRENT_VERSION = 12
     }
 }

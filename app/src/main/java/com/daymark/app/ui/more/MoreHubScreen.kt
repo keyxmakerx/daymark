@@ -38,6 +38,7 @@ fun MoreHubScreen(
     onCheckins: () -> Unit,
     onAchievements: () -> Unit,
     onActivation: () -> Unit,
+    onThoughtRecords: () -> Unit,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -94,7 +95,13 @@ fun MoreHubScreen(
                 onClick = onActivation,
                 modifier = Modifier.weight(1f),
             )
-            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+            HubCard(
+                icon = R.drawable.ic_ui_more,
+                title = "Thought records",
+                subtitle = "CBT: examine a thought",
+                onClick = onThoughtRecords,
+                modifier = Modifier.weight(1f),
+            )
         }
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),

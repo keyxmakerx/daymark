@@ -29,8 +29,9 @@ import com.daymark.app.data.entity.Treatment
         MoodEntry::class, ActivityEntity::class, EntryActivityCrossRef::class,
         JournalEntry::class, Goal::class, SleepLog::class, Treatment::class,
         Tracker::class, TrackerLog::class, Reminder::class, AssessmentResult::class,
+        com.daymark.app.data.entity.ThoughtRecord::class,
     ],
-    version = 11,
+    version = 12,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -44,6 +45,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun trackerLogDao(): TrackerLogDao
     abstract fun reminderDao(): com.daymark.app.data.dao.ReminderDao
     abstract fun assessmentDao(): com.daymark.app.data.dao.AssessmentDao
+    abstract fun thoughtRecordDao(): com.daymark.app.data.dao.ThoughtRecordDao
 
     /** Seeds a sensible set of starter activities on first install. */
     class SeedCallback : Callback() {
@@ -204,6 +206,28 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE goals ADD COLUMN cue TEXT NOT NULL DEFAULT ''")
                 db.execSQL("ALTER TABLE goals ADD COLUMN routine TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        /** v12 adds the thought_records table (CBT thought records); existing data is preserved. */
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `thought_records` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`dateTime` INTEGER NOT NULL, " +
+                        "`situation` TEXT NOT NULL, " +
+                        "`automaticThought` TEXT NOT NULL, " +
+                        "`evidenceFor` TEXT NOT NULL, " +
+                        "`evidenceAgainst` TEXT NOT NULL, " +
+                        "`balancedThought` TEXT NOT NULL, " +
+                        "`moodBefore` INTEGER NOT NULL, " +
+                        "`moodAfter` INTEGER NOT NULL, " +
+                        "`distortions` TEXT NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_thought_records_dateTime` ON `thought_records` (`dateTime`)",
+                )
             }
         }
 
