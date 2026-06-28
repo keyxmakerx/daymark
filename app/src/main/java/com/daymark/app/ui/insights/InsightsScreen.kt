@@ -72,15 +72,18 @@ private enum class Scope { Week, Month, Year }
 fun InsightsScreen(
     modifier: Modifier = Modifier,
     onDayClick: (LocalDate) -> Unit = {},
+    onSignalAction: (com.daymark.app.stats.Signals.Action) -> Unit = {},
     statsViewModel: StatsViewModel = hiltViewModel(),
     calendarViewModel: CalendarViewModel = hiltViewModel(),
     yearViewModel: YearPixelsViewModel = hiltViewModel(),
     extrasViewModel: InsightsExtrasViewModel = hiltViewModel(),
+    signalsViewModel: SignalsViewModel = hiltViewModel(),
 ) {
     val stats by statsViewModel.uiState.collectAsStateWithLifecycle()
     val calendar by calendarViewModel.uiState.collectAsStateWithLifecycle()
     val year by yearViewModel.uiState.collectAsStateWithLifecycle()
     val extras by extrasViewModel.uiState.collectAsStateWithLifecycle()
+    val signals by signalsViewModel.signals.collectAsStateWithLifecycle()
     var scope by remember { mutableStateOf(Scope.Month) }
 
     if (stats.totalEntries == 0) {
@@ -97,6 +100,9 @@ fun InsightsScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        // "For you" — the ranked Signals (rules-based, no AI), most relevant first.
+        SignalCards(signals = signals, onAction = onSignalAction)
+
         // Time-scale toggle
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
             Scope.entries.forEachIndexed { index, s ->

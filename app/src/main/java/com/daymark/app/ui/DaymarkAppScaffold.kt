@@ -61,6 +61,7 @@ import com.daymark.app.ui.insights.InsightsScreen
 import com.daymark.app.ui.journal.JournalEditorScreen
 import com.daymark.app.ui.journal.JournalScreen
 import com.daymark.app.ui.more.MoreHubScreen
+import com.daymark.app.stats.Signals
 import com.daymark.app.ui.navigation.Routes
 import com.daymark.app.ui.navigation.TopLevelDestination
 import com.daymark.app.ui.search.SearchScreen
@@ -252,6 +253,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                 InsightsScreen(
                     modifier = Modifier.padding(padding),
                     onDayClick = { date -> navController.navigate(Routes.day(date.toEpochDay())) },
+                    onSignalAction = { action -> navController.navigate(signalActionRoute(action)) },
                 )
             }
             composable(
@@ -503,4 +505,17 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
             }
         }
     }
+}
+
+/** Maps a [Signals.Action] (from a "For you" card) to a navigation route. */
+private fun signalActionRoute(action: Signals.Action): String = when (action) {
+    is Signals.Action.CreateGoalFromFactor -> Routes.goal()
+    is Signals.Action.TakeCheckin -> Routes.ASSESSMENTS
+    Signals.Action.OpenSupport -> Routes.SUPPORT
+    Signals.Action.OpenBreathing -> Routes.BREATHING
+    Signals.Action.OpenThoughtRecord -> Routes.thoughtRecord()
+    Signals.Action.OpenJournal -> Routes.journalEntry()
+    Signals.Action.OpenMovement -> Routes.MOVEMENT
+    Signals.Action.OpenCrisisResources -> Routes.CRISIS
+    Signals.Action.LogToday -> Routes.entry()
 }
