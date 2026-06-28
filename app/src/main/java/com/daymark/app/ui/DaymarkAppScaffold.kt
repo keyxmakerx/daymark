@@ -346,6 +346,8 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                     onClose = { navController.popBackStack() },
                     onTalk = { navController.navigate(Routes.journalEntry()) },
                     onBreathe = { navController.navigate(Routes.SUPPORT_BREATHE) },
+                    onReframe = { navController.navigate(Routes.thoughtRecord()) },
+                    onMove = { navController.navigate(Routes.MOVEMENT) },
                     onCrisis = { navController.navigate(Routes.CRISIS) },
                 )
             }

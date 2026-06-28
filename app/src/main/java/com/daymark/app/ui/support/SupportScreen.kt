@@ -46,6 +46,8 @@ fun SupportScreen(
     onClose: () -> Unit,
     onTalk: () -> Unit,
     onBreathe: () -> Unit,
+    onReframe: () -> Unit,
+    onMove: () -> Unit,
     onCrisis: () -> Unit,
     viewModel: SupportViewModel = hiltViewModel(),
 ) {
@@ -78,9 +80,11 @@ fun SupportScreen(
 
             FloatingOption(0, "I'd like to talk about it", "Write out what's on your mind.", onTalk)
             FloatingOption(1, "Breathe with me", "A minute of slow, paced breathing.", onBreathe)
-            SmallThingOption(2, activity, onClose)
-            FloatingOption(3, "I could use more support", "Crisis resources and someone to reach.", onCrisis)
-            FloatingOption(4, "Not right now", "That's okay too.", onClose)
+            FloatingOption(2, "Untangle a thought", "Look at a tough thought, gently.", onReframe)
+            SmallThingOption(3, activity, onClose)
+            FloatingOption(4, "Move a little", "A short, gentle stretch.", onMove)
+            FloatingOption(5, "I could use more support", "Crisis resources and someone to reach.", onCrisis)
+            FloatingOption(6, "Not right now", "That's okay too.", onClose)
         }
     }
 }
