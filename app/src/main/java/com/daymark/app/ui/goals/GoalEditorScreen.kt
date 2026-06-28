@@ -1,5 +1,7 @@
 package com.daymark.app.ui.goals
 
+import com.daymark.app.ui.components.SentenceCaps
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -75,6 +77,7 @@ fun GoalEditorScreen(
             OutlinedTextField(
                 value = state.title,
                 onValueChange = viewModel::setTitle,
+                keyboardOptions = SentenceCaps,
                 label = { Text("Goal") },
                 placeholder = { Text("e.g. Exercise") },
                 singleLine = true,
@@ -120,6 +123,7 @@ fun GoalEditorScreen(
             OutlinedTextField(
                 value = state.cue,
                 onValueChange = viewModel::setCue,
+                keyboardOptions = SentenceCaps,
                 label = { Text("When… (cue)") },
                 placeholder = { Text("e.g. after breakfast") },
                 singleLine = true,
@@ -128,6 +132,7 @@ fun GoalEditorScreen(
             OutlinedTextField(
                 value = state.routine,
                 onValueChange = viewModel::setRoutine,
+                keyboardOptions = SentenceCaps,
                 label = { Text("…I will (action)") },
                 placeholder = { Text("e.g. take a 10-min walk") },
                 singleLine = true,

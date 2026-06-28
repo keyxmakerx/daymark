@@ -1,5 +1,6 @@
 package com.daymark.app.ui.trackers
 
+import com.daymark.app.ui.components.SentenceCaps
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -132,7 +133,7 @@ private fun TrackerEditorDialog(
         title = { Text("New tracker") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, keyboardOptions = SentenceCaps, modifier = Modifier.fillMaxWidth())
                 Text("Type", style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(selected = type == Tracker.SCALE, onClick = { type = Tracker.SCALE }, label = { Text("Scale") })

@@ -1,5 +1,7 @@
 package com.daymark.app.ui.journal
 
+import com.daymark.app.ui.components.SentenceCaps
+
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -110,6 +112,7 @@ fun JournalEditorScreen(
             OutlinedTextField(
                 value = state.title,
                 onValueChange = viewModel::setTitle,
+                keyboardOptions = SentenceCaps,
                 placeholder = { Text("Title", style = MaterialTheme.typography.headlineSmall) },
                 textStyle = MaterialTheme.typography.headlineSmall,
                 singleLine = true,
@@ -119,6 +122,7 @@ fun JournalEditorScreen(
             OutlinedTextField(
                 value = state.body,
                 onValueChange = viewModel::setBody,
+                keyboardOptions = SentenceCaps,
                 placeholder = { Text("Write freely…") },
                 textStyle = MaterialTheme.typography.bodyLarge,
                 colors = borderless(),

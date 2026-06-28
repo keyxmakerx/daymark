@@ -1,5 +1,7 @@
 package com.daymark.app.ui.settings
 
+import com.daymark.app.ui.components.SentenceCaps
+
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -190,6 +192,7 @@ private fun ReminderDialog(
                 OutlinedTextField(
                     value = label,
                     onValueChange = { label = it },
+                    keyboardOptions = SentenceCaps,
                     label = { Text("Label (optional)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),

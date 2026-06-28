@@ -1,5 +1,7 @@
 package com.daymark.app.ui.sleep
 
+import com.daymark.app.ui.components.SentenceCaps
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -110,6 +112,7 @@ fun SleepLogScreen(
             OutlinedTextField(
                 value = note,
                 onValueChange = { note = it },
+                keyboardOptions = SentenceCaps,
                 label = { Text("Notes (optional)") },
                 modifier = Modifier.fillMaxWidth(),
             )

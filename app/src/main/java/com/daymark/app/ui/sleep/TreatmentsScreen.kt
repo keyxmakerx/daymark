@@ -1,5 +1,7 @@
 package com.daymark.app.ui.sleep
 
+import com.daymark.app.ui.components.SentenceCaps
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -181,6 +183,7 @@ private fun TreatmentEditorDialog(
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },
+                    keyboardOptions = SentenceCaps,
                     label = { Text("Note (optional)") },
                     modifier = Modifier.fillMaxWidth(),
                 )

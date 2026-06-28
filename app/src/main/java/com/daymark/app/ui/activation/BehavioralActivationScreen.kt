@@ -1,5 +1,7 @@
 package com.daymark.app.ui.activation
 
+import com.daymark.app.ui.components.SentenceCaps
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -91,6 +93,7 @@ fun BehavioralActivationScreen(
                     OutlinedTextField(
                         value = activity,
                         onValueChange = { activity = it },
+                        keyboardOptions = SentenceCaps,
                         label = { Text("…or your own") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),

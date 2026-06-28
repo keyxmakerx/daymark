@@ -1,5 +1,7 @@
 package com.daymark.app.ui.activities
 
+import com.daymark.app.ui.components.SentenceCaps
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -150,6 +152,7 @@ private fun ActivityEditorDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
+                    keyboardOptions = SentenceCaps,
                     label = { Text("Name") },
                     modifier = Modifier.fillMaxWidth(),
                 )

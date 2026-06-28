@@ -1,5 +1,6 @@
 package com.daymark.app.ui.support
 
+import com.daymark.app.ui.components.SentenceCaps
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -88,7 +89,7 @@ fun CrisisResourcesScreen(
             title = { Text("Crisis resource") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(value = label, onValueChange = { label = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = label, onValueChange = { label = it }, label = { Text("Name") }, keyboardOptions = SentenceCaps, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(value = contact, onValueChange = { contact = it }, label = { Text("How to reach them") }, modifier = Modifier.fillMaxWidth())
                 }
             },

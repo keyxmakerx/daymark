@@ -1,5 +1,7 @@
 package com.daymark.app.ui.entry
 
+import com.daymark.app.ui.components.SentenceCaps
+
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -167,6 +169,7 @@ fun EntryEditorScreen(
             OutlinedTextField(
                 value = state.note,
                 onValueChange = viewModel::setNote,
+                keyboardOptions = SentenceCaps,
                 placeholder = { Text("What happened, what's on your mind…") },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 4,

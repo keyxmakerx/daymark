@@ -1,5 +1,7 @@
 package com.daymark.app.ui.cbt
 
+import com.daymark.app.ui.components.SentenceCaps
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -105,6 +107,7 @@ private fun Field(label: String, placeholder: String, value: String, onChange: (
         OutlinedTextField(
             value = value,
             onValueChange = onChange,
+            keyboardOptions = SentenceCaps,
             placeholder = { Text(placeholder) },
             modifier = Modifier.fillMaxWidth(),
             minLines = 2,

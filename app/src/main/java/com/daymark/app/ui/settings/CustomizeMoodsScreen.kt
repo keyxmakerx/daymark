@@ -1,5 +1,7 @@
 package com.daymark.app.ui.settings
 
+import com.daymark.app.ui.components.SentenceCaps
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -127,6 +129,7 @@ private fun MoodLevelRow(
             OutlinedTextField(
                 value = ui.label,
                 onValueChange = onLabel,
+                keyboardOptions = SentenceCaps,
                 singleLine = true,
                 modifier = Modifier.weight(1f),
                 label = { Text("Level ${ui.level}") },
