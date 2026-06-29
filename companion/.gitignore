@@ -1,0 +1,18 @@
+# Node / web
+web/node_modules/
+web/dist/
+*.log
+
+# Gradle / server
+server/.gradle/
+server/build/
+
+# Local secrets / env
+.env
+.env.*
+!.env.example
+
+# Vendored fonts are binaries added deliberately; do not ignore them.
+# (web/fonts/*.woff2 are committed when present.)
+
+.DS_Store

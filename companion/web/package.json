@@ -1,0 +1,24 @@
+{
+  "name": "daymark-companion-web",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Daymark Companion web UI — Phase-0 offline report viewer (vendored, zero-third-party, strict-CSP).",
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "svelte-check --tsconfig ./tsconfig.json && vite build",
+    "build:nocheck": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "@tsconfig/svelte": "^5.0.4",
+    "svelte": "^5.19.0",
+    "svelte-check": "^4.1.4",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7"
+  }
+}
