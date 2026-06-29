@@ -23,22 +23,28 @@ account, and no telemetry — the owner owns the container, the data, and the ke
 server stores only **opaque ciphertext plus non-secret routing metadata**; it can
 *withhold* data but can never *read* it.
 
-### The three pillars
+### The four pillars
 
 1. **Encrypted multi-device sync.** End-to-end-encrypted, append-only backup of the
    owner's versioned `BackupData` snapshots, synced across **the owner's own** devices.
    v1 is **single-writer, last-snapshot-wins** replication; true row-level merge is
    deferred behind a schema migration.
-2. **Revocable therapist access.** The owner grants **their** therapist a
+2. **Expanded "sit-down" user features.** A data-driven **questionnaire engine** and an
+   original, **non-diagnostic** cognitive/attention **testing harness** that belong on a
+   big screen — license-clean instruments only, results folded into the same E2EE
+   snapshot and **private by default**.
+3. **Revocable therapist access.** The owner grants **their** therapist a
    **read-only, MFA-protected, time-boxed, revocable** view of a **curated subset** of
    their data, encrypted to the therapist and owner-signed.
-3. **Therapist-authored game plans.** **Non-diagnostic** "game plans" the therapist
+4. **Therapist-authored game plans.** **Non-diagnostic** "game plans" the therapist
    signs and sends back into the owner's app, landing in a new, segregated
    `game_plans` table (DB v13) the owner must explicitly accept — never the existing
    `treatments` table.
 
-All three keep the core promise intact: the server is a blind relay, the owner is the
-sole root of trust, and the default phone build never gains a network.
+All four are wrapped in a **modern, sleek, fully-vendored** web UI ("Modern Paper, Big
+Screen") that delivers polish **without** a single CDN, web-font fetch, or analytics
+call — and all four keep the core promise intact: the server is a blind relay, the owner
+is the sole root of trust, and the default phone build never gains a network.
 
 ---
 
@@ -51,6 +57,9 @@ sole root of trust, and the default phone build never gains a network.
 | [COMPANION_SECURITY.md](COMPANION_SECURITY.md) | Multi-party threat model, crypto & key hierarchy, MFA / key custody / session model, server & reverse-proxy hardening, client-anchored anti-rollback, audit posture, retractions, honest limits. |
 | [COMPANION_THERAPIST.md](COMPANION_THERAPIST.md) | Therapist role, non-diagnostic prime directive, share lifecycle (invite → enroll → pair → share → read → revoke), game-plan write-back, auth/sessions, honestly-scoped revocation, v1 scope lock. |
 | [COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md) | Docker Compose topologies, canonical `docker-compose.yml`, reverse-proxy worked examples (Caddy / Traefik / nginx), config & secrets, backup/restore, upgrades/migrations, egress lockdown, hardening defaults. |
+| [COMPANION_FEATURES.md](COMPANION_FEATURES.md) | Expanded "sit-down" user features: the data-driven questionnaire engine, the original non-diagnostic cognitive/attention testing harness, the license-clean instrument catalog, the versioned results data model (folded into the E2EE snapshot), and the honest-by-construction CI gates. |
+| [COMPANION_DESIGN_SYSTEM.md](COMPANION_DESIGN_SYSTEM.md) | The "Modern Paper, Big Screen" web design system: the sleek-vs-vendored/CSP reconciliation, the self-hosted frontend stack, design tokens, theming, the hand-rolled SVG chart layer, WCAG 2.2 AA, and a satisfying CSP example. |
+| [COMPANION_UX.md](COMPANION_UX.md) | Cross-surface UX & information architecture (owner viewer / assessment runner / therapist portal): key flows, privacy-by-design consent patterns, the honest Trust strip, and empty/error/revocation states. |
 
 **Named deliverable referenced throughout but not yet written:** `PAIRING.md` — the
 out-of-band, bidirectional pairing / key-exchange protocol.
@@ -59,7 +68,8 @@ out-of-band, bidirectional pairing / key-exchange protocol.
 
 Start with **SCOPE** (what and why) → **ARCHITECTURE** (how it fits together) →
 **SECURITY** (threat model and crypto contract) → **THERAPIST** (the two-party flows)
-→ **DEPLOYMENT** (how to run it).
+→ **FEATURES** (the sit-down questionnaire/testing suite) → **DESIGN_SYSTEM** (the look
+& feel) → **UX** (how the surfaces tie together) → **DEPLOYMENT** (how to run it).
 
 ---
 

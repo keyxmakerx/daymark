@@ -181,6 +181,32 @@ The following are *intended* for the Companion design (subject to the
    data-flow claims verifiable, and that **retract** any prior "there is no server,
    so there is no server-side surface" wording for the opt-in Sync flavor.
 
+10. **Expanded "sit-down" user features** — a fully **data-driven questionnaire engine**
+    (new license-clean instruments added by dropping a JSON definition + an
+    `INSTRUMENTS.md` ledger row, no per-instrument code) and an **original, self-authored
+    cognitive/attention testing harness** (a CPT-style sustained-attention anchor plus
+    n-back/Stroop-style tasks). **Descriptive, non-diagnostic only** — no clinical
+    cutoffs or screening flags, count-based metrics trusted over fragile browser-timing
+    ones, results folded into the same E2EE snapshot and **private by default** (a
+    therapist sees them only via an explicit share, scores/bands only). See
+    [COMPANION_FEATURES.md](COMPANION_FEATURES.md).
+
+11. **A modern, sleek, fully-vendored web design system** ("Modern Paper, Big Screen") —
+    a Svelte + TypeScript + Vite frontend that compiles to a small, zero-third-party
+    static bundle under `default-src 'self'` (no CDN, no Google Fonts, no analytics), a
+    CSS-custom-property **design-token** system mapping the app's palette 1:1 with
+    self-hosted variable fonts, light/dark/high-contrast/reduced-motion theming, a
+    dependency-light hand-rolled SVG chart layer, and **WCAG 2.2 AA** as a first-class,
+    CI-gated deliverable. This is where "sleek" lives **without** breaking the strict-CSP
+    / zero-knowledge posture. See [COMPANION_DESIGN_SYSTEM.md](COMPANION_DESIGN_SYSTEM.md).
+
+12. **Cross-surface UX & information architecture** across the three surfaces — owner
+    report viewer/dashboard, assessment/test runner, and read-only therapist portal —
+    with **privacy-by-design** consent flows (explicit, granular, time-boxed, revocable,
+    no dark patterns), a persistent honest **Trust strip** surfacing what the server
+    can/can't see, and client-rendered non-diagnostic disclaimers a hostile server
+    cannot strip. See [COMPANION_UX.md](COMPANION_UX.md).
+
 ---
 
 ## Explicitly Out of Scope
