@@ -72,7 +72,9 @@ yet active.
   in-browser crypto) is sent as a real header on every response.
 - **No telemetry, no outbound calls.** Nothing phones home.
 - **Hardened container.** Non-root, read-only FS, `cap_drop: ALL`,
-  `no-new-privileges`, healthcheck.
+  `no-new-privileges`, healthcheck. (The runtime currently uses `temurin-jre` + `curl`
+  for the healthcheck; a distroless runtime, a tiny static healthcheck binary, and
+  pinned image digests are a documented follow-up — see the `Dockerfile` header.)
 - **On-device by design.** The Phase-0 viewer reads your backup in the browser; the file
   never leaves the device.
 

@@ -19,7 +19,7 @@ import io.ktor.server.response.header
  */
 private const val CSP =
     "default-src 'self'; " +
-        "base-uri 'self'; " +
+        "base-uri 'none'; " + // the viewer never injects a <base> tag; 'none' per COMPANION_SECURITY.md
         "form-action 'self'; " +
         "frame-ancestors 'none'; " +
         "object-src 'none'; " +

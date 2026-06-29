@@ -13,8 +13,9 @@
   <span class="dot {online ? 'warn' : 'ok'}" aria-hidden="true"></span>
   <p>
     <strong>On-device only.</strong> This viewer reads your backup in the browser and
-    makes no network requests. Your data never leaves this device. For a trustworthy
-    offline copy, verify the build hash rather than relying on the page to police itself.
+    makes no network requests. Your data never leaves this device. For assurance that the
+    page itself is genuine, verify the released image digest rather than trusting the page
+    to police itself.
   </p>
 </aside>
 

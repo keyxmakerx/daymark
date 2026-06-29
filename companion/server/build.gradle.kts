@@ -16,10 +16,10 @@ dependencies {
     implementation("io.ktor:ktor-server-netty:$ktorVersion")
     implementation("io.ktor:ktor-server-content-negotiation:$ktorVersion")
     implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
-    implementation("io.ktor:ktor-server-default-headers:$ktorVersion")
-    implementation("io.ktor:ktor-server-call-logging:$ktorVersion")
-    implementation("io.ktor:ktor-server-forwarded-header:$ktorVersion")
     implementation("ch.qos.logback:logback-classic:$logbackVersion")
+    // ktor-server-forwarded-header is intentionally NOT pulled in yet: the trust-none
+    // default means we do not honour X-Forwarded-* until the sync milestone wires a
+    // pinned-proxy allowlist (see docs/COMPANION_DEPLOYMENT.md).
 
     testImplementation("io.ktor:ktor-server-test-host:$ktorVersion")
     testImplementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")

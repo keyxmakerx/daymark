@@ -51,6 +51,9 @@
   --ink-text: #2a2722;
   --ink-soft: #6b655b;
   --ink-faint: #a49c8e;
+  /* Accessible small-print colour. --ink-faint fails WCAG AA as body text, so footnote
+     text uses this darker tone (>=4.5:1 on paper) while --ink-faint stays decorative. */
+  --text-subtle: #5f5a4e;
   --hairline: #e7dfd1;
   --ink-accent: #33302a;
   --on-accent: #fcfaf5;
@@ -84,6 +87,7 @@
     --ink-soft: #b7af9e;
     --ink-faint: #7c7568;
     --hairline: #34312a;
+    --text-subtle: #9b927f; /* AA-compliant small print on dark paper */
     --ink-accent: #ebe5d8;
     --on-accent: #1b1a17;
     --focus-ring: #8fa268;
@@ -154,7 +158,7 @@ button.primary { background: var(--ink-accent); color: var(--on-accent); border-
 }
 
 .muted { color: var(--ink-soft); }
-.faint { color: var(--ink-faint); }
+.faint { color: var(--text-subtle); }
 .mono { font-family: var(--font-mono); }
 
 .visually-hidden {

@@ -13,7 +13,9 @@
 # ---- 1. Build the web bundle -------------------------------------------------
 FROM node:22-alpine AS web
 WORKDIR /web
-RUN corepack enable
+# Activate the exact pnpm version (don't rely on corepack's lazy auto-download, which
+# can fail on alpine and would mean an unpinned fetch at build time).
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 # Install deps first (cached) using only the manifest + lockfile.
 COPY web/package.json web/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile

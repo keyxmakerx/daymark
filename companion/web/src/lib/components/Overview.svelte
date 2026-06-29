@@ -21,6 +21,10 @@
   function barW(count: number): number {
     return Math.max(2, (count / maxCount) * trackW)
   }
+
+  const distLabel = $derived(
+    'Mood distribution — ' + MOODS.map((m) => `${m.label}: ${s.distribution[m.level - 1]}`).join(', '),
+  )
 </script>
 
 <section class="grid" aria-label="Overview">
@@ -50,7 +54,7 @@
 
 <div class="card">
   <h2>How your moods break down</h2>
-  <svg class="dist" viewBox={`0 0 ${VW} ${MOODS.length * ROW_H}`} role="img" aria-label="Mood distribution">
+  <svg class="dist" viewBox={`0 0 ${VW} ${MOODS.length * ROW_H}`} role="img" aria-label={distLabel}>
     {#each MOODS as m, i (m.level)}
       {@const count = s.distribution[m.level - 1]}
       {@const cy = i * ROW_H + ROW_H / 2}

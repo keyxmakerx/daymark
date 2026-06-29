@@ -17,7 +17,9 @@
   <body>
     <div id="app"></div>
     <noscript>
-      <p style="font-family: system-ui, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1rem;">
+      <!-- No inline style here: the strict CSP (style-src 'self') blocks inline styles,
+           so this fallback is intentionally unstyled, which is fine and accessible. -->
+      <p>
         The Daymark Companion report viewer needs JavaScript to render your backup in
         the browser. No data is ever sent anywhere — all processing happens locally on
         this device.

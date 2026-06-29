@@ -20,6 +20,7 @@ private val log = LoggerFactory.getLogger("com.daymark.companion")
 
 fun main() {
     val config = Config.fromEnv()
+    applyLogLevel(config.logLevel)
     log.info(
         "Daymark Companion starting on {}:{} basePath={} webDir={} dataDir={}",
         config.bindAddr, config.port, config.basePath, config.webDir, config.dataDir,
@@ -27,6 +28,13 @@ fun main() {
     embeddedServer(Netty, port = config.port, host = config.bindAddr) {
         module(config)
     }.start(wait = true)
+}
+
+/** Apply DAYMARK_LOG_LEVEL to the app's logger at startup (logback). Unknown values
+ *  fall back to logback's configured default. */
+private fun applyLogLevel(level: String) {
+    val logback = LoggerFactory.getLogger("com.daymark.companion") as? ch.qos.logback.classic.Logger
+    logback?.level = ch.qos.logback.classic.Level.toLevel(level, ch.qos.logback.classic.Level.INFO)
 }
 
 fun Application.module(config: Config) {
