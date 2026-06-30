@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <!--
+      No <meta http-equiv="Content-Security-Policy"> here: the CSP is sent by the
+      server as a response header (see companion/server Application.kt) so it also
+      covers error pages and cannot be stripped by editing the document. When this
+      file is opened directly from disk (file://) for Phase-0 offline use, the page
+      still makes zero network requests — everything is vendored and bundled.
+    -->
+    <title>Daymark Companion — Report viewer</title>
+    <meta name="description" content="Offline, on-device viewer for a Daymark backup. Your file never leaves this device." />
+  </head>
+  <body>
+    <div id="app"></div>
+    <noscript>
+      <!-- No inline style here: the strict CSP (style-src 'self') blocks inline styles,
+           so this fallback is intentionally unstyled, which is fine and accessible. -->
+      <p>
+        The Daymark Companion report viewer needs JavaScript to render your backup in
+        the browser. No data is ever sent anywhere — all processing happens locally on
+        this device.
+      </p>
+    </noscript>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

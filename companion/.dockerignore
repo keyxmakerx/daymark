@@ -1,0 +1,15 @@
+# Keep the build context small and reproducible.
+**/node_modules
+**/dist
+**/build
+**/.gradle
+**/.svelte-kit
+server/.gradle
+server/build
+web/node_modules
+web/dist
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store

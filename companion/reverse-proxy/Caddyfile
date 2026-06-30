@@ -1,0 +1,33 @@
+# Daymark Companion behind Caddy.
+#
+# Caddy auto-provisions TLS (Let's Encrypt) for a real hostname and terminates it here,
+# forwarding plain HTTP to the container on the internal network. Caddy sets X-Forwarded-*
+# itself and does not pass through client-supplied forwarded headers, which is exactly the
+# trust-the-proxy-only posture the Companion expects.
+#
+# Run Caddy and the companion on a shared Docker network; the companion has NO published
+# ports (remove `ports:` from docker-compose.yml). The proxy reaches it as companion:8080.
+
+daymark.example.com {
+    encode zstd gzip
+
+    # HSTS is set here (at the TLS terminator), not in the app container.
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        -Server
+    }
+
+    reverse_proxy companion:8080 {
+        health_uri /healthz
+        health_interval 30s
+    }
+}
+
+# Sub-path deployment (serve under https://host/daymark):
+# Set DAYMARK_BASE_PATH=/daymark on the container, then:
+#
+# host.example.com {
+#     handle_path /daymark/* {
+#         reverse_proxy companion:8080
+#     }
+# }

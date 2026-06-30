@@ -1,0 +1,58 @@
+# Daymark Companion — Compose (Milestone 1 scaffold).
+#
+# Quick start (local):   docker compose up --build   →  http://localhost:8080
+#
+# Behind a reverse proxy (recommended): remove the `ports:` block below, put this
+# service and your proxy on a shared network, and have the proxy forward to
+# http://companion:8080. Worked Caddy / Traefik / nginx examples live in
+# ./reverse-proxy/. The fully-hardened reference compose is in
+# docs/COMPANION_DEPLOYMENT.md.
+
+name: daymark-companion
+
+services:
+  companion:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: daymark-companion:dev
+    container_name: daymark-companion
+    restart: unless-stopped
+
+    # LOCAL/DEV ONLY: publish to loopback so you can reach it from this machine.
+    # Bound to 127.0.0.1 so it is not exposed on the LAN by accident. Remove this
+    # entirely when a reverse proxy fronts the service.
+    ports:
+      - "127.0.0.1:8080:8080"
+
+    environment:
+      DAYMARK_BIND_ADDR: "0.0.0.0"   # all interfaces *inside* the container only
+      DAYMARK_PORT: "8080"
+      DAYMARK_DATA_DIR: "/data"      # the only writable persistent path
+      DAYMARK_WEB_DIR: "/app/web"    # vendored static bundle baked into the image
+      DAYMARK_BASE_PATH: "/"         # e.g. "/daymark" to serve under a sub-path
+      DAYMARK_LOG_LEVEL: "info"
+
+    # Defence in depth: no writable root FS, no extra capabilities, no privilege
+    # escalation, non-root user (also set in the image).
+    read_only: true
+    tmpfs:
+      - /tmp
+    user: "10001:10001"
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+
+    volumes:
+      - blobs:/data
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  blobs:
