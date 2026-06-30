@@ -16,7 +16,9 @@ dependencies {
     implementation("io.ktor:ktor-server-netty:$ktorVersion")
     implementation("io.ktor:ktor-server-content-negotiation:$ktorVersion")
     implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
+    implementation("io.ktor:ktor-server-status-pages:$ktorVersion")
     implementation("ch.qos.logback:logback-classic:$logbackVersion")
+    implementation("org.xerial:sqlite-jdbc:3.47.1.0")
     // ktor-server-forwarded-header is intentionally NOT pulled in yet: the trust-none
     // default means we do not honour X-Forwarded-* until the sync milestone wires a
     // pinned-proxy allowlist (see docs/COMPANION_DEPLOYMENT.md).

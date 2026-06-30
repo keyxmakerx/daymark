@@ -11,14 +11,25 @@
     "build": "svelte-check --tsconfig ./tsconfig.json && vite build",
     "build:nocheck": "vite build",
     "preview": "vite preview",
-    "check": "svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run",
+    "test:unit": "vitest run src/lib/sync/crypto.test.ts",
+    "test:integration": "vitest run src/lib/sync/integration.test.ts",
+    "push": "tsx src/cli/push.ts"
+  },
+  "dependencies": {
+    "libsodium-wrappers-sumo": "^0.7.15"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tsconfig/svelte": "^5.0.4",
+    "@types/libsodium-wrappers-sumo": "^0.7.8",
+    "@types/node": "^22.10.5",
     "svelte": "^5.19.0",
     "svelte-check": "^4.1.4",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.3",
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "vitest": "^2.1.8"
   }
 }

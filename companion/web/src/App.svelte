@@ -5,13 +5,16 @@
   import Overview from './lib/components/Overview.svelte'
   import JournalReader from './lib/components/JournalReader.svelte'
   import TrustBar from './lib/components/TrustBar.svelte'
+  import SyncPanel from './lib/components/SyncPanel.svelte'
 
   type Tab = 'overview' | 'journal'
+  type Source = 'file' | 'sync'
 
   let data = $state<BackupData | null>(null)
   let fileName = $state('')
   let error = $state('')
   let tab = $state<Tab>('overview')
+  let source = $state<Source>('file')
 
   const online = typeof navigator !== 'undefined' ? navigator.onLine : false
 
@@ -25,6 +28,13 @@
       data = null
       error = e instanceof BackupParseError ? e.message : 'Could not read that backup.'
     }
+  }
+
+  function loadData(parsed: BackupData, name: string) {
+    error = ''
+    data = parsed
+    fileName = name
+    tab = 'overview'
   }
 
   function reset() {
@@ -53,14 +63,25 @@
 
     {#if !data}
       <section class="intro">
-        <Dropzone onload={load} onerror={(m) => (error = m)} />
+        <nav class="tabs source" aria-label="Data source">
+          <button class:active={source === 'file'} aria-pressed={source === 'file'} onclick={() => (source = 'file')}>Open a backup file</button>
+          <button class:active={source === 'sync'} aria-pressed={source === 'sync'} onclick={() => (source = 'sync')}>Connect to sync</button>
+        </nav>
+
+        {#if source === 'file'}
+          <Dropzone onload={load} onerror={(m) => (error = m)} />
+        {:else}
+          <SyncPanel onload={loadData} />
+        {/if}
+
         {#if error}
           <p class="error" role="alert">{error}</p>
         {/if}
         <p class="faint note">
           Non-diagnostic: Daymark is a self-tracking and journaling tool. Nothing here
           is a medical assessment. Export a backup from the app via
-          <em>Settings → Export backup</em>, then drop the <code>.json</code> file above.
+          <em>Settings → Export backup</em>, then drop the <code>.json</code> file above —
+          or pull your latest encrypted snapshot from your own sync server.
         </p>
       </section>
     {:else}
