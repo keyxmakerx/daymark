@@ -126,6 +126,21 @@ class SyncRoutesTest {
     }
 
     @Test
+    fun `a version below the retention window is rejected, not silently pruned`() = testApplication {
+        val dir = tmpDir()
+        val store = BlobStore(dir, 26_214_400L, 2, 5_368_709_120L) // keep last 2
+        application { module(config(dir, maxVersions = 2), store) }
+        suspend fun put(v: Int) = client.put("/v1/snapshots/devA/$v") {
+            header(HttpHeaders.Authorization, "Bearer $token"); setBody(byteArrayOf(v.toByte()))
+        }
+        assertEquals(HttpStatusCode.Created, put(5).status)
+        assertEquals(HttpStatusCode.Created, put(6).status)
+        assertEquals(HttpStatusCode.Created, put(7).status) // prunes v5
+        // v0 would be immediately pruned (two newer versions exist) -> reject, don't 201.
+        assertEquals(HttpStatusCode.Conflict, put(0).status)
+    }
+
+    @Test
     fun `keyparams round-trip`() = testApplication {
         val dir = tmpDir()
         val store = BlobStore(dir, 26_214_400L, 200, 5_368_709_120L)

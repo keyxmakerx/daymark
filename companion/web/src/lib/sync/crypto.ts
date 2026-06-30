@@ -134,23 +134,28 @@ export function signManifest(m: Manifest, manifestSeed: Uint8Array): { signature
   const so = s()
   const kp = so.crypto_sign_seed_keypair(manifestSeed)
   const sig = so.crypto_sign_detached(manifestBytes(m), kp.privateKey)
-  return { signatureB64: so.to_base64(sig), publicKeyB64: so.to_base64(kp.publicKey) }
+  return { signatureB64: toBase64(sig), publicKeyB64: toBase64(kp.publicKey) }
 }
 
 export function verifyManifest(m: Manifest, signatureB64: string, publicKeyB64: string): boolean {
   const so = s()
-  return so.crypto_sign_verify_detached(so.from_base64(signatureB64), manifestBytes(m), so.from_base64(publicKeyB64))
+  return so.crypto_sign_verify_detached(fromBase64(signatureB64), manifestBytes(m), fromBase64(publicKeyB64))
 }
 
 /** The Ed25519 public key the owner's passphrase implies (readers re-derive + compare). */
 export function manifestPublicKeyB64(manifestSeed: Uint8Array): string {
-  const so = s()
-  return so.to_base64(so.crypto_sign_seed_keypair(manifestSeed).publicKey)
+  return toBase64(s().crypto_sign_seed_keypair(manifestSeed).publicKey)
 }
 
+/*
+ * All base64 in the protocol is RFC 4648 §5 URL-safe, NO padding (libsodium
+ * `URLSAFE_NO_PADDING`). The variant is stated EXPLICITLY here and in SYNC_PROTOCOL.md
+ * so the future Kotlin client cannot accidentally use standard base64 (which this reader
+ * would reject). See the conformance vector in crypto.test.ts.
+ */
 export function toBase64(b: Uint8Array): string {
-  return s().to_base64(b)
+  return s().to_base64(b, s().base64_variants.URLSAFE_NO_PADDING)
 }
 export function fromBase64(b64: string): Uint8Array {
-  return s().from_base64(b64)
+  return s().from_base64(b64, s().base64_variants.URLSAFE_NO_PADDING)
 }

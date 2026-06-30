@@ -8,6 +8,8 @@ import {
   signManifest,
   verifyManifest,
   manifestPublicKeyB64,
+  toBase64,
+  fromBase64,
   type KdfParams,
   type Manifest,
 } from './crypto'
@@ -63,6 +65,15 @@ describe('owner sync crypto', () => {
   it('rejects a non-Daymark envelope', () => {
     const keys = deriveKeys('p', newSalt(), FAST)
     expect(() => decryptSnapshot(new Uint8Array([9, 9, 9, 9, 1, 2, 3]), keys.syncKey, 'devA', 0)).toThrow(/magic|short/)
+  })
+
+  it('base64 is URL-safe, no padding (conformance vector for the Kotlin client)', () => {
+    // bytes 0x00..0x0F → RFC 4648 §5 URL-safe, no padding.
+    const bytes = new Uint8Array(Array.from({ length: 16 }, (_, i) => i))
+    const b64 = toBase64(bytes)
+    expect(b64).toBe('AAECAwQFBgcICQoLDA0ODw')
+    expect(b64).not.toMatch(/[+/=]/) // never standard-base64 chars or padding
+    expect(Buffer.from(fromBase64(b64))).toEqual(Buffer.from(bytes))
   })
 
   it('signs and verifies a manifest; rejects tampering', () => {

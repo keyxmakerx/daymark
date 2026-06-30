@@ -133,14 +133,20 @@ private suspend fun ApplicationCall.readCapped(max: Long): ByteArray? {
     return out.toByteArray()
 }
 
+private val routeLog = org.slf4j.LoggerFactory.getLogger("com.daymark.companion.routes")
+
 private suspend fun ApplicationCall.failBlob(e: BlobStoreException) {
-    val status = when (e.kind) {
-        BlobStoreException.Kind.BAD_NAME -> HttpStatusCode.BadRequest
-        BlobStoreException.Kind.CONFLICT -> HttpStatusCode.Conflict
-        BlobStoreException.Kind.TOO_LARGE -> HttpStatusCode.PayloadTooLarge
-        BlobStoreException.Kind.QUOTA -> HttpStatusCode.InsufficientStorage
-        BlobStoreException.Kind.DISK_FULL -> HttpStatusCode.InsufficientStorage
-        BlobStoreException.Kind.NOT_FOUND -> HttpStatusCode.NotFound
+    // Fixed, non-enumerating client messages (no filesystem paths / internals); the real
+    // detail is logged server-side only. See COMPANION_SECURITY.md §6.
+    val (status, message) = when (e.kind) {
+        BlobStoreException.Kind.BAD_NAME -> HttpStatusCode.BadRequest to "invalid request"
+        BlobStoreException.Kind.CONFLICT -> HttpStatusCode.Conflict to "version already exists"
+        BlobStoreException.Kind.TOO_OLD -> HttpStatusCode.Conflict to "version below retention window"
+        BlobStoreException.Kind.TOO_LARGE -> HttpStatusCode.PayloadTooLarge to "payload too large"
+        BlobStoreException.Kind.QUOTA -> HttpStatusCode.InsufficientStorage to "insufficient storage"
+        BlobStoreException.Kind.DISK_FULL -> HttpStatusCode.InsufficientStorage to "insufficient storage"
+        BlobStoreException.Kind.NOT_FOUND -> HttpStatusCode.NotFound to "not found"
     }
-    respond(status, ErrorDto(e.message ?: "error"))
+    if (e.kind == BlobStoreException.Kind.DISK_FULL) routeLog.warn("blob store I/O error: {}", e.message)
+    respond(status, ErrorDto(message))
 }

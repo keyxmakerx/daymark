@@ -19,7 +19,7 @@ data class SnapshotMeta(
 )
 
 class BlobStoreException(message: String, val kind: Kind) : Exception(message) {
-    enum class Kind { BAD_NAME, CONFLICT, TOO_LARGE, QUOTA, DISK_FULL, NOT_FOUND }
+    enum class Kind { BAD_NAME, CONFLICT, TOO_OLD, TOO_LARGE, QUOTA, DISK_FULL, NOT_FOUND }
 }
 
 /**
@@ -76,6 +76,11 @@ class BlobStore(
         }
         if (exists(lineage, version)) {
             throw BlobStoreException("version already exists (append-only)", BlobStoreException.Kind.CONFLICT)
+        }
+        // Don't accept a version that prune would immediately delete (it would be a lie to
+        // return 201 for it). Reject if maxVersions newer versions already exist.
+        if (countVersionsAbove(lineage, version) >= maxVersions) {
+            throw BlobStoreException("version below retention window", BlobStoreException.Kind.TOO_OLD)
         }
         val newTotal = usedBytesLocked() + bytes.size
         if (newTotal > perTokenQuotaBytes) {
@@ -169,6 +174,14 @@ class BlobStore(
             st.executeQuery("SELECT COALESCE(SUM(size), 0) FROM snapshots").use { rs ->
                 return if (rs.next()) rs.getLong(1) else 0L
             }
+        }
+    }
+
+    private fun countVersionsAbove(lineage: String, version: Long): Int {
+        conn.prepareStatement("SELECT COUNT(*) FROM snapshots WHERE lineage=? AND version>?").use { ps ->
+            ps.setString(1, lineage)
+            ps.setLong(2, version)
+            ps.executeQuery().use { rs -> return if (rs.next()) rs.getInt(1) else 0 }
         }
     }
 

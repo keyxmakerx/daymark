@@ -52,7 +52,15 @@ export class SyncClient {
     this.base = baseUrl.replace(/\/+$/, '')
   }
 
+  /** Reject server-supplied KDF params below the security-doc floor (downgrade defense). */
+  private validateKdf(params: KdfParams) {
+    if (params.alg !== 'argon2id' || params.memMiB < 256 || params.ops < 3) {
+      throw new SyncError('server returned weak/unknown KDF parameters — refusing to derive a key')
+    }
+  }
+
   private derive(passphrase: string, saltB64: string, params: KdfParams): OwnerKeys {
+    this.validateKdf(params)
     const tag = `${saltB64}|${params.memMiB}|${params.ops}|${passphrase}`
     if (this.keyCache?.tag === tag) return this.keyCache.keys
     const keys = deriveKeys(passphrase, fromBase64(saltB64), params)

@@ -51,6 +51,13 @@ always reconstruct the AAD.
 ```
 
 A reader: fetch keyparams → `Argon2id(passphrase, salt, params)` → subkeys → decrypt.
+Readers **must reject** params below the floor (`memMiB ≥ 256`, `ops ≥ 3`, `alg = argon2id`)
+to defend against a server downgrading them.
+
+> **All base64 in this protocol is RFC 4648 §5 — URL-safe alphabet (`-`/`_`), NO padding**
+> (libsodium `URLSAFE_NO_PADDING`). This applies to `saltB64`, `signatureB64`, and
+> `publicKeyB64`. A client using standard base64 will be rejected. See the conformance
+> vector in `companion/web/src/lib/sync/crypto.test.ts` (bytes `00..0F` → `AAECAwQFBgcICQoLDA0ODw`).
 
 ### 1.3 Signed manifest (client-anchored integrity)
 
@@ -63,15 +70,27 @@ utf8(JSON.stringify({ lineage, head, entries: [{version, hash}, …] }))   // st
 
 Per [COMPANION_SECURITY.md](COMPANION_SECURITY.md) §8, the **only real anti-rollback** is
 this signed manifest checked against a **local trust watermark** the writer keeps and
-refuses to regress past. Server-side version/hash checks are **DoS hygiene only**. The
-browser portal (read-only, stateless) verifies the signature + per-blob hashes but holds
-no persistent watermark — that lives on the phone (Milestone 2b).
+refuses to regress past. Server-side version/hash checks are **DoS hygiene only**.
+
+> **Milestone 2 scope (honest):** the browser and CLI readers perform **AEAD integrity
+> only** — the XChaCha20-Poly1305 tag authenticates each blob's contents under the owner
+> key, so a tampered or substituted blob fails to decrypt. They do **not** verify a signed
+> manifest and hold **no watermark**, so a malicious server can still present an older
+> version as "head" (rollback) undetected. Manifest signing/verification + the persistent
+> watermark ship with the **phone client (2b)**; the manifest primitives here are the
+> tested building blocks for it, and **no manifest is stored on the server in M2.**
 
 ## 2. HTTP API (`/v1`)
 
 All routes require `Authorization: Bearer <DAYMARK_AUTH_TOKEN>`. Bodies/responses below.
 Rate-limit + lockout identity is the **socket peer** (no forwarded headers trusted by
 default; see [COMPANION_SECURITY.md](COMPANION_SECURITY.md) §7).
+
+> **M2 limitation:** because identity is the socket peer and there is not yet a
+> trusted-proxy config, **behind a reverse proxy all clients share one rate-limit/lockout
+> bucket** (the proxy is the only peer). Per-client limiting behind a proxy — via a pinned
+> trusted-proxy CIDR that lets `X-Forwarded-For` be honored *only* from that proxy — is a
+> follow-up. Direct/LAN deployments already get per-client limiting.
 
 | Method · Path | Body | Success | Notes |
 |---|---|---|---|
