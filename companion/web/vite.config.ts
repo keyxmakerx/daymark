@@ -1,25 +1,39 @@
-import { defineConfig } from 'vite'
+/// <reference types="vitest/config" />
+import { defineConfig } from 'vitest/config'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
+import { fileURLToPath } from 'node:url'
 
-// The Companion can be served under a sub-path behind a reverse proxy (DAYMARK_BASE_PATH).
-// At build time we bake a relative base so the same bundle works at "/" or "/daymark/…".
-// `./` keeps every asset reference relative to index.html — the server can mount it anywhere.
+// libsodium-wrappers ships a broken ESM build (its .mjs imports a sibling that isn't
+// published); the CJS build is fine. Alias to it so both the browser bundle and the
+// Node tests load a working module. Everything stays vendored — no CDN.
+const sodiumCjs = fileURLToPath(new URL('node_modules/libsodium-wrappers-sumo/dist/modules-sumo/libsodium-wrappers.js', import.meta.url))
+
 export default defineConfig({
   base: './',
   plugins: [svelte()],
+  resolve: {
+    alias: {
+      'libsodium-wrappers-sumo': sodiumCjs,
+    },
+  },
   build: {
     target: 'es2022',
     outDir: 'dist',
     emptyOutDir: true,
-    assetsInlineLimit: 0, // never inline as data: URIs — keeps the CSP free of data: in script/style
+    assetsInlineLimit: 0,
     sourcemap: false,
     rollupOptions: {
       output: {
-        // Stable, hashed names so the bundle is cache-bustable and reproducible.
         entryFileNames: 'assets/[name]-[hash].js',
         chunkFileNames: 'assets/[name]-[hash].js',
         assetFileNames: 'assets/[name]-[hash][extname]',
       },
     },
+  },
+  test: {
+    environment: 'node',
+    include: ['src/**/*.test.ts'],
+    testTimeout: 30000,
+    hookTimeout: 30000,
   },
 })

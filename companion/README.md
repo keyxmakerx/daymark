@@ -4,25 +4,55 @@ The optional, **self-hosted** companion server for Daymark — run on your own m
 (NAS, home server, mini-PC) with Docker. The phone app works fully without it and ships
 **no network access by default**; the Companion is a convenience, never a requirement.
 
-> **Status: Milestone 1 — scaffold.** What runs today is the foundation: a hardened,
-> reverse-proxy-friendly container that serves the **Phase-0 offline report viewer**
-> (drag in a backup JSON, see your reports — entirely in your browser, nothing uploaded).
-> The four pillars — sync, expanded sit-down features, therapist access, game plans — are
-> **designed but not yet built**. See the design set in
-> [`../docs/COMPANION_README.md`](../docs/COMPANION_README.md).
+> **Status: Milestone 2 — sync.** Implemented: the hardened, reverse-proxy-friendly
+> container; the **Phase-0 offline report viewer**; and now **end-to-end-encrypted sync** —
+> a zero-knowledge blob-store API plus client-side XChaCha20-Poly1305/Argon2id crypto, with
+> a browser "Connect to sync" reader and a reference CLI writer. **Still designed but not
+> built:** the phone Sync *flavor* (Milestone 2b), the expanded sit-down features, therapist
+> access, and game plans. See the design set in
+> [`../docs/COMPANION_README.md`](../docs/COMPANION_README.md) and the wire spec in
+> [`../docs/SYNC_PROTOCOL.md`](../docs/SYNC_PROTOCOL.md).
 
 ## What's here
 
 ```
 companion/
 ├── web/            Svelte 5 + TS + Vite frontend (vendored, strict-CSP, zero third-party)
-│   └── src/        Phase-0 report viewer (drag-in backup → overview + journal)
-├── server/         Ktor (Kotlin) server: serves the bundle, /healthz, security headers
+│   └── src/
+│       ├── lib/sync/   E2EE sync: crypto.ts (the reference impl), client.ts, tests
+│       ├── cli/        daymark-sync push — reference writer (Node)
+│       └── …           Phase-0 report viewer + "Connect to sync" reader
+├── server/         Ktor (Kotlin): serves the bundle, /healthz, the zero-knowledge /v1 blob store
 ├── Dockerfile      Multi-stage build (web → server jar → minimal JRE runtime, non-root)
 ├── docker-compose.yml
 ├── reverse-proxy/  Worked Caddy / Traefik / nginx examples
 └── INSTRUMENTS.md  Instrument-ledger stub (for the future assessment runner)
 ```
+
+## Sync (Milestone 2)
+
+End-to-end-encrypted, append-only snapshot sync. The server stores only opaque ciphertext
+(it never sees your passphrase, keys, or data); all crypto is client-side. The wire format
+is specified in [`../docs/SYNC_PROTOCOL.md`](../docs/SYNC_PROTOCOL.md).
+
+Enable it by setting an access token (otherwise `/v1` is fail-closed/disabled):
+
+```bash
+# in docker-compose.yml / .env
+DAYMARK_AUTH_TOKEN=<a long random token>   # or DAYMARK_AUTH_TOKEN_FILE=/run/secrets/…
+```
+
+**Push a backup from your laptop** (reference writer, until the phone Sync flavor ships):
+
+```bash
+cd companion/web && pnpm install
+DAYMARK_SYNC_PASSPHRASE='your sync passphrase' \
+  pnpm push -- --server http://localhost:8080 --token "$DAYMARK_AUTH_TOKEN" \
+              --lineage laptop --backup ~/Downloads/daymark-backup.json
+```
+
+**Read it back** in the browser: open the portal → **Connect to sync** → enter the token,
+device/lineage, and passphrase. The snapshot is fetched and decrypted in your browser.
 
 ## Quick start (Docker)
 

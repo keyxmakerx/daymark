@@ -18,6 +18,14 @@ class ApplicationTest {
         basePath = "/",
         webDir = "build/test-web",
         logLevel = "info",
+        authToken = null,
+        maxBlobBytes = 26_214_400L,
+        maxRequestBytes = 27_262_976L,
+        maxVersions = 200,
+        perTokenQuotaBytes = 5_368_709_120L,
+        authLockoutFails = 8,
+        authLockoutSeconds = 900L,
+        rateLimitRps = 100,
     )
 
     @Test
