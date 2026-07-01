@@ -32,12 +32,15 @@ function scaleScore(scale: Scale, itemsById: Map<string, Item>, answers: Answers
   for (const id of scale.items) {
     const item = itemsById.get(id)
     if (!item || !visible.has(id)) continue
+    const { lo, hi } = itemRange(item)
+    // maxPossible spans every VISIBLE scored item (answered or not) so percent_of_max
+    // can't inflate when some items are left blank.
+    maxPossible += hi
     const v = rawValue(item, answers[id])
     if (v == null) continue
-    const { lo, hi } = itemRange(item)
-    const value = reverse.has(id) ? hi + lo - v : v
-    sum += value
-    maxPossible += hi
+    // Only reverse items that have a defined value range (avoids a 0−v sign flip).
+    const canReverse = reverse.has(id) && (hi !== 0 || lo !== 0)
+    sum += canReverse ? hi + lo - v : v
     count++
   }
   switch (scale.method) {

@@ -79,6 +79,7 @@
   }
 
   function onKey(e: KeyboardEvent) {
+    if (e.repeat) return // ignore auto-repeat so a held key isn't counted as many responses
     if (e.code === 'Space') {
       e.preventDefault()
       respond()
@@ -108,7 +109,11 @@
     </p>
     <button class="primary" onclick={start}>Start</button>
   {:else if phase === 'running'}
-    <div class="progress" aria-hidden="true"><span style:width={`${progress}%`}></span></div>
+    <!-- SVG width attribute (not inline style) keeps this CSP-clean under style-src 'self'. -->
+    <svg class="progress" viewBox="0 0 100 2" preserveAspectRatio="none" aria-hidden="true">
+      <rect x="0" y="0" width="100" height="2" class="track" />
+      <rect x="0" y="0" width={progress} height="2" class="fill" />
+    </svg>
     <button class="stage" onclick={respond} aria-label="Respond">
       {#if stimulusVisible}
         <span class={currentIsTarget ? 'target' : 'nontarget'}>{currentIsTarget ? '●' : '■'}</span>
@@ -126,7 +131,7 @@
       <li><b>{outcome.metrics.accuracyPct}%</b> accuracy</li>
       <li>
         Reaction time <b>{outcome.metrics.rtMeanMs} ms</b>
-        {#if outcome.timing.flag === 'ok'}
+        {#if outcome.timing.flag === 'ok' && outcome.metrics.hits >= 3}
           · variability {outcome.metrics.rtVariabilityMs} ms ± ~{outcome.metrics.rtVariabilityJitterMs} ms clock jitter
         {/if}
       </li>
@@ -148,8 +153,9 @@
   }
   .target { color: var(--mood-5); }
   .nontarget { color: var(--ink-soft); }
-  .progress { width: 100%; height: 0.4rem; background: var(--paper-bg); border-radius: 999px; overflow: hidden; }
-  .progress span { display: block; height: 100%; background: var(--mood-4); }
+  .progress { width: 100%; height: 0.4rem; display: block; }
+  .progress .track { fill: var(--paper-bg); }
+  .progress .fill { fill: var(--mood-4); }
   .hint { margin: 0; }
   kbd { font-family: var(--font-mono); background: var(--paper-bg); border: 1px solid var(--border-strong); border-radius: 4px; padding: 0 0.3rem; }
   .metrics { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }

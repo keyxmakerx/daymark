@@ -76,7 +76,10 @@ export function computeAttention(trials: Trial[], timing: FrameTiming, takenAt: 
   const refreshMs = median(timing.frameIntervalsMs) || 16.7
   const frameJitterMs = sd(timing.frameIntervalsMs)
   const droppedFrames = timing.frameIntervalsMs.filter((i) => i > 1.5 * refreshMs).length
-  const flag: 'ok' | 'lower-precision' = frameJitterMs > ATTENTION_TASK.jitterFlagMs || droppedFrames > 3 ? 'lower-precision' : 'ok'
+  // Don't default to "ok" when there's too little timing evidence to judge precision.
+  const tooFewFrames = timing.frameIntervalsMs.length < 20
+  const flag: 'ok' | 'lower-precision' =
+    tooFewFrames || frameJitterMs > ATTENTION_TASK.jitterFlagMs || droppedFrames > 3 ? 'lower-precision' : 'ok'
 
   return {
     kind: 'task',

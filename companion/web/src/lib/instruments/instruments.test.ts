@@ -12,7 +12,7 @@ function base(): InstrumentDefinition {
     instrumentId: 'x-selfcheck', instrumentVersion: '1.0.0', title: 'X', license: 'self',
     ledgerRef: 'INSTRUMENTS.md#wellbeing-selfcheck', nonDiagnostic: true, noScreeningFlag: true,
     items: [{ id: 'q1', type: 'likert', options: [{ id: 'a', label: 'A', value: 0 }, { id: 'b', label: 'B', value: 4 }] }],
-    scoring: { scales: [{ id: 's', method: 'sum', items: ['q1'], bands: [{ label: 'ok', tone: 'neutral' }], bandFraming: 'descriptive' }] },
+    scoring: { scales: [{ id: 's', method: 'sum', items: ['q1'], bands: [{ label: 'ok', tone: 'neutral' }], bandFraming: 'descriptive — not a diagnosis' }] },
     framing: { intro: 'self-check' },
   }
 }
@@ -34,6 +34,36 @@ describe('CI honesty gate', () => {
 
   it('rejects a forbidden (licensed) source instrument', () => {
     const bad = { ...base(), instrumentId: 'conners-3', title: 'Conners 3 attention' }
+    expect(validateDefinition(bad, anchors).ok).toBe(false)
+  })
+
+  it('rejects forbidden source text hidden in an item prompt (not just the id)', () => {
+    const bad = base()
+    bad.items = [{ id: 'q1', type: 'likert', prompt: 'Item copied from the Conners scale', options: [{ id: 'a', label: 'A', value: 0 }] }]
+    bad.scoring.scales[0].items = ['q1']
+    expect(validateDefinition(bad, anchors).ok).toBe(false)
+  })
+
+  it('does not false-positive on innocuous words like "restless" (word-boundary match)', () => {
+    const ok = base()
+    ok.items = [{ id: 'q1', type: 'likert', prompt: 'I felt restless and could not settle', options: [{ id: 'a', label: 'Never', value: 0 }] }]
+    ok.scoring.scales[0].items = ['q1']
+    expect(validateDefinition(ok, anchors).ok).toBe(true)
+  })
+
+  it('rejects a scored item that branching can hide (sum scale)', () => {
+    const bad = base()
+    bad.items = [
+      { id: 'q1', type: 'likert', options: [{ id: 'a', label: 'A', value: 0 }, { id: 'b', label: 'B', value: 4 }] },
+      { id: 'q2', type: 'likert', options: [{ id: 'a', label: 'A', value: 0 }], visibleWhen: { ref: 'q1', op: 'gte', value: 3 } },
+    ]
+    bad.scoring.scales[0].items = ['q1', 'q2']
+    expect(validateDefinition(bad, anchors).ok).toBe(false)
+  })
+
+  it('rejects a gap between sum-scale bands', () => {
+    const bad = base()
+    bad.scoring.scales[0].bands = [{ max: 5, label: 'lo', tone: 'neutral' }, { min: 9, label: 'hi', tone: 'attention' }]
     expect(validateDefinition(bad, anchors).ok).toBe(false)
   })
 

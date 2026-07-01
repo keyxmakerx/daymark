@@ -58,6 +58,21 @@ describe('scoring', () => {
     expect(r[0].bandLabel).toBe('low')
   })
 
+  it('percent_of_max does not inflate when items are left blank', () => {
+    const pdef: InstrumentDefinition = {
+      instrumentId: 'p', instrumentVersion: '1.0.0', title: 'p', license: 'self', ledgerRef: 'INSTRUMENTS.md#p',
+      nonDiagnostic: true, noScreeningFlag: true,
+      items: [
+        { id: 'q1', type: 'likert', options: likert },
+        { id: 'q2', type: 'likert', options: likert },
+      ],
+      scoring: { scales: [{ id: 's', method: 'percent_of_max', items: ['q1', 'q2'], bands: [{ label: 'x', tone: 'neutral' }], bandFraming: 'not a diagnosis' }] },
+      framing: { intro: 'self-check' },
+    }
+    // one of two items answered at max (4 of 8 possible) → 50%, NOT 100%.
+    expect(scoreInstrument(pdef, { q1: 'a' })[0].score).toBe(50)
+  })
+
   it('bandFor is inclusive and ordered', () => {
     const bands: Band[] = [{ max: 3, label: 'lo', tone: 'neutral' }, { min: 4, max: 6, label: 'mid', tone: 'neutral' }, { min: 7, label: 'hi', tone: 'attention' }]
     expect(bandFor(3, bands)?.label).toBe('lo')
