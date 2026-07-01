@@ -2,19 +2,16 @@
   import { parseBackup, BackupParseError, type BackupData } from './lib/backup'
   import { formatDate } from './lib/stats'
   import Dropzone from './lib/components/Dropzone.svelte'
-  import Overview from './lib/components/Overview.svelte'
-  import JournalReader from './lib/components/JournalReader.svelte'
+  import Dashboard from './lib/components/Dashboard.svelte'
   import TrustBar from './lib/components/TrustBar.svelte'
   import SyncPanel from './lib/components/SyncPanel.svelte'
   import Assessments from './lib/components/Assessments.svelte'
 
-  type Tab = 'overview' | 'journal'
   type Source = 'file' | 'sync' | 'assess'
 
   let data = $state<BackupData | null>(null)
   let fileName = $state('')
   let error = $state('')
-  let tab = $state<Tab>('overview')
   let source = $state<Source>('file')
 
   const online = typeof navigator !== 'undefined' ? navigator.onLine : false
@@ -24,7 +21,6 @@
     try {
       data = parseBackup(text)
       fileName = name
-      tab = 'overview'
     } catch (e) {
       data = null
       error = e instanceof BackupParseError ? e.message : 'Could not read that backup.'
@@ -35,7 +31,6 @@
     error = ''
     data = parsed
     fileName = name
-    tab = 'overview'
   }
 
   function reset() {
@@ -96,16 +91,7 @@
           <strong>{fileName}</strong> · backup v{data.version} · exported {formatDate(data.exportedAt)}
         </p>
 
-        <nav class="tabs" aria-label="Report sections">
-          <button class:active={tab === 'overview'} aria-pressed={tab === 'overview'} onclick={() => (tab = 'overview')}>Overview</button>
-          <button class:active={tab === 'journal'} aria-pressed={tab === 'journal'} onclick={() => (tab = 'journal')}>Journal</button>
-        </nav>
-
-        {#if tab === 'overview'}
-          <Overview {data} />
-        {:else}
-          <JournalReader {data} />
-        {/if}
+        <Dashboard {data} />
       </section>
     {/if}
   </main>

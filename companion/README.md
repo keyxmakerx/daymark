@@ -8,12 +8,16 @@ The optional, **self-hosted** companion server for Daymark — run on your own m
 > **Phase-0 offline report viewer**; **end-to-end-encrypted sync** (zero-knowledge blob
 > store + client-side XChaCha20-Poly1305/Argon2id, browser reader + CLI writer); and now the
 > **expanded self-check suite** — a data-driven, non-diagnostic **questionnaire engine** with
-> a build-failing honesty gate, plus an original **"Steady Attention"** focus/timing task.
-> **Still designed but not built:** the phone Sync *flavor* (Milestone 2b), therapist access,
-> and game plans. See the design set in
+> a build-failing honesty gate, plus an original **"Steady Attention"** focus/timing task; a
+> **dynamic interactive dashboard** (expandable cards, range toggles, activity-association and
+> self-check trends) replacing the old tabbed viewer; and the **capability/assignment core** —
+> the owner-granted (Android-permission-style) therapist-assignment model + write-back crypto
+> (validated + tested). **Still designed but not built:** therapist auth/MFA + pairing, the
+> therapist portal UI, and the phone Sync *flavor* (2b). See the design set in
 > [`../docs/COMPANION_README.md`](../docs/COMPANION_README.md), the sync spec in
-> [`../docs/SYNC_PROTOCOL.md`](../docs/SYNC_PROTOCOL.md), and the features design in
-> [`../docs/COMPANION_FEATURES.md`](../docs/COMPANION_FEATURES.md).
+> [`../docs/SYNC_PROTOCOL.md`](../docs/SYNC_PROTOCOL.md), the features design in
+> [`../docs/COMPANION_FEATURES.md`](../docs/COMPANION_FEATURES.md), and the assignment/dashboard
+> design in [`../docs/COMPANION_ASSIGNMENTS.md`](../docs/COMPANION_ASSIGNMENTS.md).
 
 ## Self-checks (Milestone 3)
 
