@@ -89,7 +89,12 @@ docker compose up --build
 
 The container runs **non-root** on a **read-only root filesystem** (only `/data` and a
 `/tmp` tmpfs are writable), drops all Linux capabilities, and makes **no outbound
-connections**. For real use, put it behind your reverse proxy and remove the `ports:`
+connections by default**. There is exactly **one** deliberate, owner-configured exception:
+outbound **SMTP** for therapist invite/notification links. It is **OFF unless
+`DAYMARK_SMTP_HOST` is set**; when enabled it egresses only to the operator's configured
+mail server, requires TLS (STARTTLS or implicit), takes credentials via `*_FILE` secrets,
+and its emails carry **only** links/notifications — **never** any record or plaintext
+content. For real use, put it behind your reverse proxy and remove the `ports:`
 block — see [`reverse-proxy/`](reverse-proxy/) and
 [`../docs/COMPANION_DEPLOYMENT.md`](../docs/COMPANION_DEPLOYMENT.md).
 
@@ -125,7 +130,10 @@ yet active.
 - **Zero third-party origins.** The UI is fully vendored; a strict CSP
   (`default-src 'self'`, no `unsafe-inline`; one allowance: `wasm-unsafe-eval` for future
   in-browser crypto) is sent as a real header on every response.
-- **No telemetry, no outbound calls.** Nothing phones home.
+- **No telemetry, no outbound calls by default.** Nothing phones home. The sole,
+  owner-configured exception is optional outbound **SMTP** (off unless `DAYMARK_SMTP_*`
+  is set) that sends therapist invite/notification **links only** — no record content —
+  to the operator's own mail server over TLS, with credentials from `*_FILE` secrets.
 - **Hardened container.** Non-root, read-only FS, `cap_drop: ALL`,
   `no-new-privileges`, healthcheck. (The runtime currently uses `temurin-jre` + `curl`
   for the healthcheck; a distroless runtime, a tiny static healthcheck binary, and

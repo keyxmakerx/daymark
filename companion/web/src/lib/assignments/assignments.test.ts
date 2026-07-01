@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { validateAssignment, shouldAutoApply } from './validate'
+import _sodium from 'libsodium-wrappers-sumo'
 import {
   initAssignmentCrypto,
   newSignKeyPair,
@@ -7,6 +8,7 @@ import {
   sealAssignment,
   openAssignment,
   fingerprint,
+  ASSIGNMENT_CONTEXT,
   AssignmentOpenError,
 } from './crypto'
 import type { Assignment, Grant } from './types'
@@ -116,5 +118,44 @@ describe('assignment crypto (sign + seal → owner)', () => {
     const blob = sealAssignment(baseAssignment('fp'), therapist, owner.publicKey)
     blob[blob.length - 2] ^= 0x01
     expect(() => openAssignment(blob, owner, therapist.publicKey)).toThrow(AssignmentOpenError)
+  })
+
+  it('rejects a signed assignment whose recipientOwnerFp is a DIFFERENT owner (splice)', () => {
+    // Splice: the therapist signs a payload addressed to owner A (recipientOwnerFp = A), but the
+    // envelope is sealed to owner B's box. B CAN open the sealed box and the signature is valid,
+    // but the bound recipientOwnerFp does not match B — open must reject (mis-addressed / spliced).
+    const so = _sodium
+    const therapist = newSignKeyPair()
+    const ownerA = newBoxKeyPair()
+    const ownerB = newBoxKeyPair()
+    const B64 = so.base64_variants.URLSAFE_NO_PADDING
+    const signed = {
+      context: ASSIGNMENT_CONTEXT,
+      recipientOwnerFp: fingerprint(ownerA.publicKey), // addressed to A
+      assignment: baseAssignment(fingerprint(therapist.publicKey)),
+    }
+    const payloadJson = JSON.stringify(signed)
+    const sig = so.crypto_sign_detached(so.from_string(payloadJson), therapist.privateKey)
+    const envelope = so.from_string(JSON.stringify({ payloadJson, sigB64: so.to_base64(sig, B64) }))
+    const blobToB = so.crypto_box_seal(envelope, ownerB.publicKey) // but sealed to B
+    // B opens the box + verifies the sig fine, yet the recipientOwnerFp binding rejects it.
+    expect(() => openAssignment(blobToB, ownerB, therapist.publicKey)).toThrow(/different owner/)
+  })
+
+  it('rejects a wrong-context payload (message-type confusion)', () => {
+    const so = _sodium
+    const therapist = newSignKeyPair()
+    const owner = newBoxKeyPair()
+    const B64 = so.base64_variants.URLSAFE_NO_PADDING
+    const signed = {
+      context: 'daymark.gameplan.v1', // wrong context bound + validly signed + correct recipient
+      recipientOwnerFp: fingerprint(owner.publicKey),
+      assignment: baseAssignment(fingerprint(therapist.publicKey)),
+    }
+    const payloadJson = JSON.stringify(signed)
+    const sig = so.crypto_sign_detached(so.from_string(payloadJson), therapist.privateKey)
+    const envelope = so.from_string(JSON.stringify({ payloadJson, sigB64: so.to_base64(sig, B64) }))
+    const blob = so.crypto_box_seal(envelope, owner.publicKey)
+    expect(() => openAssignment(blob, owner, therapist.publicKey)).toThrow(/context/)
   })
 })

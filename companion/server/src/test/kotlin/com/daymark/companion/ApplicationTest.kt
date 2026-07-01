@@ -66,4 +66,13 @@ class ApplicationTest {
         assertEquals("/daymark", Config.normalizeBasePath("daymark"))
         assertEquals("/daymark", Config.normalizeBasePath("/daymark/"))
     }
+
+    @Test
+    fun `config endpoint reports smtpEnabled false by default`() = testApplication {
+        application { module(testConfig) }
+        val res = client.get("/v1/config")
+        assertEquals(HttpStatusCode.OK, res.status)
+        // Only the single non-secret capability flag; no config values leaked.
+        assertTrue(res.bodyAsText().contains("\"smtpEnabled\":false"), "expected smtpEnabled:false")
+    }
 }

@@ -46,10 +46,34 @@ export function fingerprint(publicKey: Uint8Array): string {
   return s().to_base64(s().crypto_generichash(16, publicKey), B())
 }
 
-/** Therapist signs the assignment, then seals it to the owner's X25519 public key. */
+/**
+ * Assignment binding context. Bound into the SIGNED payload (like game plans' GAMEPLAN_CONTEXT
+ * and shares' 'daymark.share.v1') so a signed assignment cannot be replayed as a different
+ * message type, and — together with recipientOwnerFp — cannot be re-pointed at a different owner
+ * and still verify.
+ */
+export const ASSIGNMENT_CONTEXT = 'daymark.assignment.v1' as const
+
+/**
+ * The signed payload = the assignment plus its binding fields. recipientOwnerFp is the fingerprint
+ * of the owner X25519 key the blob is sealed TO; openAssignment recomputes it from the owner's own
+ * key and rejects any mismatch (COMPANION_ASSIGNMENTS.md §2/§4 — "reuse the game-plan shape exactly").
+ */
+interface SignedAssignment {
+  context: typeof ASSIGNMENT_CONTEXT
+  recipientOwnerFp: string
+  assignment: Assignment
+}
+
+/** Therapist signs the assignment (bound to context + recipient owner), then seals it to the owner's X25519 key. */
 export function sealAssignment(a: Assignment, therapistSign: SignKeyPair, ownerBoxPub: Uint8Array): Uint8Array {
   const so = s()
-  const payloadJson = JSON.stringify(a)
+  const signed: SignedAssignment = {
+    context: ASSIGNMENT_CONTEXT,
+    recipientOwnerFp: fingerprint(ownerBoxPub),
+    assignment: a,
+  }
+  const payloadJson = JSON.stringify(signed)
   const sig = so.crypto_sign_detached(so.from_string(payloadJson), therapistSign.privateKey)
   const envelope = so.from_string(JSON.stringify({ payloadJson, sigB64: so.to_base64(sig, B()) }))
   return so.crypto_box_seal(envelope, ownerBoxPub)
@@ -58,8 +82,9 @@ export function sealAssignment(a: Assignment, therapistSign: SignKeyPair, ownerB
 export class AssignmentOpenError extends Error {}
 
 /**
- * Owner opens + verifies. Throws if the seal can't be opened (not for us / tampered) or the
- * signature doesn't match the PINNED therapist key (wrong/forged author).
+ * Owner opens + verifies. Throws if the seal can't be opened (not for us / tampered), the
+ * signature doesn't match the PINNED therapist key (wrong/forged author), the context is wrong
+ * (message-type confusion), or recipientOwnerFp is not this owner (mis-addressed / spliced).
  */
 export function openAssignment(blob: Uint8Array, ownerBox: BoxKeyPair, pinnedTherapistSignPub: Uint8Array): Assignment {
   const so = s()
@@ -80,5 +105,12 @@ export function openAssignment(blob: Uint8Array, ownerBox: BoxKeyPair, pinnedThe
   }
   const ok = so.crypto_sign_verify_detached(so.from_base64(env.sigB64, B()), so.from_string(env.payloadJson), pinnedTherapistSignPub)
   if (!ok) throw new AssignmentOpenError('assignment signature does not match the pinned therapist key')
-  return JSON.parse(env.payloadJson) as Assignment
+  const signed = JSON.parse(env.payloadJson) as SignedAssignment
+  if (signed.context !== ASSIGNMENT_CONTEXT) {
+    throw new AssignmentOpenError('unexpected assignment context')
+  }
+  if (signed.recipientOwnerFp !== fingerprint(ownerBox.publicKey)) {
+    throw new AssignmentOpenError('assignment is addressed to a different owner')
+  }
+  return signed.assignment
 }

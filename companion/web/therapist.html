@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <!--
+      No <meta http-equiv="Content-Security-Policy"> here: the CSP is sent by the server as a
+      response header (see companion/server Application.kt) so it also covers error pages and cannot
+      be stripped by editing the document. The therapist portal is a SEPARATE surface from the owner
+      report viewer (index.html); it is served at its own route and never loads any remote origin.
+    -->
+    <title>Daymark Companion — Therapist portal</title>
+    <meta name="description" content="Capability-scoped therapist portal for a self-hosted Daymark Companion. Owner-granted access only; nothing is a diagnosis." />
+  </head>
+  <body>
+    <div id="therapist-app"></div>
+    <noscript>
+      <!-- No inline style: strict CSP (style-src 'self') blocks inline styles; this fallback is
+           intentionally unstyled, which is fine and accessible. -->
+      <p>
+        The Daymark Companion therapist portal needs JavaScript. It runs entirely in your browser and
+        talks only to the self-hosted server you signed in to.
+      </p>
+    </noscript>
+    <script type="module" src="/src/therapist.ts"></script>
+  </body>
+</html>
