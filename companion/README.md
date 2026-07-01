@@ -4,14 +4,35 @@ The optional, **self-hosted** companion server for Daymark — run on your own m
 (NAS, home server, mini-PC) with Docker. The phone app works fully without it and ships
 **no network access by default**; the Companion is a convenience, never a requirement.
 
-> **Status: Milestone 2 — sync.** Implemented: the hardened, reverse-proxy-friendly
-> container; the **Phase-0 offline report viewer**; and now **end-to-end-encrypted sync** —
-> a zero-knowledge blob-store API plus client-side XChaCha20-Poly1305/Argon2id crypto, with
-> a browser "Connect to sync" reader and a reference CLI writer. **Still designed but not
-> built:** the phone Sync *flavor* (Milestone 2b), the expanded sit-down features, therapist
-> access, and game plans. See the design set in
-> [`../docs/COMPANION_README.md`](../docs/COMPANION_README.md) and the wire spec in
-> [`../docs/SYNC_PROTOCOL.md`](../docs/SYNC_PROTOCOL.md).
+> **Status: Milestone 3 — sit-down self-checks.** Implemented: the hardened container; the
+> **Phase-0 offline report viewer**; **end-to-end-encrypted sync** (zero-knowledge blob
+> store + client-side XChaCha20-Poly1305/Argon2id, browser reader + CLI writer); and now the
+> **expanded self-check suite** — a data-driven, non-diagnostic **questionnaire engine** with
+> a build-failing honesty gate, plus an original **"Steady Attention"** focus/timing task.
+> **Still designed but not built:** the phone Sync *flavor* (Milestone 2b), therapist access,
+> and game plans. See the design set in
+> [`../docs/COMPANION_README.md`](../docs/COMPANION_README.md), the sync spec in
+> [`../docs/SYNC_PROTOCOL.md`](../docs/SYNC_PROTOCOL.md), and the features design in
+> [`../docs/COMPANION_FEATURES.md`](../docs/COMPANION_FEATURES.md).
+
+## Self-checks (Milestone 3)
+
+Open the portal → **Self-checks**. Two things run there, entirely on-device and **never
+uploaded**:
+
+- **Questionnaire engine** — instruments are pure JSON definitions (`src/lib/instruments/`);
+  a new license-clean instrument is added by dropping a definition + an `INSTRUMENTS.md`
+  ledger row, no per-instrument code. A **load-time + CI honesty gate** (`validate.ts`,
+  `instruments.test.ts`) *fails the build* if a definition is not non-diagnostic, contains a
+  self-harm slot, names a forbidden (licensed) source (TOVA/Conners/CAARS/…), references a
+  missing ledger anchor, or presents a band as a clinical screen/cutoff. Ships two
+  **self-authored** instruments (a daily wellbeing check and a focus & follow-through check).
+- **Steady Attention** — an original CPT-style sustained-attention task. Reports robust
+  count-based metrics (omissions/commissions/accuracy) plus a *caveated* reaction-time
+  mean; it measures its own frame jitter and flags **lower-precision** runs, per the design.
+
+Non-diagnostic by construction: descriptive bands only, a fixed disclaimer on every result,
+and no self-harm item anywhere in the engine.
 
 ## What's here
 
