@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
-    "test:unit": "vitest run src/lib/sync/crypto.test.ts",
+    "test:unit": "vitest run --exclude '**/integration.test.ts'",
     "test:integration": "vitest run src/lib/sync/integration.test.ts",
     "push": "tsx src/cli/push.ts"
   },

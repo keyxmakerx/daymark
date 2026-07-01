@@ -4,14 +4,39 @@ The optional, **self-hosted** companion server for Daymark — run on your own m
 (NAS, home server, mini-PC) with Docker. The phone app works fully without it and ships
 **no network access by default**; the Companion is a convenience, never a requirement.
 
-> **Status: Milestone 2 — sync.** Implemented: the hardened, reverse-proxy-friendly
-> container; the **Phase-0 offline report viewer**; and now **end-to-end-encrypted sync** —
-> a zero-knowledge blob-store API plus client-side XChaCha20-Poly1305/Argon2id crypto, with
-> a browser "Connect to sync" reader and a reference CLI writer. **Still designed but not
-> built:** the phone Sync *flavor* (Milestone 2b), the expanded sit-down features, therapist
-> access, and game plans. See the design set in
-> [`../docs/COMPANION_README.md`](../docs/COMPANION_README.md) and the wire spec in
-> [`../docs/SYNC_PROTOCOL.md`](../docs/SYNC_PROTOCOL.md).
+> **Status: Milestone 3 — sit-down self-checks.** Implemented: the hardened container; the
+> **Phase-0 offline report viewer**; **end-to-end-encrypted sync** (zero-knowledge blob
+> store + client-side XChaCha20-Poly1305/Argon2id, browser reader + CLI writer); and now the
+> **expanded self-check suite** — a data-driven, non-diagnostic **questionnaire engine** with
+> a build-failing honesty gate, plus an original **"Steady Attention"** focus/timing task; a
+> **dynamic interactive dashboard** (expandable cards, range toggles, activity-association and
+> self-check trends) replacing the old tabbed viewer; and the **capability/assignment core** —
+> the owner-granted (Android-permission-style) therapist-assignment model + write-back crypto
+> (validated + tested). **Still designed but not built:** therapist auth/MFA + pairing, the
+> therapist portal UI, and the phone Sync *flavor* (2b). See the design set in
+> [`../docs/COMPANION_README.md`](../docs/COMPANION_README.md), the sync spec in
+> [`../docs/SYNC_PROTOCOL.md`](../docs/SYNC_PROTOCOL.md), the features design in
+> [`../docs/COMPANION_FEATURES.md`](../docs/COMPANION_FEATURES.md), and the assignment/dashboard
+> design in [`../docs/COMPANION_ASSIGNMENTS.md`](../docs/COMPANION_ASSIGNMENTS.md).
+
+## Self-checks (Milestone 3)
+
+Open the portal → **Self-checks**. Two things run there, entirely on-device and **never
+uploaded**:
+
+- **Questionnaire engine** — instruments are pure JSON definitions (`src/lib/instruments/`);
+  a new license-clean instrument is added by dropping a definition + an `INSTRUMENTS.md`
+  ledger row, no per-instrument code. A **load-time + CI honesty gate** (`validate.ts`,
+  `instruments.test.ts`) *fails the build* if a definition is not non-diagnostic, contains a
+  self-harm slot, names a forbidden (licensed) source (TOVA/Conners/CAARS/…), references a
+  missing ledger anchor, or presents a band as a clinical screen/cutoff. Ships two
+  **self-authored** instruments (a daily wellbeing check and a focus & follow-through check).
+- **Steady Attention** — an original CPT-style sustained-attention task. Reports robust
+  count-based metrics (omissions/commissions/accuracy) plus a *caveated* reaction-time
+  mean; it measures its own frame jitter and flags **lower-precision** runs, per the design.
+
+Non-diagnostic by construction: descriptive bands only, a fixed disclaimer on every result,
+and no self-harm item anywhere in the engine.
 
 ## What's here
 
@@ -64,7 +89,12 @@ docker compose up --build
 
 The container runs **non-root** on a **read-only root filesystem** (only `/data` and a
 `/tmp` tmpfs are writable), drops all Linux capabilities, and makes **no outbound
-connections**. For real use, put it behind your reverse proxy and remove the `ports:`
+connections by default**. There is exactly **one** deliberate, owner-configured exception:
+outbound **SMTP** for therapist invite/notification links. It is **OFF unless
+`DAYMARK_SMTP_HOST` is set**; when enabled it egresses only to the operator's configured
+mail server, requires TLS (STARTTLS or implicit), takes credentials via `*_FILE` secrets,
+and its emails carry **only** links/notifications — **never** any record or plaintext
+content. For real use, put it behind your reverse proxy and remove the `ports:`
 block — see [`reverse-proxy/`](reverse-proxy/) and
 [`../docs/COMPANION_DEPLOYMENT.md`](../docs/COMPANION_DEPLOYMENT.md).
 
@@ -100,7 +130,10 @@ yet active.
 - **Zero third-party origins.** The UI is fully vendored; a strict CSP
   (`default-src 'self'`, no `unsafe-inline`; one allowance: `wasm-unsafe-eval` for future
   in-browser crypto) is sent as a real header on every response.
-- **No telemetry, no outbound calls.** Nothing phones home.
+- **No telemetry, no outbound calls by default.** Nothing phones home. The sole,
+  owner-configured exception is optional outbound **SMTP** (off unless `DAYMARK_SMTP_*`
+  is set) that sends therapist invite/notification **links only** — no record content —
+  to the operator's own mail server over TLS, with credentials from `*_FILE` secrets.
 - **Hardened container.** Non-root, read-only FS, `cap_drop: ALL`,
   `no-new-privileges`, healthcheck. (The runtime currently uses `temurin-jre` + `curl`
   for the healthcheck; a distroless runtime, a tiny static healthcheck binary, and
