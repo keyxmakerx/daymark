@@ -55,7 +55,7 @@ jobs:
       - name: Type-check + build
         run: pnpm build
 
-      - name: Crypto unit tests
+      - name: Unit tests (crypto + instrument honesty gate + tasks)
         run: pnpm test:unit
 
       - name: Upload web bundle
