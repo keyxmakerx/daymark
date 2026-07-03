@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The `sync` product flavor ONLY. This is the one place in the whole app that requests
+  INTERNET — the default `foss` flavor (app/src/main/AndroidManifest.xml) never does, so the
+  flagship build's no-network privacy claim stays verifiable. See docs/COMPANION_PHONE_2B.md §0
+  and docs/COMPANION_SCOPE.md.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+</manifest>

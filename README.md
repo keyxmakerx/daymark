@@ -160,7 +160,8 @@ release notes for verification, and submit to **F-Droid**.
 ## Building
 
 ```bash
-./gradlew assembleDebug   # -> app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleDebug   # -> app/build/outputs/apk/foss/debug/app-foss-debug.apk
+                          #    (+ a "sync" flavor APK — see docs/COMPANION_PHONE_2B.md)
 ./gradlew assembleRelease # R8-minified release build (signed if a keystore is configured)
 ./gradlew test            # unit tests (stats, goal progress, sleep metrics, CSV escaping)
 ```
