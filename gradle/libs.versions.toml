@@ -20,6 +20,17 @@ coroutines = "1.9.0"
 androidxTestExt = "1.2.1"
 androidxTestCore = "1.6.1"
 androidxTestRunner = "1.6.2"
+# lazysodium-android and lazysodium-java MUST stay pinned to the same version: sync-crypto's
+# SyncCrypto is compiled against lazysodium-java's copy of the shared com.goterl.lazysodium.*
+# types but runs on lazysodium-android's copy in the real app (see SyncCrypto's class KDoc) —
+# a version drift between the two would silently invalidate that cross-artifact API parity.
+# Pinned to 5.1.0 (not 5.2.0): lazysodium-java 5.2.0's Gradle metadata marks it JVM-21-only,
+# but :sync-crypto (and the whole app) targets JVM 17, so 5.2.0 fails variant resolution
+# (":sync-crypto:compileKotlin" — "compatible with JVM 21 or newer"). 5.1.0 is the newest
+# release whose java artifact is JVM-8+ and whose android artifact also exists, keeping the
+# same-version invariant; the crypto conformance vectors are byte-identical across the two.
+lazysodium = "5.1.0"
+jna = "5.17.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -54,11 +65,15 @@ androidx-room-testing = { group = "androidx.room", name = "room-testing", versio
 androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestExt" }
 androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidxTestCore" }
 androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
+lazysodium-android = { group = "com.goterl", name = "lazysodium-android", version.ref = "lazysodium" }
+lazysodium-java = { group = "com.goterl", name = "lazysodium-java", version.ref = "lazysodium" }
+jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }

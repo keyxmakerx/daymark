@@ -6,6 +6,10 @@ import com.daymark.companion.auth.Secrets
 import com.daymark.companion.auth.Totp
 import com.daymark.companion.mail.MailMessage
 import com.daymark.companion.mail.Mailer
+import com.daymark.companion.mail.OwnerNotifier
+import com.daymark.companion.storage.AuditAction
+import com.daymark.companion.storage.AuditActor
+import com.daymark.companion.storage.AuditStore
 import io.ktor.http.Cookie
 import io.ktor.http.CookieEncoding
 import io.ktor.http.HttpHeaders
@@ -20,9 +24,21 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import kotlinx.serialization.Serializable
+import org.slf4j.LoggerFactory
 import java.net.URI
 import java.time.Instant
 import java.util.Base64
+
+private val log = LoggerFactory.getLogger("com.daymark.companion.audit")
+
+/** The audit log is additive, never load-bearing: a logging bug must never fail a real request. */
+private fun auditSafely(block: () -> Unit) {
+    try {
+        block()
+    } catch (e: Exception) {
+        log.warn("audit log append failed", e)
+    }
+}
 
 @Serializable data class InviteRequest(val relRef: String, val scope: List<String>, val email: String? = null, val ttlSeconds: Long? = null)
 @Serializable data class InviteResponse(val inviteId: String, val link: String, val expiresAt: Long)
@@ -50,7 +66,10 @@ fun Route.therapistAuthRoutes(
     totpLockoutFails: Int,
     totpLockoutSeconds: Long,
     publicBaseUrl: String?,
+    notifier: OwnerNotifier,
     cookieSecure: Boolean = true,
+    auditStore: AuditStore,
+    auditSourceIp: Boolean = false,
 ) {
     route("/v1") {
 
@@ -98,7 +117,19 @@ fun Route.therapistAuthRoutes(
             if (secretBytes.size < 16) return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("secret too short"))
             val result = authStore.enrollTotp(req.enrollTicket, req.credentialId, req.secret)
             when (result.status) {
-                AuthStore.EnrollStatus.OK -> call.respond(HttpStatusCode.NoContent)
+                AuthStore.EnrollStatus.OK -> {
+                    // Respond FIRST: the audit append and notifier.notify() below are best-effort
+                    // and must never delay or gate the enrollment response the therapist is waiting
+                    // on (it already committed). Matches the ordering in RelationRoutes.kt.
+                    call.respond(HttpStatusCode.NoContent)
+                    auditSafely {
+                        auditStore.append(
+                            result.relRef!!, AuditActor.THERAPIST, AuditAction.ENROL_OK,
+                            meta = auditMeta(auditSourceIp, call, "credentialId" to req.credentialId),
+                        )
+                    }
+                    notifier.notify(MailMessage.ReviewKind.THERAPIST_ENROLLED, portalUrlFor(call, publicBaseUrl))
+                }
                 // Do not distinguish a bad/expired ticket from a missing one (non-enumerating).
                 AuthStore.EnrollStatus.NO_TICKET -> call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized"))
                 // A credential already exists for this relationship/credential — refuse to overwrite.
@@ -111,13 +142,17 @@ fun Route.therapistAuthRoutes(
             val req = call.receive<TotpVerifyRequest>()
             val rec = authStore.getTotp(req.credentialId)
             if (rec == null) {
-                // Do not reveal whether the credential exists.
+                // Do not reveal whether the credential exists. No relRef is known, so there is
+                // nothing meaningful to key an audit entry on.
                 call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized"))
                 return@post
             }
             val now = System.currentTimeMillis()
             if (rec.lockedUntil > now) {
                 call.respond(HttpStatusCode.TooManyRequests, ErrorDto("temporarily locked"))
+                auditSafely {
+                    auditStore.append(rec.relRef, AuditActor.THERAPIST, AuditAction.LOCKOUT, meta = auditMeta(auditSourceIp, call, "credentialId" to req.credentialId))
+                }
                 return@post
             }
             val secretBytes = decodeSecret(rec.secretB64)
@@ -126,8 +161,14 @@ fun Route.therapistAuthRoutes(
                 val locked = authStore.recordTotpFailure(req.credentialId, totpLockoutFails, totpLockoutSeconds * 1000)
                 if (locked > now) {
                     call.respond(HttpStatusCode.TooManyRequests, ErrorDto("temporarily locked"))
+                    auditSafely {
+                        auditStore.append(rec.relRef, AuditActor.THERAPIST, AuditAction.LOCKOUT, meta = auditMeta(auditSourceIp, call, "credentialId" to req.credentialId))
+                    }
                 } else {
                     call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized"))
+                    auditSafely {
+                        auditStore.append(rec.relRef, AuditActor.THERAPIST, AuditAction.AUTH_FAIL, meta = auditMeta(auditSourceIp, call, "credentialId" to req.credentialId))
+                    }
                 }
                 return@post
             }
@@ -145,6 +186,9 @@ fun Route.therapistAuthRoutes(
                 ),
             )
             call.respond(HttpStatusCode.OK, SessionInfo(session.csrfToken, session.absoluteExpiry))
+            auditSafely {
+                auditStore.append(rec.relRef, AuditActor.THERAPIST, AuditAction.AUTH_SUCCESS, meta = auditMeta(auditSourceIp, call, "credentialId" to req.credentialId))
+            }
         }
 
         // Logout: requires the session cookie + matching anti-CSRF header; hard-deletes the session.
@@ -195,6 +239,14 @@ private suspend fun ApplicationCall.ownerAuthorized(guard: AuthGuard): Boolean {
     }
 }
 
+/** Small fixed non-content annotations for an audit entry: the acting credential id, plus the
+ *  source IP only when the operator opted in (COMPANION_SECURITY.md §9 — IP off by default). */
+private fun auditMeta(sourceIpEnabled: Boolean, call: ApplicationCall, vararg extra: Pair<String, String>): Map<String, String> {
+    val meta = extra.toMap().toMutableMap()
+    if (sourceIpEnabled) meta["sourceIp"] = call.request.origin.remoteAddress
+    return meta
+}
+
 /** Accept a secret encoded as base64url (no pad), base64, or raw utf-8 of sufficient length. */
 private fun decodeSecret(s: String): ByteArray? {
     runCatching { return Base64.getUrlDecoder().decode(s) }
@@ -203,10 +255,10 @@ private fun decodeSecret(s: String): ByteArray? {
 }
 
 private fun buildInviteLink(call: ApplicationCall, publicBaseUrl: String?, inviteId: String, secret: String): String {
-    val base = publicBaseUrl?.trimEnd('/') ?: run {
-        val scheme = call.request.origin.scheme
-        val host = call.request.headers[HttpHeaders.Host] ?: "${call.request.origin.serverHost}:${call.request.origin.serverPort}"
-        "$scheme://$host"
-    }
-    return "$base/portal/invite#id=$inviteId&s=$secret"
+    return "${resolveBaseUrl(call, publicBaseUrl)}/portal/invite#id=$inviteId&s=$secret"
+}
+
+/** Best-effort absolute URL to the owner console root, for "something to review" notifications. */
+private fun portalUrlFor(call: ApplicationCall, publicBaseUrl: String?): URI {
+    return URI("${resolveBaseUrl(call, publicBaseUrl)}/")
 }

@@ -1,11 +1,17 @@
 # Daymark Phone — Milestone 2b: Sync flavor + assignment/game-plan integration (Kotlin)
 
-> **Status: SPEC ONLY — not built.** No Android SDK is available in the build/CI-authoring
-> environment used so far, so this milestone is written as a build-ready spec and is
-> **verifiable only in CI** (an Android build/instrumented-test job) or on a dev machine.
-> The web reference implementations under `companion/web/src/lib/**` and the tests there
-> are the **conformance oracle**: the Kotlin here must produce/consume byte-identical
-> envelopes. Authoritative crypto/API contracts:
+> **Status: build order §6 step 1 done (sync flavor scaffold + CI + crypto conformance);
+> steps 2-6 (sync push/pull, DB v13/v14 migrations, inbound assignments/game-plans +
+> acceptance inbox, pairing/Grant/share) are NOT built yet.** §1's crypto now has a real
+> Kotlin port (`sync-crypto/`, a pure-JVM module shared by the `sync` flavor at runtime and
+> by its own host-JVM unit tests — no Android SDK or emulator needed to verify it) that
+> passes both the `SYNC_PROTOCOL.md` §1.2 base64 conformance vector and a set of
+> cross-language vectors independently generated from the actual `crypto.ts` reference. No
+> Android SDK is available in this doc-authoring environment either, so the flavor
+> scaffold/manifest/CI-workflow pieces are **CI-verified only**, per this doc's original
+> design. The web reference implementations under `companion/web/src/lib/**` and the tests
+> there remain the **conformance oracle**: the Kotlin here must produce/consume
+> byte-identical envelopes. Authoritative crypto/API contracts:
 > [SYNC_PROTOCOL.md](SYNC_PROTOCOL.md), [COMPANION_ASSIGNMENTS.md](COMPANION_ASSIGNMENTS.md),
 > [COMPANION_SECURITY.md](COMPANION_SECURITY.md), [COMPANION_THERAPIST.md](COMPANION_THERAPIST.md).
 

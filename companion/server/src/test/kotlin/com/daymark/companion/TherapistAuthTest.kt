@@ -3,9 +3,13 @@ package com.daymark.companion
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.auth.Secrets
 import com.daymark.companion.auth.Totp
+import com.daymark.companion.mail.InMemoryMailTransport
+import com.daymark.companion.mail.Mailer
+import com.daymark.companion.mail.MailerConfig
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
@@ -299,6 +303,33 @@ class TherapistAuthTest {
             header(HttpHeaders.Cookie, "daymark_session=${session.sessionId}")
         }
         assertEquals(HttpStatusCode.Unauthorized, res.status)
+    }
+
+    @Test
+    fun `successful TOTP enrol fires the owner therapist-enrolled notification`() = testApplication {
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val (auth, rel) = stores(dir, cfg)
+        val transport = InMemoryMailTransport()
+        val mailerCfg = MailerConfig(host = "mail.example.org", port = 587, user = null, pass = null, from = "companion@example.org", tls = MailerConfig.TlsMode.STARTTLS, allowInsecureLinks = true)
+        val mailer = Mailer.forConfig(mailerCfg, transport)
+        application { module(cfg, null, mailer, rel, auth) }
+
+        client.put("/v1/owner/notifications") {
+            header(HttpHeaders.Authorization, "Bearer $ownerToken")
+            contentType(ContentType.Application.Json)
+            setBody("""{"email":"owner@example.org","events":["THERAPIST_ENROLLED"]}""")
+        }
+
+        val ticket = redeemForTicket(client, auth, relRef)
+        val secretB64 = Secrets.b64url(ByteArray(20) { (it + 3).toByte() })
+        val enroll = client.post("/v1/totp/enroll") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"enrollTicket":"$ticket","credentialId":"cred-notify","secret":"$secretB64"}""")
+        }
+        assertEquals(HttpStatusCode.NoContent, enroll.status)
+        assertEquals(1, transport.sent.size)
+        assertEquals("owner@example.org", transport.sent[0].to)
     }
 
     @Test

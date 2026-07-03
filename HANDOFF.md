@@ -51,9 +51,9 @@ micro-journaling + wellbeing toolkit. A clean-room alternative to Daylio (no Day
 
 ### Build / test commands (an Android SDK is present in-container)
 ```
-./gradlew :app:compileDebugKotlin --offline -q          # fast compile check
-./gradlew :app:testDebugUnitTest --tests "com.daymark.app.stats.*" --offline -q
-./gradlew :app:assembleDebug --offline -q               # produces app/build/outputs/apk/debug/app-debug.apk
+./gradlew :app:compileFossDebugKotlin --offline -q      # fast compile check (default "foss" flavor)
+./gradlew :app:testFossDebugUnitTest --tests "com.daymark.app.stats.*" --offline -q
+./gradlew :app:assembleDebug --offline -q               # both flavors: app/build/outputs/apk/{foss,sync}/debug/app-*-debug.apk
 ```
 - CI (`.github/workflows/build.yml`) is the source of truth for "it builds": JDK 17 → unit tests →
   `assembleDebug` → uploads the APK artifact. `local.properties` is git-ignored.
@@ -234,8 +234,8 @@ ViewModel derivation) — never a model.**
 3. **Add a CI emulator job** for the instrumented `MigrationTest` + any androidTest; add `lint` to CI.
 
 **Release readiness (gate before a public tag)**
-4. Replace the **debug-signed** `release.yml` with a **signed `assembleRelease`** (keystore from
-   Actions secrets, `keystore.properties` git-ignored). Publish APK SHA-256 in release notes.
+4. Replace the **debug-signed** `release.yml` with a **signed `assembleFossRelease`** (keystore
+   from Actions secrets, `keystore.properties` git-ignored). Publish APK SHA-256 in release notes.
 5. **F-Droid submission:** `fastlane/metadata/android/en-US/`, verify FOSS deps + reproducible build,
    confirm no `INTERNET`. Decide final app name + permanent `applicationId` before first public
    release.

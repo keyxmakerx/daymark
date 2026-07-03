@@ -2,6 +2,9 @@ package com.daymark.companion
 
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.auth.Secrets
+import com.daymark.companion.mail.InMemoryMailTransport
+import com.daymark.companion.mail.Mailer
+import com.daymark.companion.mail.MailerConfig
 import com.daymark.companion.storage.RelationStore
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -240,6 +243,76 @@ class RelationRoutesTest {
         // A token whose hash won't match this bad path anyway -> unauthorized before charset.
         val res = client.get("/v1/rel/bad..name/grants") { header("X-Rel-Token", inboxToken) }
         assertEquals(HttpStatusCode.Unauthorized, res.status)
+    }
+
+    @Test
+    fun `a therapist PUT to assignments or gameplans fires the owner notification, but owner-writes do not`() = testApplication {
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val (blob, rel, auth) = stores(dir, cfg)
+        val transport = InMemoryMailTransport()
+        val mailerCfg = MailerConfig(host = "mail.example.org", port = 587, user = null, pass = null, from = "companion@example.org", tls = MailerConfig.TlsMode.STARTTLS, allowInsecureLinks = true)
+        val mailer = Mailer.forConfig(mailerCfg, transport)
+        application { module(cfg, blob, mailer, rel, auth) }
+
+        client.put("/v1/owner/notifications") {
+            header(HttpHeaders.Authorization, "Bearer $ownerToken")
+            header("Content-Type", "application/json")
+            setBody("""{"email":"owner@example.org","events":["NEW_ASSIGNMENT","NEW_GAMEPLAN"]}""")
+        }
+
+        val ts = therapistSession(auth, relRef)
+        // Owner writes to grants/shares never trigger the "review this" notice.
+        client.put("/v1/rel/$relRef/grants/lin/0") {
+            header("X-Rel-Token", inboxToken); header(HttpHeaders.Authorization, "Bearer $ownerToken"); setBody(byteArrayOf(1))
+        }
+        assertEquals(0, transport.sent.size)
+
+        // Therapist write to assignments triggers one notice.
+        client.put("/v1/rel/$relRef/assignments/lin/0") {
+            header("X-Rel-Token", inboxToken)
+            header(HttpHeaders.Cookie, "daymark_session=${ts.cookie}")
+            header("X-CSRF-Token", ts.csrf)
+            setBody(byteArrayOf(2))
+        }
+        assertEquals(1, transport.sent.size)
+        assertEquals("owner@example.org", transport.sent[0].to)
+
+        // Therapist write to gameplans triggers a second notice.
+        client.put("/v1/rel/$relRef/gameplans/lin/0") {
+            header("X-Rel-Token", inboxToken)
+            header(HttpHeaders.Cookie, "daymark_session=${ts.cookie}")
+            header("X-CSRF-Token", ts.csrf)
+            setBody(byteArrayOf(3))
+        }
+        assertEquals(2, transport.sent.size)
+    }
+
+    @Test
+    fun `no notification is sent when the owner has not opted into that event`() = testApplication {
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val (blob, rel, auth) = stores(dir, cfg)
+        val transport = InMemoryMailTransport()
+        val mailerCfg = MailerConfig(host = "mail.example.org", port = 587, user = null, pass = null, from = "companion@example.org", tls = MailerConfig.TlsMode.STARTTLS, allowInsecureLinks = true)
+        val mailer = Mailer.forConfig(mailerCfg, transport)
+        application { module(cfg, blob, mailer, rel, auth) }
+
+        client.put("/v1/owner/notifications") {
+            header(HttpHeaders.Authorization, "Bearer $ownerToken")
+            header("Content-Type", "application/json")
+            // Registered, but opted into NOTHING.
+            setBody("""{"email":"owner@example.org","events":[]}""")
+        }
+
+        val ts = therapistSession(auth, relRef)
+        client.put("/v1/rel/$relRef/assignments/lin/0") {
+            header("X-Rel-Token", inboxToken)
+            header(HttpHeaders.Cookie, "daymark_session=${ts.cookie}")
+            header("X-CSRF-Token", ts.csrf)
+            setBody(byteArrayOf(1))
+        }
+        assertEquals(0, transport.sent.size)
     }
 
     /** A therapist session bound to [relRef]: the raw session id (cookie) and its anti-CSRF token. */

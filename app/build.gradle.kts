@@ -36,6 +36,28 @@ android {
         }
     }
 
+    // "network" flavor dimension (see docs/COMPANION_PHONE_2B.md §0): the default `foss`
+    // flavor is the flagship, offline-only build — unchanged, no INTERNET permission, no
+    // network code reachable. `sync` is the separate, opt-in "Daymark Sync" flavor; it alone
+    // gets INTERNET (declared only in src/sync/AndroidManifest.xml) and the Companion sync
+    // crypto. Network/sync/portal code must live under src/sync/ ONLY, so `foss` can never
+    // reference it — enforced structurally by Gradle source sets, not by convention.
+    flavorDimensions += "network"
+    productFlavors {
+        create("foss") {
+            dimension = "network"
+        }
+        create("sync") {
+            dimension = "network"
+            applicationIdSuffix = ".sync"
+            versionNameSuffix = "-sync"
+            // JNA (via lazysodium-android) binds native methods reflectively — R8 needs
+            // extra keep rules or a minified release build can break at runtime instead of
+            // compile time. Only this flavor pulls in JNA, so only it needs the rules.
+            proguardFile("proguard-rules-sync.pro")
+        }
+    }
+
     signingConfigs {
         create("release") {
             if (releaseStorePath != null) {
@@ -117,6 +139,20 @@ dependencies {
 
     implementation(libs.androidx.glance.appwidget)
     implementation(libs.nayuki.qrcodegen)
+
+    // Companion sync crypto (Milestone 2b) — the `sync` flavor only; see
+    // docs/COMPANION_PHONE_2B.md. lazysodium-android's own POM depends on the plain (desktop)
+    // jna jar, not the Android-native `aar` variant, so that transitive is excluded and the
+    // `aar` artifact is requested explicitly instead (mirrors lazysodium-android's own README).
+    // Deliberately NOT `libs.jna) { artifact { type = "aar" } }` — combining a version-catalog
+    // accessor with an `artifact {}` block resolves transitive deps instead of the plain
+    // artifact (https://github.com/gradle/gradle/issues/21267); the string form below is the
+    // confirmed-working `@aar` shorthand, with the version still pulled from the catalog.
+    "syncImplementation"(project(":sync-crypto"))
+    "syncImplementation"(libs.lazysodium.android) {
+        exclude(group = "net.java.dev.jna", module = "jna")
+    }
+    "syncImplementation"("net.java.dev.jna:jna:${libs.versions.jna.get()}@aar")
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

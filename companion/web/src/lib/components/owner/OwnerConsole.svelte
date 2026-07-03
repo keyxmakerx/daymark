@@ -5,14 +5,16 @@
   import GrantManager from './GrantManager.svelte'
   import AssignmentInbox from './AssignmentInbox.svelte'
   import ShareBuilder from './ShareBuilder.svelte'
+  import AuditList from './AuditList.svelte'
   import PinnedTherapistPicker from './PinnedTherapistPicker.svelte'
+  import NotificationSettings from './NotificationSettings.svelte'
   import { withGrant, type OwnerSession } from './session'
   import { PortalClient } from '../../sync/portal'
   import type { Grant } from '../../assignments/types'
 
   let { data }: { data: BackupData | null } = $props()
 
-  type Sub = 'review' | 'grants' | 'inbox' | 'share'
+  type Sub = 'review' | 'grants' | 'inbox' | 'share' | 'access-log' | 'notify'
 
   let session = $state<OwnerSession | null>(null)
   let sub = $state<Sub>('grants')
@@ -69,6 +71,8 @@
         <button class:active={sub === 'grants'} aria-pressed={sub === 'grants'} onclick={() => (sub = 'grants')}>Grants</button>
         <button class:active={sub === 'inbox'} aria-pressed={sub === 'inbox'} onclick={() => (sub = 'inbox')}>Inbox</button>
         <button class:active={sub === 'share'} aria-pressed={sub === 'share'} onclick={() => (sub = 'share')}>Share</button>
+        <button class:active={sub === 'access-log'} aria-pressed={sub === 'access-log'} onclick={() => (sub = 'access-log')}>Access log</button>
+        <button class:active={sub === 'notify'} aria-pressed={sub === 'notify'} onclick={() => (sub = 'notify')}>Notifications</button>
       </nav>
       <button class="lock" onclick={lock}>Lock console</button>
     </div>
@@ -89,6 +93,8 @@
       {:else}
         <p class="empty faint">No backup loaded. Open a backup or connect to sync to review your own data here.</p>
       {/if}
+    {:else if sub === 'notify'}
+      <NotificationSettings {client} />
     {:else}
       <div class="who">
         <PinnedTherapistPicker therapists={session.pinned} {selectedId} onselect={(id) => (selectedId = id)} />
@@ -102,6 +108,8 @@
         <AssignmentInbox {session} {client} />
       {:else if sub === 'share'}
         <ShareBuilder {session} therapist={selected} {data} {client} {smtpEnabled} />
+      {:else if sub === 'access-log'}
+        <AuditList therapist={selected} {client} />
       {/if}
     {/if}
   </section>

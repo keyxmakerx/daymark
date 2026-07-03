@@ -59,7 +59,7 @@ have read an earlier draft, **these supersede it.**
 | R9 | "Trust 172.16.0.0/12 as the default proxy CIDR." | **REMOVED.** A /12 lets any co-resident Docker container forge `X-Forwarded-*`. | **Default trusts NO forwarded headers** (use socket peer); operator pins a single narrow proxy IP/CIDR. See [§7](#7-reverse-proxy--trusted-proxy-hardening). |
 | R10 | "Therapist-authored game plans land in the existing `treatments` table." | **REMOVED.** `Treatment.kt` is an owner-authored, explicitly non-evaluative sleep-marker; writing clinical guidance there violates [HANDOFF.md](../HANDOFF.md) §0. | Game plans go in a **new segregated `game_plans` table** (DB v13). See [COMPANION_THERAPIST.md](COMPANION_THERAPIST.md). |
 | R11 | "Deterministic three-way LWW row-merge with per-row `updatedAt`/tombstones." | **NOT IMPLEMENTABLE.** No `updatedAt` column exists anywhere; every entity is `@PrimaryKey(autoGenerate=true) Long`; `entry_activity` is keyed on raw rowids. | **v1 sync is SINGLE-WRITER, LAST-SNAPSHOT-WINS replication.** True row-merge is gated behind a prerequisite UUID+`updatedAt` schema migration, deferred. See [COMPANION_ARCHITECTURE.md](COMPANION_ARCHITECTURE.md). |
-| R12 | "Therapist-signed attestations make access non-hideable." | **RETRACTED** until a chain ships. No sequence/hash-chain means a hostile server silently omits an attestation undetectably. | Add a **signed monotonic sequence / hash-chain** to attestations; until then the "cannot be hidden" claim is dropped. See [§9](#9-audit-logging-posture). |
+| R12 | "Therapist-signed attestations make access non-hideable." | **PARTIALLY RETRACTED.** A server-computed monotonic hash-chain now ships (Track T1), making a *stored* entry's tampering/reordering detectable. It is **not** a therapist-signed attestation, so it adds no non-repudiation, and a hostile server can still simply never append an event or truncate the chain. | The "cannot be hidden" claim stays dropped for **withholding**; it is lifted only for **tampering/reordering of returned entries**. See [§9](#9-audit-logging-posture). |
 
 ---
 
@@ -431,6 +431,61 @@ SAS comparison is the binding step**. This protocol is a **named deliverable
 - Unguessable per-relationship inbox tokens; listing scoped to the caller's own
   relationship only.
 
+### Owner notifications + access-token recovery (Track T2, shipped)
+
+Email Option A: **owner notifications + server-access-token re-issue only** — no owner
+accounts, no passwords, no escrow. The server still can never reset the PIN or E2EE
+passphrase.
+
+- **The registered notification email is stored in plaintext** on the server. This is
+  necessary — the server must read the address to send to it — and is documented
+  loudly rather than glossed. It is comparable in sensitivity to the routing metadata
+  already covered by §3 T1 (a leak reveals that a relationship/owner exists at this
+  address, not any record content).
+- **The owner/bearer token (`DAYMARK_AUTH_TOKEN`) is likewise stored in plaintext**, now
+  in a small per-datadir store rather than only held in process memory from the env
+  var. This does not change its threat classification: it was already an
+  operator-plaintext secret (env var / mounted file), and remains a
+  network-enumeration/DoS guard, **not** a confidentiality boundary (§ above) — it
+  gates PUT/GET of opaque blobs and never decrypts anything.
+- **The access-token recovery request endpoint is unauthenticated by necessity** (that
+  is the point of a recovery path) but is heavily rate-limited per source (with a
+  bounded, evicted rate-limit table so an unauthenticated flood cannot grow it without
+  bound) and **always responds `202` identically** whether the submitted email matches
+  the registered one or not, so a status/body oracle cannot reveal whether an address
+  is registered. The one branch that does real work on a match — sending the email —
+  is **dispatched to a background task, never awaited inline**, so a match and a
+  non-match take the same time to respond too; without this, the real SMTP round-trip
+  that only happens on a match would itself be a timing side-channel defeating the
+  "always responds identically" property. Email comparison is case-insensitive
+  (addresses are normalized to lowercase at registration and at compare time) so a
+  registered `Owner@Example.org` still matches a recovery request for the everyday
+  lowercase form.
+- **The recovery link is built ONLY from the operator-configured `DAYMARK_PUBLIC_BASE_URL`
+  (or `DAYMARK_WEBAUTHN_ORIGINS` as a fallback) — never from the request's `Host`
+  header.** Unlike the owner-authenticated invite link (which does fall back to `Host`
+  as a best effort, acceptable there because minting an invite already requires the
+  owner's bearer token), this route has no credential gate at all; trusting a
+  client-supplied `Host` here would let an unauthenticated attacker cause a real,
+  single-use recovery token to be emailed inside a link pointing at a domain *they*
+  control. If no public base URL is configured, the server accepts the request
+  (still responding identically) but skips sending and logs a warning — see
+  COMPANION_DEPLOYMENT.md.
+- **Recovery is single-use and time-limited**: the confirmation link is a high-entropy,
+  one-time token; confirming it rotates the bearer token immediately (the old value
+  stops working with no overlap) and the new token is shown **once**, in the response
+  to the confirm call — **never** emailed. The rotation is applied to the live
+  in-process token guard from *inside* the same critical section that persists it, so
+  two concurrent confirms (e.g. two outstanding valid links) can't leave the live guard
+  and the persisted/restart-recovered token disagreeing. A follow-up "your access token
+  was just re-issued" receipt is sent to the registered address so an owner who did not
+  initiate a rotation is alerted.
+- **Recovering server access never recovers anything else.** A newly issued bearer
+  token still cannot decrypt a single record — the E2EE passphrase and PIN remain
+  entirely client-side and are unrecoverable by design (O6).
+- **Deferred from this slice:** lockout-alert emails (the "(optional)" item in the
+  original mini-spec) are not yet wired up; tracked as a follow-up.
+
 ---
 
 ## 7. Reverse-proxy / trusted-proxy hardening
@@ -492,32 +547,44 @@ explicitly here per the reviewer must-fix.
 
 ## 9. Audit-logging posture
 
-**Log events, not content.** Owner-readable, append-only, metadata-only.
+**Log events, not content.** Owner-readable, append-only, metadata-only. **Shipped**
+(Track T1): `GET /v1/rel/{relRef}/audit`, gated the same two ways as the blob API — the
+caller must hold the relationship's inbox token (`X-Rel-Token`, hashed to `relRef`) AND
+present the owner bearer token. Therapists cannot read or write it directly; entries are
+appended server-side from the real access paths (auth, TOTP enrol, share/game-plan
+fetch, assignment/game-plan publish, session expiry) — never client-supplied.
 
 ```jsonc
 {
-  "seq": 412,                          // signed monotonic sequence (see below)
-  "ts": 1719600123,                    // server time
-  "event": "share.open",               // invite.redeem | webauthn.register |
-                                       //   auth.success | auth.fail | totp.fail |
-                                       //   share.open | gameplan.publish |
-                                       //   credential.revoked | share.revoked |
-                                       //   lockout | key.repinned
-  "relationship": "rel_a91...",        // opaque per-relationship token, NOT a name/fp
-  "attestation": "<Ed25519 sig>"       // therapist-signed for share.open/gameplan.publish
+  "seq": 412,                    // monotonic per relationship, starts at 1
+  "ts": 1719600123,               // server time, epoch seconds
+  "actor": "therapist",           // "owner" | "therapist" — who performed the action
+  "action": "share.open",         // auth.success | auth.fail | lockout | enrol.ok |
+                                   //   share.open | gameplan.open | assignment.publish |
+                                   //   gameplan.publish | session.expired (extend as needed)
+  "objectRef": "lin1:3",          // opaque channel-scoped id (lineage:version); never content
+  "meta": { "credentialId": "…" },// small, fixed, non-content annotations only (optional)
+  "entryHash": "<sha256 hex>"      // = SHA256(prevHash ‖ seq ‖ ts ‖ relRef ‖ actor ‖ action ‖ objectRef ‖ meta)
 }
 ```
 
 - **Never logged:** which individual records/moods were viewed, any plaintext, CEKs,
   private keys, PRF output, TOTP codes, passphrases.
-- **IP is OFF by default** — a logged IP geolocates the clinic. Short retention when
-  enabled.
-- **Suppression resistance (R12):** therapist-signed attestations prevent **forgery**
-  but **not** silent **suppression/reordering/truncation** by the server. There is no
-  way for the owner to detect an omitted attestation **unless** a **signed monotonic
-  sequence number / hash-chain** is added (the `seq` field above). **Until that ships,
-  the "access cannot be hidden" claim is RETRACTED.** Server-only events
-  (`auth.fail`, `lockout`) are unsigned and labeled **server-asserted**.
+- **IP is OFF by default** (`DAYMARK_ACCESS_LOG_SOURCE_IP`) — a logged IP geolocates the
+  clinic; when enabled it rides in `meta.sourceIp`. Retention is configurable
+  (`DAYMARK_ACCESS_LOG_RETENTION_DAYS`, default 90) — entries older than the window are
+  pruned on the relationship's next append.
+- **Suppression resistance, updated (R12):** each entry is now **server-computed
+  hash-chained** (`entryHash` above) — a *stored* entry cannot be silently altered or
+  reordered without breaking the chain for every entry after it. This is **not** the
+  therapist-signed attestation originally described here (no Ed25519 signature; every
+  event above is server-asserted, the same trust level `auth.fail`/`lockout` already
+  had) — so it adds no non-repudiation, and it does **not** stop a hostile server from
+  simply never appending an event, or from truncating the chain and serving a
+  shorter-but-internally-consistent history. **"Access cannot be hidden" therefore
+  remains partially retracted:** tampering/reordering of what the server *does* return
+  is now detectable; withholding is not. Full suppression-resistance still needs the
+  originally-scoped signed client attestation, which has not shipped.
 
 ---
 
@@ -569,8 +636,8 @@ explicitly here per the reviewer must-fix.
 - [ ] **Client-anchored anti-rollback:** Ed25519 hash-chained manifest verified vs local trust watermark; server chain checks are DoS hygiene only.
 
 **Audit**
-- [ ] Events not content; owner-readable; opaque per-relationship token (not fp/name); IP **off by default**; short retention.
-- [ ] Signed **monotonic sequence / hash-chain** on attestations **or** the "access cannot be hidden" claim is dropped.
+- [x] Events not content; owner-readable; opaque per-relationship token (not fp/name); IP **off by default**; short retention. — shipped (Track T1), see [§9](#9-audit-logging-posture).
+- [x] Monotonic sequence / hash-chain on entries — shipped, **server-computed, not therapist-signed**; the "access cannot be hidden" claim stays dropped for withholding (see [§9](#9-audit-logging-posture)).
 
 **Product boundary**
 - [ ] Therapist viewer + game-plan UI carry the same "self-check, not a diagnosis; scores are not clinical thresholds" framing as the app.

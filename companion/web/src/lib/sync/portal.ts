@@ -34,6 +34,32 @@ export interface InviteResponse {
   expiresAt: number
 }
 
+/** One owner-readable, metadata-only audit entry (COMPANION_SECURITY.md §9). */
+export interface AuditEvent {
+  seq: number
+  ts: number
+  actor: 'owner' | 'therapist'
+  action: string
+  objectRef?: string | null
+  meta?: Record<string, string> | null
+  entryHash: string
+}
+
+export interface AuditLogPage {
+  events: AuditEvent[]
+  nextCursor: number | null
+}
+
+/** Track T2 (email Option A): owner notification-email registration + per-event preferences. */
+export interface NotificationSettings {
+  email: string | null
+  events: string[]
+}
+
+export interface RecoveryConfirmResult {
+  newToken: string
+}
+
 type FetchLike = typeof fetch
 
 export class PortalError extends Error {
@@ -141,6 +167,21 @@ export class PortalClient {
     return (await res.json()) as RelMeta
   }
 
+  // --- owner-readable audit log (metadata only; never content — COMPANION_SECURITY.md §9) ---
+
+  /** Fetch one page of the access log for [inboxToken]'s relationship, newest-first. */
+  async getAuditLog(inboxToken: string, before?: number, limit = 50): Promise<AuditLogPage> {
+    const relRef = await relRefOf(inboxToken)
+    const params = new URLSearchParams({ limit: String(limit) })
+    if (before != null) params.set('before', String(before))
+    const res = await this.req(`/v1/rel/${encodeURIComponent(relRef)}/audit?${params}`, {
+      headers: { 'X-Rel-Token': inboxToken },
+    })
+    if (res.status === 404) return { events: [], nextCursor: null }
+    if (!res.ok) throw new PortalError('audit log fetch failed', res.status)
+    return (await res.json()) as AuditLogPage
+  }
+
   // --- invites (owner mints; link is ALWAYS returned in-band for OOB delivery) ---
 
   async mintInvite(relId: string, scope: string[], ttlSeconds?: number, email?: string): Promise<InviteResponse> {
@@ -152,4 +193,48 @@ export class PortalClient {
     if (!res.ok) throw new PortalError('invite mint failed', res.status)
     return (await res.json()) as InviteResponse
   }
+
+  // --- owner notification-email registration (Track T2) ---
+
+  async getNotificationSettings(): Promise<NotificationSettings> {
+    const res = await this.req('/v1/owner/notifications')
+    if (!res.ok) throw new PortalError('failed to load notification settings', res.status)
+    return (await res.json()) as NotificationSettings
+  }
+
+  async setNotificationSettings(email: string | null, events: string[]): Promise<void> {
+    const res = await this.req('/v1/owner/notifications', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, events }),
+    })
+    if (!res.ok) throw new PortalError('failed to save notification settings', res.status)
+  }
+}
+
+// --- access-token recovery (Track T2) — deliberately UNAUTHENTICATED; no token exists yet ---
+
+/**
+ * Request access-token recovery. Always resolves — the server responds identically whether the
+ * email matches the registered one or not (non-enumerating), so this never throws on mismatch.
+ */
+export async function requestAccessRecovery(baseUrl: string, email: string, doFetch: FetchLike = fetch): Promise<void> {
+  const base = baseUrl.replace(/\/+$/, '')
+  await doFetch(base + '/v1/recovery/request', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+}
+
+/** Confirm a recovery link (the link's `t=` fragment value) and receive the new owner access token once. */
+export async function confirmAccessRecovery(baseUrl: string, confirmToken: string, doFetch: FetchLike = fetch): Promise<RecoveryConfirmResult> {
+  const base = baseUrl.replace(/\/+$/, '')
+  const res = await doFetch(base + '/v1/recovery/confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmToken }),
+  })
+  if (!res.ok) throw new PortalError('recovery link invalid or expired', res.status)
+  return (await res.json()) as RecoveryConfirmResult
 }

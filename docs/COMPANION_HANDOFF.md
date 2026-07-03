@@ -3,6 +3,21 @@
 > Written for a **fresh chat** to continue the Companion build. Snapshot of where things
 > stand, what's verified, what's not, open decisions, and how to resume. Read this first.
 
+> ### 📌 Update (2026-07-03, coordinator)
+>
+> - **PR #6 is MERGED** — everything below that says "on `claude/companion-features` /
+>   PR #6" is now simply **on `main`** (merge `6e1b44c`).
+> - **The §2 "build seems to be failing" report is RESOLVED: unreproducible.** Post-merge
+>   `main` was re-verified green locally *and* in CI at every layer (web build 0 errors,
+>   unit 134/134, integration 5/5, server 57/57, Docker smoke ✅, Android app build ✅).
+>   One known false alarm: in the cloud workspace, `./gradlew` may fail with HTTP 403
+>   downloading the Gradle distribution (egress-proxy policy) — use the preinstalled
+>   system `gradle`; it is not a code failure.
+> - **Open decision §5.1 is DECIDED: Option A** (owner notifications + access-token
+>   re-issue only). §5.2 confirmed: the audit log is next.
+> - **The working plan + parallel track assignments now live in
+>   [`COMPANION_PLAN.md`](COMPANION_PLAN.md).** Read that after this file.
+
 ## 1. Where the work lives
 
 - **Active branch:** `claude/companion-migration-8j32gv`? No — **`claude/companion-features`**
