@@ -3,6 +3,8 @@ package com.daymark.companion.routes
 import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.auth.Secrets
+import com.daymark.companion.mail.MailMessage
+import com.daymark.companion.mail.OwnerNotifier
 import com.daymark.companion.storage.AuditActor
 import com.daymark.companion.storage.AuditAction
 import com.daymark.companion.storage.AuditStore
@@ -59,6 +61,8 @@ fun Route.relationRoutes(
     sessionIdleSeconds: Long,
     maxRequestBytes: Long,
     auditStore: AuditStore,
+    notifier: OwnerNotifier,
+    publicBaseUrl: String?,
     auditSourceIp: Boolean = false,
 ) {
     route("/v1/rel/{relRef}/{channel}") {
@@ -137,6 +141,9 @@ fun Route.relationRoutes(
                     RelPutResult(ctx.relRef, ctx.channel.wire, lineage, putMeta.version, putMeta.size, putMeta.contentHash),
                 )
                 auditPublish(auditStore, ctx, lineage, putMeta.version, auditSourceIp, call)
+                // Best-effort "new item to review" notice — only for the therapist-writes-owner-reads
+                // direction (writerRole already enforced this is THERAPIST for these two channels).
+                reviewKindFor(ctx.channel)?.let { kind -> notifier.notify(kind, portalUrl(call, publicBaseUrl)) }
             } catch (e: RelationStoreException) {
                 call.failRel(e)
             }
@@ -183,6 +190,18 @@ private fun auditSafely(block: () -> Unit) {
 private fun writerRole(channel: Channel): Role = when (channel) {
     Channel.GRANTS, Channel.SHARES -> Role.OWNER
     Channel.ASSIGNMENTS, Channel.GAMEPLANS -> Role.THERAPIST
+}
+
+/** Which owner-facing notification (if any) a successful therapist PUT to this channel triggers. */
+private fun reviewKindFor(channel: Channel): MailMessage.ReviewKind? = when (channel) {
+    Channel.ASSIGNMENTS -> MailMessage.ReviewKind.NEW_ASSIGNMENT
+    Channel.GAMEPLANS -> MailMessage.ReviewKind.NEW_GAMEPLAN
+    Channel.GRANTS, Channel.SHARES -> null
+}
+
+/** Best-effort absolute URL to the owner console root, for "something to review" notifications. */
+private fun portalUrl(call: ApplicationCall, publicBaseUrl: String?): java.net.URI {
+    return java.net.URI("${resolveBaseUrl(call, publicBaseUrl)}/")
 }
 
 private data class RelContext(val relRef: String, val channel: Channel, val role: Role)

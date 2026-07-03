@@ -33,9 +33,9 @@ object MailContentGuard {
 
     fun assertClean(msg: MailMessage, rendered: RenderedMail, allowInsecureLinks: Boolean = false) {
         val url = urlOf(msg)
-        assertUrl(url, allowInsecureLinks)
+        url?.let { assertUrl(it, allowInsecureLinks) }
 
-        // Whitelist: fixed template text + the URL + (invite) the ISO expiry + display name.
+        // Whitelist: fixed template text + the URL + (invite/recovery) the ISO expiry + display name.
         val allowedFragments = mutableListOf<String>()
         when (msg) {
             is MailMessage.TherapistInvite -> {
@@ -49,6 +49,16 @@ object MailContentGuard {
                 allowedFragments += MailTemplates.REVIEW_SUBJECT
                 allowedFragments += REVIEW_TEMPLATE_TOKENS
                 allowedFragments += url.toString()
+            }
+            is MailMessage.AccessRecovery -> {
+                allowedFragments += MailTemplates.RECOVERY_SUBJECT
+                allowedFragments += RECOVERY_TEMPLATE_TOKENS
+                allowedFragments += url.toString()
+                allowedFragments += ISO.format(msg.expiresAt)
+            }
+            is MailMessage.SecurityNotice -> {
+                allowedFragments += MailTemplates.SECURITY_SUBJECT
+                allowedFragments += securityTemplateTokens(msg.event)
             }
         }
 
@@ -71,9 +81,12 @@ object MailContentGuard {
         }
     }
 
-    private fun urlOf(msg: MailMessage): URI = when (msg) {
+    /** Null for message kinds with no link (e.g. [MailMessage.SecurityNotice]) — URL validation is skipped for those. */
+    private fun urlOf(msg: MailMessage): URI? = when (msg) {
         is MailMessage.TherapistInvite -> msg.inviteUrl
         is MailMessage.ReviewNotification -> msg.portalUrl
+        is MailMessage.AccessRecovery -> msg.confirmUrl
+        is MailMessage.SecurityNotice -> null
     }
 
     private fun assertUrl(url: URI, allowInsecureLinks: Boolean) {
@@ -118,4 +131,24 @@ object MailContentGuard {
         "Open the portal to see it:",
         "This email contains no personal or health information.",
     )
+
+    private val RECOVERY_TEMPLATE_TOKENS = listOf(
+        "A request was made to recover access to your Daymark Companion server.",
+        "If this was you, open this single-use link to continue:",
+        "This link expires at",
+        "If you did not request this, you can ignore this email — nothing changes unless the link above is opened.",
+        "This email contains no personal or health information.",
+    )
+
+    private fun securityTemplateTokens(event: MailMessage.SecurityEvent): List<String> {
+        val eventLine = when (event) {
+            MailMessage.SecurityEvent.TOKEN_REISSUED ->
+                "Your Daymark Companion server access token was just re-issued. The previous token no longer works."
+        }
+        return listOf(
+            eventLine,
+            "If you did not do this, your registered email address may be compromised — check your Companion deployment.",
+            "This email contains no personal or health information.",
+        )
+    }
 }

@@ -125,18 +125,42 @@ branch/PRs. Honest state:
 | Therapist portal: **TOTP** auth, single-use invites, pairing + share crypto, owner acceptance inbox, capability-scoped assign surface, game-plan authoring | ✅ built + tested |
 | SMTP mailer (owner-configured, off by default, no record content) | ✅ built, tested vs GreenMail |
 | **Audit log** (owner-readable, metadata-only, hash-chained therapist-access log) | ✅ built + tested |
+| App ⇄ server email, **Option A** (owner notifications + access-token recovery) | ✅ built + tested — see below |
 | WebAuthn / passkey therapist auth | ⚠️ **501 scaffold** — TOTP is the working path; browser ceremony unverifiable headlessly |
 | Phone `sync` flavor (Kotlin, 2b) | 📄 spec only ([COMPANION_PHONE_2B.md](COMPANION_PHONE_2B.md)) — CI/emulator-verifiable |
 
-Verified locally + in CI: web build 0 errors, web unit **141/141**, server **70 tests**,
+Verified locally + in CI: web build 0 errors, web unit **147/147**, server **103 tests**,
 sync integration **5/5**, Docker build+smoke green.
+
+### App ⇄ server email — Option A (owner notifications + access-token recovery)
+
+Decided and shipped: **no owner accounts, no passwords, no escrow.** The server remains
+zero-knowledge and can never reset the PIN or E2EE passphrase. Concretely:
+
+- The owner registers (or changes/removes) a notification email + per-event
+  preferences via the owner-authenticated `PUT/GET /v1/owner/notifications`.
+  The address is stored **in plaintext** on the server by necessity — see the
+  T2 note added to [COMPANION_SECURITY.md](COMPANION_SECURITY.md).
+- Notification events (all through the existing content guard — event type + link
+  only, never record content): a therapist finishing enrollment, a therapist
+  publishing a new assignment or game plan.
+- **Access-token recovery**: an unauthenticated, heavily rate-limited,
+  always-same-response `POST /v1/recovery/request` mints a single-use,
+  time-limited confirmation link (emailed, never returned in the response);
+  `POST /v1/recovery/confirm` rotates the owner's bearer token, shows it once, and
+  invalidates the old one immediately. This recovers **server access only** — it
+  cannot recover the PIN or the E2EE passphrase, and a recovered token still
+  decrypts nothing.
+- The owner/bearer token now lives in a small per-datadir store (`OwnerAccountStore`)
+  instead of only in the `DAYMARK_AUTH_TOKEN` env var, so a runtime rotation survives
+  a restart; an operator changing the env var (the pre-existing redeploy-to-rotate
+  method in [COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md)) still takes precedence.
+- Stays OFF by default: everything no-ops unless `DAYMARK_SMTP_*` is configured *and*
+  the owner has registered an address.
 
 ## Decisions & roadmap (see [COMPANION_PLAN.md](COMPANION_PLAN.md) for the working plan)
 
-- **App ⇄ server email — DECIDED (2026-07-03): Option A**, "notifications +
-  server-access-token recovery" — owner notifications + re-issue of the *access token*
-  only, keeping the local-PIN / no-escrow model intact. The server still cannot reset
-  the PIN or E2EE passphrase. (Track T2 in the plan.)
+- **App ⇄ server email — Option A: ✅ shipped (Track T2)** — see the section above.
 - **Audit log** (owner-readable therapist-access log): ✅ **shipped (Track T1)** —
   hash-chained, metadata-only; see [COMPANION_SECURITY.md](COMPANION_SECURITY.md) §9/R12.
 - **Phone `sync` flavor (2b)**: **in progress as Track T3** (Android CI job first).
@@ -144,8 +168,8 @@ sync integration **5/5**, Docker build+smoke green.
   already-pinned RP-ID/origins; queued as Track T4.
 - Smaller follow-ups (Track T5): credential-rotation endpoint, expired-invite/ticket
   sweep, per-client rate-limiting behind a trusted proxy, crypto-random lineage IDs,
-  server `/data` backup docs.
-
+  server `/data` backup docs, optional lockout-alert emails (deferred from the email
+  Option A slice above).
 ---
 
 ## Related (flagship) documents

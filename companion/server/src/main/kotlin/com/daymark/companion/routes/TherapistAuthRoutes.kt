@@ -6,6 +6,7 @@ import com.daymark.companion.auth.Secrets
 import com.daymark.companion.auth.Totp
 import com.daymark.companion.mail.MailMessage
 import com.daymark.companion.mail.Mailer
+import com.daymark.companion.mail.OwnerNotifier
 import com.daymark.companion.storage.AuditAction
 import com.daymark.companion.storage.AuditActor
 import com.daymark.companion.storage.AuditStore
@@ -65,6 +66,7 @@ fun Route.therapistAuthRoutes(
     totpLockoutFails: Int,
     totpLockoutSeconds: Long,
     publicBaseUrl: String?,
+    notifier: OwnerNotifier,
     cookieSecure: Boolean = true,
     auditStore: AuditStore,
     auditSourceIp: Boolean = false,
@@ -116,6 +118,9 @@ fun Route.therapistAuthRoutes(
             val result = authStore.enrollTotp(req.enrollTicket, req.credentialId, req.secret)
             when (result.status) {
                 AuthStore.EnrollStatus.OK -> {
+                    // Respond FIRST: the audit append and notifier.notify() below are best-effort
+                    // and must never delay or gate the enrollment response the therapist is waiting
+                    // on (it already committed). Matches the ordering in RelationRoutes.kt.
                     call.respond(HttpStatusCode.NoContent)
                     auditSafely {
                         auditStore.append(
@@ -123,6 +128,7 @@ fun Route.therapistAuthRoutes(
                             meta = auditMeta(auditSourceIp, call, "credentialId" to req.credentialId),
                         )
                     }
+                    notifier.notify(MailMessage.ReviewKind.THERAPIST_ENROLLED, portalUrlFor(call, publicBaseUrl))
                 }
                 // Do not distinguish a bad/expired ticket from a missing one (non-enumerating).
                 AuthStore.EnrollStatus.NO_TICKET -> call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized"))
@@ -249,10 +255,10 @@ private fun decodeSecret(s: String): ByteArray? {
 }
 
 private fun buildInviteLink(call: ApplicationCall, publicBaseUrl: String?, inviteId: String, secret: String): String {
-    val base = publicBaseUrl?.trimEnd('/') ?: run {
-        val scheme = call.request.origin.scheme
-        val host = call.request.headers[HttpHeaders.Host] ?: "${call.request.origin.serverHost}:${call.request.origin.serverPort}"
-        "$scheme://$host"
-    }
-    return "$base/portal/invite#id=$inviteId&s=$secret"
+    return "${resolveBaseUrl(call, publicBaseUrl)}/portal/invite#id=$inviteId&s=$secret"
+}
+
+/** Best-effort absolute URL to the owner console root, for "something to review" notifications. */
+private fun portalUrlFor(call: ApplicationCall, publicBaseUrl: String?): URI {
+    return URI("${resolveBaseUrl(call, publicBaseUrl)}/")
 }

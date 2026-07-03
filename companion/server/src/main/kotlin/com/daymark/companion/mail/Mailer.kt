@@ -55,6 +55,8 @@ class Mailer internal constructor(
     private fun kindOf(msg: MailMessage): String = when (msg) {
         is MailMessage.TherapistInvite -> "invite"
         is MailMessage.ReviewNotification -> "notification.${msg.kind}"
+        is MailMessage.AccessRecovery -> "recovery"
+        is MailMessage.SecurityNotice -> "security.${msg.event}"
     }
 
     companion object {

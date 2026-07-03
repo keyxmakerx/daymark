@@ -34,6 +34,16 @@ data class Config(
     /** WebAuthn RP-ID / origins are config-pinned NOW even though verification is scaffold-only. */
     val webauthnRpId: String? = null,
     val webauthnOrigins: List<String> = emptyList(),
+    /**
+     * Explicit public origin for building absolute links in outbound email (invites,
+     * review notifications, access-token recovery). Falls back to the first configured
+     * WebAuthn origin if unset (many deployments already point that at the real external
+     * origin). Never derived from a client-controllable `Host` header — see
+     * COMPANION_SECURITY.md's trusted-proxy contract; the unauthenticated recovery route in
+     * particular refuses to guess a base URL when this is unset rather than trusting the
+     * request.
+     */
+    val publicBaseUrl: String? = null,
     /** Single-use invite TTL (default 72h). */
     val inviteTtlSeconds: Long = 259_200L,
     /** Idle / absolute session lifetimes (15 min / 8 h). */
@@ -48,6 +58,13 @@ data class Config(
     /** Owner-readable audit log (COMPANION_SECURITY.md §9): retention window, IP off by default. */
     val auditRetentionDays: Long = 90L,
     val auditSourceIpEnabled: Boolean = false,
+    /**
+     * Track T2 (email Option A): the unauthenticated access-token recovery request endpoint is
+     * capped at this many attempts per source per hour (heavily rate-limited, per the mini-spec).
+     */
+    val reissueMaxPerHour: Int = 3,
+    /** How long a minted recovery-confirmation link stays valid before it is GONE. */
+    val reissueConfirmTtlSeconds: Long = 3600L,
     /**
      * Whether the therapist session cookie carries the `Secure` attribute. TRUE by default
      * (the portal requires a real TLS origin, per COMPANION_SECURITY.md open Q7). Only set
@@ -84,6 +101,8 @@ data class Config(
                 webauthnRpId = env["DAYMARK_WEBAUTHN_RP_ID"]?.trim()?.ifBlank { null },
                 webauthnOrigins = env["DAYMARK_WEBAUTHN_ORIGINS"]?.split(',')
                     ?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList(),
+                publicBaseUrl = env["DAYMARK_PUBLIC_BASE_URL"]?.trim()?.ifBlank { null }
+                    ?: env["DAYMARK_WEBAUTHN_ORIGINS"]?.split(',')?.map { it.trim() }?.firstOrNull { it.isNotEmpty() },
                 inviteTtlSeconds = env["DAYMARK_INVITE_TTL_SECONDS"]?.trim()?.toLongOrNull() ?: 259_200L,
                 sessionIdleSeconds = env["DAYMARK_SESSION_IDLE_SECONDS"]?.trim()?.toLongOrNull() ?: 900L,
                 sessionAbsoluteSeconds = env["DAYMARK_SESSION_ABSOLUTE_SECONDS"]?.trim()?.toLongOrNull() ?: 28_800L,
@@ -95,6 +114,8 @@ data class Config(
                 auditRetentionDays = env["DAYMARK_ACCESS_LOG_RETENTION_DAYS"]?.trim()?.toLongOrNull() ?: 90L,
                 auditSourceIpEnabled = env["DAYMARK_ACCESS_LOG_SOURCE_IP"]?.trim()
                     .let { it == "1" || it.equals("true", true) },
+                reissueMaxPerHour = env["DAYMARK_REISSUE_MAX_PER_HOUR"]?.trim()?.toIntOrNull() ?: 3,
+                reissueConfirmTtlSeconds = env["DAYMARK_REISSUE_CONFIRM_TTL_SECONDS"]?.trim()?.toLongOrNull() ?: 3600L,
             )
         }
 

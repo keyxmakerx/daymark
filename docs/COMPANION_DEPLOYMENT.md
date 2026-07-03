@@ -712,6 +712,9 @@ Serving under a prefix is split between proxy and app:
 | `DAYMARK_REL_MAX_VERSIONS` | `50` | Append-only retention cap per relationship-channel lineage. |
 | `DAYMARK_REL_QUOTA_BYTES` | `268435456` | Per-relationship storage quota (256 MiB). |
 | `DAYMARK_COOKIE_INSECURE` | _(off)_ | Dev/test only: drop the `Secure` attribute on the session cookie (for a plain-HTTP origin). Leave unset in production — the portal requires a TLS origin. |
+| `DAYMARK_REISSUE_MAX_PER_HOUR` | `3` | Cap on `POST /v1/recovery/request` attempts per source per hour (email Option A access-token recovery; heavily rate-limited by design). |
+| `DAYMARK_REISSUE_CONFIRM_TTL_SECONDS` | `3600` | How long a minted access-token recovery confirmation link stays valid. |
+| `DAYMARK_PUBLIC_BASE_URL` | _(falls back to the first `DAYMARK_WEBAUTHN_ORIGINS` entry; unset = none)_ | The real external origin (e.g. `https://daymark.example.com`) used to build links in outbound email — invites, review notifications, and access-token recovery. **Required** for access-token recovery to actually send: unlike the invite link, the recovery link is never built from the request's `Host` header (that route is unauthenticated, so trusting a client-supplied header there would let an attacker redirect a real recovery token to a domain they control) — if this is unset, recovery requests are accepted but silently skip sending, logged as a warning. |
 | `DAYMARK_SHARE_MAX_TTL_DAYS` | `90` | Ceiling on owner-requested share/game-plan expiry (bounds the no-PFS harvest window). |
 | `DAYMARK_BLOB_HARD_DELETE` | `on-supersede-and-expiry` | Hard-delete superseded/expired blob **bytes** (not just flag). |
 | `DAYMARK_SIZE_PADDING` | `bucketed` | Pad blob sizes to fixed buckets (e.g. 4/16/64 KiB) **by default** (anti acuity/withdrawal de-anon). |

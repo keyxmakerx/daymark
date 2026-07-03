@@ -84,6 +84,35 @@ class MailerGreenMailTest {
     }
 
     @Test
+    fun `sends access recovery link over tls`() {
+        val result = mailer().send(
+            MailMessage.AccessRecovery(
+                to = "owner@example.org",
+                confirmUrl = URI("https://companion.example.org/recover#t=abc123"),
+                expiresAt = Instant.parse("2026-09-01T00:00:00Z"),
+            ),
+        )
+        assertEquals(MailResult.Sent, result)
+        assertTrue(greenMail.waitForIncomingEmail(5000, 1))
+        val m = greenMail.receivedMessages[0]
+        assertEquals(MailTemplates.RECOVERY_SUBJECT, m.subject)
+        val body = m.content.toString()
+        assertTrue(body.contains("https://companion.example.org/recover#t=abc123"))
+    }
+
+    @Test
+    fun `sends token-reissued security notice over tls with no link`() {
+        val result = mailer().send(
+            MailMessage.SecurityNotice(to = "owner@example.org", event = MailMessage.SecurityEvent.TOKEN_REISSUED),
+        )
+        assertEquals(MailResult.Sent, result)
+        assertTrue(greenMail.waitForIncomingEmail(5000, 1))
+        val m = greenMail.receivedMessages[0]
+        assertEquals(MailTemplates.SECURITY_SUBJECT, m.subject)
+        assertTrue(m.content.toString().contains("re-issued"))
+    }
+
+    @Test
     fun `sends review notification over tls`() {
         val result = mailer().send(
             MailMessage.ReviewNotification(
