@@ -46,6 +46,13 @@ data class Config(
     val relMaxVersions: Int = 50,
     val relQuotaBytes: Long = 268_435_456L, // 256 MiB per relationship
     /**
+     * Track T2 (email Option A): the unauthenticated access-token recovery request endpoint is
+     * capped at this many attempts per source per hour (heavily rate-limited, per the mini-spec).
+     */
+    val reissueMaxPerHour: Int = 3,
+    /** How long a minted recovery-confirmation link stays valid before it is GONE. */
+    val reissueConfirmTtlSeconds: Long = 3600L,
+    /**
      * Whether the therapist session cookie carries the `Secure` attribute. TRUE by default
      * (the portal requires a real TLS origin, per COMPANION_SECURITY.md open Q7). Only set
      * false for a plain-HTTP dev/test origin — the cookie would otherwise not be sent.
@@ -89,6 +96,8 @@ data class Config(
                 relMaxVersions = env["DAYMARK_REL_MAX_VERSIONS"]?.trim()?.toIntOrNull() ?: 50,
                 relQuotaBytes = env["DAYMARK_REL_QUOTA_BYTES"]?.trim()?.toLongOrNull() ?: 268_435_456L,
                 cookieSecure = env["DAYMARK_COOKIE_INSECURE"]?.trim().let { !(it == "1" || it.equals("true", true)) },
+                reissueMaxPerHour = env["DAYMARK_REISSUE_MAX_PER_HOUR"]?.trim()?.toIntOrNull() ?: 3,
+                reissueConfirmTtlSeconds = env["DAYMARK_REISSUE_CONFIRM_TTL_SECONDS"]?.trim()?.toLongOrNull() ?: 3600L,
             )
         }
 

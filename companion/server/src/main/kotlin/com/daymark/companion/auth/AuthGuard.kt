@@ -11,9 +11,15 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * The bearer token is separate from the E2EE passphrase: it only gates who may PUT/GET
  * opaque blobs; it never decrypts anything.
+ *
+ * The accepted token is swappable at runtime via [rotate] — the email-triggered access-token
+ * recovery flow (COMPANION_PLAN.md T2) calls this after persisting a newly issued token, so a
+ * live server never needs a restart to accept it. `@Volatile` is sufficient (not a lock): the
+ * whole array reference is swapped atomically, so a concurrent reader always sees a complete
+ * old or new token, never a partial one.
  */
 class AuthGuard(
-    private val token: String,
+    token: String,
     private val lockoutThreshold: Int,
     private val lockoutMillis: Long,
     private val ratePerSecond: Int,
@@ -21,7 +27,8 @@ class AuthGuard(
 ) {
     enum class Result { OK, BAD_TOKEN, LOCKED, RATE_LIMITED }
 
-    private val tokenBytes = token.toByteArray(Charsets.UTF_8)
+    @Volatile
+    private var tokenBytes = token.toByteArray(Charsets.UTF_8)
     private val failures = ConcurrentHashMap<String, FailState>()
     private val buckets = ConcurrentHashMap<String, Bucket>()
 
@@ -41,6 +48,16 @@ class AuthGuard(
         }
         recordFailure(sourceId)
         return Result.BAD_TOKEN
+    }
+
+    /**
+     * Replace the accepted token, effective immediately for every subsequent [authorize] call.
+     * The old token stops working the instant this returns — there is no grace overlap. Callers
+     * are responsible for persisting the new token durably *before* calling this (so a crash
+     * between persist and rotate never strands the server on a token nobody has).
+     */
+    fun rotate(newToken: String) {
+        tokenBytes = newToken.toByteArray(Charsets.UTF_8)
     }
 
     private fun recordFailure(sourceId: String) {

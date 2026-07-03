@@ -1,17 +1,20 @@
 # Daymark Companion — Documentation Index
 
-> ## ⚠️ STATUS: DESIGN ONLY — NO CODE EXISTS YET
+> ## Status: substantially built and CI-verified — see the [build status](#build-status-what-actually-ships-today) below
 >
-> **Nothing described in these documents is implemented.** There is no Companion
-> container, no `ghcr.io/daymark/companion` image, no "Daymark Sync" build flavor, no
-> therapist portal, no invite flow, and no `game_plans` table in the shipping app
-> today. Everything here is a **design proposal** — a build-ready contract to be
-> reviewed, sequenced, and possibly built. It may change or be dropped entirely.
+> These documents began as a design proposal; most of the surface described here is
+> now **implemented and CI-green** (container, sync, therapist portal, SMTP, the
+> Companion web UI). The [build status](#build-status-what-actually-ships-today)
+> section is the source of truth for what actually ships today vs. what is still
+> spec-only. Sibling documents (SCOPE/ARCHITECTURE/SECURITY/THERAPIST/DEPLOYMENT)
+> were written design-first and have not all been fully reconciled against the
+> shipped code — where they conflict with this file's build-status table, this file
+> wins. See [COMPANION_HANDOFF.md](COMPANION_HANDOFF.md) for session-by-session detail.
 >
 > The flagship Daymark app remains **fully offline, declares no `INTERNET`
 > permission, and operates 100% on-device** (see [../PRIVACY.md](../PRIVACY.md)). The
-> Companion, *if* built, lives **only** in a separate, opt-in flavor and the
-> self-hosted container, and never alters that default.
+> Companion lives **only** in a separate, opt-in flavor and the self-hosted
+> container, and never alters that default.
 
 ---
 
@@ -122,25 +125,48 @@ branch/PRs. Honest state:
 | Capability/assignment model + write-back crypto | ✅ built + tested |
 | Therapist portal: **TOTP** auth, single-use invites, pairing + share crypto, owner acceptance inbox, capability-scoped assign surface, game-plan authoring | ✅ built + tested |
 | SMTP mailer (owner-configured, off by default, no record content) | ✅ built, tested vs GreenMail |
+| App ⇄ server email, **Option A** (owner notifications + access-token recovery) | ✅ built + tested — see below |
 | WebAuthn / passkey therapist auth | ⚠️ **501 scaffold** — TOTP is the working path; browser ceremony unverifiable headlessly |
 | Phone `sync` flavor (Kotlin, 2b) | 📄 spec only ([COMPANION_PHONE_2B.md](COMPANION_PHONE_2B.md)) — CI/emulator-verifiable |
 
-Verified locally + in CI: web build 0 errors, web unit **134/134**, server **57 tests**,
+Verified locally + in CI: web build 0 errors, web unit **140/140**, server **84 tests**,
 sync integration **5/5**, Docker build+smoke green.
+
+### App ⇄ server email — Option A (owner notifications + access-token recovery)
+
+Decided and shipped: **no owner accounts, no passwords, no escrow.** The server remains
+zero-knowledge and can never reset the PIN or E2EE passphrase. Concretely:
+
+- The owner registers (or changes/removes) a notification email + per-event
+  preferences via the owner-authenticated `PUT/GET /v1/owner/notifications`.
+  The address is stored **in plaintext** on the server by necessity — see the
+  T2 note added to [COMPANION_SECURITY.md](COMPANION_SECURITY.md).
+- Notification events (all through the existing content guard — event type + link
+  only, never record content): a therapist finishing enrollment, a therapist
+  publishing a new assignment or game plan.
+- **Access-token recovery**: an unauthenticated, heavily rate-limited,
+  always-same-response `POST /v1/recovery/request` mints a single-use,
+  time-limited confirmation link (emailed, never returned in the response);
+  `POST /v1/recovery/confirm` rotates the owner's bearer token, shows it once, and
+  invalidates the old one immediately. This recovers **server access only** — it
+  cannot recover the PIN or the E2EE passphrase, and a recovered token still
+  decrypts nothing.
+- The owner/bearer token now lives in a small per-datadir store (`OwnerAccountStore`)
+  instead of only in the `DAYMARK_AUTH_TOKEN` env var, so a runtime rotation survives
+  a restart; an operator changing the env var (the pre-existing redeploy-to-rotate
+  method in [COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md)) still takes precedence.
+- Stays OFF by default: everything no-ops unless `DAYMARK_SMTP_*` is configured *and*
+  the owner has registered an address.
 
 ## Decisions & roadmap (pending / next)
 
-- **App ⇄ server email** (owner side): the server is zero-knowledge, so it **cannot** reset
-  your PIN or E2EE passphrase (no escrow). **Default direction (pending maintainer confirm):
-  "notifications + server-access-token recovery"** — owner notifications + re-issue of the
-  *access token* only, keeping the local-PIN / no-escrow model intact. (Alternatives: a real
-  owner account, or a hybrid portal-login account — a larger departure.)
 - **Audit log** (owner-readable therapist-access log): flagged in
   [COMPANION_SECURITY.md](COMPANION_SECURITY.md); **next to build.**
 - **WebAuthn**: implement server-side attestation/assertion (CI-testable) behind the
   already-pinned RP-ID/origins; browser ceremony stays deploy-time verified.
 - Smaller follow-ups: credential-rotation endpoint, expired-invite/ticket sweep, per-client
-  rate-limiting behind a trusted proxy, crypto-random lineage IDs, server `/data` backup docs.
+  rate-limiting behind a trusted proxy, crypto-random lineage IDs, server `/data` backup docs,
+  optional lockout-alert emails (deferred from the email Option A slice above).
 
 ---
 

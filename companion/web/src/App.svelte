@@ -7,8 +7,9 @@
   import SyncPanel from './lib/components/SyncPanel.svelte'
   import Assessments from './lib/components/Assessments.svelte'
   import OwnerConsole from './lib/components/owner/OwnerConsole.svelte'
+  import RecoverAccess from './lib/components/owner/RecoverAccess.svelte'
 
-  type Source = 'file' | 'sync' | 'assess' | 'owner'
+  type Source = 'file' | 'sync' | 'assess' | 'owner' | 'recover'
 
   let data = $state<BackupData | null>(null)
   let fileName = $state('')
@@ -65,6 +66,7 @@
           <button class:active={source === 'sync'} aria-pressed={source === 'sync'} onclick={() => (source = 'sync')}>Connect to sync</button>
           <button class:active={source === 'assess'} aria-pressed={source === 'assess'} onclick={() => (source = 'assess')}>Self-checks</button>
           <button class:active={source === 'owner'} aria-pressed={source === 'owner'} onclick={() => (source = 'owner')}>Owner console</button>
+          <button class:active={source === 'recover'} aria-pressed={source === 'recover'} onclick={() => (source = 'recover')}>Recover access</button>
         </nav>
 
         {#if source === 'file'}
@@ -73,6 +75,8 @@
           <SyncPanel onload={loadData} />
         {:else if source === 'assess'}
           <Assessments />
+        {:else if source === 'recover'}
+          <RecoverAccess />
         {:else}
           <OwnerConsole data={null} />
         {/if}
@@ -80,7 +84,7 @@
         {#if error}
           <p class="error" role="alert">{error}</p>
         {/if}
-        {#if source !== 'assess' && source !== 'owner'}
+        {#if source !== 'assess' && source !== 'owner' && source !== 'recover'}
           <p class="faint note">
             Non-diagnostic: Daymark is a self-tracking and journaling tool. Nothing here
             is a medical assessment. Export a backup from the app via

@@ -3,7 +3,10 @@ package com.daymark.companion
 import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.mail.Mailer
+import com.daymark.companion.mail.OwnerAccountStore
+import com.daymark.companion.mail.OwnerNotifier
 import com.daymark.companion.routes.ErrorDto
+import com.daymark.companion.routes.recoveryRoutes
 import com.daymark.companion.routes.relationRoutes
 import com.daymark.companion.routes.syncRoutes
 import com.daymark.companion.routes.therapistAuthRoutes
@@ -70,6 +73,7 @@ fun Application.module(
     mailer: Mailer? = null,
     relationStore: RelationStore? = null,
     authStore: AuthStore? = null,
+    accountStore: OwnerAccountStore? = null,
 ) {
     install(ContentNegotiation) { json(Json { explicitNulls = false }) }
     install(SecurityHeaders)
@@ -89,13 +93,22 @@ fun Application.module(
     val store = if (config.syncEnabled) {
         blobStore ?: BlobStore(config.dataDir, config.maxBlobBytes, config.maxVersions, config.perTokenQuotaBytes)
     } else null
-    val guard = config.authToken?.let {
-        AuthGuard(it, config.authLockoutFails, config.authLockoutSeconds * 1000, config.rateLimitRps)
+
+    // Track T2 (email Option A): the owner/bearer token now lives here, not just in config —
+    // this is what makes it rotatable at runtime via the email-triggered recovery flow without a
+    // restart. Bootstrapped from (and reconciled against, on every boot) DAYMARK_AUTH_TOKEN; see
+    // OwnerAccountStore's kdoc for the reconciliation rule.
+    val account = config.authToken?.let { token ->
+        accountStore ?: OwnerAccountStore(config.dataDir, token)
+    }
+    val guard = account?.let {
+        AuthGuard(it.currentToken(), config.authLockoutFails, config.authLockoutSeconds * 1000, config.rateLimitRps)
     }
 
     // Built once and DI'd to the invite/notification services. When SMTP is disabled this never
     // opens a socket. Tests can inject an InMemory-backed mailer.
     val mail = mailer ?: Mailer.forConfig(config.mailer)
+    val notifier = account?.let { OwnerNotifier(it, mail) }
 
     // Therapist portal: relationship blob channels + auth. Gated on DAYMARK_THERAPIST_AUTH and
     // (for the owner-write direction / mint route) the owner bearer token being configured.
@@ -133,8 +146,11 @@ fun Application.module(
 
         // Therapist portal. Fail-closed: 503 on every portal path when the feature is off, so a
         // probe cannot tell configured-but-empty from not-configured.
-        if (relStore != null && auth != null && guard != null) {
-            relationRoutes(relStore, guard, auth, config.sessionIdleSeconds, config.maxRequestBytes)
+        if (relStore != null && auth != null && guard != null && notifier != null) {
+            relationRoutes(
+                relStore, guard, auth, config.sessionIdleSeconds, config.maxRequestBytes,
+                notifier = notifier, publicBaseUrl = config.webauthnOrigins.firstOrNull(),
+            )
             therapistAuthRoutes(
                 authStore = auth,
                 ownerGuard = guard,
@@ -145,6 +161,7 @@ fun Application.module(
                 totpLockoutFails = config.totpLockoutFails,
                 totpLockoutSeconds = config.totpLockoutSeconds,
                 publicBaseUrl = config.webauthnOrigins.firstOrNull(),
+                notifier = notifier,
                 cookieSecure = config.cookieSecure,
             )
         } else {
@@ -155,6 +172,25 @@ fun Application.module(
             post("/v1/totp/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
             post("/v1/session/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
             post("/v1/webauthn/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
+        }
+
+        // Track T2 (email Option A): owner notification-email registration + the unauthenticated
+        // access-token recovery flow. Gated on the sync/owner bearer token being configured at
+        // all (independent of the therapist portal — recovery covers plain /v1 sync access too),
+        // fail-closed to 503 otherwise so a probe cannot tell configured-but-empty from absent.
+        if (account != null && guard != null && notifier != null) {
+            recoveryRoutes(
+                accountStore = account,
+                ownerGuard = guard,
+                mailer = mail,
+                confirmTtlSeconds = config.reissueConfirmTtlSeconds,
+                reissueMaxPerHour = config.reissueMaxPerHour,
+                publicBaseUrl = config.webauthnOrigins.firstOrNull(),
+            )
+        } else {
+            get("/v1/owner/notifications") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("recovery not configured")) }
+            put("/v1/owner/notifications") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("recovery not configured")) }
+            post("/v1/recovery/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("recovery not configured")) }
         }
 
         // The therapist portal is a SEPARATE surface served at its own route. Map the clean path

@@ -431,6 +431,39 @@ SAS comparison is the binding step**. This protocol is a **named deliverable
 - Unguessable per-relationship inbox tokens; listing scoped to the caller's own
   relationship only.
 
+### Owner notifications + access-token recovery (Track T2, shipped)
+
+Email Option A: **owner notifications + server-access-token re-issue only** — no owner
+accounts, no passwords, no escrow. The server still can never reset the PIN or E2EE
+passphrase.
+
+- **The registered notification email is stored in plaintext** on the server. This is
+  necessary — the server must read the address to send to it — and is documented
+  loudly rather than glossed. It is comparable in sensitivity to the routing metadata
+  already covered by §3 T1 (a leak reveals that a relationship/owner exists at this
+  address, not any record content).
+- **The owner/bearer token (`DAYMARK_AUTH_TOKEN`) is likewise stored in plaintext**, now
+  in a small per-datadir store rather than only held in process memory from the env
+  var. This does not change its threat classification: it was already an
+  operator-plaintext secret (env var / mounted file), and remains a
+  network-enumeration/DoS guard, **not** a confidentiality boundary (§ above) — it
+  gates PUT/GET of opaque blobs and never decrypts anything.
+- **The access-token recovery request endpoint is unauthenticated by necessity** (that
+  is the point of a recovery path) but is heavily rate-limited per source and
+  **always responds identically** whether the submitted email matches the registered
+  one or not, so it cannot be used to probe whether an address is registered.
+- **Recovery is single-use and time-limited**: the confirmation link is a high-entropy,
+  one-time token; confirming it rotates the bearer token immediately (the old value
+  stops working with no overlap) and the new token is shown **once**, in the response
+  to the confirm call — **never** emailed. A follow-up "your access token was just
+  re-issued" receipt is sent to the registered address so an owner who did not
+  initiate a rotation is alerted.
+- **Recovering server access never recovers anything else.** A newly issued bearer
+  token still cannot decrypt a single record — the E2EE passphrase and PIN remain
+  entirely client-side and are unrecoverable by design (O6).
+- **Deferred from this slice:** lockout-alert emails (the "(optional)" item in the
+  original mini-spec) are not yet wired up; tracked as a follow-up.
+
 ---
 
 ## 7. Reverse-proxy / trusted-proxy hardening

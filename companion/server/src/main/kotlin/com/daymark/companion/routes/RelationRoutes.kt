@@ -3,6 +3,8 @@ package com.daymark.companion.routes
 import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.auth.Secrets
+import com.daymark.companion.mail.MailMessage
+import com.daymark.companion.mail.OwnerNotifier
 import com.daymark.companion.storage.Channel
 import com.daymark.companion.storage.RelMeta
 import com.daymark.companion.storage.RelationStore
@@ -52,6 +54,8 @@ fun Route.relationRoutes(
     authStore: AuthStore,
     sessionIdleSeconds: Long,
     maxRequestBytes: Long,
+    notifier: OwnerNotifier,
+    publicBaseUrl: String?,
 ) {
     route("/v1/rel/{relRef}/{channel}") {
 
@@ -126,6 +130,9 @@ fun Route.relationRoutes(
                     HttpStatusCode.Created,
                     RelPutResult(ctx.relRef, ctx.channel.wire, lineage, meta.version, meta.size, meta.contentHash),
                 )
+                // Best-effort "new item to review" notice — only for the therapist-writes-owner-reads
+                // direction (writerRole already enforced this is THERAPIST for these two channels).
+                reviewKindFor(ctx.channel)?.let { kind -> notifier.notify(kind, portalUrl(call, publicBaseUrl)) }
             } catch (e: RelationStoreException) {
                 call.failRel(e)
             }
@@ -136,6 +143,23 @@ fun Route.relationRoutes(
 private fun writerRole(channel: Channel): Role = when (channel) {
     Channel.GRANTS, Channel.SHARES -> Role.OWNER
     Channel.ASSIGNMENTS, Channel.GAMEPLANS -> Role.THERAPIST
+}
+
+/** Which owner-facing notification (if any) a successful therapist PUT to this channel triggers. */
+private fun reviewKindFor(channel: Channel): MailMessage.ReviewKind? = when (channel) {
+    Channel.ASSIGNMENTS -> MailMessage.ReviewKind.NEW_ASSIGNMENT
+    Channel.GAMEPLANS -> MailMessage.ReviewKind.NEW_GAMEPLAN
+    Channel.GRANTS, Channel.SHARES -> null
+}
+
+/** Best-effort absolute URL to the owner console root, for "something to review" notifications. */
+private fun portalUrl(call: ApplicationCall, publicBaseUrl: String?): java.net.URI {
+    val base = publicBaseUrl?.trimEnd('/') ?: run {
+        val scheme = call.request.origin.scheme
+        val host = call.request.headers[HttpHeaders.Host] ?: "${call.request.origin.serverHost}:${call.request.origin.serverPort}"
+        "$scheme://$host"
+    }
+    return java.net.URI("$base/")
 }
 
 private data class RelContext(val relRef: String, val channel: Channel, val role: Role)

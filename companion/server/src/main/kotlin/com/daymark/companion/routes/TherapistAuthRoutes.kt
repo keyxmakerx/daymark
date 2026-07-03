@@ -6,6 +6,7 @@ import com.daymark.companion.auth.Secrets
 import com.daymark.companion.auth.Totp
 import com.daymark.companion.mail.MailMessage
 import com.daymark.companion.mail.Mailer
+import com.daymark.companion.mail.OwnerNotifier
 import io.ktor.http.Cookie
 import io.ktor.http.CookieEncoding
 import io.ktor.http.HttpHeaders
@@ -50,6 +51,7 @@ fun Route.therapistAuthRoutes(
     totpLockoutFails: Int,
     totpLockoutSeconds: Long,
     publicBaseUrl: String?,
+    notifier: OwnerNotifier,
     cookieSecure: Boolean = true,
 ) {
     route("/v1") {
@@ -98,7 +100,10 @@ fun Route.therapistAuthRoutes(
             if (secretBytes.size < 16) return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("secret too short"))
             val result = authStore.enrollTotp(req.enrollTicket, req.credentialId, req.secret)
             when (result.status) {
-                AuthStore.EnrollStatus.OK -> call.respond(HttpStatusCode.NoContent)
+                AuthStore.EnrollStatus.OK -> {
+                    notifier.notify(MailMessage.ReviewKind.THERAPIST_ENROLLED, portalUrlFor(call, publicBaseUrl))
+                    call.respond(HttpStatusCode.NoContent)
+                }
                 // Do not distinguish a bad/expired ticket from a missing one (non-enumerating).
                 AuthStore.EnrollStatus.NO_TICKET -> call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized"))
                 // A credential already exists for this relationship/credential — refuse to overwrite.
@@ -209,4 +214,14 @@ private fun buildInviteLink(call: ApplicationCall, publicBaseUrl: String?, invit
         "$scheme://$host"
     }
     return "$base/portal/invite#id=$inviteId&s=$secret"
+}
+
+/** Best-effort absolute URL to the owner console root, for "something to review" notifications. */
+private fun portalUrlFor(call: ApplicationCall, publicBaseUrl: String?): URI {
+    val base = publicBaseUrl?.trimEnd('/') ?: run {
+        val scheme = call.request.origin.scheme
+        val host = call.request.headers[HttpHeaders.Host] ?: "${call.request.origin.serverHost}:${call.request.origin.serverPort}"
+        "$scheme://$host"
+    }
+    return URI("$base/")
 }
