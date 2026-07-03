@@ -1,17 +1,18 @@
 # Daymark Companion — Documentation Index
 
-> ## ⚠️ STATUS: DESIGN ONLY — NO CODE EXISTS YET
+> ## STATUS: LARGELY BUILT — see the [build-status matrix](#build-status-what-actually-ships-today) below
 >
-> **Nothing described in these documents is implemented.** There is no Companion
-> container, no `ghcr.io/daymark/companion` image, no "Daymark Sync" build flavor, no
-> therapist portal, no invite flow, and no `game_plans` table in the shipping app
-> today. Everything here is a **design proposal** — a build-ready contract to be
-> reviewed, sequenced, and possibly built. It may change or be dropped entirely.
+> These documents began as a design proposal; most of it is now **built, tested, and
+> CI-verified** on `main` (container + viewer, E2EE sync, self-checks, dashboard,
+> assignments, therapist portal + TOTP, SMTP mailer). Still outstanding: WebAuthn
+> (501 scaffold), the phone `sync` flavor (spec only), and the items in
+> [COMPANION_PLAN.md](COMPANION_PLAN.md). Where a design section conflicts with the
+> matrix below, the matrix is the truth.
 >
 > The flagship Daymark app remains **fully offline, declares no `INTERNET`
 > permission, and operates 100% on-device** (see [../PRIVACY.md](../PRIVACY.md)). The
-> Companion, *if* built, lives **only** in a separate, opt-in flavor and the
-> self-hosted container, and never alters that default.
+> Companion lives **only** in the self-hosted container and (eventually) a separate,
+> opt-in phone flavor, and never alters that default.
 
 ---
 
@@ -128,19 +129,20 @@ branch/PRs. Honest state:
 Verified locally + in CI: web build 0 errors, web unit **134/134**, server **57 tests**,
 sync integration **5/5**, Docker build+smoke green.
 
-## Decisions & roadmap (pending / next)
+## Decisions & roadmap (see [COMPANION_PLAN.md](COMPANION_PLAN.md) for the working plan)
 
-- **App ⇄ server email** (owner side): the server is zero-knowledge, so it **cannot** reset
-  your PIN or E2EE passphrase (no escrow). **Default direction (pending maintainer confirm):
-  "notifications + server-access-token recovery"** — owner notifications + re-issue of the
-  *access token* only, keeping the local-PIN / no-escrow model intact. (Alternatives: a real
-  owner account, or a hybrid portal-login account — a larger departure.)
+- **App ⇄ server email — DECIDED (2026-07-03): Option A**, "notifications +
+  server-access-token recovery" — owner notifications + re-issue of the *access token*
+  only, keeping the local-PIN / no-escrow model intact. The server still cannot reset
+  the PIN or E2EE passphrase. (Track T2 in the plan.)
 - **Audit log** (owner-readable therapist-access log): flagged in
-  [COMPANION_SECURITY.md](COMPANION_SECURITY.md); **next to build.**
-- **WebAuthn**: implement server-side attestation/assertion (CI-testable) behind the
-  already-pinned RP-ID/origins; browser ceremony stays deploy-time verified.
-- Smaller follow-ups: credential-rotation endpoint, expired-invite/ticket sweep, per-client
-  rate-limiting behind a trusted proxy, crypto-random lineage IDs, server `/data` backup docs.
+  [COMPANION_SECURITY.md](COMPANION_SECURITY.md); **in progress as Track T1.**
+- **Phone `sync` flavor (2b)**: **in progress as Track T3** (Android CI job first).
+- **WebAuthn**: server-side attestation/assertion (CI-testable) behind the
+  already-pinned RP-ID/origins; queued as Track T4.
+- Smaller follow-ups (Track T5): credential-rotation endpoint, expired-invite/ticket
+  sweep, per-client rate-limiting behind a trusted proxy, crypto-random lineage IDs,
+  server `/data` backup docs.
 
 ---
 
