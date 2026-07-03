@@ -101,8 +101,11 @@ fun Route.therapistAuthRoutes(
             val result = authStore.enrollTotp(req.enrollTicket, req.credentialId, req.secret)
             when (result.status) {
                 AuthStore.EnrollStatus.OK -> {
-                    notifier.notify(MailMessage.ReviewKind.THERAPIST_ENROLLED, portalUrlFor(call, publicBaseUrl))
+                    // Respond FIRST: notifier.notify() is best-effort and must never delay or
+                    // gate the enrollment response the therapist is waiting on (it already
+                    // committed). Matches the ordering in RelationRoutes.kt.
                     call.respond(HttpStatusCode.NoContent)
+                    notifier.notify(MailMessage.ReviewKind.THERAPIST_ENROLLED, portalUrlFor(call, publicBaseUrl))
                 }
                 // Do not distinguish a bad/expired ticket from a missing one (non-enumerating).
                 AuthStore.EnrollStatus.NO_TICKET -> call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized"))
@@ -208,20 +211,10 @@ private fun decodeSecret(s: String): ByteArray? {
 }
 
 private fun buildInviteLink(call: ApplicationCall, publicBaseUrl: String?, inviteId: String, secret: String): String {
-    val base = publicBaseUrl?.trimEnd('/') ?: run {
-        val scheme = call.request.origin.scheme
-        val host = call.request.headers[HttpHeaders.Host] ?: "${call.request.origin.serverHost}:${call.request.origin.serverPort}"
-        "$scheme://$host"
-    }
-    return "$base/portal/invite#id=$inviteId&s=$secret"
+    return "${resolveBaseUrl(call, publicBaseUrl)}/portal/invite#id=$inviteId&s=$secret"
 }
 
 /** Best-effort absolute URL to the owner console root, for "something to review" notifications. */
 private fun portalUrlFor(call: ApplicationCall, publicBaseUrl: String?): URI {
-    val base = publicBaseUrl?.trimEnd('/') ?: run {
-        val scheme = call.request.origin.scheme
-        val host = call.request.headers[HttpHeaders.Host] ?: "${call.request.origin.serverHost}:${call.request.origin.serverPort}"
-        "$scheme://$host"
-    }
-    return URI("$base/")
+    return URI("${resolveBaseUrl(call, publicBaseUrl)}/")
 }

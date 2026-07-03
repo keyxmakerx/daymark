@@ -8,6 +8,7 @@ import com.daymark.companion.mail.ReissueConfirmOutcome
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
+import io.ktor.server.application.application
 import io.ktor.server.plugins.origin
 import io.ktor.server.request.receive
 import io.ktor.server.response.header
@@ -17,7 +18,10 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import org.slf4j.LoggerFactory
 import java.net.URI
 import java.time.Instant
 
@@ -27,15 +31,20 @@ import java.time.Instant
 @Serializable data class RecoveryConfirmBody(val confirmToken: String)
 @Serializable data class RecoveryConfirmResponse(val newToken: String)
 
+private val log = LoggerFactory.getLogger("com.daymark.companion.routes.RecoveryRoutes")
+
 /**
- * Track T2 (COMPANION_PLAN.md, email Option A): owner notification-email registration and the
- * unauthenticated access-token recovery flow. This recovers *server access only* — the server is
- * zero-knowledge and can never reset the PIN or E2EE passphrase; see COMPANION_SECURITY.md.
+ * Track T2 (email Option A, per the Companion coordination plan): owner notification-email
+ * registration and the unauthenticated access-token recovery flow. This recovers *server access
+ * only* — the server is zero-knowledge and can never reset the PIN or E2EE passphrase; see
+ * COMPANION_SECURITY.md.
  *
  * `/v1/owner/notifications` is owner-bearer-token-authenticated, matching every other owner
  * write path. The `/v1/recovery` routes are deliberately unauthenticated (that is the point of a
  * recovery path) but heavily rate-limited and always-same-response, so they cannot be used to
- * probe which email address is registered.
+ * probe which email address is registered. Sending the actual email is dispatched onto the
+ * application's own background scope (never awaited inline) so response latency never differs
+ * between a match and a non-match — see [buildRecoveryLink] and the request handler below.
  */
 fun Route.recoveryRoutes(
     accountStore: OwnerAccountStore,
@@ -68,7 +77,12 @@ fun Route.recoveryRoutes(
         }
 
         // Unauthenticated by design (this IS the recovery path). Always the same response
-        // regardless of whether the email matches — non-enumerating.
+        // regardless of whether the email matches, whether it was rate-limited, or whether a
+        // link was actually mintable — non-enumerating. The mail send (a real, network-bound
+        // SMTP round-trip only on a match) is dispatched to the application's background scope
+        // rather than awaited, so response TIMING cannot leak a match either — a status-code-only
+        // non-enumeration guarantee is not enough when one branch does real I/O and the other
+        // doesn't.
         post("/recovery/request") {
             call.response.header("Referrer-Policy", "no-referrer")
             val req = call.receive<RecoveryRequestBody>()
@@ -76,9 +90,20 @@ fun Route.recoveryRoutes(
             if (accountStore.allowReissueAttempt(sourceId, reissueMaxPerHour)) {
                 val minted = accountStore.requestReissue(req.email.trim(), confirmTtlSeconds)
                 if (minted != null) {
-                    val link = buildRecoveryLink(call, publicBaseUrl, minted.confirmToken)
-                    runCatching {
-                        mailer.send(MailMessage.AccessRecovery(minted.email, URI(link), Instant.ofEpochMilli(minted.expiresAt)))
+                    val link = buildRecoveryLink(publicBaseUrl, minted.confirmToken)
+                    if (link != null) {
+                        val app = call.application
+                        app.launch(Dispatchers.IO) {
+                            runCatching {
+                                mailer.send(MailMessage.AccessRecovery(minted.email, URI(link), Instant.ofEpochMilli(minted.expiresAt)))
+                            }.onFailure { log.warn("recovery email failed to send: {}", it.javaClass.simpleName) }
+                        }
+                    } else {
+                        log.warn(
+                            "access-token recovery was requested but no public base URL is configured " +
+                                "(DAYMARK_PUBLIC_BASE_URL / DAYMARK_WEBAUTHN_ORIGINS) — refusing to build a " +
+                                "recovery link from the request's Host header and skipping the send",
+                        )
                     }
                 }
             }
@@ -88,12 +113,19 @@ fun Route.recoveryRoutes(
         post("/recovery/confirm") {
             call.response.header("Referrer-Policy", "no-referrer")
             val req = call.receive<RecoveryConfirmBody>()
-            when (val result = accountStore.confirmReissue(req.confirmToken)) {
+            // The rotation is applied to the live guard from *inside* confirmReissue's own lock,
+            // atomically with persisting it — see OwnerAccountStore.confirmReissue's kdoc for why
+            // applying it out here (after the lock is released) would race two concurrent confirms.
+            when (val result = accountStore.confirmReissue(req.confirmToken) { newToken -> ownerGuard.rotate(newToken) }) {
                 is ReissueConfirmOutcome.Rotated -> {
-                    ownerGuard.rotate(result.newToken)
-                    // Best-effort receipt; never gates the response — the rotation already happened.
-                    accountStore.getNotificationSettings().email?.let { addr ->
-                        runCatching { mailer.send(MailMessage.SecurityNotice(addr, MailMessage.SecurityEvent.TOKEN_REISSUED)) }
+                    // Best-effort receipt; dispatched in the background so a slow SMTP server
+                    // never delays handing the owner their new token.
+                    accountStore.registeredEmail()?.let { addr ->
+                        val app = call.application
+                        app.launch(Dispatchers.IO) {
+                            runCatching { mailer.send(MailMessage.SecurityNotice(addr, MailMessage.SecurityEvent.TOKEN_REISSUED)) }
+                                .onFailure { log.warn("token-reissued receipt failed to send: {}", it.javaClass.simpleName) }
+                        }
                     }
                     call.respond(HttpStatusCode.OK, RecoveryConfirmResponse(result.newToken))
                 }
@@ -115,17 +147,24 @@ private suspend fun ApplicationCall.ownerAuthorizedForRecovery(guard: AuthGuard)
     }
 }
 
-/** Structural-only plausibility check (one '@', something on both sides) — not full RFC 5322. */
+/**
+ * Structural-only plausibility check (one `@`, something on both sides, no whitespace or control
+ * characters) — not full RFC 5322. Control characters are rejected specifically because this
+ * value is later used as a literal SMTP recipient address.
+ */
 private fun isPlausibleEmail(email: String): Boolean {
     val at = email.indexOf('@')
-    return at > 0 && at < email.length - 1 && email.indexOf('@', at + 1) == -1 && !email.contains(' ')
+    if (at <= 0 || at >= email.length - 1 || email.indexOf('@', at + 1) != -1) return false
+    return email.none { it.isWhitespace() || it.isISOControl() }
 }
 
-private fun buildRecoveryLink(call: ApplicationCall, publicBaseUrl: String?, confirmToken: String): String {
-    val base = publicBaseUrl?.trimEnd('/') ?: run {
-        val scheme = call.request.origin.scheme
-        val host = call.request.headers[HttpHeaders.Host] ?: "${call.request.origin.serverHost}:${call.request.origin.serverPort}"
-        "$scheme://$host"
-    }
-    return "$base/recover#t=$confirmToken"
-}
+/**
+ * Build the recovery confirmation link, using ONLY the configured [publicBaseUrl] — never the
+ * request's `Host` header. Unlike the owner-authenticated invite/notification links elsewhere in
+ * this package (see `resolveBaseUrl`), this endpoint is reachable by anyone with no credential at
+ * all, so trusting a client-controllable header here would let an attacker point a real,
+ * single-use recovery token at a domain they control. Returns null (skip sending) if unconfigured
+ * rather than guess.
+ */
+private fun buildRecoveryLink(publicBaseUrl: String?, confirmToken: String): String? =
+    publicBaseUrl?.trimEnd('/')?.let { "$it/recover#t=$confirmToken" }

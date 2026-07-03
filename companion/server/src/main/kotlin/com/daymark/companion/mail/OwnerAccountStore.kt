@@ -19,7 +19,7 @@ sealed interface ReissueConfirmOutcome {
 }
 
 /**
- * Server-side state for Track T2 (COMPANION_PLAN.md, email Option A): the owner's registered
+ * Server-side state for Track T2 (email Option A): the owner's registered
  * notification email + per-event preferences, the currently accepted owner/bearer token
  * (rotatable via the email-triggered recovery flow, durable across restarts), and single-use
  * recovery-confirmation tokens. One SQLite file per data dir, independent of the therapist-portal
@@ -146,16 +146,28 @@ class OwnerAccountStore(
      * A null [email] disables all content notifications (the feature no-ops); it does NOT clear
      * the recovery capability retroactively — a null email simply means [requestReissue] never
      * matches, since there is nothing registered to match against.
+     *
+     * The email is normalized to lowercase before storage (matching [requestReissue]'s compare) —
+     * email addresses are near-universally treated case-insensitively in practice, and without
+     * this an owner who registers `Owner@Example.org` but later requests recovery with the
+     * everyday lowercase form would silently never match.
      */
     fun setNotificationSettings(email: String?, events: Set<MailMessage.ReviewKind>) = synchronized(lock) {
         conn.prepareStatement(
             "INSERT INTO owner_notify(id, email, events, updated_at) VALUES (1,?,?,?) " +
                 "ON CONFLICT(id) DO UPDATE SET email=excluded.email, events=excluded.events, updated_at=excluded.updated_at",
         ).use { ps ->
-            ps.setString(1, email)
+            ps.setString(1, email?.lowercase())
             ps.setString(2, events.joinToString(",") { it.name })
             ps.setLong(3, clock())
             ps.executeUpdate()
+        }
+    }
+
+    /** Lightweight accessor for just the registered email, avoiding the events parse/lookup. */
+    fun registeredEmail(): String? = synchronized(lock) {
+        conn.prepareStatement("SELECT email FROM owner_notify WHERE id=1").use { ps ->
+            ps.executeQuery().use { rs -> if (rs.next()) rs.getString(1) else null }
         }
     }
 
@@ -170,6 +182,7 @@ class OwnerAccountStore(
     fun allowReissueAttempt(sourceId: String, maxPerHour: Int): Boolean {
         val now = clock()
         val cap = maxPerHour.toDouble().coerceAtLeast(1.0)
+        evictBucketsIfLarge(cap, now)
         val refillPerMs = cap / 3_600_000.0
         val b = requestBuckets.computeIfAbsent(sourceId) { Bucket(cap, now) }
         synchronized(b) {
@@ -181,6 +194,21 @@ class OwnerAccountStore(
     }
 
     /**
+     * Keep the per-source bucket map from growing without bound under a many-source flood on this
+     * UNAUTHENTICATED endpoint — mirrors [com.daymark.companion.auth.AuthGuard.evictIfLarge]:
+     * when large, drop entries whose bucket has already fully refilled (no live rate-limit state).
+     */
+    private fun evictBucketsIfLarge(cap: Double, now: Long) {
+        if (requestBuckets.size <= MAX_RATE_ENTRIES) return
+        requestBuckets.entries.removeIf { e ->
+            synchronized(e.value) {
+                val elapsed = (now - e.value.last).coerceAtLeast(0)
+                e.value.tokens + elapsed * (cap / 3_600_000.0) >= cap
+            }
+        }
+    }
+
+    /**
      * Mint a single-use, time-limited confirmation token IFF [presentedEmail] matches the
      * registered address (constant-time compare). Returns null on any mismatch or when nothing
      * is registered. Callers MUST respond identically whether this returns null or non-null —
@@ -188,8 +216,8 @@ class OwnerAccountStore(
      * a source cannot distinguish "wrong email" from "right email" from the response alone.
      */
     fun requestReissue(presentedEmail: String, ttlSeconds: Long): ReissueMint? = synchronized(lock) {
-        val registered = getNotificationSettings().email ?: return null
-        if (!Secrets.constantTimeEquals(presentedEmail, registered)) return null
+        val registered = registeredEmail() ?: return null
+        if (!Secrets.constantTimeEquals(presentedEmail.lowercase(), registered)) return null
         val token = Secrets.newToken()
         val now = clock()
         val expiry = now + ttlSeconds * 1000
@@ -209,8 +237,15 @@ class OwnerAccountStore(
      * Validate + consume a confirm token and rotate the owner token. Single-use (status flips to
      * CONSUMED atomically under [lock]) and capped by TTL; expired-or-already-used tokens are
      * indistinguishable [ReissueConfirmOutcome.Gone] (no oracle on which).
+     *
+     * [onRotated] is invoked with the new token from *inside* the same critical section that
+     * persists it (before [lock] is released) — callers use this to apply the rotation to the
+     * live [com.daymark.companion.auth.AuthGuard] atomically with the persist. Without this, two
+     * concurrent confirms (e.g. two valid pending links) could persist in one order but apply to
+     * the live guard in the other order, leaving the in-memory guard on a token that doesn't match
+     * what either caller was told or what a restart would load.
      */
-    fun confirmReissue(confirmToken: String): ReissueConfirmOutcome = synchronized(lock) {
+    fun confirmReissue(confirmToken: String, onRotated: (String) -> Unit = {}): ReissueConfirmOutcome = synchronized(lock) {
         val hash = Secrets.tokenHash(confirmToken)
         val now = clock()
         val row = conn.prepareStatement("SELECT expiry, status FROM reissue_confirm WHERE token_hash=?").use { ps ->
@@ -223,8 +258,14 @@ class OwnerAccountStore(
             ps.setString(1, hash)
             ps.executeUpdate()
         }
-        ReissueConfirmOutcome.Rotated(rotateToken())
+        val newToken = rotateToken()
+        onRotated(newToken)
+        ReissueConfirmOutcome.Rotated(newToken)
     }
 
     override fun close() = synchronized(lock) { conn.close() }
+
+    companion object {
+        private const val MAX_RATE_ENTRIES = 50_000
+    }
 }

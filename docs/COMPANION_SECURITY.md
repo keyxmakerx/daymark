@@ -449,14 +449,36 @@ passphrase.
   network-enumeration/DoS guard, **not** a confidentiality boundary (§ above) — it
   gates PUT/GET of opaque blobs and never decrypts anything.
 - **The access-token recovery request endpoint is unauthenticated by necessity** (that
-  is the point of a recovery path) but is heavily rate-limited per source and
-  **always responds identically** whether the submitted email matches the registered
-  one or not, so it cannot be used to probe whether an address is registered.
+  is the point of a recovery path) but is heavily rate-limited per source (with a
+  bounded, evicted rate-limit table so an unauthenticated flood cannot grow it without
+  bound) and **always responds `202` identically** whether the submitted email matches
+  the registered one or not, so a status/body oracle cannot reveal whether an address
+  is registered. The one branch that does real work on a match — sending the email —
+  is **dispatched to a background task, never awaited inline**, so a match and a
+  non-match take the same time to respond too; without this, the real SMTP round-trip
+  that only happens on a match would itself be a timing side-channel defeating the
+  "always responds identically" property. Email comparison is case-insensitive
+  (addresses are normalized to lowercase at registration and at compare time) so a
+  registered `Owner@Example.org` still matches a recovery request for the everyday
+  lowercase form.
+- **The recovery link is built ONLY from the operator-configured `DAYMARK_PUBLIC_BASE_URL`
+  (or `DAYMARK_WEBAUTHN_ORIGINS` as a fallback) — never from the request's `Host`
+  header.** Unlike the owner-authenticated invite link (which does fall back to `Host`
+  as a best effort, acceptable there because minting an invite already requires the
+  owner's bearer token), this route has no credential gate at all; trusting a
+  client-supplied `Host` here would let an unauthenticated attacker cause a real,
+  single-use recovery token to be emailed inside a link pointing at a domain *they*
+  control. If no public base URL is configured, the server accepts the request
+  (still responding identically) but skips sending and logs a warning — see
+  COMPANION_DEPLOYMENT.md.
 - **Recovery is single-use and time-limited**: the confirmation link is a high-entropy,
   one-time token; confirming it rotates the bearer token immediately (the old value
   stops working with no overlap) and the new token is shown **once**, in the response
-  to the confirm call — **never** emailed. A follow-up "your access token was just
-  re-issued" receipt is sent to the registered address so an owner who did not
+  to the confirm call — **never** emailed. The rotation is applied to the live
+  in-process token guard from *inside* the same critical section that persists it, so
+  two concurrent confirms (e.g. two outstanding valid links) can't leave the live guard
+  and the persisted/restart-recovered token disagreeing. A follow-up "your access token
+  was just re-issued" receipt is sent to the registered address so an owner who did not
   initiate a rotation is alerted.
 - **Recovering server access never recovers anything else.** A newly issued bearer
   token still cannot decrypt a single record — the E2EE passphrase and PIN remain

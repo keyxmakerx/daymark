@@ -17,19 +17,20 @@
 
   let email = $state('')
   let events = $state<Set<string>>(new Set())
-  let loaded = $state(false)
+  let loadedFor = $state<PortalClient | null>(null)
   let busy = $state(false)
   let status = $state('')
   let error = $state('')
 
   async function load() {
     if (!client) return
+    const forClient = client
     error = ''
     try {
-      const s = await client.getNotificationSettings()
+      const s = await forClient.getNotificationSettings()
       email = s.email ?? ''
       events = new Set(s.events)
-      loaded = true
+      loadedFor = forClient
     } catch (e) {
       error = e instanceof Error ? e.message : 'Could not load notification settings.'
     }
@@ -60,8 +61,11 @@
     }
   }
 
+  // Re-load whenever the connected client identity changes (e.g. the owner reconnects to a
+  // different server) — keying off `loaded` alone would leave stale settings from the previous
+  // server on screen, and risk saving them over the new server's actual settings.
   $effect(() => {
-    if (client && !loaded) load()
+    if (client && client !== loadedFor) load()
   })
 </script>
 

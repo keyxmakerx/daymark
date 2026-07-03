@@ -154,12 +154,7 @@ private fun reviewKindFor(channel: Channel): MailMessage.ReviewKind? = when (cha
 
 /** Best-effort absolute URL to the owner console root, for "something to review" notifications. */
 private fun portalUrl(call: ApplicationCall, publicBaseUrl: String?): java.net.URI {
-    val base = publicBaseUrl?.trimEnd('/') ?: run {
-        val scheme = call.request.origin.scheme
-        val host = call.request.headers[HttpHeaders.Host] ?: "${call.request.origin.serverHost}:${call.request.origin.serverPort}"
-        "$scheme://$host"
-    }
-    return java.net.URI("$base/")
+    return java.net.URI("${resolveBaseUrl(call, publicBaseUrl)}/")
 }
 
 private data class RelContext(val relRef: String, val channel: Channel, val role: Role)

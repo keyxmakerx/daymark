@@ -15,6 +15,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import java.nio.file.Files
+import kotlinx.coroutines.delay
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -22,26 +23,43 @@ import kotlin.test.assertTrue
 class RecoveryRoutesTest {
 
     private val ownerToken = "owner-token-abc"
+    private val publicBaseUrl = "https://companion.example.org"
 
-    private fun config(dir: String, authToken: String? = ownerToken, reissueMaxPerHour: Int = 5) = Config(
+    private fun config(
+        dir: String,
+        authToken: String? = ownerToken,
+        reissueMaxPerHour: Int = 5,
+        publicBaseUrl: String? = this.publicBaseUrl,
+    ) = Config(
         bindAddr = "127.0.0.1", port = 8080, dataDir = dir, basePath = "/",
         webDir = "build/test-web", logLevel = "info", authToken = authToken,
         maxBlobBytes = 26_214_400L, maxRequestBytes = 27_262_976L,
         maxVersions = 200, perTokenQuotaBytes = 5_368_709_120L,
         authLockoutFails = 8, authLockoutSeconds = 900L, rateLimitRps = 500,
         reissueMaxPerHour = reissueMaxPerHour, reissueConfirmTtlSeconds = 3600L,
+        publicBaseUrl = publicBaseUrl,
     )
 
     private fun tmpDir() = Files.createTempDirectory("recovery-routes-test").toString()
 
     private fun mailerWithTransport(): Pair<Mailer, InMemoryMailTransport> {
         val transport = InMemoryMailTransport()
-        val cfg = MailerConfig(host = "mail.example.org", port = 587, user = null, pass = null, from = "companion@example.org", tls = MailerConfig.TlsMode.STARTTLS, allowInsecureLinks = true)
+        val cfg = MailerConfig(host = "mail.example.org", port = 587, user = null, pass = null, from = "companion@example.org", tls = MailerConfig.TlsMode.STARTTLS)
         return Mailer.forConfig(cfg, transport) to transport
     }
 
     private fun confirmTokenFrom(body: String): String =
         Regex("#t=([^\\s\"]+)").find(body)!!.groupValues[1]
+
+    /** The recovery email send is dispatched to a background task, never awaited by the HTTP
+     *  response — poll briefly rather than asserting immediately. */
+    private suspend fun awaitSentCount(transport: InMemoryMailTransport, expected: Int, timeoutMs: Long = 2000) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (transport.sent.size < expected && System.currentTimeMillis() < deadline) {
+            delay(20)
+        }
+        assertEquals(expected, transport.sent.size)
+    }
 
     @Test
     fun `recovery routes are fail-closed when no auth token is configured`() = testApplication {
@@ -88,6 +106,13 @@ class RecoveryRoutesTest {
             setBody("""{"email":"not-an-email","events":[]}""")
         }
         assertEquals(HttpStatusCode.BadRequest, badEmail.status)
+
+        val controlChar = client.put("/v1/owner/notifications") {
+            header(HttpHeaders.Authorization, "Bearer $ownerToken")
+            contentType(ContentType.Application.Json)
+            setBody("""{"email":"owner@example.org\r\nBcc: attacker@evil.example","events":[]}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, controlChar.status)
     }
 
     @Test
@@ -106,8 +131,10 @@ class RecoveryRoutesTest {
             contentType(ContentType.Application.Json); setBody("""{"email":"owner@example.org"}""")
         }
         assertEquals(HttpStatusCode.Accepted, req.status)
-        assertEquals(1, transport.sent.size)
-        val confirmToken = confirmTokenFrom(transport.sent[0].body)
+        awaitSentCount(transport, 1)
+        val sent = transport.sent[0]
+        assertTrue(sent.body.contains(publicBaseUrl), "recovery link must use the configured public base URL")
+        val confirmToken = confirmTokenFrom(sent.body)
 
         val confirm = client.post("/v1/recovery/confirm") {
             contentType(ContentType.Application.Json); setBody("""{"confirmToken":"$confirmToken"}""")
@@ -116,8 +143,9 @@ class RecoveryRoutesTest {
         val newToken = Regex("\"newToken\":\"([^\"]+)\"").find(confirm.bodyAsText())!!.groupValues[1]
         assertTrue(newToken.isNotEmpty() && newToken != ownerToken)
 
-        // A security-notice receipt was sent (in addition to the confirmation link email).
-        assertEquals(2, transport.sent.size)
+        // A security-notice receipt was sent (in addition to the confirmation link email),
+        // also dispatched asynchronously.
+        awaitSentCount(transport, 2)
 
         // Old token now fails; new token now works.
         assertEquals(
@@ -137,6 +165,47 @@ class RecoveryRoutesTest {
     }
 
     @Test
+    fun `recovery request matches a registered email case-insensitively`() = testApplication {
+        val dir = tmpDir()
+        val (mailer, transport) = mailerWithTransport()
+        application { module(config(dir), mailer = mailer) }
+
+        client.put("/v1/owner/notifications") {
+            header(HttpHeaders.Authorization, "Bearer $ownerToken")
+            contentType(ContentType.Application.Json)
+            setBody("""{"email":"Owner@Example.ORG","events":[]}""")
+        }
+
+        val req = client.post("/v1/recovery/request") {
+            contentType(ContentType.Application.Json); setBody("""{"email":"owner@example.org"}""")
+        }
+        assertEquals(HttpStatusCode.Accepted, req.status)
+        awaitSentCount(transport, 1)
+    }
+
+    @Test
+    fun `without a configured public base URL, recovery is accepted but never sends a link`() = testApplication {
+        val dir = tmpDir()
+        val (mailer, transport) = mailerWithTransport()
+        application { module(config(dir, publicBaseUrl = null), mailer = mailer) }
+
+        client.put("/v1/owner/notifications") {
+            header(HttpHeaders.Authorization, "Bearer $ownerToken")
+            contentType(ContentType.Application.Json)
+            setBody("""{"email":"owner@example.org","events":[]}""")
+        }
+        val req = client.post("/v1/recovery/request") {
+            contentType(ContentType.Application.Json); setBody("""{"email":"owner@example.org"}""")
+        }
+        assertEquals(HttpStatusCode.Accepted, req.status)
+        // Give any (incorrectly fired) async send a chance to land before asserting it never did —
+        // a real regression here would be a critical account-takeover vector (a Host-header-built
+        // link), not a flaky test to shrug off.
+        delay(300)
+        assertEquals(0, transport.sent.size)
+    }
+
+    @Test
     fun `request with a non-matching or unregistered email is silently a no-op but still 202`() = testApplication {
         val dir = tmpDir()
         val (mailer, transport) = mailerWithTransport()
@@ -147,6 +216,7 @@ class RecoveryRoutesTest {
             contentType(ContentType.Application.Json); setBody("""{"email":"anyone@example.org"}""")
         }
         assertEquals(HttpStatusCode.Accepted, res1.status)
+        delay(300)
         assertEquals(0, transport.sent.size)
 
         client.put("/v1/owner/notifications") {
@@ -159,6 +229,7 @@ class RecoveryRoutesTest {
             contentType(ContentType.Application.Json); setBody("""{"email":"wrong@example.org"}""")
         }
         assertEquals(HttpStatusCode.Accepted, res2.status)
+        delay(300)
         assertEquals(0, transport.sent.size)
     }
 
@@ -186,7 +257,7 @@ class RecoveryRoutesTest {
             contentType(ContentType.Application.Json); setBody("""{"email":"owner@example.org"}""")
         }
         assertEquals(HttpStatusCode.Accepted, first.status)
-        assertEquals(1, transport.sent.size)
+        awaitSentCount(transport, 1)
 
         // Second request from the same source within the window: still 202 (non-enumerating),
         // but the rate limiter suppresses the actual mint/send.
@@ -194,6 +265,7 @@ class RecoveryRoutesTest {
             contentType(ContentType.Application.Json); setBody("""{"email":"owner@example.org"}""")
         }
         assertEquals(HttpStatusCode.Accepted, second.status)
+        delay(300)
         assertEquals(1, transport.sent.size)
     }
 }

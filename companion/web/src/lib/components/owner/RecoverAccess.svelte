@@ -31,11 +31,14 @@
     }
     busy = true
     try {
+      // requestAccessRecovery never inspects the server's response status (the server always
+      // replies 202 regardless of match, by design) — the only way this throws is a genuine
+      // network-level failure (unreachable server, bad URL), which is safe to surface distinctly
+      // without leaking anything about whether the email matched.
       await requestAccessRecovery(serverUrl, email.trim())
       requestStatus = 'If that email is registered, a recovery link was sent. Check your inbox.'
     } catch {
-      // Never surfaces whether the email matched — non-enumerating by design.
-      requestStatus = 'If that email is registered, a recovery link was sent. Check your inbox.'
+      error = 'Could not reach that server. Check the server URL and try again.'
     } finally {
       busy = false
     }

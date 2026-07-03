@@ -46,7 +46,7 @@ sealed interface MailMessage {
     enum class ReviewKind { NEW_ASSIGNMENT, NEW_SHARE, PLAN_ACCEPTED, THERAPIST_ENROLLED, NEW_GAMEPLAN }
 
     /**
-     * Owner access-token recovery (Track T2, COMPANION_PLAN.md). Carries ONLY the single-use,
+     * Owner access-token recovery (Track T2, email Option A). Carries ONLY the single-use,
      * time-limited confirmation link and its expiry — never the token itself, and never a hint
      * about whether the requesting email actually matched the registered one (the route always
      * sends this, or nothing, identically regardless of match; see `RecoveryRoutes.kt`).

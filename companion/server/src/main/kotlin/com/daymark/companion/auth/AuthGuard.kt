@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap
  * opaque blobs; it never decrypts anything.
  *
  * The accepted token is swappable at runtime via [rotate] — the email-triggered access-token
- * recovery flow (COMPANION_PLAN.md T2) calls this after persisting a newly issued token, so a
+ * recovery flow (Track T2, email Option A) calls this after persisting a newly issued token, so a
  * live server never needs a restart to accept it. `@Volatile` is sufficient (not a lock): the
  * whole array reference is swapped atomically, so a concurrent reader always sees a complete
  * old or new token, never a partial one.

@@ -149,7 +149,7 @@ fun Application.module(
         if (relStore != null && auth != null && guard != null && notifier != null) {
             relationRoutes(
                 relStore, guard, auth, config.sessionIdleSeconds, config.maxRequestBytes,
-                notifier = notifier, publicBaseUrl = config.webauthnOrigins.firstOrNull(),
+                notifier = notifier, publicBaseUrl = config.publicBaseUrl,
             )
             therapistAuthRoutes(
                 authStore = auth,
@@ -160,7 +160,7 @@ fun Application.module(
                 sessionAbsoluteSeconds = config.sessionAbsoluteSeconds,
                 totpLockoutFails = config.totpLockoutFails,
                 totpLockoutSeconds = config.totpLockoutSeconds,
-                publicBaseUrl = config.webauthnOrigins.firstOrNull(),
+                publicBaseUrl = config.publicBaseUrl,
                 notifier = notifier,
                 cookieSecure = config.cookieSecure,
             )
@@ -185,7 +185,7 @@ fun Application.module(
                 mailer = mail,
                 confirmTtlSeconds = config.reissueConfirmTtlSeconds,
                 reissueMaxPerHour = config.reissueMaxPerHour,
-                publicBaseUrl = config.webauthnOrigins.firstOrNull(),
+                publicBaseUrl = config.publicBaseUrl,
             )
         } else {
             get("/v1/owner/notifications") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("recovery not configured")) }

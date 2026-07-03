@@ -34,6 +34,16 @@ data class Config(
     /** WebAuthn RP-ID / origins are config-pinned NOW even though verification is scaffold-only. */
     val webauthnRpId: String? = null,
     val webauthnOrigins: List<String> = emptyList(),
+    /**
+     * Explicit public origin for building absolute links in outbound email (invites,
+     * review notifications, access-token recovery). Falls back to the first configured
+     * WebAuthn origin if unset (many deployments already point that at the real external
+     * origin). Never derived from a client-controllable `Host` header — see
+     * COMPANION_SECURITY.md's trusted-proxy contract; the unauthenticated recovery route in
+     * particular refuses to guess a base URL when this is unset rather than trusting the
+     * request.
+     */
+    val publicBaseUrl: String? = null,
     /** Single-use invite TTL (default 72h). */
     val inviteTtlSeconds: Long = 259_200L,
     /** Idle / absolute session lifetimes (15 min / 8 h). */
@@ -88,6 +98,8 @@ data class Config(
                 webauthnRpId = env["DAYMARK_WEBAUTHN_RP_ID"]?.trim()?.ifBlank { null },
                 webauthnOrigins = env["DAYMARK_WEBAUTHN_ORIGINS"]?.split(',')
                     ?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList(),
+                publicBaseUrl = env["DAYMARK_PUBLIC_BASE_URL"]?.trim()?.ifBlank { null }
+                    ?: env["DAYMARK_WEBAUTHN_ORIGINS"]?.split(',')?.map { it.trim() }?.firstOrNull { it.isNotEmpty() },
                 inviteTtlSeconds = env["DAYMARK_INVITE_TTL_SECONDS"]?.trim()?.toLongOrNull() ?: 259_200L,
                 sessionIdleSeconds = env["DAYMARK_SESSION_IDLE_SECONDS"]?.trim()?.toLongOrNull() ?: 900L,
                 sessionAbsoluteSeconds = env["DAYMARK_SESSION_ABSOLUTE_SECONDS"]?.trim()?.toLongOrNull() ?: 28_800L,

@@ -14,7 +14,10 @@
   let data = $state<BackupData | null>(null)
   let fileName = $state('')
   let error = $state('')
-  let source = $state<Source>('file')
+  // An emailed access-token recovery link lands here as `#t=<token>` (see RecoverAccess.svelte);
+  // land the owner straight on the recovery tab instead of the default "open a backup" tab.
+  const startedOnRecoveryLink = typeof window !== 'undefined' && /(?:^|[#&])t=/.test(window.location.hash)
+  let source = $state<Source>(startedOnRecoveryLink ? 'recover' : 'file')
 
   const online = typeof navigator !== 'undefined' ? navigator.onLine : false
 

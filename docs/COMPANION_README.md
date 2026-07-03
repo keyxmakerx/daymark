@@ -129,7 +129,7 @@ branch/PRs. Honest state:
 | WebAuthn / passkey therapist auth | ⚠️ **501 scaffold** — TOTP is the working path; browser ceremony unverifiable headlessly |
 | Phone `sync` flavor (Kotlin, 2b) | 📄 spec only ([COMPANION_PHONE_2B.md](COMPANION_PHONE_2B.md)) — CI/emulator-verifiable |
 
-Verified locally + in CI: web build 0 errors, web unit **140/140**, server **84 tests**,
+Verified locally + in CI: web build 0 errors, web unit **140/140**, server **90 tests**,
 sync integration **5/5**, Docker build+smoke green.
 
 ### App ⇄ server email — Option A (owner notifications + access-token recovery)

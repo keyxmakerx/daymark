@@ -16,11 +16,16 @@ class OwnerNotifier(
 ) {
     private val log = LoggerFactory.getLogger(OwnerNotifier::class.java)
 
+    /**
+     * Never throws, regardless of the failure (a bad DB read included, not just a failed send) —
+     * callers rely on this to never turn their own already-committed operation into an error.
+     */
     fun notify(event: MailMessage.ReviewKind, portalUrl: URI) {
-        val settings = accountStore.getNotificationSettings()
-        val email = settings.email ?: return
-        if (event !in settings.events) return
-        runCatching { mailer.send(MailMessage.ReviewNotification(email, portalUrl, event)) }
-            .onFailure { log.warn("owner notification failed to send (event={}): {}", event, it.javaClass.simpleName) }
+        runCatching {
+            val settings = accountStore.getNotificationSettings()
+            val email = settings.email ?: return@runCatching
+            if (event !in settings.events) return@runCatching
+            mailer.send(MailMessage.ReviewNotification(email, portalUrl, event))
+        }.onFailure { log.warn("owner notification failed (event={}): {}", event, it.javaClass.simpleName) }
     }
 }

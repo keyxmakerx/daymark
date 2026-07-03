@@ -1,6 +1,10 @@
 package com.daymark.companion.mail
 
 import java.nio.file.Files
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -85,6 +89,27 @@ class OwnerAccountStoreTest {
     }
 
     @Test
+    fun `email registration and matching are case-insensitive`() {
+        val dir = tmpDir()
+        val store = OwnerAccountStore(dir, envToken = "t")
+        store.setNotificationSettings("Owner@Example.ORG", emptySet())
+        assertEquals("owner@example.org", store.registeredEmail())
+        assertNotNull(store.requestReissue("owner@example.org", 3600))
+        assertNotNull(store.requestReissue("OWNER@EXAMPLE.ORG", 3600))
+        store.close()
+    }
+
+    @Test
+    fun `registeredEmail returns just the email without parsing events`() {
+        val dir = tmpDir()
+        val store = OwnerAccountStore(dir, envToken = "t")
+        assertNull(store.registeredEmail())
+        store.setNotificationSettings("owner@example.org", setOf(MailMessage.ReviewKind.NEW_ASSIGNMENT))
+        assertEquals("owner@example.org", store.registeredEmail())
+        store.close()
+    }
+
+    @Test
     fun `confirmReissue rotates the token exactly once and is single-use`() {
         val dir = tmpDir()
         val store = OwnerAccountStore(dir, envToken = "original-token")
@@ -119,6 +144,56 @@ class OwnerAccountStoreTest {
         val dir = tmpDir()
         val store = OwnerAccountStore(dir, envToken = "t")
         assertEquals(ReissueConfirmOutcome.Gone, store.confirmReissue("not-a-real-token"))
+        store.close()
+    }
+
+    @Test
+    fun `confirmReissue invokes onRotated synchronously, before returning, with the new token`() {
+        val dir = tmpDir()
+        val store = OwnerAccountStore(dir, envToken = "original-token")
+        store.setNotificationSettings("owner@example.org", emptySet())
+        val minted = store.requestReissue("owner@example.org", 3600)!!
+
+        val callbackToken = mutableListOf<String>()
+        val result = store.confirmReissue(minted.confirmToken) { newToken -> callbackToken += newToken }
+        // The callback already ran by the time confirmReissue returns (called from inside its
+        // own lock) — callers rely on this to apply the rotation atomically with the persist.
+        assertEquals(1, callbackToken.size)
+        assertEquals((result as ReissueConfirmOutcome.Rotated).newToken, callbackToken[0])
+        store.close()
+    }
+
+    @Test
+    fun `concurrent confirms of the same token — exactly one wins and the callback fires exactly once`() {
+        val dir = tmpDir()
+        val store = OwnerAccountStore(dir, envToken = "original-token")
+        store.setNotificationSettings("owner@example.org", emptySet())
+        val minted = store.requestReissue("owner@example.org", 3600)!!
+
+        val rotatedTokens = CopyOnWriteArrayList<String>()
+        val outcomes = CopyOnWriteArrayList<ReissueConfirmOutcome>()
+        val threadCount = 8
+        val pool = Executors.newFixedThreadPool(threadCount)
+        val ready = CountDownLatch(threadCount)
+        val go = CountDownLatch(1)
+        repeat(threadCount) {
+            pool.submit {
+                ready.countDown()
+                go.await()
+                outcomes += store.confirmReissue(minted.confirmToken) { newToken -> rotatedTokens += newToken }
+            }
+        }
+        ready.await()
+        go.countDown()
+        pool.shutdown()
+        pool.awaitTermination(10, TimeUnit.SECONDS)
+
+        val wins = outcomes.filterIsInstance<ReissueConfirmOutcome.Rotated>()
+        assertEquals(1, wins.size, "exactly one concurrent confirm of a single-use token must win")
+        assertEquals(threadCount - 1, outcomes.count { it == ReissueConfirmOutcome.Gone })
+        assertEquals(1, rotatedTokens.size, "the onRotated callback must fire exactly once")
+        assertEquals(wins[0].newToken, rotatedTokens[0])
+        assertEquals(wins[0].newToken, store.currentToken())
         store.close()
     }
 
