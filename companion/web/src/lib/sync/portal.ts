@@ -48,6 +48,7 @@ export interface AuditEvent {
 export interface AuditLogPage {
   events: AuditEvent[]
   nextCursor: number | null
+}
 
 /** Track T2 (email Option A): owner notification-email registration + per-event preferences. */
 export interface NotificationSettings {

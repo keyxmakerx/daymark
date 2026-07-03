@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { PortalClient, requestAccessRecovery, confirmAccessRecovery } from './portal'
+
 interface Recorded {
   url: string
   init: RequestInit
@@ -16,6 +17,16 @@ function fakeFetch(routes: Record<string, () => Response>, log: Recorded[] = [])
 }
 
 const inboxToken = 'inbox-token-256-bit-example-xyz'
+
+type FetchMock = (url: string, init?: RequestInit) => Promise<Response>
+
+function jsonResponse(body: unknown, ok = true, status = 200): Response {
+  return {
+    ok,
+    status,
+    json: async () => body,
+  } as Response
+}
 
 describe('PortalClient.getAuditLog', () => {
   it('sends the owner bearer token + X-Rel-Token and returns the page as-is', async () => {
@@ -61,15 +72,8 @@ describe('PortalClient.getAuditLog', () => {
   it('throws PortalError on other non-ok statuses', async () => {
     const client = new PortalClient('https://s.example', 'owner-token', fakeFetch({ '/audit': () => new Response('nope', { status: 401 }) }))
     await expect(client.getAuditLog(inboxToken)).rejects.toThrow('audit log fetch failed')
-type FetchMock = (url: string, init?: RequestInit) => Promise<Response>
-
-function jsonResponse(body: unknown, ok = true, status = 200): Response {
-  return {
-    ok,
-    status,
-    json: async () => body,
-  } as Response
-}
+  })
+})
 
 describe('PortalClient notification settings (Track T2)', () => {
   it('gets notification settings with the owner bearer token', async () => {
@@ -117,3 +121,5 @@ describe('access-token recovery client functions (Track T2)', () => {
   it('confirmAccessRecovery throws PortalError when the link is gone', async () => {
     const fetchMock = vi.fn<FetchMock>(async () => jsonResponse({}, false, 410))
     await expect(confirmAccessRecovery('https://host', 'expired-tok', fetchMock as unknown as typeof fetch)).rejects.toMatchObject({ status: 410 })
+  })
+})
