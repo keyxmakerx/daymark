@@ -2,18 +2,17 @@
   import { parseBackup, BackupParseError, type BackupData } from './lib/backup'
   import { formatDate } from './lib/stats'
   import Dropzone from './lib/components/Dropzone.svelte'
-  import Overview from './lib/components/Overview.svelte'
-  import JournalReader from './lib/components/JournalReader.svelte'
+  import Dashboard from './lib/components/Dashboard.svelte'
   import TrustBar from './lib/components/TrustBar.svelte'
   import SyncPanel from './lib/components/SyncPanel.svelte'
+  import Assessments from './lib/components/Assessments.svelte'
+  import OwnerConsole from './lib/components/owner/OwnerConsole.svelte'
 
-  type Tab = 'overview' | 'journal'
-  type Source = 'file' | 'sync'
+  type Source = 'file' | 'sync' | 'assess' | 'owner'
 
   let data = $state<BackupData | null>(null)
   let fileName = $state('')
   let error = $state('')
-  let tab = $state<Tab>('overview')
   let source = $state<Source>('file')
 
   const online = typeof navigator !== 'undefined' ? navigator.onLine : false
@@ -23,7 +22,6 @@
     try {
       data = parseBackup(text)
       fileName = name
-      tab = 'overview'
     } catch (e) {
       data = null
       error = e instanceof BackupParseError ? e.message : 'Could not read that backup.'
@@ -34,7 +32,6 @@
     error = ''
     data = parsed
     fileName = name
-    tab = 'overview'
   }
 
   function reset() {
@@ -66,23 +63,31 @@
         <nav class="tabs source" aria-label="Data source">
           <button class:active={source === 'file'} aria-pressed={source === 'file'} onclick={() => (source = 'file')}>Open a backup file</button>
           <button class:active={source === 'sync'} aria-pressed={source === 'sync'} onclick={() => (source = 'sync')}>Connect to sync</button>
+          <button class:active={source === 'assess'} aria-pressed={source === 'assess'} onclick={() => (source = 'assess')}>Self-checks</button>
+          <button class:active={source === 'owner'} aria-pressed={source === 'owner'} onclick={() => (source = 'owner')}>Owner console</button>
         </nav>
 
         {#if source === 'file'}
           <Dropzone onload={load} onerror={(m) => (error = m)} />
-        {:else}
+        {:else if source === 'sync'}
           <SyncPanel onload={loadData} />
+        {:else if source === 'assess'}
+          <Assessments />
+        {:else}
+          <OwnerConsole data={null} />
         {/if}
 
         {#if error}
           <p class="error" role="alert">{error}</p>
         {/if}
-        <p class="faint note">
-          Non-diagnostic: Daymark is a self-tracking and journaling tool. Nothing here
-          is a medical assessment. Export a backup from the app via
-          <em>Settings → Export backup</em>, then drop the <code>.json</code> file above —
-          or pull your latest encrypted snapshot from your own sync server.
-        </p>
+        {#if source !== 'assess' && source !== 'owner'}
+          <p class="faint note">
+            Non-diagnostic: Daymark is a self-tracking and journaling tool. Nothing here
+            is a medical assessment. Export a backup from the app via
+            <em>Settings → Export backup</em>, then drop the <code>.json</code> file above —
+            or pull your latest encrypted snapshot from your own sync server.
+          </p>
+        {/if}
       </section>
     {:else}
       <section class="loaded">
@@ -90,16 +95,7 @@
           <strong>{fileName}</strong> · backup v{data.version} · exported {formatDate(data.exportedAt)}
         </p>
 
-        <nav class="tabs" aria-label="Report sections">
-          <button class:active={tab === 'overview'} aria-pressed={tab === 'overview'} onclick={() => (tab = 'overview')}>Overview</button>
-          <button class:active={tab === 'journal'} aria-pressed={tab === 'journal'} onclick={() => (tab = 'journal')}>Journal</button>
-        </nav>
-
-        {#if tab === 'overview'}
-          <Overview {data} />
-        {:else}
-          <JournalReader {data} />
-        {/if}
+        <Dashboard {data} />
       </section>
     {/if}
   </main>

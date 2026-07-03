@@ -211,8 +211,17 @@ server can use to impersonate the therapist**; it bootstraps registration only.
   (e.g. 72 h to complete enrollment), and `status: PENDING`.
 - The owner receives back a **link** plus a **4–6 word verification code** shown locally, and
   delivers them **out of band** — read over the phone in session, handed on paper, or QR shown in
-  person. **No outbound email / SMS / magic links** (that would violate the no-egress principle; see
-  [COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md)).
+  person. The **OOB short code is the mandatory, security-bearing channel** and always must be
+  compared in person.
+- **Optional email convenience.** If the owner has configured outbound SMTP
+  (`DAYMARK_SMTP_*`, off by default; see [COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md) §8),
+  the server *may* additionally email the therapist the **same non-secret bootstrap link** — and
+  nothing else. This is **not a magic-link auth bypass**: the emailed link carries no secret the
+  server could use to impersonate the therapist, redemption still requires the OOB short code, and
+  the email contains no record or plaintext content. Email is a delivery convenience for the link,
+  not an authentication channel. (Earlier drafts said "no outbound email … magic links"; the
+  content-free, non-secret invite link is the one deliberate, owner-configured exception, and it
+  does **not** weaken the enrollment threat model because the OOB code remains required.)
 - **Invite redemption uses capped backoff**, **not** permanent burn-after-5. Burn-after-5 is a
   *denial-of-enrollment* vector (an attacker who can reach the invite endpoint locks the real
   therapist out forever). `inviteId`s are **unguessable**, and the enroll page is served with **no

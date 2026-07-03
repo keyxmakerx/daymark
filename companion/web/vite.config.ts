@@ -1,7 +1,7 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vitest/config'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, URL as NodeURL } from 'node:url'
 
 // libsodium-wrappers ships a broken ESM build (its .mjs imports a sibling that isn't
 // published); the CJS build is fine. Alias to it so both the browser bundle and the
@@ -23,6 +23,12 @@ export default defineConfig({
     assetsInlineLimit: 0,
     sourcemap: false,
     rollupOptions: {
+      // Multi-page build: the owner report viewer (index.html) and the SEPARATE therapist portal
+      // (therapist.html) are distinct entries/surfaces served at distinct routes.
+      input: {
+        index: fileURLToPath(new NodeURL('index.html', import.meta.url)),
+        therapist: fileURLToPath(new NodeURL('therapist.html', import.meta.url)),
+      },
       output: {
         entryFileNames: 'assets/[name]-[hash].js',
         chunkFileNames: 'assets/[name]-[hash].js',

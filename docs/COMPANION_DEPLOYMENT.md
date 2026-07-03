@@ -69,6 +69,14 @@ and [COMPANION_SECURITY.md](COMPANION_SECURITY.md). With that boundary stated:
    puts the container on its **own** `internal: true` bridge so the no-telemetry
    claim is enforced at the network layer, not merely promised. See [§8](#8-network-egress-lockdown)
    for the structural-honesty caveat about *sharing* a network with the proxy.
+   **One deliberate exception:** owner-configured outbound **SMTP** for therapist
+   invite/notification links. It is **OFF unless `DAYMARK_SMTP_HOST` is set**; when
+   enabled it egresses only to the operator's configured mail server, requires TLS
+   (`DAYMARK_SMTP_TLS=starttls|implicit`), reads credentials via `DAYMARK_SMTP_PASS_FILE`,
+   and its emails carry **only** the invite/notification link — never any record or
+   plaintext content. Enabling it means the operator must open a narrow egress path to
+   exactly that mail host (see [§8](#8-network-egress-lockdown)); it does not reopen
+   general egress.
 4. **Least privilege at the container boundary.** Non-root, read-only rootfs, all
    capabilities dropped, `no-new-privileges`, and a single writable named volume. A
    bug in the API cannot write outside the blob store, escalate, or persist a webshell.
@@ -88,18 +96,30 @@ and [COMPANION_SECURITY.md](COMPANION_SECURITY.md). With that boundary stated:
 Pick one. All three use the **same image and the same `companion` service**; they
 differ only in how TLS and ingress are handled.
 
+> **STATUS — WebAuthn/passkey + PRF is a config-pinned SCAFFOLD in this build.** The
+> server's `/v1/webauthn/register/*` and `/v1/webauthn/assert/*` endpoints return **501
+> Not Implemented** (attestation/assertion verification is out of scope for this slice;
+> see `TherapistAuthRoutes.kt` and the `Config.kt` "verification is scaffold-only"
+> note). **TOTP is the only functioning therapist auth path today.** The RP-ID / origin
+> columns and `DAYMARK_WEBAUTHN_*` rows below describe how the passkey path *will* be
+> pinned when implemented — they are **config plumbing, not a working login path yet**.
+> A hardware passkey (WebAuthn) is the stronger path when available; until this scaffold
+> is completed, plan for TOTP. (Mirrors the in-app LowerAssuranceBanner copy.)
+
 | Topology | When | TLS | Network exposure | WebAuthn? |
 |---|---|---|---|---|
-| **A. Container + reverse proxy** (recommended, public or LAN) | You already run Caddy/Traefik/nginx, or want a real cert, a hostname, or a sub-path. | Terminated at the proxy (Let's Encrypt or internal CA). | Only the proxy is published; the companion listens on an internal-only network. | ✅ Yes — real origin. |
-| **B. Single container, LAN-only self-signed** | Home LAN / NAS, no proxy, "just works." | Self-signed cert generated on first boot, or a static cert you mount. | Companion publishes `:8443` directly to the LAN. | ⚠️ Only if the SAN is a real registrable hostname trusted by the device. Bare-IP / `.local` = **TOTP fallback only** (see note). |
-| **C. Single container, loopback / behind host firewall** | Advanced; you front it with the host's own nginx or an SSH tunnel. | None in-container (plain HTTP bound to `127.0.0.1`). | Bound to loopback only; never reachable off-box without a tunnel/proxy. | Depends on the fronting proxy's origin. |
+| **A. Container + reverse proxy** (recommended, public or LAN) | You already run Caddy/Traefik/nginx, or want a real cert, a hostname, or a sub-path. | Terminated at the proxy (Let's Encrypt or internal CA). | Only the proxy is published; the companion listens on an internal-only network. | 🚧 Scaffold (501) — real origin *would* work once implemented; **use TOTP today.** |
+| **B. Single container, LAN-only self-signed** | Home LAN / NAS, no proxy, "just works." | Self-signed cert generated on first boot, or a static cert you mount. | Companion publishes `:8443` directly to the LAN. | 🚧 Scaffold (501) — and even once built, bare-IP / `.local` = **TOTP only** (see note). **Use TOTP today.** |
+| **C. Single container, loopback / behind host firewall** | Advanced; you front it with the host's own nginx or an SSH tunnel. | None in-container (plain HTTP bound to `127.0.0.1`). | Bound to loopback only; never reachable off-box without a tunnel/proxy. | 🚧 Scaffold (501). **Use TOTP today.** |
 
 **Default recommendation: Topology A.** It gives a real certificate, clean
 `X-Forwarded-*` handling, sub-path mounting, and keeps the companion off the
 published-port surface. Topology B is the documented fallback for proxy-less LAN
 users.
 
-> **WebAuthn / RP-ID reality (LAN & bare-IP self-hosters).** WebAuthn requires a
+> **WebAuthn / RP-ID reality (LAN & bare-IP self-hosters).** *(Applies once the
+> WebAuthn scaffold above is implemented — the endpoints return 501 in this build, so
+> today every deployment uses the TOTP path regardless of RP-ID.)* WebAuthn requires a
 > *secure origin* with a real registrable domain. Deployments on a bare IP
 > (`https://192.168.1.10`), an `.local` mDNS name, or a self-signed cert the OS does
 > not trust **cannot register passkeys** in most browsers. Those deployments are
@@ -671,8 +691,8 @@ Serving under a prefix is split between proxy and app:
 | `DAYMARK_TLS_SAN` | _(host)_ | Comma-list of SANs for the auto self-signed cert. |
 | `DAYMARK_TRUSTED_PROXIES` | _(empty = trust none)_ | CIDRs whose `X-Forwarded-*` are honored. **No broad default.** Pin a `/32`. |
 | `DAYMARK_FORWARDED_HEADERS` | `none` | `x-forwarded` \| `forwarded` \| `none`. |
-| `DAYMARK_WEBAUTHN_RP_ID` | _(required for WebAuthn)_ | Config-pinned RP-ID; never client-derived. |
-| `DAYMARK_WEBAUTHN_ORIGINS` | _(required for WebAuthn)_ | Exact origin allowlist for assertion verification. |
+| `DAYMARK_WEBAUTHN_RP_ID` | _(SCAFFOLD — WebAuthn endpoints return 501; TOTP is the only working path today)_ | Config-pinned RP-ID; never client-derived. Pins the *future* passkey path so it can never regress to `Host`-header derivation. |
+| `DAYMARK_WEBAUTHN_ORIGINS` | _(SCAFFOLD — WebAuthn endpoints return 501; TOTP is the only working path today)_ | Exact origin allowlist for assertion verification (used once the scaffold is implemented). |
 | `DAYMARK_AUTH_TOKEN` / `…_FILE` | _(required)_ | Server access token (gates PUT/list/enumerate). Prefer `_FILE`. |
 | `DAYMARK_TOTP_ISSUER` | `Daymark Companion` | Issuer label for the therapist TOTP fallback. |
 | `DAYMARK_MAX_BLOB_BYTES` | `26214400` | Per-blob ciphertext cap (25 MiB). |
@@ -683,6 +703,15 @@ Serving under a prefix is split between proxy and app:
 | `DAYMARK_LINEAGE_CREATE_RPM` | `10` | Cap on lineage/version creation (anti monotonic-poisoning / queue-flooding). |
 | `DAYMARK_AUTH_LOCKOUT_FAILS` | `8` | Failed-auth attempts before lockout. |
 | `DAYMARK_AUTH_LOCKOUT_SECONDS` | `900` | Lockout duration. |
+| `DAYMARK_THERAPIST_AUTH` | _(off)_ | Set `1`/`true` to enable the therapist portal (relationship blob channels + TOTP auth + invites). Fail-closed (503 on every portal path) when unset. |
+| `DAYMARK_INVITE_TTL_SECONDS` | `259200` | Single-use therapist-invite TTL (72 h). |
+| `DAYMARK_SESSION_IDLE_SECONDS` | `900` | Therapist session idle timeout (15 min). |
+| `DAYMARK_SESSION_ABSOLUTE_SECONDS` | `28800` | Therapist session absolute lifetime (8 h). |
+| `DAYMARK_TOTP_LOCKOUT_FAILS` | `5` | Bad TOTP codes (and bad invite-secret guesses) before lockout / capped backoff. |
+| `DAYMARK_TOTP_LOCKOUT_SECONDS` | `300` | TOTP lockout window / invite-redeem backoff base. |
+| `DAYMARK_REL_MAX_VERSIONS` | `50` | Append-only retention cap per relationship-channel lineage. |
+| `DAYMARK_REL_QUOTA_BYTES` | `268435456` | Per-relationship storage quota (256 MiB). |
+| `DAYMARK_COOKIE_INSECURE` | _(off)_ | Dev/test only: drop the `Secure` attribute on the session cookie (for a plain-HTTP origin). Leave unset in production — the portal requires a TLS origin. |
 | `DAYMARK_SHARE_MAX_TTL_DAYS` | `90` | Ceiling on owner-requested share/game-plan expiry (bounds the no-PFS harvest window). |
 | `DAYMARK_BLOB_HARD_DELETE` | `on-supersede-and-expiry` | Hard-delete superseded/expired blob **bytes** (not just flag). |
 | `DAYMARK_SIZE_PADDING` | `bucketed` | Pad blob sizes to fixed buckets (e.g. 4/16/64 KiB) **by default** (anti acuity/withdrawal de-anon). |
@@ -894,7 +923,18 @@ misbehaving.
 ## 8. Network egress lockdown
 
 `internal: true` on the companion's **own** network removes its route to the gateway.
-This is the structural enforcement of "no telemetry, ever."
+This is the structural enforcement of "no telemetry by default."
+
+> **The SMTP exception (the one deliberate egress path).** If — and only if — the owner
+> sets `DAYMARK_SMTP_HOST`, the companion sends therapist invite/notification **links**
+> (no record or plaintext content) to that one mail server over TLS, with credentials
+> from `*_FILE` secrets. To enable it you must give the container a **narrow** egress
+> path to exactly that `host:port` and nothing else — e.g. a second bridge that reaches
+> only the mail relay, or a host-firewall allow-rule scoped to the mail host — while
+> keeping `internal: true` on its primary network. Do **not** simply drop the container
+> onto a general egress-capable network; that reopens telemetry egress. If SMTP is left
+> unset (the default), the mailer never opens a socket and the "no outbound, ever" claim
+> holds unchanged.
 
 > **Structural-honesty caveat (do not get this wrong).** Putting the companion on a
 > network that it **shares with the internet-facing proxy** does **not** lock egress —

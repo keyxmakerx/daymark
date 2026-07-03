@@ -1,5 +1,6 @@
 package com.daymark.companion
 
+import com.daymark.companion.mail.MailerConfig
 import java.io.File
 
 /**
@@ -24,9 +25,38 @@ data class Config(
     val authLockoutFails: Int,
     val authLockoutSeconds: Long,
     val rateLimitRps: Int,
+    // --- Outbound SMTP (the ONE deliberate exception; OFF by default) ---
+    /** SMTP config. Disabled unless DAYMARK_SMTP_HOST is set. See docs/COMPANION_SECURITY.md §6. */
+    val mailer: MailerConfig = MailerConfig.fromEnv(emptyMap()),
+    // --- Therapist portal (Milestone: server slice) ---
+    /** Feature gate for the therapist auth + relationship-blob channels. Off unless DAYMARK_THERAPIST_AUTH=1. */
+    val therapistAuthEnabled: Boolean = false,
+    /** WebAuthn RP-ID / origins are config-pinned NOW even though verification is scaffold-only. */
+    val webauthnRpId: String? = null,
+    val webauthnOrigins: List<String> = emptyList(),
+    /** Single-use invite TTL (default 72h). */
+    val inviteTtlSeconds: Long = 259_200L,
+    /** Idle / absolute session lifetimes (15 min / 8 h). */
+    val sessionIdleSeconds: Long = 900L,
+    val sessionAbsoluteSeconds: Long = 28_800L,
+    /** TOTP verify lockout: fails before lockout, and lockout window. */
+    val totpLockoutFails: Int = 5,
+    val totpLockoutSeconds: Long = 300L,
+    /** Per-relationship blob channel retention + quota. */
+    val relMaxVersions: Int = 50,
+    val relQuotaBytes: Long = 268_435_456L, // 256 MiB per relationship
+    /**
+     * Whether the therapist session cookie carries the `Secure` attribute. TRUE by default
+     * (the portal requires a real TLS origin, per COMPANION_SECURITY.md open Q7). Only set
+     * false for a plain-HTTP dev/test origin — the cookie would otherwise not be sent.
+     */
+    val cookieSecure: Boolean = true,
 ) {
     /** True when the sync API has a configured access token and may serve /v1. */
     val syncEnabled: Boolean get() = !authToken.isNullOrBlank()
+
+    /** True only when the operator configured an outbound mail host. */
+    val smtpEnabled: Boolean get() = mailer.enabled
 
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): Config {
@@ -46,6 +76,19 @@ data class Config(
                 authLockoutFails = env["DAYMARK_AUTH_LOCKOUT_FAILS"]?.trim()?.toIntOrNull() ?: 8,
                 authLockoutSeconds = env["DAYMARK_AUTH_LOCKOUT_SECONDS"]?.trim()?.toLongOrNull() ?: 900L,
                 rateLimitRps = env["DAYMARK_RATE_LIMIT_RPS"]?.trim()?.toIntOrNull() ?: 5,
+                mailer = MailerConfig.fromEnv(env),
+                therapistAuthEnabled = env["DAYMARK_THERAPIST_AUTH"]?.trim().let { it == "1" || it.equals("true", true) },
+                webauthnRpId = env["DAYMARK_WEBAUTHN_RP_ID"]?.trim()?.ifBlank { null },
+                webauthnOrigins = env["DAYMARK_WEBAUTHN_ORIGINS"]?.split(',')
+                    ?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList(),
+                inviteTtlSeconds = env["DAYMARK_INVITE_TTL_SECONDS"]?.trim()?.toLongOrNull() ?: 259_200L,
+                sessionIdleSeconds = env["DAYMARK_SESSION_IDLE_SECONDS"]?.trim()?.toLongOrNull() ?: 900L,
+                sessionAbsoluteSeconds = env["DAYMARK_SESSION_ABSOLUTE_SECONDS"]?.trim()?.toLongOrNull() ?: 28_800L,
+                totpLockoutFails = env["DAYMARK_TOTP_LOCKOUT_FAILS"]?.trim()?.toIntOrNull() ?: 5,
+                totpLockoutSeconds = env["DAYMARK_TOTP_LOCKOUT_SECONDS"]?.trim()?.toLongOrNull() ?: 300L,
+                relMaxVersions = env["DAYMARK_REL_MAX_VERSIONS"]?.trim()?.toIntOrNull() ?: 50,
+                relQuotaBytes = env["DAYMARK_REL_QUOTA_BYTES"]?.trim()?.toLongOrNull() ?: 268_435_456L,
+                cookieSecure = env["DAYMARK_COOKIE_INSECURE"]?.trim().let { !(it == "1" || it.equals("true", true)) },
             )
         }
 
