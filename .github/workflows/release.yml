@@ -34,6 +34,9 @@ jobs:
       # keystore the build falls back to debug signing (so forks without secrets still
       # build). The keystore gating is done in shell — the `secrets` context is not
       # allowed inside a GitHub `if:` conditional.
+      # Only the `foss` (flagship, network-free) flavor is published here. The opt-in `sync`
+      # flavor (docs/COMPANION_PHONE_2B.md) isn't feature-complete yet and will get its own
+      # release path once it is.
       - name: Build release APK
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -45,10 +48,30 @@ jobs:
             echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
             export KEYSTORE_FILE="$RUNNER_TEMP/release.keystore"
           fi
-          ./gradlew assembleRelease --stacktrace
+          ./gradlew assembleFossRelease --stacktrace
+
+      # Defense in depth: re-verify here too, not just in build.yml's PR checks — a tag can be
+      # pushed against a commit/ref that never ran those checks.
+      - name: Install build-tools (for aapt2)
+        run: sdkmanager --install "build-tools;35.0.0"
+
+      - name: Verify the published APK never declares INTERNET
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT}}"
+          AAPT2="$(find "$SDK_ROOT/build-tools" -maxdepth 2 -name aapt2 -type f | sort -V | tail -1)"
+          if [ -z "$AAPT2" ]; then
+            echo "::error::could not locate aapt2 under $SDK_ROOT/build-tools"
+            exit 1
+          fi
+          PERMS=$("$AAPT2" dump permissions app/build/outputs/apk/foss/release/app-foss-release.apk)
+          echo "$PERMS"
+          if echo "$PERMS" | grep -q "android.permission.INTERNET"; then
+            echo "::error::refusing to publish — the foss release APK declares INTERNET"
+            exit 1
+          fi
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/release/app-release.apk
+          files: app/build/outputs/apk/foss/release/app-foss-release.apk
           generate_release_notes: true

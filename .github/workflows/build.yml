@@ -31,12 +31,37 @@ jobs:
       - name: Run unit tests
         run: ./gradlew test --stacktrace
 
-      - name: Build debug APK
+      - name: Build debug APKs (foss + sync flavors)
         run: ./gradlew assembleDebug --stacktrace
 
-      - name: Upload debug APK
+      - name: Install build-tools (for aapt2)
+        run: sdkmanager --install "build-tools;35.0.0"
+
+      - name: Verify the foss flavor never declares INTERNET
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT}}"
+          AAPT2="$(find "$SDK_ROOT/build-tools" -maxdepth 2 -name aapt2 -type f | sort -V | tail -1)"
+          if [ -z "$AAPT2" ]; then
+            echo "::error::could not locate aapt2 under $SDK_ROOT/build-tools"
+            exit 1
+          fi
+          PERMS=$("$AAPT2" dump permissions app/build/outputs/apk/foss/debug/app-foss-debug.apk)
+          echo "$PERMS"
+          if echo "$PERMS" | grep -q "android.permission.INTERNET"; then
+            echo "::error::the foss flavor must stay network-free — INTERNET leaked into its merged manifest"
+            exit 1
+          fi
+
+      - name: Upload foss debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: daymark-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: daymark-foss-debug
+          path: app/build/outputs/apk/foss/debug/app-foss-debug.apk
+          if-no-files-found: error
+
+      - name: Upload sync debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: daymark-sync-debug
+          path: app/build/outputs/apk/sync/debug/app-sync-debug.apk
           if-no-files-found: error

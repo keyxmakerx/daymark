@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Daymark"
 include(":app")
+include(":sync-crypto")
