@@ -24,7 +24,12 @@ androidxTestRunner = "1.6.2"
 # SyncCrypto is compiled against lazysodium-java's copy of the shared com.goterl.lazysodium.*
 # types but runs on lazysodium-android's copy in the real app (see SyncCrypto's class KDoc) —
 # a version drift between the two would silently invalidate that cross-artifact API parity.
-lazysodium = "5.2.0"
+# Pinned to 5.1.0 (not 5.2.0): lazysodium-java 5.2.0's Gradle metadata marks it JVM-21-only,
+# but :sync-crypto (and the whole app) targets JVM 17, so 5.2.0 fails variant resolution
+# (":sync-crypto:compileKotlin" — "compatible with JVM 21 or newer"). 5.1.0 is the newest
+# release whose java artifact is JVM-8+ and whose android artifact also exists, keeping the
+# same-version invariant; the crypto conformance vectors are byte-identical across the two.
+lazysodium = "5.1.0"
 jna = "5.17.0"
 
 [libraries]
