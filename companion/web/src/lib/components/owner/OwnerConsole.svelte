@@ -5,6 +5,7 @@
   import GrantManager from './GrantManager.svelte'
   import AssignmentInbox from './AssignmentInbox.svelte'
   import ShareBuilder from './ShareBuilder.svelte'
+  import AuditList from './AuditList.svelte'
   import PinnedTherapistPicker from './PinnedTherapistPicker.svelte'
   import { withGrant, type OwnerSession } from './session'
   import { PortalClient } from '../../sync/portal'
@@ -12,7 +13,7 @@
 
   let { data }: { data: BackupData | null } = $props()
 
-  type Sub = 'review' | 'grants' | 'inbox' | 'share'
+  type Sub = 'review' | 'grants' | 'inbox' | 'share' | 'access-log'
 
   let session = $state<OwnerSession | null>(null)
   let sub = $state<Sub>('grants')
@@ -69,6 +70,7 @@
         <button class:active={sub === 'grants'} aria-pressed={sub === 'grants'} onclick={() => (sub = 'grants')}>Grants</button>
         <button class:active={sub === 'inbox'} aria-pressed={sub === 'inbox'} onclick={() => (sub = 'inbox')}>Inbox</button>
         <button class:active={sub === 'share'} aria-pressed={sub === 'share'} onclick={() => (sub = 'share')}>Share</button>
+        <button class:active={sub === 'access-log'} aria-pressed={sub === 'access-log'} onclick={() => (sub = 'access-log')}>Access log</button>
       </nav>
       <button class="lock" onclick={lock}>Lock console</button>
     </div>
@@ -102,6 +104,8 @@
         <AssignmentInbox {session} {client} />
       {:else if sub === 'share'}
         <ShareBuilder {session} therapist={selected} {data} {client} {smtpEnabled} />
+      {:else if sub === 'access-log'}
+        <AuditList therapist={selected} {client} />
       {/if}
     {/if}
   </section>
