@@ -4,9 +4,11 @@ import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.mail.Mailer
 import com.daymark.companion.routes.ErrorDto
+import com.daymark.companion.routes.auditRoutes
 import com.daymark.companion.routes.relationRoutes
 import com.daymark.companion.routes.syncRoutes
 import com.daymark.companion.routes.therapistAuthRoutes
+import com.daymark.companion.storage.AuditStore
 import com.daymark.companion.storage.BlobStore
 import com.daymark.companion.storage.RelationStore
 import io.ktor.http.ContentType
@@ -70,6 +72,7 @@ fun Application.module(
     mailer: Mailer? = null,
     relationStore: RelationStore? = null,
     authStore: AuthStore? = null,
+    auditStore: AuditStore? = null,
 ) {
     install(ContentNegotiation) { json(Json { explicitNulls = false }) }
     install(SecurityHeaders)
@@ -105,6 +108,11 @@ fun Application.module(
     val auth = if (config.therapistAuthEnabled) {
         authStore ?: AuthStore(config.dataDir)
     } else null
+    // Owner-readable audit log (COMPANION_SECURITY.md §9). Same feature gate as the rest of the
+    // therapist portal — it only makes sense once relationships/sessions exist.
+    val audit = if (config.therapistAuthEnabled) {
+        auditStore ?: AuditStore(config.dataDir, config.auditRetentionDays * 86_400L)
+    } else null
 
     routing {
         // Unauthenticated, content-free liveness probe — never under the base path.
@@ -133,8 +141,11 @@ fun Application.module(
 
         // Therapist portal. Fail-closed: 503 on every portal path when the feature is off, so a
         // probe cannot tell configured-but-empty from not-configured.
-        if (relStore != null && auth != null && guard != null) {
-            relationRoutes(relStore, guard, auth, config.sessionIdleSeconds, config.maxRequestBytes)
+        if (relStore != null && auth != null && guard != null && audit != null) {
+            relationRoutes(
+                relStore, guard, auth, config.sessionIdleSeconds, config.maxRequestBytes,
+                auditStore = audit, auditSourceIp = config.auditSourceIpEnabled,
+            )
             therapistAuthRoutes(
                 authStore = auth,
                 ownerGuard = guard,
@@ -146,7 +157,10 @@ fun Application.module(
                 totpLockoutSeconds = config.totpLockoutSeconds,
                 publicBaseUrl = config.webauthnOrigins.firstOrNull(),
                 cookieSecure = config.cookieSecure,
+                auditStore = audit,
+                auditSourceIp = config.auditSourceIpEnabled,
             )
+            auditRoutes(audit, guard)
         } else {
             get("/v1/rel/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
             put("/v1/rel/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }

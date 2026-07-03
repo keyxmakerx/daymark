@@ -104,8 +104,9 @@ Each document retracts overstated earlier claims rather than quietly editing the
 - **The browser portal is NOT zero-knowledge** against a malicious operator; the
   native phone Sync flavor is the only secret-handling owner path.
 - **Anti-rollback is client-anchored**; server chain checks are DoS hygiene only.
-- **Audit suppression is undetectable** until a signed monotonic hash-chain ships, so
-  "access cannot be hidden" is retracted.
+- **Audit tampering is now detectable** (server-computed hash-chain), but **withholding
+  is not** — a hostile server can still simply never append an event, so "access cannot
+  be hidden" stays partially retracted (see COMPANION_SECURITY.md §9/R12).
 
 ---
 
@@ -123,10 +124,11 @@ branch/PRs. Honest state:
 | Capability/assignment model + write-back crypto | ✅ built + tested |
 | Therapist portal: **TOTP** auth, single-use invites, pairing + share crypto, owner acceptance inbox, capability-scoped assign surface, game-plan authoring | ✅ built + tested |
 | SMTP mailer (owner-configured, off by default, no record content) | ✅ built, tested vs GreenMail |
+| **Audit log** (owner-readable, metadata-only, hash-chained therapist-access log) | ✅ built + tested |
 | WebAuthn / passkey therapist auth | ⚠️ **501 scaffold** — TOTP is the working path; browser ceremony unverifiable headlessly |
 | Phone `sync` flavor (Kotlin, 2b) | 📄 spec only ([COMPANION_PHONE_2B.md](COMPANION_PHONE_2B.md)) — CI/emulator-verifiable |
 
-Verified locally + in CI: web build 0 errors, web unit **134/134**, server **57 tests**,
+Verified locally + in CI: web build 0 errors, web unit **141/141**, server **70 tests**,
 sync integration **5/5**, Docker build+smoke green.
 
 ## Decisions & roadmap (see [COMPANION_PLAN.md](COMPANION_PLAN.md) for the working plan)
@@ -135,8 +137,8 @@ sync integration **5/5**, Docker build+smoke green.
   server-access-token recovery" — owner notifications + re-issue of the *access token*
   only, keeping the local-PIN / no-escrow model intact. The server still cannot reset
   the PIN or E2EE passphrase. (Track T2 in the plan.)
-- **Audit log** (owner-readable therapist-access log): flagged in
-  [COMPANION_SECURITY.md](COMPANION_SECURITY.md); **in progress as Track T1.**
+- **Audit log** (owner-readable therapist-access log): ✅ **shipped (Track T1)** —
+  hash-chained, metadata-only; see [COMPANION_SECURITY.md](COMPANION_SECURITY.md) §9/R12.
 - **Phone `sync` flavor (2b)**: **in progress as Track T3** (Android CI job first).
 - **WebAuthn**: server-side attestation/assertion (CI-testable) behind the
   already-pinned RP-ID/origins; queued as Track T4.

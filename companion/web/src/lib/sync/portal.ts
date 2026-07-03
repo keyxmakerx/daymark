@@ -34,6 +34,22 @@ export interface InviteResponse {
   expiresAt: number
 }
 
+/** One owner-readable, metadata-only audit entry (COMPANION_SECURITY.md §9). */
+export interface AuditEvent {
+  seq: number
+  ts: number
+  actor: 'owner' | 'therapist'
+  action: string
+  objectRef?: string | null
+  meta?: Record<string, string> | null
+  entryHash: string
+}
+
+export interface AuditLogPage {
+  events: AuditEvent[]
+  nextCursor: number | null
+}
+
 type FetchLike = typeof fetch
 
 export class PortalError extends Error {
@@ -139,6 +155,21 @@ export class PortalClient {
     if (res.status === 403) throw new PortalError('wrong direction for this channel', 403)
     if (!res.ok) throw new PortalError('blob store failed', res.status)
     return (await res.json()) as RelMeta
+  }
+
+  // --- owner-readable audit log (metadata only; never content — COMPANION_SECURITY.md §9) ---
+
+  /** Fetch one page of the access log for [inboxToken]'s relationship, newest-first. */
+  async getAuditLog(inboxToken: string, before?: number, limit = 50): Promise<AuditLogPage> {
+    const relRef = await relRefOf(inboxToken)
+    const params = new URLSearchParams({ limit: String(limit) })
+    if (before != null) params.set('before', String(before))
+    const res = await this.req(`/v1/rel/${encodeURIComponent(relRef)}/audit?${params}`, {
+      headers: { 'X-Rel-Token': inboxToken },
+    })
+    if (res.status === 404) return { events: [], nextCursor: null }
+    if (!res.ok) throw new PortalError('audit log fetch failed', res.status)
+    return (await res.json()) as AuditLogPage
   }
 
   // --- invites (owner mints; link is ALWAYS returned in-band for OOB delivery) ---

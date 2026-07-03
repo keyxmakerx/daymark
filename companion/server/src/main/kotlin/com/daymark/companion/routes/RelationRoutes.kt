@@ -3,6 +3,9 @@ package com.daymark.companion.routes
 import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.auth.Secrets
+import com.daymark.companion.storage.AuditActor
+import com.daymark.companion.storage.AuditAction
+import com.daymark.companion.storage.AuditStore
 import com.daymark.companion.storage.Channel
 import com.daymark.companion.storage.RelMeta
 import com.daymark.companion.storage.RelationStore
@@ -21,6 +24,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import kotlinx.serialization.Serializable
+import org.slf4j.LoggerFactory
 
 @Serializable data class RelMetaDto(val version: Long, val size: Long, val contentHash: String, val settingKey: String? = null, val createdAt: Long)
 @Serializable data class RelVersionList(val lineage: String, val versions: List<RelMetaDto>)
@@ -28,6 +32,8 @@ import kotlinx.serialization.Serializable
 @Serializable data class RelPutResult(val relRef: String, val channel: String, val lineage: String, val version: Long, val size: Long, val contentHash: String)
 
 private fun RelMeta.toDto() = RelMetaDto(version, size, contentHash, settingKey, createdAt)
+
+private val log = LoggerFactory.getLogger("com.daymark.companion.audit")
 
 /** Who is presenting a request, resolved from the presented credential. */
 enum class Role { OWNER, THERAPIST }
@@ -52,18 +58,20 @@ fun Route.relationRoutes(
     authStore: AuthStore,
     sessionIdleSeconds: Long,
     maxRequestBytes: Long,
+    auditStore: AuditStore,
+    auditSourceIp: Boolean = false,
 ) {
     route("/v1/rel/{relRef}/{channel}") {
 
         // List lineages in a channel (either counterparty may read).
         get {
-            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds) ?: return@get
+            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds, auditStore, auditSourceIp) ?: return@get
             call.respond(RelLineageList(store.listLineages(ctx.relRef, ctx.channel)))
         }
 
         // List versions of a lineage (metadata only).
         get("/{lineage}") {
-            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds) ?: return@get
+            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds, auditStore, auditSourceIp) ?: return@get
             val lineage = call.parameters["lineage"] ?: return@get call.respond(HttpStatusCode.BadRequest, ErrorDto("missing lineage"))
             if (lineage == "current") return@get call.respond(HttpStatusCode.BadRequest, ErrorDto("missing lineage"))
             try {
@@ -75,13 +83,14 @@ fun Route.relationRoutes(
 
         // Fetch the highest version of a lineage (the counterparty read path).
         get("/{lineage}/current") {
-            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds) ?: return@get
+            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds, auditStore, auditSourceIp) ?: return@get
             val lineage = call.parameters["lineage"] ?: return@get call.respond(HttpStatusCode.BadRequest, ErrorDto("missing lineage"))
             try {
                 val (version, bytes) = store.fetchCurrent(ctx.relRef, ctx.channel, lineage)
                 call.response.header("X-Content-Hash", RelationStore.sha256HexPublic(bytes))
                 call.response.header("X-Version", version.toString())
                 call.respondBytes(bytes, ContentType.Application.OctetStream)
+                auditFetch(auditStore, ctx, lineage, version, auditSourceIp, call)
             } catch (e: RelationStoreException) {
                 call.failRel(e)
             }
@@ -89,7 +98,7 @@ fun Route.relationRoutes(
 
         // Fetch one blob.
         get("/{lineage}/{version}") {
-            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds) ?: return@get
+            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds, auditStore, auditSourceIp) ?: return@get
             val lineage = call.parameters["lineage"] ?: return@get call.respond(HttpStatusCode.BadRequest, ErrorDto("missing lineage"))
             val version = call.parameters["version"]?.toLongOrNull()
                 ?: return@get call.respond(HttpStatusCode.BadRequest, ErrorDto("version must be an integer"))
@@ -97,6 +106,7 @@ fun Route.relationRoutes(
                 val bytes = store.fetch(ctx.relRef, ctx.channel, lineage, version)
                 call.response.header("X-Content-Hash", RelationStore.sha256HexPublic(bytes))
                 call.respondBytes(bytes, ContentType.Application.OctetStream)
+                auditFetch(auditStore, ctx, lineage, version, auditSourceIp, call)
             } catch (e: RelationStoreException) {
                 call.failRel(e)
             }
@@ -106,7 +116,7 @@ fun Route.relationRoutes(
         // writer MUST also present a matching X-CSRF-Token — a session cookie alone is not enough
         // (defends assignments/gameplans PUTs against cross-site forgery, matching /session/logout).
         put("/{lineage}/{version}") {
-            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds, requireCsrf = true) ?: return@put
+            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds, auditStore, auditSourceIp, requireCsrf = true) ?: return@put
             val requiredRole = writerRole(ctx.channel)
             if (ctx.role != requiredRole) {
                 call.respond(HttpStatusCode.Forbidden, ErrorDto("wrong direction for this channel"))
@@ -120,16 +130,53 @@ fun Route.relationRoutes(
             val settingKey = call.request.headers["X-Setting-Key"]?.trim()?.ifBlank { null }
             val body = call.readCappedRel(maxRequestBytes) ?: return@put
             try {
-                val meta = store.put(ctx.relRef, ctx.channel, lineage, version, body, settingKey)
-                call.response.header("X-Content-Hash", meta.contentHash)
+                val putMeta = store.put(ctx.relRef, ctx.channel, lineage, version, body, settingKey)
+                call.response.header("X-Content-Hash", putMeta.contentHash)
                 call.respond(
                     HttpStatusCode.Created,
-                    RelPutResult(ctx.relRef, ctx.channel.wire, lineage, meta.version, meta.size, meta.contentHash),
+                    RelPutResult(ctx.relRef, ctx.channel.wire, lineage, putMeta.version, putMeta.size, putMeta.contentHash),
                 )
+                auditPublish(auditStore, ctx, lineage, putMeta.version, auditSourceIp, call)
             } catch (e: RelationStoreException) {
                 call.failRel(e)
             }
         }
+    }
+}
+
+/** Log a therapist-share-read or owner-gameplan-read. No-op for uninteresting (channel, role) pairs. */
+private fun auditFetch(auditStore: AuditStore, ctx: RelContext, lineage: String, version: Long, sourceIp: Boolean, call: ApplicationCall) {
+    val (actor, action) = when {
+        ctx.channel == Channel.SHARES && ctx.role == Role.THERAPIST -> AuditActor.THERAPIST to AuditAction.SHARE_OPEN
+        ctx.channel == Channel.GAMEPLANS && ctx.role == Role.OWNER -> AuditActor.OWNER to AuditAction.GAMEPLAN_OPEN
+        else -> return
+    }
+    auditSafely {
+        auditStore.append(ctx.relRef, actor, action, objectRef = "$lineage:$version", meta = sourceIpMeta(sourceIp, call))
+    }
+}
+
+/** Log a therapist publishing an assignment or game plan. No-op for the other (owner-write) channels. */
+private fun auditPublish(auditStore: AuditStore, ctx: RelContext, lineage: String, version: Long, sourceIp: Boolean, call: ApplicationCall) {
+    val action = when (ctx.channel) {
+        Channel.ASSIGNMENTS -> AuditAction.ASSIGNMENT_PUBLISH
+        Channel.GAMEPLANS -> AuditAction.GAMEPLAN_PUBLISH
+        Channel.GRANTS, Channel.SHARES -> return
+    }
+    auditSafely {
+        auditStore.append(ctx.relRef, AuditActor.THERAPIST, action, objectRef = "$lineage:$version", meta = sourceIpMeta(sourceIp, call))
+    }
+}
+
+private fun sourceIpMeta(enabled: Boolean, call: ApplicationCall): Map<String, String>? =
+    if (enabled) mapOf("sourceIp" to call.request.origin.remoteAddress) else null
+
+/** The audit log is additive, never load-bearing: a logging bug must never fail a real request. */
+private fun auditSafely(block: () -> Unit) {
+    try {
+        block()
+    } catch (e: Exception) {
+        log.warn("audit log append failed", e)
     }
 }
 
@@ -149,6 +196,8 @@ private suspend fun io.ktor.server.routing.RoutingContext.resolve(
     ownerGuard: AuthGuard,
     authStore: AuthStore,
     sessionIdleSeconds: Long,
+    auditStore: AuditStore,
+    auditSourceIp: Boolean,
     requireCsrf: Boolean = false,
 ): RelContext? {
     val channelWire = call.parameters["channel"] ?: run {
@@ -174,7 +223,7 @@ private suspend fun io.ktor.server.routing.RoutingContext.resolve(
     // Determine role. Prefer an owner bearer token; else a therapist session cookie bound here.
     // For state-changing therapist calls (requireCsrf), a missing/mismatched X-CSRF-Token is a
     // rejection, not a bypass — the cookie alone must not authorize a write.
-    val role = resolveRole(call, ownerGuard, authStore, sessionIdleSeconds, pathRelRef, requireCsrf) ?: run {
+    val role = resolveRole(call, ownerGuard, authStore, sessionIdleSeconds, pathRelRef, requireCsrf, auditStore, auditSourceIp) ?: run {
         call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized")); return null
     }
     return RelContext(pathRelRef, channel, role)
@@ -187,6 +236,8 @@ private fun resolveRole(
     sessionIdleSeconds: Long,
     relRef: String,
     requireCsrf: Boolean,
+    auditStore: AuditStore,
+    auditSourceIp: Boolean,
 ): Role? {
     val sourceId = call.request.origin.remoteAddress
     val bearer = call.request.headers[HttpHeaders.Authorization]?.removePrefix("Bearer ")?.trim()
@@ -204,6 +255,11 @@ private fun resolveRole(
         }
         val v = authStore.validateSession(sessionId, sessionIdleSeconds, requireCsrf = csrf)
         if (v.check == AuthStore.SessionCheck.OK && v.record?.relRef == relRef) return Role.THERAPIST
+        if (v.check == AuthStore.SessionCheck.EXPIRED) {
+            auditSafely {
+                auditStore.append(relRef, AuditActor.THERAPIST, AuditAction.SESSION_EXPIRED, meta = sourceIpMeta(auditSourceIp, call))
+            }
+        }
     }
     return null
 }

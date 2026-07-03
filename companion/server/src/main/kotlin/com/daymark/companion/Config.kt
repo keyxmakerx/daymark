@@ -45,6 +45,9 @@ data class Config(
     /** Per-relationship blob channel retention + quota. */
     val relMaxVersions: Int = 50,
     val relQuotaBytes: Long = 268_435_456L, // 256 MiB per relationship
+    /** Owner-readable audit log (COMPANION_SECURITY.md §9): retention window, IP off by default. */
+    val auditRetentionDays: Long = 90L,
+    val auditSourceIpEnabled: Boolean = false,
     /**
      * Whether the therapist session cookie carries the `Secure` attribute. TRUE by default
      * (the portal requires a real TLS origin, per COMPANION_SECURITY.md open Q7). Only set
@@ -89,6 +92,9 @@ data class Config(
                 relMaxVersions = env["DAYMARK_REL_MAX_VERSIONS"]?.trim()?.toIntOrNull() ?: 50,
                 relQuotaBytes = env["DAYMARK_REL_QUOTA_BYTES"]?.trim()?.toLongOrNull() ?: 268_435_456L,
                 cookieSecure = env["DAYMARK_COOKIE_INSECURE"]?.trim().let { !(it == "1" || it.equals("true", true)) },
+                auditRetentionDays = env["DAYMARK_ACCESS_LOG_RETENTION_DAYS"]?.trim()?.toLongOrNull() ?: 90L,
+                auditSourceIpEnabled = env["DAYMARK_ACCESS_LOG_SOURCE_IP"]?.trim()
+                    .let { it == "1" || it.equals("true", true) },
             )
         }
 
