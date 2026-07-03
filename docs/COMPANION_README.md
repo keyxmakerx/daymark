@@ -48,7 +48,7 @@ is the sole root of trust, and the default phone build never gains a network.
 
 ---
 
-## The five design documents
+## The design documents
 
 | Document | Covers |
 |---|---|
@@ -60,6 +60,9 @@ is the sole root of trust, and the default phone build never gains a network.
 | [COMPANION_FEATURES.md](COMPANION_FEATURES.md) | Expanded "sit-down" user features: the data-driven questionnaire engine, the original non-diagnostic cognitive/attention testing harness, the license-clean instrument catalog, the versioned results data model (folded into the E2EE snapshot), and the honest-by-construction CI gates. |
 | [COMPANION_DESIGN_SYSTEM.md](COMPANION_DESIGN_SYSTEM.md) | The "Modern Paper, Big Screen" web design system: the sleek-vs-vendored/CSP reconciliation, the self-hosted frontend stack, design tokens, theming, the hand-rolled SVG chart layer, WCAG 2.2 AA, and a satisfying CSP example. |
 | [COMPANION_UX.md](COMPANION_UX.md) | Cross-surface UX & information architecture (owner viewer / assessment runner / therapist portal): key flows, privacy-by-design consent patterns, the honest Trust strip, and empty/error/revocation states. |
+| [COMPANION_ASSIGNMENTS.md](COMPANION_ASSIGNMENTS.md) | Owner-granted **capability model** (Android-permission style), the therapist→owner **assignment channel** (questionnaires / tasks / large assessments / reminders / goals / settings), and the **dynamic interactive dashboard** (replaces PDF-first). |
+| [SYNC_PROTOCOL.md](SYNC_PROTOCOL.md) | Normative E2EE sync wire format (Argon2id → XChaCha20-Poly1305 envelope, base64 conformance vector) + the `/v1` API — the contract the phone client must mirror. |
+| [COMPANION_PHONE_2B.md](COMPANION_PHONE_2B.md) | Milestone 2b spec: the Kotlin/Android `sync` product flavor, lazysodium crypto conformance, inbound assignments/game-plans, DB v13/v14 migrations, pairing. Spec-only (CI/emulator-verifiable). |
 
 **Named deliverable referenced throughout but not yet written:** `PAIRING.md` — the
 out-of-band, bidirectional pairing / key-exchange protocol.
@@ -105,12 +108,39 @@ Each document retracts overstated earlier claims rather than quietly editing the
 
 ---
 
-## Project status
+## Build status (what actually ships today)
 
-**Design only.** These documents are a contract for review and sequencing, not a
-description of shipping software. The single largest open question — restated in every
-document — is **sequencing**: whether the first Companion release ships the
-owner→therapist **sharing + game-plan** tracks at all, or lands **sync-only first**.
+These docs began as design; much is now **built and CI-verified** on the `companion/`
+branch/PRs. Honest state:
+
+| Area | State |
+|---|---|
+| Hardened container, Phase-0 offline report viewer | ✅ built, CI-green (Docker smoke-test) |
+| E2EE sync (zero-knowledge blob store + client crypto, browser reader + CLI writer) | ✅ built, CI-green (integration round-trip) |
+| Self-check engine + honesty gate + "Steady Attention" task | ✅ built, CI-green |
+| Dynamic interactive dashboard (replaces PDF-first) | ✅ built |
+| Capability/assignment model + write-back crypto | ✅ built + tested |
+| Therapist portal: **TOTP** auth, single-use invites, pairing + share crypto, owner acceptance inbox, capability-scoped assign surface, game-plan authoring | ✅ built + tested |
+| SMTP mailer (owner-configured, off by default, no record content) | ✅ built, tested vs GreenMail |
+| WebAuthn / passkey therapist auth | ⚠️ **501 scaffold** — TOTP is the working path; browser ceremony unverifiable headlessly |
+| Phone `sync` flavor (Kotlin, 2b) | 📄 spec only ([COMPANION_PHONE_2B.md](COMPANION_PHONE_2B.md)) — CI/emulator-verifiable |
+
+Verified locally + in CI: web build 0 errors, web unit **134/134**, server **57 tests**,
+sync integration **5/5**, Docker build+smoke green.
+
+## Decisions & roadmap (pending / next)
+
+- **App ⇄ server email** (owner side): the server is zero-knowledge, so it **cannot** reset
+  your PIN or E2EE passphrase (no escrow). **Default direction (pending maintainer confirm):
+  "notifications + server-access-token recovery"** — owner notifications + re-issue of the
+  *access token* only, keeping the local-PIN / no-escrow model intact. (Alternatives: a real
+  owner account, or a hybrid portal-login account — a larger departure.)
+- **Audit log** (owner-readable therapist-access log): flagged in
+  [COMPANION_SECURITY.md](COMPANION_SECURITY.md); **next to build.**
+- **WebAuthn**: implement server-side attestation/assertion (CI-testable) behind the
+  already-pinned RP-ID/origins; browser ceremony stays deploy-time verified.
+- Smaller follow-ups: credential-rotation endpoint, expired-invite/ticket sweep, per-client
+  rate-limiting behind a trusted proxy, crypto-random lineage IDs, server `/data` backup docs.
 
 ---
 

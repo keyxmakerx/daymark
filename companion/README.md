@@ -10,10 +10,13 @@ The optional, **self-hosted** companion server for Daymark — run on your own m
 > **expanded self-check suite** — a data-driven, non-diagnostic **questionnaire engine** with
 > a build-failing honesty gate, plus an original **"Steady Attention"** focus/timing task; a
 > **dynamic interactive dashboard** (expandable cards, range toggles, activity-association and
-> self-check trends) replacing the old tabbed viewer; and the **capability/assignment core** —
-> the owner-granted (Android-permission-style) therapist-assignment model + write-back crypto
-> (validated + tested). **Still designed but not built:** therapist auth/MFA + pairing, the
-> therapist portal UI, and the phone Sync *flavor* (2b). See the design set in
+> self-check trends) replacing the old tabbed viewer; and the **therapist portal** — the
+> owner-granted (Android-permission-style) capability model, therapist **TOTP auth** +
+> single-use invites, **pairing + share crypto**, the owner **acceptance inbox**, the
+> capability-scoped **assign surface** + game-plan authoring, and an opt-in **SMTP mailer**
+> (the one owner-configured outbound; no record content in emails). **Not verifiable here /
+> not built:** WebAuthn (a 501 scaffold — **TOTP is the working therapist auth path**), and
+> the phone Sync *flavor* (2b, Kotlin — spec only). See the design set in
 > [`../docs/COMPANION_README.md`](../docs/COMPANION_README.md), the sync spec in
 > [`../docs/SYNC_PROTOCOL.md`](../docs/SYNC_PROTOCOL.md), the features design in
 > [`../docs/COMPANION_FEATURES.md`](../docs/COMPANION_FEATURES.md), and the assignment/dashboard
