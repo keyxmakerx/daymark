@@ -24,6 +24,12 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
+        with:
+          # Skip setup-android's default "tools" (legacy Android SDK Tools) package: it drags
+          # in the ~1GB emulator, whose download intermittently corrupts ("Error reading Zip
+          # content from a SeekableByteChannel") and which this headless build never uses.
+          # Install only what the build needs, up front, so it can't flake on the emulator.
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
 
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
