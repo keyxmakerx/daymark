@@ -8,6 +8,7 @@
   import type { Grant, AssignmentType, AssignmentPayload, Cadence } from '../../assignments/types'
   import { hasCapability } from '../../therapist/grant'
   import { assignableQuestionnaires, assignableTasks } from '../../therapist/catalog'
+  import { PROVENANCE_LABEL, PROVENANCE_GLYPH } from '../../instruments'
   import { buildAssignment, preflight, publishAssignment } from '../../therapist/assignClient'
   import { describeAssignment } from '../../assignments/describe'
   import type { UnlockedContext } from '../../therapist/context'
@@ -35,6 +36,8 @@
   let status = $state('')
   let error = $state('')
   let stepUpOpen = $state(false)
+
+  const selectedTier = $derived(questionnaires.find((q) => q.id === selectedInstrument)?.tier)
 
   function currentPayload(): AssignmentPayload | null {
     switch (draftType) {
@@ -93,9 +96,10 @@
     {#if hasCapability(grant, 'assign.questionnaire')}
       <label class="field"><span>Self-check</span>
         <select bind:value={selectedInstrument}>
-          {#each questionnaires as q (q.id)}<option value={q.id}>{q.title}</option>{/each}
+          {#each questionnaires as q (q.id)}<option value={q.id}>{q.title}{q.tier ? ' · ' + PROVENANCE_LABEL[q.tier] : ''}</option>{/each}
         </select>
       </label>
+      {#if selectedTier}<p class="tiernote faint">{PROVENANCE_GLYPH[selectedTier]} {PROVENANCE_LABEL[selectedTier]} — the person sees this label when they take it.</p>{/if}
     {:else}
       <p class="denied faint">You do not have the "Assign self-checks" capability.</p>
     {/if}
