@@ -1,0 +1,174 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+  :root{
+    --linen:#E7E0D2; --paper:#F7F3EA; --sheet:#FCFAF4; --card:#FBF8F1;
+    --ink:#2B2925; --ink2:#6E6757; --ink3:#948B78; --line:#E4DCCB; --line2:#D8CEB9;
+    --awful:#B0654E; --bad:#CE9560; --meh:#CBB56B; --good:#93A96A; --rad:#5E9B8C;
+    --sage:#4E7D70; --sageink:#3C665B; --sagewash:#E4EDE7; --clay:#B0654E;
+    --serif:Georgia,"Iowan Old Style","Times New Roman",serif;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,"DejaVu Sans",sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{width:736px; height:1580px; background:var(--linen); font-family:var(--sans); color:var(--ink);
+    background-image:radial-gradient(circle at 1px 1px, rgba(120,110,90,.05) 1px, transparent 0); background-size:22px 22px;}
+  .board{padding:44px 48px;}
+  .head h1{font-family:var(--serif); font-size:27px; font-weight:600; letter-spacing:-.01em;}
+  .head p{color:var(--ink2); font-size:13.5px; margin-top:6px; font-family:var(--serif); font-style:italic;}
+  .grid{margin-top:24px; display:grid; grid-template-columns:repeat(2,300px); gap:40px 40px; justify-content:center;}
+  figure{margin:0;}
+  figcaption{margin-top:11px; font-family:var(--serif); font-size:13px; color:var(--ink2);}
+  figcaption b{color:var(--ink); font-weight:600; display:block; font-size:14px;}
+  .phone{width:300px; height:620px; background:#141210; border-radius:38px; padding:7px; box-shadow:0 18px 40px -18px rgba(40,35,25,.5);}
+  .screen{width:100%; height:100%; background:var(--paper); border-radius:31px; overflow:hidden; position:relative; display:flex; flex-direction:column;}
+  .sb{display:flex; justify-content:space-between; align-items:center; padding:12px 20px 4px; font-size:11px; color:var(--ink2); font-weight:600;}
+  .sb .dots{display:flex; gap:3px;} .sb .dots i{width:5px; height:5px; border-radius:50%; background:var(--ink3); display:block;}
+  .body{flex:1; padding:6px 16px 14px; display:flex; flex-direction:column; gap:11px; overflow:hidden;}
+  .h2{font-family:var(--serif); font-size:20px; font-weight:600; letter-spacing:-.01em;}
+  .sub{color:var(--ink2); font-size:11.5px;}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:15px; padding:12px 13px;}
+  .lbl{font-size:9.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--ink3); font-weight:700;}
+  .btn{background:var(--sage); color:#fff; border-radius:12px; padding:11px; text-align:center; font-weight:600; font-size:13.5px;}
+  .chip{display:inline-flex; align-items:center; gap:5px; background:var(--sheet); border:1px solid var(--line2); border-radius:999px; padding:5px 11px; font-size:11px; color:var(--ink);}
+  .nav{display:flex; justify-content:space-around; align-items:center; padding:9px 8px 16px; border-top:1px solid var(--line); background:var(--sheet); font-size:9.5px; color:var(--ink3);}
+  .nav .t{display:flex; flex-direction:column; align-items:center; gap:4px;}
+  .nav .ic{width:19px; height:19px; border-radius:6px; border:1.6px solid var(--ink3);}
+  .nav .t.on{color:var(--sageink);} .nav .t.on .ic{border-color:var(--sage); background:var(--sagewash);}
+  .nav .home{width:44px; height:44px; border-radius:50%; background:var(--sage); border:none; margin-top:-14px; display:grid; place-items:center; box-shadow:0 6px 14px -4px rgba(78,125,112,.6);}
+  .nav .home::after{content:"+"; color:#fff; font-size:24px; line-height:1;}
+  .fab{position:absolute; right:18px; bottom:74px; background:var(--sage); color:#fff; border-radius:14px; padding:11px 15px; font-size:13px; font-weight:600; box-shadow:0 8px 18px -6px rgba(78,125,112,.6);}
+  /* journal */
+  .jentry{border-bottom:1px solid var(--line); padding:11px 2px;}
+  .jentry .jt{font-family:var(--serif); font-size:14px; font-weight:600;}
+  .jentry .js{font-size:11px; color:var(--ink2); margin-top:3px; line-height:1.4;}
+  .jentry .jd{font-size:9.5px; color:var(--ink3); margin-top:5px; letter-spacing:.04em;}
+  /* goals */
+  .goal{display:flex; gap:12px; align-items:center;}
+  .ring{flex:none;}
+  .goal .g{flex:1;} .goal .g b{font-size:13px;} .goal .g p{font-size:10.5px; color:var(--ink2); margin-top:2px;}
+  .ii{font-size:10px; color:var(--sageink); background:var(--sagewash); border-radius:8px; padding:5px 8px; margin-top:7px; display:inline-block;}
+  /* menu */
+  .fory{background:var(--sagewash); border:1px solid #cfe0d8; border-radius:15px; padding:12px 13px; display:flex; gap:11px; align-items:center; position:relative;}
+  .fory .ic{width:36px; height:36px; border-radius:11px; background:#fff; display:grid; place-items:center; font-size:17px; flex:none;}
+  .fory .g{flex:1;} .fory .g b{font-size:12.5px;} .fory .g p{font-size:10.5px; color:var(--ink2);}
+  .fory .kebab{color:var(--ink3); font-size:17px; font-weight:700; letter-spacing:1px;}
+  .menu{background:#fff; border:1px solid var(--line2); border-radius:14px; box-shadow:0 16px 34px -12px rgba(40,35,25,.45); overflow:hidden;}
+  .mi{display:flex; gap:10px; align-items:center; padding:11px 14px; font-size:12.5px; border-bottom:1px solid var(--line);}
+  .mi .mic{width:17px; text-align:center;}
+  .mi.warn{color:var(--clay);}
+  .mnote{padding:10px 14px; font-size:10px; color:var(--ink3); background:var(--sheet);}
+  .mnote b{color:var(--sageink);}
+  /* toggle + settings */
+  .setrow{display:flex; align-items:center; gap:10px; padding:11px 2px; border-bottom:1px solid var(--line); font-size:12.5px;}
+  .setrow .g{flex:1;} .setrow .g p{font-size:10px; color:var(--ink3); margin-top:2px;}
+  .tog{width:38px; height:22px; border-radius:999px; background:var(--sage); position:relative; flex:none;}
+  .tog::after{content:""; position:absolute; width:16px; height:16px; border-radius:50%; background:#fff; top:3px; right:3px;}
+  .tog.off{background:var(--line2);} .tog.off::after{right:auto; left:3px;}
+  .tog.snz{background:var(--meh);}
+  .trec{background:#eef2ec; border:1px solid #d5e0d2; border-radius:13px; padding:11px 12px;}
+  .trec .tt{font-size:11.5px;} .trec .tt b{color:var(--sageink);}
+  .trec .btns{display:flex; gap:8px; margin-top:9px;}
+  .trec .yes{background:var(--sage); color:#fff; border-radius:9px; padding:7px 0; flex:1; text-align:center; font-size:11.5px; font-weight:600;}
+  .trec .no{border:1px solid var(--line2); color:var(--ink2); border-radius:9px; padding:7px 0; flex:1; text-align:center; font-size:11.5px;}
+  .mut{font-size:10px; color:var(--ink3);}
+</style></head><body><div class="board">
+  <div class="head">
+    <h1>Journal, Goals & staying in control</h1>
+    <p>The other two tabs — and the “dial it down, don’t rip it out” model for suggestions.</p>
+  </div>
+  <div class="grid">
+
+    <!-- JOURNAL -->
+    <figure><div class="phone"><div class="screen">
+      <div class="sb"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+      <div class="body">
+        <div class="h2">Journal</div>
+        <div class="row" style="display:flex; gap:6px; flex-wrap:wrap;"><span class="chip">✦ Three good things</span><span class="chip">✎ Expressive</span><span class="chip">☾ Reflect</span></div>
+        <div style="margin-top:2px;">
+          <div class="jentry"><div class="jt">A better Tuesday</div><div class="js">Walk in the morning actually helped. Work was calmer than I expected…</div><div class="jd">JUL 8 · 3 MIN READ</div></div>
+          <div class="jentry"><div class="jt">Three good things</div><div class="js">1. Coffee on the porch  2. Finished the report  3. Called Sam…</div><div class="jd">JUL 6</div></div>
+          <div class="jentry"><div class="jt">Untitled</div><div class="js">Rough night. Writing it down so it’s out of my head.</div><div class="jd">JUL 4</div></div>
+        </div>
+      </div>
+      <div class="fab">✎ Write</div>
+      <div class="nav">
+        <div class="t"><div class="ic"></div>Insights</div>
+        <div class="t on"><div class="ic"></div>Journal</div>
+        <div class="home"></div>
+        <div class="t"><div class="ic"></div>Goals</div>
+        <div class="t"><div class="ic"></div>More</div>
+      </div>
+    </div></div><figcaption><b>Journal</b>entries + writing templates, reached from the Journal tab</figcaption></figure>
+
+    <!-- GOALS -->
+    <figure><div class="phone"><div class="screen">
+      <div class="sb"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+      <div class="body">
+        <div class="h2">Goals</div>
+        <div class="sub">This week</div>
+        <div class="card"><div class="goal">
+          <svg class="ring" width="46" height="46" viewBox="0 0 46 46"><circle cx="23" cy="23" r="19" fill="none" stroke="#E4DCCB" stroke-width="5"/><circle cx="23" cy="23" r="19" fill="none" stroke="#4E7D70" stroke-width="5" stroke-linecap="round" stroke-dasharray="119" stroke-dashoffset="30" transform="rotate(-90 23 23)"/></svg>
+          <div class="g"><b>Walk 4× a week</b><p>3 of 4 done</p></div>
+        </div><div class="ii">When I get home, I’ll walk 10 minutes.</div></div>
+        <div class="card"><div class="goal">
+          <svg class="ring" width="46" height="46" viewBox="0 0 46 46"><circle cx="23" cy="23" r="19" fill="none" stroke="#E4DCCB" stroke-width="5"/><circle cx="23" cy="23" r="19" fill="none" stroke="#93A96A" stroke-width="5" stroke-linecap="round" stroke-dasharray="119" stroke-dashoffset="79" transform="rotate(-90 23 23)"/></svg>
+          <div class="g"><b>Journal 3× a week</b><p>1 of 3 done</p></div>
+        </div><div class="ii">After dinner, I’ll write for 5 minutes.</div></div>
+        <div class="card"><div class="goal">
+          <svg class="ring" width="46" height="46" viewBox="0 0 46 46"><circle cx="23" cy="23" r="19" fill="none" stroke="#E4DCCB" stroke-width="5"/><circle cx="23" cy="23" r="19" fill="none" stroke="#4E7D70" stroke-width="5" stroke-linecap="round" stroke-dasharray="119" stroke-dashoffset="0" transform="rotate(-90 23 23)"/></svg>
+          <div class="g"><b>In bed by 11</b><p>7 of 7 — nice ✦</p></div>
+        </div></div>
+      </div>
+      <div class="fab">＋ New goal</div>
+      <div class="nav">
+        <div class="t"><div class="ic"></div>Insights</div>
+        <div class="t"><div class="ic"></div>Journal</div>
+        <div class="home"></div>
+        <div class="t on"><div class="ic"></div>Goals</div>
+        <div class="t"><div class="ic"></div>More</div>
+      </div>
+    </div></div><figcaption><b>Goals</b>weekly progress + implementation intentions (“when X, I’ll Y”)</figcaption></figure>
+
+    <!-- CARD CONTROLS -->
+    <figure><div class="phone"><div class="screen">
+      <div class="sb"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+      <div class="body">
+        <div class="h2">For you</div>
+        <div class="fory">
+          <div class="ic">🌙</div>
+          <div class="g"><b>Sleep’s been off 3 nights</b><p>Check in on sleep</p></div>
+          <div class="kebab">⋯</div>
+        </div>
+        <div class="menu">
+          <div class="mi"><span class="mic">▽</span>Show less like this</div>
+          <div class="mi"><span class="mic">◷</span>Remind me in a few hours</div>
+          <div class="mi"><span class="mic">✕</span>Not helpful — hide it</div>
+          <div class="mi warn"><span class="mic">⊘</span>Turn this suggestion off</div>
+          <div class="mnote">Turned‑off suggestions never nag. <b>Your therapist can suggest turning a helpful one back on</b> — you always decide.</div>
+        </div>
+        <div style="flex:1"></div>
+        <div class="mut" style="text-align:center">Suggestions are opt‑out, granular, and remembered.</div>
+      </div>
+    </div></div><figcaption><b>Every suggestion, on a dial</b>show‑less · remind‑later · hide · turn‑off — per card</figcaption></figure>
+
+    <!-- SUGGESTIONS SETTINGS -->
+    <figure><div class="phone"><div class="screen">
+      <div class="sb"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+      <div class="body">
+        <div style="display:flex; align-items:center; gap:10px;"><span style="font-size:20px; color:var(--ink2)">‹</span><div class="h2">Suggestions</div></div>
+        <div class="lbl">On</div>
+        <div style="margin-top:-4px">
+          <div class="setrow"><div class="g">Check‑in reminders</div><div class="tog"></div></div>
+          <div class="setrow"><div class="g">“One small thing”<p>behavioral activation</p></div><div class="tog"></div></div>
+          <div class="setrow"><div class="g">Thought‑record nudges</div><div class="tog"></div></div>
+          <div class="setrow"><div class="g">Sleep check‑ins<p>snoozed · back in 2h</p></div><div class="tog snz"></div></div>
+        </div>
+        <div class="lbl" style="margin-top:4px">Off</div>
+        <div class="setrow" style="margin-top:-4px"><div class="g">Breathing prompts</div><div class="tog off"></div></div>
+        <div class="trec">
+          <div class="tt">🩺 <b>Dr. Rivera</b> suggested re‑enabling <b>Sleep check‑ins</b> — “these seemed to help you.”</div>
+          <div class="btns"><div class="yes">Turn on</div><div class="no">Not now</div></div>
+        </div>
+      </div>
+    </div></div><figcaption><b>Settings › Suggestions</b>one place to tune everything; therapist can *recommend*, never force</figcaption></figure>
+
+  </div>
+</div></body></html>

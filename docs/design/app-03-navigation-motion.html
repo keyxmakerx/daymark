@@ -1,0 +1,123 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+  :root{
+    --linen:#E7E0D2; --paper:#F7F3EA; --sheet:#FCFAF4; --card:#FBF8F1;
+    --ink:#2B2925; --ink2:#6E6757; --ink3:#948B78; --line:#E4DCCB; --line2:#D8CEB9;
+    --sage:#4E7D70; --sageink:#3C665B; --sagewash:#E4EDE7; --clay:#B0654E; --gold:#C0912F;
+    --serif:Georgia,"Iowan Old Style","Times New Roman",serif;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,"DejaVu Sans",sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{width:1240px; height:900px; background:var(--linen); font-family:var(--sans); color:var(--ink);
+    background-image:radial-gradient(circle at 1px 1px, rgba(120,110,90,.05) 1px, transparent 0); background-size:22px 22px;}
+  .board{padding:40px 48px;}
+  h1{font-family:var(--serif); font-size:27px; font-weight:600;}
+  .head p{color:var(--ink2); font-size:13.5px; margin-top:5px; font-family:var(--serif); font-style:italic;}
+  h2.k{font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink3); font-weight:700; margin:22px 0 12px;}
+
+  /* legend */
+  .legend{display:grid; grid-template-columns:repeat(3,1fr); gap:20px;}
+  .mo{background:var(--sheet); border:1px solid var(--line); border-radius:16px; padding:16px;}
+  .mo h3{font-family:var(--serif); font-size:16px; margin-bottom:3px;}
+  .mo .d{font-size:11.5px; color:var(--ink2); margin-bottom:14px;}
+  .film{display:flex; align-items:center; gap:8px; height:96px;}
+  .mini{width:56px; height:92px; border-radius:11px; background:#fff; border:1px solid var(--line2); position:relative; overflow:hidden; flex:none;}
+  .mini .bar{height:9px; background:var(--sagewash); margin:9px 8px 0; border-radius:3px;}
+  .mini .bar.s{width:60%;}
+  .mini.b2{background:var(--sagewash);}
+  .arrow{color:var(--sage); font-size:20px; flex:none;}
+  .mini .sheet{position:absolute; left:0; right:0; bottom:0; height:58%; background:var(--sagewash); border-top:2px solid var(--sage); border-radius:10px 10px 0 0;}
+  .fade1{opacity:.35;}
+  .tag{display:inline-block; font-size:10px; color:var(--sageink); background:var(--sagewash); border-radius:6px; padding:2px 7px; margin-top:10px; font-weight:600;}
+
+  /* tabs map */
+  .tabsrow{position:relative; display:grid; grid-template-columns:repeat(5,1fr); gap:16px;}
+  .col{display:flex; flex-direction:column; gap:10px;}
+  .tab{background:var(--sage); color:#fff; border-radius:12px; padding:11px; text-align:center; font-weight:700; font-size:13px; position:relative;}
+  .tab.center{background:var(--sageink); box-shadow:0 0 0 4px var(--sagewash);}
+  .fadeband{text-align:center; font-size:10.5px; color:var(--gold); font-weight:600; margin:8px 0 2px; letter-spacing:.02em;}
+  .dest{background:#fff; border:1px solid var(--line); border-radius:11px; padding:9px 10px; font-size:11.5px; display:flex; align-items:center; gap:8px;}
+  .badge{font-size:9px; font-weight:700; border-radius:6px; padding:2px 6px; flex:none; letter-spacing:.02em;}
+  .b-push{color:var(--sageink); background:var(--sagewash);}
+  .b-sheet{color:#8a5a1f; background:#f4ecdb;}
+  .dest .nm{flex:1;}
+  .more-tools{font-size:11px; color:var(--ink2); line-height:1.7;}
+  .more-tools b{color:var(--ink);}
+  .crosslink{margin-top:16px; background:#eef2ec; border:1px solid #d5e0d2; border-radius:13px; padding:12px 15px; font-size:12.5px; color:var(--ink2); display:flex; align-items:center; gap:10px;}
+  .crosslink b{color:var(--sageink);}
+  .pill{font-size:10px; background:#fff; border:1px solid var(--line2); border-radius:999px; padding:3px 9px; color:var(--ink2);}
+</style></head><body><div class="board">
+  <div class="head">
+    <h1>How you get around — and how it moves</h1>
+    <p>Five tabs are the spine. Everything else is a drill‑in (push) or a create/edit (slide‑up sheet). Three transitions, used consistently.</p>
+  </div>
+
+  <h2 class="k">The three transitions (this is “how the animations look”)</h2>
+  <div class="legend">
+    <div class="mo">
+      <h3>Switch tabs → fade‑through</h3>
+      <div class="d">Tapping a bottom‑nav tab cross‑fades; no directional slide.</div>
+      <div class="film">
+        <div class="mini fade1"><div class="bar"></div><div class="bar s"></div></div>
+        <div class="arrow">⤳</div>
+        <div class="mini b2"><div class="bar"></div><div class="bar s"></div></div>
+      </div>
+      <span class="tag">calm · non‑spatial</span>
+    </div>
+    <div class="mo">
+      <h3>Drill in → shared‑axis push</h3>
+      <div class="d">Open a detail or a tool: new screen springs in from the right, old one eases left.</div>
+      <div class="film">
+        <div class="mini fade1"><div class="bar"></div><div class="bar s"></div></div>
+        <div class="arrow">→</div>
+        <div class="mini" style="transform:translateX(-6px)"><div class="bar"></div><div class="bar s"></div></div>
+      </div>
+      <span class="tag">spring · spatial forward/back</span>
+    </div>
+    <div class="mo">
+      <h3>Create / edit → sheet up</h3>
+      <div class="d">Logging or writing rises as a bottom sheet over the current screen.</div>
+      <div class="film">
+        <div class="mini"><div class="bar"></div><div class="sheet"></div></div>
+        <div class="arrow">↑</div>
+        <div class="mini"><div class="sheet" style="height:82%"></div></div>
+      </div>
+      <span class="tag">modal · dismiss down</span>
+    </div>
+  </div>
+
+  <h2 class="k">Where each tab takes you</h2>
+  <div class="fadeband">← ← ←   fade‑through between all five tabs   → → →</div>
+  <div class="tabsrow">
+    <div class="col">
+      <div class="tab">Insights</div>
+      <div class="dest"><span class="badge b-push">PUSH</span><span class="nm">Review my year</span></div>
+      <div class="dest"><span class="badge b-push">PUSH</span><span class="nm">Day detail</span></div>
+    </div>
+    <div class="col">
+      <div class="tab">Journal</div>
+      <div class="dest"><span class="badge b-sheet">SHEET ↑</span><span class="nm">Write / editor</span></div>
+      <div class="dest"><span class="badge b-push">PUSH</span><span class="nm">Search</span></div>
+    </div>
+    <div class="col">
+      <div class="tab center">Home ＋</div>
+      <div class="dest"><span class="badge b-sheet">SHEET ↑</span><span class="nm">Check‑in / entry</span></div>
+      <div class="dest"><span class="badge b-push">PUSH</span><span class="nm">A “For you” tool</span></div>
+      <div class="dest"><span class="badge b-push">PUSH</span><span class="nm">Day detail · Search</span></div>
+    </div>
+    <div class="col">
+      <div class="tab">Goals</div>
+      <div class="dest"><span class="badge b-sheet">SHEET ↑</span><span class="nm">New / edit goal</span></div>
+    </div>
+    <div class="col">
+      <div class="tab">More</div>
+      <div class="dest" style="display:block"><span class="badge b-push">PUSH</span> <b style="font-size:11px">the library →</b>
+        <div class="more-tools" style="margin-top:6px">Sleep · Gentle support · Do one thing · Thought records · Move · Trackers · Check‑ins · Achievements · Settings</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="crosslink">
+    <span class="pill">key idea</span>
+    <div><b>Tools open from two places</b> — the <b>More</b> library (browse) <i>and</i> the <b>“For you” router on Home</b> (in‑the‑moment). Same screen, same push transition, so it never feels like a different app. That’s what turns the buried “More” grid into part of the daily loop.</div>
+  </div>
+</div></body></html>

@@ -1,0 +1,236 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+  :root{
+    --linen:#E7E0D2; --paper:#F7F3EA; --sheet:#FCFAF4; --card:#FBF8F1;
+    --ink:#2B2925; --ink2:#6E6757; --ink3:#948B78; --line:#E4DCCB; --line2:#D8CEB9;
+    --awful:#B0654E; --bad:#CE9560; --meh:#CBB56B; --good:#93A96A; --rad:#5E9B8C;
+    --sage:#4E7D70; --sageink:#3C665B; --sagewash:#E4EDE7; --clay:#B0654E;
+    --serif:Georgia,"Iowan Old Style","Times New Roman",serif;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,"DejaVu Sans",sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{width:1076px; height:1600px; background:var(--linen); font-family:var(--sans); color:var(--ink);
+    background-image:radial-gradient(circle at 1px 1px, rgba(120,110,90,.05) 1px, transparent 0); background-size:22px 22px;}
+  .board{padding:44px 48px;}
+  .head h1{font-family:var(--serif); font-size:30px; font-weight:600; letter-spacing:-.01em;}
+  .head p{color:var(--ink2); font-size:14px; margin-top:6px; font-family:var(--serif); font-style:italic;}
+  .grid{margin-top:26px; display:grid; grid-template-columns:repeat(3,300px); gap:40px;}
+  figure{margin:0;}
+  figcaption{margin-top:12px; font-family:var(--serif); font-size:13.5px; color:var(--ink2);}
+  figcaption b{color:var(--ink); font-weight:600; display:block; font-size:14px;}
+
+  .phone{width:300px; height:620px; background:#141210; border-radius:38px; padding:7px; box-shadow:0 18px 40px -18px rgba(40,35,25,.5), 0 2px 0 rgba(255,255,255,.15) inset;}
+  .screen{width:100%; height:100%; background:var(--paper); border-radius:31px; overflow:hidden; position:relative; display:flex; flex-direction:column;}
+  .sb{display:flex; justify-content:space-between; align-items:center; padding:12px 20px 4px; font-size:11px; color:var(--ink2); font-weight:600;}
+  .sb .dots{display:flex; gap:3px;} .sb .dots i{width:5px; height:5px; border-radius:50%; background:var(--ink3); display:block;}
+  .body{flex:1; padding:6px 16px 14px; display:flex; flex-direction:column; gap:11px; overflow:hidden;}
+  .h2{font-family:var(--serif); font-size:20px; font-weight:600; letter-spacing:-.01em;}
+  .sub{color:var(--ink2); font-size:11.5px;}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:15px; padding:12px 13px;}
+  .lbl{font-size:9.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--ink3); font-weight:700;}
+  .btn{background:var(--sage); color:#fff; border-radius:12px; padding:11px; text-align:center; font-weight:600; font-size:13.5px;}
+  .chip{display:inline-flex; align-items:center; gap:5px; background:var(--sheet); border:1px solid var(--line2); border-radius:999px; padding:5px 11px; font-size:11.5px; color:var(--ink);}
+  .faces{display:flex; justify-content:space-between; align-items:center;}
+  .face{width:38px; height:38px; border-radius:50%; display:grid; place-items:center;}
+  .face svg{width:100%; height:100%;}
+  .face.sel{outline:3px solid var(--sage); outline-offset:2px;}
+  .nav{display:flex; justify-content:space-around; align-items:center; padding:9px 8px 16px; border-top:1px solid var(--line); background:var(--sheet); font-size:9.5px; color:var(--ink3);}
+  .nav .t{display:flex; flex-direction:column; align-items:center; gap:4px;}
+  .nav .ic{width:19px; height:19px; border-radius:6px; border:1.6px solid var(--ink3);}
+  .nav .t.on{color:var(--sageink);} .nav .t.on .ic{border-color:var(--sage); background:var(--sagewash);}
+  .nav .home{width:44px; height:44px; border-radius:50%; background:var(--sage); border:none; margin-top:-14px; display:grid; place-items:center; box-shadow:0 6px 14px -4px rgba(78,125,112,.6);}
+  .nav .home::after{content:"+"; color:#fff; font-size:24px; line-height:1;}
+  .entry{display:flex; gap:10px; align-items:center;}
+  .entry .t{font-size:12px;} .entry .tm{margin-left:auto; font-size:10.5px; color:var(--ink3);}
+  .bars{display:flex; gap:4px; align-items:flex-end; height:30px;}
+  .bars i{flex:1; background:var(--good); border-radius:3px 3px 0 0; display:block; opacity:.85;}
+  .row{display:flex; gap:8px;}
+  .tile{flex:1; background:var(--card); border:1px solid var(--line); border-radius:13px; padding:10px; text-align:center;}
+  .tile b{font-family:var(--serif); font-size:19px; display:block;} .tile span{font-size:10px; color:var(--ink3);}
+  .seg{display:flex; background:var(--sheet); border:1px solid var(--line); border-radius:10px; padding:3px; font-size:11px;}
+  .seg div{flex:1; text-align:center; padding:5px; border-radius:7px; color:var(--ink2);}
+  .seg div.on{background:var(--sage); color:#fff; font-weight:600;}
+  .router{display:flex; gap:11px; align-items:center;}
+  .router .ic{width:38px; height:38px; border-radius:11px; flex:none; display:grid; place-items:center; font-size:18px;}
+  .router .g{flex:1;} .router .g b{font-size:12.5px;} .router .g p{font-size:10.5px; color:var(--ink2); margin-top:1px;}
+  .router .ch{color:var(--ink3); font-size:16px;}
+  .disc{border:1.5px dashed var(--clay); background:#F6EBE4; border-radius:13px; padding:11px 12px; font-size:11px; color:#7a4636;}
+  .disc b{color:#5f3527;}
+  .scale{display:flex; gap:6px;} .scale i{flex:1; text-align:center; padding:9px 0; border:1px solid var(--line2); border-radius:9px; font-size:13px; color:var(--ink2); font-family:var(--serif);}
+  .scale i.on{background:var(--sage); color:#fff; border-color:var(--sage);}
+  .badge{display:inline-flex; gap:4px; align-items:center; font-size:10px; font-weight:700; padding:2px 8px; border-radius:999px;}
+  .badge.val{color:#2f7a52; background:#e5f0e8;} .badge.cus{color:#8a5a3a; background:#f3e9e0;}
+  .corr{display:flex; align-items:center; gap:8px; font-size:11px;}
+  .corr .bar{height:7px; border-radius:4px; background:var(--good);}
+  .corr .bar.neg{background:var(--bad);}
+  .corr .n{margin-left:auto; font-variant-numeric:tabular-nums; color:var(--ink2); font-size:10.5px;}
+  .contact{display:flex; align-items:center; gap:9px; font-size:12px; padding:7px 0;}
+  .contact .av{width:26px; height:26px; border-radius:50%; background:var(--sagewash); border:1px solid var(--line2);}
+  .call{background:var(--clay); color:#fff; border-radius:13px; padding:13px; text-align:center; font-weight:700; font-size:14px;}
+  .mut{font-size:10px; color:var(--ink3); text-align:center;}
+  .greet .dt{font-size:11.5px; color:var(--ink2); margin-top:2px;}
+</style></head><body><div class="board">
+  <div class="head">
+    <h1>Daymark — the app, from the ground up</h1>
+    <p>Same “modern paper” soul. The buried tools surface into a calm daily loop, and every tool wears its provenance.</p>
+  </div>
+  <div class="grid">
+
+    <!-- 1 HOME -->
+    <figure><div class="phone"><div class="screen">
+      <div class="sb"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+      <div class="body">
+        <div class="greet"><div class="h2">Good morning, Kay</div><div class="dt">Tuesday · July 8</div></div>
+        <div class="card">
+          <div class="lbl" style="margin-bottom:9px">How are you, right now?</div>
+          <div class="faces">
+            <div class="face"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="19" fill="#B0654E"/><circle cx="15" cy="17" r="1.7" fill="#fff"/><circle cx="25" cy="17" r="1.7" fill="#fff"/><path d="M13 29 Q20 22 27 29" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg></div>
+            <div class="face"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="19" fill="#CE9560"/><circle cx="15" cy="17" r="1.7" fill="#fff"/><circle cx="25" cy="17" r="1.7" fill="#fff"/><path d="M13 28 Q20 24 27 28" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg></div>
+            <div class="face"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="19" fill="#CBB56B"/><circle cx="15" cy="17" r="1.7" fill="#fff"/><circle cx="25" cy="17" r="1.7" fill="#fff"/><path d="M13 26 L27 26" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg></div>
+            <div class="face"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="19" fill="#93A96A"/><circle cx="15" cy="17" r="1.7" fill="#fff"/><circle cx="25" cy="17" r="1.7" fill="#fff"/><path d="M13 25 Q20 30 27 25" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg></div>
+            <div class="face"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="19" fill="#5E9B8C"/><circle cx="15" cy="17" r="1.7" fill="#fff"/><circle cx="25" cy="17" r="1.7" fill="#fff"/><path d="M13 24 Q20 33 27 24" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg></div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="chip">🔥 5‑day streak</div>
+          <div class="card" style="flex:1; padding:8px 10px; display:flex; align-items:center; gap:8px;">
+            <div class="bars"><i style="height:60%"></i><i style="height:40%"></i><i style="height:75%;background:#CBB56B"></i><i style="height:55%"></i><i style="height:85%"></i><i style="height:70%"></i><i style="height:50%;background:#CE9560"></i></div>
+          </div>
+        </div>
+        <div class="card" style="background:var(--sagewash); border-color:#cfe0d8;">
+          <div class="router">
+            <div class="ic" style="background:#fff;">🌿</div>
+            <div class="g"><b>A rough couple of days</b><p>Want to try one small, kind thing?</p></div>
+            <div class="ch">›</div>
+          </div>
+        </div>
+        <div>
+          <div class="lbl" style="margin-bottom:7px">Today</div>
+          <div class="entry">
+            <div class="face" style="width:30px;height:30px"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="19" fill="#93A96A"/><circle cx="15" cy="17" r="1.7" fill="#fff"/><circle cx="25" cy="17" r="1.7" fill="#fff"/><path d="M13 25 Q20 30 27 25" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg></div>
+            <div class="t">Walk cleared my head</div><div class="tm">8:30</div>
+          </div>
+        </div>
+      </div>
+      <div class="nav">
+        <div class="t"><div class="ic"></div>Insights</div>
+        <div class="t"><div class="ic"></div>Journal</div>
+        <div class="home"></div>
+        <div class="t"><div class="ic"></div>Goals</div>
+        <div class="t"><div class="ic"></div>More</div>
+      </div>
+    </div></div><figcaption><b>Home — the daily loop</b>one‑tap check‑in, a glance, and a router</figcaption></figure>
+
+    <!-- 2 CHECK-IN -->
+    <figure><div class="phone"><div class="screen">
+      <div class="sb"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+      <div class="body">
+        <div style="display:flex; align-items:center; gap:10px;"><span style="font-size:20px; color:var(--ink2)">‹</span><div class="h2">How are you?</div></div>
+        <div style="text-align:center; margin-top:6px;">
+          <div class="face" style="width:96px;height:96px;margin:0 auto;"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="19" fill="#93A96A"/><circle cx="15" cy="17" r="1.7" fill="#fff"/><circle cx="25" cy="17" r="1.7" fill="#fff"/><path d="M13 25 Q20 30 27 25" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg></div>
+          <div class="h2" style="margin-top:8px; color:#6a8049">Good</div>
+        </div>
+        <div class="faces" style="padding:0 4px;">
+          <div class="face" style="width:32px;height:32px;opacity:.5"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="19" fill="#B0654E"/></svg></div>
+          <div class="face" style="width:32px;height:32px;opacity:.5"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="19" fill="#CE9560"/></svg></div>
+          <div class="face" style="width:32px;height:32px;opacity:.5"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="19" fill="#CBB56B"/></svg></div>
+          <div class="face sel" style="width:32px;height:32px"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="19" fill="#93A96A"/></svg></div>
+          <div class="face" style="width:32px;height:32px;opacity:.5"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="19" fill="#5E9B8C"/></svg></div>
+        </div>
+        <div class="card" style="color:var(--ink3); font-size:12px; height:64px;">What’s going on? <span style="font-size:10px">(optional)</span></div>
+        <div>
+          <div class="lbl" style="margin-bottom:7px">With</div>
+          <div class="row" style="flex-wrap:wrap; gap:6px;"><span class="chip">🚶 Walk</span><span class="chip">💻 Work</span><span class="chip">👋 Friends</span><span class="chip">＋</span></div>
+        </div>
+        <div style="flex:1"></div>
+        <div class="btn">Save entry</div>
+        <div class="mut">🔒 Nothing leaves your phone unless you share it.</div>
+      </div>
+    </div></div><figcaption><b>Check‑in — the logging moment</b>fast, kind, private by default</figcaption></figure>
+
+    <!-- 3 FOR YOU -->
+    <figure><div class="phone"><div class="screen">
+      <div class="sb"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+      <div class="body">
+        <div><div class="h2">For you</div><div class="sub">Gentle suggestions — never nags</div></div>
+        <div class="card"><div class="router"><div class="ic" style="background:#e9efe1">🌿</div><div class="g"><b>A rough couple of days</b><p>Do one small, kind thing · behavioral activation</p></div><div class="ch">›</div></div></div>
+        <div class="card"><div class="router"><div class="ic" style="background:#e6ecef">🌙</div><div class="g"><b>Sleep’s been off 3 nights</b><p>Check in on sleep</p></div><div class="ch">›</div></div></div>
+        <div class="card"><div class="router"><div class="ic" style="background:#f1ece2">✍️</div><div class="g"><b>Haven’t reflected lately</b><p>Try a thought record</p></div><div class="ch">›</div></div></div>
+        <div class="card"><div class="router"><div class="ic" style="background:#efe7ea">🫁</div><div class="g"><b>Feeling wound up?</b><p>A 3‑minute breathing space</p></div><div class="ch">›</div></div></div>
+        <div style="flex:1"></div>
+        <div class="chip" style="align-self:center; color:var(--ink3)">You’re always in control · ✕ dismiss any card</div>
+      </div>
+    </div></div><figcaption><b>For you — the Signals router</b>surfaces the right existing tool at the right moment</figcaption></figure>
+
+    <!-- 4 INSIGHTS -->
+    <figure><div class="phone"><div class="screen">
+      <div class="sb"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+      <div class="body">
+        <div class="h2">Insights</div>
+        <div class="seg"><div>Week</div><div class="on">Month</div><div>Year</div></div>
+        <div class="row"><div class="tile"><b>3.8</b><span>avg mood</span></div><div class="tile"><b>21</b><span>entries</span></div><div class="tile"><b>5</b><span>day streak</span></div></div>
+        <div class="card">
+          <div class="lbl" style="margin-bottom:8px">30‑day trend</div>
+          <svg viewBox="0 0 250 70" style="width:100%; height:64px;">
+            <path d="M0 50 L25 44 L50 52 L75 38 L100 42 L125 30 L150 36 L175 24 L200 30 L225 20 L250 26 L250 70 L0 70 Z" fill="#93A96A" opacity=".18"/>
+            <path d="M0 50 L25 44 L50 52 L75 38 L100 42 L125 30 L150 36 L175 24 L200 30 L225 20 L250 26" fill="none" stroke="#6a8049" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="250" cy="26" r="3.4" fill="#6a8049"/>
+          </svg>
+        </div>
+        <div class="card">
+          <div class="lbl" style="margin-bottom:9px">What goes with your mood</div>
+          <div style="display:flex; flex-direction:column; gap:9px;">
+            <div class="corr"><span>Walking</span><span class="bar" style="width:52px"></span><span class="n">+0.6</span></div>
+            <div class="corr"><span>Good sleep</span><span class="bar" style="width:44px"></span><span class="n">+0.5</span></div>
+            <div class="corr"><span>Long work days</span><span class="bar neg" style="width:26px"></span><span class="n">−0.3</span></div>
+          </div>
+        </div>
+        <div class="mut">Patterns, not proof — association, not causation.</div>
+      </div>
+    </div></div><figcaption><b>Insights — your own patterns</b>the n‑of‑1 loop that makes tracking worth it</figcaption></figure>
+
+    <!-- 5 PROVENANCE TOOL -->
+    <figure><div class="phone"><div class="screen">
+      <div class="sb"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+      <div class="body">
+        <div style="display:flex; align-items:center; gap:10px;"><span style="font-size:20px; color:var(--ink2)">‹</span><div class="h2">Evening wind‑down</div></div>
+        <span class="badge cus" style="align-self:flex-start">✎ Custom</span>
+        <div class="disc"><b>Custom‑made</b> — a personal reflection tool, not a validated or clinical instrument. Not for diagnosis.</div>
+        <div class="card" style="margin-top:2px;">
+          <div style="font-family:var(--serif); font-size:15px; margin-bottom:12px;">How wound‑up do you feel right now?</div>
+          <div class="scale"><i>1</i><i>2</i><i class="on">3</i><i>4</i><i>5</i></div>
+          <div style="display:flex; justify-content:space-between; font-size:9.5px; color:var(--ink3); margin-top:6px;"><span>calm</span><span>very tense</span></div>
+        </div>
+        <div style="flex:1"></div>
+        <div class="card" style="display:flex; gap:8px; align-items:center; font-size:10.5px; color:var(--ink2); background:#eef2ec; border-color:#d9e3d6;">
+          <span class="badge val">✅ Validated</span><span>e.g. PHQ‑9 shows its source &amp; license instead.</span>
+        </div>
+        <div class="btn">Continue</div>
+      </div>
+    </div></div><figcaption><b>Any tool — provenance, up front</b>custom tools self‑disclaim; validated ones cite their source</figcaption></figure>
+
+    <!-- 6 SAFETY PLAN -->
+    <figure><div class="phone"><div class="screen">
+      <div class="sb"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+      <div class="body">
+        <div><div class="h2">My safety plan</div><div class="sub">Yours. Private. Works offline.</div></div>
+        <div class="card">
+          <div class="lbl" style="margin-bottom:8px">Warning signs I notice</div>
+          <div class="row" style="flex-wrap:wrap; gap:6px;"><span class="chip">Can’t sleep</span><span class="chip">Withdrawing</span><span class="chip">Racing thoughts</span></div>
+        </div>
+        <div class="card">
+          <div class="lbl" style="margin-bottom:8px">Things that help</div>
+          <div class="row" style="flex-wrap:wrap; gap:6px;"><span class="chip">Call Sam</span><span class="chip">Walk outside</span><span class="chip">Breathing space</span></div>
+        </div>
+        <div class="card">
+          <div class="lbl" style="margin-bottom:4px">People I can reach</div>
+          <div class="contact"><div class="av"></div>Sam — sister</div>
+          <div class="contact" style="border-top:1px solid var(--line)"><div class="av"></div>Dr. Rivera — therapist</div>
+        </div>
+        <div style="flex:1"></div>
+        <div class="call">📞 Call or text 988</div>
+        <div class="mut">The 988 Suicide &amp; Crisis Lifeline · always one tap away</div>
+      </div>
+    </div></div><figcaption><b>Safety plan — built in</b>Stanley‑Brown style, offline, one tap to 988</figcaption></figure>
+
+  </div>
+</div></body></html>
