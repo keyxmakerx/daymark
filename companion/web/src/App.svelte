@@ -8,8 +8,10 @@
   import Assessments from './lib/components/Assessments.svelte'
   import OwnerConsole from './lib/components/owner/OwnerConsole.svelte'
   import RecoverAccess from './lib/components/owner/RecoverAccess.svelte'
+  import ToolBuilder from './lib/components/ToolBuilder.svelte'
+  import type { InstrumentDefinition } from './lib/instruments/types'
 
-  type Source = 'file' | 'sync' | 'assess' | 'owner' | 'recover'
+  type Source = 'file' | 'sync' | 'assess' | 'build' | 'owner' | 'recover'
 
   let data = $state<BackupData | null>(null)
   let fileName = $state('')
@@ -43,6 +45,18 @@
     fileName = ''
     error = ''
   }
+
+  // A built tool is exported as a validated instrument-definition JSON; it can later be shipped
+  // in the catalog or delivered via the assignment channel (that plumbing is a separate slice).
+  function publishTool(def: InstrumentDefinition) {
+    const blob = new Blob([JSON.stringify(def, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `daymark-tool-${def.instrumentId || 'draft'}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 </script>
 
 <div class="shell">
@@ -68,6 +82,7 @@
           <button class:active={source === 'file'} aria-pressed={source === 'file'} onclick={() => (source = 'file')}>Open a backup file</button>
           <button class:active={source === 'sync'} aria-pressed={source === 'sync'} onclick={() => (source = 'sync')}>Connect to sync</button>
           <button class:active={source === 'assess'} aria-pressed={source === 'assess'} onclick={() => (source = 'assess')}>Self-checks</button>
+          <button class:active={source === 'build'} aria-pressed={source === 'build'} onclick={() => (source = 'build')}>Build a tool</button>
           <button class:active={source === 'owner'} aria-pressed={source === 'owner'} onclick={() => (source = 'owner')}>Owner console</button>
           <button class:active={source === 'recover'} aria-pressed={source === 'recover'} onclick={() => (source = 'recover')}>Recover access</button>
         </nav>
@@ -78,6 +93,8 @@
           <SyncPanel onload={loadData} />
         {:else if source === 'assess'}
           <Assessments />
+        {:else if source === 'build'}
+          <ToolBuilder onPublish={publishTool} />
         {:else if source === 'recover'}
           <RecoverAccess />
         {:else}
@@ -87,7 +104,7 @@
         {#if error}
           <p class="error" role="alert">{error}</p>
         {/if}
-        {#if source !== 'assess' && source !== 'owner' && source !== 'recover'}
+        {#if source !== 'assess' && source !== 'build' && source !== 'owner' && source !== 'recover'}
           <p class="faint note">
             Non-diagnostic: Daymark is a self-tracking and journaling tool. Nothing here
             is a medical assessment. Export a backup from the app via
