@@ -1,0 +1,218 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+  :root{
+    --bg:#F3F4F4; --surface:#FFFFFF; --panel:#FAFBFB; --panel2:#F6F7F7;
+    --ink:#14171A; --ink2:#565D63; --ink3:#888F95; --line:#E7E9EB; --line2:#D6DADD;
+    --accent:#0F7A66; --accent2:#0B5B4C; --accentw:#E9F2EF;
+    --ok:#2E8B5B; --warn:#B0812A; --danger:#BB4A31; --neutral:#8A9198;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,"DejaVu Sans",sans-serif;
+    --mono:ui-monospace,"DejaVu Sans Mono","SF Mono",Menlo,monospace;
+    --serif:Georgia,"Times New Roman",serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{width:1300px; background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:13px; -webkit-font-smoothing:antialiased; letter-spacing:-.005em;}
+  .board{padding:40px 40px 48px;}
+  .head h1{font-size:26px; font-weight:560; letter-spacing:-.02em;}
+  .head p{color:var(--ink2); font-size:14px; margin-top:5px;}
+  figure{margin:30px 0 0;} figcaption{margin-top:10px; font-size:13px; color:var(--ink2);} figcaption b{color:var(--ink); font-weight:600;}
+
+  .app{background:var(--surface); border:1px solid var(--line2); border-radius:9px; overflow:hidden; display:flex; box-shadow:0 1px 2px rgba(20,23,26,.04);}
+  /* sidebar */
+  .side{width:210px; background:var(--panel); border-right:1px solid var(--line); padding:14px 10px; display:flex; flex-direction:column; flex:none;}
+  .wm{display:flex; align-items:baseline; gap:7px; padding:2px 8px 12px; border-bottom:1px solid var(--line); margin-bottom:10px;}
+  .wm b{font-family:var(--serif); font-size:16px; font-weight:600; letter-spacing:-.01em;}
+  .wm .dotmark{width:7px; height:7px; border-radius:50%; background:var(--accent);}
+  .grp{font-size:9.5px; letter-spacing:.11em; text-transform:uppercase; color:var(--ink3); font-weight:600; padding:12px 8px 5px;}
+  .nv{display:flex; align-items:center; gap:9px; padding:6px 8px; border-radius:5px; font-size:12.5px; color:var(--ink2); position:relative;}
+  .nv .i{width:14px; height:14px; border-radius:3px; border:1.5px solid var(--ink3);}
+  .nv.on{color:var(--ink); font-weight:550; background:var(--panel2);}
+  .nv.on::before{content:""; position:absolute; left:-10px; top:6px; bottom:6px; width:2px; background:var(--accent); border-radius:2px;}
+  .nv.on .i{border-color:var(--accent); background:var(--accentw);}
+  .side .sp{flex:1;}
+  .uchip{display:flex; align-items:center; gap:8px; padding:8px; border-top:1px solid var(--line); margin-top:8px; font-size:11.5px;}
+  .uchip .av{width:24px; height:24px; border-radius:50%; background:var(--accentw); border:1px solid var(--line2); flex:none;}
+  .uchip b{font-size:12px; display:block;} .uchip .r{color:var(--accent2); font-size:10.5px;}
+  /* main */
+  .wrap{flex:1; display:flex; flex-direction:column; min-width:0;}
+  .bar{height:44px; border-bottom:1px solid var(--line); display:flex; align-items:center; padding:0 18px; gap:14px; background:var(--surface);}
+  .bc{font-size:12.5px; color:var(--ink3);} .bc b{color:var(--ink); font-weight:550;}
+  .bar .sp{flex:1;}
+  .srch{width:200px; border:1px solid var(--line2); border-radius:6px; padding:5px 9px; font-size:12px; color:var(--ink3); display:flex; justify-content:space-between;}
+  .srch .k{font-family:var(--mono); font-size:10px; border:1px solid var(--line); border-radius:3px; padding:0 4px; color:var(--ink3);}
+  .content{padding:18px 22px; flex:1; overflow:hidden;}
+  .h1{font-size:18px; font-weight:560; letter-spacing:-.015em;}
+  .th{display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:14px;}
+  .th .sub{font-size:12px; color:var(--ink3); margin-top:2px;}
+  .btn{background:var(--accent); color:#fff; border-radius:6px; padding:7px 13px; font-size:12.5px; font-weight:550;}
+  .btn.g{background:var(--surface); color:var(--ink); border:1px solid var(--line2);}
+  .note-line{display:flex; gap:8px; align-items:center; font-size:12px; color:var(--ink2); padding:8px 11px; border-left:2px solid var(--accent); background:var(--panel2); border-radius:0 5px 5px 0; margin-bottom:16px;}
+  .note-line b{color:var(--ink);}
+  /* table */
+  table{width:100%; border-collapse:collapse;}
+  thead th{font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink3); font-weight:600; text-align:left; padding:0 12px 8px; border-bottom:1px solid var(--line2);}
+  tbody td{padding:11px 12px; border-bottom:1px solid var(--line); font-size:12.5px; vertical-align:middle;}
+  tbody tr:last-child td{border-bottom:none;}
+  .nm{font-weight:550;} .em{font-family:var(--mono); font-size:11px; color:var(--ink3);}
+  .roled{color:var(--ink); border-bottom:1px dashed var(--line2); cursor:default;}
+  .roled::after{content:" ⌄"; color:var(--ink3);}
+  .mut{color:var(--ink2);}
+  .num{font-variant-numeric:tabular-nums; text-align:right;}
+  .mono{font-family:var(--mono); font-size:11px; color:var(--ink3);}
+  .st{display:inline-flex; align-items:center; gap:6px;} .st .d{width:6px; height:6px; border-radius:50%;}
+  .d.ok{background:var(--ok);} .d.pend{background:var(--warn);} .d.off{background:var(--neutral);}
+  .rev{color:var(--danger); font-weight:550; font-size:12px;}
+  .noacc{color:var(--ink3); font-style:italic;}
+  /* client workspace */
+  .cw{display:grid; grid-template-columns:222px 1fr 320px; height:100%;}
+  .rail{border-right:1px solid var(--line); padding:16px 16px; }
+  .rail.r{border-right:none; border-left:1px solid var(--line);}
+  .pt{font-size:16px; font-weight:600; letter-spacing:-.01em;}
+  .ptid{font-family:var(--mono); font-size:10.5px; color:var(--ink3); margin-top:3px; display:flex; align-items:center; gap:5px;}
+  .lab{font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink3); font-weight:600; margin:18px 0 8px;}
+  .tm{padding:7px 0; border-bottom:1px solid var(--line);} .tm:last-child{border-bottom:none;}
+  .tm b{font-size:12.5px; font-weight:550;} .tm .rl{font-size:10.5px; color:var(--ink2);} .tm .ac{font-size:10px; color:var(--ink3); margin-top:2px;}
+  .kv{display:flex; justify-content:space-between; font-size:12px; padding:5px 0; border-bottom:1px solid var(--line);}
+  .kv:last-child{border-bottom:none;} .kv .v{font-variant-numeric:tabular-nums; font-weight:550;}
+  .kv .v small{color:var(--ok); font-weight:400;}
+  .lnk{color:var(--accent2); font-size:11.5px; font-weight:550;}
+  .center{padding:16px 20px; min-width:0;}
+  .tabs{display:flex; gap:2px; border-bottom:1px solid var(--line2); margin-bottom:14px;}
+  .tabs div{padding:8px 12px; font-size:12.5px; color:var(--ink3); border-bottom:2px solid transparent; margin-bottom:-1px;}
+  .tabs div.on{color:var(--ink); font-weight:550; border-bottom-color:var(--accent);}
+  .vis{display:flex; align-items:center; gap:7px; font-size:11.5px; color:var(--ink2); margin-bottom:12px;}
+  .vis .d{width:6px; height:6px; border-radius:50%; background:var(--accent);}
+  .editor{border:1px solid var(--line2); border-radius:7px; padding:14px; font-size:12.5px; line-height:1.65; color:#2c3033; min-height:210px;}
+  .editor h4{font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink3); font-weight:600; margin-bottom:9px;}
+  .sig{display:flex; justify-content:space-between; font-size:10.5px; color:var(--ink3); margin-top:11px; font-family:var(--mono);}
+  /* assessment table */
+  .as{width:100%; border-collapse:collapse;}
+  .as td{padding:9px 0; border-bottom:1px solid var(--line); vertical-align:middle;}
+  .as tr:last-child td{border-bottom:none;}
+  .as .anm{font-size:12.5px; font-weight:550;}
+  .as .asc{font-family:var(--mono); font-size:14px; text-align:right; font-variant-numeric:tabular-nums;}
+  .tag{font-size:9px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink2); display:inline-flex; gap:5px; align-items:center; margin-top:3px;}
+  .tag .d{width:6px; height:6px; border-radius:50%;} .tag.v .d{background:var(--ok);} .tag.c .d{background:var(--warn);}
+  .disc{font-size:10px; color:var(--warn); margin-top:3px;}
+  .log{margin-top:2px;}
+  .lr{display:grid; grid-template-columns:1fr auto; gap:8px; padding:8px 0; border-bottom:1px solid var(--line); font-size:11.5px; align-items:start;}
+  .lr:last-child{border-bottom:none;}
+  .lr .tt b{font-weight:600;} .lr .tt .rq{font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:.05em; color:var(--warn); border:1px solid var(--line2); border-radius:3px; padding:0 4px; margin-right:5px;}
+  .lr .tt .gr{color:var(--ok); font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:.05em; border:1px solid var(--line2); border-radius:3px; padding:0 4px; margin-right:5px;}
+  .lr .ts{font-family:var(--mono); font-size:10px; color:var(--ink3); white-space:nowrap;}
+</style></head><body><div class="board">
+  <div class="head">
+    <h1>Daymark Companion — web console, reinvented</h1>
+    <p>Hairlines instead of shadows · tables instead of card‑bubbles · monospace for keys &amp; times · one accent, tiny status dots. Crisp, dense, legible.</p>
+  </div>
+
+  <!-- SCREEN 1: TEAM & ROLES -->
+  <figure>
+  <div class="app">
+    <div class="side">
+      <div class="wm"><span class="dotmark"></span><b>Daymark</b></div>
+      <div style="font-family:var(--mono); font-size:10px; color:var(--ink3); padding:0 8px 4px;">riverside‑psych.local</div>
+      <div class="grp">Practice</div>
+      <div class="nv"><span class="i"></span>Overview</div>
+      <div class="nv"><span class="i"></span>Clients</div>
+      <div class="nv on"><span class="i"></span>Team &amp; roles</div>
+      <div class="nv"><span class="i"></span>Assignments</div>
+      <div class="grp">Security</div>
+      <div class="nv"><span class="i"></span>Audit log</div>
+      <div class="nv"><span class="i"></span>Access guard</div>
+      <div class="nv"><span class="i"></span>Recovery</div>
+      <div class="sp"></div>
+      <div class="uchip"><span class="av"></span><span><b>You</b><span class="r">Org Admin</span></span></div>
+    </div>
+    <div class="wrap">
+      <div class="bar"><span class="bc">Riverside Psychology&nbsp; / &nbsp;<b>Team &amp; roles</b></span><span class="sp"></span><span class="srch">Search<span class="k">⌘K</span></span></div>
+      <div class="content">
+        <div class="th"><div><div class="h1">Team &amp; roles</div><div class="sub">6 members · 1 pending invite</div></div><div class="btn">Invite member</div></div>
+        <div class="note-line">🛡 <span><b>Management ≠ reading.</b> Org Admin and Sysadmin manage the practice; neither holds a key to clinical content. Reading always requires a client's grant.</span></div>
+        <table>
+          <thead><tr><th>Member</th><th>Role</th><th>Clinical access</th><th>Last active</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            <tr><td><span class="nm">Dr. Elena Rivera</span><br><span class="em">elena@riverside</span></td><td><span class="roled">Psychologist</span></td><td class="mut">Full — per client grant</td><td class="mono">2m ago</td><td><span class="st"><span class="d ok"></span>Active</span></td><td><span class="rev">Revoke</span></td></tr>
+            <tr><td><span class="nm">Dr. Amir Shah</span><br><span class="em">amir@riverside</span></td><td><span class="roled">Psychiatrist</span></td><td class="mut">Full — per client grant</td><td class="mono">1h ago</td><td><span class="st"><span class="d ok"></span>Active</span></td><td><span class="rev">Revoke</span></td></tr>
+            <tr><td><span class="nm">Jordan Lee</span><br><span class="em">jordan@riverside</span></td><td><span class="roled">Therapist assistant</span></td><td class="mut">Tasks &amp; scheduling only</td><td class="mono">3h ago</td><td><span class="st"><span class="d ok"></span>Active</span></td><td><span class="rev">Revoke</span></td></tr>
+            <tr><td><span class="nm">Casey Kim</span><br><span class="em">casey@riverside</span></td><td><span class="roled">Front desk</span></td><td class="mut">Scheduling metadata · no notes</td><td class="mono">Jul 7</td><td><span class="st"><span class="d ok"></span>Active</span></td><td><span class="rev">Revoke</span></td></tr>
+            <tr><td><span class="nm">Sam Okafor</span><br><span class="em">sam@riverside</span></td><td><span class="roled">Psychologist</span></td><td class="mut">—</td><td class="mono">—</td><td><span class="st"><span class="d pend"></span>Invited</span></td><td><span class="lnk">Resend</span></td></tr>
+            <tr><td><span class="nm">infra@riverside</span><br><span class="em">svc · server operator</span></td><td><span class="roled">Sysadmin</span></td><td class="noacc">No clinical access — infra only</td><td class="mono">5m ago</td><td><span class="st"><span class="d ok"></span>Active</span></td><td><span class="rev">Revoke</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <figcaption><b>Team &amp; roles</b> — a real table: hairline rows, monospace emails/times, a status dot not a pill, roles as inline editable text, and one quiet accent‑ruled note.</figcaption>
+  </figure>
+
+  <!-- SCREEN 2: CLIENT WORKSPACE -->
+  <figure>
+  <div class="app">
+    <div class="side">
+      <div class="wm"><span class="dotmark"></span><b>Daymark</b></div>
+      <div style="font-family:var(--mono); font-size:10px; color:var(--ink3); padding:0 8px 4px;">riverside‑psych.local</div>
+      <div class="grp">Practice</div>
+      <div class="nv"><span class="i"></span>Overview</div>
+      <div class="nv on"><span class="i"></span>Clients</div>
+      <div class="nv"><span class="i"></span>Team &amp; roles</div>
+      <div class="nv"><span class="i"></span>Assignments</div>
+      <div class="grp">Security</div>
+      <div class="nv"><span class="i"></span>Audit log</div>
+      <div class="nv"><span class="i"></span>Access guard</div>
+      <div class="nv"><span class="i"></span>Recovery</div>
+      <div class="sp"></div>
+      <div class="uchip"><span class="av"></span><span><b>Dr. Elena Rivera</b><span class="r">Psychologist</span></span></div>
+    </div>
+    <div class="wrap">
+      <div class="bar"><span class="bc">Clients&nbsp; / &nbsp;<b>Maya R.</b>&nbsp; / &nbsp;Session · Jul 8</span><span class="sp"></span><span class="srch">Search<span class="k">⌘K</span></span></div>
+      <div class="cw">
+        <!-- left rail: patient + care team -->
+        <div class="rail">
+          <div class="pt">Maya R.</div>
+          <div class="ptid">🔒 e2e‑encrypted · id 8f3a…c1</div>
+          <div class="lab">Care team</div>
+          <div class="tm"><b>Dr. Elena Rivera</b><div class="rl">Psychologist · primary</div><div class="ac">full · granted Jun 12</div></div>
+          <div class="tm"><b>Dr. Amir Shah</b><div class="rl">Psychiatrist · consulting</div><div class="ac">assessments · granted Jul 2</div></div>
+          <div class="tm"><b>Jordan Lee</b><div class="rl">Assistant</div><div class="ac">tasks · granted Jun 12</div></div>
+          <div style="margin-top:10px"><span class="lnk">+ Refer / add to team</span></div>
+          <div class="lab">At a glance</div>
+          <div class="kv"><span class="mut">PHQ‑9</span><span class="v">11 <small>↓4</small></span></div>
+          <div class="kv"><span class="mut">GAD‑7</span><span class="v">8 <small>→</small></span></div>
+          <div class="kv"><span class="mut">Sleep (7d)</span><span class="v">6.4h</span></div>
+          <div class="kv"><span class="mut">Check‑ins</span><span class="v">21</span></div>
+        </div>
+        <!-- center: notes -->
+        <div class="center">
+          <div class="tabs"><div class="on">Progress note</div><div>Process note · private</div><div>Timeline</div></div>
+          <div class="vis"><span class="d"></span><span><b style="color:var(--ink)">Shared</b> — Maya can read this note. Open by default.</span></div>
+          <div class="editor">
+            <h4>Progress · July 8</h4>
+            Maya reports steadier mood this week; morning walks (4/4) seem to help. Sleep improved after setting an 11pm anchor. Coordinated with Dr. Shah re: medication review — assessment summary shared with her consent.<br><br>Plan: continue behavioral activation; revisit sleep in two weeks.
+            <div class="sig"><span>signed · e.rivera · jul 8 17:32</span><span>amendable · never erased</span></div>
+          </div>
+          <div class="vis" style="margin-top:12px; color:var(--ink3)"><span class="d" style="background:var(--neutral)"></span>Process notes stay private to you — separately keyed, excluded from shares &amp; exports.</div>
+        </div>
+        <!-- right rail: assessment + access -->
+        <div class="rail r">
+          <div class="lab" style="margin-top:0">Assessment summary</div>
+          <table class="as"><tbody>
+            <tr><td><div class="anm">PHQ‑9</div><span class="tag v"><span class="d"></span>Validated</span></td><td><svg width="72" height="26" viewBox="0 0 72 26"><polyline points="0,6 18,10 36,14 54,17 72,20" fill="none" stroke="#0F7A66" stroke-width="1.6"/></svg></td><td class="asc">11</td></tr>
+            <tr><td><div class="anm">GAD‑7</div><span class="tag v"><span class="d"></span>Validated</span></td><td><svg width="72" height="26" viewBox="0 0 72 26"><polyline points="0,14 18,13 36,15 54,13 72,14" fill="none" stroke="#0F7A66" stroke-width="1.6"/></svg></td><td class="asc">8</td></tr>
+            <tr><td><div class="anm">Evening wind‑down</div><span class="tag c"><span class="d"></span>Custom</span><div class="disc">not validated / clinical</div></td><td></td><td class="asc">3/5</td></tr>
+          </tbody></table>
+          <div style="font-size:10px; color:var(--ink3); margin-top:8px;">Scores &amp; bands only — raw answers never leave Maya's device.</div>
+          <div class="lab">Consent &amp; access</div>
+          <div class="log">
+            <div class="lr"><span class="tt"><b>Dr. Shah</b> opened shared summary</span><span class="ts">jul 6 09:12</span></div>
+            <div class="lr"><span class="tt"><span class="gr">share</span><b>You</b> shared summary → Shah</span><span class="ts">jul 5 16:40</span></div>
+            <div class="lr"><span class="tt"><span class="rq">req</span>referral “med review” → Shah</span><span class="ts">jul 2 11:05</span></div>
+            <div class="lr"><span class="tt"><b>Maya</b> granted Shah · assessments</span><span class="ts">jul 2 11:20</span></div>
+          </div>
+          <div style="font-size:10px; color:var(--ink3); margin-top:8px;">Referral = request. Reading requires the grant.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <figcaption><b>Client workspace</b> — data proximity: patient + care team, the note, the assessments, and the access trail all in view at once. Dense, but calm.</figcaption>
+  </figure>
+
+</div></body></html>
