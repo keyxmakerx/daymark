@@ -27,9 +27,8 @@ See [COMPANION_WEB_DESIGN.md](../COMPANION_WEB_DESIGN.md)
 | File | What it shows |
 |---|---|
 | [`web-01-console.png`](./web-01-console.png) | The reinvented console: **Team & roles** (editable org, role table, sysadmin has no clinical access) and the **client workspace** (patient + care team + notes with open/private tabs + provenance‑labeled assessments + consent/access trail, all in one view). |
+| [`web-02-access-guard-and-builder.png`](./web-02-access-guard-and-builder.png) | The **Access guard** (behavioral‑IDS flags table, a paused session with step‑up + kill‑switch actions, and true revocation shown as live key‑rotation) and the provenance‑aware **builder** (author items, required provenance tier, honesty‑gate run before publish). |
 
 ## Still to render
-- Patient's **own** console (their care team, grant/revoke, own audit log).
-- **Access Guard / behavioral‑IDS** and the **revocation** console.
-- The no‑code **builder** (provenance‑aware).
-- **Onboarding**, the reworked **More** library, a full **Validated** assessment.
+- Patient's **own** console (their care team, grant/revoke, own audit log) — register TBD (warm app vs. crisp console).
+- **Onboarding**, the reworked **More** library, and a full **Validated** assessment (warm app register).

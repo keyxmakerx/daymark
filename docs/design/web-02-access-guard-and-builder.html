@@ -1,0 +1,211 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+  :root{
+    --bg:#F3F4F4; --surface:#FFFFFF; --panel:#FAFBFB; --panel2:#F6F7F7;
+    --ink:#14171A; --ink2:#565D63; --ink3:#888F95; --line:#E7E9EB; --line2:#D6DADD;
+    --accent:#0F7A66; --accent2:#0B5B4C; --accentw:#E9F2EF;
+    --ok:#2E8B5B; --warn:#B0812A; --danger:#BB4A31; --neutral:#8A9198;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,"DejaVu Sans",sans-serif;
+    --mono:ui-monospace,"DejaVu Sans Mono","SF Mono",Menlo,monospace;
+    --serif:Georgia,"Times New Roman",serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{width:1300px; background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:13px; -webkit-font-smoothing:antialiased; letter-spacing:-.005em;}
+  .board{padding:40px 40px 48px;}
+  .head h1{font-size:26px; font-weight:560; letter-spacing:-.02em;}
+  .head p{color:var(--ink2); font-size:14px; margin-top:5px;}
+  figure{margin:30px 0 0;} figcaption{margin-top:10px; font-size:13px; color:var(--ink2);} figcaption b{color:var(--ink); font-weight:600;}
+  .app{background:var(--surface); border:1px solid var(--line2); border-radius:9px; overflow:hidden; display:flex; box-shadow:0 1px 2px rgba(20,23,26,.04);}
+  .side{width:210px; background:var(--panel); border-right:1px solid var(--line); padding:14px 10px; display:flex; flex-direction:column; flex:none;}
+  .wm{display:flex; align-items:baseline; gap:7px; padding:2px 8px 4px;}
+  .wm b{font-family:var(--serif); font-size:16px; font-weight:600; letter-spacing:-.01em;} .wm .dotmark{width:7px; height:7px; border-radius:50%; background:var(--accent);}
+  .host{font-family:var(--mono); font-size:10px; color:var(--ink3); padding:0 8px 12px; border-bottom:1px solid var(--line); margin-bottom:6px;}
+  .grp{font-size:9.5px; letter-spacing:.11em; text-transform:uppercase; color:var(--ink3); font-weight:600; padding:12px 8px 5px;}
+  .nv{display:flex; align-items:center; gap:9px; padding:6px 8px; border-radius:5px; font-size:12.5px; color:var(--ink2); position:relative;}
+  .nv .i{width:14px; height:14px; border-radius:3px; border:1.5px solid var(--ink3);}
+  .nv.on{color:var(--ink); font-weight:550; background:var(--panel2);}
+  .nv.on::before{content:""; position:absolute; left:-10px; top:6px; bottom:6px; width:2px; background:var(--accent); border-radius:2px;}
+  .nv.on .i{border-color:var(--accent); background:var(--accentw);}
+  .side .sp{flex:1;}
+  .uchip{display:flex; align-items:center; gap:8px; padding:8px; border-top:1px solid var(--line); margin-top:8px; font-size:11.5px;}
+  .uchip .av{width:24px; height:24px; border-radius:50%; background:var(--accentw); border:1px solid var(--line2); flex:none;}
+  .uchip b{font-size:12px; display:block;} .uchip .r{color:var(--accent2); font-size:10.5px;}
+  .wrap{flex:1; display:flex; flex-direction:column; min-width:0;}
+  .bar{height:44px; border-bottom:1px solid var(--line); display:flex; align-items:center; padding:0 18px; gap:14px; background:var(--surface);}
+  .bc{font-size:12.5px; color:var(--ink3);} .bc b{color:var(--ink); font-weight:550;}
+  .bar .sp{flex:1;}
+  .srch{width:200px; border:1px solid var(--line2); border-radius:6px; padding:5px 9px; font-size:12px; color:var(--ink3); display:flex; justify-content:space-between;}
+  .srch .k{font-family:var(--mono); font-size:10px; border:1px solid var(--line); border-radius:3px; padding:0 4px;}
+  .content{padding:18px 22px; flex:1;}
+  .th{display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:14px;}
+  .h1{font-size:18px; font-weight:560; letter-spacing:-.015em;} .th .sub{font-size:12px; color:var(--ink3); margin-top:2px;}
+  .btn{background:var(--accent); color:#fff; border-radius:6px; padding:7px 13px; font-size:12.5px; font-weight:550;}
+  .btn.g{background:var(--surface); color:var(--ink); border:1px solid var(--line2);}
+  .btn.off{background:var(--panel2); color:var(--ink3); border:1px solid var(--line);}
+  .note-line{display:flex; gap:8px; align-items:center; font-size:12px; color:var(--ink2); padding:8px 11px; border-left:2px solid var(--accent); background:var(--panel2); border-radius:0 5px 5px 0; margin-bottom:16px;}
+  .note-line b{color:var(--ink);}
+  .lab{font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink3); font-weight:600; margin:16px 0 8px;}
+  .mono{font-family:var(--mono); font-size:11px; color:var(--ink3);}
+  table{width:100%; border-collapse:collapse;}
+  thead th{font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink3); font-weight:600; text-align:left; padding:0 12px 8px; border-bottom:1px solid var(--line2);}
+  tbody td{padding:10px 12px; border-bottom:1px solid var(--line); font-size:12.5px; vertical-align:middle;} tbody tr:last-child td{border-bottom:none;}
+  .nm{font-weight:550;}
+  /* stat strip */
+  .stats{display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; margin-bottom:8px;}
+  .stat{flex:1; padding:12px 16px; border-right:1px solid var(--line);} .stat:last-child{border-right:none;}
+  .stat .n{font-size:22px; font-weight:560; letter-spacing:-.02em; font-variant-numeric:tabular-nums;}
+  .stat .n.warn{color:var(--warn);} .stat .n.danger{color:var(--danger);}
+  .stat .l{font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink3); margin-top:2px;}
+  .sev{display:inline-flex; align-items:center; gap:6px; font-size:11.5px;}
+  .sev .d{width:7px; height:7px; border-radius:2px;}
+  .sev.high .d{background:var(--danger);} .sev.high{color:var(--danger);} .sev.med .d{background:var(--warn);} .sev.low .d{background:var(--neutral);}
+  .actst{font-size:11.5px; color:var(--ink2);}
+  .focus{border:1px solid var(--line2); border-left:3px solid var(--danger); border-radius:7px; padding:14px 16px; margin-top:14px; background:var(--panel);}
+  .focus .ttl{font-weight:560; font-size:13.5px;} .focus .meta{font-size:11.5px; color:var(--ink2); margin-top:3px;} .focus .meta b{color:var(--ink);}
+  .acts{display:flex; gap:8px; margin-top:13px;}
+  .acts .b{font-size:12px; border-radius:6px; padding:7px 12px; border:1px solid var(--line2); background:var(--surface); color:var(--ink);}
+  .acts .b.warn{border-color:#e0cfa4; color:var(--warn);}
+  .acts .b.danger{background:var(--danger); border-color:var(--danger); color:#fff;}
+  .rot{margin-top:14px; padding-top:12px; border-top:1px solid var(--line); font-size:12px; color:var(--ink2);}
+  .rot b{color:var(--ink);}
+  .prog{height:5px; background:var(--line); border-radius:3px; margin-top:7px; overflow:hidden;} .prog i{display:block; height:100%; background:var(--accent); width:25%;}
+  /* builder */
+  .b3{display:grid; grid-template-columns:252px 1fr 262px; min-height:470px;}
+  .bcol{padding:14px 15px; border-right:1px solid var(--line);} .bcol:last-child{border-right:none; border-left:1px solid var(--line);}
+  .it{padding:9px 10px; border:1px solid var(--line); border-radius:6px; margin-bottom:7px; font-size:12px; display:flex; justify-content:space-between; align-items:center;}
+  .it.on{border-color:var(--accent); background:var(--accentw);} .it .ty{font-family:var(--mono); font-size:9px; text-transform:uppercase; color:var(--ink3);}
+  .addit{font-size:12px; color:var(--accent2); border:1px dashed var(--line2); border-radius:6px; padding:8px; text-align:center; margin-top:2px;}
+  .field{margin-bottom:13px;} .field label{font-size:9.5px; text-transform:uppercase; letter-spacing:.07em; color:var(--ink3); font-weight:600; display:block; margin-bottom:5px;}
+  .inp{border:1px solid var(--line2); border-radius:6px; padding:8px 10px; font-size:12.5px; color:var(--ink); background:var(--surface);}
+  .opt{display:flex; align-items:center; gap:8px; font-size:12px; padding:5px 0;} .opt .rd{width:13px; height:13px; border-radius:50%; border:1.5px solid var(--line2); flex:none;}
+  .provseg{display:flex; border:1px solid var(--line2); border-radius:6px; overflow:hidden; margin-bottom:10px;}
+  .provseg div{flex:1; text-align:center; padding:7px 3px; font-size:10.5px; color:var(--ink2); border-right:1px solid var(--line);} .provseg div:last-child{border-right:none;} .provseg div.on{background:var(--warn); color:#fff; font-weight:600;}
+  .discp{font-size:10.5px; color:var(--warn); border:1px dashed #dcc79a; background:#fbf6ec; border-radius:6px; padding:8px 9px; margin-bottom:10px;}
+  .gate{border:1px solid var(--line); border-radius:7px; padding:10px 12px;}
+  .gi{display:flex; align-items:center; gap:8px; font-size:11.5px; padding:4px 0;} .gi .ck{color:var(--ok); font-weight:700;} .gi .xx{color:var(--danger); font-weight:700;}
+</style></head><body><div class="board">
+  <div class="head">
+    <h1>Console, continued — security &amp; the builder</h1>
+    <p>Same crisp register: the behavioral guard / revocation, and the provenance‑aware no‑code builder.</p>
+  </div>
+
+  <!-- SCREEN A: ACCESS GUARD / IDS + REVOCATION -->
+  <figure>
+  <div class="app">
+    <div class="side">
+      <div class="wm"><span class="dotmark"></span><b>Daymark</b></div>
+      <div class="host">riverside‑psych.local</div>
+      <div class="grp">Practice</div>
+      <div class="nv"><span class="i"></span>Overview</div>
+      <div class="nv"><span class="i"></span>Clients</div>
+      <div class="nv"><span class="i"></span>Team &amp; roles</div>
+      <div class="nv"><span class="i"></span>Assignments</div>
+      <div class="grp">Security</div>
+      <div class="nv"><span class="i"></span>Audit log</div>
+      <div class="nv on"><span class="i"></span>Access guard</div>
+      <div class="nv"><span class="i"></span>Recovery</div>
+      <div class="sp"></div>
+      <div class="uchip"><span class="av"></span><span><b>You</b><span class="r">Org Admin</span></span></div>
+    </div>
+    <div class="wrap">
+      <div class="bar"><span class="bc">Security&nbsp; / &nbsp;<b>Access guard</b></span><span class="sp"></span><span class="srch">Search<span class="k">⌘K</span></span></div>
+      <div class="content">
+        <div class="th"><div><div class="h1">Access guard</div><div class="sub">Behavioral monitoring · metadata only, never content</div></div><div class="btn g">Guard settings</div></div>
+        <div class="stats">
+          <div class="stat"><div class="n">42</div><div class="l">Sessions today</div></div>
+          <div class="stat"><div class="n warn">2</div><div class="l">Flagged</div></div>
+          <div class="stat"><div class="n danger">1</div><div class="l">Paused</div></div>
+          <div class="stat"><div class="n">6</div><div class="l">Failed auth (24h)</div></div>
+          <div class="stat"><div class="n">0</div><div class="l">Guard false‑locks</div></div>
+        </div>
+        <div class="note-line">👁 <span><b>Watches behavior, never content.</b> Responses <b>step up</b> (re‑auth / MFA) before they ever hard‑lock — a clinician is never cut off mid‑session.</span></div>
+        <div class="lab">Recent flags</div>
+        <table>
+          <thead><tr><th>When</th><th>Member</th><th>Signal</th><th>Severity</th><th>Response</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">17:41</td><td class="nm">Dr. Amir Shah</td><td>Unusual volume — 180 client reads in 5m</td><td><span class="sev high"><span class="d"></span>High</span></td><td class="actst">Token paused · step‑up sent</td></tr>
+            <tr><td class="mono">14:02</td><td class="nm">Jordan Lee</td><td>New location — Berlin (usual: Denver)</td><td><span class="sev med"><span class="d"></span>Medium</span></td><td class="actst">Challenge MFA</td></tr>
+            <tr><td class="mono">02:14</td><td class="nm">Casey Kim</td><td>Off‑hours access</td><td><span class="sev low"><span class="d"></span>Low</span></td><td class="actst">Logged only</td></tr>
+          </tbody>
+        </table>
+        <div class="focus">
+          <div class="ttl">⏸ Paused — Dr. Amir Shah · session <span class="mono" style="color:var(--ink2)">s_9c4f…</span></div>
+          <div class="meta">180 reads across <b>62 clients</b> in 5 min · far above his baseline. Step‑up challenge sent; awaiting re‑auth.</div>
+          <div class="acts">
+            <div class="b">Approve &amp; resume</div>
+            <div class="b warn">Require re‑auth</div>
+            <div class="b danger">Revoke access + rotate keys</div>
+          </div>
+          <div class="rot"><b>Revocation in progress</b> — Dr. Lee (removed from practice): rotating client data keys so old keys can't read new data · <span class="mono">9 / 12 clients re‑wrapped</span>
+            <div class="prog"><i style="width:75%"></i></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <figcaption><b>Access guard + revocation</b> — behavioral flags as a table, a focused paused session with step‑up/kill‑switch actions, and true revocation shown as live key‑rotation.</figcaption>
+  </figure>
+
+  <!-- SCREEN B: BUILDER -->
+  <figure>
+  <div class="app">
+    <div class="side">
+      <div class="wm"><span class="dotmark"></span><b>Daymark</b></div>
+      <div class="host">riverside‑psych.local</div>
+      <div class="grp">Practice</div>
+      <div class="nv"><span class="i"></span>Overview</div>
+      <div class="nv"><span class="i"></span>Clients</div>
+      <div class="nv"><span class="i"></span>Team &amp; roles</div>
+      <div class="nv on"><span class="i"></span>Assignments</div>
+      <div class="grp">Security</div>
+      <div class="nv"><span class="i"></span>Audit log</div>
+      <div class="nv"><span class="i"></span>Access guard</div>
+      <div class="nv"><span class="i"></span>Recovery</div>
+      <div class="sp"></div>
+      <div class="uchip"><span class="av"></span><span><b>Dr. Elena Rivera</b><span class="r">Psychologist</span></span></div>
+    </div>
+    <div class="wrap">
+      <div class="bar"><span class="bc">Assignments&nbsp; / &nbsp;Builder&nbsp; / &nbsp;<b>New tool</b></span><span class="sp"></span><span class="srch">Search<span class="k">⌘K</span></span></div>
+      <div class="b3">
+        <!-- items -->
+        <div class="bcol">
+          <div class="th" style="margin-bottom:10px"><div class="h1" style="font-size:15px">Items</div><span class="mono" style="color:var(--ink3)">4</span></div>
+          <div class="it"><span>1 · How was your sleep?</span><span class="ty">scale</span></div>
+          <div class="it on"><span>2 · How wound‑up now?</span><span class="ty">scale</span></div>
+          <div class="it"><span>3 · What helped today?</span><span class="ty">text</span></div>
+          <div class="it"><span>4 · Did you move?</span><span class="ty">yes/no</span></div>
+          <div class="addit">+ Add item</div>
+        </div>
+        <!-- editor -->
+        <div class="bcol">
+          <div class="th" style="margin-bottom:12px"><div class="h1" style="font-size:15px">Item 2</div><span class="mono" style="color:var(--ink3)">scale · 1–5</span></div>
+          <div class="field"><label>Prompt</label><div class="inp">How wound‑up do you feel right now?</div></div>
+          <div class="field"><label>Response type</label><div class="inp" style="display:flex;justify-content:space-between;color:var(--ink2)">1–5 scale <span class="mono" style="font-size:10px">▾</span></div></div>
+          <div class="field"><label>Anchors</label>
+            <div class="opt"><span class="rd"></span>1 — calm</div>
+            <div class="opt"><span class="rd"></span>5 — very tense</div>
+          </div>
+          <div class="field"><label>Scoring</label><div class="inp" style="color:var(--ink2)">Sum · no clinical cutoff <span class="mono" style="font-size:10px; color:var(--ink3)">(custom tools can't set cutoffs)</span></div></div>
+        </div>
+        <!-- provenance + gate -->
+        <div class="bcol">
+          <div class="lab" style="margin-top:0">Provenance <span style="color:var(--danger)">*</span></div>
+          <div class="provseg"><div>Validated</div><div>Adapted</div><div class="on">Custom</div></div>
+          <div class="discp"><b>Custom</b> tools open with: “Custom‑made — a personal reflection tool, not validated or clinical. Not for diagnosis.”</div>
+          <div class="lab">Honesty gate</div>
+          <div class="gate">
+            <div class="gi"><span class="ck">✓</span>No clinical cutoffs</div>
+            <div class="gi"><span class="ck">✓</span>No “all‑clear” output</div>
+            <div class="gi"><span class="ck">✓</span>No self‑harm item slot</div>
+            <div class="gi"><span class="ck">✓</span>Disclaimer will show first</div>
+            <div class="gi"><span class="ck">✓</span>License‑clean</div>
+          </div>
+          <div style="margin-top:12px; display:flex; gap:8px;"><div class="btn g" style="flex:1; text-align:center">Preview</div><div class="btn" style="flex:1; text-align:center">Publish…</div></div>
+          <div style="font-size:10px; color:var(--ink3); margin-top:8px;">Gate passes · ready to publish to selected clients.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <figcaption><b>The builder</b> — author items on the left, edit in the center; the right panel makes <b>provenance required</b> and runs the honesty gate before publish.</figcaption>
+  </figure>
+
+</div></body></html>
