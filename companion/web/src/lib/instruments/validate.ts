@@ -82,9 +82,14 @@ export function validateDefinition(def: InstrumentDefinition, knownLedgerAnchors
     if (hit) fail(`item "${it.id}" contains text from a forbidden source instrument: "${hit}"`)
   }
 
-  // ledgerRef must resolve (format + known-anchor check when a set is supplied).
-  if (!/^INSTRUMENTS\.md#[a-z0-9-]+$/.test(def.ledgerRef)) fail(`ledgerRef "${def.ledgerRef}" is not a valid INSTRUMENTS.md anchor`)
-  else if (knownLedgerAnchors) {
+  // ledgerRef: required for validated/adapted (published sources need license tracking); optional
+  // for self-authored custom tools. When present it must resolve (format + known-anchor check).
+  const tierNeedsLedger = def.provenance?.tier === 'validated' || def.provenance?.tier === 'adapted'
+  if (!def.ledgerRef) {
+    if (tierNeedsLedger) fail(`provenance '${def.provenance.tier}' requires a ledgerRef (an INSTRUMENTS.md anchor)`)
+  } else if (!/^INSTRUMENTS\.md#[a-z0-9-]+$/.test(def.ledgerRef)) {
+    fail(`ledgerRef "${def.ledgerRef}" is not a valid INSTRUMENTS.md anchor`)
+  } else if (knownLedgerAnchors) {
     const anchor = def.ledgerRef.split('#')[1]
     if (!knownLedgerAnchors.has(anchor)) fail(`ledgerRef anchor "#${anchor}" does not exist in INSTRUMENTS.md`)
   }

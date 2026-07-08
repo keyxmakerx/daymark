@@ -3,6 +3,8 @@ export { evalPredicate, visibleItemIds } from './predicate'
 export { scoreInstrument, bandFor } from './scoring'
 export { validateDefinition, assertValid, FORBIDDEN_SOURCES } from './validate'
 export { PROVENANCE_LABEL, PROVENANCE_GLYPH, CUSTOM_DISCLAIMER, provenanceDisclaimer, provenanceSource } from './provenance'
+export { newDraft, compileDraft, validateDraft, scoredItemIds } from './builder'
+export type { ToolDraft, DraftItem, DraftOption, DraftBand } from './builder'
 export { CATALOG, getInstrument, REQUIRED_LEDGER_ANCHORS } from './catalog'
 
 import type { InstrumentDefinition } from './types'

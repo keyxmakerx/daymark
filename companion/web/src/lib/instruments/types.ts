@@ -88,7 +88,8 @@ export interface InstrumentDefinition {
   license: string
   attribution?: string
   noticeText?: string
-  ledgerRef: string
+  /** License-ledger anchor. Required for validated/adapted (published sources); optional for self-authored custom tools. */
+  ledgerRef?: string
   /** Clinical-honesty label — REQUIRED. Enforced by the honesty gate (validate.ts). */
   provenance: Provenance
   nonDiagnostic: true // hard-required literal true

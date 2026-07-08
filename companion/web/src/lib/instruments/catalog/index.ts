@@ -14,7 +14,7 @@ import { focusSelfCheck } from './focus'
 export const CATALOG: InstrumentDefinition[] = [wellbeingCheck, focusSelfCheck]
 
 /** Ledger anchors the catalog references (CI verifies these exist in companion/INSTRUMENTS.md). */
-export const REQUIRED_LEDGER_ANCHORS = CATALOG.map((d) => d.ledgerRef.split('#')[1])
+export const REQUIRED_LEDGER_ANCHORS = CATALOG.flatMap((d) => (d.ledgerRef ? [d.ledgerRef.split('#')[1]] : []))
 
 // Fail fast at load if any shipped definition is invalid.
 for (const def of CATALOG) assertValid(def, new Set(REQUIRED_LEDGER_ANCHORS))
