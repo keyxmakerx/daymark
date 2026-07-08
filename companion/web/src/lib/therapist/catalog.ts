@@ -8,6 +8,7 @@
  * that is maintainer-only via the instrument ledger.
  */
 import { CATALOG, getInstrument } from '../instruments'
+import type { ProvenanceTier } from '../instruments/types'
 import { ATTENTION_TASK } from '../tasks/attention'
 
 export interface AssignableItem {
@@ -15,6 +16,8 @@ export interface AssignableItem {
   id: string
   title: string
   estimatedMinutes?: number
+  /** Provenance tier (questionnaires only) so the assign surface can show/label it. */
+  tier?: ProvenanceTier
 }
 
 /** Catalog questionnaires (honesty-gated). Titles/est-minutes come from the definitions. */
@@ -24,6 +27,7 @@ export function assignableQuestionnaires(): AssignableItem[] {
     id: d.instrumentId,
     title: d.title,
     estimatedMinutes: d.estimatedMinutes,
+    tier: d.provenance.tier,
   }))
 }
 
