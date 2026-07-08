@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { CATALOG, getInstrument } from '../instruments'
+  import { CATALOG, getInstrument, PROVENANCE_LABEL, PROVENANCE_GLYPH } from '../instruments'
   import type { InstrumentResult, TaskResult } from '../instruments/types'
   import { ATTENTION_TASK } from '../tasks/attention'
   import QuestionnaireRunner from './QuestionnaireRunner.svelte'
@@ -45,7 +45,7 @@
         <li>
           <button onclick={() => (selection = { kind: 'instrument', id: inst.instrumentId })}>
             <span class="t">{inst.title}</span>
-            <span class="s faint">Questionnaire · ~{inst.estimatedMinutes ?? 3} min</span>
+            <span class="s faint">Questionnaire · ~{inst.estimatedMinutes ?? 3} min · <span class="prov prov-{inst.provenance.tier}">{PROVENANCE_GLYPH[inst.provenance.tier]} {PROVENANCE_LABEL[inst.provenance.tier]}</span></span>
           </button>
         </li>
       {/each}
@@ -77,5 +77,8 @@
   .menu button { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem; padding: var(--space-3) var(--space-4); text-align: left; }
   .menu .t { font-family: var(--font-display); font-size: 1.05rem; }
   .menu .s { font-size: 0.85rem; }
+  .prov { font-weight: 600; }
+  .prov-validated { color: var(--mood-5); }
+  .prov-custom { color: var(--mood-2); }
   .runbar { display: flex; gap: var(--space-3); }
 </style>

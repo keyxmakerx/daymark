@@ -10,10 +10,10 @@ const anchors = new Set(REQUIRED_LEDGER_ANCHORS)
 function base(): InstrumentDefinition {
   return {
     instrumentId: 'x-selfcheck', instrumentVersion: '1.0.0', title: 'X', license: 'self',
-    ledgerRef: 'INSTRUMENTS.md#wellbeing-selfcheck', nonDiagnostic: true, noScreeningFlag: true,
+    ledgerRef: 'INSTRUMENTS.md#wellbeing-selfcheck', provenance: { tier: 'custom' }, nonDiagnostic: true, noScreeningFlag: true,
     items: [{ id: 'q1', type: 'likert', options: [{ id: 'a', label: 'A', value: 0 }, { id: 'b', label: 'B', value: 4 }] }],
     scoring: { scales: [{ id: 's', method: 'sum', items: ['q1'], bands: [{ label: 'ok', tone: 'neutral' }], bandFraming: 'descriptive — not a diagnosis' }] },
-    framing: { intro: 'self-check' },
+    framing: { intro: 'self-check — not a diagnosis' },
   }
 }
 
