@@ -2,9 +2,12 @@
   import type { InstrumentDefinition, InstrumentResult, Item } from '../instruments/types'
   import { visibleItemIds } from '../instruments/predicate'
   import { scoreInstrument } from '../instruments/scoring'
-  import { bandFramingFor } from '../instruments/index'
+  import { bandFramingFor, PROVENANCE_LABEL, PROVENANCE_GLYPH, provenanceDisclaimer, provenanceSource } from '../instruments/index'
 
   let { def, onDone }: { def: InstrumentDefinition; onDone?: (r: InstrumentResult) => void } = $props()
+
+  const provDisclaimer = $derived(provenanceDisclaimer(def.provenance))
+  const provSource = $derived(provenanceSource(def.provenance))
 
   let answers = $state<Record<string, unknown>>({})
   let submitted = $state(false)
@@ -53,7 +56,15 @@
 
 <div class="q card">
   {#if !submitted}
-    <h2>{def.title}</h2>
+    <div class="head">
+      <h2>{def.title}</h2>
+      <span class="prov prov-{def.provenance.tier}">{PROVENANCE_GLYPH[def.provenance.tier]} {PROVENANCE_LABEL[def.provenance.tier]}</span>
+    </div>
+    {#if provDisclaimer}
+      <p class="prov-disclaimer" role="note">{provDisclaimer}</p>
+    {:else if provSource}
+      <p class="prov-source faint">Source: {provSource}</p>
+    {/if}
     <p class="intro muted">{def.framing.intro}</p>
 
     {#each shownItems as it (it.id)}
@@ -96,7 +107,10 @@
     {#if error}<p class="error" role="alert">{error}</p>{/if}
     <button class="primary" onclick={submit}>Finish & see my results</button>
   {:else}
-    <h2>{def.title} — your answers today</h2>
+    <div class="head">
+      <h2>{def.title} — your answers today</h2>
+      <span class="prov prov-{def.provenance.tier}">{PROVENANCE_GLYPH[def.provenance.tier]} {PROVENANCE_LABEL[def.provenance.tier]}</span>
+    </div>
     {#each result as sr (sr.scaleId)}
       <div class="result {toneClass(sr.scaleId)}">
         <p class="band">{sr.bandLabel}</p>
@@ -110,6 +124,13 @@
 
 <style>
   .q { display: flex; flex-direction: column; gap: var(--space-4); max-width: 40rem; }
+  .head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+  .head h2 { margin: 0; }
+  .prov { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; padding: 0.15rem 0.55rem; border-radius: 999px; border: 1px solid var(--hairline); color: var(--ink-soft); white-space: nowrap; }
+  .prov-validated { color: var(--mood-5); border-color: var(--mood-5); }
+  .prov-custom { color: var(--mood-2); border-color: var(--mood-2); }
+  .prov-disclaimer { margin: 0; font-size: 0.9rem; color: var(--ink-soft); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); background: var(--paper-bg); }
+  .prov-source { margin: 0; }
   .intro { margin: 0; }
   .info { background: var(--paper-bg); border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: var(--space-3); color: var(--ink-soft); }
   fieldset { border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: var(--space-3) var(--space-4); margin: 0; }

@@ -67,6 +67,19 @@ export interface Scoring {
   scales: Scale[]
 }
 
+// --- provenance (clinical-honesty labeling; see docs/PROVENANCE.md) ---
+export type ProvenanceTier = 'validated' | 'adapted' | 'custom'
+export interface Provenance {
+  /** What this tool clinically IS — drives the badge, the disclaimer, and the honesty gate. */
+  tier: ProvenanceTier
+  /** Citation of the published instrument a 'validated' tool reproduces faithfully. Required for 'validated'. */
+  source?: string
+  /** The evidence-based method an 'adapted' tool draws from. Required for 'adapted'. */
+  basedOn?: string
+  /** Role that authored/published this (ties to the RBAC model); informational. */
+  authorRole?: string
+}
+
 export interface InstrumentDefinition {
   instrumentId: string
   instrumentVersion: string // semver of OUR definition
@@ -76,6 +89,8 @@ export interface InstrumentDefinition {
   attribution?: string
   noticeText?: string
   ledgerRef: string
+  /** Clinical-honesty label — REQUIRED. Enforced by the honesty gate (validate.ts). */
+  provenance: Provenance
   nonDiagnostic: true // hard-required literal true
   noScreeningFlag: true // hard-required literal true
   estimatedMinutes?: number

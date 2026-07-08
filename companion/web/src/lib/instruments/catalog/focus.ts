@@ -19,6 +19,8 @@ export const focusSelfCheck: InstrumentDefinition = {
   title: 'Focus & follow-through self-check',
   license: 'Self-authored (original items) — GPL-3.0, no third-party instrument reproduced',
   ledgerRef: 'INSTRUMENTS.md#focus-selfcheck',
+  // Self-authored original (explicitly not the ASRS) — a Custom tool, not a validated instrument.
+  provenance: { tier: 'custom' },
   nonDiagnostic: true,
   noScreeningFlag: true,
   estimatedMinutes: 3,

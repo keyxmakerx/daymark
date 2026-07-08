@@ -19,6 +19,8 @@ export const wellbeingCheck: InstrumentDefinition = {
   title: 'Daily wellbeing self-check',
   license: 'Self-authored (original items) — GPL-3.0, no third-party instrument reproduced',
   ledgerRef: 'INSTRUMENTS.md#wellbeing-selfcheck',
+  // Self-authored original — honestly a Custom tool, not a validated instrument.
+  provenance: { tier: 'custom' },
   nonDiagnostic: true,
   noScreeningFlag: true,
   estimatedMinutes: 2,

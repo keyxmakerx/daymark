@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Companion — tool provenance labeling**: every questionnaire/tool now declares whether it is
+  **Validated**, **Adapted**, or **Custom**, enforced by the instrument honesty gate (validated
+  requires a source; adapted names the method it draws from; custom must open with a
+  non-diagnostic disclaimer). The questionnaire runner shows the badge and, for a custom tool, its
+  "not a validated or clinical instrument" disclaimer up front. See
+  [docs/PROVENANCE.md](docs/PROVENANCE.md).
 - **Insights — what affects your mood**: on-device mood↔factor correlations for activities and
   numeric trackers, ranked "lifts you up / weighs you down" (with a minimum-sample gate);
   by-day-of-week and by-time-of-day mood patterns; and a this-period-vs-last comparison that

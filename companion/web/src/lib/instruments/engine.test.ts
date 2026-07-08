@@ -35,7 +35,7 @@ describe('scoring', () => {
   ]
   const def: InstrumentDefinition = {
     instrumentId: 't', instrumentVersion: '1.0.0', title: 't', license: 'self', ledgerRef: 'INSTRUMENTS.md#t',
-    nonDiagnostic: true, noScreeningFlag: true,
+    provenance: { tier: 'custom' }, nonDiagnostic: true, noScreeningFlag: true,
     items: [
       { id: 'q1', type: 'likert', options: likert },
       { id: 'q2', type: 'likert', options: likert },
@@ -61,7 +61,7 @@ describe('scoring', () => {
   it('percent_of_max does not inflate when items are left blank', () => {
     const pdef: InstrumentDefinition = {
       instrumentId: 'p', instrumentVersion: '1.0.0', title: 'p', license: 'self', ledgerRef: 'INSTRUMENTS.md#p',
-      nonDiagnostic: true, noScreeningFlag: true,
+      provenance: { tier: 'custom' }, nonDiagnostic: true, noScreeningFlag: true,
       items: [
         { id: 'q1', type: 'likert', options: likert },
         { id: 'q2', type: 'likert', options: likert },

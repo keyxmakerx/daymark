@@ -51,6 +51,26 @@ export function validateDefinition(def: InstrumentDefinition, knownLedgerAnchors
   if (!def.license || !def.license.trim()) fail('license is required')
   if (!def.framing?.intro?.trim()) fail('framing.intro is required')
 
+  // --- provenance / clinical-honesty labeling (docs/PROVENANCE.md) ---
+  // Every tool must declare what it clinically IS. The tier drives its badge + disclaimer;
+  // the rules below are what make "a rando can't hand out a clinical screener" true —
+  // anyone may publish 'custom', but it self-discloses and can never pose as clinical.
+  const prov = def.provenance
+  if (!prov || !prov.tier) {
+    fail('provenance.tier is required (validated | adapted | custom)')
+  } else if (prov.tier !== 'validated' && prov.tier !== 'adapted' && prov.tier !== 'custom') {
+    fail(`provenance.tier "${prov.tier}" is invalid (validated | adapted | custom)`)
+  } else {
+    if (prov.tier === 'validated' && !prov.source?.trim())
+      fail("provenance 'validated' requires a source (the published instrument it faithfully reproduces)")
+    if (prov.tier === 'adapted' && !prov.basedOn?.trim())
+      fail("provenance 'adapted' requires basedOn (the evidence-based method it draws from)")
+    // A self-authored 'custom' tool must OPEN with the non-diagnostic disclaimer — framing.intro
+    // is what the runner shows before the first item, so the person is never misled.
+    if (prov.tier === 'custom' && !DISCLAIMER.test(def.framing?.intro ?? ''))
+      fail('provenance \'custom\' requires framing.intro to carry a non-diagnostic disclaimer ("not a diagnosis/screen/clinical")')
+  }
+
   // License-clean: reject forbidden source instruments — check the identity AND all
   // user-visible item text (prompts/bodies/option labels), so verbatim licensed item text
   // can't slip past the identity fields.
