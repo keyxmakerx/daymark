@@ -29,7 +29,7 @@ androidxTestRunner = "1.6.2"
 # (":sync-crypto:compileKotlin" — "compatible with JVM 21 or newer"). 5.1.0 is the newest
 # release whose java artifact is JVM-8+ and whose android artifact also exists, keeping the
 # same-version invariant; the crypto conformance vectors are byte-identical across the two.
-lazysodium = "5.1.0"
+lazysodium = "5.2.0"
 jna = "5.17.0"
 
 [libraries]
