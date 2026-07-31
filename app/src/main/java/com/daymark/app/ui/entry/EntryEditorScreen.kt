@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -80,6 +81,30 @@ fun EntryEditorScreen(
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
+    var confirmingDelete by remember { mutableStateOf(false) }
+
+    if (confirmingDelete) {
+        // Deleting from the editor is permanent — there's no undo snackbar behind this one — so
+        // it always asks first, and says so.
+        AlertDialog(
+            onDismissRequest = { confirmingDelete = false },
+            title = { Text("Delete this entry?") },
+            text = { Text("This can't be undone from here, and any photo on it goes too.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmingDelete = false
+                        viewModel.delete()
+                    },
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingDelete = false }) { Text("Keep it") }
+            },
+        )
+    }
 
     val photoPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
@@ -96,7 +121,7 @@ fun EntryEditorScreen(
                 },
                 actions = {
                     if (state.isEditing) {
-                        IconButton(onClick = viewModel::delete) {
+                        IconButton(onClick = { confirmingDelete = true }) {
                             Icon(Icons.Filled.Delete, contentDescription = "Delete")
                         }
                     }
