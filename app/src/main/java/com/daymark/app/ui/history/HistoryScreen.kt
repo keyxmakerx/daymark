@@ -37,15 +37,16 @@ import com.daymark.app.util.DateUtils
 /**
  * Everything you've logged, newest first, grouped by day — the archive Home links to.
  *
- * Deleting here is deliberately a three-step affair: a long swipe, a confirmation, and then an
- * undo snackbar ([onUndoableDelete]). Nothing about a mood log is worth losing to a stray thumb.
+ * Deleting here is deliberately a three-step affair: a swipe, a confirmation, and then an undo
+ * snackbar ([onDeleteEntry], which the scaffold owns). Nothing about a mood log is worth losing to
+ * a stray thumb.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(
     onBack: () -> Unit,
     onEntryClick: (Long) -> Unit,
-    onUndoableDelete: (onUndo: () -> Unit, onExpire: () -> Unit) -> Unit = { _, _ -> },
+    onDeleteEntry: (EntryWithActivities) -> Unit = {},
     viewModel: HistoryViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -90,13 +91,7 @@ fun HistoryScreen(
                         label = DateUtils.formatDate(DateUtils.startOfDay(date)),
                         entries = entries,
                         onEntryClick = onEntryClick,
-                        onDelete = { entry ->
-                            viewModel.delete(entry)
-                            onUndoableDelete(
-                                { viewModel.restore(entry) },
-                                { viewModel.purgePhoto(entry) },
-                            )
-                        },
+                        onDelete = onDeleteEntry,
                         modifier = Modifier.animateItem(),
                     )
                 }

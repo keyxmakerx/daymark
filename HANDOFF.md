@@ -217,10 +217,16 @@ ViewModel derivation) — never a model.**
   glance, one signal card, today), **All entries** archive + **For you** router, Calendar,
   tap-a-day detail, Insights (stats + correlations + patterns + period-compare + heatmap +
   "in review"), Journal (separate from entry notes, with search), Year-in-Pixels.
-- **Deleting an entry takes three steps** (`ui/components/SwipeToDeleteRow.kt`): a swipe past
+- **Deleting an entry takes three steps** (`ui/components/SwipeToDeleteRow.kt`): a drag past
   `CommitFraction` (0.62 of the row) to arm it, a confirmation dialog, then the 5-second undo
   snackbar. `confirmValueChange` **always returns false** so the gesture itself can never delete —
-  don't "fix" that. The entry editor's delete confirms too (no undo behind that one).
+  don't "fix" that. (Material's velocity shortcut can still arm on a hard flick and is not
+  configurable; that's harmless *because* the gesture only opens the dialog. Don't claim in copy
+  that a flick does nothing.) The entry editor's delete confirms too — no undo behind that one.
+- **Delete/undo live in `ui/entry/EntryActionsViewModel`**, obtained by `DaymarkAppScaffold` so the
+  scope is the activity's. Screens must not run the restore in their own `viewModelScope`: the undo
+  snackbar outlives navigation, so popping "All entries" would cancel it and the undo would
+  silently do nothing.
 - **Reminders:** multiple, with notification quick-log. **App-lock:** PIN + biometric, auto-lock
   timeout, re-lock on background.
 - **Backup/restore:** JSON (replace/merge), CSV export, **PDF report** with QR authenticity.

@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -33,9 +32,13 @@ data class HomeUiState(
 /** How many days the Home glance looks back over. */
 const val WEEK_DAYS = 7
 
+/**
+ * Read-only on purpose: deleting and undoing live in
+ * [com.daymark.app.ui.entry.EntryActionsViewModel], shared with the History screen.
+ */
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    private val entryRepository: EntryRepository,
+    entryRepository: EntryRepository,
 ) : ViewModel() {
 
     val uiState: StateFlow<HomeUiState> = entryRepository.observeAll()
@@ -59,20 +62,4 @@ class HomeViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = HomeUiState(),
         )
-
-    fun delete(entry: EntryWithActivities) {
-        viewModelScope.launch { entryRepository.delete(entry.entry) }
-    }
-
-    /** Restores an entry removed by swipe-to-delete (undo), keeping its id and activities. */
-    fun restore(entry: EntryWithActivities) {
-        viewModelScope.launch {
-            entryRepository.restore(entry.entry, entry.activities.map { it.id })
-        }
-    }
-
-    /** Finalizes a swipe-delete once undo is no longer possible: drop the photo file. */
-    fun purgePhoto(entry: EntryWithActivities) {
-        entryRepository.deletePhoto(entry.entry.photoPath)
-    }
 }

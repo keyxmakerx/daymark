@@ -38,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -54,6 +55,8 @@ import com.daymark.app.ui.calendar.DayDetailScreen
 import com.daymark.app.ui.calendar.YearPixelsScreen
 import com.daymark.app.ui.goals.GoalEditorScreen
 import com.daymark.app.ui.goals.GoalsScreen
+import com.daymark.app.data.entity.EntryWithActivities
+import com.daymark.app.ui.entry.EntryActionsViewModel
 import com.daymark.app.ui.entry.EntryEditorScreen
 import com.daymark.app.ui.components.RaisedCenterNavBar
 import com.daymark.app.ui.foryou.ForYouScreen
@@ -102,6 +105,8 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
     val navController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    // Scoped to the activity (not a NavBackStackEntry) so an in-flight delete/undo survives a pop.
+    val entryActions: EntryActionsViewModel = hiltViewModel()
 
     // From the home-screen widget: jump straight into a new entry with the tapped mood.
     // From a reminder notification (openEditor): open a blank new entry.
@@ -230,8 +235,11 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
         }
 
         // The one undo snackbar, shared by every surface that can delete an entry (Home, History).
-        // It is the last of the three guards in front of a delete — see [SwipeToDeleteRow].
-        val undoableDelete: (onUndo: () -> Unit, onExpire: () -> Unit) -> Unit = { onUndo, onExpire ->
+        // It is the last of the three guards in front of a delete — see [SwipeToDeleteRow]. Both
+        // the delete and the undo run in [EntryActionsViewModel], obtained here at the scaffold, so
+        // they outlive a destination the user pops while the snackbar is still up.
+        val deleteEntryWithUndo: (EntryWithActivities) -> Unit = { entry ->
+            entryActions.delete(entry)
             scope.launch {
                 val result = snackbarHostState.showSnackbar(
                     message = "Entry deleted",
@@ -239,7 +247,11 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                     withDismissAction = true,
                     duration = SnackbarDuration.Short,
                 )
-                if (result == SnackbarResult.ActionPerformed) onUndo() else onExpire()
+                if (result == SnackbarResult.ActionPerformed) {
+                    entryActions.restore(entry)
+                } else {
+                    entryActions.purgePhoto(entry)
+                }
             }
         }
 
@@ -260,7 +272,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                     onSignalAction = { action -> navController.navigate(signalActionRoute(action)) },
                     onOpenForYou = { navController.navigate(Routes.FOR_YOU) },
                     onOpenHistory = { navController.navigate(Routes.HISTORY) },
-                    onUndoableDelete = { onUndo, onExpire -> undoableDelete(onUndo, onExpire) },
+                    onDeleteEntry = deleteEntryWithUndo,
                     modifier = Modifier.padding(padding),
                 )
             }
@@ -268,7 +280,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                 HistoryScreen(
                     onBack = { navController.popBackStack() },
                     onEntryClick = { id -> navController.navigate(Routes.entry(id)) },
-                    onUndoableDelete = { onUndo, onExpire -> undoableDelete(onUndo, onExpire) },
+                    onDeleteEntry = deleteEntryWithUndo,
                 )
             }
             composable(Routes.FOR_YOU, enterTransition = zEnter, popExitTransition = zPopExit) {

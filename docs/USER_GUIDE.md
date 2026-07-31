@@ -15,8 +15,9 @@ This guide walks through everything the app can do, one task at a time.
 ## Getting started
 
 1. Install Daymark (see the FAQ if you get an "unknown app" warning).
-2. Open the app — you'll land on the **Home** timeline, which starts empty.
-3. Tap the **+** button to log your first mood.
+2. Open the app — you'll land on **Home**, which asks *"How are you, right now?"*
+3. Tap a face to log your first mood — or the **Entry** button for the full
+   editor, if you want to add a note, activities or a photo straight away.
 
 That's it. There's no sign-up and nothing to configure before you begin. You can
 explore the bottom navigation any time: **Home**, **Journal**, **Calendar**,
@@ -81,7 +82,8 @@ but never by accident. Three things have to happen:
 
 1. **Swipe it left, and keep going.** The background stays muted and says *"Keep
    swiping"* until you've dragged most of the row across; only then does it turn
-   and read *"Release to delete"*. A short flick does nothing.
+   and read *"Release to delete"*. A quick flick can still raise the question,
+   but the swipe by itself never removes anything.
 2. **Confirm.** A dialog asks *"Delete this entry?"* — choose **Keep it** and
    nothing happens.
 3. **Undo, if you change your mind.** A 5-second **Undo** snackbar appears — tap

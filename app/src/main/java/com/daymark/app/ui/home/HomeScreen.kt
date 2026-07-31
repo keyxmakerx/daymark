@@ -73,7 +73,7 @@ fun HomeScreen(
     onSignalAction: (Signals.Action) -> Unit = {},
     onOpenForYou: () -> Unit = {},
     onOpenHistory: () -> Unit = {},
-    onUndoableDelete: (onUndo: () -> Unit, onExpire: () -> Unit) -> Unit = { _, _ -> },
+    onDeleteEntry: (EntryWithActivities) -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
     signalsViewModel: SignalsViewModel = hiltViewModel(),
 ) {
@@ -94,7 +94,8 @@ fun HomeScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+        // Bottom padding clears the extended "Entry" FAB so it never sits on the exit links.
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item(key = "greeting") {
@@ -159,13 +160,7 @@ fun HomeScreen(
             TodaySheet(
                 entries = state.today,
                 onEntryClick = onEntryClick,
-                onDelete = { entry ->
-                    viewModel.delete(entry)
-                    onUndoableDelete(
-                        { viewModel.restore(entry) },
-                        { viewModel.purgePhoto(entry) },
-                    )
-                },
+                onDelete = onDeleteEntry,
                 modifier = Modifier.animateItem(),
             )
         }

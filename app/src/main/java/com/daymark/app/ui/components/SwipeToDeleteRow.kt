@@ -46,12 +46,14 @@ private const val CommitFraction = 0.62f
  * Two guards sit in front of the delete, because losing a logged day to a stray thumb is the kind
  * of small loss this app should never cause:
  *
- *  1. **A long swipe.** The gesture only arms past [CommitFraction] of the row's width, and the
+ *  1. **A long swipe.** A steady drag only arms past [CommitFraction] of the row's width, and the
  *     background stays muted ("Keep swiping") until it does — so a half-swipe reads as "not yet"
- *     rather than "gone".
+ *     rather than "gone". Material's velocity shortcut can still settle a hard *flick* to the
+ *     dismissed anchor short of that distance, and it is not configurable — which is exactly why
+ *     the second guard exists and why the gesture is never allowed to be the delete.
  *  2. **A confirmation.** The swipe itself never removes anything: [confirmValueChange] always
  *     returns `false`, so the row springs back and a dialog asks first. [onDelete] runs only when
- *     the person confirms there.
+ *     the person confirms there. A stray flick therefore costs a tap on "Keep it", never an entry.
  *
  * The caller is still expected to offer undo afterwards (the snackbar on Home / History) — this is
  * the front half of that safety net, not a replacement for it.

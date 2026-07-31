@@ -108,11 +108,11 @@ All notable changes to this project are documented here. The format is based on
 - **First-run onboarding wizard** (skippable): daily-reminder setup, optional PIN lock.
 
 ### Changed
-- **Deleting an entry now asks first.** A swipe only arms once the row has travelled most of its
-  width — the background reads "Keep swiping" until then, and "Release to delete" after — and the
-  swipe itself never deletes: a confirmation dialog does, with the 5-second **Undo** snackbar
-  still behind it. The entry editor's delete button also confirms now (and says plainly that
-  there's no undo behind that one). Swiping a day's log away by accident was far too easy.
+- **Deleting an entry now asks first.** The swipe itself never deletes — a confirmation dialog
+  does, with the 5-second **Undo** snackbar still behind it. A steady drag has to cross most of the
+  row before the background turns from "Keep swiping" to "Release to delete", so a stray thumb
+  costs a tap on "Keep it" rather than a day's log. The entry editor's delete button also confirms
+  now (and says plainly that there's no undo behind that one).
 - The **"on this day" memories** card and the extra suggestion cards moved off Home to the new
   **For you** screen, and the day-grouped timeline moved to **All entries** — Home was doing too
   many jobs at once.
