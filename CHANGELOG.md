@@ -7,6 +7,19 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Home — the daily loop**: Home is no longer the whole archive. It now opens with a greeting
+  and the date, a **one-tap check-in row** ("How are you, right now?" — tap a face and the entry
+  editor opens with that mood already picked), a small **glance** (current streak, plus the last
+  seven days as seven bars where an unlogged day is a faint stub), at most **one** suggestion
+  card, and **today's** entries. Two quiet links lead onward: **More for you** and **All
+  entries**. Follows the locked concept in
+  [docs/design/app-01-home-daily-loop.png](docs/design/app-01-home-daily-loop.png).
+- **All entries**: the full day-grouped timeline that used to live on Home, now its own screen
+  linked from Home — nothing was removed, it just stopped being the first thing you see.
+- **For you**: the ranked Signals suggestions Home has no room for, plus the richer "on this day"
+  memories card, on one screen ("Gentle suggestions — never nags"). Every card is still a fixed,
+  rules-based template and every one can be dismissed.
+
 - **Companion — tool provenance labeling**: every questionnaire/tool now declares whether it is
   **Validated**, **Adapted**, or **Custom**, enforced by the instrument honesty gate (validated
   requires a source; adapted names the method it draws from; custom must open with a
@@ -95,6 +108,14 @@ All notable changes to this project are documented here. The format is based on
 - **First-run onboarding wizard** (skippable): daily-reminder setup, optional PIN lock.
 
 ### Changed
+- **Deleting an entry now asks first.** A swipe only arms once the row has travelled most of its
+  width — the background reads "Keep swiping" until then, and "Release to delete" after — and the
+  swipe itself never deletes: a confirmation dialog does, with the 5-second **Undo** snackbar
+  still behind it. The entry editor's delete button also confirms now (and says plainly that
+  there's no undo behind that one). Swiping a day's log away by accident was far too easy.
+- The **"on this day" memories** card and the extra suggestion cards moved off Home to the new
+  **For you** screen, and the day-grouped timeline moved to **All entries** — Home was doing too
+  many jobs at once.
 - Renamed the app from "Daylie" to **Daymark** (package `com.daymark.app`).
 - Adopted the "modern paper" design system: paper palette, serif/sans type, and original
   hand-drawn mood + activity icons (replacing emoji and Material icons).

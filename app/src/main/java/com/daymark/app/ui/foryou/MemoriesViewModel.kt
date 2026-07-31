@@ -1,4 +1,4 @@
-package com.daymark.app.ui.home
+package com.daymark.app.ui.foryou
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope

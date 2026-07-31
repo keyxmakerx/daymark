@@ -56,6 +56,8 @@ import com.daymark.app.ui.goals.GoalEditorScreen
 import com.daymark.app.ui.goals.GoalsScreen
 import com.daymark.app.ui.entry.EntryEditorScreen
 import com.daymark.app.ui.components.RaisedCenterNavBar
+import com.daymark.app.ui.foryou.ForYouScreen
+import com.daymark.app.ui.history.HistoryScreen
 import com.daymark.app.ui.home.HomeScreen
 import com.daymark.app.ui.insights.InsightsScreen
 import com.daymark.app.ui.insights.ReviewYearScreen
@@ -126,16 +128,19 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
             if (showTopBar) {
                 val onHome = currentRoute == Routes.HOME || currentRoute == null
                 val title = when {
-                    onHome -> "Daymark"
                     currentRoute == Routes.SETTINGS -> "Settings"
                     else -> TopLevelDestination.entries.firstOrNull { it.route == currentRoute }?.label ?: "Daymark"
                 }
                 TopAppBar(
+                    // Home writes its own header (the greeting + date), so the bar there is just
+                    // the search affordance — one heading per screen, not two.
                     title = {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.headlineMedium,
-                        )
+                        if (!onHome) {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.headlineMedium,
+                            )
+                        }
                     },
                     navigationIcon = {
                         if (drillWithChrome) {
@@ -224,6 +229,20 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
             slideOutVertically(offsetSpring) { it / 3 } + fadeOut(tween(160))
         }
 
+        // The one undo snackbar, shared by every surface that can delete an entry (Home, History).
+        // It is the last of the three guards in front of a delete — see [SwipeToDeleteRow].
+        val undoableDelete: (onUndo: () -> Unit, onExpire: () -> Unit) -> Unit = { onUndo, onExpire ->
+            scope.launch {
+                val result = snackbarHostState.showSnackbar(
+                    message = "Entry deleted",
+                    actionLabel = "Undo",
+                    withDismissAction = true,
+                    duration = SnackbarDuration.Short,
+                )
+                if (result == SnackbarResult.ActionPerformed) onUndo() else onExpire()
+            }
+        }
+
         NavHost(
             navController = navController,
             startDestination = Routes.HOME,
@@ -237,19 +256,26 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
             composable(Routes.HOME) {
                 HomeScreen(
                     onEntryClick = { id -> navController.navigate(Routes.entry(id)) },
+                    onQuickCheckIn = { level -> navController.navigate(Routes.entry(mood = level)) },
                     onSignalAction = { action -> navController.navigate(signalActionRoute(action)) },
-                    onUndoableDelete = { onUndo, onExpire ->
-                        scope.launch {
-                            val result = snackbarHostState.showSnackbar(
-                                message = "Entry deleted",
-                                actionLabel = "Undo",
-                                withDismissAction = true,
-                                duration = SnackbarDuration.Short,
-                            )
-                            if (result == SnackbarResult.ActionPerformed) onUndo() else onExpire()
-                        }
-                    },
+                    onOpenForYou = { navController.navigate(Routes.FOR_YOU) },
+                    onOpenHistory = { navController.navigate(Routes.HISTORY) },
+                    onUndoableDelete = { onUndo, onExpire -> undoableDelete(onUndo, onExpire) },
                     modifier = Modifier.padding(padding),
+                )
+            }
+            composable(Routes.HISTORY, enterTransition = zEnter, popExitTransition = zPopExit) {
+                HistoryScreen(
+                    onBack = { navController.popBackStack() },
+                    onEntryClick = { id -> navController.navigate(Routes.entry(id)) },
+                    onUndoableDelete = { onUndo, onExpire -> undoableDelete(onUndo, onExpire) },
+                )
+            }
+            composable(Routes.FOR_YOU, enterTransition = zEnter, popExitTransition = zPopExit) {
+                ForYouScreen(
+                    onBack = { navController.popBackStack() },
+                    onSignalAction = { action -> navController.navigate(signalActionRoute(action)) },
+                    onEntryClick = { id -> navController.navigate(Routes.entry(id)) },
                 )
             }
             composable(Routes.INSIGHTS) {

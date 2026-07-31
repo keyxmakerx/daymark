@@ -13,10 +13,15 @@ network, nothing leaves your device. See [PRIVACY.md](PRIVACY.md) for the privac
   for *why*. Multiple entries per day.
 - **Photo attachments** — optionally attach a photo to a mood entry via the Android Photo Picker
   (which needs **no** storage permission). The image is downscaled and copied into the app's
-  private storage, shown as a thumbnail on the Home timeline and Day Detail, and embedded in JSON
+  private storage, shown as a thumbnail on **All entries** and Day Detail, and embedded in JSON
   backups so the backup stays one portable file.
-- **Swipe to delete + undo** — swipe a Home-timeline entry away to delete it, with a 5-second
-  **Undo** snackbar that restores the entry (and its activity links).
+- **Home — the daily loop** — Home asks one question ("how are you, right now?") with a one-tap
+  check-in row, shows a small glance (your streak and the last seven days), at most **one**
+  suggestion card, and **today's** entries. The full archive lives one tap away under **All
+  entries**, and the rest of the suggestions under **More for you**.
+- **Deliberate delete + undo** — swiping an entry away asks twice before anything goes: the swipe
+  only arms once you've dragged most of the row ("Release to delete"), then a dialog confirms, and
+  a 5-second **Undo** snackbar still restores the entry and its activity links afterwards.
 - **Journal** — a separate free-form diary, distinct from per-entry mood notes.
 - **Journal writing templates** — optional starters on a fresh entry: **Three Good Things**
   (gratitude), a timed **Expressive Writing** prompt, and a reflect-on-the-day prompt — all

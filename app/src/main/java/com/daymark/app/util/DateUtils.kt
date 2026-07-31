@@ -18,6 +18,8 @@ object DateUtils {
         DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
     private val monthYearFormatter: DateTimeFormatter =
         DateTimeFormatter.ofPattern("MMMM yyyy")
+    private val weekdayDayFormatter: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("EEEE · MMMM d")
 
     fun toLocalDateTime(epochMillis: Long): LocalDateTime =
         Instant.ofEpochMilli(epochMillis).atZone(zone).toLocalDateTime()
@@ -43,6 +45,9 @@ object DateUtils {
         toLocalDateTime(epochMillis).format(dateFormatter)
 
     fun formatMonthYear(date: LocalDate): String = date.format(monthYearFormatter)
+
+    /** "Tuesday · July 8" — the date line under Home's greeting. */
+    fun formatWeekdayAndDay(date: LocalDate): String = date.format(weekdayDayFormatter)
 
     fun formatMonthYear(epochMillis: Long): String =
         toLocalDate(epochMillis).format(monthYearFormatter)

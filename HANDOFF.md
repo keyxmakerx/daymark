@@ -92,9 +92,16 @@ app/schemas/       committed Room schema JSON (exportSchema=true), versions 1..1
 docs/              DESIGN, ARCHITECTURE, PRIVACY, FEATURES, USER_GUIDE, ROADMAP, INSTRUMENTS,
                    SLEEP_FEATURE_PLAN, SUPPORT_FEATURE_PLAN, DOCKER_COMPANION, FAQ, ON_BODY_BREATHING…
 ```
-ui feature dirs: `home, entry, calendar, insights, journal, goals, activities, trackers, assessments,
-cbt, activation, movement, sleep, support, achievements, settings, onboarding, search, lock, more,
-icon, theme, components, navigation`.
+ui feature dirs: `home, foryou, history, entry, calendar, insights, journal, goals, activities,
+trackers, assessments, cbt, activation, movement, sleep, support, achievements, settings,
+onboarding, search, lock, more, icon, theme, components, navigation`.
+
+**Home is the "daily loop", not the archive** (2026-07, per `docs/design/app-01-home-daily-loop`):
+greeting + date → one-tap check-in row → glance (streak + last-7-days bars) → **at most one**
+signal card → **today's** entries → two links out. The full day-grouped timeline lives in
+`ui/history/` ("All entries") and the rest of the ranked signals plus the "on this day" memories
+card live in `ui/foryou/` ("For you"). `ui/components/EntryRow.kt` holds the shared rows
+(`EntryRow` full, `CompactEntryRow` one-line for Home).
 
 ---
 
@@ -158,9 +165,16 @@ meshes them into one experience **without AI**.
   rising + getting personalized copy when it's a known lift.
 - **It feeds THREE surfaces** (the "one engine, three surfaces" design):
   1. **Insights "For you"** strip → `ui/insights/SignalCards.kt`.
-  2. **Home "Quiet Feed"** (Plan A) → `ui/home/HomeScreen.kt` (excludes `on_this_day`; Home has its
-     own richer memories card).
+  2. **Home + the "For you" router** → `ui/home/HomeScreen.kt` shows only the **top-ranked** Feed
+     card; `ui/foryou/ForYouScreen.kt` shows the rest plus the richer memories card. Both exclude
+     `SelfRenderedSignalKinds` (`prompt_log_today` — that *is* Home's check-in row; `on_this_day` —
+     the memories card renders it properly), declared in `ForYouScreen.kt`.
   3. **"What might help"** → `ui/support/SupportScreen.kt` (uses `supportSignals`).
+
+  ⚠ Dismissal is still **per-screen `rememberSaveable`** — Home and "For you" keep independent
+  sets and neither survives process death. The mockup's "suggestions are opt-out, granular, and
+  **remembered**" (with show-less / remind-later / hide / turn-off per card, and a Settings →
+  Suggestions screen) needs persisted state and is **not built**.
 - `ui/insights/SignalsViewModel.kt` derives `Signals.Inputs` from repos (reusing `MoodStats`,
   `MoodCorrelations`, `MoodPatterns`). Notes:
   - It **idempotently writes** newly-earned achievement unlock times (documented in its KDoc) — same
@@ -199,9 +213,14 @@ ViewModel derivation) — never a model.**
 
 ## 8. Feature inventory — what's DONE (all in `main`)
 
-- **Core:** entry logging (mood + note + activities + photo), Home timeline (swipe-to-delete + undo),
-  Calendar, tap-a-day detail, Insights (stats + correlations + patterns + period-compare + heatmap +
+- **Core:** entry logging (mood + note + activities + photo), the Home daily loop (one-tap check-in,
+  glance, one signal card, today), **All entries** archive + **For you** router, Calendar,
+  tap-a-day detail, Insights (stats + correlations + patterns + period-compare + heatmap +
   "in review"), Journal (separate from entry notes, with search), Year-in-Pixels.
+- **Deleting an entry takes three steps** (`ui/components/SwipeToDeleteRow.kt`): a swipe past
+  `CommitFraction` (0.62 of the row) to arm it, a confirmation dialog, then the 5-second undo
+  snackbar. `confirmValueChange` **always returns false** so the gesture itself can never delete —
+  don't "fix" that. The entry editor's delete confirms too (no undo behind that one).
 - **Reminders:** multiple, with notification quick-log. **App-lock:** PIN + biometric, auto-lock
   timeout, re-lock on background.
 - **Backup/restore:** JSON (replace/merge), CSV export, **PDF report** with QR authenticity.
