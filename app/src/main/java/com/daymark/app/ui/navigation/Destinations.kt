@@ -21,6 +21,9 @@ object Routes {
 
     /** The ranked "For you" suggestions Home doesn't have room for. */
     const val FOR_YOU = "for_you"
+
+    /** Settings → Suggestions: the on/off/snoozed dial for every suggestion family. */
+    const val SUGGESTIONS = "suggestions"
     const val TRACKERS = "trackers"
     const val TRACKER = "tracker"
 

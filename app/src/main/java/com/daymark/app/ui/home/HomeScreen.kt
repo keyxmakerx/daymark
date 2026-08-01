@@ -152,6 +152,7 @@ fun HomeScreen(
                     max = 1,
                     exclude = SelfRenderedSignalKinds,
                     header = null,
+                    onControl = signalsViewModel::applyControl,
                     modifier = Modifier.animateItem(),
                 )
             }

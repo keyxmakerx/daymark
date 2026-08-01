@@ -171,10 +171,25 @@ meshes them into one experience **without AI**.
      the memories card renders it properly), declared in `ForYouScreen.kt`.
   3. **"What might help"** → `ui/support/SupportScreen.kt` (uses `supportSignals`).
 
-  ⚠ Dismissal is still **per-screen `rememberSaveable`** — Home and "For you" keep independent
-  sets and neither survives process death. The mockup's "suggestions are opt-out, granular, and
-  **remembered**" (with show-less / remind-later / hide / turn-off per card, and a Settings →
-  Suggestions screen) needs persisted state and is **not built**.
+**Suggestion controls** (`stats/SuggestionControls.kt`, pure + tested; `data/SuggestionControlsStore.kt`,
+prefs-backed): every card carries an overflow menu — *show less like this · remind me in a few hours ·
+not helpful, hide it · turn this suggestion off*. Choices are stored per **group** (7 groups covering
+all 10 Feed/Insights kinds), not per raw kind, so the wording in Settings stays plain English and
+turning one card off silences everything that suggestion says. `SuggestionControls.filter` drops
+off/snoozed groups and subtracts `DAMPING_STEP` per "show less" before re-ranking; it deliberately
+passes the **support menu** through untouched (you open "what might help" on purpose, so there's
+nothing there to turn off, and crisis resources stay reachable regardless). Turning a group back on
+clears the off flag, the snooze **and** the damping — otherwise you could turn something on and
+still not see it, with nothing on screen explaining why. Settings → Suggestions
+(`ui/settings/SuggestionsScreen.kt`) lists every group under On/Off, names when a snoozed one
+returns, and offers to end the snooze now.
+
+  ⚠ Still open: per-screen **session** dismissal (`rememberSaveable`) is unchanged and remains
+  independent between Home and "For you" — that's the "not right now" gesture, distinct from the
+  persisted controls. Suggestion controls do **not** round-trip in JSON backups yet (that needs a
+  `BackupData` version bump). The mockup's **therapist re-recommend banner** is not built: it needs
+  an inbound Companion channel and its own consent story, and per principle 4 it must only ever
+  *recommend* — never flip a toggle.
 - `ui/insights/SignalsViewModel.kt` derives `Signals.Inputs` from repos (reusing `MoodStats`,
   `MoodCorrelations`, `MoodPatterns`). Notes:
   - It **idempotently writes** newly-earned achievement unlock times (documented in its KDoc) — same

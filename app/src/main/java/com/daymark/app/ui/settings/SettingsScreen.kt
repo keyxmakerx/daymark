@@ -53,6 +53,7 @@ fun SettingsScreen(
     onManageGoals: () -> Unit,
     onManageReminders: () -> Unit,
     onCustomizeMoods: () -> Unit,
+    onManageSuggestions: () -> Unit,
     onShowMessage: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel(),
@@ -105,6 +106,11 @@ fun SettingsScreen(
                 )
             },
             modifier = Modifier.clickable { onManageReminders() },
+        )
+        ListItem(
+            headlineContent = { Text("Suggestions") },
+            supportingContent = { Text("Choose which gentle nudges you want to see") },
+            modifier = Modifier.clickable { onManageSuggestions() },
         )
 
         Divider()

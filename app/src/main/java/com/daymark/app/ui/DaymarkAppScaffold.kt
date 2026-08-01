@@ -96,6 +96,7 @@ import com.daymark.app.ui.assessments.AssessmentsHubScreen
 import com.daymark.app.ui.settings.CustomizeMoodsScreen
 import com.daymark.app.ui.settings.RemindersScreen
 import com.daymark.app.ui.settings.SettingsScreen
+import com.daymark.app.ui.settings.SuggestionsScreen
 import com.daymark.app.ui.stats.StatsScreen
 import kotlinx.coroutines.launch
 
@@ -464,9 +465,13 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                     onManageGoals = { navController.navigate(Routes.GOALS) },
                     onManageReminders = { navController.navigate(Routes.REMINDERS) },
                     onCustomizeMoods = { navController.navigate(Routes.CUSTOMIZE_MOODS) },
+                    onManageSuggestions = { navController.navigate(Routes.SUGGESTIONS) },
                     onShowMessage = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                     modifier = Modifier.padding(padding),
                 )
+            }
+            composable(Routes.SUGGESTIONS, enterTransition = zEnter, popExitTransition = zPopExit) {
+                SuggestionsScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.REMINDERS, enterTransition = zEnter, popExitTransition = zPopExit) {
                 RemindersScreen(onBack = { navController.popBackStack() })

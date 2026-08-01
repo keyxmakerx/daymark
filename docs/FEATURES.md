@@ -15,6 +15,13 @@ network, nothing leaves your device. See [PRIVACY.md](PRIVACY.md) for the privac
   (which needs **no** storage permission). The image is downscaled and copied into the app's
   private storage, shown as a thumbnail on **All entries** and Day Detail, and embedded in JSON
   backups so the backup stays one portable file.
+- **Suggestion controls** — every suggestion card has a menu: *show less like this*, *remind me in
+  a few hours*, *not helpful — hide it*, *turn this suggestion off*. Choices are remembered across
+  restarts and every one is reversible under **Settings → Suggestions**, which lists each kind of
+  suggestion as On or Off, says when a snoozed one returns, and can bring it back immediately.
+  Nothing is learned from what you tap — "show less" subtracts a fixed amount from that
+  suggestion's rank and snoozes it for three days. The "what might help" support menu isn't
+  controllable (you open it deliberately), and crisis resources stay reachable regardless.
 - **Home — the daily loop** — Home asks one question ("how are you, right now?") with a one-tap
   check-in row, shows a small glance (your streak and the last seven days), at most **one**
   suggestion card, and **today's** entries. The full archive lives one tap away under **All

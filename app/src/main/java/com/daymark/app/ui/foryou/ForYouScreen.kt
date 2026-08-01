@@ -126,6 +126,7 @@ fun ForYouScreen(
                         max = FeedWindow,
                         exclude = SelfRenderedSignalKinds,
                         header = null,
+                        onControl = signalsViewModel::applyControl,
                         modifier = Modifier.animateItem(),
                     )
                 }

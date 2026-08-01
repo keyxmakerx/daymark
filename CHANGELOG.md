@@ -19,6 +19,16 @@ All notable changes to this project are documented here. The format is based on
 - **For you**: the ranked Signals suggestions Home has no room for, plus the richer "on this day"
   memories card, on one screen ("Gentle suggestions — never nags"). Every card is still a fixed,
   rules-based template and every one can be dismissed.
+- **Suggestion controls — opt-out, granular, and remembered**: every suggestion card now carries a
+  menu — **show less like this**, **remind me in a few hours**, **not helpful, hide it**, and
+  **turn this suggestion off** — and the choice is remembered across restarts. **Settings →
+  Suggestions** lists every kind of suggestion under *On* and *Off*, says when a snoozed one comes
+  back ("Snoozed · back in 2h") and offers to bring it back now. Turning one back on clears
+  everything holding it back, so it can't be on and still invisible. Nothing is learned from what
+  you tap: "show less" subtracts a fixed amount from that suggestion's rank and snoozes it for
+  three days, and the rules are unit-tested. The **"what might help" support menu is deliberately
+  not controllable** — you open it on purpose — and crisis resources stay reachable whatever you
+  set.
 
 - **Companion — tool provenance labeling**: every questionnaire/tool now declares whether it is
   **Validated**, **Adapted**, or **Custom**, enforced by the instrument honesty gate (validated
