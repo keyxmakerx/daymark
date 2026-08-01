@@ -25,18 +25,16 @@ object SuggestionControls {
     )
 
     /**
-     * Every controllable suggestion. The **support menu** on the "what might help" screen is
-     * deliberately absent: you open that screen on purpose, so it is never a suggestion pushed at
-     * you and there is nothing there to turn off. Crisis resources stay reachable regardless of
-     * anything set here.
+     * Every controllable suggestion. Two things are deliberately absent, and a switch is only
+     * listed here if flipping it visibly changes something — a dial that does nothing is worse
+     * than no dial:
+     *
+     *  - The **support menu** on "what might help": you open that screen on purpose, so nothing
+     *    there is pushed at you. Crisis resources stay reachable whatever is set here.
+     *  - Home's **check-in row** (`prompt_log_today`): that row is the app's primary way to log,
+     *    on screen whether or not you've logged today, so it isn't a nudge to switch off.
      */
     val GROUPS: List<Group> = listOf(
-        Group(
-            key = "check_in",
-            title = "Check-in nudges",
-            subtitle = "when you haven't logged today",
-            kinds = setOf("prompt_log_today"),
-        ),
         Group(
             key = "support",
             title = "Support offers",

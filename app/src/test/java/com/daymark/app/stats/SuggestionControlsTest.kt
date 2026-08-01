@@ -38,6 +38,13 @@ class SuggestionControlsTest {
         assertEquals(kinds.size, kinds.toSet().size)
     }
 
+    /**
+     * A card the person can wave away is a card they should be able to turn off. Non-dismissible
+     * signals are exempt by construction: they render as fixed parts of a screen (Home's check-in
+     * row) or as the support menu you opened on purpose, and carry no menu to dial down.
+     */
+    private fun List<Signals.Signal>.controllable() = filter { it.dismissible }
+
     @Test
     fun everyControllableSignalKindTheEngineCanEmitHasAGroup() {
         // Guards against adding a rule to Signals.build and silently leaving it uncontrollable.
@@ -57,8 +64,7 @@ class SuggestionControlsTest {
                 onThisDayNote = "a note",
             ),
         )
-        val ungrouped = emitted
-            .filterNot { it.surfaces == setOf(Signals.Surface.Support) }
+        val ungrouped = emitted.controllable()
             .map { it.kind }
             .filter { SuggestionControls.groupKeyOf(it) == null }
         assertEquals(emptyList<String>(), ungrouped)
@@ -71,9 +77,15 @@ class SuggestionControlsTest {
                 onThisDayNote = null,
             ),
         )
-        down.filterNot { it.surfaces == setOf(Signals.Surface.Support) }.forEach {
+        down.controllable().forEach {
             assertTrue(it.kind, SuggestionControls.groupKeyOf(it.kind) != null)
         }
+    }
+
+    @Test
+    fun theCheckInRowIsNotSomethingYouCanSwitchOff() {
+        // Home's check-in row is how you log, not a nudge — so it must not appear in Settings.
+        assertNull(SuggestionControls.groupKeyOf("prompt_log_today"))
     }
 
     @Test

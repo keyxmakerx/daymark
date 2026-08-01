@@ -35,11 +35,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.daymark.app.data.entity.EntryWithActivities
 import com.daymark.app.model.Mood
 import com.daymark.app.stats.Signals
+import com.daymark.app.stats.SuggestionControls
 import com.daymark.app.ui.components.MoodFaceIcon
 import com.daymark.app.ui.components.PaperSurface
 import com.daymark.app.ui.insights.SignalCards
 import com.daymark.app.ui.insights.SignalDismissalSaver
 import com.daymark.app.ui.insights.SignalsViewModel
+import com.daymark.app.ui.insights.SuggestionControlMenu
 import com.daymark.app.ui.insights.visibleSignalCount
 import com.daymark.app.ui.theme.LocalDaymarkTextStyles
 import com.daymark.app.util.DateUtils
@@ -68,6 +70,10 @@ fun ForYouScreen(
     var dismissed by rememberSaveable(stateSaver = SignalDismissalSaver) {
         mutableStateOf(emptySet<String>())
     }
+    // The memories card is rendered here rather than by SignalCards, so it keeps its own
+    // session-dismissal flag alongside the shared one.
+    var memoriesDismissed by rememberSaveable { mutableStateOf(false) }
+    val showMemories = memories.isNotEmpty() && !memoriesDismissed
 
     val visible = visibleSignalCount(
         signals, Signals.Surface.Feed, dismissed, max = FeedWindow, exclude = SelfRenderedSignalKinds,
@@ -94,7 +100,7 @@ fun ForYouScreen(
             )
         },
     ) { padding ->
-        if (visible == 0 && memories.isEmpty()) {
+        if (visible == 0 && !showMemories) {
             Box(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentAlignment = Alignment.Center,
@@ -131,9 +137,18 @@ fun ForYouScreen(
                     )
                 }
             }
-            if (memories.isNotEmpty()) {
+            if (showMemories) {
                 item(key = "on-this-day") {
-                    OnThisDayCard(memories, onEntryClick, modifier = Modifier.animateItem())
+                    OnThisDayCard(
+                        memories = memories,
+                        onEntryClick = onEntryClick,
+                        onControl = { action ->
+                            // Null = "not right now": this session only, nothing stored.
+                            action?.let { signalsViewModel.applyControl(MemoriesKind, it) }
+                            memoriesDismissed = true
+                        },
+                        modifier = Modifier.animateItem(),
+                    )
                 }
             }
             item(key = "control-note") {
@@ -152,6 +167,9 @@ fun ForYouScreen(
 /** How many ranked feed cards this screen will show at once. */
 private const val FeedWindow = 6
 
+/** The [Signals] kind behind the memories card, so its menu writes to the right group. */
+private const val MemoriesKind = "on_this_day"
+
 /**
  * Feed signals that Home and "For you" render in their own, richer form rather than as a generic
  * [SignalCards] card — so the same thing never appears twice on one screen.
@@ -165,18 +183,25 @@ val SelfRenderedSignalKinds = setOf("prompt_log_today", "on_this_day")
 private fun OnThisDayCard(
     memories: List<EntryWithActivities>,
     onEntryClick: (Long) -> Unit,
+    onControl: (SuggestionControls.Action?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val thisYear = LocalDate.now().year
     PaperSurface(modifier = modifier.fillMaxWidth()) {
         Column(Modifier.padding(vertical = 4.dp)) {
-            Text(
-                "ON THIS DAY",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.tertiary,
-                letterSpacing = 1.2.sp,
-                modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 4.dp),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "ON THIS DAY",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    letterSpacing = 1.2.sp,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 4.dp),
+                )
+                // The same dial every other suggestion carries — this one just draws itself.
+                SuggestionControlMenu(label = "On this day", onControl = onControl)
+            }
             memories.take(4).forEach { m ->
                 val mood = Mood.fromLevel(m.entry.moodLevel)
                 val yearsAgo = thisYear - DateUtils.toLocalDate(m.entry.dateTime).year

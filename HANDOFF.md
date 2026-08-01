@@ -172,10 +172,18 @@ meshes them into one experience **without AI**.
   3. **"What might help"** → `ui/support/SupportScreen.kt` (uses `supportSignals`).
 
 **Suggestion controls** (`stats/SuggestionControls.kt`, pure + tested; `data/SuggestionControlsStore.kt`,
-prefs-backed): every card carries an overflow menu — *show less like this · remind me in a few hours ·
-not helpful, hide it · turn this suggestion off*. Choices are stored per **group** (7 groups covering
-all 10 Feed/Insights kinds), not per raw kind, so the wording in Settings stays plain English and
-turning one card off silences everything that suggestion says. `SuggestionControls.filter` drops
+prefs-backed): every card carries an overflow menu — *not right now · show less like this · remind me
+in a few hours · not helpful, hide it · turn this suggestion off*. The first is session-only
+(nothing stored) — "not today" and "not this again" must never share a gesture. Choices are stored
+per **group** (6 groups covering every *dismissible* kind), not per raw kind, so the wording in
+Settings stays plain English and turning one card off silences everything that suggestion says.
+
+**A group only exists if its switch visibly does something.** `prompt_log_today` has no group: it
+renders as Home's check-in row, which is how you log rather than a nudge, and it isn't dismissible.
+`on_this_day` *does* have one, and because the memories card draws itself rather than going through
+`SignalCards`, `MemoriesViewModel` reads the store directly — otherwise its Settings switch would
+silence a card nobody ever sees and leave the real one on screen. A unit test asserts every
+**dismissible** kind the engine can emit has a group; if you add a rule, that's the guard. `SuggestionControls.filter` drops
 off/snoozed groups and subtracts `DAMPING_STEP` per "show less" before re-ranking; it deliberately
 passes the **support menu** through untouched (you open "what might help" on purpose, so there's
 nothing there to turn off, and crisis resources stay reachable regardless). Turning a group back on

@@ -28,8 +28,9 @@ and no tracking. Because there's no backend, the app is free for everyone, forev
 - 🌤️ **Home, the daily loop** — a greeting, a one-tap check-in row, a small glance (streak +
   the last seven days), one gentle suggestion, and today's entries. The full archive is one tap
   away under **All entries**.
-- 🎚️ **Suggestions on a dial** — show less · remind me later · hide · turn off, per card and
-  remembered, with one screen under **Settings → Suggestions** to turn any of them back on.
+- 🎚️ **Suggestions on a dial** — not right now · show less · remind me later · hide · turn off,
+  per card and remembered, with one screen under **Settings → Suggestions** to turn any of them
+  back on.
 - ↔️ **Deliberate delete + undo** — a swipe raises the question, a dialog confirms it, and a
   5-second **Undo** snackbar can still bring it back.
 - 📓 **Journal** — a separate free-form diary, distinct from your mood notes.

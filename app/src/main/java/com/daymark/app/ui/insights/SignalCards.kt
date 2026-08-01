@@ -146,11 +146,12 @@ private fun SignalCard(
                     )
                 }
                 if (onControl != null) {
-                    SignalControlMenu(
-                        signal = signal,
+                    SuggestionControlMenu(
+                        label = signal.title,
                         onControl = { action ->
-                            onControl(signal.kind, action)
-                            // Step the card out now; the stored control keeps it out afterwards.
+                            // A null action is "not right now" — this session only, nothing stored.
+                            action?.let { onControl(signal.kind, it) }
+                            // Step the card out now; a stored control keeps it out afterwards.
                             onDismiss?.invoke()
                         },
                     )
@@ -182,20 +183,26 @@ private fun SignalCard(
 }
 
 /**
- * The per-card dial: four fixed choices, from "a bit less of this" all the way to "never again".
- * Every one is reversible under Settings → Suggestions, which the footnote says out loud so
+ * The per-card dial: five fixed choices, from "not right now" all the way to "never again".
+ *
+ * The first is deliberately weightless — it passes `null` and only waves the card away for this
+ * session, so "not today" and "not this again" never share a gesture. The other four are stored.
+ * All of them are reversible under Settings → Suggestions, which the footnote says out loud so
  * turning something off never feels like a door closing.
+ *
+ * Shared so anything Home or "For you" renders in its own richer form (the memories card) offers
+ * the same dial as a plain [SignalCards] card.
  */
 @Composable
-private fun SignalControlMenu(
-    signal: Signals.Signal,
-    onControl: (SuggestionControls.Action) -> Unit,
+fun SuggestionControlMenu(
+    label: String,
+    onControl: (SuggestionControls.Action?) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(
             onClick = { open = true },
-            modifier = Modifier.semantics { contentDescription = "Options for: ${signal.title}" },
+            modifier = Modifier.semantics { contentDescription = "Options for: $label" },
         ) {
             Icon(
                 Icons.Filled.MoreVert,
@@ -204,11 +211,11 @@ private fun SignalControlMenu(
             )
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            CONTROL_ITEMS.forEach { (action, label) ->
+            CONTROL_ITEMS.forEach { (action, itemLabel) ->
                 DropdownMenuItem(
                     text = {
                         Text(
-                            label,
+                            itemLabel,
                             color = if (action == SuggestionControls.Action.TurnOff) {
                                 MaterialTheme.colorScheme.error
                             } else {
@@ -234,8 +241,12 @@ private fun SignalControlMenu(
     }
 }
 
-/** Fixed menu copy, in escalating order. No generated text. */
-private val CONTROL_ITEMS: List<Pair<SuggestionControls.Action, String>> = listOf(
+/**
+ * Fixed menu copy, in escalating order. No generated text. A null action means "this session
+ * only" — nothing is written down.
+ */
+private val CONTROL_ITEMS: List<Pair<SuggestionControls.Action?, String>> = listOf(
+    null to "Not right now",
     SuggestionControls.Action.ShowLess to "Show less like this",
     SuggestionControls.Action.RemindLater to "Remind me in a few hours",
     SuggestionControls.Action.Hide to "Not helpful — hide it",

@@ -62,15 +62,18 @@ Home is the daily loop, not an archive. Top to bottom:
 
 ### Turning suggestions down, or off
 
-Every suggestion card has a **⋮** menu with four choices:
+Every suggestion card has a **⋮** menu with five choices:
 
+- **Not right now** — it steps aside for this visit only. Nothing is remembered,
+  and it's back next time.
 - **Show less like this** — it drops down the running order and steps back for
   three days.
 - **Remind me in a few hours** — it goes quiet for four hours.
 - **Not helpful — hide it** — it goes quiet for a month.
 - **Turn this suggestion off** — it stops entirely until you say otherwise.
 
-These are remembered — they survive closing the app. **Settings → Suggestions**
+All but "Not right now" are remembered — they survive closing the app.
+**Settings → Suggestions**
 lists every kind of suggestion under *On* and *Off*, tells you when a snoozed one
 comes back ("Snoozed · back in 2h"), and can bring it back right away. Turning
 one back on clears everything holding it back, so it can never be switched on and
@@ -79,9 +82,10 @@ still invisible.
 Nothing is learned from what you tap. "Show less" subtracts a fixed amount from
 that suggestion's rank — the same amount, every time, for everyone.
 
-Two things stay put: the **"what might help"** menu (you open that on purpose, so
-nothing there is pushed at you), and **crisis resources**, which stay reachable
-whatever you set here.
+Three things stay put: the **check-in row** on Home (that's how you log, not a
+nudge), the **"what might help"** menu (you open that on purpose, so nothing
+there is pushed at you), and **crisis resources**, which stay reachable whatever
+you set here.
 
 ### Adding a photo
 

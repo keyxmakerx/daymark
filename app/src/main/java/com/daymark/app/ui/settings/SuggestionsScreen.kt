@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -141,8 +142,15 @@ private fun SuggestionRowItem(
             Switch(
                 checked = row.on,
                 onCheckedChange = onToggle,
+                // An explicit state description replaces the synthesized "On"/"Off", so the state
+                // is announced once — and a snoozed row says so rather than just "on".
                 modifier = Modifier.semantics {
-                    contentDescription = "${row.group.title}: ${if (row.on) "on" else "off"}"
+                    contentDescription = row.group.title
+                    stateDescription = when {
+                        !row.on -> "off"
+                        row.snoozed -> "on, snoozed"
+                        else -> "on"
+                    }
                 },
             )
         },
