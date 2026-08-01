@@ -117,6 +117,7 @@ fun InsightsScreen(
                 onAction = onSignalAction,
                 dismissed = insightsDismissed,
                 onDismiss = { insightsDismissed = insightsDismissed + it },
+                onControl = signalsViewModel::applyControl,
             )
         }
 

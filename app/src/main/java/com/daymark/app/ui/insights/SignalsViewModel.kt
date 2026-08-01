@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.daymark.app.data.AchievementsStore
 import com.daymark.app.data.AssessmentRepository
 import com.daymark.app.data.EntryRepository
+import com.daymark.app.data.SuggestionControlsStore
 import com.daymark.app.data.entity.AssessmentResult
 import com.daymark.app.data.entity.EntryWithActivities
 import com.daymark.app.stats.Achievements
@@ -12,6 +13,7 @@ import com.daymark.app.stats.MoodCorrelations
 import com.daymark.app.stats.MoodPatterns
 import com.daymark.app.stats.MoodStats
 import com.daymark.app.stats.Signals
+import com.daymark.app.stats.SuggestionControls
 import com.daymark.app.ui.assessments.Assessments
 import com.daymark.app.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -43,16 +45,30 @@ class SignalsViewModel @Inject constructor(
     entryRepository: EntryRepository,
     assessmentRepository: AssessmentRepository,
     private val achievementsStore: AchievementsStore,
+    private val suggestionControlsStore: SuggestionControlsStore,
 ) : ViewModel() {
 
     val signals: StateFlow<List<Signals.Signal>> = combine(
         entryRepository.observeAll(),
         assessmentRepository.observeAll(),
-    ) { entries, assessments ->
-        Signals.build(buildInputs(entries, assessments, System.currentTimeMillis()))
+        suggestionControlsStore.observe(),
+    ) { entries, assessments, controls ->
+        val now = System.currentTimeMillis()
+        // Build everything that could be relevant, then keep only what the person still wants.
+        SuggestionControls.filter(Signals.build(buildInputs(entries, assessments, now)), controls, now)
     }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * Records a card-menu choice ("show less", "remind me later", "hide it", "turn it off"). The
+     * choice is stored against the whole suggestion *group*, so turning one card off silences
+     * everything that suggestion says rather than just this one wording of it.
+     */
+    fun applyControl(kind: String, action: SuggestionControls.Action) {
+        val groupKey = SuggestionControls.groupKeyOf(kind) ?: return
+        suggestionControlsStore.apply(groupKey, action, System.currentTimeMillis())
+    }
 
     /**
      * The "what might help" support menu, ordered & lightly personalised (movement rises when it's

@@ -24,9 +24,15 @@ and no tracking. Because there's no backend, the app is free for everyone, forev
   a note for *why* you feel that way. Multiple entries per day.
 - 📷 **Photo attachments** — optionally attach a photo to a mood entry via the Android Photo
   Picker (needs **no** storage permission); it's downscaled, stored app-private, shown as a
-  thumbnail on Home and Day Detail, and included in JSON backups.
-- ↔️ **Swipe to delete + undo** — swipe a Home-timeline entry away to delete it, with a
-  5-second **Undo** snackbar.
+  thumbnail on All entries and Day Detail, and included in JSON backups.
+- 🌤️ **Home, the daily loop** — a greeting, a one-tap check-in row, a small glance (streak +
+  the last seven days), one gentle suggestion, and today's entries. The full archive is one tap
+  away under **All entries**.
+- 🎚️ **Suggestions on a dial** — not right now · show less · remind me later · hide · turn off,
+  per card and remembered, with one screen under **Settings → Suggestions** to turn any of them
+  back on.
+- ↔️ **Deliberate delete + undo** — a swipe raises the question, a dialog confirms it, and a
+  5-second **Undo** snackbar can still bring it back.
 - 📓 **Journal** — a separate free-form diary, distinct from your mood notes.
 - 🔍 **Global note search** — search across mood notes and journal entries from one place.
 - 🗓️ **Tap a day to view/edit** — open any day from the calendar to review or change its entries.

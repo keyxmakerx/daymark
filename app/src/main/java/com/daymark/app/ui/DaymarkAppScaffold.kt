@@ -38,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -54,8 +55,12 @@ import com.daymark.app.ui.calendar.DayDetailScreen
 import com.daymark.app.ui.calendar.YearPixelsScreen
 import com.daymark.app.ui.goals.GoalEditorScreen
 import com.daymark.app.ui.goals.GoalsScreen
+import com.daymark.app.data.entity.EntryWithActivities
+import com.daymark.app.ui.entry.EntryActionsViewModel
 import com.daymark.app.ui.entry.EntryEditorScreen
 import com.daymark.app.ui.components.RaisedCenterNavBar
+import com.daymark.app.ui.foryou.ForYouScreen
+import com.daymark.app.ui.history.HistoryScreen
 import com.daymark.app.ui.home.HomeScreen
 import com.daymark.app.ui.insights.InsightsScreen
 import com.daymark.app.ui.insights.ReviewYearScreen
@@ -91,6 +96,7 @@ import com.daymark.app.ui.assessments.AssessmentsHubScreen
 import com.daymark.app.ui.settings.CustomizeMoodsScreen
 import com.daymark.app.ui.settings.RemindersScreen
 import com.daymark.app.ui.settings.SettingsScreen
+import com.daymark.app.ui.settings.SuggestionsScreen
 import com.daymark.app.ui.stats.StatsScreen
 import kotlinx.coroutines.launch
 
@@ -100,6 +106,8 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
     val navController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    // Scoped to the activity (not a NavBackStackEntry) so an in-flight delete/undo survives a pop.
+    val entryActions: EntryActionsViewModel = hiltViewModel()
 
     // From the home-screen widget: jump straight into a new entry with the tapped mood.
     // From a reminder notification (openEditor): open a blank new entry.
@@ -126,16 +134,19 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
             if (showTopBar) {
                 val onHome = currentRoute == Routes.HOME || currentRoute == null
                 val title = when {
-                    onHome -> "Daymark"
                     currentRoute == Routes.SETTINGS -> "Settings"
                     else -> TopLevelDestination.entries.firstOrNull { it.route == currentRoute }?.label ?: "Daymark"
                 }
                 TopAppBar(
+                    // Home writes its own header (the greeting + date), so the bar there is just
+                    // the search affordance — one heading per screen, not two.
                     title = {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.headlineMedium,
-                        )
+                        if (!onHome) {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.headlineMedium,
+                            )
+                        }
                     },
                     navigationIcon = {
                         if (drillWithChrome) {
@@ -224,6 +235,27 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
             slideOutVertically(offsetSpring) { it / 3 } + fadeOut(tween(160))
         }
 
+        // The one undo snackbar, shared by every surface that can delete an entry (Home, History).
+        // It is the last of the three guards in front of a delete — see [SwipeToDeleteRow]. Both
+        // the delete and the undo run in [EntryActionsViewModel], obtained here at the scaffold, so
+        // they outlive a destination the user pops while the snackbar is still up.
+        val deleteEntryWithUndo: (EntryWithActivities) -> Unit = { entry ->
+            entryActions.delete(entry)
+            scope.launch {
+                val result = snackbarHostState.showSnackbar(
+                    message = "Entry deleted",
+                    actionLabel = "Undo",
+                    withDismissAction = true,
+                    duration = SnackbarDuration.Short,
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    entryActions.restore(entry)
+                } else {
+                    entryActions.purgePhoto(entry)
+                }
+            }
+        }
+
         NavHost(
             navController = navController,
             startDestination = Routes.HOME,
@@ -237,19 +269,26 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
             composable(Routes.HOME) {
                 HomeScreen(
                     onEntryClick = { id -> navController.navigate(Routes.entry(id)) },
+                    onQuickCheckIn = { level -> navController.navigate(Routes.entry(mood = level)) },
                     onSignalAction = { action -> navController.navigate(signalActionRoute(action)) },
-                    onUndoableDelete = { onUndo, onExpire ->
-                        scope.launch {
-                            val result = snackbarHostState.showSnackbar(
-                                message = "Entry deleted",
-                                actionLabel = "Undo",
-                                withDismissAction = true,
-                                duration = SnackbarDuration.Short,
-                            )
-                            if (result == SnackbarResult.ActionPerformed) onUndo() else onExpire()
-                        }
-                    },
+                    onOpenForYou = { navController.navigate(Routes.FOR_YOU) },
+                    onOpenHistory = { navController.navigate(Routes.HISTORY) },
+                    onDeleteEntry = deleteEntryWithUndo,
                     modifier = Modifier.padding(padding),
+                )
+            }
+            composable(Routes.HISTORY, enterTransition = zEnter, popExitTransition = zPopExit) {
+                HistoryScreen(
+                    onBack = { navController.popBackStack() },
+                    onEntryClick = { id -> navController.navigate(Routes.entry(id)) },
+                    onDeleteEntry = deleteEntryWithUndo,
+                )
+            }
+            composable(Routes.FOR_YOU, enterTransition = zEnter, popExitTransition = zPopExit) {
+                ForYouScreen(
+                    onBack = { navController.popBackStack() },
+                    onSignalAction = { action -> navController.navigate(signalActionRoute(action)) },
+                    onEntryClick = { id -> navController.navigate(Routes.entry(id)) },
                 )
             }
             composable(Routes.INSIGHTS) {
@@ -426,9 +465,13 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                     onManageGoals = { navController.navigate(Routes.GOALS) },
                     onManageReminders = { navController.navigate(Routes.REMINDERS) },
                     onCustomizeMoods = { navController.navigate(Routes.CUSTOMIZE_MOODS) },
+                    onManageSuggestions = { navController.navigate(Routes.SUGGESTIONS) },
                     onShowMessage = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                     modifier = Modifier.padding(padding),
                 )
+            }
+            composable(Routes.SUGGESTIONS, enterTransition = zEnter, popExitTransition = zPopExit) {
+                SuggestionsScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.REMINDERS, enterTransition = zEnter, popExitTransition = zPopExit) {
                 RemindersScreen(onBack = { navController.popBackStack() })

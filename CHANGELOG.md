@@ -7,6 +7,30 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Home — the daily loop**: Home is no longer the whole archive. It now opens with a greeting
+  and the date, a **one-tap check-in row** ("How are you, right now?" — tap a face and the entry
+  editor opens with that mood already picked), a small **glance** (current streak, plus the last
+  seven days as seven bars where an unlogged day is a faint stub), at most **one** suggestion
+  card, and **today's** entries. Two quiet links lead onward: **More for you** and **All
+  entries**. Follows the locked concept in
+  [docs/design/app-01-home-daily-loop.png](docs/design/app-01-home-daily-loop.png).
+- **All entries**: the full day-grouped timeline that used to live on Home, now its own screen
+  linked from Home — nothing was removed, it just stopped being the first thing you see.
+- **For you**: the ranked Signals suggestions Home has no room for, plus the richer "on this day"
+  memories card, on one screen ("Gentle suggestions — never nags"). Every card is still a fixed,
+  rules-based template and every one can be dismissed.
+- **Suggestion controls — opt-out, granular, and remembered**: every suggestion card now carries a
+  menu — **not right now** (this visit only, nothing stored), **show less like this**, **remind me
+  in a few hours**, **not helpful, hide it**, and **turn this suggestion off** — and every choice
+  but the first is remembered across restarts. **Settings →
+  Suggestions** lists every kind of suggestion under *On* and *Off*, says when a snoozed one comes
+  back ("Snoozed · back in 2h") and offers to bring it back now. Turning one back on clears
+  everything holding it back, so it can't be on and still invisible. Nothing is learned from what
+  you tap: "show less" subtracts a fixed amount from that suggestion's rank and snoozes it for
+  three days, and the rules are unit-tested. Two things are deliberately **not** controllable:
+  Home's check-in row (that's how you log, not a nudge) and the "what might help" support menu (you
+  open it on purpose). Crisis resources stay reachable whatever you set.
+
 - **Companion — tool provenance labeling**: every questionnaire/tool now declares whether it is
   **Validated**, **Adapted**, or **Custom**, enforced by the instrument honesty gate (validated
   requires a source; adapted names the method it draws from; custom must open with a
@@ -95,6 +119,14 @@ All notable changes to this project are documented here. The format is based on
 - **First-run onboarding wizard** (skippable): daily-reminder setup, optional PIN lock.
 
 ### Changed
+- **Deleting an entry now asks first.** The swipe itself never deletes — a confirmation dialog
+  does, with the 5-second **Undo** snackbar still behind it. A steady drag has to cross most of the
+  row before the background turns from "Keep swiping" to "Release to delete", so a stray thumb
+  costs a tap on "Keep it" rather than a day's log. The entry editor's delete button also confirms
+  now (and says plainly that there's no undo behind that one).
+- The **"on this day" memories** card and the extra suggestion cards moved off Home to the new
+  **For you** screen, and the day-grouped timeline moved to **All entries** — Home was doing too
+  many jobs at once.
 - Renamed the app from "Daylie" to **Daymark** (package `com.daymark.app`).
 - Adopted the "modern paper" design system: paper palette, serif/sans type, and original
   hand-drawn mood + activity icons (replacing emoji and Material icons).

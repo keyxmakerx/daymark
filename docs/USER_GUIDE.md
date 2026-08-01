@@ -15,8 +15,9 @@ This guide walks through everything the app can do, one task at a time.
 ## Getting started
 
 1. Install Daymark (see the FAQ if you get an "unknown app" warning).
-2. Open the app — you'll land on the **Home** timeline, which starts empty.
-3. Tap the **+** button to log your first mood.
+2. Open the app — you'll land on **Home**, which asks *"How are you, right now?"*
+3. Tap a face to log your first mood — or the **Entry** button for the full
+   editor, if you want to add a note, activities or a photo straight away.
 
 That's it. There's no sign-up and nothing to configure before you begin. You can
 explore the bottom navigation any time: **Home**, **Journal**, **Calendar**,
@@ -29,7 +30,11 @@ explore the bottom navigation any time: **Home**, **Journal**, **Calendar**,
 Your mood is the heart of Daymark. You can log as many entries per day as you
 like.
 
-**To log a mood:**
+**The fastest way** is the check-in row at the top of **Home**, under *"How are
+you, right now?"* — tap a face and the entry editor opens with that mood already
+picked, so you can save immediately or add a note first.
+
+**To log a mood with everything filled in:**
 
 1. From **Home**, tap **+** to open the entry editor.
 2. Pick how you feel from the 5-level scale: **Awful, Bad, Meh, Good, Rad**.
@@ -39,7 +44,48 @@ like.
 6. (Optional) **Add a photo** (see below).
 7. Tap **Save**.
 
-Your entry appears on the Home timeline, newest first.
+Your entry appears under **Today** on Home. Everything you've ever logged lives
+under **All entries**, newest first — Home links to it at the bottom.
+
+### What's on Home
+
+Home is the daily loop, not an archive. Top to bottom:
+
+- **A greeting and today's date.**
+- **The check-in row** — *"How are you, right now?"* Tap a face to log in one tap.
+- **A glance** — your current streak, and the last seven days as seven small bars
+  (an unlogged day shows as a faint stub; a week is allowed to have holes in it).
+- **One suggestion**, at most — the rest are under **More for you**, along with
+  your *"on this day"* memories. Every card can be dismissed.
+- **Today** — the entries you've logged today.
+- **More for you** and **All entries** — the two ways onward.
+
+### Turning suggestions down, or off
+
+Every suggestion card has a **⋮** menu with five choices:
+
+- **Not right now** — it steps aside for this visit only. Nothing is remembered,
+  and it's back next time.
+- **Show less like this** — it drops down the running order and steps back for
+  three days.
+- **Remind me in a few hours** — it goes quiet for four hours.
+- **Not helpful — hide it** — it goes quiet for a month.
+- **Turn this suggestion off** — it stops entirely until you say otherwise.
+
+All but "Not right now" are remembered — they survive closing the app.
+**Settings → Suggestions**
+lists every kind of suggestion under *On* and *Off*, tells you when a snoozed one
+comes back ("Snoozed · back in 2h"), and can bring it back right away. Turning
+one back on clears everything holding it back, so it can never be switched on and
+still invisible.
+
+Nothing is learned from what you tap. "Show less" subtracts a fixed amount from
+that suggestion's rank — the same amount, every time, for everyone.
+
+Three things stay put: the **check-in row** on Home (that's how you log, not a
+nudge), the **"what might help"** menu (you open that on purpose, so nothing
+there is pushed at you), and **crisis resources**, which stay reachable whatever
+you set here.
 
 ### Adding a photo
 
@@ -53,14 +99,27 @@ moment.
 3. A thumbnail appears with a remove button; tap it to drop the photo.
 
 The photo is shrunk down and copied into Daymark's private storage, so it stays
-on your device. Thumbnails show on the Home timeline and on a day's detail view,
+on your device. Thumbnails show under **All entries** and on a day's detail view,
 and photos are included when you export a JSON backup.
 
-### Deleting an entry from the timeline
+### Deleting an entry
 
-To remove an entry quickly, **swipe it left** on the Home timeline. A 5-second
-**Undo** snackbar appears — tap **Undo** to bring the entry back (with its
-activities intact). If you don't, the entry, and any photo on it, is removed.
+You can swipe an entry away under **Today** on Home or under **All entries** —
+but never by accident. Three things have to happen:
+
+1. **Swipe it left, and keep going.** The background stays muted and says *"Keep
+   swiping"* until you've dragged most of the row across; only then does it turn
+   and read *"Release to delete"*. A quick flick can still raise the question,
+   but the swipe by itself never removes anything.
+2. **Confirm.** A dialog asks *"Delete this entry?"* — choose **Keep it** and
+   nothing happens.
+3. **Undo, if you change your mind.** A 5-second **Undo** snackbar appears — tap
+   **Undo** to bring the entry back, with its activities intact. If you don't,
+   the entry and any photo on it are removed.
+
+You can also delete the entry you're editing from the 🗑 button in the entry
+editor. That one asks for confirmation too, but there's **no undo** behind it —
+it says so in the dialog.
 
 ### Mood note vs. Journal — what's the difference?
 

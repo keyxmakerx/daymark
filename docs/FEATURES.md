@@ -13,10 +13,23 @@ network, nothing leaves your device. See [PRIVACY.md](PRIVACY.md) for the privac
   for *why*. Multiple entries per day.
 - **Photo attachments** — optionally attach a photo to a mood entry via the Android Photo Picker
   (which needs **no** storage permission). The image is downscaled and copied into the app's
-  private storage, shown as a thumbnail on the Home timeline and Day Detail, and embedded in JSON
+  private storage, shown as a thumbnail on **All entries** and Day Detail, and embedded in JSON
   backups so the backup stays one portable file.
-- **Swipe to delete + undo** — swipe a Home-timeline entry away to delete it, with a 5-second
-  **Undo** snackbar that restores the entry (and its activity links).
+- **Suggestion controls** — every suggestion card has a menu: *not right now* (this visit only),
+  *show less like this*, *remind me in a few hours*, *not helpful — hide it*, *turn this suggestion
+  off*. Everything but the first is remembered across restarts, and all of it is reversible under
+  **Settings → Suggestions**, which lists each kind of suggestion as On or Off, says when a snoozed
+  one returns, and can bring it back immediately. Nothing is learned from what you tap — "show
+  less" subtracts a fixed amount from that suggestion's rank and snoozes it for three days. Home's
+  check-in row and the "what might help" support menu aren't controllable (they're how you log and
+  a screen you open deliberately), and crisis resources stay reachable regardless.
+- **Home — the daily loop** — Home asks one question ("how are you, right now?") with a one-tap
+  check-in row, shows a small glance (your streak and the last seven days), at most **one**
+  suggestion card, and **today's** entries. The full archive lives one tap away under **All
+  entries**, and the rest of the suggestions under **More for you**.
+- **Deliberate delete + undo** — the swipe never deletes on its own. A steady drag past most of the
+  row turns the background and reads "Release to delete"; then a dialog confirms; and a 5-second
+  **Undo** snackbar still restores the entry and its activity links afterwards.
 - **Journal** — a separate free-form diary, distinct from per-entry mood notes.
 - **Journal writing templates** — optional starters on a fresh entry: **Three Good Things**
   (gratitude), a timed **Expressive Writing** prompt, and a reflect-on-the-day prompt — all

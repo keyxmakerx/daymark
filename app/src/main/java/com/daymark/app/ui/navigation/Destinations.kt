@@ -15,6 +15,15 @@ object Routes {
     const val CUSTOMIZE_MOODS = "customize_moods"
     const val ACTIVITY_LIBRARY = "activity_library"
     const val SEARCH = "search"
+
+    /** The full day-grouped archive of entries, linked from Home. */
+    const val HISTORY = "history"
+
+    /** The ranked "For you" suggestions Home doesn't have room for. */
+    const val FOR_YOU = "for_you"
+
+    /** Settings → Suggestions: the on/off/snoozed dial for every suggestion family. */
+    const val SUGGESTIONS = "suggestions"
     const val TRACKERS = "trackers"
     const val TRACKER = "tracker"
 
