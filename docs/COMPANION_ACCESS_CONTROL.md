@@ -24,6 +24,7 @@
 - [Behavioral guard (IDS)](#behavioral-guard-ids)
 - [HIPAA‑readiness checklist](#hipaa-readiness-checklist)
 - [The annoyance budget](#the-annoyance-budget)
+- [Clinician turnover](#clinician-turnover-what-a-handover-actually-is)
 - [Asked and answered](#asked-and-answered-so-this-isnt-re-litigated)
 - [Honest limits](#honest-limits)
 
@@ -220,6 +221,57 @@ Corollaries that follow from the same principle:
 - **The patient's own friction is capped hardest.** A person in a bad moment must never be locked out
   of *their own* data by a security measure meant to constrain someone else.
 
+## Clinician turnover: what a handover actually is
+
+The org is **one practice**, so the motion that matters is not multi-tenancy — it is people moving:
+a GP referring out, a psychiatrist and a psychotherapist co-treating, someone covering a leave, and
+a clinician **departing** with clients who must not be stranded.
+
+**A referral and a transfer are the same control-plane object at two points in its life, and
+neither moves a key.** One `care_relationships` table (patient, member, `care_role` of
+primary/co-treating/covering/supervising, status, `ended_reason`). A referral *proposes* a
+relationship; a transfer *ends* one and proposes another. Because none of it mints read capability,
+reassignment stays cheap — session auth and an audit entry, no step-up. That cheapness is the payoff
+for keeping roles and keys independent in the first place.
+
+Two hard edges:
+
+- **`covering` must auto-expire.** Without a hard end date, covering a two-week leave quietly
+  becomes permanent access.
+- **A transfer must never route through break-glass.** A planned departure is not an emergency, and
+  that is the one door this design must not let it open.
+
+### The turnover decision
+
+Whether the care team may admit a new clinician, or whether every grant must be minted on the
+patient's device, is a genuine trade with no free option:
+
+| | Team may hand over | Patient mints every grant |
+|---|---|---|
+| Turnover | Works; new clinician reads day one | Strands until the patient acts |
+| Compromise | A hijacked clinician account can admit an attacker-controlled one | No access exists the patient didn't authorise |
+| Revocation | Needs re-key **and** assurance nobody re-admits | Clean |
+| Who pays | The patient pays in control | The patient pays in continuity of care |
+
+**Direction: team may hand over, hardened — with the stricter mode available per patient.** The
+deciding argument is that the second column's failure lands hardest on exactly the people least able
+to absorb it: someone unreachable for three weeks *because they are unwell* returns to a new
+clinician who knows nothing. Four constraints keep the cost of the first column small:
+
+1. **The care-team key carries strictly less than a personal grant** — assessment summaries,
+   progress notes, game plans. **Never** journal free text, **never** process notes.
+2. **Admission is loud** — adding a clinician notifies the patient immediately and appears in the
+   roster they can prune.
+3. **Admission requires step-up and is rate-limited** — a hijacked session must not be able to add
+   readers quietly. Granting is precisely where the [annoyance budget](#the-annoyance-budget) says
+   friction belongs.
+4. **The patient can switch to patient-minted-only** — a per-patient setting for anyone who prefers
+   the stricter trade, with its cost stated plainly on the same screen.
+
+> **Honest limit, to state in-product:** under the default, the safeguard against a bad admission is
+> the audit log and the patient's roster — **detective, not preventive**. Any current team member
+> can cryptographically admit another. Do not describe this as "only your therapist can see it".
+
 ## Asked and answered (so this isn't re-litigated)
 
 Recurring questions, and where they were already settled:
@@ -235,6 +287,12 @@ Recurring questions, and where they were already settled:
 **Still genuinely open:** groups *finer than* an org — a specific care team, a therapy group cohort,
 or a client-defined circle that isn't a practice. Org-consent covers "my care team at Practice X";
 it does not yet model a group whose membership the *client* curates, or one spanning two practices.
+
+**Settled, and recorded elsewhere so it isn't reopened:** location/presence sharing is
+**permanently excluded on principle**; timed/video/puzzle test items are **not built on the phone**;
+tool descriptors are **bundled in the app**, never remotely delivered. All three are in
+[COMPANION_SCOPE.md § Explicitly Out of Scope](./COMPANION_SCOPE.md#explicitly-out-of-scope) with
+their reasoning, because a bare exclusion gets argued back in and a reasoned one doesn't.
 
 ## Honest limits
 

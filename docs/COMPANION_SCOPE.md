@@ -233,6 +233,32 @@ principle, not merely deferred:
 - **Licensed/proprietary clinical instruments** (TOVA, Conners, CAARS, etc.). Only
   **public-domain or self-authored** instruments are permitted, tracked in
   `INSTRUMENTS.md`.
+- **Location, presence, or "where is the patient" sharing at any resolution** —
+  coordinates, geofences, or vague categories like "at entertainment". **Permanently
+  excluded on principle, not deferred, and not gated on any certification.** Three
+  things break it and a security certification fixes none of them: (1) coarse
+  categories are only vague to a stranger, and the one person reading them already
+  knows the patient's life well enough to resolve them; (2) *producing* a coarse
+  category still requires collecting fine location in the background, so the sensitive
+  data exists on the device regardless of what is displayed; (3) there is no safe
+  off-state — if switching it off is visible it becomes an accusation, and if it is
+  invisible the product is lying to the viewer. Consent given to someone holding power
+  over your care is not freely given. What is permitted instead: optional,
+  self-reported "where / who with" tags on entries, authored by the patient, with
+  patterns shown **to the patient**, who chooses what to raise.
+- **Timed, reaction-time, video-stimulus, or puzzle/performance test items on the
+  phone.** Unsupervised timing on unknown handsets with no device norms measures the
+  hardware and the room, not the person — and it buys the largest untrusted-media
+  attack surface in the app to do it. This is the same reason TOVA/Conners/CAARS are
+  excluded above. Permitted instead: untimed, patient-paced questionnaires, including
+  branching logic and images as *content*. If a timed harness is ever built it caps at
+  **Adapted** — faithful administration is part of what "Validated" means, and a phone
+  in a noisy room is not that.
+- **Remotely delivered tool/questionnaire definitions, downloadable "tool packs", or
+  any form of remote code or remote content execution.** Tool descriptors ship
+  **bundled in the app**, with local authoring for anything else. This keeps the
+  reproducible-build and no-network claims verifiable and adds no parser for untrusted
+  input.
 - **Treating the server as the source of truth.** It is a convenience replica, never
   the only copy of the owner's data.
 - **True concurrent multi-device row-level merge in v1** (deferred behind a schema
