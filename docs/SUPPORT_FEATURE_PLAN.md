@@ -108,3 +108,59 @@ data as concrete, action-linked, present-tense, never "you used to be happier").
 ## Naming
 "Cope" isn't ideal (user agrees). Candidates: **"Gentle support," "Take a moment," "Steady,"
 "A moment for you."** Recommend **"Take a moment"** (action-neutral, non-clinical, non-presumptuous).
+
+---
+
+## The nag regression (found 2026-08, fix pending)
+
+**What shipped drifted from the line above.** The build sketch says the support space is
+*"Triggered by: a low-mood log (**offer, never force**) OR a pulled non-intrusive icon."*
+The shipped behaviour forces.
+
+`EntryEditorViewModel.save()` sets `offer = moodLevel <= 2 && gentleSupportEnabled`; the editor then
+calls `onOfferSupport()` instead of `onDone()`, and the scaffold **pops the editor and navigates to
+the support screen**. That is a screen takeover, not an offer. It fires on *every* qualifying save,
+with no frequency cap, no dismissal, and no memory that it just happened. The only control is a
+single boolean, so a person's real choice is **"every single time" or "never"** — and "never" also
+removes the moment of pause that made it worth having.
+
+**How we know it's harmful.** A maintainer hit this repeatedly while trying to log during a
+depressive episode. Their report, which is the reason this section exists: the repetition was
+"really annoying", *and* the brief interruption itself genuinely helped — "it made me think for a
+moment, even brief, which was good." Both halves matter. The fix must keep the pause and drop the
+repetition. They also flagged, correctly, that one person's experience is not a dosing study.
+
+**What the literature says.** This is a *just-in-time adaptive intervention* (JITAI), and the design
+guidance names this failure mode outright: JITAIs are meant to address vulnerability windows *while
+minimising burden, disruption and habituation*. The standard mitigations are varying form and
+timing, not firing on every qualifying event. There is a dose-response relationship, so more is not
+uniformly better.
+
+**What we do NOT know**, and must not pretend to:
+
+- The published dosing figures are for other interventions and populations. **Any default frequency
+  we pick is a judgement call, not evidence.** Make it easy to change; don't dress it up as science.
+- The risk is **asymmetric in both directions**. Fewer prompts is less annoying, but could mean
+  missing a moment that mattered. So the fix may reduce *interruption* but must never reduce what is
+  *reachable*: the support space and crisis resources stay one tap away at all times.
+- "A brief pause creates a useful decision point" is plausible and matches the maintainer's report,
+  but we have no citation that it generalises. Don't claim one.
+
+### The fix
+
+1. **Never force navigation.** Saving a low-mood entry returns you where you were, like any other
+   save. Delete the `offerSupport` navigation branch.
+2. **A fixed corner affordance** — the plan's own *"pulled non-intrusive icon."* When Awful or Bad is
+   selected, a small action fades into the entry editor's top bar **at the moment of the feeling**,
+   before you commit, and simply sits there. It must **not reflow the content** — no inline insertion
+   that pushes the note field around while someone is typing. Ignoring it costs nothing.
+   Keep visible distance from the delete action; "get help" must never sit adjacent to "destroy this".
+3. **Frequency, not a boolean.** Replace `gentleSupportEnabled` with a choice: every time / at most
+   once a day / at most once a week / only when I ask. The old force-navigate behaviour survives only
+   as an explicit **opt-in**, for the people who do want that reinforcement every time.
+4. **Personalisable, and eventually specialist-tunable.** Stored as a setting so a clinician could
+   later *recommend* a change through the Companion — recommend, never flip. Consent stays with the
+   person (see [COMPANION_ACCESS_CONTROL.md](./COMPANION_ACCESS_CONTROL.md)).
+
+> **Rule of thumb this leaves behind:** an offer the person can ignore for free is an offer. Anything
+> that moves them somewhere they didn't ask to go is a demand. This app makes offers.

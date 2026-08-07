@@ -23,6 +23,8 @@
 - [Key recovery](#key-recovery)
 - [Behavioral guard (IDS)](#behavioral-guard-ids)
 - [HIPAA‑readiness checklist](#hipaa-readiness-checklist)
+- [The annoyance budget](#the-annoyance-budget)
+- [Asked and answered](#asked-and-answered-so-this-isnt-re-litigated)
 - [Honest limits](#honest-limits)
 
 ---
@@ -184,6 +186,55 @@ compliant when they run it right.
 > **The gate:** an external HIPAA Security‑Rule assessment **and** an independent
 > crypto/RBAC audit **before any real patient** — see
 > [PRODUCT_DIRECTION.md](./PRODUCT_DIRECTION.md#the-compliance-gate-non-negotiable).
+
+## The annoyance budget
+
+Least privilege **will** be annoying. There is no version of this that isn't, and pretending
+otherwise is how security designs get quietly gutted the first time someone important is
+inconvenienced. So we budget the annoyance deliberately rather than letting it land at random.
+
+**The rule: friction goes where the risk is.** Rare, high-stakes, hard-to-undo actions should be
+genuinely hard. Routine, reversible, low-blast-radius actions should be nearly free. A design that
+charges the same friction for "read today's note for a client I already treat" and "add a clinician
+to the practice" has mispriced both — and users will route around the expensive one.
+
+| Action | Friction | Why |
+|---|---|---|
+| Read content you already hold a grant for | **None** — session auth only | The grant *was* the decision; charging again teaches people to hate the system |
+| Author a note / game plan | None beyond session | Routine clinical work, auditable, reversible |
+| Grant, extend, or widen a share | **Step-up (MFA)** | Creates new read capability — the actual risk |
+| Add/remove a practice member, change roles | **Step-up (MFA)** | Changes who *can* be granted |
+| Revoke / kill switch | **Deliberately cheap** | Never make the safe direction expensive |
+| Break-glass / emergency access | **Maximum** — justification + loud, immediate notification | Should feel like breaking glass |
+
+Corollaries that follow from the same principle:
+
+- **Never make the safe direction expensive.** Revoking, narrowing a share, and turning something
+  off must always be easier than granting, widening, and turning on. Asymmetry is the point.
+- **Step up, don't hard-lock.** Already the behavioral guard's rule; it generalises. A hard lockout
+  can cut off a clinician mid-session with a client in crisis, which is its own harm.
+- **Charge per decision, not per action.** Re-authorising the same standing decision repeatedly is
+  the enterprise-software version of the nag regression documented in
+  [SUPPORT_FEATURE_PLAN.md](./SUPPORT_FEATURE_PLAN.md) — repetition erodes the effect and trains
+  people to click through. If a prompt is answered the same way every time, it is not a control.
+- **The patient's own friction is capped hardest.** A person in a bad moment must never be locked out
+  of *their own* data by a security measure meant to constrain someone else.
+
+## Asked and answered (so this isn't re-litigated)
+
+Recurring questions, and where they were already settled:
+
+| Question | Answer | Where |
+|---|---|---|
+| "Attendants who only handle the time/scheduling piece?" | The **Front desk** role — scheduling, invites, membership logistics; **no** clinical content, scheduling metadata only | [Role catalog](#role-catalog) |
+| "Other specialists — psychiatrists, assistants, supervisors?" | All in the catalog. A **supervisor reads only via explicit consented grant, never by title** | [Role catalog](#role-catalog) |
+| "A group system that can be changed?" | **Orgs/practices** are the editable tenant; membership changes issue/revoke grants automatically; **org-consent** lets a client consent to "my care team at Practice X" and prune it any time | [Orgs](#orgs--practices-the-tenant), [Consent](#consent-model) |
+| "Least privilege without a god admin?" | The **three-plane rule** — admins live in control + monitoring, **never** the data plane | [Three planes](#the-three-planes) |
+| "Can a specialist see the safety plan?" | Not today (no `INTERNET` in the default build). If ever: an owner-created, curated, revocable share like anything else — never automatic | [SAFETY_PLAN_FEATURE_PLAN.md](./SAFETY_PLAN_FEATURE_PLAN.md) |
+
+**Still genuinely open:** groups *finer than* an org — a specific care team, a therapy group cohort,
+or a client-defined circle that isn't a practice. Org-consent covers "my care team at Practice X";
+it does not yet model a group whose membership the *client* curates, or one spanning two practices.
 
 ## Honest limits
 
