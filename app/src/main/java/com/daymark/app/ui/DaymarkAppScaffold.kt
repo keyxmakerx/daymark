@@ -544,6 +544,9 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                         navController.popBackStack()
                         navController.navigate(Routes.SUPPORT)
                     },
+                    // The corner action does NOT pop: the half-written entry stays on the back
+                    // stack, so taking a moment never costs you what you were in the middle of.
+                    onTakeAMoment = { navController.navigate(Routes.SUPPORT) },
                 )
             }
             composable(Routes.ACTIVITIES, enterTransition = zEnter, popExitTransition = zPopExit) {

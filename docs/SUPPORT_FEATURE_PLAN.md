@@ -111,7 +111,7 @@ data as concrete, action-linked, present-tense, never "you used to be happier").
 
 ---
 
-## The nag regression (found 2026-08, fix pending)
+## The nag regression (found and fixed 2026-08)
 
 **What shipped drifted from the line above.** The build sketch says the support space is
 *"Triggered by: a low-mood log (**offer, never force**) OR a pulled non-intrusive icon."*
@@ -146,10 +146,14 @@ uniformly better.
 - "A brief pause creates a useful decision point" is plausible and matches the maintainer's report,
   but we have no citation that it generalises. Don't claim one.
 
-### The fix
+### The fix (shipped)
 
-1. **Never force navigation.** Saving a low-mood entry returns you where you were, like any other
-   save. Delete the `offerSupport` navigation branch.
+Implemented as `stats/SupportOffer.kt` (the pure rule + `SupportOfferFrequency`), two new
+`SettingsRepository` values, `EntryEditorUiState.showSupportAction`, and a frequency chooser on the
+Gentle support screen.
+
+1. **Never force navigation by default.** Saving a low-mood entry returns you where you were, like
+   any other save, unless you have explicitly asked to be taken there.
 2. **A fixed corner affordance** — the plan's own *"pulled non-intrusive icon."* When Awful or Bad is
    selected, a small action fades into the entry editor's top bar **at the moment of the feeling**,
    before you commit, and simply sits there. It must **not reflow the content** — no inline insertion

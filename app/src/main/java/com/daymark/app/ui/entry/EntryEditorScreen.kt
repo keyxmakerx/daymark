@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -69,6 +71,7 @@ import java.time.ZoneId
 fun EntryEditorScreen(
     onDone: () -> Unit,
     onOfferSupport: () -> Unit = {},
+    onTakeAMoment: () -> Unit = {},
     viewModel: EntryEditorViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -120,6 +123,15 @@ fun EntryEditorScreen(
                     }
                 },
                 actions = {
+                    // Appears the moment a low mood is picked — before you commit, while you're
+                    // still here — and then just sits there. Text, not an icon, so it never reads
+                    // as a sibling of the delete button next to it, and spaced away from it: "get
+                    // help" must never sit flush against "destroy this". Tapping it doesn't save
+                    // or pop, so a half-written entry survives taking the moment.
+                    if (state.showSupportAction) {
+                        TextButton(onClick = onTakeAMoment) { Text("Take a moment") }
+                        Spacer(Modifier.width(8.dp))
+                    }
                     if (state.isEditing) {
                         IconButton(onClick = { confirmingDelete = true }) {
                             Icon(Icons.Filled.Delete, contentDescription = "Delete")

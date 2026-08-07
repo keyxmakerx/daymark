@@ -11,6 +11,7 @@ import com.daymark.app.data.SettingsRepository
 import com.daymark.app.data.entity.ActivityEntity
 import com.daymark.app.data.entity.MoodEntry
 import com.daymark.app.security.AutoLockController
+import com.daymark.app.stats.SupportOffer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,9 +33,24 @@ data class EntryEditorUiState(
     val photoPath: String? = null,
     val isEditing: Boolean = false,
     val saved: Boolean = false,
-    /** True when this save should *offer* (never force) gentle support — a low mood + opt-in. */
+    /**
+     * True when this save may *take you* to the support space. Rationed by
+     * [com.daymark.app.stats.SupportOffer]; off unless the person asked to be taken there.
+     */
     val offerSupport: Boolean = false,
-)
+    /** Whether the person has opted into gentle support at all. */
+    val gentleSupportOn: Boolean = false,
+) {
+    /**
+     * The quiet corner action, shown the moment a low mood is picked — before saving, while you're
+     * still here. It only ever *appears*; it never moves you or reflows what you're typing, so it
+     * needs no rationing. Ignoring it costs nothing.
+     */
+    val showSupportAction: Boolean get() = gentleSupportOn && moodLevel <= LOW_MOOD_MAX
+}
+
+/** Awful (1) and Bad (2). The mood levels that put the support action within reach. */
+const val LOW_MOOD_MAX = 2
 
 @HiltViewModel
 class EntryEditorViewModel @Inject constructor(
@@ -59,6 +75,7 @@ class EntryEditorViewModel @Inject constructor(
         EntryEditorUiState(
             entryId = entryId,
             moodLevel = if (entryId == 0L && prefillMood in 1..5) prefillMood else 3,
+            gentleSupportOn = settingsRepository.gentleSupportEnabled,
         ),
     )
     val uiState: StateFlow<EntryEditorUiState> = _uiState.asStateFlow()
@@ -139,8 +156,17 @@ class EntryEditorViewModel @Inject constructor(
                 photoStore.delete(loadedPhotoPath)
             }
             loadedPhotoPath = s.photoPath
-            val offer = s.moodLevel <= 2 && settingsRepository.gentleSupportEnabled
-            _uiState.update { it.copy(saved = true, offerSupport = offer) }
+            // Being moved somewhere you didn't ask to go is the expensive kind of offer, so it is
+            // rationed and off by default. The corner action above is the unrationed one.
+            val now = System.currentTimeMillis()
+            val interrupt = s.moodLevel <= LOW_MOOD_MAX && s.gentleSupportOn &&
+                SupportOffer.shouldInterrupt(
+                    frequency = settingsRepository.supportOfferFrequency,
+                    lastOfferedAt = settingsRepository.supportOfferLastShownAt,
+                    nowMillis = now,
+                )
+            if (interrupt) settingsRepository.supportOfferLastShownAt = now
+            _uiState.update { it.copy(saved = true, offerSupport = interrupt) }
         }
     }
 

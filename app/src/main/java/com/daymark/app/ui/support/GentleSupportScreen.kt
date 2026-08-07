@@ -16,6 +16,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -27,6 +28,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.daymark.app.stats.SupportOffer
+import com.daymark.app.stats.SupportOfferFrequency
 import com.daymark.app.ui.components.PaperSurface
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,6 +41,7 @@ fun GentleSupportScreen(
     viewModel: GentleSupportViewModel = hiltViewModel(),
 ) {
     val enabled by viewModel.enabled.collectAsStateWithLifecycle()
+    val frequency by viewModel.frequency.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -56,9 +60,10 @@ fun GentleSupportScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(
-                "When this is on, Daymark will gently offer a moment of support after you log a low " +
-                    "mood — always optional, with \"Not right now\" as the first choice, and never in " +
-                    "your face. It's off until you turn it on, and you can turn it off anytime.",
+                "When this is on and you log a low mood, a quiet \"Take a moment\" button appears in " +
+                    "the corner while you're writing. It just sits there — ignoring it costs nothing, " +
+                    "and it never moves you or interrupts what you're typing. It's off until you turn " +
+                    "it on, and you can turn it off anytime.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -69,6 +74,44 @@ fun GentleSupportScreen(
                 ) {
                     Text("Offer gentle support", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
                     Switch(checked = enabled, onCheckedChange = viewModel::setEnabled)
+                }
+            }
+
+            if (enabled) {
+                Text(
+                    "Being taken there",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    "Separately from the button, Daymark can open the support space for you after you " +
+                        "save a hard day. Some people want that reminder every time; for others it " +
+                        "becomes noise exactly when they're least able to take it. You choose.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                PaperSurface(modifier = Modifier.fillMaxWidth()) {
+                    Column {
+                        SupportOfferFrequency.entries.forEach { option ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { viewModel.setFrequency(option) }
+                                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                RadioButton(
+                                    selected = option == frequency,
+                                    onClick = { viewModel.setFrequency(option) },
+                                )
+                                Text(
+                                    SupportOffer.summary(option),
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            }
+                        }
+                    }
                 }
             }
             NavRow("Preview it", "See what's offered", onPreview)
