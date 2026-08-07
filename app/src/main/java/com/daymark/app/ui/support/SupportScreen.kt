@@ -56,10 +56,12 @@ fun SupportScreen(
     onReframe: () -> Unit,
     onMove: () -> Unit,
     onCrisis: () -> Unit,
+    onSafetyPlan: () -> Unit,
     viewModel: SupportViewModel = hiltViewModel(),
     signalsViewModel: SignalsViewModel = hiltViewModel(),
 ) {
     val activity by viewModel.suggestedActivity.collectAsStateWithLifecycle()
+    val hasSafetyPlan by viewModel.hasSafetyPlan.collectAsStateWithLifecycle()
     val supportSignals by signalsViewModel.supportSignals.collectAsStateWithLifecycle()
     var shown by remember { mutableStateOf(false) }
     val appear by animateFloatAsState(if (shown) 1f else 0f, tween(700), label = "appear")
@@ -98,10 +100,16 @@ fun SupportScreen(
             }
             // A tiny behavioural-activation step using one of the user's own activities.
             SmallThingOption(mainOptions.size, activity, onClose)
-            crisis?.let {
-                FloatingOption(mainOptions.size + 1, it.title, it.body, onCrisis)
+            // The safety plan sits quietly in the list, and only when one has been written — a row
+            // that leads to a blank page is the opposite of what the plan is for.
+            var next = mainOptions.size + 1
+            if (hasSafetyPlan) {
+                FloatingOption(next++, "My safety plan", "The one you wrote.", onSafetyPlan)
             }
-            FloatingOption(mainOptions.size + 2, "Not right now", "That's okay too.", onClose)
+            crisis?.let {
+                FloatingOption(next++, it.title, it.body, onCrisis)
+            }
+            FloatingOption(next, "Not right now", "That's okay too.", onClose)
         }
     }
 }

@@ -30,8 +30,9 @@ import com.daymark.app.data.entity.Treatment
         JournalEntry::class, Goal::class, SleepLog::class, Treatment::class,
         Tracker::class, TrackerLog::class, Reminder::class, AssessmentResult::class,
         com.daymark.app.data.entity.ThoughtRecord::class,
+        com.daymark.app.data.entity.SafetyPlanItem::class,
     ],
-    version = 12,
+    version = 13,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -46,6 +47,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun reminderDao(): com.daymark.app.data.dao.ReminderDao
     abstract fun assessmentDao(): com.daymark.app.data.dao.AssessmentDao
     abstract fun thoughtRecordDao(): com.daymark.app.data.dao.ThoughtRecordDao
+    abstract fun safetyPlanDao(): com.daymark.app.data.dao.SafetyPlanDao
 
     /** Seeds a sensible set of starter activities on first install. */
     class SeedCallback : Callback() {
@@ -227,6 +229,27 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_thought_records_dateTime` ON `thought_records` (`dateTime`)",
+                )
+            }
+        }
+
+        /**
+         * v13 adds the safety-plan items table; existing data is preserved. One row per line the
+         * person writes — deliberately not a CSV column, since safety-plan text may contain commas.
+         */
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `safety_plan_items` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`section` TEXT NOT NULL, " +
+                        "`position` INTEGER NOT NULL, " +
+                        "`text` TEXT NOT NULL, " +
+                        "`detail` TEXT NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_safety_plan_items_section` " +
+                        "ON `safety_plan_items` (`section`)",
                 )
             }
         }

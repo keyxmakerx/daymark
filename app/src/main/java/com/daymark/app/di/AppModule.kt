@@ -39,6 +39,7 @@ object AppModule {
                 AppDatabase.MIGRATION_9_10,
                 AppDatabase.MIGRATION_10_11,
                 AppDatabase.MIGRATION_11_12,
+                AppDatabase.MIGRATION_12_13,
             )
             .build()
 
@@ -74,6 +75,9 @@ object AppModule {
 
     @Provides
     fun provideThoughtRecordDao(db: AppDatabase): com.daymark.app.data.dao.ThoughtRecordDao = db.thoughtRecordDao()
+
+    @Provides
+    fun provideSafetyPlanDao(db: AppDatabase): com.daymark.app.data.dao.SafetyPlanDao = db.safetyPlanDao()
 
     @Provides
     @Singleton
