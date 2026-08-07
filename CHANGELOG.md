@@ -7,6 +7,23 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **My safety plan**: short lists you write **while things are steady**, so a harder moment doesn't
+  have to start from a blank page — *warning signs I notice*, *things that help*, *people I can
+  reach*, plus an optional *reasons I want to stay* that is **offered rather than assumed** (it's
+  the heaviest thing on the screen to write, and an empty one sitting there permanently would read
+  as a reproach on a bad day). Reading and editing are the same screen, because in a hard moment
+  nobody should have to hunt for an edit button. The crisis row shows **your own** saved resource —
+  it defaults to 988 and is editable, so it's a real number wherever you are — and it hands off to
+  the crisis screen rather than dialing, since Daymark isn't a crisis service and never places a
+  call for you. The footer says the limit out loud: **a plan is not a person — reaching one is the
+  point.** Reachable from **More**, and as a quiet row in "Take a moment" **only once a plan
+  exists** (a row leading to a blank page in a hard moment is exactly what the plan is meant to
+  prevent). Deliberately **never** a suggestion card: nothing infers from your mood that you need
+  your safety plan. Everything is local, offline, and included in backups.
+  - Written in **our own words** and labelled **Adapted**, not the Stanley-Brown Safety Planning
+    Intervention — that form requires written permission to program into an electronic record.
+    There is deliberately **no means-restriction prompt**, which is also a house rule under
+    `PROVENANCE.md`. You can write anything you like; the app just never asks.
 - **Home — the daily loop**: Home is no longer the whole archive. It now opens with a greeting
   and the date, a **one-tap check-in row** ("How are you, right now?" — tap a face and the entry
   editor opens with that mood already picked), a small **glance** (current streak, plus the last
