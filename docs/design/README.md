@@ -20,6 +20,7 @@ See [DESIGN.md](../DESIGN.md) · [COMPANION_DESIGN_SYSTEM.md](../COMPANION_DESIG
 | [`app-01-home-daily-loop.png`](./app-01-home-daily-loop.png) | The reworked **Home** (one‑tap check‑in, glance, Signals‑as‑router), **Check‑in**, **For you** router, **Insights**, a **Custom tool with provenance**, and the built‑in **Safety plan**. |
 | [`app-02-journal-goals-controls.png`](./app-02-journal-goals-controls.png) | **Journal** and **Goals** (weekly progress + implementation intentions), plus the suggestion‑control model: per‑card menu (show‑less / remind‑later / hide / turn‑off) and *Settings › Suggestions* with the **therapist re‑recommend** banner. |
 | [`app-03-navigation-motion.png`](./app-03-navigation-motion.png) | The **navigation + motion map** — how you reach every screen, and the three transitions (fade‑through tabs · shared‑axis push · sheet slide‑up). |
+| [`app-04-safety-plan.png`](./app-04-safety-plan.png) | The **safety plan** in three states — empty (the invitation), filled (the read view for a hard moment), and editing (with its **Adapted** provenance badge and disclaimer). Original wording, **not** the Stanley‑Brown form, which requires the authors' written permission to program electronically. The crisis button is data‑driven from the user‑editable `CrisisStore`, so it reads "Call or text 988" by default and can be replaced outside the US. |
 
 ## Clinician / admin web console — crisp, dense register
 See [COMPANION_WEB_DESIGN.md](../COMPANION_WEB_DESIGN.md)
@@ -32,3 +33,7 @@ See [COMPANION_WEB_DESIGN.md](../COMPANION_WEB_DESIGN.md)
 ## Still to render
 - Patient's **own** console (their care team, grant/revoke, own audit log) — register TBD (warm app vs. crisp console).
 - **Onboarding**, the reworked **More** library, and a full **Validated** assessment (warm app register).
+- The **gentle-support offer** at its new frequencies — today it force-navigates to the support
+  screen on *every* save at Awful/Bad, which a maintainer reported as genuinely distressing during a
+  depressive episode ("the same popup every single time"). Needs a render of the dismissible offer
+  and the *Settings → how often* control that replaces the single on/off boolean.

@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Daymark — My safety plan</title>
+<style>
+  :root{
+    --linen:#E7E0D2; --paper:#F7F3EA; --sheet:#FCFAF4; --card:#FBF8F1;
+    --ink:#2B2925; --ink2:#6E6757; --ink3:#948B78; --line:#E4DCCB; --line2:#D8CEB9;
+    --awful:#B0654E; --bad:#CE9560; --meh:#CBB56B; --good:#93A96A; --rad:#5E9B8C;
+    --sage:#4E7D70; --sageink:#3C665B; --sagewash:#E4EDE7; --clay:#B0654E;
+    --serif:Georgia,"Iowan Old Style","Times New Roman",serif;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,"DejaVu Sans",sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{width:1076px; height:1150px; background:var(--linen); font-family:var(--sans); color:var(--ink);
+    background-image:radial-gradient(circle at 1px 1px, rgba(120,110,90,.05) 1px, transparent 0); background-size:22px 22px;}
+  .board{padding:44px 48px;}
+  .head h1{font-family:var(--serif); font-size:30px; font-weight:600; letter-spacing:-.01em;}
+  .head p{color:var(--ink2); font-size:14px; margin-top:6px; font-family:var(--serif); font-style:italic;}
+  .grid{margin-top:26px; display:grid; grid-template-columns:repeat(3,300px); gap:40px;}
+  figure{margin:0;}
+  figcaption{margin-top:12px; font-family:var(--serif); font-size:13.5px; color:var(--ink2);}
+  figcaption b{color:var(--ink); font-weight:600; display:block; font-size:14px;}
+
+  .phone{width:300px; height:620px; background:#141210; border-radius:38px; padding:7px; box-shadow:0 18px 40px -18px rgba(40,35,25,.5), 0 2px 0 rgba(255,255,255,.15) inset;}
+  .screen{width:100%; height:100%; background:var(--paper); border-radius:31px; overflow:hidden; position:relative; display:flex; flex-direction:column;}
+  .sb{display:flex; justify-content:space-between; align-items:center; padding:12px 20px 4px; font-size:11px; color:var(--ink2); font-weight:600;}
+  .sb .dots{display:flex; gap:3px;} .sb .dots i{width:5px; height:5px; border-radius:50%; background:var(--ink3); display:block;}
+  .body{flex:1; padding:6px 16px 14px; display:flex; flex-direction:column; gap:10px; overflow:hidden;}
+  .h2{font-family:var(--serif); font-size:20px; font-weight:600; letter-spacing:-.01em;}
+  .back{font-size:15px; color:var(--ink2); margin-right:7px;}
+  .sub{color:var(--ink2); font-size:11.5px;}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:15px; padding:12px 13px;}
+  .lbl{font-size:9.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--ink3); font-weight:700;}
+  .btn{background:var(--sage); color:#fff; border-radius:12px; padding:11px; text-align:center; font-weight:600; font-size:13.5px;}
+  .btn.clay{background:var(--clay);}
+  .btn.ghost{background:transparent; color:var(--sageink); border:1px solid var(--line2);}
+  .chip{display:inline-flex; align-items:center; gap:5px; background:var(--sheet); border:1px solid var(--line2); border-radius:999px; padding:5px 11px; font-size:11.5px; color:var(--ink); margin:0 5px 5px 0;}
+  .chip.ghost{border-style:dashed; color:var(--ink3);}
+  .chip .x{color:var(--ink3); font-size:12px;}
+  .row{display:flex; align-items:center; gap:9px; padding:8px 0;}
+  .row + .row{border-top:1px solid var(--line);}
+  .dot{width:24px; height:24px; border-radius:50%; background:var(--sagewash); border:1px solid #cfe0d8; flex:none;}
+  .row .nm{font-size:12.5px;}
+  .row .rel{font-size:10.5px; color:var(--ink2);}
+  .foot{margin-top:auto; font-size:10px; color:var(--ink3); text-align:center; line-height:1.45;}
+  .disc{background:#F6EBE4; border:1px dashed var(--clay); border-radius:12px; padding:10px 11px; font-size:10.5px; color:#7a4632; line-height:1.5;}
+  .badge{display:inline-block; background:#f3e9e0; color:#8a5a3a; border-radius:999px; padding:3px 9px; font-size:9.5px; font-weight:700; letter-spacing:.04em;}
+  .field{background:#fff; border:1px solid var(--line2); border-radius:12px; padding:10px 11px; font-size:12px; color:var(--ink3);}
+  .empty{border:1px dashed var(--line2); border-radius:14px; padding:13px; text-align:center;}
+  .empty .t{font-size:12px; color:var(--ink2);}
+  .empty .a{font-size:11.5px; color:var(--sageink); font-weight:600; margin-top:6px;}
+
+  .notes{margin-top:34px; background:var(--sheet); border:1px solid var(--line); border-radius:16px; padding:20px 22px;}
+  .notes h3{font-family:var(--serif); font-size:17px; font-weight:600; margin-bottom:4px;}
+  .notes .q{margin-top:14px; display:flex; gap:11px; align-items:flex-start;}
+  .notes .n{flex:none; width:22px; height:22px; border-radius:50%; background:var(--sagewash); border:1px solid #cfe0d8;
+    display:grid; place-items:center; font-size:11px; font-weight:700; color:var(--sageink);}
+  .notes .qt{font-size:13px; line-height:1.55;}
+  .notes .qt b{font-weight:600;}
+  .notes .qt em{color:var(--ink2); font-style:italic;}
+</style>
+</head>
+<body>
+<div class="board">
+  <div class="head">
+    <h1>My safety plan — a plan you write now, for a moment when thinking is hard</h1>
+    <p>Original wording, not the Stanley-Brown form. Local-only. Nothing watches it, and nothing escalates on its own.</p>
+  </div>
+
+  <div class="grid">
+
+    <!-- 1. Empty / invitation -->
+    <figure>
+      <div class="phone"><div class="screen">
+        <div class="sb"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <div class="body">
+          <div><span class="back">‹</span><span class="h2">My safety plan</span></div>
+          <div class="sub">Yours. Private. Works offline.</div>
+
+          <div class="card" style="margin-top:2px;">
+            <div style="font-size:12px; line-height:1.55;">
+              Write it while things are steady, so a harder moment doesn’t have to start from a blank page.
+            </div>
+            <div class="sub" style="margin-top:8px;">Three short lists. You can change them any time.</div>
+          </div>
+
+          <div class="empty">
+            <div class="lbl" style="margin-bottom:6px;">Warning signs I notice</div>
+            <div class="t">What it looks like when things start to slip</div>
+            <div class="a">+ Add the first one</div>
+          </div>
+          <div class="empty">
+            <div class="lbl" style="margin-bottom:6px;">Things that help</div>
+            <div class="t">What has actually worked before</div>
+            <div class="a">+ Add the first one</div>
+          </div>
+          <div class="empty">
+            <div class="lbl" style="margin-bottom:6px;">People I can reach</div>
+            <div class="t">Who you’d be glad to hear from</div>
+            <div class="a">+ Add the first one</div>
+          </div>
+
+          <div class="foot">Nothing here leaves your phone.</div>
+        </div>
+      </div></div>
+      <figcaption><b>Empty — the invitation</b>Written while steady, so a bad moment starts from something, not nothing.</figcaption>
+    </figure>
+
+    <!-- 2. The filled plan — the read view -->
+    <figure>
+      <div class="phone"><div class="screen">
+        <div class="sb"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <div class="body">
+          <div><span class="back">‹</span><span class="h2">My safety plan</span></div>
+          <div class="sub">Yours. Private. Works offline.</div>
+
+          <div class="card">
+            <div class="lbl">Warning signs I notice</div>
+            <div style="margin-top:8px;">
+              <span class="chip">Can’t sleep</span><span class="chip">Withdrawing</span><span class="chip">Racing thoughts</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="lbl">Things that help</div>
+            <div style="margin-top:8px;">
+              <span class="chip">Walk outside</span><span class="chip">Breathing space</span><span class="chip">Put music on</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="lbl">People I can reach</div>
+            <div class="row"><span class="dot"></span><span><span class="nm">Sam</span> <span class="rel">— sister</span></span></div>
+            <div class="row"><span class="dot"></span><span><span class="nm">Dr. Rivera</span> <span class="rel">— therapist</span></span></div>
+          </div>
+
+          <div style="margin-top:auto;">
+            <div class="btn clay">Call or text 988</div>
+            <div class="foot" style="margin-top:7px;">
+              988 Suicide &amp; Crisis Lifeline (US) — <b>editable</b>, offline.<br>
+              A plan is not a person — reaching one is the point.
+            </div>
+          </div>
+        </div>
+      </div></div>
+      <figcaption><b>Filled — the read view</b>What you actually see in a hard moment: your own words, three taps deep at most.</figcaption>
+    </figure>
+
+    <!-- 3. Editing + provenance honesty -->
+    <figure>
+      <div class="phone"><div class="screen">
+        <div class="sb"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <div class="body">
+          <div><span class="back">‹</span><span class="h2">Things that help</span></div>
+          <div style="margin-top:2px;"><span class="badge">✎ Adapted</span></div>
+
+          <div class="disc">
+            <b>A plain safety plan in our own words.</b> It draws on the general idea of safety
+            planning. It is not a validated or clinical instrument, and not for diagnosis.
+          </div>
+
+          <div class="card">
+            <div class="lbl">What has actually worked before</div>
+            <div style="margin-top:9px;">
+              <span class="chip">Walk outside <span class="x">✕</span></span>
+              <span class="chip">Breathing space <span class="x">✕</span></span>
+              <span class="chip">Put music on <span class="x">✕</span></span>
+            </div>
+            <div class="field" style="margin-top:9px;">Add something that helps…</div>
+          </div>
+
+          <div class="card" style="border-style:dashed;">
+            <div class="lbl">Proposed — a fourth section?</div>
+            <div style="font-size:11.5px; line-height:1.5; margin-top:7px; color:var(--ink2);">
+              “Reasons I want to stay” is a documented part of safety planning that the original
+              three-section sketch leaves out.
+            </div>
+            <div style="margin-top:8px;">
+              <span class="chip ghost">My dog</span><span class="chip ghost">Mum</span><span class="chip ghost">The garden</span>
+            </div>
+          </div>
+
+          <div style="margin-top:auto;"><div class="btn">Save</div></div>
+        </div>
+      </div></div>
+      <figcaption><b>Editing — and saying what this is</b>Every tool declares its provenance; this one is <em>Adapted</em>, never <em>Validated</em>.</figcaption>
+    </figure>
+
+  </div>
+
+  <div class="notes">
+    <h3>Three things I'd like you to decide</h3>
+    <div class="q">
+      <span class="n">✓</span>
+      <span class="qt"><b>The crisis button — already settled by existing code.</b>
+      I was going to ask 988-vs-editable. No need: <code>CrisisStore</code> already holds one
+      user-editable resource that <em>defaults</em> to “Call or text 988” / “988 Suicide &amp; Crisis Lifeline (US)”.
+      So the button is data-driven — a US user sees the mockup's 988 button out of the box, and everyone
+      else can replace it. <em>The two options were never in conflict.</em></span>
+    </div>
+    <div class="q">
+      <span class="n">2</span>
+      <span class="qt"><b>Add “Reasons I want to stay” as a fourth section?</b>
+      It's a documented element I'd missed until I looked it up. It's also the heaviest thing on the screen
+      to write, and a blank one may read worse than no section at all. Include it, make it optional, or leave it out?</span>
+    </div>
+    <div class="q">
+      <span class="n">3</span>
+      <span class="qt"><b>Where should this live?</b>
+      I've assumed <b>More → My safety plan</b>, plus a quiet row on the “what might help” support screen.
+      Deliberately <em>not</em> a Signals card — nothing should push a safety plan at someone based on their mood.</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>
