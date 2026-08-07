@@ -34,6 +34,14 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
+      - name: TEMPORARY — regenerate Room schema v13 and print it
+        run: |
+          rm -f app/schemas/com.daymark.app.data.AppDatabase/13.json
+          ./gradlew :app:kspFossDebugKotlin --no-build-cache --rerun-tasks --stacktrace
+          echo "=====SCHEMA13START====="
+          cat app/schemas/com.daymark.app.data.AppDatabase/13.json
+          echo "=====SCHEMA13END====="
+
       - name: Run unit tests
         run: ./gradlew test --stacktrace
 
