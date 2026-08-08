@@ -95,6 +95,13 @@ android {
     buildFeatures {
         compose = true
     }
+    // MigrationTestHelper loads the exported schemas from the androidTest APK's assets, so the
+    // schema directory has to be an androidTest asset source. Room 2.7.0+ registers this
+    // automatically; at 2.6.1 it must be wired by hand. Without it every test in MigrationTest
+    // fails at runtime with "Cannot find the schema file in the assets folder".
+    sourceSets.getByName("androidTest") {
+        assets.srcDir("$projectDir/schemas")
+    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"

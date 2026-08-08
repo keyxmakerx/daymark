@@ -202,8 +202,16 @@ automatic and never on by default. A clinician may *recommend*; only the owner g
 >    `identityHash` would otherwise be invisible to every build. It also catches an entity change
 >    that forgot to bump the version.
 >
-> **Known limitation, unrelated to the above:** `MigrationTest.kt` cannot find these schemas at
-> runtime — nothing wires `app/schemas` into androidTest assets — and no workflow runs instrumented
-> tests, so its KDoc claim that it runs in CI is stale. It also stops at v12 and never reads
-> `13.json`. Room 2.7.0+ auto-registers exported schemas as androidTest resources; at 2.6.1 that
-> wiring would have to be added by hand. Live the moment instrumented tests are wired up.
+> **`MigrationTest.kt`, found broken while investigating and now fixed.** It could not find these
+> schemas at runtime — nothing wired `app/schemas` into androidTest assets — so every test in it
+> would have failed with "Cannot find the schema file in the assets folder". It also stopped at v12,
+> and its KDoc claimed it ran in CI, which was false. Now: the assets are wired by hand in
+> `app/build.gradle.kts` (Room 2.7.0+ would do this automatically; 2.6.1 does not), `MIGRATION_12_13`
+> is covered including the comma case that motivated the child table, and the KDoc says plainly that
+> **no workflow runs these tests**.
+>
+> CI now runs `assembleFossDebugAndroidTest`, which *compiles* the instrumented tests without
+> running them — neither `test` nor `assembleDebug` touches androidTest sources, so before this a
+> broken `MigrationTest.kt` sailed through untouched. Actually **running** them still needs an
+> emulator job that does not exist yet; until it does, treat green CI as saying nothing about
+> migrations at runtime.
