@@ -136,6 +136,15 @@ All notable changes to this project are documented here. The format is based on
 - **First-run onboarding wizard** (skippable): daily-reminder setup, optional PIN lock.
 
 ### Changed
+- **Dependabot now knows which upgrades this project cannot take**, so it stops reopening
+  un-mergeable PRs every week. Five of them were failing CI on repeat: Hilt 2.60.1 (Dagger ≥2.59
+  hard-requires AGP 9), Kotlin 2.4.0 (Kotlin and KSP are version-locked and bumped in separate PRs;
+  plus a KSP defect around `internal` Hilt providers), lazysodium 5.2.0 (JVM-21-only, which
+  `libs.versions.toml` had already documented in detail), and a grouped androidx PR carrying Compose
+  BOM 2024.12.01 → 2026.06.01 past the AGP 8.8.2 lint floor. Every ignore rule carries its reason
+  and its unblock condition inline, and the full constraint graph is written up in
+  [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md). GitHub Actions updates are left unconstrained — those
+  aren't failing.
 - **Room schemas are now exported through Room's own Gradle plugin** (`room { schemaDirectory(…) }`)
   instead of the raw `ksp { arg("room.schemaLocation", …) }`, so the directory is a declared Gradle
   task input/output rather than a path the processor writes to blind. CI additionally fails if the
