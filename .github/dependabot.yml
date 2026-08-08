@@ -70,6 +70,32 @@ updates:
       # on app/schemas. So Room updates flow normally again. Recorded rather than silently deleted,
       # so nobody re-adds the bound from the old docs.
 
+      # --- androidx runtime libraries that jumped to the AGP 9 / compileSdk 37 floor -----------
+      # These were bumped, merged, and turned main RED. CheckAarMetadata failed with 17 issues, all
+      # variations of: "requires libraries and applications that depend on it to compile against
+      # version 37 or later of the Android APIs" and "requires Android Gradle plugin 9.1.0 or
+      # higher". The project is on AGP 8.13 / compileSdk 35.
+      #
+      # The trap worth naming: these are NOT the Dagger/Hilt 2.x artifacts, so they look independent
+      # of the AGP 9 block — androidx.hilt versions separately from com.google.dagger. They are not.
+      # androidx.hilt:hilt-navigation-compose 1.4.0 requires AGP 9.1 directly, on its own.
+      #
+      # Bounds are set at the exact versions observed to fail, so anything below still flows.
+      # Unblocked by: the AGP 9 + compileSdk 37 migration (Move B in docs/TOOLCHAIN.md).
+      - dependency-name: "androidx.core:*"
+        versions: [">=1.19.0"]
+      - dependency-name: "androidx.activity:*"
+        versions: [">=1.13.0"]
+      - dependency-name: "androidx.lifecycle:*"
+        versions: [">=2.11.0"]
+      - dependency-name: "androidx.hilt:*"
+        versions: [">=1.4.0"]
+      # Not in the failure list itself, but androidx.navigationevent:1.0.0 was — and it arrives with
+      # navigation 2.9.x. Bounded conservatively rather than risk a second red main to find out;
+      # over-blocking costs a skipped update, under-blocking costs a broken default branch.
+      - dependency-name: "androidx.navigation:*"
+        versions: [">=2.9.0"]
+
       # --- lazysodium -------------------------------------------------------------------------
       # Documented at length in gradle/libs.versions.toml: lazysodium-java 5.2.0's Gradle metadata
       # marks it JVM-21-only, but :sync-crypto (and the app) target JVM 17, so 5.2.0 fails variant

@@ -51,6 +51,7 @@ Room 2.8.4 ──────────► schema export automated by the Room
 | **Kotlin / KSP** | no major/minor bumps | They are version-locked (KSP publishes as `<kotlin>-<ksp>`), and Dependabot bumps them in *separate* PRs — so a Kotlin-only bump cannot build by construction. Separately, Kotlin 2.4.0 changed default module naming to include a colon, and KSP ≤ 2.3.9 then emits invalid identifiers when Dagger/Hilt processes **`internal`** provider methods (`google/ksp#2964`, fixed in KSP 2.3.10/2.3.11). This repo has internal Hilt providers. | One hand-made PR moving Kotlin + KSP together onto KSP ≥ 2.3.10, with Hilt re-verified against that Kotlin |
 | **Compose BOM** | *(none)* | Was bounded at `<2025.05.00` because foundation ≥1.9.0 needs AGP ≥8.8.2. **Done:** AGP 8.13 cleared it; the BOM is on **2026.06.01** and the eight `@OptIn(ExperimentalLayoutApi)` annotations are gone. | — |
 | **Room** | *(none)* | Was bounded at `<2.7.0` because 2.7 empties `room-ktx` into `room-runtime` and we declared it. **Done:** the project is on **2.8.4**, `room-ktx` is dropped, and schema export is verified in CI. The bound is lifted. | — |
+| **androidx core / activity / lifecycle / androidx.hilt / navigation** | core `<1.19.0`, activity `<1.13.0`, lifecycle `<2.11.0`, androidx.hilt `<1.4.0`, navigation `<2.9.0` | These jumped to an **AGP ≥9.1 and compileSdk ≥37** floor. Bumping them was merged and **turned main red** — `CheckAarMetadata` failed with 17 issues. The trap: `androidx.hilt` versions separately from `com.google.dagger`, so it looks unrelated to the AGP 9 block. It is not — `hilt-navigation-compose:1.4.0` requires AGP 9.1 on its own. | The AGP 9 + compileSdk 37 migration (Move B) |
 | **lazysodium** | `< 5.2.0` | 5.2.0's `lazysodium-java` Gradle metadata marks it **JVM-21-only**; `:sync-crypto` and the app target JVM 17, so it fails variant resolution. `lazysodium-android` and `lazysodium-java` must also stay on the *same* version — `SyncCrypto` compiles against the java copy of the shared types and runs against the android copy. | Moving the whole project to JVM 21 |
 
 **GitHub Actions updates are deliberately unconstrained.** Those bumps are not failing, and action
@@ -65,7 +66,10 @@ as its own commit so failures stayed attributable. That last part earned itself:
 coupling nothing documents (see below), and would have been far harder to diagnose inside a
 combined bump.
 
-**Move B — the expensive one, still open. AGP 9 + Gradle 9.1+ + Kotlin/KSP + Hilt, together.**
+**Move B — the expensive one, still open. AGP 9 + Gradle 9.1+ + compileSdk 37 + Kotlin/KSP + Hilt.**
+It is bigger than first scoped: a whole tier of ordinary androidx runtime libraries (core, activity,
+lifecycle, androidx.hilt, navigation) has also moved to an AGP 9.1 / compileSdk 37 floor, so they
+come along too rather than being separable currency work.
 These genuinely cannot be separated: Hilt ≥2.59 forces AGP 9, AGP 9 forces Gradle 9.1+ and Kotlin
 ≥2.2.10, and Kotlin drags KSP with it. Do it as one PR, on a quiet week, verified in CI, with the
 intent to revert wholesale if it goes bad. Dagger publishes **no** Kotlin support matrix and has
