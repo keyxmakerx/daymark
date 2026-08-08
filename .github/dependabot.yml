@@ -56,27 +56,19 @@ updates:
       - dependency-name: "com.google.dagger:*"
         versions: [">=2.59"]
 
-      # --- Compose ----------------------------------------------------------------------------
-      # Compose foundation >= 1.9.0 bundles lint checks requiring a minimum of AGP 8.8.2; this repo
-      # is on 8.7.3. BOM 2025.05.00 is the first BOM shipping 1.9.0. There is an escape hatch
-      # (android.experimental.lint.version), but that is an AGP upgrade wearing a disguise.
-      # Unblocked by: AGP >= 8.8.2, which is a small bump and does NOT require the AGP 9 work.
-      # Worth knowing: BOM 2025.04.01 (foundation 1.8.0) is where FlowRow/FlowColumn become stable
-      # and the @OptIn(ExperimentalLayoutApi::class) annotations in ui/ could be dropped.
-      - dependency-name: "androidx.compose:compose-bom"
-        versions: [">=2025.05.00"]
+      # --- Compose: constraint LIFTED ------------------------------------------------------
+      # There was a `>=2025.05.00` bound here because Compose foundation >= 1.9.0 bundles lint
+      # checks needing AGP >= 8.8.2, and the repo was on 8.7.3. Stage 1 moved it to AGP 8.13, which
+      # cleared that floor, and the BOM is now on 2026.06.01 with the FlowRow opt-ins removed.
+      # Recorded rather than silently deleted so nobody re-adds it from the old docs.
 
-      # --- Room -------------------------------------------------------------------------------
-      # Room 2.7.0+ empties androidx.room:room-ktx into room-runtime ("the artifact is now blank.
-      # Please remove it from your dependency list") — this repo declares and uses room-ktx, so the
-      # bump needs a matching dependency edit. The Room Gradle plugin's behaviour also changes
-      # across 2.7 (b/376071291 and KSP2 support land in 2.7.0-alpha13), and schema export is
-      # load-bearing here (see docs/SAFETY_PLAN_FEATURE_PLAN.md).
-      # Unblocked by: a deliberate PR that drops room-ktx and re-verifies schema export in CI.
-      # Note this is a "needs a human", not a "never" — 2.7+ would also auto-register exported
-      # schemas as androidTest assets, replacing the manual wiring in app/build.gradle.kts.
-      - dependency-name: "androidx.room:*"
-        versions: [">=2.7.0"]
+      # --- Room: constraint LIFTED -------------------------------------------------------------
+      # There was a `>=2.7.0` bound here because 2.7 empties androidx.room:room-ktx into
+      # room-runtime ("the artifact is now blank. Please remove it from your dependency list")
+      # and this repo declared it. That work is DONE: the project is on Room 2.8.4, room-ktx is
+      # no longer declared, and schema export runs through the Room Gradle plugin with a CI guard
+      # on app/schemas. So Room updates flow normally again. Recorded rather than silently deleted,
+      # so nobody re-adds the bound from the old docs.
 
       # --- lazysodium -------------------------------------------------------------------------
       # Documented at length in gradle/libs.versions.toml: lazysodium-java 5.2.0's Gradle metadata
