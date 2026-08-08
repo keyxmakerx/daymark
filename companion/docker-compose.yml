@@ -1,58 +1,216 @@
-# Daymark Companion — Compose (Milestone 1 scaffold).
+# Daymark Companion — hardened deployment.
 #
-# Quick start (local):   docker compose up --build   →  http://localhost:8080
+#   cp .env.example .env && edit          # DAYMARK_DOMAIN, DAYMARK_ACME_EMAIL
+#   mkdir -p secrets && chmod 700 secrets
+#   openssl rand -base64 48 | tr -d '\n' > secrets/auth_token && chmod 600 secrets/auth_token
+#   docker compose up -d --build
 #
-# Behind a reverse proxy (recommended): remove the `ports:` block below, put this
-# service and your proxy on a shared network, and have the proxy forward to
-# http://companion:8080. Worked Caddy / Traefik / nginx examples live in
-# ./reverse-proxy/. The fully-hardened reference compose is in
-# docs/COMPANION_DEPLOYMENT.md.
+# NO top-level `version:` key — obsolete since Compose v2; current Compose warns on it.
 
 name: daymark-companion
 
+# ── Shared hardening ────────────────────────────────────────────────────────
+x-hardened: &hardened
+  restart: unless-stopped
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  security_opt:
+    - "no-new-privileges:true"
+    - "apparmor=docker-default"     # verify with: aa-status | grep docker-default
+  # Docker's DEFAULT seccomp profile applies automatically. NEVER add seccomp:unconfined.
+
+# `local` driver: rotates AND compresses. `json-file` defaults to max-size:-1 (UNLIMITED)
+# and its max-file is inert unless max-size is also set. This is the disk-fill footgun.
+x-logging: &logging
+  driver: "local"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
+
+  # ── Reverse proxy / TLS terminator ───────────────────────────────────────
+  caddy:
+    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    container_name: daymark-caddy
+    <<: *hardened
+    logging: *logging
+    depends_on:
+      companion:
+        condition: service_healthy
+
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"          # HTTP/3. Delete this line to disable QUIC.
+
+    networks:
+      edge: {}
+      back:
+        ipv4_address: 10.89.0.2   # pinned so DAYMARK_TRUSTED_PROXIES is deterministic
+
+    environment:
+      DAYMARK_DOMAIN:     "${DAYMARK_DOMAIN:?set in .env, e.g. daymark.example.com}"
+      DAYMARK_ACME_EMAIL: "${DAYMARK_ACME_EMAIL:?set in .env}"
+
+    volumes:
+      - ./reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data         # certs + ACME account keys — MUST persist or you will
+      - caddy_config:/config     # burn Let's Encrypt rate limits on every redeploy
+
+    # Bind :80/:443 as a non-root user with ZERO capabilities.
+    # The image ships `setcap cap_net_bind_service=+ep` on the binary, but that file
+    # capability is IGNORED under no-new-privileges, and Docker grants no ambient caps to
+    # a non-root `user:`. So `cap_add: [NET_BIND_SERVICE]` + `user:` does NOT work.
+    # The namespaced sysctl below lowers the privileged-port floor inside THIS netns only.
+    # ↳ MUST BE TESTED (see §9.2). Fallback if it fails: drop `user:` and `sysctls:`,
+    #   keep cap_drop:[ALL] + cap_add:[NET_BIND_SERVICE] (root inside a stripped container).
+    user: "10002:10002"
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "0"
+
+    tmpfs:
+      - /tmp:size=16m,mode=1777,noexec,nosuid,nodev
+
+    ulimits:
+      nofile: { soft: 8192, hard: 16384 }
+
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.50"
+          pids: 128
+
+    # busybox wget (present in the alpine base) against the container-local :2020
+    # health site defined in the Caddyfile. Not published to the host.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:2020/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # ── Application ──────────────────────────────────────────────────────────
   companion:
     build:
       context: .
       dockerfile: Dockerfile
-    image: daymark-companion:dev
+    image: daymark-companion:1.0.0
     container_name: daymark-companion
-    restart: unless-stopped
+    <<: *hardened
+    logging: *logging
 
-    # LOCAL/DEV ONLY: publish to loopback so you can reach it from this machine.
-    # Bound to 127.0.0.1 so it is not exposed on the LAN by accident. Remove this
-    # entirely when a reverse proxy fronts the service.
-    ports:
-      - "127.0.0.1:8080:8080"
+    # NO ports: — reachable ONLY via Caddy on `back`.
+    networks:
+      back:
+        ipv4_address: 10.89.0.3
+
+    user: "65532:65532"          # distroless nonroot. WAS 10001 — see §4.4 migration.
 
     environment:
-      DAYMARK_BIND_ADDR: "0.0.0.0"   # all interfaces *inside* the container only
-      DAYMARK_PORT: "8080"
-      DAYMARK_DATA_DIR: "/data"      # the only writable persistent path
-      DAYMARK_WEB_DIR: "/app/web"    # vendored static bundle baked into the image
-      DAYMARK_BASE_PATH: "/"         # e.g. "/daymark" to serve under a sub-path
-      DAYMARK_LOG_LEVEL: "info"
+      DAYMARK_BIND_ADDR: "0.0.0.0"        # all interfaces INSIDE the container only
+      DAYMARK_PORT:      "8080"
+      DAYMARK_DATA_DIR:  "/data"
+      DAYMARK_WEB_DIR:   "/app/web"
+      DAYMARK_BASE_PATH: "/"
+      DAYMARK_LOG_LEVEL: "warn"
+      TZ:                "UTC"
 
-    # Defence in depth: no writable root FS, no extra capabilities, no privilege
-    # escalation, non-root user (also set in the image).
-    read_only: true
+      # THE most important line in this file. Unset = every internet client shares one
+      # lockout bucket; 8 bad bearer tokens from one attacker locks out everyone for 15
+      # minutes. Pinned /32, never a bridge-wide CIDR — a co-resident container could
+      # otherwise forge X-Forwarded-For and evade lockout entirely.
+      DAYMARK_TRUSTED_PROXIES: "10.89.0.2/32"
+
+      # Required once SMTP or the therapist portal is enabled. Without it,
+      # RouteUrls.resolveBaseUrl() falls back to the client-supplied Host header and
+      # emails an attacker-controlled invite link. See §6 item 6.
+      DAYMARK_PUBLIC_BASE_URL:  "https://${DAYMARK_DOMAIN}"
+      DAYMARK_WEBAUTHN_RP_ID:   "${DAYMARK_DOMAIN}"
+      DAYMARK_WEBAUTHN_ORIGINS: "https://${DAYMARK_DOMAIN}"
+
+      DAYMARK_AUTH_TOKEN_FILE: "/run/secrets/companion_auth_token"
+
+      # App-layer limits (Config.kt defaults, stated explicitly so they are auditable).
+      DAYMARK_RATE_LIMIT_RPS:     "5"
+      DAYMARK_MAX_REQUEST_BYTES:  "27262976"   # 26 MiB
+      DAYMARK_MAX_BLOB_BYTES:     "26214400"   # 25 MiB
+      DAYMARK_ACCESS_LOG_SOURCE_IP:     "false"
+      DAYMARK_ACCESS_LOG_RETENTION_DAYS: "90"
+
+      # A JVM under a container memory limit defaults to a 25% heap. Without this you
+      # get a ~192M heap on a 768M limit and will be confused by the OOMs.
+      JAVA_TOOL_OPTIONS: >-
+        -XX:MaxRAMPercentage=70
+        -XX:+ExitOnOutOfMemoryError
+        -XX:-UsePerfData
+        -Djava.io.tmpdir=/tmp
+
+    secrets:
+      - source: companion_auth_token
+        target: companion_auth_token
+        uid: "65532"
+        gid: "65532"
+        mode: 0400
+
     tmpfs:
-      - /tmp
-    user: "10001:10001"
-    cap_drop:
-      - ALL
-    security_opt:
-      - "no-new-privileges:true"
+      - /tmp:size=64m,mode=1777,noexec,nosuid,nodev
 
     volumes:
       - blobs:/data
 
+    ulimits:
+      nofile: { soft: 4096, hard: 8192 }
+
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus: "1.0"
+          pids: 256
+        reservations:
+          memory: 256M
+
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      test: ["CMD", "/usr/local/bin/healthcheck"]   # static Go binary; no shell exists
       interval: 30s
       timeout: 3s
       retries: 3
-      start_period: 20s
+      start_period: 30s
+      start_interval: 2s        # Engine >= 25: fast first-start convergence
+
+networks:
+  # Internet-facing. Caddy only. Needed for ACME.
+  edge:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: dmk-edge
+
+  # Caddy <-> app only. No egress, no route to host services.
+  back:
+    driver: bridge
+    internal: true
+    driver_opts:
+      com.docker.network.bridge.name: dmk-back
+      # `internal: true` ALONE is not enough: Docker still assigns the bridge a host-side
+      # address, so an "internal" container can reach host services bound to 0.0.0.0.
+      # `isolated` removes that address. It is only valid together with internal: true.
+      com.docker.network.bridge.gateway_mode_ipv4: isolated
+      # Do NOT set enable_icc:"false" — it would block caddy -> companion. Isolation here
+      # comes from this network having exactly two members.
+    ipam:
+      config:
+        - subnet: 10.89.0.0/24
 
 volumes:
   blobs:
+  caddy_data:
+  caddy_config:
+
+secrets:
+  companion_auth_token:
+    file: ./secrets/auth_token     # chmod 600, gitignored
+  # companion_smtp_pass:
+  #   file: ./secrets/smtp_pass

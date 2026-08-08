@@ -1,33 +1,190 @@
-# Daymark Companion behind Caddy.
+# Daymark Companion — Caddy edge config.
 #
-# Caddy auto-provisions TLS (Let's Encrypt) for a real hostname and terminates it here,
-# forwarding plain HTTP to the container on the internal network. Caddy sets X-Forwarded-*
-# itself and does not pass through client-supplied forwarded headers, which is exactly the
-# trust-the-proxy-only posture the Companion expects.
-#
-# Run Caddy and the companion on a shared Docker network; the companion has NO published
-# ports (remove `ports:` from docker-compose.yml). The proxy reaches it as companion:8080.
+# Caddy terminates TLS and forwards plain HTTP to companion:8080 on the `back` network.
+# The app (SecurityHeaders.kt) already sends CSP + hardening headers on EVERY response and
+# deliberately omits HSTS, because the app cannot know whether it is behind TLS. So the
+# proxy's job is: HSTS, plus covering PROXY-GENERATED responses (502/503/413/308).
 
-daymark.example.com {
-    encode zstd gzip
+{
+	# The admin API (default :2019) is a full remote-reconfiguration surface. Nothing
+	# here uses it. Consequence: in-container `caddy reload` won't work — use
+	# `docker compose restart caddy`. That is the right trade.
+	admin off
 
-    # HSTS is set here (at the TLS terminator), not in the app container.
-    header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains"
-        -Server
-    }
+	# Setting `email` is what makes Caddy add ZeroSSL as a FALLBACK issuer (changed in
+	# Caddy 2.8 — without an email, Let's Encrypt is the only issuer). A second issuer
+	# is real resilience against an LE outage.
+	email {$DAYMARK_ACME_EMAIL}
 
-    reverse_proxy companion:8080 {
-        health_uri /healthz
-        health_interval 30s
-    }
+	servers {
+		# Exact subdirective names: read_body / read_header / write / idle.
+		# NOT read_timeout/write_timeout — that spelling fails config load.
+		timeouts {
+			read_header 10s
+			read_body   120s   # generous: 25 MiB encrypted blob uploads on slow links
+			write       300s   # generous: blob downloads
+			idle        120s
+		}
+		max_header_size 32KB
+		protocols h1 h2 h3
+
+		# Caddy IS the edge. Do NOT set trusted_proxies — with it unset Caddy ignores
+		# client-supplied X-Forwarded-* for its own client-IP logic, which is correct.
+	}
+
+	# Caddy's own runtime log (TLS renewal, startup, errors). NOT an access log.
+	log {
+		output stderr
+		format json
+		level  WARN
+	}
 }
 
-# Sub-path deployment (serve under https://host/daymark):
-# Set DAYMARK_BASE_PATH=/daymark on the container, then:
-#
-# host.example.com {
-#     handle_path /daymark/* {
-#         reverse_proxy companion:8080
-#     }
-# }
+# ── Catch-all: refuse unknown Host / unknown SNI ────────────────────────────
+# Closes the RouteUrls.resolveBaseUrl() Host-header fallback path at the edge as well
+# as in the app. Any request whose Host is not DAYMARK_DOMAIN dies here.
+:443 {
+	tls internal
+	abort
+}
+:80 {
+	abort
+}
+
+# ── The site ────────────────────────────────────────────────────────────────
+{$DAYMARK_DOMAIN} {
+
+	# ---- TLS -----------------------------------------------------------
+	# Nothing to declare. Caddy automatically obtains a cert (HTTP-01/TLS-ALPN-01),
+	# serves :80 as a 308 redirect to :443, and renews using RFC 9773 (ARI) timing
+	# from the CA. Certs live in the caddy_data volume — it MUST persist.
+	#
+	# Do NOT add `ssl_stapling`-equivalents: since 2025-05-07 Let's Encrypt certs carry
+	# NO AIA OCSP URL, only a CRL distribution point. OCSP stapling config is dead
+	# weight for LE certs. (Caddy's knob, if you ever need it, is `ocsp_stapling off`.)
+	#
+	# Optional 45-day profile — EXPERIMENTAL, the ACME profiles draft is not final:
+	#   tls { issuer acme { profile tlsserver } }
+
+	# ---- Security headers ----------------------------------------------
+	header {
+		# HSTS is set ONLY here. Start at 300 for the first day to prove the cert
+		# works, then raise to 31536000. Add `preload` only if you intend to submit
+		# to hstspreload.org and never want plain HTTP on this domain — or any
+		# subdomain — again.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+
+		# `?` = "set only if absent"; `?` and `-` operations are automatically deferred
+		# to write time. The Ktor app sends every one of these on every app response,
+		# so these copies apply ONLY to Caddy-generated responses: 502/503 when the app
+		# is down, 413 from request_body, 308 redirects, TLS error pages.
+		#
+		# DO NOT REMOVE THE `?`. Two Content-Security-Policy headers are enforced by the
+		# browser as their INTERSECTION. This policy is copied VERBATIM from
+		# SecurityHeaders.kt including 'wasm-unsafe-eval'. Drop the `?` and let the two
+		# drift, and libsodium's WASM module stops instantiating — all client-side
+		# crypto fails with a console-only error. Verify per §9.2.
+		?Content-Security-Policy "default-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self'; manifest-src 'self'"
+		?X-Content-Type-Options       "nosniff"
+		?X-Frame-Options              "DENY"
+		?Referrer-Policy              "no-referrer"
+		?Cross-Origin-Opener-Policy   "same-origin"
+		?Cross-Origin-Resource-Policy "same-origin"
+		?Permissions-Policy           "geolocation=(), camera=(), microphone=(), payment=(), usb=(), magnetometer=(), accelerometer=()"
+	}
+
+	# ---- Limits ---------------------------------------------------------
+	# Deliberately ABOVE the app's DAYMARK_MAX_REQUEST_BYTES (26 MiB = 27,262,976 B) so
+	# the app returns its own semantic 413 with its own error body, and Caddy only
+	# truncates genuinely absurd requests. If you lower the app cap, lower this to
+	# match + ~2 MB. Returns HTTP 413.
+	request_body {
+		max_size 28MB
+	}
+
+	encode zstd gzip
+
+	# ---- Upstream --------------------------------------------------------
+	reverse_proxy companion:8080 {
+		# IMPORTANT: Caddy APPENDS the client IP to any inbound X-Forwarded-For rather
+		# than replacing it, so the upstream would otherwise receive
+		# "<attacker junk>, <real IP>". The app's ClientAddress.resolve() walks
+		# right-to-left and is safe today — but this line makes it safe by construction
+		# instead of by accident. (The old Caddyfile comment claiming Caddy "does not
+		# pass through client-supplied forwarded headers" was factually wrong.)
+		header_up X-Forwarded-For   {client_ip}
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host  {host}
+
+		# Active health checking — this is the one that actually stops routing to a
+		# dead upstream. The container HEALTHCHECK is what `depends_on:
+		# condition: service_healthy` reads; you want both.
+		health_uri      /healthz
+		health_interval 10s
+		health_timeout  3s
+		health_failures 3
+	}
+
+	# ---- Access log: FAULTS ONLY ----------------------------------------
+	# Caddy emits "handled request" at InfoLevel, escalating to ErrorLevel only when
+	# status >= 500. So `level ERROR` yields "the server broke" and nothing else — no
+	# per-request trail of who accessed which relationship and when.
+	#
+	# This does NOT blind you to auth abuse: 401/403/429 are 4xx, and the app's
+	# AuditStore already records AUTH_FAIL and LOCKOUT as first-class hash-chained
+	# events that the OWNER (the data subject) can read. That is where the security
+	# signal belongs.
+	#
+	# For temporary triage, change `level ERROR` to `level INFO`, restart, and CHANGE
+	# IT BACK. The filter below still applies at INFO.
+	log {
+		level  ERROR
+		output stderr
+		format filter {
+			wrap json
+			fields {
+				# Caddy auto-redacts ONLY Cookie, Set-Cookie, Authorization and
+				# Proxy-Authorization. These four are this project's own bearer-
+				# equivalent secrets and are NOT covered:
+				request>headers>X-Rel-Token    delete
+				request>headers>X-CSRF-Token   delete
+				request>headers>X-Content-Hash delete
+				request>headers>X-Setting-Key  delete
+
+				# Fingerprinting / geolocation surface.
+				request>headers>User-Agent      delete
+				request>headers>Referer         delete
+				request>headers>Accept-Language delete
+				resp_headers>Set-Cookie         delete
+
+				# DO NOT write `ip_mask 0`. A CIDR of 0 makes parseRawToMask return nil
+				# and net.IP.Mask(nil) renders as "<nil>" — it DISABLES masking rather
+				# than maximizing it. `delete` is the only way to drop an IP.
+				# If you ever need coarse IPs for abuse triage, the form is:
+				#   request>remote_ip ip_mask { ipv4 16  ipv6 32 }
+				request>remote_ip   delete
+				request>client_ip   delete
+				request>remote_port delete
+
+				# Regression guard. Secrets ride in the URL FRAGMENT today
+				# (TherapistAuthRoutes.kt:258 -> /portal/invite#id=..&s=..,
+				#  RecoveryRoutes.kt:169    -> /recover#t=..), which browsers never
+				# transmit. Strip them from the query too so a future refactor from
+				# '#' to '?' cannot leak single-use recovery tokens with no alarm.
+				request>uri query {
+					delete t
+					delete s
+					delete id
+					delete token
+				}
+			}
+		}
+	}
+}
+
+# ── Container-local health endpoint for HEALTHCHECK. Not published. ─────────
+:2020 {
+	respond /healthz 200
+	respond 404
+}
