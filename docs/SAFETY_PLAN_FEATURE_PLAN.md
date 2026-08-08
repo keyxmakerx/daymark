@@ -166,8 +166,36 @@ automatic and never on by default. A clinician may *recommend*; only the owner g
   device. Behind an explicit action only. The plan does round-trip through `BackupManager` today,
   which covers *not losing it* but not *carrying it*.
 > **Note for the next schema change.** `app/schemas/…/13.json` is committed, like every version
-> before it. That is not just tidiness: if the file is *absent*, Room has to create it during the
-> build, and a stale Gradle build-cache restore can leave a zero-length file that
-> `Database.exportSchema` then fails to deserialize (`IllegalStateException: Empty schema file`).
-> Every earlier version was already committed, so no build had ever had to create one — v13 was the
-> first, and it broke CI. **Commit the generated schema in the same change that bumps the version.**
+> before it. **Commit the generated schema in the same change that bumps the version.** v13 was the
+> first version this repo ever had to *create* during a build rather than read from the tree, and
+> that build failed: `IllegalStateException: Empty schema file` out of `Database.exportSchema`.
+>
+> Committing the file genuinely closes that path. `exportSchema` deserializes any existing file
+> first and early-returns via `isSchemaEqual` **without opening the output stream**, so a committed,
+> matching schema means Room never writes and never truncates.
+>
+> **What caused the zero-byte file is still unknown, and two plausible-sounding explanations are
+> wrong** — recorded here so nobody re-derives them:
+>
+> - *"A stale Gradle build-cache restore left an empty file."* No. `$projectDir/schemas` is not a
+>   declared task output, so cache restore never writes there; and a cache **hit** means the task
+>   does not run, which yields **no** file, not an empty one.
+> - *"The four variant KSP tasks race on one shared directory."* No. `org.gradle.parallel` is
+>   *project-level* parallelism and all four KSP tasks live in `:app`, so they run serially.
+>
+> The most parsimonious surviving explanation is a write aborted part-way (the OOM history noted in
+> `gradle.properties` is the obvious candidate), but without the CI logs it is unproven. Treat the
+> cause as open.
+>
+> **Two follow-ups worth doing, neither done here:**
+>
+> 1. Adopt the **`androidx.room` Gradle plugin** (`room { schemaDirectory(...) }`), available at the
+>    pinned Room 2.6.1 with no version bump. It replaces the raw `ksp { arg("room.schemaLocation") }`
+>    and — this is the actual benefit — makes the schema directory a **declared Gradle task
+>    input/output**, so up-to-date checks and the build cache stop operating blind on it. It does
+>    *not* need per-variant directories: this repo's single `@Database` lives in `src/main`, so all
+>    four variants emit identical schemas and the existing flat layout stays.
+> 2. Add a CI guard: `git diff --exit-code -- app/schemas`. This matters more than it looks —
+>    `DatabaseBundle.isSchemaEqual` compares **only entities and views**, never `identityHash`,
+>    `version`, or `setupQueries`, so a committed schema with a wrong `identityHash` would be
+>    invisible to every build.
