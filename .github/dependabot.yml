@@ -56,15 +56,11 @@ updates:
       - dependency-name: "com.google.dagger:*"
         versions: [">=2.59"]
 
-      # --- Compose ----------------------------------------------------------------------------
-      # Compose foundation >= 1.9.0 bundles lint checks requiring a minimum of AGP 8.8.2; this repo
-      # is on 8.7.3. BOM 2025.05.00 is the first BOM shipping 1.9.0. There is an escape hatch
-      # (android.experimental.lint.version), but that is an AGP upgrade wearing a disguise.
-      # Unblocked by: AGP >= 8.8.2, which is a small bump and does NOT require the AGP 9 work.
-      # Worth knowing: BOM 2025.04.01 (foundation 1.8.0) is where FlowRow/FlowColumn become stable
-      # and the @OptIn(ExperimentalLayoutApi::class) annotations in ui/ could be dropped.
-      - dependency-name: "androidx.compose:compose-bom"
-        versions: [">=2025.05.00"]
+      # --- Compose: constraint LIFTED ------------------------------------------------------
+      # There was a `>=2025.05.00` bound here because Compose foundation >= 1.9.0 bundles lint
+      # checks needing AGP >= 8.8.2, and the repo was on 8.7.3. Stage 1 moved it to AGP 8.13, which
+      # cleared that floor, and the BOM is now on 2026.06.01 with the FlowRow opt-ins removed.
+      # Recorded rather than silently deleted so nobody re-adds it from the old docs.
 
       # --- Room: constraint LIFTED -------------------------------------------------------------
       # There was a `>=2.7.0` bound here because 2.7 empties androidx.room:room-ktx into

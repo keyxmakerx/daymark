@@ -10,6 +10,8 @@ coreKtx = "1.15.0"
 lifecycle = "2.8.7"
 activityCompose = "1.9.3"
 # foundation >= 1.9.0 needs AGP >= 8.8.2; stage 1 put us on 8.13, so that floor is cleared.
+# foundation >= 1.9.0 needs AGP >= 8.8.2; stage 1 (AGP 8.13) cleared that floor. FlowRow and
+# FlowColumn are stable from foundation 1.8.0, so no ExperimentalLayoutApi opt-in is needed.
 composeBom = "2026.06.01"
 navigationCompose = "2.8.5"
 # 2.8.4: needs AGP >= 8.4 and minSdk >= 23 (we are on 8.13 and 26). room-ktx is emptied into

@@ -1,7 +1,6 @@
 package com.daymark.app.ui.activities
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -33,7 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.daymark.app.data.CatalogActivity
 import com.daymark.app.ui.icon.ActivityIcons
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ActivityLibraryScreen(
     onBack: () -> Unit,

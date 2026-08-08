@@ -4,7 +4,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -190,7 +189,6 @@ fun SafetyPlanScreen(
 }
 
 /** One section of the plan: its lines, and a way to add another. */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SectionCard(
     section: SafetyPlanSection,

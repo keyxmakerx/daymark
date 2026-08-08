@@ -4,7 +4,6 @@ import com.daymark.app.ui.components.SentenceCaps
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -42,7 +41,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.daymark.app.ui.components.PaperSurface
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BehavioralActivationScreen(
     onBack: () -> Unit,
