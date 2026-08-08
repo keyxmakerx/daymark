@@ -220,3 +220,54 @@ jobs:
 
           docker rm -f companion >/dev/null
           echo "Container smoke-test passed."
+
+      # Everything above tests the IMAGE. Nothing tested the deployment — and a security
+      # audit found four independent first-boot failures that all lived in the compose file
+      # and the Caddyfile, none of which CI had ever parsed, let alone run. These two steps
+      # exist so that class of bug cannot ship green again.
+      - name: Caddyfile must parse
+        working-directory: companion
+        run: |
+          set -euo pipefail
+          # Same pinned binary the deployment runs. `caddy validate` adapts the Caddyfile,
+          # which is where an unrecognised subdirective or a conflicting TLS automation
+          # policy surfaces — both of which are hard startup failures, not warnings.
+          docker run --rm \
+            -e DAYMARK_DOMAIN=daymark.example.com \
+            -e DAYMARK_ACME_EMAIL=ci@example.com \
+            -v "$PWD/reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.11.4-alpine \
+            caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+      - name: Compose must boot the app for real
+        working-directory: companion
+        run: |
+          set -euo pipefail
+          # Boots the app service through the REAL compose file, so the hardening actually
+          # applies: the noexec tmpfs (which blocks sqlite-jdbc's JNI extraction unless
+          # org.sqlite.tmpdir points elsewhere) and the docker secret (whose host ownership
+          # is what the container sees, because Compose ignores the uid/gid/mode keys).
+          cp .env.example .env
+          mkdir -p secrets
+          openssl rand -base64 48 | tr -d '\n' > secrets/auth_token
+          sudo chown 65532:65532 secrets/auth_token
+          sudo chmod 400 secrets/auth_token
+
+          docker compose config --quiet
+          docker compose up -d --build companion
+
+          st=none
+          for _ in $(seq 1 60); do
+            st=$(docker inspect -f '{{.State.Health.Status}}' daymark-companion 2>/dev/null || echo none)
+            [ "$st" = "healthy" ] && break
+            [ "$st" = "unhealthy" ] && break
+            sleep 2
+          done
+          if [ "$st" != "healthy" ]; then
+            echo "::error::compose deployment never became healthy (status=$st)"
+            docker compose logs companion || true
+            docker compose down -v || true
+            exit 1
+          fi
+          echo "Compose deployment reached healthy."
+          docker compose down -v

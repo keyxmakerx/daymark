@@ -149,7 +149,27 @@ data class Config(
         fun envOrFile(name: String, env: Map<String, String> = System.getenv()): String? {
             env["${name}_FILE"]?.let { path ->
                 val f = File(path)
-                if (f.isFile) return f.readText().trim()
+                // isFile() is a stat, not a readability check. A docker secret arrives with the
+                // ownership of the file on the host, and Compose silently ignores the secrets
+                // uid/gid/mode keys outside Swarm — so root:root 0600 is the common case while the
+                // process runs as 65532. Calling readText() on that threw AccessDeniedException out
+                // of the first statement of main(), before a single log line, which reads like a
+                // crash rather than a permissions problem.
+                if (f.isFile && !f.canRead()) {
+                    val user = System.getProperty("user.name") ?: "unknown"
+                    error(
+                        "${name}_FILE is set to '$path' and that file exists, but this process " +
+                            "(running as '$user') cannot read it. Docker secrets keep the HOST " +
+                            "file's owner and mode — Compose ignores the secrets uid/gid/mode keys " +
+                            "outside Swarm — so make it readable by the container user on the host: " +
+                            "chown 65532:65532 <file> && chmod 400 <file>.",
+                    )
+                }
+                if (f.isFile) {
+                    return runCatching { f.readText().trim() }.getOrElse { cause ->
+                        error("${name}_FILE is set to '$path' but reading it failed: ${cause.message}")
+                    }
+                }
             }
             return env[name]?.trim()
         }
