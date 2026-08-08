@@ -283,7 +283,13 @@ class AuthStore(
     fun recordTotpFailure(credentialId: String, lockoutFails: Int, lockoutMs: Long): Long = synchronized(lock) {
         val now = clock()
         val rec = getTotp(credentialId) ?: return 0L
-        val newFails = rec.failCount + 1
+        // Once a lockout has expired, the counter starts again. Without this reset the count only
+        // ever climbs, so every failure after the first lockout immediately re-armed another one —
+        // a single bad code per window locked the credential out permanently, and `credentialId`
+        // is a therapist-typed username, so anyone who knows it could keep them locked out for
+        // free. Serving a lockout must clear the debt that caused it.
+        val priorFails = if (rec.lockedUntil in 1..now) 0 else rec.failCount
+        val newFails = priorFails + 1
         val locked = if (newFails >= lockoutFails) now + lockoutMs else 0L
         conn.prepareStatement("UPDATE totp SET fail_count=?, locked_until=? WHERE credential_id=?").use { ps ->
             ps.setInt(1, newFails); ps.setLong(2, locked); ps.setString(3, credentialId); ps.executeUpdate()

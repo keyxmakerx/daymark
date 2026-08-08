@@ -10,7 +10,6 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.application
-import io.ktor.server.request.receive
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -63,7 +62,7 @@ fun Route.recoveryRoutes(
 
         put("/owner/notifications") {
             if (!call.ownerAuthorizedForRecovery(ownerGuard)) return@put
-            val req = call.receive<SetNotificationSettingsRequest>()
+            val req = call.receiveCappedJson<SetNotificationSettingsRequest>() ?: return@put
             val email = req.email?.trim()?.ifBlank { null }
             if (email != null && !isPlausibleEmail(email)) {
                 call.respond(HttpStatusCode.BadRequest, ErrorDto("invalid email"))
@@ -85,9 +84,20 @@ fun Route.recoveryRoutes(
         // doesn't.
         post("/recovery/request") {
             call.response.header("Referrer-Policy", "no-referrer")
-            val req = call.receive<RecoveryRequestBody>()
+            // Budget FIRST, body second. This route takes no credential, so anyone can reach it;
+            // reading the body before consulting the limiter meant an attacker could commit heap
+            // on every request and never be told no. Over-budget callers now cost nothing to
+            // refuse. The response is still an unconditional 202 — the non-enumeration guarantee
+            // is unchanged, and a rate-limited caller learns only that it is rate-limited, which
+            // it already knows.
             val sourceId = call.clientAddress()
-            if (accountStore.allowReissueAttempt(sourceId, reissueMaxPerHour)) {
+            val allowed = accountStore.allowReissueAttempt(sourceId, reissueMaxPerHour)
+            if (!allowed) {
+                call.respond(HttpStatusCode.Accepted)
+                return@post
+            }
+            val req = call.receiveCappedJson<RecoveryRequestBody>() ?: return@post
+            run {
                 val minted = accountStore.requestReissue(req.email.trim(), confirmTtlSeconds)
                 if (minted != null) {
                     val link = buildRecoveryLink(publicBaseUrl, minted.confirmToken)
@@ -112,7 +122,7 @@ fun Route.recoveryRoutes(
 
         post("/recovery/confirm") {
             call.response.header("Referrer-Policy", "no-referrer")
-            val req = call.receive<RecoveryConfirmBody>()
+            val req = call.receiveCappedJson<RecoveryConfirmBody>() ?: return@post
             // The rotation is applied to the live guard from *inside* confirmReissue's own lock,
             // atomically with persisting it — see OwnerAccountStore.confirmReissue's kdoc for why
             // applying it out here (after the lock is released) would race two concurrent confirms.

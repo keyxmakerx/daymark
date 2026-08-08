@@ -1,5 +1,6 @@
 package com.daymark.companion.routes
 
+import com.daymark.companion.auth.AttemptLimiter
 import com.daymark.companion.clientAddress
 import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.auth.AuthStore
@@ -16,7 +17,6 @@ import io.ktor.http.CookieEncoding
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
-import io.ktor.server.request.receive
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -71,13 +71,20 @@ fun Route.therapistAuthRoutes(
     auditStore: AuditStore,
     auditSourceIp: Boolean = false,
 ) {
+    // Per-SOURCE budget for the credential-free TOTP verify route, distinct from the
+    // per-credential lockout. The lockout protects the secret from brute force; it does not stop
+    // an attacker denying a therapist their own login, because `credentialId` is a typed username
+    // and the attacker only has to burn its counter. Keyed on the client address (real client, not
+    // the proxy — see ClientAddress), so sustained abuse costs the attacker rather than the victim.
+    val totpSourceLimiter = AttemptLimiter(maxPerWindow = 20, windowMs = 5 * 60_000L)
+
     route("/v1") {
 
         // Owner mints a single-use invite. Best-effort email; the link is ALSO returned in-band
         // for OOB delivery (email is a convenience, not the security-bearing channel).
         post("/invite") {
             if (!call.ownerAuthorized(ownerGuard)) return@post
-            val req = call.receive<InviteRequest>()
+            val req = call.receiveCappedJson<InviteRequest>() ?: return@post
             val ttl = req.ttlSeconds ?: inviteTtlSeconds
             val minted = authStore.mintInvite(req.relRef, req.scope, ttl)
             val link = buildInviteLink(call, publicBaseUrl, minted.inviteId, minted.secret)
@@ -94,7 +101,7 @@ fun Route.therapistAuthRoutes(
         post("/invite/{inviteId}/redeem") {
             call.response.header("Referrer-Policy", "no-referrer")
             val inviteId = call.parameters["inviteId"] ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("missing inviteId"))
-            val req = call.receive<RedeemRequest>()
+            val req = call.receiveCappedJson<RedeemRequest>() ?: return@post
             val lockoutBaseMs = totpLockoutSeconds * 1000
             val result = authStore.redeemInvite(inviteId, req.secret, totpLockoutFails, lockoutBaseMs)
             when (result.status) {
@@ -111,7 +118,7 @@ fun Route.therapistAuthRoutes(
         // to CONSUMED. Insert-only — a live credential is never silently overwritten. Fail-closed.
         post("/totp/enroll") {
             call.response.header("Referrer-Policy", "no-referrer")
-            val req = call.receive<TotpEnrollRequest>()
+            val req = call.receiveCappedJson<TotpEnrollRequest>() ?: return@post
             // Validate the secret is a plausible base64url key (structural, not content).
             val secretBytes = decodeSecret(req.secret) ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("invalid secret"))
             if (secretBytes.size < 16) return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("secret too short"))
@@ -139,7 +146,14 @@ fun Route.therapistAuthRoutes(
 
         // Verify a TOTP code; on success issue an opaque session cookie + anti-CSRF token.
         post("/totp/verify") {
-            val req = call.receive<TotpVerifyRequest>()
+            // Source budget BEFORE the body is read: this route takes no credential, so an
+            // unlimited stream of attempts was previously free to the attacker in both memory and
+            // lockout budget.
+            if (!totpSourceLimiter.allow(call.clientAddress())) {
+                call.respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited"))
+                return@post
+            }
+            val req = call.receiveCappedJson<TotpVerifyRequest>() ?: return@post
             val rec = authStore.getTotp(req.credentialId)
             if (rec == null) {
                 // Do not reveal whether the credential exists. No relRef is known, so there is
@@ -173,6 +187,7 @@ fun Route.therapistAuthRoutes(
                 return@post
             }
             authStore.recordTotpSuccess(req.credentialId)
+            totpSourceLimiter.reset(call.clientAddress())
             val session = authStore.createSession(req.credentialId, rec.relRef, sessionIdleSeconds, sessionAbsoluteSeconds)
             call.response.cookies.append(
                 Cookie(
