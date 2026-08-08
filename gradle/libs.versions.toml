@@ -11,7 +11,9 @@ lifecycle = "2.8.7"
 activityCompose = "1.9.3"
 composeBom = "2024.12.01"
 navigationCompose = "2.8.5"
-room = "2.6.1"
+# 2.8.4: needs AGP >= 8.4 and minSdk >= 23 (we are on 8.13 and 26). room-ktx is emptied into
+# room-runtime from 2.7.0 ("the artifact is now blank"), so it is no longer declared.
+room = "2.8.4"
 hilt = "2.52"
 hiltNavigationCompose = "1.2.0"
 biometric = "1.1.0"
@@ -51,7 +53,6 @@ androidx-material3 = { group = "androidx.compose.material3", name = "material3" 
 androidx-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
-androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
 hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", version.ref = "hilt" }

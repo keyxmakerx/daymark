@@ -21,8 +21,8 @@ flakes rather than the hard constraints they are. Every `ignore` rule in
 
 ## The constraint graph
 
-Currently pinned: **AGP 8.7.3**, **Gradle 8.11.1**, **JDK 17**, **compileSdk 35**, **Kotlin 2.0.21**,
-**KSP 2.0.21-1.0.28** (KSP1), **Compose BOM 2024.12.01**, **Room 2.6.1**, **Hilt/Dagger 2.52**,
+Currently pinned: **AGP 8.13.0**, **Gradle 8.13**, **JDK 17**, **compileSdk 35**, **Kotlin 2.0.21**,
+**KSP 2.0.21-1.0.28** (KSP1), **Compose BOM 2024.12.01**, **Room 2.8.4**, **Hilt/Dagger 2.52**,
 **lazysodium 5.1.0**, **jna 5.17.0**.
 
 Almost everything interesting hangs off the AGP version:
@@ -30,16 +30,16 @@ Almost everything interesting hangs off the AGP version:
 ```
 JDK 17 ──────────────► lazysodium 5.1.0 ceiling  (5.2.0 java artifact is JVM-21-only)
 
-AGP 8.7.3 ─┬─────────► Hilt/Dagger 2.58 ceiling  (2.59+ hard-requires AGP 9)
-           ├─────────► Compose foundation 1.8.x ceiling  (1.9.0 lint needs AGP 8.8.2)
-           └─ needs ─► Gradle 8.x   (AGP 9 needs Gradle 9.1+)
+AGP 8.13.0 ┬─────────► Hilt/Dagger 2.58 ceiling  (2.59+ hard-requires AGP 9)
+ (last 8.x)├─────────► Compose foundation 1.9+ now ALLOWED (8.13 > the 8.8.2 lint floor)
+           └─ needs ─► Gradle 8.13   (AGP 9 would need Gradle 9.1+)
 
 Kotlin 2.0.21 ── locked to ──► KSP 2.0.21-1.0.28
         │                          │
         └──── both feed ───────────┴──► Hilt annotation processing
                                         (Kotlin 2.4.0 + KSP ≤2.3.9 breaks `internal` providers)
 
-Room 2.6.1 ──────────► schema export is manual  (2.7+ automates it, but empties room-ktx)
+Room 2.8.4 ──────────► schema export automated by the Room Gradle plugin; room-ktx dropped
 ```
 
 ## Each constraint, and what unblocks it
@@ -50,7 +50,7 @@ Room 2.6.1 ──────────► schema export is manual  (2.7+ auto
 | **Hilt / Dagger** | `< 2.59` | Dagger 2.59 makes AGP 9 a hard requirement for anyone applying the Hilt Gradle plugin, which we do. 2.58's notes say AGP 9 support was deliberately held back "because it forces users onto AGP 9". Hilt currency and the AGP 9 migration are **one atomic decision**. | The AGP 9 migration |
 | **Kotlin / KSP** | no major/minor bumps | They are version-locked (KSP publishes as `<kotlin>-<ksp>`), and Dependabot bumps them in *separate* PRs — so a Kotlin-only bump cannot build by construction. Separately, Kotlin 2.4.0 changed default module naming to include a colon, and KSP ≤ 2.3.9 then emits invalid identifiers when Dagger/Hilt processes **`internal`** provider methods (`google/ksp#2964`, fixed in KSP 2.3.10/2.3.11). This repo has internal Hilt providers. | One hand-made PR moving Kotlin + KSP together onto KSP ≥ 2.3.10, with Hilt re-verified against that Kotlin |
 | **Compose BOM** | `< 2025.05.00` | foundation ≥ 1.9.0 bundles lint checks requiring **AGP ≥ 8.8.2**; we are on 8.7.3. | A small AGP bump to 8.8.2+ — this does **not** require the AGP 9 work |
-| **Room** | `< 2.7.0` | 2.7.0+ empties `androidx.room:room-ktx` into `room-runtime` ("the artifact is now blank. Please remove it from your dependency list") and we declare it. Plugin behaviour also shifts across 2.7. Schema export is load-bearing here. | A PR that drops `room-ktx` and re-verifies schema export in CI. **This one is a "needs a human", not a "never"** — 2.7+ also auto-registers exported schemas as androidTest assets, replacing manual wiring |
+| **Room** | *(none)* | Was bounded at `<2.7.0` because 2.7 empties `room-ktx` into `room-runtime` and we declared it. **Done:** the project is on **2.8.4**, `room-ktx` is dropped, and schema export is verified in CI. The bound is lifted. | — |
 | **lazysodium** | `< 5.2.0` | 5.2.0's `lazysodium-java` Gradle metadata marks it **JVM-21-only**; `:sync-crypto` and the app target JVM 17, so it fails variant resolution. `lazysodium-android` and `lazysodium-java` must also stay on the *same* version — `SyncCrypto` compiles against the java copy of the shared types and runs against the android copy. | Moving the whole project to JVM 21 |
 
 **GitHub Actions updates are deliberately unconstrained.** Those bumps are not failing, and action

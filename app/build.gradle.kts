@@ -96,9 +96,13 @@ android {
         compose = true
     }
     // MigrationTestHelper loads the exported schemas from the androidTest APK's assets, so the
-    // schema directory has to be an androidTest asset source. Room 2.7.0+ registers this
-    // automatically; at 2.6.1 it must be wired by hand. Without it every test in MigrationTest
-    // fails at runtime with "Cannot find the schema file in the assets folder".
+    // schema directory has to be an androidTest asset source.
+    //
+    // Room 2.7.0+ registers this automatically, so as of 2.8.4 this line is belt-and-braces —
+    // it points at the same directory the plugin would add. Kept deliberately: nothing in CI
+    // RUNS the instrumented tests (they are only compiled), so if the automatic registration
+    // ever changed, the failure would be a silent "Cannot find the schema file in the assets
+    // folder" at runtime on someone's machine rather than a red build here.
     sourceSets.getByName("androidTest") {
         assets.srcDir("$projectDir/schemas")
     }
@@ -149,7 +153,6 @@ dependencies {
     ksp(libs.hilt.compiler)
 
     implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
     implementation(libs.androidx.biometric)
