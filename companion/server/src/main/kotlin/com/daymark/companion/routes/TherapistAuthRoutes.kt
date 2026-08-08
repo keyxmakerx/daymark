@@ -1,5 +1,6 @@
 package com.daymark.companion.routes
 
+import com.daymark.companion.clientAddress
 import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.auth.Secrets
@@ -15,7 +16,6 @@ import io.ktor.http.CookieEncoding
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
-import io.ktor.server.plugins.origin
 import io.ktor.server.request.receive
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
@@ -229,7 +229,7 @@ fun Route.therapistAuthRoutes(
 
 /** Owner-token gate for the mint route. Non-enumerating errors, source-keyed lockout. */
 private suspend fun ApplicationCall.ownerAuthorized(guard: AuthGuard): Boolean {
-    val sourceId = request.origin.remoteAddress
+    val sourceId = clientAddress()
     val presented = request.headers[HttpHeaders.Authorization]?.removePrefix("Bearer ")?.trim()
     return when (guard.authorize(sourceId, presented)) {
         AuthGuard.Result.OK -> true
@@ -243,7 +243,7 @@ private suspend fun ApplicationCall.ownerAuthorized(guard: AuthGuard): Boolean {
  *  source IP only when the operator opted in (COMPANION_SECURITY.md §9 — IP off by default). */
 private fun auditMeta(sourceIpEnabled: Boolean, call: ApplicationCall, vararg extra: Pair<String, String>): Map<String, String> {
     val meta = extra.toMap().toMutableMap()
-    if (sourceIpEnabled) meta["sourceIp"] = call.request.origin.remoteAddress
+    if (sourceIpEnabled) meta["sourceIp"] = call.clientAddress()
     return meta
 }
 

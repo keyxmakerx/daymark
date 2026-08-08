@@ -1,5 +1,6 @@
 package com.daymark.companion.routes
 
+import com.daymark.companion.clientAddress
 import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.mail.MailMessage
 import com.daymark.companion.mail.Mailer
@@ -9,7 +10,6 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.application
-import io.ktor.server.plugins.origin
 import io.ktor.server.request.receive
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
@@ -86,7 +86,7 @@ fun Route.recoveryRoutes(
         post("/recovery/request") {
             call.response.header("Referrer-Policy", "no-referrer")
             val req = call.receive<RecoveryRequestBody>()
-            val sourceId = call.request.origin.remoteAddress
+            val sourceId = call.clientAddress()
             if (accountStore.allowReissueAttempt(sourceId, reissueMaxPerHour)) {
                 val minted = accountStore.requestReissue(req.email.trim(), confirmTtlSeconds)
                 if (minted != null) {
@@ -137,7 +137,7 @@ fun Route.recoveryRoutes(
 
 /** Owner-token gate, matching the convention in TherapistAuthRoutes.kt / SyncRoutes.kt. */
 private suspend fun ApplicationCall.ownerAuthorizedForRecovery(guard: AuthGuard): Boolean {
-    val sourceId = request.origin.remoteAddress
+    val sourceId = clientAddress()
     val presented = request.headers[HttpHeaders.Authorization]?.removePrefix("Bearer ")?.trim()
     return when (guard.authorize(sourceId, presented)) {
         AuthGuard.Result.OK -> true

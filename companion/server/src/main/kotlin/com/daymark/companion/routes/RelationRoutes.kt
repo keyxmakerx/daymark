@@ -1,5 +1,6 @@
 package com.daymark.companion.routes
 
+import com.daymark.companion.clientAddress
 import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.auth.Secrets
@@ -16,7 +17,6 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
-import io.ktor.server.plugins.origin
 import io.ktor.server.request.receiveStream
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
@@ -176,7 +176,7 @@ private fun auditPublish(auditStore: AuditStore, ctx: RelContext, lineage: Strin
 }
 
 private fun sourceIpMeta(enabled: Boolean, call: ApplicationCall): Map<String, String>? =
-    if (enabled) mapOf("sourceIp" to call.request.origin.remoteAddress) else null
+    if (enabled) mapOf("sourceIp" to call.clientAddress()) else null
 
 /** The audit log is additive, never load-bearing: a logging bug must never fail a real request. */
 private fun auditSafely(block: () -> Unit) {
@@ -258,7 +258,7 @@ private fun resolveRole(
     auditStore: AuditStore,
     auditSourceIp: Boolean,
 ): Role? {
-    val sourceId = call.request.origin.remoteAddress
+    val sourceId = call.clientAddress()
     val bearer = call.request.headers[HttpHeaders.Authorization]?.removePrefix("Bearer ")?.trim()
     if (bearer != null && ownerGuard.authorize(sourceId, bearer) == AuthGuard.Result.OK) {
         return Role.OWNER
