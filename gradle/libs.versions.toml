@@ -24,7 +24,7 @@ navigationCompose = "2.8.5"
 # 2.8.4: needs AGP >= 8.4 and minSdk >= 23 (we are on 8.13 and 26). room-ktx is emptied into
 # room-runtime from 2.7.0 ("the artifact is now blank"), so it is no longer declared.
 room = "2.8.4"
-hilt = "2.52"
+hilt = "2.58"
 hiltNavigationCompose = "1.2.0"
 biometric = "1.1.0"
 securityCrypto = "1.1.0"
