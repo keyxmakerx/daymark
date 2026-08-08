@@ -22,3 +22,7 @@ keystore.properties
 
 # Logs
 *.log
+
+# Companion deployment secrets and local env (never committed).
+companion/.env
+companion/secrets/

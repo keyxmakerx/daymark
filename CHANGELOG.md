@@ -7,6 +7,23 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **My safety plan**: short lists you write **while things are steady**, so a harder moment doesn't
+  have to start from a blank page — *warning signs I notice*, *things that help*, *people I can
+  reach*, plus an optional *reasons I want to stay* that is **offered rather than assumed** (it's
+  the heaviest thing on the screen to write, and an empty one sitting there permanently would read
+  as a reproach on a bad day). Reading and editing are the same screen, because in a hard moment
+  nobody should have to hunt for an edit button. The crisis row shows **your own** saved resource —
+  it defaults to 988 and is editable, so it's a real number wherever you are — and it hands off to
+  the crisis screen rather than dialing, since Daymark isn't a crisis service and never places a
+  call for you. The footer says the limit out loud: **a plan is not a person — reaching one is the
+  point.** Reachable from **More**, and as a quiet row in "Take a moment" **only once a plan
+  exists** (a row leading to a blank page in a hard moment is exactly what the plan is meant to
+  prevent). Deliberately **never** a suggestion card: nothing infers from your mood that you need
+  your safety plan. Everything is local, offline, and included in backups.
+  - Written in **our own words** and labelled **Adapted**, not the Stanley-Brown Safety Planning
+    Intervention — that form requires written permission to program into an electronic record.
+    There is deliberately **no means-restriction prompt**, which is also a house rule under
+    `PROVENANCE.md`. You can write anything you like; the app just never asks.
 - **Home — the daily loop**: Home is no longer the whole archive. It now opens with a greeting
   and the date, a **one-tap check-in row** ("How are you, right now?" — tap a face and the entry
   editor opens with that mood already picked), a small **glance** (current streak, plus the last
@@ -119,6 +136,22 @@ All notable changes to this project are documented here. The format is based on
 - **First-run onboarding wizard** (skippable): daily-reminder setup, optional PIN lock.
 
 ### Changed
+- **Dependabot now knows which upgrades this project cannot take**, so it stops reopening
+  un-mergeable PRs every week. Five of them were failing CI on repeat: Hilt 2.60.1 (Dagger ≥2.59
+  hard-requires AGP 9), Kotlin 2.4.0 (Kotlin and KSP are version-locked and bumped in separate PRs;
+  plus a KSP defect around `internal` Hilt providers), lazysodium 5.2.0 (JVM-21-only, which
+  `libs.versions.toml` had already documented in detail), and a grouped androidx PR carrying Compose
+  BOM 2024.12.01 → 2026.06.01 past the AGP 8.8.2 lint floor. Every ignore rule carries its reason
+  and its unblock condition inline, and the full constraint graph is written up in
+  [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md). GitHub Actions updates are left unconstrained — those
+  aren't failing.
+- **Room schemas are now exported through Room's own Gradle plugin** (`room { schemaDirectory(…) }`)
+  instead of the raw `ksp { arg("room.schemaLocation", …) }`, so the directory is a declared Gradle
+  task input/output rather than a path the processor writes to blind. CI additionally fails if the
+  exported schemas drift from what is committed — Room's own equality check compares only entities
+  and views, so a wrong `identityHash` in a committed schema would otherwise go unnoticed. No
+  dependency versions changed, and the existing flat schema layout is unchanged. Build-only; no
+  behaviour change in the app.
 - **Deleting an entry now asks first.** The swipe itself never deletes — a confirmation dialog
   does, with the 5-second **Undo** snackbar still behind it. A steady drag has to cross most of the
   row before the background turns from "Keep swiping" to "Release to delete", so a stray thumb

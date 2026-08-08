@@ -1,6 +1,7 @@
 package com.daymark.app.data
 
 import android.content.SharedPreferences
+import com.daymark.app.stats.SupportOfferFrequency
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -65,9 +66,27 @@ class SettingsRepository @Inject constructor(
         set(value) = prefs.edit().putBoolean(KEY_ONBOARDING_DONE, value).apply()
 
     // --- Gentle support (opt-in in-the-moment help offered after a low mood) ---
+    /**
+     * Master switch. When on, picking a low mood puts a quiet "Take a moment" action in the entry
+     * editor's top bar. That action is an *offer* — it sits there and costs nothing to ignore.
+     */
     var gentleSupportEnabled: Boolean
         get() = prefs.getBoolean(KEY_GENTLE_SUPPORT, false)
         set(value) = prefs.edit().putBoolean(KEY_GENTLE_SUPPORT, value).apply()
+
+    /**
+     * How often saving a hard day may *take you* to the support space rather than just offering.
+     * Separate from [gentleSupportEnabled] because being moved somewhere you didn't ask to go costs
+     * far more than a button you can ignore. See [SupportOffer].
+     */
+    var supportOfferFrequency: SupportOfferFrequency
+        get() = SupportOfferFrequency.fromKey(prefs.getString(KEY_SUPPORT_OFFER_FREQ, null))
+        set(value) = prefs.edit().putString(KEY_SUPPORT_OFFER_FREQ, value.name).apply()
+
+    /** Epoch millis of the last interruption; 0 = never. Rationed by [supportOfferFrequency]. */
+    var supportOfferLastShownAt: Long
+        get() = prefs.getLong(KEY_SUPPORT_OFFER_LAST, 0L)
+        set(value) = prefs.edit().putLong(KEY_SUPPORT_OFFER_LAST, value).apply()
 
     /** Emits the current preferences object whenever any value changes. */
     fun changes(): Flow<SharedPreferences> = callbackFlow {
@@ -89,5 +108,7 @@ class SettingsRepository @Inject constructor(
         private const val KEY_DYNAMIC_COLOR = "dynamic_color"
         private const val KEY_ONBOARDING_DONE = "onboarding_complete"
         private const val KEY_GENTLE_SUPPORT = "gentle_support_enabled"
+        private const val KEY_SUPPORT_OFFER_FREQ = "support_offer_frequency"
+        private const val KEY_SUPPORT_OFFER_LAST = "support_offer_last_shown_at"
     }
 }

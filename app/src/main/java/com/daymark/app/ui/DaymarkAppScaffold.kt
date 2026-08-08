@@ -370,6 +370,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                     onActivation = { navController.navigate(Routes.ACTIVATION) },
                     onThoughtRecords = { navController.navigate(Routes.THOUGHT_RECORDS) },
                     onMovement = { navController.navigate(Routes.MOVEMENT) },
+                    onSafetyPlan = { navController.navigate(Routes.SAFETY_PLAN) },
                     onSettings = { navController.navigate(Routes.SETTINGS) },
                     modifier = Modifier.padding(padding),
                 )
@@ -397,6 +398,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
             composable(Routes.SUPPORT, enterTransition = sheetEnter, popExitTransition = sheetPopExit) {
                 SupportScreen(
                     onClose = { navController.popBackStack() },
+                    onSafetyPlan = { navController.navigate(Routes.SAFETY_PLAN) },
                     onTalk = { navController.navigate(Routes.journalEntry()) },
                     onBreathe = { navController.navigate(Routes.SUPPORT_BREATHE) },
                     onReframe = { navController.navigate(Routes.thoughtRecord()) },
@@ -409,6 +411,12 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
             }
             composable(Routes.CRISIS, enterTransition = zEnter, popExitTransition = zPopExit) {
                 CrisisResourcesScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Routes.SAFETY_PLAN, enterTransition = zEnter, popExitTransition = zPopExit) {
+                com.daymark.app.ui.safety.SafetyPlanScreen(
+                    onBack = { navController.popBackStack() },
+                    onCrisis = { navController.navigate(Routes.CRISIS) },
+                )
             }
             composable(Routes.SLEEP_LOG, enterTransition = sheetEnter, popExitTransition = sheetPopExit) {
                 SleepLogScreen(onDone = { navController.popBackStack() })
@@ -544,6 +552,9 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                         navController.popBackStack()
                         navController.navigate(Routes.SUPPORT)
                     },
+                    // The corner action does NOT pop: the half-written entry stays on the back
+                    // stack, so taking a moment never costs you what you were in the middle of.
+                    onTakeAMoment = { navController.navigate(Routes.SUPPORT) },
                 )
             }
             composable(Routes.ACTIVITIES, enterTransition = zEnter, popExitTransition = zPopExit) {

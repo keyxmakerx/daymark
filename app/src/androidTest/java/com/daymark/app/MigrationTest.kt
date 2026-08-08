@@ -13,11 +13,20 @@ import org.junit.runner.RunWith
 
 /**
  * Verifies the Room migrations preserve user data and produce the expected schema. Covers every
- * hop for which an exported start schema exists (3 → 9). The 1.json / 2.json start schemas predate
+ * hop for which an exported start schema exists (3 → 13). The 1.json / 2.json start schemas predate
  * `exportSchema`, so MIGRATION_1_2 and MIGRATION_2_3 can't be validated here — they are retained
  * for correctness and must never be deleted (see docs/ARCHITECTURE.md).
  *
- * Instrumented test: runs on a device/emulator (and in CI), not in the local JVM unit-test run.
+ * **Instrumented test — and nothing in CI runs it today.** It needs a device or emulator, and no
+ * workflow invokes `connectedAndroidTest`; `build.yml` runs `test` + `assembleDebug` only. So a
+ * green CI badge says nothing about migrations, and these assertions only run when someone runs
+ * them locally. (An earlier version of this comment claimed it ran in CI. It did not.)
+ *
+ * The exported schemas reach this test as **androidTest assets**, wired by hand in
+ * `app/build.gradle.kts` via `sourceSets.getByName("androidTest") { assets.srcDir(...) }`. Without
+ * that wiring `MigrationTestHelper` cannot find them and every test here fails at runtime with
+ * "Cannot find the schema file in the assets folder" — which is exactly the state this file was in
+ * before v13 was added.
  */
 @RunWith(AndroidJUnit4::class)
 class MigrationTest {
@@ -34,7 +43,7 @@ class MigrationTest {
         AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4,
         AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7,
         AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_8_9, AppDatabase.MIGRATION_9_10,
-        AppDatabase.MIGRATION_10_11, AppDatabase.MIGRATION_11_12,
+        AppDatabase.MIGRATION_10_11, AppDatabase.MIGRATION_11_12, AppDatabase.MIGRATION_12_13,
     )
 
     @Test
@@ -106,13 +115,42 @@ class MigrationTest {
     }
 
     @Test
+    fun migrate12To13_createsSafetyPlanTable_andKeepsCommasIntact() {
+        helper.createDatabase(TEST_DB, 12).close()
+        helper.runMigrationsAndValidate(TEST_DB, 13, true, AppDatabase.MIGRATION_12_13).use { db ->
+            db.execSQL(
+                "INSERT INTO safety_plan_items (id, section, position, text, detail) " +
+                    "VALUES (1, 'things_that_help', 0, 'Call Sam, then walk', '')",
+            )
+            db.execSQL(
+                "INSERT INTO safety_plan_items (id, section, position, text, detail) " +
+                    "VALUES (2, 'people', 0, 'Sam', 'sister')",
+            )
+            // The comma is the whole reason this is a child table rather than a CSV column: a
+            // free-text safety-plan line must survive storage byte-for-byte.
+            db.query("SELECT text, detail FROM safety_plan_items WHERE id = 1").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("Call Sam, then walk", c.getString(0))
+                assertEquals("", c.getString(1))
+            }
+            db.query("SELECT text, detail FROM safety_plan_items WHERE id = 2").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("Sam", c.getString(0))
+                assertEquals("sister", c.getString(1))
+            }
+        }
+    }
+
+    @Test
     fun migrateAll_from3_toLatest() {
         helper.createDatabase(TEST_DB, 3).use { db ->
             db.execSQL(
                 "INSERT INTO mood_entries (id, dateTime, moodLevel, note) VALUES (7, 5000, 5, 'kept')",
             )
         }
-        helper.runMigrationsAndValidate(TEST_DB, 12, true, *allMigrations).use { db ->
+        // Keep this target in step with AppDatabase's @Database(version = …) on every schema bump —
+        // running to a stale version silently stops exercising the newest migrations.
+        helper.runMigrationsAndValidate(TEST_DB, 13, true, *allMigrations).use { db ->
             db.query("SELECT note FROM mood_entries WHERE id = 7").use { c ->
                 assertTrue(c.moveToFirst())
                 assertEquals("kept", c.getString(0))

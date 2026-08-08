@@ -7,6 +7,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    alias(libs.plugins.androidx.room)
 }
 
 // Release signing is read from keystore.properties (git-ignored) or CI env vars.
@@ -94,6 +95,13 @@ android {
     buildFeatures {
         compose = true
     }
+    // MigrationTestHelper loads the exported schemas from the androidTest APK's assets, so the
+    // schema directory has to be an androidTest asset source. Room 2.7.0+ registers this
+    // automatically; at 2.6.1 it must be wired by hand. Without it every test in MigrationTest
+    // fails at runtime with "Cannot find the schema file in the assets folder".
+    sourceSets.getByName("androidTest") {
+        assets.srcDir("$projectDir/schemas")
+    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -102,8 +110,19 @@ android {
 }
 
 // Export Room schemas so future migrations can be tested and reviewed.
-ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
+//
+// Configured through Room's own Gradle plugin rather than the raw
+// `ksp { arg("room.schemaLocation", ...) }`, so the directory is a **declared Gradle task
+// input/output** instead of a path the processor writes to blind — up-to-date checks and the
+// build cache track it. That distinction is not academic: adding v13 was the first time this repo
+// had to *create* a schema during a build rather than read one from the tree, and that build died
+// on a zero-byte 13.json (`IllegalStateException: Empty schema file`).
+//
+// One global directory is correct here, NOT one per variant: the single @Database lives in
+// src/main, so all four variants (foss/sync x debug/release) export identical schemas. Room only
+// calls for per-variant directories when the schemas actually differ.
+room {
+    schemaDirectory("$projectDir/schemas")
 }
 
 dependencies {

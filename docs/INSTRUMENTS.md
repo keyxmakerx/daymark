@@ -63,6 +63,28 @@ instruction, and label below is **authored by us**, not copied from any book, wo
 - **Yoga / stretch & bodyweight routines (Move)** — built from public-domain sequences and generic
   bodyweight intervals, with all instructions in **our own words** and **original hand-drawn pose
   figures** (no branded programs, no third-party images).
+- **Safety planning ("My safety plan")** — the general method of writing down warning signs, things
+  that help, people to reach, and reasons to stay. Tagged **Adapted (◐)** in-app. See the caveat
+  below; this one has a live licence question the others don't.
+
+### The one method with a named form behind it
+
+The reference safety-planning instrument is the **Stanley-Brown Safety Planning Intervention**,
+© Barbara Stanley, PhD and Gregory K. Brown, PhD (2008, 2021). Individual use of their form is
+permitted, but **written permission is required to change it, to translate it, or to program it into
+an electronic record** — which is exactly what building it into this app would be.
+
+**We do not reproduce their form.** Daymark ships its own section titles and helper copy, informed
+by the general method, and labels the tool **Adapted** rather than Validated to say so plainly. Two
+consequences worth recording:
+
+- **No means-restriction step.** Stanley-Brown includes making the environment safe; we omit it.
+  This is independently required by [PROVENANCE.md](PROVENANCE.md) rule 4 — no self-harm item slot
+  in any tier's shareable output — so it is a house rule, not only a licensing artifact. A person
+  may write anything they like in their own words; we never prompt for it.
+- **If permission is ever obtained**, the tool becomes **Validated** and this row changes with it.
+
+Detail and rationale: [SAFETY_PLAN_FEATURE_PLAN.md](SAFETY_PLAN_FEATURE_PLAN.md).
 
 ## See also
 

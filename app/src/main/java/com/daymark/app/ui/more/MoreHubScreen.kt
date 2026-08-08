@@ -48,6 +48,7 @@ fun MoreHubScreen(
     onActivation: () -> Unit,
     onThoughtRecords: () -> Unit,
     onMovement: () -> Unit,
+    onSafetyPlan: () -> Unit,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -123,7 +124,13 @@ fun MoreHubScreen(
                 onClick = onMovement,
                 modifier = Modifier.weight(1f),
             )
-            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+            HubCard(
+                icon = R.drawable.ic_act_love,
+                title = "My safety plan",
+                subtitle = "Write it while steady",
+                onClick = onSafetyPlan,
+                modifier = Modifier.weight(1f),
+            )
         }
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),

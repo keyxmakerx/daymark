@@ -1,5 +1,9 @@
 [versions]
-agp = "8.7.3"
+# AGP 8.13 is the LAST release on the 8.x line. It needs Gradle >= 8.13 and JDK 17 (both satisfied),
+# and unlike AGP 9 it keeps the legacy variant API and does not turn on built-in Kotlin — so this is
+# currency without the AGP 9 DSL migration. Going past it means AGP 9, which drags in Gradle 9.5+,
+# Kotlin >= 2.2.10 and Hilt >= 2.59 all at once. See docs/TOOLCHAIN.md.
+agp = "8.13.0"
 kotlin = "2.0.21"
 ksp = "2.0.21-1.0.28"
 coreKtx = "1.15.0"
@@ -77,3 +81,6 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+# Room's own Gradle plugin, so the exported-schema directory is a declared task
+# input/output instead of a path KSP writes to blind. Same version as the Room libraries.
+androidx-room = { id = "androidx.room", version.ref = "room" }

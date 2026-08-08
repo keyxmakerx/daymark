@@ -131,6 +131,14 @@ diagnosis, and nothing leaves your device.
 - **Breathing presets** — choose the pacer cadence: **slow ~6/min** (gentle default), **box
   4·4·4·4**, or **4·7·8**, with proper hold phases and in/out haptics. Described generically — no
   brand names, no health claims.
+- **My safety plan** — short lists you write **while things are steady**, so a harder moment
+  doesn't have to start from a blank page: *warning signs I notice*, *things that help*, *people I
+  can reach*, and an optional *reasons I want to stay* that is offered rather than assumed. The
+  crisis row shows **your own** saved line (defaulting to 988, editable) and hands off to the
+  crisis screen — Daymark never places a call for you. Written in our own words and labelled
+  **Adapted**, not the Stanley-Brown form; there is deliberately no means-restriction prompt. Lives
+  under **More**, appears as a quiet row in "Take a moment" **only once you've written one**, and
+  is never surfaced by a suggestion card — nothing infers from your mood that you need it.
 
 ## Everyday
 

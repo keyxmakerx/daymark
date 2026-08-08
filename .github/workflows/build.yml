@@ -40,6 +40,20 @@ jobs:
       - name: Build debug APKs (foss + sync flavors)
         run: ./gradlew assembleDebug --stacktrace
 
+      - name: Compile instrumented tests
+        # Neither `test` nor `assembleDebug` compiles androidTest sources, so without this a broken
+        # MigrationTest.kt would sail through CI untouched. This does NOT run the tests — they need
+        # a device — but it does prove they still compile against the current schema and DAOs.
+        run: ./gradlew assembleFossDebugAndroidTest --stacktrace
+
+      - name: Fail if the exported Room schemas drifted from what is committed
+        # Worth more than it looks. Room's own equality check (DatabaseBundle.isSchemaEqual)
+        # compares ONLY entities and views — never identityHash, version, or setupQueries — so a
+        # committed schema carrying a wrong identityHash would be invisible to every build. This
+        # step is the only thing that would catch it, and it also catches an entity change that
+        # forgot to bump the version.
+        run: git diff --exit-code -- app/schemas
+
       - name: Install build-tools (for aapt2)
         run: sdkmanager --install "build-tools;35.0.0"
 

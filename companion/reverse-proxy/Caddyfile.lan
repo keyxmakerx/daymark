@@ -1,0 +1,35 @@
+daymark.lan {
+	# Caddy's built-in CA. Root 3600d (10y), intermediate 7d, leaf 12h, all auto-renewed.
+	# Caddy CANNOT install the root into the host trust store from inside a container:
+	#   docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt ./daymark-root.crt
+	#   # then import daymark-root.crt on every phone/laptop
+	# This is what keeps WebAuthn working — WebAuthn requires a secure context, and an
+	# untrusted cert does not give you one.
+	tls internal
+
+	header {
+		# NO HSTS on the internal-CA variant. If you later move this hostname to a
+		# public cert, or a device caches HSTS for a name whose cert you then rotate,
+		# you have locked yourself out.
+		-Server
+		?Content-Security-Policy "default-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self'; manifest-src 'self'"
+		?X-Content-Type-Options       "nosniff"
+		?X-Frame-Options              "DENY"
+		?Referrer-Policy              "no-referrer"
+		?Cross-Origin-Opener-Policy   "same-origin"
+		?Cross-Origin-Resource-Policy "same-origin"
+		?Permissions-Policy           "geolocation=(), camera=(), microphone=(), payment=(), usb=(), magnetometer=(), accelerometer=()"
+	}
+	request_body { max_size 28MB }
+	encode zstd gzip
+	reverse_proxy companion:8080 {
+		header_up X-Forwarded-For   {client_ip}
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host  {host}
+		health_uri /healthz
+		health_interval 10s
+	}
+	log { level ERROR  output stderr  format filter { wrap json  fields { request>remote_ip delete  request>client_ip delete } } }
+}
+:2020 { respond /healthz 200
+        respond 404 }

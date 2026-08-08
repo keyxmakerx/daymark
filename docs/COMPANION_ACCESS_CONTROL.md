@@ -23,6 +23,9 @@
 - [Key recovery](#key-recovery)
 - [Behavioral guard (IDS)](#behavioral-guard-ids)
 - [HIPAA‑readiness checklist](#hipaa-readiness-checklist)
+- [The annoyance budget](#the-annoyance-budget)
+- [Clinician turnover](#clinician-turnover-what-a-handover-actually-is)
+- [Asked and answered](#asked-and-answered-so-this-isnt-re-litigated)
 - [Honest limits](#honest-limits)
 
 ---
@@ -184,6 +187,112 @@ compliant when they run it right.
 > **The gate:** an external HIPAA Security‑Rule assessment **and** an independent
 > crypto/RBAC audit **before any real patient** — see
 > [PRODUCT_DIRECTION.md](./PRODUCT_DIRECTION.md#the-compliance-gate-non-negotiable).
+
+## The annoyance budget
+
+Least privilege **will** be annoying. There is no version of this that isn't, and pretending
+otherwise is how security designs get quietly gutted the first time someone important is
+inconvenienced. So we budget the annoyance deliberately rather than letting it land at random.
+
+**The rule: friction goes where the risk is.** Rare, high-stakes, hard-to-undo actions should be
+genuinely hard. Routine, reversible, low-blast-radius actions should be nearly free. A design that
+charges the same friction for "read today's note for a client I already treat" and "add a clinician
+to the practice" has mispriced both — and users will route around the expensive one.
+
+| Action | Friction | Why |
+|---|---|---|
+| Read content you already hold a grant for | **None** — session auth only | The grant *was* the decision; charging again teaches people to hate the system |
+| Author a note / game plan | None beyond session | Routine clinical work, auditable, reversible |
+| Grant, extend, or widen a share | **Step-up (MFA)** | Creates new read capability — the actual risk |
+| Add/remove a practice member, change roles | **Step-up (MFA)** | Changes who *can* be granted |
+| Revoke / kill switch | **Deliberately cheap** | Never make the safe direction expensive |
+| Break-glass / emergency access | **Maximum** — justification + loud, immediate notification | Should feel like breaking glass |
+
+Corollaries that follow from the same principle:
+
+- **Never make the safe direction expensive.** Revoking, narrowing a share, and turning something
+  off must always be easier than granting, widening, and turning on. Asymmetry is the point.
+- **Step up, don't hard-lock.** Already the behavioral guard's rule; it generalises. A hard lockout
+  can cut off a clinician mid-session with a client in crisis, which is its own harm.
+- **Charge per decision, not per action.** Re-authorising the same standing decision repeatedly is
+  the enterprise-software version of the nag regression documented in
+  [SUPPORT_FEATURE_PLAN.md](./SUPPORT_FEATURE_PLAN.md) — repetition erodes the effect and trains
+  people to click through. If a prompt is answered the same way every time, it is not a control.
+- **The patient's own friction is capped hardest.** A person in a bad moment must never be locked out
+  of *their own* data by a security measure meant to constrain someone else.
+
+## Clinician turnover: what a handover actually is
+
+The org is **one practice**, so the motion that matters is not multi-tenancy — it is people moving:
+a GP referring out, a psychiatrist and a psychotherapist co-treating, someone covering a leave, and
+a clinician **departing** with clients who must not be stranded.
+
+**A referral and a transfer are the same control-plane object at two points in its life, and
+neither moves a key.** One `care_relationships` table (patient, member, `care_role` of
+primary/co-treating/covering/supervising, status, `ended_reason`). A referral *proposes* a
+relationship; a transfer *ends* one and proposes another. Because none of it mints read capability,
+reassignment stays cheap — session auth and an audit entry, no step-up. That cheapness is the payoff
+for keeping roles and keys independent in the first place.
+
+Two hard edges:
+
+- **`covering` must auto-expire.** Without a hard end date, covering a two-week leave quietly
+  becomes permanent access.
+- **A transfer must never route through break-glass.** A planned departure is not an emergency, and
+  that is the one door this design must not let it open.
+
+### The turnover decision
+
+Whether the care team may admit a new clinician, or whether every grant must be minted on the
+patient's device, is a genuine trade with no free option:
+
+| | Team may hand over | Patient mints every grant |
+|---|---|---|
+| Turnover | Works; new clinician reads day one | Strands until the patient acts |
+| Compromise | A hijacked clinician account can admit an attacker-controlled one | No access exists the patient didn't authorise |
+| Revocation | Needs re-key **and** assurance nobody re-admits | Clean |
+| Who pays | The patient pays in control | The patient pays in continuity of care |
+
+**Direction: team may hand over, hardened — with the stricter mode available per patient.** The
+deciding argument is that the second column's failure lands hardest on exactly the people least able
+to absorb it: someone unreachable for three weeks *because they are unwell* returns to a new
+clinician who knows nothing. Four constraints keep the cost of the first column small:
+
+1. **The care-team key carries strictly less than a personal grant** — assessment summaries,
+   progress notes, game plans. **Never** journal free text, **never** process notes.
+2. **Admission is loud** — adding a clinician notifies the patient immediately and appears in the
+   roster they can prune.
+3. **Admission requires step-up and is rate-limited** — a hijacked session must not be able to add
+   readers quietly. Granting is precisely where the [annoyance budget](#the-annoyance-budget) says
+   friction belongs.
+4. **The patient can switch to patient-minted-only** — a per-patient setting for anyone who prefers
+   the stricter trade, with its cost stated plainly on the same screen.
+
+> **Honest limit, to state in-product:** under the default, the safeguard against a bad admission is
+> the audit log and the patient's roster — **detective, not preventive**. Any current team member
+> can cryptographically admit another. Do not describe this as "only your therapist can see it".
+
+## Asked and answered (so this isn't re-litigated)
+
+Recurring questions, and where they were already settled:
+
+| Question | Answer | Where |
+|---|---|---|
+| "Attendants who only handle the time/scheduling piece?" | The **Front desk** role — scheduling, invites, membership logistics; **no** clinical content, scheduling metadata only | [Role catalog](#role-catalog) |
+| "Other specialists — psychiatrists, assistants, supervisors?" | All in the catalog. A **supervisor reads only via explicit consented grant, never by title** | [Role catalog](#role-catalog) |
+| "A group system that can be changed?" | **Orgs/practices** are the editable tenant; membership changes issue/revoke grants automatically; **org-consent** lets a client consent to "my care team at Practice X" and prune it any time | [Orgs](#orgs--practices-the-tenant), [Consent](#consent-model) |
+| "Least privilege without a god admin?" | The **three-plane rule** — admins live in control + monitoring, **never** the data plane | [Three planes](#the-three-planes) |
+| "Can a specialist see the safety plan?" | Not today (no `INTERNET` in the default build). If ever: an owner-created, curated, revocable share like anything else — never automatic | [SAFETY_PLAN_FEATURE_PLAN.md](./SAFETY_PLAN_FEATURE_PLAN.md) |
+
+**Still genuinely open:** groups *finer than* an org — a specific care team, a therapy group cohort,
+or a client-defined circle that isn't a practice. Org-consent covers "my care team at Practice X";
+it does not yet model a group whose membership the *client* curates, or one spanning two practices.
+
+**Settled, and recorded elsewhere so it isn't reopened:** location/presence sharing is
+**permanently excluded on principle**; timed/video/puzzle test items are **not built on the phone**;
+tool descriptors are **bundled in the app**, never remotely delivered. All three are in
+[COMPANION_SCOPE.md § Explicitly Out of Scope](./COMPANION_SCOPE.md#explicitly-out-of-scope) with
+their reasoning, because a bare exclusion gets argued back in and a reasoned one doesn't.
 
 ## Honest limits
 

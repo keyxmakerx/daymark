@@ -1,4 +1,16 @@
 version: 2
+
+# Why there are so many `ignore` rules here
+# ----------------------------------------
+# Several upgrades in this project are not "bump the number and see" — they are coupled to the
+# Android Gradle Plugin, to Gradle itself, or to each other, and Dependabot proposes them one at a
+# time in ways that cannot build. Left alone it reopens the same un-mergeable PRs every week, which
+# trains everyone to ignore CI failures. Each rule below therefore says WHY it exists and what
+# would unblock it. **Do not delete a rule without reading its comment and re-checking the claim.**
+#
+# This repo builds only through CI (no Android SDK on the maintainer's machine), so a bad merge
+# means a red default branch found late. The bias here is deliberately toward blocking.
+
 updates:
   - package-ecosystem: gradle
     directory: "/"
@@ -9,7 +21,80 @@ updates:
       androidx:
         patterns:
           - "androidx.*"
+    ignore:
+      # --- Android Gradle Plugin -------------------------------------------------------------
+      # AGP 9.x removes the legacy variant API, turns on built-in Kotlin by default, and raises the
+      # minimum Gradle to 9.1.0 (the wrapper is on 8.11.1). The variant-API part is actually cheap
+      # here — nothing in this repo uses applicationVariants/libraryVariants/variantFilter/etc —
+      # but the Gradle wrapper jump and the built-in-Kotlin decision are a deliberate, reviewed
+      # piece of work, not a dependency bump.
+      - dependency-name: "com.android.tools.build:gradle"
+        versions: [">=9.0.0"]
+
+      # --- Kotlin, and KSP, which must move together -----------------------------------------
+      # Two separate problems:
+      #  1. Kotlin and KSP are version-locked (KSP is published as "<kotlin>-<ksp>"). Dependabot
+      #     bumps them in separate PRs, so a Kotlin-only bump cannot build by construction. This is
+      #     the likely cause of the failing "Bump kotlin from 2.0.21 to 2.4.0" PR.
+      #  2. Kotlin 2.4.0 changed default module naming to include a colon; KSP <= 2.3.9 then emits
+      #     invalid identifiers specifically when Dagger/Hilt processes `internal` provider methods
+      #     (google/ksp#2964, fixed in KSP 2.3.10/2.3.11). This repo has internal Hilt providers.
+      # Unblocked by: a single hand-made PR moving kotlin + ksp together, onto KSP >= 2.3.10, with
+      # Hilt/Dagger checked against that Kotlin (Dagger publishes no support matrix and has broken
+      # on new Kotlin metadata before — google/dagger#5001).
+      - dependency-name: "org.jetbrains.kotlin*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "com.google.devtools.ksp*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+
+      # --- Hilt / Dagger ----------------------------------------------------------------------
+      # Dagger 2.59 makes AGP 9 a HARD requirement for anyone applying the Hilt Gradle plugin,
+      # which this project does. 2.58's notes say AGP 9 support was held back precisely "because it
+      # forces users onto AGP 9". So Hilt currency and the AGP 9 migration are one atomic decision,
+      # not separable work — which is why "Bump hilt from 2.52 to 2.60.1" fails.
+      # Ceiling while on AGP 8.x: 2.58. Unblocked by: the AGP 9 migration above.
+      - dependency-name: "com.google.dagger:*"
+        versions: [">=2.59"]
+
+      # --- Compose ----------------------------------------------------------------------------
+      # Compose foundation >= 1.9.0 bundles lint checks requiring a minimum of AGP 8.8.2; this repo
+      # is on 8.7.3. BOM 2025.05.00 is the first BOM shipping 1.9.0. There is an escape hatch
+      # (android.experimental.lint.version), but that is an AGP upgrade wearing a disguise.
+      # Unblocked by: AGP >= 8.8.2, which is a small bump and does NOT require the AGP 9 work.
+      # Worth knowing: BOM 2025.04.01 (foundation 1.8.0) is where FlowRow/FlowColumn become stable
+      # and the @OptIn(ExperimentalLayoutApi::class) annotations in ui/ could be dropped.
+      - dependency-name: "androidx.compose:compose-bom"
+        versions: [">=2025.05.00"]
+
+      # --- Room -------------------------------------------------------------------------------
+      # Room 2.7.0+ empties androidx.room:room-ktx into room-runtime ("the artifact is now blank.
+      # Please remove it from your dependency list") — this repo declares and uses room-ktx, so the
+      # bump needs a matching dependency edit. The Room Gradle plugin's behaviour also changes
+      # across 2.7 (b/376071291 and KSP2 support land in 2.7.0-alpha13), and schema export is
+      # load-bearing here (see docs/SAFETY_PLAN_FEATURE_PLAN.md).
+      # Unblocked by: a deliberate PR that drops room-ktx and re-verifies schema export in CI.
+      # Note this is a "needs a human", not a "never" — 2.7+ would also auto-register exported
+      # schemas as androidTest assets, replacing the manual wiring in app/build.gradle.kts.
+      - dependency-name: "androidx.room:*"
+        versions: [">=2.7.0"]
+
+      # --- lazysodium -------------------------------------------------------------------------
+      # Documented at length in gradle/libs.versions.toml: lazysodium-java 5.2.0's Gradle metadata
+      # marks it JVM-21-only, but :sync-crypto (and the app) target JVM 17, so 5.2.0 fails variant
+      # resolution outright. 5.1.0 is the newest release whose java artifact is JVM-8+ and whose
+      # android artifact also exists — and the two MUST stay on the same version, because
+      # SyncCrypto is compiled against lazysodium-java's copy of the shared types and runs against
+      # lazysodium-android's. This pin is a considered decision that Dependabot keeps re-proposing.
+      # Unblocked by: moving the whole project to JVM 21.
+      - dependency-name: "com.goterl:lazysodium-java"
+        versions: [">=5.2.0"]
+      - dependency-name: "com.goterl:lazysodium-android"
+        versions: [">=5.2.0"]
+
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
+    # Deliberately unconstrained. The open actions/* bumps are not failing CI, and action major
+    # versions mostly change the bundled Node runtime — the build log already warns that
+    # actions/checkout@v4 targets the deprecated Node 20. Reviewed and merged normally.

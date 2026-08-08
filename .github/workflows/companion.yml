@@ -198,5 +198,25 @@ jobs:
           curl -fsS http://127.0.0.1:8080/ | grep -q "Daymark Companion" \
             || { echo "::error::report viewer not served at /"; exit 1; }
 
+          # The checks above curl from the HOST, which passes even if the image's own
+          # HEALTHCHECK is broken. That matters on distroless: shell-form HEALTHCHECK is
+          # wrapped in /bin/sh, which does not exist there, so the probe cannot execute at
+          # all and the container pins "unhealthy" forever. Docker never restarts a
+          # container for being unhealthy on a single host, so nothing would ever say so.
+          echo "== container reports healthy (proves the HEALTHCHECK binary actually runs) =="
+          st=none
+          for _ in $(seq 1 45); do
+            st=$(docker inspect -f '{{.State.Health.Status}}' companion 2>/dev/null || echo none)
+            [ "$st" = "healthy" ] && break
+            [ "$st" = "unhealthy" ] && break
+            sleep 2
+          done
+          if [ "$st" != "healthy" ]; then
+            echo "::error::HEALTHCHECK never reported healthy (status=$st)"
+            docker inspect -f '{{json .State.Health}}' companion || true
+            docker logs companion || true
+            exit 1
+          fi
+
           docker rm -f companion >/dev/null
           echo "Container smoke-test passed."

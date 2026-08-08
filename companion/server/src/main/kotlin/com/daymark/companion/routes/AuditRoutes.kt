@@ -1,5 +1,6 @@
 package com.daymark.companion.routes
 
+import com.daymark.companion.clientAddress
 import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.auth.Secrets
 import com.daymark.companion.storage.AuditEvent
@@ -7,7 +8,6 @@ import com.daymark.companion.storage.AuditStore
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
-import io.ktor.server.plugins.origin
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
@@ -61,7 +61,7 @@ fun Route.auditRoutes(store: AuditStore, ownerGuard: AuthGuard) {
 
 /** Owner-token gate, matching TherapistAuthRoutes.ownerAuthorized exactly. */
 private suspend fun ApplicationCall.ownerAuditAuthorized(guard: AuthGuard): Boolean {
-    val sourceId = request.origin.remoteAddress
+    val sourceId = clientAddress()
     val presented = request.headers[HttpHeaders.Authorization]?.removePrefix("Bearer ")?.trim()
     return when (guard.authorize(sourceId, presented)) {
         AuthGuard.Result.OK -> true

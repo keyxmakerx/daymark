@@ -35,6 +35,12 @@ object Routes {
     const val SUPPORT = "support"
     const val SUPPORT_BREATHE = "support_breathe"
     const val CRISIS = "crisis"
+
+    /**
+     * "My safety plan" — written while steady, read in a hard moment. Reachable from More and from
+     * a quiet row on the support screen; deliberately never surfaced by a Signals card.
+     */
+    const val SAFETY_PLAN = "safety_plan"
     const val SLEEP = "sleep"
     const val SLEEP_LOG = "sleep_log"
     const val SLEEP_SETUP = "sleep_setup"

@@ -78,6 +78,18 @@ fun Application.module(
     auditStore: AuditStore? = null,
     accountStore: OwnerAccountStore? = null,
 ) {
+    // Publish the trusted-proxy allowlist before any route runs: every per-client lockout and rate
+    // limit reads it via ApplicationCall.clientAddress(). Empty (the default) means forwarded
+    // headers are ignored and controls key on the direct peer, exactly as before.
+    setTrustedProxies(config.trustedProxies)
+    if (config.trustedProxies.isEmpty()) {
+        log.warn(
+            "DAYMARK_TRUSTED_PROXIES is unset: per-client lockouts and rate limits will key on the " +
+                "direct peer address. Behind a reverse proxy that is the PROXY for every request, so " +
+                "all clients share one bucket and a single attacker can lock out everyone. Set it to " +
+                "your proxy's address on the internal network. See docs/COMPANION_DEPLOYMENT.md 4.0.",
+        )
+    }
     install(ContentNegotiation) { json(Json { explicitNulls = false }) }
     install(SecurityHeaders)
     install(StatusPages) {

@@ -16,6 +16,7 @@ import com.daymark.app.data.entity.AssessmentResult
 import com.daymark.app.data.entity.MoodEntry
 import com.daymark.app.data.entity.ThoughtRecord
 import com.daymark.app.data.entity.Reminder
+import com.daymark.app.data.entity.SafetyPlanItem
 import com.daymark.app.data.entity.SleepLog
 import com.daymark.app.data.entity.Tracker
 import com.daymark.app.data.entity.TrackerLog
@@ -101,6 +102,11 @@ data class BackupThoughtRecord(
 )
 
 @Serializable
+data class BackupSafetyPlanItem(
+    val id: Long, val section: String, val position: Int, val text: String, val detail: String,
+)
+
+@Serializable
 data class BackupData(
     val version: Int = 12,
     val exportedAt: Long,
@@ -130,6 +136,8 @@ data class BackupData(
     val achievements: Map<String, Long> = emptyMap(),
     // Added in v12.
     val thoughtRecords: List<BackupThoughtRecord> = emptyList(),
+    // Added in v13: the safety plan. Local-only like the rest — this is the backup, not a share.
+    val safetyPlan: List<BackupSafetyPlanItem> = emptyList(),
 )
 
 /**
@@ -153,6 +161,7 @@ class BackupManager @Inject constructor(
     private val assessmentDao: com.daymark.app.data.dao.AssessmentDao,
     private val achievementsStore: com.daymark.app.data.AchievementsStore,
     private val thoughtRecordDao: com.daymark.app.data.dao.ThoughtRecordDao,
+    private val safetyPlanDao: com.daymark.app.data.dao.SafetyPlanDao,
 ) {
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
 
@@ -191,6 +200,9 @@ class BackupManager @Inject constructor(
             thoughtRecords = thoughtRecordDao.getAll().map {
                 BackupThoughtRecord(it.id, it.dateTime, it.situation, it.automaticThought, it.evidenceFor,
                     it.evidenceAgainst, it.balancedThought, it.moodBefore, it.moodAfter, it.distortions)
+            },
+            safetyPlan = safetyPlanDao.getAll().map {
+                BackupSafetyPlanItem(it.id, it.section, it.position, it.text, it.detail)
             },
         )
         return json.encodeToString(data)
@@ -292,6 +304,10 @@ class BackupManager @Inject constructor(
             thoughtRecordDao.insert(ThoughtRecord(it.id, it.dateTime, it.situation, it.automaticThought,
                 it.evidenceFor, it.evidenceAgainst, it.balancedThought, it.moodBefore, it.moodAfter, it.distortions))
         }
+        safetyPlanDao.deleteAll()
+        data.safetyPlan.forEach {
+            safetyPlanDao.insert(SafetyPlanItem(it.id, it.section, it.position, it.text, it.detail))
+        }
     }
 
     /** Adds backup rows alongside existing data, assigning new ids and remapping links. */
@@ -360,6 +376,13 @@ class BackupManager @Inject constructor(
             thoughtRecordDao.insert(ThoughtRecord(0, t.dateTime, t.situation, t.automaticThought,
                 t.evidenceFor, t.evidenceAgainst, t.balancedThought, t.moodBefore, t.moodAfter, t.distortions))
         }
+        // Safety-plan items have no foreign keys. Positions are recomputed rather than copied, so a
+        // merged plan appends after what's already there instead of interleaving two orderings.
+        data.safetyPlan.sortedBy { it.position }.forEach { s ->
+            safetyPlanDao.insert(
+                SafetyPlanItem(0, s.section, safetyPlanDao.nextPosition(s.section), s.text, s.detail),
+            )
+        }
     }
 
     private fun encodeBase64(bytes: ByteArray): String =
@@ -369,6 +392,6 @@ class BackupManager @Inject constructor(
         android.util.Base64.decode(text, android.util.Base64.NO_WRAP)
 
     companion object {
-        const val CURRENT_VERSION = 12
+        const val CURRENT_VERSION = 13
     }
 }

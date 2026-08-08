@@ -303,6 +303,43 @@ phone face-up.
 Each finished session logs to a **"Movement minutes"** tracker, so movement shows
 up alongside your mood in Insights. There's no video and no network involved.
 
+### My safety plan
+
+A few short lists you write **while things are steady**, so that a harder moment
+doesn't have to start from a blank page.
+
+1. Open **More → My safety plan**.
+2. Fill in as much or as little as you like:
+   - **Warning signs I notice** — what it looks like when things start to slip.
+   - **Things that help** — what has actually worked before.
+   - **People I can reach** — a name, and optionally who they are.
+3. There's a fourth, **optional** section — *"Reasons I want to stay"*. It isn't
+   there unless you ask for it, because a blank one sitting on the screen is the
+   last thing anyone needs on a bad day. Tap the card to add it.
+
+There's no "save" step and no separate read mode — it's the same screen either
+way, so in a hard moment you don't have to go looking for an edit button. Tap the
+**✕** on any line to take it back out.
+
+At the bottom is your **crisis line**. It starts as 988 (US) and you can change
+it to your own local line under **"Take a moment" → crisis resources**; whatever
+you save shows up here. Tapping it opens your saved resource — **Daymark can't
+call for you and isn't a crisis service.** A plan is not a person, and reaching
+one is the point.
+
+Where it shows up: under **More**, and as a quiet row inside **"Take a moment"**
+— but only once you've actually written something, since a link to an empty plan
+in a hard moment would be worse than no link at all. It is **never** suggested by
+a card on Home; nothing in the app decides from your mood that you need it.
+
+> **What this is.** It's written in our own words and marked **Adapted** — it
+> draws on the general idea of safety planning, but it isn't the standard
+> clinical form, isn't validated, and isn't for diagnosis. It also never asks you
+> about means or methods. Write whatever you want in your own words; the app
+> simply doesn't prompt for that.
+
+Everything stays on your phone and is included in your backups.
+
 ### Achievements
 
 **More → Achievements** marks gentle milestones for showing up — your first

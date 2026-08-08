@@ -71,6 +71,21 @@ data class Config(
      * false for a plain-HTTP dev/test origin — the cookie would otherwise not be sent.
      */
     val cookieSecure: Boolean = true,
+    /**
+     * The trusted-proxy allowlist (`docs/COMPANION_DEPLOYMENT.md` §4.0) — comma-separated IPs and
+     * CIDR blocks, e.g. `"10.89.0.2/32"`.
+     *
+     * **Default is trust-nothing**, and that default is load-bearing. Empty means forwarded headers
+     * are ignored entirely and every per-source control keys on the direct peer — exactly what this
+     * server did before this setting existed. There is deliberately no broad default like
+     * `172.16.0.0/12`: that would let any co-resident container forge `X-Forwarded-For` and walk
+     * straight past the auth lockout.
+     *
+     * Set this and per-client controls start distinguishing clients instead of lumping every
+     * request behind the proxy into one bucket. Leave it unset behind a proxy and one attacker can
+     * lock out every user. See [ClientAddress].
+     */
+    val trustedProxies: List<ClientAddress.Range> = emptyList(),
 ) {
     /** True when the sync API has a configured access token and may serve /v1. */
     val syncEnabled: Boolean get() = !authToken.isNullOrBlank()
@@ -116,6 +131,7 @@ data class Config(
                     .let { it == "1" || it.equals("true", true) },
                 reissueMaxPerHour = env["DAYMARK_REISSUE_MAX_PER_HOUR"]?.trim()?.toIntOrNull() ?: 3,
                 reissueConfirmTtlSeconds = env["DAYMARK_REISSUE_CONFIRM_TTL_SECONDS"]?.trim()?.toLongOrNull() ?: 3600L,
+                trustedProxies = ClientAddress.parseTrusted(env["DAYMARK_TRUSTED_PROXIES"]),
             )
         }
 
