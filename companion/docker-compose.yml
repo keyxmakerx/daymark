@@ -2,7 +2,12 @@
 #
 #   cp .env.example .env && edit          # DAYMARK_DOMAIN, DAYMARK_ACME_EMAIL
 #   mkdir -p secrets && chmod 700 secrets
-#   openssl rand -base64 48 | tr -d '\n' > secrets/auth_token && chmod 600 secrets/auth_token
+#   openssl rand -base64 48 | tr -d '\n' > secrets/auth_token
+#   sudo chown 65532:65532 secrets/auth_token && chmod 400 secrets/auth_token
+#
+#   ^ the chown matters. Compose ignores the secrets uid/gid/mode keys outside Swarm, so
+#     the container sees the HOST file's ownership. Left as root:root 0600, UID 65532
+#     cannot read it and the server exits on startup.
 #   docker compose up -d --build
 #
 # NO top-level `version:` key — obsolete since Compose v2; current Compose warns on it.
@@ -142,18 +147,25 @@ services:
 
       # A JVM under a container memory limit defaults to a 25% heap. Without this you
       # get a ~192M heap on a 768M limit and will be confused by the OOMs.
+      # -Dorg.sqlite.tmpdir is NOT optional. sqlite-jdbc is JNI: on the first connection it
+      # extracts libsqlitejdbc.so into java.io.tmpdir and dlopen()s it. /tmp is mounted
+      # noexec (correctly — keep it), so loading from there fails with
+      # "UnsatisfiedLinkError: failed to map segment from shared object" and the JVM exits
+      # during Application.module(), before it ever binds a port. Pointing only the native
+      # extraction at the executable /data volume keeps noexec everywhere else.
       JAVA_TOOL_OPTIONS: >-
         -XX:MaxRAMPercentage=70
         -XX:+ExitOnOutOfMemoryError
         -XX:-UsePerfData
         -Djava.io.tmpdir=/tmp
+        -Dorg.sqlite.tmpdir=/data
 
+    # No uid/gid/mode here: Compose IGNORES them outside Swarm and only prints
+    # "warning: secrets 'uid', 'gid' and 'mode' are not supported, they will be ignored".
+    # The mounted file keeps the ownership and mode of the file on the host, so it must be
+    # made readable by UID 65532 there — see the header of this file.
     secrets:
-      - source: companion_auth_token
-        target: companion_auth_token
-        uid: "65532"
-        gid: "65532"
-        mode: 0400
+      - companion_auth_token
 
     tmpfs:
       - /tmp:size=64m,mode=1777,noexec,nosuid,nodev
