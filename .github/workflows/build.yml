@@ -29,16 +29,36 @@ jobs:
           # in the ~1GB emulator, whose download intermittently corrupts ("Error reading Zip
           # content from a SeekableByteChannel") and which this headless build never uses.
           # Install only what the build needs, up front, so it can't flake on the emulator.
-          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
+          # android-36 + build-tools 36.0.0 are staged ahead of the compileSdk 36 bump and of
+          # AGP 9 (which requires build-tools >= 36.0.0). Installing them now costs nothing and
+          # removes a variable from those changes.
+          packages: "platform-tools platforms;android-35 platforms;android-36 build-tools;35.0.0 build-tools;36.0.0"
 
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
+
+      # Configuration-only gate, ~90s. Plugin resolution, DSL and version-catalog failures land
+      # here instead of after a 7-minute assemble. Cheap attribution is the scarce resource in
+      # this repo: there is no Android SDK on the dev machine, so CI is the only oracle and every
+      # round costs 7 minutes.
+      - name: Configuration smoke test
+        run: |
+          ./gradlew help --stacktrace
+          ./gradlew build --dry-run --stacktrace
 
       - name: Run unit tests
         run: ./gradlew test --stacktrace
 
       - name: Build debug APKs (foss + sync flavors)
         run: ./gradlew assembleDebug --stacktrace
+
+      # R8 and resource shrinking run ONLY on release variants, which until now were built only
+      # on a tag push — so a minification failure surfaced at release time, outside the feedback
+      # loop entirely. That is the worst possible place to find it. The `sync` flavor matters
+      # most: JNA binds native methods reflectively, so its keep rules are exactly the kind R8
+      # breaks silently. Both flavors, because only `sync` pulls in JNA.
+      - name: Build release APKs (exercises R8 + resource shrinking)
+        run: ./gradlew assembleFossRelease assembleSyncRelease --stacktrace
 
       - name: Compile instrumented tests
         # Neither `test` nor `assembleDebug` compiles androidTest sources, so without this a broken
@@ -55,7 +75,7 @@ jobs:
         run: git diff --exit-code -- app/schemas
 
       - name: Install build-tools (for aapt2)
-        run: sdkmanager --install "build-tools;35.0.0"
+        run: sdkmanager --install "build-tools;36.0.0"
 
       - name: Verify the foss flavor never declares INTERNET
         run: |
@@ -67,6 +87,12 @@ jobs:
           fi
           PERMS=$("$AAPT2" dump permissions app/build/outputs/apk/foss/debug/app-foss-debug.apk)
           echo "$PERMS"
+          # Guard against a vacuous pass: if aapt2 emits nothing (wrong path, wrong tool version),
+          # the grep below finds no INTERNET and the check "succeeds" while having verified nothing.
+          if [ -z "$PERMS" ]; then
+            echo "::error::aapt2 dump permissions produced no output - the assertion below would pass vacuously"
+            exit 1
+          fi
           if echo "$PERMS" | grep -q "android.permission.INTERNET"; then
             echo "::error::the foss flavor must stay network-free — INTERNET leaked into its merged manifest"
             exit 1

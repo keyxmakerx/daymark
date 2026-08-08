@@ -6,12 +6,10 @@
 agp = "8.13.0"
 kotlin = "2.0.21"
 ksp = "2.0.21-1.0.28"
-# core / activity / lifecycle / androidx.hilt are held BELOW their latest: 1.19.0, 1.13.0, 2.11.0
-# and 1.4.0 respectively all require AGP >= 9.1 and compileSdk >= 37. Bumping them turned main red
-# via CheckAarMetadata. They move with the AGP 9 migration, not before it. See docs/TOOLCHAIN.md.
 # core / activity / lifecycle / androidx.hilt / navigation are deliberately held BELOW their latest.
 # 1.19.0 / 1.13.0 / 2.11.0 / 1.4.0 / 2.9.x each require **AGP >= 9.1 and compileSdk >= 37**; bumping
-# them turned main red via CheckAarMetadata. They move with the AGP 9 migration, not before it.
+# them turned main red via CheckAarMetadata. They do NOT move with an AGP 9 migration: they need
+# compileSdk 37 -> AGP 9.2 -> Kotlin > 2.3.21, and Dagger caps Kotlin at 2.3.21. Gated upstream.
 # Note androidx.hilt is NOT the Dagger 2.x line and versions separately, which makes it look
 # independent of the AGP 9 block. It is not. See docs/TOOLCHAIN.md.
 coreKtx = "1.15.0"

@@ -28,7 +28,7 @@ jobs:
         uses: android-actions/setup-android@v4
         with:
           # See build.yml: skip the flaky ~1GB emulator ("tools") download the build never uses.
-          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
+          packages: "platform-tools platforms;android-35 platforms;android-36 build-tools;35.0.0 build-tools;36.0.0"
 
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
@@ -56,7 +56,7 @@ jobs:
       # Defense in depth: re-verify here too, not just in build.yml's PR checks — a tag can be
       # pushed against a commit/ref that never ran those checks.
       - name: Install build-tools (for aapt2)
-        run: sdkmanager --install "build-tools;35.0.0"
+        run: sdkmanager --install "build-tools;36.0.0"
 
       - name: Verify the published APK never declares INTERNET
         run: |
@@ -68,6 +68,12 @@ jobs:
           fi
           PERMS=$("$AAPT2" dump permissions app/build/outputs/apk/foss/release/app-foss-release.apk)
           echo "$PERMS"
+          # Guard against a vacuous pass: if aapt2 emits nothing (wrong path, wrong tool version),
+          # the grep below finds no INTERNET and the check "succeeds" while having verified nothing.
+          if [ -z "$PERMS" ]; then
+            echo "::error::aapt2 dump permissions produced no output - the assertion below would pass vacuously"
+            exit 1
+          fi
           if echo "$PERMS" | grep -q "android.permission.INTERNET"; then
             echo "::error::refusing to publish — the foss release APK declares INTERNET"
             exit 1

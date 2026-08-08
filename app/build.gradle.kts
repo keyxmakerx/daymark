@@ -22,11 +22,18 @@ val releaseStorePath: String? =
 
 android {
     namespace = "com.daymark.app"
-    compileSdk = 35
+    // 36, not 35: AGP 9.0 flips the AarMetadata default so a consumer must compile against the
+    // same or higher SDK than the library did. Landing it here, on AGP 8.13 (which supports up to
+    // API 36.1), keeps it from being one more variable in any later AGP move.
+    // NOT 37 — that needs AGP 9.2, which needs Kotlin > 2.3.21, which Dagger forbids. See
+    // docs/TOOLCHAIN.md "Move C".
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.daymark.app"
         minSdk = 26
+        // Stays 35, and stays EXPLICIT. AGP 9 defaults targetSdk to compileSdk when unset, so an
+        // implicit value would silently become 36 and opt the app into new runtime behaviour.
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"

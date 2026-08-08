@@ -81,7 +81,13 @@ updates:
       # androidx.hilt:hilt-navigation-compose 1.4.0 requires AGP 9.1 directly, on its own.
       #
       # Bounds are set at the exact versions observed to fail, so anything below still flows.
-      # Unblocked by: the AGP 9 + compileSdk 37 migration (Move B in docs/TOOLCHAIN.md).
+      #
+      # Unblocked by: NOT the AGP 9 migration, despite what an earlier version of this comment
+      # said. These need compileSdk 37, which needs AGP 9.2, which needs Kotlin above 2.3.21 —
+      # and Kotlin is capped at 2.3.21 because Dagger's bundled kotlin-metadata-jvm is 2.3.21 and
+      # rejects Kotlin 2.4 metadata outright (google/dagger#5177; verified in Dagger master's own
+      # version catalog). So this tier is gated on an UPSTREAM DAGGER RELEASE whose
+      # kotlin-metadata-jvm is 2.4.x. See "Move C" in docs/TOOLCHAIN.md.
       - dependency-name: "androidx.core:*"
         versions: [">=1.19.0"]
       - dependency-name: "androidx.activity:*"
