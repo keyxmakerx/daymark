@@ -13,3 +13,8 @@ web/dist
 .env.*
 !.env.example
 .DS_Store
+
+# Deployment secrets and local env. The auth token reaches the container as a docker SECRET at
+# runtime, never through the image — so it has no business in the build context either.
+.env
+secrets/

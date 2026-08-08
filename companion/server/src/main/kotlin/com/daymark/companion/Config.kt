@@ -93,6 +93,21 @@ data class Config(
     /** True only when the operator configured an outbound mail host. */
     val smtpEnabled: Boolean get() = mailer.enabled
 
+    /**
+     * A data class's generated `toString()` prints every property — including [authToken], the
+     * bearer token that gates the entire sync API.
+     *
+     * Nothing logs a `Config` today. But "nothing logs it today" is one debug statement, one
+     * exception message, or one `log.info("starting with {}", config)` away from a live credential
+     * sitting in a log file that the operator then pastes into a bug report. `MailerConfig` already
+     * redacts for exactly this reason; this is the same guard, eight files over.
+     */
+    override fun toString(): String =
+        "Config(bindAddr=$bindAddr, port=$port, dataDir=$dataDir, basePath=$basePath, " +
+            "webDir=$webDir, logLevel=$logLevel, syncEnabled=$syncEnabled, smtpEnabled=$smtpEnabled, " +
+            "therapistAuthEnabled=$therapistAuthEnabled, trustedProxies=${trustedProxies.size} entries, " +
+            "authToken=${if (authToken.isNullOrBlank()) "unset" else "REDACTED"})"
+
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): Config {
             val basePathRaw = env["DAYMARK_BASE_PATH"]?.trim().orEmpty().ifEmpty { "/" }

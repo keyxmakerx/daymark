@@ -122,3 +122,30 @@ updates:
     # Deliberately unconstrained. The open actions/* bumps are not failing CI, and action major
     # versions mostly change the bundled Node runtime — the build log already warns that
     # actions/checkout@v4 targets the deprecated Node 20. Reviewed and merged normally.
+
+  # The companion server is a SEPARATE Gradle build with its own wrapper and its own catalog, so
+  # the root gradle entry above never sees it. It is also the only internet-facing code in this
+  # repo — a Ktor/Netty stack that was, until this entry existed, frozen and entirely unwatched.
+  - package-ecosystem: gradle
+    directory: "/companion/server"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # The companion web bundle is vendored into the image at build time and served to the browser
+  # that performs the client-side crypto. A compromised or vulnerable dependency here reaches the
+  # place where plaintext actually exists.
+  - package-ecosystem: npm
+    directory: "/companion/web"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Base images in companion/Dockerfile are pinned by digest, which is correct for reproducibility
+  # and useless for staying patched — a pinned digest never updates itself. This is what turns
+  # those pins from "frozen" into "deliberately current".
+  - package-ecosystem: docker
+    directory: "/companion"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
