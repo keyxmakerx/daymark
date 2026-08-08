@@ -77,3 +77,6 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+# Room's own Gradle plugin, so the exported-schema directory is a declared task
+# input/output instead of a path KSP writes to blind. Same version as the Room libraries.
+androidx-room = { id = "androidx.room", version.ref = "room" }

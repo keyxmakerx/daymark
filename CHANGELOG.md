@@ -136,6 +136,13 @@ All notable changes to this project are documented here. The format is based on
 - **First-run onboarding wizard** (skippable): daily-reminder setup, optional PIN lock.
 
 ### Changed
+- **Room schemas are now exported through Room's own Gradle plugin** (`room { schemaDirectory(…) }`)
+  instead of the raw `ksp { arg("room.schemaLocation", …) }`, so the directory is a declared Gradle
+  task input/output rather than a path the processor writes to blind. CI additionally fails if the
+  exported schemas drift from what is committed — Room's own equality check compares only entities
+  and views, so a wrong `identityHash` in a committed schema would otherwise go unnoticed. No
+  dependency versions changed, and the existing flat schema layout is unchanged. Build-only; no
+  behaviour change in the app.
 - **Deleting an entry now asks first.** The swipe itself never deletes — a confirmation dialog
   does, with the 5-second **Undo** snackbar still behind it. A steady drag has to cross most of the
   row before the background turns from "Keep swiping" to "Release to delete", so a stray thumb

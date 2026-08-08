@@ -187,15 +187,23 @@ automatic and never on by default. A clinician may *recommend*; only the owner g
 > `gradle.properties` is the obvious candidate), but without the CI logs it is unproven. Treat the
 > cause as open.
 >
-> **Two follow-ups worth doing, neither done here:**
+> **Both structural follow-ups are now in place:**
 >
-> 1. Adopt the **`androidx.room` Gradle plugin** (`room { schemaDirectory(...) }`), available at the
->    pinned Room 2.6.1 with no version bump. It replaces the raw `ksp { arg("room.schemaLocation") }`
->    and — this is the actual benefit — makes the schema directory a **declared Gradle task
->    input/output**, so up-to-date checks and the build cache stop operating blind on it. It does
->    *not* need per-variant directories: this repo's single `@Database` lives in `src/main`, so all
->    four variants emit identical schemas and the existing flat layout stays.
-> 2. Add a CI guard: `git diff --exit-code -- app/schemas`. This matters more than it looks —
->    `DatabaseBundle.isSchemaEqual` compares **only entities and views**, never `identityHash`,
->    `version`, or `setupQueries`, so a committed schema with a wrong `identityHash` would be
->    invisible to every build.
+> 1. The **`androidx.room` Gradle plugin** (`room { schemaDirectory(...) }`) replaces the raw
+>    `ksp { arg("room.schemaLocation") }` — available at the pinned Room 2.6.1 with no version bump.
+>    The benefit is precisely the thing that went wrong: the schema directory is now a **declared
+>    Gradle task input/output**, so up-to-date checks and the build cache track it instead of
+>    operating blind on it. It does *not* need per-variant directories, and deliberately does not
+>    use them: this repo's single `@Database` lives in `src/main`, so all four variants export
+>    identical schemas. Room only calls for per-variant directories when the schemas differ.
+> 2. A CI guard, `git diff --exit-code -- app/schemas`, runs after the build. This matters more
+>    than it looks — `DatabaseBundle.isSchemaEqual` compares **only entities and views**, never
+>    `identityHash`, `version`, or `setupQueries`, so a committed schema carrying a wrong
+>    `identityHash` would otherwise be invisible to every build. It also catches an entity change
+>    that forgot to bump the version.
+>
+> **Known limitation, unrelated to the above:** `MigrationTest.kt` cannot find these schemas at
+> runtime — nothing wires `app/schemas` into androidTest assets — and no workflow runs instrumented
+> tests, so its KDoc claim that it runs in CI is stale. It also stops at v12 and never reads
+> `13.json`. Room 2.7.0+ auto-registers exported schemas as androidTest resources; at 2.6.1 that
+> wiring would have to be added by hand. Live the moment instrumented tests are wired up.
