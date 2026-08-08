@@ -51,7 +51,7 @@ Room 2.8.4 ──────────► schema export automated by the Room
 | **Kotlin / KSP** | no major/minor bumps | They are version-locked (KSP publishes as `<kotlin>-<ksp>`), and Dependabot bumps them in *separate* PRs — so a Kotlin-only bump cannot build by construction. Separately, Kotlin 2.4.0 changed default module naming to include a colon, and KSP ≤ 2.3.9 then emits invalid identifiers when Dagger/Hilt processes **`internal`** provider methods (`google/ksp#2964`, fixed in KSP 2.3.10/2.3.11). This repo has internal Hilt providers. | One hand-made PR moving Kotlin + KSP together onto KSP ≥ 2.3.10, with Hilt re-verified against that Kotlin |
 | **Compose BOM** | *(none)* | Was bounded at `<2025.05.00` because foundation ≥1.9.0 needs AGP ≥8.8.2. **Done:** AGP 8.13 cleared it; the BOM is on **2026.06.01** and the eight `@OptIn(ExperimentalLayoutApi)` annotations are gone. | — |
 | **Room** | *(none)* | Was bounded at `<2.7.0` because 2.7 empties `room-ktx` into `room-runtime` and we declared it. **Done:** the project is on **2.8.4**, `room-ktx` is dropped, and schema export is verified in CI. The bound is lifted. | — |
-| **androidx core / activity / lifecycle / androidx.hilt / navigation** | core `<1.19.0`, activity `<1.13.0`, lifecycle `<2.11.0`, androidx.hilt `<1.4.0`, navigation `<2.9.0` | These jumped to an **AGP ≥9.1 and compileSdk ≥37** floor. Bumping them was merged and **turned main red** — `CheckAarMetadata` failed with 17 issues. The trap: `androidx.hilt` versions separately from `com.google.dagger`, so it looks unrelated to the AGP 9 block. It is not — `hilt-navigation-compose:1.4.0` requires AGP 9.1 on its own. | The AGP 9 + compileSdk 37 migration (Move B) |
+| **androidx core / activity / lifecycle / androidx.hilt / navigation** | core `<1.19.0`, activity `<1.13.0`, lifecycle `<2.11.0`, androidx.hilt `<1.4.0`, navigation `<2.9.0` | These jumped to an **AGP ≥9.1 and compileSdk ≥37** floor. Bumping them was merged and **turned main red** — `CheckAarMetadata` failed with 17 issues. The trap: `androidx.hilt` versions separately from `com.google.dagger`, so it looks unrelated to the AGP 9 block. It is not — `hilt-navigation-compose:1.4.0` requires AGP 9.1 on its own. | **Move C** — an upstream Dagger release supporting Kotlin 2.4. Not the AGP 9 migration. |
 | **lazysodium** | `< 5.2.0` | 5.2.0's `lazysodium-java` Gradle metadata marks it **JVM-21-only**; `:sync-crypto` and the app target JVM 17, so it fails variant resolution. `lazysodium-android` and `lazysodium-java` must also stay on the *same* version — `SyncCrypto` compiles against the java copy of the shared types and runs against the android copy. | Moving the whole project to JVM 21 |
 
 **GitHub Actions updates are deliberately unconstrained.** Those bumps are not failing, and action
@@ -75,6 +75,35 @@ These genuinely cannot be separated: Hilt ≥2.59 forces AGP 9, AGP 9 forces Gra
 intent to revert wholesale if it goes bad. Dagger publishes **no** Kotlin support matrix and has
 broken on new Kotlin metadata versions before (`google/dagger#5001`), so this is the least
 predictable work in the repo.
+
+### Move C — and why Move B does not unblock the androidx tier
+
+**This corrects an earlier claim in this document.** The held androidx libraries (core, activity,
+lifecycle, androidx.hilt, navigation) were described as moving "with the AGP 9 migration". They do
+not, and the chain is worth stating exactly:
+
+```
+androidx tier  needs  compileSdk 37
+compileSdk 37  needs  AGP 9.2
+AGP 9.2        needs  Kotlin > 2.3.21   (KGP 2.3.21's documented AGP ceiling is 9.0.0)
+Kotlin > 2.3.21 is FORBIDDEN by Dagger
+```
+
+Dagger's Hilt compiler bundles `kotlin-metadata-jvm`, whose reader maxes out at metadata 2.3.0.
+Kotlin 2.4 emits 2.4.0 and Hilt aborts:
+
+> Provided Metadata instance has version 2.4.0, while maximum supported version is 2.3.0.
+> To support newer versions, update the kotlin-metadata-jvm library.
+
+Verified directly, not inferred: `google/dagger#5177` carries that exact string, and Dagger
+`master`'s own `gradle/libs.versions.toml` still reads `kotlin = "2.3.21"` with
+`kotlin-metadataJvm` referencing it. No released Dagger supports Kotlin 2.4.
+
+**The signal to watch for is therefore a single upstream event:** a Dagger release whose
+`kotlin-metadata-jvm` is 2.4.x. When it lands, Kotlin 2.4 becomes legal, KGP 2.4's own matrix
+documents AGP up to 9.1 and Gradle up to 9.5, and AGP 9.2/9.3 + compileSdk 37 becomes a far
+better-supported move than anything available today. Until then, Move B buys the AGP 9 / KSP2
+foundation but **not** the androidx tier.
 
 Do **not** attempt Room 3.x as part of it. It is a rename-everything migration — new coordinates
 (`androidx.room3:room3-*`), new plugin id, new extension, new package — for no gain here.
