@@ -1,5 +1,21 @@
 # Daymark Companion — hardened deployment.
 #
+# TWO TOPOLOGIES. Pick one before you start.
+#
+#   A. YOU ALREADY RUN A REVERSE PROXY (canonical; docs/COMPANION_DEPLOYMENT.md §1)
+#        docker compose up -d --build
+#      Starts the app ONLY, published on 127.0.0.1:8080. Point your proxy there. Then:
+#        - set DAYMARK_TRUSTED_PROXIES in .env to your proxy's source address (REQUIRED — see below)
+#        - add Strict-Transport-Security at your proxy. The app sends CSP, X-Frame-Options,
+#          X-Content-Type-Options and Referrer-Policy on every response, but deliberately NOT
+#          HSTS, because it cannot know whether it is behind TLS.
+#        - your proxy terminates TLS; the app speaks plain HTTP on loopback.
+#
+#   B. USE THE BUNDLED CADDY (automatic TLS, nothing else to run)
+#        docker compose --profile bundled-proxy up -d --build
+#      Requires DAYMARK_DOMAIN to already resolve to this host, or ACME will fail and burn
+#      Let's Encrypt rate limits.
+#
 #   cp .env.example .env && edit          # DAYMARK_DOMAIN, DAYMARK_ACME_EMAIL
 #   mkdir -p secrets && chmod 700 secrets
 #   openssl rand -base64 48 | tr -d '\n' > secrets/auth_token
@@ -8,7 +24,6 @@
 #   ^ the chown matters. Compose ignores the secrets uid/gid/mode keys outside Swarm, so
 #     the container sees the HOST file's ownership. Left as root:root 0600, UID 65532
 #     cannot read it and the server exits on startup.
-#   docker compose up -d --build
 #
 # NO top-level `version:` key — obsolete since Compose v2; current Compose warns on it.
 
@@ -36,7 +51,11 @@ x-logging: &logging
 services:
 
   # ── Reverse proxy / TLS terminator ───────────────────────────────────────
+  # OPT-IN. Only starts with `--profile bundled-proxy`. If you already run a reverse proxy
+  # (Topology A in docs/COMPANION_DEPLOYMENT.md — the canonical setup), leave this out entirely
+  # and point your own proxy at 127.0.0.1:${DAYMARK_HOST_PORT:-8080}. See the header of this file.
   caddy:
+    profiles: ["bundled-proxy"]
     image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
     container_name: daymark-caddy
     <<: *hardened
@@ -107,7 +126,12 @@ services:
     <<: *hardened
     logging: *logging
 
-    # NO ports: — reachable ONLY via Caddy on `back`.
+    # Published to LOOPBACK ONLY (127.0.0.1), never 0.0.0.0 — so a reverse proxy on this host can
+    # reach it, while nothing on the LAN can. Harmless when the bundled Caddy is in use, since it
+    # talks over the internal `back` network regardless; useful for local debugging either way.
+    ports:
+      - "127.0.0.1:${DAYMARK_HOST_PORT:-8080}:8080"
+
     networks:
       back:
         ipv4_address: 10.89.0.3
@@ -123,11 +147,12 @@ services:
       DAYMARK_LOG_LEVEL: "warn"
       TZ:                "UTC"
 
-      # THE most important line in this file. Unset = every internet client shares one
-      # lockout bucket; 8 bad bearer tokens from one attacker locks out everyone for 15
-      # minutes. Pinned /32, never a bridge-wide CIDR — a co-resident container could
-      # otherwise forge X-Forwarded-For and evade lockout entirely.
-      DAYMARK_TRUSTED_PROXIES: "10.89.0.2/32"
+      # THE most important line in this file. Defaults to the bundled Caddy's pinned IP. IF YOU USE YOUR OWN REVERSE PROXY YOU MUST SET
+      # DAYMARK_TRUSTED_PROXIES in .env to ITS address, or its X-Forwarded-For is ignored and every
+      # client on the internet shares one lockout bucket — eight bad tokens from one attacker then
+      # locks out everybody. Setting it wrong is worse than leaving it unset only if you set it too
+      # WIDE: never a whole bridge CIDR, or any co-resident container can forge the header.
+      DAYMARK_TRUSTED_PROXIES: "${DAYMARK_TRUSTED_PROXIES:-10.89.0.2/32}"
 
       # Required once SMTP or the therapist portal is enabled. Without it,
       # RouteUrls.resolveBaseUrl() falls back to the client-supplied Host header and
