@@ -22,7 +22,7 @@ COPY web/ ./
 RUN pnpm build
 
 # ---- 2. Server fat jar ------------------------------------------------------
-FROM gradle:8.11.1-jdk21@sha256:7990a44ed0ad609ee740426d3becc69ae7d10a5ed14da7e354ad83cf7ef1d087 AS server
+FROM gradle:9.6.1-jdk21@sha256:a91a96d5f8530b4a6766f6502f563510bb5df157dc864ef50659c4214611a3d9 AS server
 WORKDIR /src
 COPY server/ ./
 # Use ./gradlew, NOT the image's `gradle`. CI runs gradle/actions/wrapper-validation
