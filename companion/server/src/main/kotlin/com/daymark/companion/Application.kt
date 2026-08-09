@@ -19,6 +19,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
+import io.ktor.server.engine.connector
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.http.content.staticFiles
 import io.ktor.server.netty.Netty
@@ -58,22 +59,31 @@ fun main() {
         config.mailer.validate()
         log.info("Outbound SMTP is ENABLED (the one deliberate egress exception): host={} port={} tls={}", config.mailer.host, config.mailer.port, config.mailer.tls)
     }
-    // Read/idle timeouts. These used to be the bundled reverse proxy's job — `read_header 10s`,
-    // `read_body 120s`, `idle 120s` — and they left with it, so until now nothing in the
-    // deployment bounded how slowly a client could dribble a request. Netty being non-blocking
-    // makes connection-count slowloris weak, not the slow-request kind. The operator's proxy is
-    // asked for the same thing (COMPANION_DEPLOYMENT_HARDENING.md 3.1 requirement 9), but the app
-    // must not depend on a proxy it cannot see to have a floor.
+    // A request-read timeout. This used to be the bundled reverse proxy's job — `read_header 10s`,
+    // `read_body 120s` — and it left with the proxy, so nothing in the deployment bounded how
+    // slowly a client could dribble a request. Netty being non-blocking makes connection-count
+    // slowloris weak, not the slow-request kind, and Ktor's own default here is
+    // `requestReadTimeoutSeconds = 0` — infinite (verified against the Ktor 3.0.3 source, not
+    // assumed). The operator's proxy is asked for the same thing in
+    // COMPANION_DEPLOYMENT_HARDENING.md §3.1 requirement 9, but the app must not depend on a proxy
+    // it cannot see for its floor.
     //
-    // 120 s for the body, not 10: a 25 MiB snapshot over a slow mobile uplink is a legitimate
-    // long request, and cutting those off would be a worse bug than the one being closed.
+    // 120 s, not 10: a 25 MiB snapshot over a slow mobile uplink is a legitimate long request, and
+    // cutting those off would be a worse bug than the one being closed. `responseWriteTimeoutSeconds`
+    // is deliberately left at Ktor's 10 s default — it is shipped behaviour I have not investigated,
+    // and widening it "while I'm here" would be changing a limit I have no finding about.
+    //
+    // NOTE the shape: Ktor 3.0.3 has NO embeddedServer overload taking port/host AND configure
+    // together (the compiler will list the three that exist if you get this wrong). Connectors are
+    // set inside `configure` instead, via the `connector` extension on ApplicationEngine.Configuration.
     embeddedServer(
         Netty,
-        port = config.port,
-        host = config.bindAddr,
         configure = {
+            connector {
+                host = config.bindAddr
+                port = config.port
+            }
             requestReadTimeoutSeconds = 120
-            responseWriteTimeoutSeconds = 120
         },
     ) {
         module(config)
