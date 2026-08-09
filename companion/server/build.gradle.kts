@@ -8,7 +8,7 @@ plugins {
 group = "com.daymark.companion"
 version = "0.0.1"
 
-val ktorVersion = "3.0.3"
+val ktorVersion = "3.5.2"
 val logbackVersion = "1.5.12"
 
 dependencies {
