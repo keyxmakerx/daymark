@@ -65,7 +65,7 @@ class RelationStore(
         conn = DriverManager.getConnection("jdbc:sqlite:${root.resolve("rel-index.db")}")
         conn.createStatement().use { st ->
             st.execute("PRAGMA journal_mode=WAL")
-            st.execute("PRAGMA synchronous=NORMAL")
+            st.execute("PRAGMA synchronous=FULL") // see BlobStore.init for why not NORMAL
             st.execute(
                 """
                 CREATE TABLE IF NOT EXISTS rel_blobs (
@@ -117,29 +117,51 @@ class RelationStore(
 
         val hash = BlobStore.sha256Hex(bytes)
         val now = clock()
+        val dir = relDir.resolve(relRef).resolve(channel.wire).resolve(lineage)
+        val target = dir.resolve("$version.blob")
+        var tmp: java.nio.file.Path? = null
         try {
-            val dir = relDir.resolve(relRef).resolve(channel.wire).resolve(lineage)
             Files.createDirectories(dir)
-            val target = dir.resolve("$version.blob")
-            val tmp = Files.createTempFile(tmpDir, "put", ".tmp")
-            Files.write(tmp, bytes)
-            Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE)
+            tmp = Files.createTempFile(tmpDir, "put", ".tmp")
+            java.io.FileOutputStream(tmp.toFile()).use { out ->
+                out.write(bytes)
+                out.flush()
+                out.fd.sync()
+            }
+
+            // Same ordering fix as BlobStore.put — see the long comment there. Index row inside a
+            // transaction, blob moved into place, then commit; every failure path rolls back and
+            // the finally clears the temp file. This path carries therapist-visible blobs, so a
+            // half-written pair here is a relationship that reads as empty rather than as broken.
+            conn.autoCommit = false
+            try {
+                conn.prepareStatement(
+                    "INSERT INTO rel_blobs(rel_ref, channel, lineage, version, size, content_hash, setting_key, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                ).use { ps ->
+                    ps.setString(1, relRef)
+                    ps.setString(2, channel.wire)
+                    ps.setString(3, lineage)
+                    ps.setLong(4, version)
+                    ps.setLong(5, bytes.size.toLong())
+                    ps.setString(6, hash)
+                    if (settingKey != null) ps.setString(7, settingKey) else ps.setNull(7, java.sql.Types.VARCHAR)
+                    ps.setLong(8, now)
+                    ps.executeUpdate()
+                }
+                Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+                conn.commit()
+            } catch (e: Throwable) {
+                runCatching { conn.rollback() }
+                throw e
+            } finally {
+                conn.autoCommit = true
+            }
         } catch (e: IOException) {
             throw RelationStoreException("disk write failed: ${e.message}", RelationStoreException.Kind.DISK_FULL)
-        }
-
-        conn.prepareStatement(
-            "INSERT INTO rel_blobs(rel_ref, channel, lineage, version, size, content_hash, setting_key, created_at) VALUES (?,?,?,?,?,?,?,?)",
-        ).use { ps ->
-            ps.setString(1, relRef)
-            ps.setString(2, channel.wire)
-            ps.setString(3, lineage)
-            ps.setLong(4, version)
-            ps.setLong(5, bytes.size.toLong())
-            ps.setString(6, hash)
-            if (settingKey != null) ps.setString(7, settingKey) else ps.setNull(7, java.sql.Types.VARCHAR)
-            ps.setLong(8, now)
-            ps.executeUpdate()
+        } catch (e: java.sql.SQLException) {
+            throw RelationStoreException("index write failed: ${e.message}", RelationStoreException.Kind.DISK_FULL)
+        } finally {
+            tmp?.let { runCatching { Files.deleteIfExists(it) } }
         }
 
         pruneLocked(relRef, channel, lineage)
