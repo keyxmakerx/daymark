@@ -11,6 +11,64 @@ class AuditStoreTest {
 
     private fun tmpDir() = Files.createTempDirectory("audit-store-test").toString()
 
+    /**
+     * Meta encoding must be injective, because the therapist controls one of the values that goes
+     * into it. `credentialId` is not validated anywhere before it reaches here, and the old
+     * encoding joined pairs with a raw `,` and `=`, so a value carrying those characters split
+     * into extra fields on the way back out. The hash is computed over the *encoded* string, so a
+     * verifier re-canonicalising the parsed map got the same hash — the tamper-evidence certified
+     * the forgery rather than catching it. On the log that exists to hold the therapist to
+     * account.
+     */
+    @Test
+    fun `a meta value containing the separators cannot forge extra fields`() {
+        val store = AuditStore(tmpDir(), retentionSeconds = 0)
+        val forged = mapOf("credentialId" to "alice,sourceIp=10.0.0.1")
+        store.append("rel1", AuditActor.THERAPIST, AuditAction.SHARE_OPEN, meta = forged)
+
+        val read = store.list("rel1").single().meta
+        assertEquals(forged, read, "the map must round-trip exactly, with no invented fields")
+        assertEquals(1, read!!.size, "a value with a comma must not become two entries")
+        assertNull(read["sourceIp"], "sourceIp was never recorded and must not appear")
+    }
+
+    @Test
+    fun `percent, comma and equals all survive a round trip in keys and values`() {
+        val store = AuditStore(tmpDir(), retentionSeconds = 0)
+        // '%' is the escape character, so a value that already contains an escape sequence is the
+        // case that breaks a naive implementation: escape '%' last and "%2C" decodes to a comma
+        // the caller never wrote.
+        val awkward = mapOf(
+            "a=b" to "100%",
+            "c,d" to "%2C",
+            "plain" to "",
+            "%25" to "x=y,z",
+        )
+        store.append("rel1", AuditActor.OWNER, AuditAction.SHARE_OPEN, meta = awkward)
+        assertEquals(awkward, store.list("rel1").single().meta)
+    }
+
+    @Test
+    fun `ordinary values encode exactly as before, so existing rows still verify`() {
+        // The escaping must be backward compatible: any meta that contained none of the three
+        // characters hashes identically to the pre-fix encoding, or every historical entry's
+        // chain hash would break on upgrade.
+        var now = 1_000_000L
+        val store = AuditStore(tmpDir(), retentionSeconds = 0, clock = { now })
+        val e = store.append(
+            "rel1", AuditActor.THERAPIST, AuditAction.SHARE_OPEN,
+            objectRef = "obj-1",
+            meta = mapOf("credentialId" to "alice", "channel" to "notes"),
+        )
+        // Recomputed by hand against the documented format: sorted pairs joined with ',' and '='.
+        val expectedMeta = "channel=notes,credentialId=alice"
+        val canonical = listOf(
+            "0".repeat(64), "1", now.toString(), "rel1",
+            AuditActor.THERAPIST.wire, AuditAction.SHARE_OPEN.wire, "obj-1", expectedMeta,
+        ).joinToString("|")
+        assertEquals(BlobStore.sha256Hex(canonical.toByteArray()), e.entryHash)
+    }
+
     @Test
     fun `append assigns monotonic seq per relationship and chains hashes`() {
         var now = 1_000_000L

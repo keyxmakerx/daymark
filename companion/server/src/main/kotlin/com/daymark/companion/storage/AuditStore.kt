@@ -198,9 +198,24 @@ class AuditStore(
             require(NAME.matches(name)) { "invalid rel_ref" }
         }
 
-        /** Deterministic, order-stable encoding of a small flat meta map (no nested values). */
+        /**
+         * Deterministic, order-stable, **injective** encoding of a small flat meta map.
+         *
+         * The separators used to be raw, and that let a caller-supplied value forge entries. A
+         * `credentialId` of `alice,sourceIp=10.0.0.1` encoded to
+         * `credentialId=alice,sourceIp=10.0.0.1`, which [parseMeta] reads back as *two* fields —
+         * one of them invented. And because [chainHash] hashes the already-encoded string, a
+         * verifier that re-canonicalises the parsed map computes the identical hash: the tamper-
+         * evidence machinery certifies the forgery instead of catching it. On a log whose whole
+         * purpose is holding the therapist accountable, with a field the therapist supplies.
+         *
+         * Percent-escaping the three meaningful characters makes the mapping one-to-one, so
+         * `parseMeta(canonicalMeta(m)) == m` for every map. Values containing none of them encode
+         * byte-identically to before, so existing rows and their hashes still verify — only the
+         * inputs that were already ambiguous change, and those were never trustworthy.
+         */
         private fun canonicalMeta(meta: Map<String, String>): String =
-            meta.toSortedMap().entries.joinToString(",") { (k, v) -> "$k=$v" }
+            meta.toSortedMap().entries.joinToString(",") { (k, v) -> "${escapeMeta(k)}=${escapeMeta(v)}" }
 
         private fun parseMeta(encoded: String): Map<String, String> =
             if (encoded.isEmpty()) {
@@ -208,9 +223,17 @@ class AuditStore(
             } else {
                 encoded.split(",").associate {
                     val parts = it.split("=", limit = 2)
-                    parts[0] to (parts.getOrElse(1) { "" })
+                    unescapeMeta(parts[0]) to unescapeMeta(parts.getOrElse(1) { "" })
                 }
             }
+
+        // '%' must be escaped first and unescaped last, or the escape character is not itself
+        // escapable and a value containing "%2C" would decode to a comma it never had.
+        private fun escapeMeta(s: String): String =
+            s.replace("%", "%25").replace(",", "%2C").replace("=", "%3D")
+
+        private fun unescapeMeta(s: String): String =
+            s.replace("%3D", "=").replace("%2C", ",").replace("%25", "%")
 
         private fun chainHash(
             prevHash: String,
