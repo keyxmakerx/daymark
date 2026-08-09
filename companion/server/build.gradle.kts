@@ -39,7 +39,7 @@ dependencies {
     testImplementation(kotlin("test"))
     // Embedded fake SMTP server for headless end-to-end mailer tests (Apache-2.0, test-only,
     // never shipped in the shadowJar).
-    testImplementation("com.icegreen:greenmail:2.1.2")
+    testImplementation("com.icegreen:greenmail:2.1.12")
 }
 
 kotlin {
