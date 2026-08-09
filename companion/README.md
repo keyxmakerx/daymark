@@ -103,6 +103,11 @@ mail server, requires TLS (STARTTLS or implicit), takes credentials via `*_FILE`
 and its emails carry **only** links/notifications — **never** any record or plaintext
 content.
 
+Two health endpoints: **`/healthz`** is liveness (the process is up) and **`/readyz`**
+additionally proves `/data` is still writable, returning 503 when it is not — a read-only
+mount, a volume owned by the wrong UID, or a full disk. The container's own HEALTHCHECK
+probes `/readyz`.
+
 **There is no bundled reverse proxy, deliberately.** The app speaks plain HTTP on
 `127.0.0.1:8080` and expects yours — Cosmos Cloud, Caddy, Traefik, nginx, a Cloudflare
 tunnel — to terminate TLS in front of it. Two things are required of it and neither is

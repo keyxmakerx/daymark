@@ -109,6 +109,9 @@ fun Application.module(
         log.warn("Web directory '{}' not found — static assets will 404 until it is built/mounted.", webRoot.absolutePath)
     }
 
+    // Answers "can this server still take a write?", which /healthz never could. See Readiness.
+    val readiness = Readiness(config.dataDir)
+
     val store = if (config.syncEnabled) {
         blobStore ?: BlobStore(config.dataDir, config.maxBlobBytes, config.maxVersions, config.perTokenQuotaBytes)
     } else null
@@ -144,9 +147,31 @@ fun Application.module(
     } else null
 
     routing {
-        // Unauthenticated, content-free liveness probe — never under the base path.
+        // Unauthenticated, content-free LIVENESS probe — never under the base path.
+        // "The process is up and routing." Deliberately says nothing about whether the server can
+        // still accept a write: a full disk leaves every read working, and a proxy that pulls this
+        // backend out of rotation over it would take away the operator's last way to read their own
+        // data through the proxy. Point a load balancer here; point monitoring at /readyz.
         get("/healthz") {
             call.respondText("""{"ok":true}""", ContentType.Application.Json)
+        }
+
+        // Unauthenticated READINESS probe — "and it can still write." 503 when it cannot.
+        // The body stays content-free for the same reason /healthz does: this endpoint is reachable
+        // by anyone who can reach the app, and "which" failure it is belongs in the operator's log,
+        // not in a response to an anonymous caller. Result is cached (see Readiness) so this cannot
+        // be used to force one disk write per request.
+        get("/readyz") {
+            val result = readiness.check()
+            if (result.ready) {
+                call.respondText("""{"ok":true}""", ContentType.Application.Json)
+            } else {
+                call.respondText(
+                    """{"ok":false}""",
+                    ContentType.Application.Json,
+                    HttpStatusCode.ServiceUnavailable,
+                )
+            }
         }
 
         // Unauthenticated capability probe. Reveals ONLY whether the operator enabled outbound

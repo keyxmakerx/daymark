@@ -1,8 +1,12 @@
 name: Companion
 
 # CI for the self-hosted Companion (companion/). Two gates first — type-check the web
-# bundle and test the server — then, only if both pass, build the Docker image and run
-# the container to confirm it actually serves /healthz under its hardened settings.
+# bundle and test the server — then, only if both pass, build the Docker image and boot it
+# under its hardened settings, twice: once through docker-compose.yml (host-proxy topology,
+# published loopback port) and once with docker-compose.no-egress.yml (container-proxy
+# topology, no published port). Both are probed for the security properties their comments
+# claim, because an untested claim in a compose file is how the last four first-boot
+# failures shipped green.
 #
 # Path-filtered so it only runs when companion code (or this workflow) changes; the
 # Android app build lives in build.yml.
@@ -142,7 +146,7 @@ jobs:
         run: pnpm test:integration
 
   docker:
-    name: Docker — build image + run /healthz
+    name: Docker — image + both compose topologies
     runs-on: ubuntu-latest
     needs: [web, server] # only spin up the builder once the checks above pass
     steps:
@@ -167,9 +171,14 @@ jobs:
           set -euo pipefail
           # Run under the same hardening the compose file uses: non-root (baked into the
           # image), read-only rootfs + tmpfs /tmp, all caps dropped, no new privileges.
+          # /data needs a real volume: the rootfs is read-only, and the HEALTHCHECK probes
+          # /readyz, which writes there. Without it the container is correctly unhealthy —
+          # which is the point of that probe, but not what this step is testing.
+          docker volume create companion-ci-data >/dev/null
           docker run -d --name companion \
             -p 127.0.0.1:8080:8080 \
             --read-only --tmpfs /tmp \
+            -v companion-ci-data:/data \
             --cap-drop ALL \
             --security-opt no-new-privileges \
             daymark-companion:ci
@@ -188,6 +197,11 @@ jobs:
 
           echo "== /healthz =="
           curl -fsS http://127.0.0.1:8080/healthz; echo
+
+          echo "== /readyz proves the data volume is writable =="
+          curl -fsS http://127.0.0.1:8080/readyz | grep -q '"ok":true' \
+            || { echo "::error::/readyz did not report ready with a writable /data"; \
+                 docker logs companion || true; exit 1; }
 
           echo "== security header present =="
           curl -fsS -D - -o /dev/null http://127.0.0.1:8080/ \
@@ -218,7 +232,36 @@ jobs:
             exit 1
           fi
 
+          # And the inverse: with /data NOT writable, /readyz must say so. This is the whole
+          # reason the endpoint exists — the old /healthz returned 200 in exactly this state,
+          # so a container that could not accept a single write reported perfect health.
+          echo "== /readyz fails when /data is read-only =="
           docker rm -f companion >/dev/null
+          docker run -d --name companion-ro \
+            -p 127.0.0.1:8081:8080 \
+            --read-only --tmpfs /tmp \
+            -v companion-ci-data:/data:ro \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            daymark-companion:ci
+          for _ in $(seq 1 40); do
+            curl -fsS --max-time 2 http://127.0.0.1:8081/healthz >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS --max-time 5 http://127.0.0.1:8081/healthz >/dev/null \
+            || { echo "::error::liveness should still pass with a read-only /data"; \
+                 docker logs companion-ro || true; exit 1; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:8081/readyz)
+          if [ "$code" != "503" ]; then
+            echo "::error::/readyz returned $code with a read-only /data; expected 503"
+            docker logs companion-ro || true
+            exit 1
+          fi
+          docker logs companion-ro 2>&1 | grep -q 'NOT READY' \
+            || { echo "::error::readiness failure was not logged"; docker logs companion-ro || true; exit 1; }
+
+          docker rm -f companion-ro >/dev/null
+          docker volume rm companion-ci-data >/dev/null
           echo "Container smoke-test passed."
 
       # Everything above tests the IMAGE. Nothing tested the deployment — and a security

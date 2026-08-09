@@ -5,7 +5,7 @@
 the operator's, and these are references for writing its config.
 
 Read [COMPANION_DEPLOYMENT_HARDENING.md §3](../COMPANION_DEPLOYMENT_HARDENING.md#3-your-reverse-proxy--the-contract)
-first. It states the eight requirements the proxy has to meet. These files are illustrations of
+first. It states the nine requirements the proxy has to meet. These files are illustrations of
 those requirements, not substitutes for them — where a file and the contract disagree, the contract
 is right.
 
