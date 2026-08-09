@@ -52,8 +52,8 @@ companion/
 │       └── …           Phase-0 report viewer + "Connect to sync" reader
 ├── server/         Ktor (Kotlin): serves the bundle, /healthz, the zero-knowledge /v1 blob store
 ├── Dockerfile      Multi-stage build (web → server jar → minimal JRE runtime, non-root)
-├── docker-compose.yml
-├── reverse-proxy/  Worked Caddy / Traefik / nginx examples
+├── docker-compose.yml            The app, published on 127.0.0.1:8080. No bundled proxy.
+├── docker-compose.no-egress.yml  Override for a containerised proxy: no host port, no egress
 └── INSTRUMENTS.md  Instrument-ledger stub (for the future assessment runner)
 ```
 
@@ -86,7 +86,11 @@ device/lineage, and passphrase. The snapshot is fetched and decrypted in your br
 
 ```bash
 cd companion
-docker compose up --build
+cp .env.example .env          # set DAYMARK_DOMAIN
+mkdir -p secrets && chmod 700 secrets
+openssl rand -base64 48 | tr -d '\n' > secrets/auth_token
+sudo chown 65532:65532 secrets/auth_token && chmod 400 secrets/auth_token
+docker compose up -d --build
 # then open http://localhost:8080
 ```
 
@@ -97,9 +101,18 @@ outbound **SMTP** for therapist invite/notification links. It is **OFF unless
 `DAYMARK_SMTP_HOST` is set**; when enabled it egresses only to the operator's configured
 mail server, requires TLS (STARTTLS or implicit), takes credentials via `*_FILE` secrets,
 and its emails carry **only** links/notifications — **never** any record or plaintext
-content. For real use, put it behind your reverse proxy and remove the `ports:`
-block — see [`reverse-proxy/`](reverse-proxy/) and
-[`../docs/COMPANION_DEPLOYMENT.md`](../docs/COMPANION_DEPLOYMENT.md).
+content.
+
+**There is no bundled reverse proxy, deliberately.** The app speaks plain HTTP on
+`127.0.0.1:8080` and expects yours — Cosmos Cloud, Caddy, Traefik, nginx, a Cloudflare
+tunnel — to terminate TLS in front of it. Two things are required of it and neither is
+optional: set `DAYMARK_TRUSTED_PROXIES` to its address, and add `Strict-Transport-Security`
+there (the app sends every other security header but not HSTS, because it cannot know
+whether it is behind TLS). If your proxy is itself a container, use
+`docker-compose.no-egress.yml`, which drops the host port and leaves the app no route out
+at all. The full contract is §3 of
+[`../docs/COMPANION_DEPLOYMENT_HARDENING.md`](../docs/COMPANION_DEPLOYMENT_HARDENING.md);
+worked configs are in [`../docs/alternatives/`](../docs/alternatives/).
 
 ## Local development
 

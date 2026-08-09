@@ -90,6 +90,10 @@ fun Application.module(
                 "your proxy's address on the internal network. See docs/COMPANION_DEPLOYMENT.md 4.0.",
         )
     }
+    // The line above is a hint; unset is also correct for a directly-reachable deployment, so it
+    // cannot tell "fine" from "forgotten". This turns it into evidence: it fires only when a
+    // forwarded header actually arrives while the allowlist is empty.
+    install(ProxyMisconfigWarning)
     install(ContentNegotiation) { json(Json { explicitNulls = false }) }
     install(SecurityHeaders)
     install(StatusPages) {

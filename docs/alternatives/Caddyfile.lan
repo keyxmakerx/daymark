@@ -1,3 +1,18 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# EXAMPLE — NOT SHIPPED, NOT TESTED, NOT STARTED BY ANY COMPOSE FILE.
+#
+# This used to be `companion/reverse-proxy/Caddyfile.lan`, run by a bundled Caddy service.
+# That service was removed on 2026-08-09; the Companion now ships the application only.
+# Kept here as a worked reference for operators who choose Caddy. Read
+# docs/COMPANION_DEPLOYMENT_HARDENING.md §3 for the contract this is one way of meeting,
+# and docs/alternatives/README.md for what the four examples do and do not agree on.
+#
+# Written for the CONTAINERISED-PROXY topology (docker-compose.no-egress.yml), where Caddy
+# joins `daymark-companion_back` and the app is reachable as `daymark-companion:8080`.
+# If Caddy runs on the Docker host instead, use the default compose file and change every
+# upstream below to 127.0.0.1:8080.
+# ─────────────────────────────────────────────────────────────────────────────
+
 daymark.lan {
 	# Caddy's built-in CA. Root 3600d (10y), intermediate 7d, leaf 12h, all auto-renewed.
 	# Caddy CANNOT install the root into the host trust store from inside a container:
@@ -22,7 +37,7 @@ daymark.lan {
 	}
 	request_body { max_size 28MB }
 	encode zstd gzip
-	reverse_proxy companion:8080 {
+	reverse_proxy daymark-companion:8080 {
 		header_up X-Forwarded-For   {client_ip}
 		header_up X-Forwarded-Proto {scheme}
 		header_up X-Forwarded-Host  {host}

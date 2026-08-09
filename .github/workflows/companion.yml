@@ -222,38 +222,33 @@ jobs:
           echo "Container smoke-test passed."
 
       # Everything above tests the IMAGE. Nothing tested the deployment — and a security
-      # audit found four independent first-boot failures that all lived in the compose file
-      # and the Caddyfile, none of which CI had ever parsed, let alone run. These two steps
-      # exist so that class of bug cannot ship green again.
-      - name: Caddyfile must parse
+      # audit found four independent first-boot failures that all lived in the compose
+      # file, which CI had never parsed, let alone run. The steps below exist so that
+      # class of bug cannot ship green again, and so that the security claims written in
+      # the compose comments are claims CI can contradict.
+      - name: Compose — prepare .env and the auth secret
         working-directory: companion
         run: |
           set -euo pipefail
-          # Same pinned binary the deployment runs. `caddy validate` adapts the Caddyfile,
-          # which is where an unrecognised subdirective or a conflicting TLS automation
-          # policy surfaces — both of which are hard startup failures, not warnings.
-          docker run --rm \
-            -e DAYMARK_DOMAIN=daymark.example.com \
-            -e DAYMARK_ACME_EMAIL=ci@example.com \
-            -v "$PWD/reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro" \
-            caddy:2.11.4-alpine \
-            caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-
-      - name: Compose must boot the app for real
-        working-directory: companion
-        run: |
-          set -euo pipefail
-          # Boots the app service through the REAL compose file, so the hardening actually
-          # applies: the noexec tmpfs (which blocks sqlite-jdbc's JNI extraction unless
-          # org.sqlite.tmpdir points elsewhere) and the docker secret (whose host ownership
-          # is what the container sees, because Compose ignores the uid/gid/mode keys).
           cp .env.example .env
           mkdir -p secrets
           openssl rand -base64 48 | tr -d '\n' > secrets/auth_token
+          # Compose ignores the secrets uid/gid/mode keys outside Swarm, so the container
+          # sees the HOST file's ownership. Left root:root, UID 65532 cannot read it.
           sudo chown 65532:65532 secrets/auth_token
           sudo chmod 400 secrets/auth_token
-
           docker compose config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.no-egress.yml config --quiet
+          # Pull the probe image once; both topology tests use it.
+          docker pull -q alpine:3
+
+      - name: Compose — default topology boots, publishes, and cannot phone home
+        working-directory: companion
+        run: |
+          set -euo pipefail
+          # Boots the app through the REAL compose file, so the hardening actually applies:
+          # the noexec tmpfs (which blocks sqlite-jdbc's JNI extraction unless
+          # org.sqlite.tmpdir points elsewhere) and the docker secret above.
           docker compose up -d --build companion
 
           st=none
@@ -269,5 +264,97 @@ jobs:
             docker compose down -v || true
             exit 1
           fi
-          echo "Compose deployment reached healthy."
+
+          # THE claim this topology rests on. Published ports do NOT work on Docker
+          # `internal:` networks (moby/moby#36174), which is why the default network is a
+          # plain bridge with masquerading off rather than an internal one. If that ever
+          # stops being true, every bring-your-own-proxy deployment silently loses its
+          # only ingress path, so prove it on every run rather than trusting the comment.
+          echo "== the published loopback port actually serves =="
+          curl -fsS --max-time 10 http://127.0.0.1:8080/healthz | grep -q '"ok":true' \
+            || { echo "::error::published port 127.0.0.1:8080 did not serve /healthz"; \
+                 docker compose logs companion || true; docker compose down -v || true; exit 1; }
+
+          # The other half of that trade: no NAT for outbound, so egress does not complete.
+          # Tested from a probe container on the same network, because egress is a property
+          # of the network and the app image has no shell to test from.
+          echo "== the network has no working egress =="
+          net="$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}' daymark-companion)"
+          if docker run --rm --network "$net" alpine:3 \
+               wget -q -T 6 -O /dev/null http://1.1.1.1/ 2>/dev/null; then
+            echo "::error::egress SUCCEEDED from the app network — enable_ip_masquerade:false is not holding, and the compose comment claiming no egress is wrong"
+            docker compose down -v || true
+            exit 1
+          fi
+          echo "egress blocked as designed."
+
+          # The trusted-proxy contract's silent failure mode, made loud. .env ships with
+          # DAYMARK_TRUSTED_PROXIES empty, so a forwarded header must produce exactly one
+          # warning naming the address the app saw.
+          echo "== a forwarded header with an empty allowlist warns =="
+          curl -fsS --max-time 10 -H 'X-Forwarded-For: 203.0.113.9' http://127.0.0.1:8080/healthz >/dev/null
+          sleep 2
+          docker compose logs companion 2>&1 | grep -q 'X-Forwarded-For' \
+            || { echo "::error::no trusted-proxy misconfiguration warning was logged"; \
+                 docker compose logs companion || true; docker compose down -v || true; exit 1; }
+
+          echo "Default topology verified."
           docker compose down -v
+
+      - name: Compose — no-egress override serves a proxy container, and only that
+        working-directory: companion
+        run: |
+          set -euo pipefail
+          # The topology for a CONTAINERISED proxy (Cosmos Cloud's normal mode, Traefik,
+          # NPM): no published port, `internal: true` + gateway_mode isolated, and the
+          # proxy joins the app's network. Untested, this is exactly the config that boots
+          # fine and is unreachable — so CI stands in for the proxy.
+          docker compose -f docker-compose.yml -f docker-compose.no-egress.yml up -d --build companion
+
+          st=none
+          for _ in $(seq 1 60); do
+            st=$(docker inspect -f '{{.State.Health.Status}}' daymark-companion 2>/dev/null || echo none)
+            [ "$st" = "healthy" ] && break
+            [ "$st" = "unhealthy" ] && break
+            sleep 2
+          done
+          if [ "$st" != "healthy" ]; then
+            echo "::error::no-egress deployment never became healthy (status=$st)"
+            docker compose -f docker-compose.yml -f docker-compose.no-egress.yml logs companion || true
+            docker compose -f docker-compose.yml -f docker-compose.no-egress.yml down -v || true
+            exit 1
+          fi
+
+          net="$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}' daymark-companion)"
+
+          # A proxy attached to this network must reach the app BY CONTAINER NAME — that is
+          # the upstream address the docs tell operators to configure, and it depends on
+          # Docker's embedded DNS still working on a gateway-less network.
+          echo "== a container on the network reaches the app by name =="
+          docker run --rm --network "$net" alpine:3 \
+            wget -q -T 10 -O- http://daymark-companion:8080/healthz | grep -q '"ok":true' \
+            || { echo "::error::a proxy container on $net cannot reach http://daymark-companion:8080"; \
+                 docker compose -f docker-compose.yml -f docker-compose.no-egress.yml logs companion || true; \
+                 docker compose -f docker-compose.yml -f docker-compose.no-egress.yml down -v || true; exit 1; }
+
+          echo "== and still has no egress =="
+          if docker run --rm --network "$net" alpine:3 \
+               wget -q -T 6 -O /dev/null http://1.1.1.1/ 2>/dev/null; then
+            echo "::error::egress SUCCEEDED from an internal+isolated network"
+            docker compose -f docker-compose.yml -f docker-compose.no-egress.yml down -v || true
+            exit 1
+          fi
+
+          # `!reset` on ports is what removes the binding the base file declares. If the
+          # override syntax ever silently stops applying, the port comes back and the
+          # "no host exposure" claim is void — so assert the absence directly.
+          echo "== no host port is published =="
+          published="$(docker inspect -f '{{json .NetworkSettings.Ports}}' daymark-companion)"
+          if [ "$published" != "{}" ] && echo "$published" | grep -q 'HostPort'; then
+            echo "::error::no-egress override still published a host port: $published"
+            docker compose -f docker-compose.yml -f docker-compose.no-egress.yml down -v || true
+            exit 1
+          fi
+
+          echo "No-egress topology verified."
+          docker compose -f docker-compose.yml -f docker-compose.no-egress.yml down -v

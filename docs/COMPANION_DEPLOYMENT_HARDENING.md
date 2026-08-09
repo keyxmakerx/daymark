@@ -6,14 +6,20 @@
 > model's stale training data — and the findings in §7 show that instinct was right.
 >
 > **This is the reasoning behind the shipped files**, not a second source of truth. The live
-> artefacts are `companion/docker-compose.yml`, `companion/Dockerfile`,
-> `companion/reverse-proxy/Caddyfile` and `companion/healthcheck/main.go`. Where this document and
-> those files disagree, the files win.
+> artefacts are `companion/docker-compose.yml`, `companion/docker-compose.no-egress.yml`,
+> `companion/Dockerfile` and `companion/healthcheck/main.go`. Where this document and those files
+> disagree, the files win.
 >
-> **Two things are NOT verified and must be before any public exposure:** every image digest in
-> §9.1 (re-resolve them; they were resolved by an agent, not by pulling), and the runtime items in
-> §9.2 — in particular whether Caddy can bind :80/:443 as a non-root user via the namespaced
-> `ip_unprivileged_port_start` sysctl. A fallback is documented inline in the compose file.
+> **REVISED 2026-08-09: the bundled Caddy is gone.** The original spec shipped a reverse proxy as a
+> second compose service. The deployment now ships the application only and documents a *contract*
+> (§3) for whichever proxy the operator already runs. Everything Caddy was credited with in the
+> audit tables of §6 has been re-marked: some items moved to the operator's proxy, some were since
+> fixed in code, and some are simply open again. The Caddy research in §7 is kept — it is still the
+> best available guidance for an operator choosing a proxy — but it no longer describes anything
+> this repo starts.
+>
+> **One thing is NOT verified and must be before any public exposure:** every image digest in §9.1
+> (re-resolve them; they were resolved by an agent, not by pulling).
 
 ---
 
@@ -30,11 +36,15 @@ Everything below was cross-checked against the actual repo. Where the five repor
 
 | Layer | Decision |
 |---|---|
-| **Reverse proxy** | **Caddy 2.11.4-alpine**, digest-pinned, stock image, no custom build. Automatic ACME + renewal (ARI-aware), automatic HTTP→HTTPS, HTTP/3, `tls internal` for LAN, and a config the operator can still read in three years. |
+| **Reverse proxy** | **None shipped.** The operator's own proxy fronts the app; §3 states the contract it must satisfy. *(Superseded 2026-08-09 — this row previously read "Caddy 2.11.4-alpine, digest-pinned". See §2.0.)* |
 | **App runtime base** | **`gcr.io/distroless/java21-debian13:nonroot`**, digest-pinned, UID 65532, no shell / no package manager / no curl, with a ~2 MB stdlib-only static Go healthcheck binary built in-repo. |
-| **Logging** | **No aggregation stack.** Docker `local` log driver with hard rotation caps, Caddy access log set to **faults only (`level ERROR`)** with an explicit redaction filter, and the app's existing SQLite `AuditStore` as the real accountability record. |
+| **Logging** | **No aggregation stack.** Docker `local` log driver with hard rotation caps and the app's existing SQLite `AuditStore` as the real accountability record. Access logging is now entirely the proxy's business; §5.3 says what it must not record. |
 
-### Deliberately rejected
+### Deliberately rejected — and what the rejections are worth now
+
+*These were choices about what to **bundle**. Nothing is bundled any more, so read the table as
+research for an operator picking their own proxy, not as a decision this repo makes for them. The
+findings themselves were verified against primary sources on 2026-08-08 and still hold.*
 
 | Rejected | Why |
 |---|---|
@@ -56,230 +66,70 @@ Everything below was cross-checked against the actual repo. Where the five repor
 
 ## 2. `docker-compose.yml`
 
-**Path:** `/home/user/daymark/companion/docker-compose.yml` (replaces the scaffold entirely)
+**Path:** `/home/user/daymark/companion/docker-compose.yml` — the live file. It is deliberately
+**not reproduced here**: an earlier revision of this document inlined the whole thing, and the copy
+started drifting from the original within a day. What follows is the reasoning that does not fit in
+the file's own comments.
 
-```yaml
-# Daymark Companion — hardened deployment.
-#
-#   cp .env.example .env && edit          # DAYMARK_DOMAIN, DAYMARK_ACME_EMAIL
-#   mkdir -p secrets && chmod 700 secrets
-#   openssl rand -base64 48 | tr -d '\n' > secrets/auth_token && chmod 600 secrets/auth_token
-#   docker compose up -d --build
-#
-# NO top-level `version:` key — obsolete since Compose v2; current Compose warns on it.
+### 2.0 There is no bundled reverse proxy
 
-name: daymark-companion
+The first version of this spec shipped Caddy as a second service in the same compose file. That is
+now **removed entirely** — not made opt-in, removed. The audience for a self-hosted therapy tool
+already runs a proxy: a NAS with its own UI, a homelab with Traefik, a VPS with nginx, or (the
+maintainer's case) Cosmos Cloud. For all of them the bundled option was a second thing to configure
+and a second thing to patch, and for none of them was it the thing they would actually use. Shipping
+it also meant shipping ACME, a certificate volume, a `:80`/`:443` binding and a privileged-port
+sysctl workaround that nobody had ever run.
 
-# ── Shared hardening ────────────────────────────────────────────────────────
-x-hardened: &hardened
-  restart: unless-stopped
-  init: true
-  read_only: true
-  cap_drop: [ALL]
-  security_opt:
-    - "no-new-privileges:true"
-    - "apparmor=docker-default"     # verify with: aa-status | grep docker-default
-  # Docker's DEFAULT seccomp profile applies automatically. NEVER add seccomp:unconfined.
+What replaces it is a **contract** (§3) rather than a component. Compose starts the application, and
+only the application.
 
-# `local` driver: rotates AND compresses. `json-file` defaults to max-size:-1 (UNLIMITED)
-# and its max-file is inert unless max-size is also set. This is the disk-fill footgun.
-x-logging: &logging
-  driver: "local"
-  options:
-    max-size: "10m"
-    max-file: "3"
+#### The fact that dictates the network shape
 
-services:
+The old topology gave the app an `internal: true` network with
+`com.docker.network.bridge.gateway_mode_ipv4: isolated` — no gateway address, no route anywhere —
+and let Caddy straddle that network and an internet-facing one. With Caddy gone, the app's only
+ingress would have to be a published host port, and:
 
-  # ── Reverse proxy / TLS terminator ───────────────────────────────────────
-  caddy:
-    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
-    container_name: daymark-caddy
-    <<: *hardened
-    logging: *logging
-    depends_on:
-      companion:
-        condition: service_healthy
+> **Published ports do not work on Docker `internal:` bridge networks.** Port bindings are simply
+> not set up; `docker inspect` shows `"Ports": {}` even for `-p 127.0.0.1:8080:8080`.
+> ([moby/moby#36174](https://github.com/moby/moby/issues/36174) — open since 2018, still open.)
+> `gateway_mode_ipv4: isolated` goes further and stops Docker assigning the bridge a host-side
+> address at all ([moby/moby#49262](https://github.com/moby/moby/pull/49262), merged for 28.0), so
+> there is not even a route for DNAT to target.
 
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"          # HTTP/3. Delete this line to disable QUIC.
+This was checked because the first draft of the replacement compose file asserted the opposite in a
+comment — that publishing is host-side DNAT and therefore independent of the container's route out.
+That reasoning is plausible and wrong, which is exactly the sort of claim that ships green and fails
+on someone else's machine. Hence the two shipped topologies:
 
-    networks:
-      edge: {}
-      back:
-        ipv4_address: 10.89.0.2   # pinned so DAYMARK_TRUSTED_PROXIES is deterministic
+| | Default (`docker-compose.yml`) | No-egress override (`+ docker-compose.no-egress.yml`) |
+|---|---|---|
+| For | a proxy running on the **Docker host** | a proxy running in a **container** |
+| Network | plain bridge, `enable_ip_masquerade: false` | `internal: true` + `gateway_mode_ipv4: isolated` |
+| Ingress | published on `127.0.0.1:8080` | proxy joins `daymark-companion_back`, talks to `daymark-companion:8080` |
+| Egress | packets leave, replies never return | dropped in the FORWARD chain; no gateway exists |
+| Host services on the bridge gateway | still reachable from the container | no address to reach them through |
 
-    environment:
-      DAYMARK_DOMAIN:     "${DAYMARK_DOMAIN:?set in .env, e.g. daymark.example.com}"
-      DAYMARK_ACME_EMAIL: "${DAYMARK_ACME_EMAIL:?set in .env}"
+The default is the weaker of the two and it is the default anyway, because it is the one that works
+without knowing anything about the operator's proxy. Be precise about what `enable_ip_masquerade:
+false` buys: outbound packets **still leave the host**, carrying a `10.89.0.0/24` source that
+nothing upstream will route a reply to. Egress does not *complete*; it is not *dropped*. That is
+enough to stop an exfiltration channel that needs a response, and not enough to call the container
+sealed. `no-egress.yml` is the sealed version, and it is what the maintainer's Cosmos Cloud setup
+should use.
 
-    volumes:
-      - ./reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data         # certs + ACME account keys — MUST persist or you will
-      - caddy_config:/config     # burn Let's Encrypt rate limits on every redeploy
-
-    # Bind :80/:443 as a non-root user with ZERO capabilities.
-    # The image ships `setcap cap_net_bind_service=+ep` on the binary, but that file
-    # capability is IGNORED under no-new-privileges, and Docker grants no ambient caps to
-    # a non-root `user:`. So `cap_add: [NET_BIND_SERVICE]` + `user:` does NOT work.
-    # The namespaced sysctl below lowers the privileged-port floor inside THIS netns only.
-    # ↳ MUST BE TESTED (see §9.2). Fallback if it fails: drop `user:` and `sysctls:`,
-    #   keep cap_drop:[ALL] + cap_add:[NET_BIND_SERVICE] (root inside a stripped container).
-    user: "10002:10002"
-    sysctls:
-      net.ipv4.ip_unprivileged_port_start: "0"
-
-    tmpfs:
-      - /tmp:size=16m,mode=1777,noexec,nosuid,nodev
-
-    ulimits:
-      nofile: { soft: 8192, hard: 16384 }
-
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: "0.50"
-          pids: 128
-
-    # busybox wget (present in the alpine base) against the container-local :2020
-    # health site defined in the Caddyfile. Not published to the host.
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:2020/healthz"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 10s
-
-  # ── Application ──────────────────────────────────────────────────────────
-  companion:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: daymark-companion:1.0.0
-    container_name: daymark-companion
-    <<: *hardened
-    logging: *logging
-
-    # NO ports: — reachable ONLY via Caddy on `back`.
-    networks:
-      back:
-        ipv4_address: 10.89.0.3
-
-    user: "65532:65532"          # distroless nonroot. WAS 10001 — see §4.4 migration.
-
-    environment:
-      DAYMARK_BIND_ADDR: "0.0.0.0"        # all interfaces INSIDE the container only
-      DAYMARK_PORT:      "8080"
-      DAYMARK_DATA_DIR:  "/data"
-      DAYMARK_WEB_DIR:   "/app/web"
-      DAYMARK_BASE_PATH: "/"
-      DAYMARK_LOG_LEVEL: "warn"
-      TZ:                "UTC"
-
-      # THE most important line in this file. Unset = every internet client shares one
-      # lockout bucket; 8 bad bearer tokens from one attacker locks out everyone for 15
-      # minutes. Pinned /32, never a bridge-wide CIDR — a co-resident container could
-      # otherwise forge X-Forwarded-For and evade lockout entirely.
-      DAYMARK_TRUSTED_PROXIES: "10.89.0.2/32"
-
-      # Required once SMTP or the therapist portal is enabled. Without it,
-      # RouteUrls.resolveBaseUrl() falls back to the client-supplied Host header and
-      # emails an attacker-controlled invite link. See §6 item 6.
-      DAYMARK_PUBLIC_BASE_URL:  "https://${DAYMARK_DOMAIN}"
-      DAYMARK_WEBAUTHN_RP_ID:   "${DAYMARK_DOMAIN}"
-      DAYMARK_WEBAUTHN_ORIGINS: "https://${DAYMARK_DOMAIN}"
-
-      DAYMARK_AUTH_TOKEN_FILE: "/run/secrets/companion_auth_token"
-
-      # App-layer limits (Config.kt defaults, stated explicitly so they are auditable).
-      DAYMARK_RATE_LIMIT_RPS:     "5"
-      DAYMARK_MAX_REQUEST_BYTES:  "27262976"   # 26 MiB
-      DAYMARK_MAX_BLOB_BYTES:     "26214400"   # 25 MiB
-      DAYMARK_ACCESS_LOG_SOURCE_IP:     "false"
-      DAYMARK_ACCESS_LOG_RETENTION_DAYS: "90"
-
-      # A JVM under a container memory limit defaults to a 25% heap. Without this you
-      # get a ~192M heap on a 768M limit and will be confused by the OOMs.
-      JAVA_TOOL_OPTIONS: >-
-        -XX:MaxRAMPercentage=70
-        -XX:+ExitOnOutOfMemoryError
-        -XX:-UsePerfData
-        -Djava.io.tmpdir=/tmp
-
-    secrets:
-      - source: companion_auth_token
-        target: companion_auth_token
-        uid: "65532"
-        gid: "65532"
-        mode: 0400
-
-    tmpfs:
-      - /tmp:size=64m,mode=1777,noexec,nosuid,nodev
-
-    volumes:
-      - blobs:/data
-
-    ulimits:
-      nofile: { soft: 4096, hard: 8192 }
-
-    deploy:
-      resources:
-        limits:
-          memory: 768M
-          cpus: "1.0"
-          pids: 256
-        reservations:
-          memory: 256M
-
-    healthcheck:
-      test: ["CMD", "/usr/local/bin/healthcheck"]   # static Go binary; no shell exists
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 30s
-      start_interval: 2s        # Engine >= 25: fast first-start convergence
-
-networks:
-  # Internet-facing. Caddy only. Needed for ACME.
-  edge:
-    driver: bridge
-    driver_opts:
-      com.docker.network.bridge.name: dmk-edge
-
-  # Caddy <-> app only. No egress, no route to host services.
-  back:
-    driver: bridge
-    internal: true
-    driver_opts:
-      com.docker.network.bridge.name: dmk-back
-      # `internal: true` ALONE is not enough: Docker still assigns the bridge a host-side
-      # address, so an "internal" container can reach host services bound to 0.0.0.0.
-      # `isolated` removes that address. It is only valid together with internal: true.
-      com.docker.network.bridge.gateway_mode_ipv4: isolated
-      # Do NOT set enable_icc:"false" — it would block caddy -> companion. Isolation here
-      # comes from this network having exactly two members.
-    ipam:
-      config:
-        - subnet: 10.89.0.0/24
-
-volumes:
-  blobs:
-  caddy_data:
-  caddy_config:
-
-secrets:
-  companion_auth_token:
-    file: ./secrets/auth_token     # chmod 600, gitignored
-  # companion_smtp_pass:
-  #   file: ./secrets/smtp_pass
-```
+Both topologies are booted and probed in CI on every change to `companion/**` — published port
+serves, egress fails, a container on the network resolves `daymark-companion` by name, the override
+really does remove the host binding. The `!reset` on `ports:` is asserted directly, because a
+silently-non-applying override would put the port back and void the claim.
 
 ### 2.1 SMTP egress override (optional, opt-in)
 
-`back` is `internal: true`, so **SMTP will not work by default** — that is deliberate. Compose cannot express per-destination egress allowlists. If the operator enables SMTP:
+The default network disables NAT masquerading and the no-egress override has no gateway at all, so
+**SMTP will not work by default** — that is deliberate. Compose cannot express per-destination
+egress allowlists. If the operator enables SMTP (base topology only; the no-egress override is
+incompatible by design):
 
 **`/home/user/daymark/companion/docker-compose.smtp.yml`**
 ```yaml
@@ -310,7 +160,10 @@ secrets:
     file: ./secrets/smtp_pass
 ```
 
-Run with `docker compose -f docker-compose.yml -f docker-compose.smtp.yml up -d`, then pin the actual allowlist on the host — this is *why* the bridges are named:
+A second network is what carries the egress, so `back` keeps its masquerade turned off and the mail
+path is the only one that works. Run with
+`docker compose -f docker-compose.yml -f docker-compose.smtp.yml up -d`, then pin the actual
+allowlist on the host — this is *why* the bridges are named:
 
 ```sh
 # iptables backend (Docker 29 default)
@@ -320,6 +173,11 @@ iptables -I DOCKER-USER -i dmk-mail -j DROP
 
 > **On the experimental nftables backend there is NO `DOCKER-USER` chain.** Add a separate table with a base chain at the same hook/priority instead. Every "put your egress rules in DOCKER-USER" recipe silently does nothing there.
 
+The same `DOCKER-USER` technique is the belt-and-braces completion of the default topology: adding
+`iptables -I DOCKER-USER -i dmk-back -j DROP` turns "replies never return" into "packets never
+leave," without giving up the published port. It is a host-level change compose cannot make for you,
+which is the only reason it is not the default.
+
 ### 2.2 Prerequisites
 
 ```sh
@@ -327,6 +185,7 @@ docker --version         # need >= 29.7.2 (29.3.x is missing the docker cp host-
                          # escape fixes, a seccomp/AppArmor bypass fix, and BuildKit fixes)
 docker compose version   # v5.x. v5 REMOVED the internal builder — buildx is now a hard
                          # requirement for `docker compose build`, not an optimization.
+                         # `!reset`/`!override` in the no-egress file need >= v2.24.
 docker buildx version
 aa-status | grep docker-default
 docker compose config    # must parse clean before anything else
@@ -334,261 +193,128 @@ docker compose config    # must parse clean before anything else
 
 ---
 
-## 3. Reverse-proxy configuration
+## 3. Your reverse proxy — the contract
 
-### 3.1 `/home/user/daymark/companion/reverse-proxy/Caddyfile` (public / Let's Encrypt)
+Nothing in this section is shipped. It is the interface the deployment expects on its front, stated
+precisely enough that any proxy can satisfy it and any operator can check theirs does.
 
-```caddyfile
-# Daymark Companion — Caddy edge config.
-#
-# Caddy terminates TLS and forwards plain HTTP to companion:8080 on the `back` network.
-# The app (SecurityHeaders.kt) already sends CSP + hardening headers on EVERY response and
-# deliberately omits HSTS, because the app cannot know whether it is behind TLS. So the
-# proxy's job is: HSTS, plus covering PROXY-GENERATED responses (502/503/413/308).
+### 3.1 What your proxy MUST do
 
-{
-	# The admin API (default :2019) is a full remote-reconfiguration surface. Nothing
-	# here uses it. Consequence: in-container `caddy reload` won't work — use
-	# `docker compose restart caddy`. That is the right trade.
-	admin off
+**1. Terminate TLS.** The app speaks plain HTTP and authenticates with a bearer token. Anything that
+can read the wire can replay the token, so the app is only ever published on loopback (or reached
+over a container-only network). If your proxy is on another machine, the link between them must
+already be encrypted — a VPN, WireGuard, a private VLAN — before you touch `DAYMARK_BIND_IP`.
 
-	# Setting `email` is what makes Caddy add ZeroSSL as a FALLBACK issuer (changed in
-	# Caddy 2.8 — without an email, Let's Encrypt is the only issuer). A second issuer
-	# is real resilience against an LE outage.
-	email {$DAYMARK_ACME_EMAIL}
+**2. Add `Strict-Transport-Security`.** `SecurityHeaders.kt` sends CSP, `X-Frame-Options`,
+`X-Content-Type-Options` and `Referrer-Policy` on **every** response, and deliberately omits HSTS,
+because the app cannot know whether it is behind TLS. HSTS is the proxy's job and only the proxy's
+job. Suggested: `max-age=31536000; includeSubDomains` — add `preload` only once you are certain,
+because it is effectively irreversible.
 
-	servers {
-		# Exact subdirective names: read_body / read_header / write / idle.
-		# NOT read_timeout/write_timeout — that spelling fails config load.
-		timeouts {
-			read_header 10s
-			read_body   120s   # generous: 25 MiB encrypted blob uploads on slow links
-			write       300s   # generous: blob downloads
-			idle        120s
-		}
-		max_header_size 32KB
-		protocols h1 h2 h3
+**3. Replace, never append, `X-Forwarded-For`.** Your proxy must overwrite any client-supplied value
+with the address it actually observed, or append to it — but you must know which, because the app
+reads the chain **right-to-left**, skipping trusted hops. Appending is safe; the forged prefix
+becomes noise. Setting the header from client input is not. Caddy's `reverse_proxy` appends by
+default. nginx's `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for` appends; using
+`$remote_addr` replaces. Both are fine.
 
-		# Caddy IS the edge. Do NOT set trusted_proxies — with it unset Caddy ignores
-		# client-supplied X-Forwarded-* for its own client-IP logic, which is correct.
-	}
+**4. Tell the app who you are.** Set `DAYMARK_TRUSTED_PROXIES` to the proxy's source address **as
+the app sees it**, which is often not the address you expect:
 
-	# Caddy's own runtime log (TLS renewal, startup, errors). NOT an access log.
-	log {
-		output stderr
-		format json
-		level  WARN
-	}
-}
+- proxy on the host forwarding to the published loopback port → usually the `docker0` gateway
+  (commonly `172.17.0.1`), *not* the proxy's LAN address
+- proxy in a container on `daymark-companion_back` → that container's address on that network
+  (allocated from `10.89.0.0/24`; the app is pinned at `10.89.0.3`)
 
-# ── Catch-all: refuse unknown Host / unknown SNI ────────────────────────────
-# Closes the RouteUrls.resolveBaseUrl() Host-header fallback path at the edge as well
-# as in the app. Any request whose Host is not DAYMARK_DOMAIN dies here.
-:443 {
-	tls internal
-	abort
-}
-:80 {
-	abort
-}
+Never a broad range. A `/12` lets any co-resident container forge the header and walk past the auth
+lockout — that is finding R9 in [COMPANION_SECURITY.md](COMPANION_SECURITY.md) §7.
 
-# ── The site ────────────────────────────────────────────────────────────────
-{$DAYMARK_DOMAIN} {
+This is the one setting that **fails quiet**: get it wrong and forwarded headers are ignored, every
+per-client lockout and rate limit keys on the proxy, all clients share one bucket, and eight bad
+tokens from one attacker lock out everybody. There is no error, because ignoring an *untrusted*
+header is also the correct behaviour. So the app infers it instead: the first time an
+`X-Forwarded-For` arrives while the allowlist is empty, it logs one WARN naming the address it saw.
 
-	# ---- TLS -----------------------------------------------------------
-	# Nothing to declare. Caddy automatically obtains a cert (HTTP-01/TLS-ALPN-01),
-	# serves :80 as a 308 redirect to :443, and renews using RFC 9773 (ARI) timing
-	# from the CA. Certs live in the caddy_data volume — it MUST persist.
-	#
-	# Do NOT add `ssl_stapling`-equivalents: since 2025-05-07 Let's Encrypt certs carry
-	# NO AIA OCSP URL, only a CRL distribution point. OCSP stapling config is dead
-	# weight for LE certs. (Caddy's knob, if you ever need it, is `ocsp_stapling off`.)
-	#
-	# Optional 45-day profile — EXPERIMENTAL, the ACME profiles draft is not final:
-	#   tls { issuer acme { profile tlsserver } }
-
-	# ---- Security headers ----------------------------------------------
-	header {
-		# HSTS is set ONLY here. Start at 300 for the first day to prove the cert
-		# works, then raise to 31536000. Add `preload` only if you intend to submit
-		# to hstspreload.org and never want plain HTTP on this domain — or any
-		# subdomain — again.
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
-		-Server
-
-		# `?` = "set only if absent"; `?` and `-` operations are automatically deferred
-		# to write time. The Ktor app sends every one of these on every app response,
-		# so these copies apply ONLY to Caddy-generated responses: 502/503 when the app
-		# is down, 413 from request_body, 308 redirects, TLS error pages.
-		#
-		# DO NOT REMOVE THE `?`. Two Content-Security-Policy headers are enforced by the
-		# browser as their INTERSECTION. This policy is copied VERBATIM from
-		# SecurityHeaders.kt including 'wasm-unsafe-eval'. Drop the `?` and let the two
-		# drift, and libsodium's WASM module stops instantiating — all client-side
-		# crypto fails with a console-only error. Verify per §9.2.
-		?Content-Security-Policy "default-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self'; manifest-src 'self'"
-		?X-Content-Type-Options       "nosniff"
-		?X-Frame-Options              "DENY"
-		?Referrer-Policy              "no-referrer"
-		?Cross-Origin-Opener-Policy   "same-origin"
-		?Cross-Origin-Resource-Policy "same-origin"
-		?Permissions-Policy           "geolocation=(), camera=(), microphone=(), payment=(), usb=(), magnetometer=(), accelerometer=()"
-	}
-
-	# ---- Limits ---------------------------------------------------------
-	# Deliberately ABOVE the app's DAYMARK_MAX_REQUEST_BYTES (26 MiB = 27,262,976 B) so
-	# the app returns its own semantic 413 with its own error body, and Caddy only
-	# truncates genuinely absurd requests. If you lower the app cap, lower this to
-	# match + ~2 MB. Returns HTTP 413.
-	request_body {
-		max_size 28MB
-	}
-
-	encode zstd gzip
-
-	# ---- Upstream --------------------------------------------------------
-	reverse_proxy companion:8080 {
-		# IMPORTANT: Caddy APPENDS the client IP to any inbound X-Forwarded-For rather
-		# than replacing it, so the upstream would otherwise receive
-		# "<attacker junk>, <real IP>". The app's ClientAddress.resolve() walks
-		# right-to-left and is safe today — but this line makes it safe by construction
-		# instead of by accident. (The old Caddyfile comment claiming Caddy "does not
-		# pass through client-supplied forwarded headers" was factually wrong.)
-		header_up X-Forwarded-For   {client_ip}
-		header_up X-Forwarded-Proto {scheme}
-		header_up X-Forwarded-Host  {host}
-
-		# Active health checking — this is the one that actually stops routing to a
-		# dead upstream. The container HEALTHCHECK is what `depends_on:
-		# condition: service_healthy` reads; you want both.
-		health_uri      /healthz
-		health_interval 10s
-		health_timeout  3s
-		health_failures 3
-	}
-
-	# ---- Access log: FAULTS ONLY ----------------------------------------
-	# Caddy emits "handled request" at InfoLevel, escalating to ErrorLevel only when
-	# status >= 500. So `level ERROR` yields "the server broke" and nothing else — no
-	# per-request trail of who accessed which relationship and when.
-	#
-	# This does NOT blind you to auth abuse: 401/403/429 are 4xx, and the app's
-	# AuditStore already records AUTH_FAIL and LOCKOUT as first-class hash-chained
-	# events that the OWNER (the data subject) can read. That is where the security
-	# signal belongs.
-	#
-	# For temporary triage, change `level ERROR` to `level INFO`, restart, and CHANGE
-	# IT BACK. The filter below still applies at INFO.
-	log {
-		level  ERROR
-		output stderr
-		format filter {
-			wrap json
-			fields {
-				# Caddy auto-redacts ONLY Cookie, Set-Cookie, Authorization and
-				# Proxy-Authorization. These four are this project's own bearer-
-				# equivalent secrets and are NOT covered:
-				request>headers>X-Rel-Token    delete
-				request>headers>X-CSRF-Token   delete
-				request>headers>X-Content-Hash delete
-				request>headers>X-Setting-Key  delete
-
-				# Fingerprinting / geolocation surface.
-				request>headers>User-Agent      delete
-				request>headers>Referer         delete
-				request>headers>Accept-Language delete
-				resp_headers>Set-Cookie         delete
-
-				# DO NOT write `ip_mask 0`. A CIDR of 0 makes parseRawToMask return nil
-				# and net.IP.Mask(nil) renders as "<nil>" — it DISABLES masking rather
-				# than maximizing it. `delete` is the only way to drop an IP.
-				# If you ever need coarse IPs for abuse triage, the form is:
-				#   request>remote_ip ip_mask { ipv4 16  ipv6 32 }
-				request>remote_ip   delete
-				request>client_ip   delete
-				request>remote_port delete
-
-				# Regression guard. Secrets ride in the URL FRAGMENT today
-				# (TherapistAuthRoutes.kt:258 -> /portal/invite#id=..&s=..,
-				#  RecoveryRoutes.kt:169    -> /recover#t=..), which browsers never
-				# transmit. Strip them from the query too so a future refactor from
-				# '#' to '?' cannot leak single-use recovery tokens with no alarm.
-				request>uri query {
-					delete t
-					delete s
-					delete id
-					delete token
-				}
-			}
-		}
-	}
-}
-
-# ── Container-local health endpoint for HEALTHCHECK. Not published. ─────────
-:2020 {
-	respond /healthz 200
-	respond 404
-}
+```sh
+docker compose logs companion | grep X-Forwarded-For
 ```
 
-### 3.2 `/home/user/daymark/companion/reverse-proxy/Caddyfile.lan` (LAN, no public DNS)
+Once per process, deliberately — the trigger is an attacker-supplied header, so an unbounded version
+would be a log-flood amplifier.
 
-Identical except: replace the `{$DAYMARK_DOMAIN}` site header with a LAN name, add `tls internal`, and **omit HSTS entirely**.
+**5. Refuse unknown `Host` / unknown SNI.** `RouteUrls.resolveBaseUrl()` prefers
+`DAYMARK_PUBLIC_BASE_URL` and only falls back to the client-supplied `Host` if it is unset — which is
+why compose always sets it. Closing the same path at the edge with a catch-all that returns an error
+for any other Host means a poisoned invite link needs two independent mistakes, not one.
 
-```caddyfile
-daymark.lan {
-	# Caddy's built-in CA. Root 3600d (10y), intermediate 7d, leaf 12h, all auto-renewed.
-	# Caddy CANNOT install the root into the host trust store from inside a container:
-	#   docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt ./daymark-root.crt
-	#   # then import daymark-root.crt on every phone/laptop
-	# This is what keeps WebAuthn working — WebAuthn requires a secure context, and an
-	# untrusted cert does not give you one.
-	tls internal
+**6. Do not strip the sub-path unless you set `DAYMARK_BASE_PATH` to match.** Serving under
+`/daymark` means the app must generate its own links under `/daymark`. Caddy's `handle_path` strips
+the prefix; `handle` does not. nginx `proxy_pass` with a trailing slash strips; without, it does not.
+Pick one and make `DAYMARK_BASE_PATH` agree with it.
 
-	header {
-		# NO HSTS on the internal-CA variant. If you later move this hostname to a
-		# public cert, or a device caches HSTS for a name whose cert you then rotate,
-		# you have locked yourself out.
-		-Server
-		?Content-Security-Policy "default-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self'; manifest-src 'self'"
-		?X-Content-Type-Options       "nosniff"
-		?X-Frame-Options              "DENY"
-		?Referrer-Policy              "no-referrer"
-		?Cross-Origin-Opener-Policy   "same-origin"
-		?Cross-Origin-Resource-Policy "same-origin"
-		?Permissions-Policy           "geolocation=(), camera=(), microphone=(), payment=(), usb=(), magnetometer=(), accelerometer=()"
-	}
-	request_body { max_size 28MB }
-	encode zstd gzip
-	reverse_proxy companion:8080 {
-		header_up X-Forwarded-For   {client_ip}
-		header_up X-Forwarded-Proto {scheme}
-		header_up X-Forwarded-Host  {host}
-		health_uri /healthz
-		health_interval 10s
-	}
-	log { level ERROR  output stderr  format filter { wrap json  fields { request>remote_ip delete  request>client_ip delete } } }
-}
-:2020 { respond /healthz 200
-        respond 404 }
+**7. Do NOT add your own Content-Security-Policy.** `SecurityHeaders.kt` already sends one, and two
+CSP headers on the same response are **intersected** by the browser, not overridden. The app's
+policy includes `'wasm-unsafe-eval'` because all decryption happens in a libsodium WASM module in
+the browser; a proxy adding a "hardened" CSP without it silently kills every crypto operation in the
+viewer, with no error a non-expert would connect to the cause. If your proxy sets security headers
+by default (Cosmos Cloud does), either turn CSP off for this route or make it byte-identical.
+Caddy's set-if-absent form is a `?`-prefixed header; nginx `add_header` has **no** set-if-absent
+form, which is one of the reasons the nginx example needs care.
+
+**8. Cap the request body and set read timeouts.** The app enforces its own caps — 64 KiB on JSON
+routes (`RequestLimits.kt`) and `DAYMARK_MAX_REQUEST_BYTES` (26 MiB) on blob uploads — so this is
+defence in depth rather than the only line. Timeouts are more than that: Netty is non-blocking so
+connection-count slowloris is weak, but nothing in the app bounds how slowly a client may dribble a
+request, and with the bundled proxy gone nothing else does either. Suggested: ~10 s header read,
+~120 s body read, ~120 s idle, and a body cap a little above 26 MiB.
+
+### 3.2 Worked examples
+
+`docs/alternatives/` holds configs for the common proxies. They are **references, not shipped
+artefacts** — nothing in CI parses them, and they are the operator's to adapt:
+
+| File | Notes |
+|---|---|
+| `docs/alternatives/Caddyfile` | Public / Let's Encrypt. Includes the catch-all Host refusal, HSTS, the redaction filter on the access log, and the reasoning for each. Written for the container-on-a-shared-network topology (`no-egress.yml`); change the upstream to `127.0.0.1:8080` for a host install. |
+| `docs/alternatives/Caddyfile.lan` | LAN with no public DNS, using Caddy's internal CA. |
+| `docs/alternatives/nginx.conf` | Has **no catch-all `default_server`** — add one before using it publicly, or requirement 5 above is unmet. |
+| `docs/alternatives/traefik.md` | Label-driven; note it wants `/var/run/docker.sock`, which the rest of this deployment goes out of its way to avoid. |
+
+**Cosmos Cloud** (the maintainer's setup) is a containerised proxy, so it takes the second topology:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.no-egress.yml up -d --build
+docker network connect daymark-companion_back cosmos-server
 ```
 
-> **Better LAN option if the operator owns a domain:** point a real name (`daymark.internal.example.com`) at the private IP in public DNS and use DNS-01 — publicly-trusted cert, nothing to install on devices. Cost: DNS-01 provider plugins are **not** in the standard image, so it requires an xcaddy build. For a non-expert, `tls internal` + one-time root install is usually the better trade.
-> Let's Encrypt IP-address certs went GA 2026-01-15 but only for **public** IPs — they do not help RFC1918.
+Then add a route in the Cosmos UI with target `http://daymark-companion:8080`, enable
+`Strict-Transport-Security` in its security settings, and set `DAYMARK_TRUSTED_PROXIES` in `.env` to
+the address Cosmos was given on that network (`docker inspect cosmos-server`, look for the
+`daymark-companion_back` entry). Cosmos's "Force secure network" feature does the network attachment
+for you, but it creates its *own* network — either let it, and set `DAYMARK_TRUSTED_PROXIES`
+accordingly, or attach it to ours as above. Do not do both.
 
-### 3.3 Deleted files
+### 3.3 The bundled Caddyfiles
 
-`reverse-proxy/nginx.conf` and `reverse-proxy/traefik.md` should be **removed or moved to `docs/alternatives/`**. Reason: the three examples currently disagree with each other on sub-path prefix stripping (nginx says "do not strip"; the Caddy example uses `handle_path` which *does* strip), and `nginx.conf` has no catch-all `default_server`, which is what makes the Host-header link-poisoning path reachable. Shipping three untested, mutually inconsistent proxy configs is worse than shipping one tested one.
+`companion/reverse-proxy/` is gone. `Caddyfile` and `Caddyfile.lan` moved to `docs/alternatives/`
+alongside the nginx and Traefik examples, where their status is honest: worked references, not
+tested deployment artefacts. The CI step that ran `caddy validate` against them went with them —
+it was validating a file the deployment no longer uses.
+
+Note the caveat that applied when they were shipped and still applies: the four examples do not
+agree with each other on sub-path prefix stripping (nginx says "do not strip"; the Caddy example
+uses `handle_path`, which does). Requirement 6 above is the rule; the examples are illustrations of
+it.
 
 ### 3.4 Rate limiting — stated plainly
 
-**Stock Caddy 2.11 has no rate limiting.** It is not a directive; the current directives index contains zero occurrences of "rate". Anyone saying `rate_limit` works on a stock Caddy is wrong.
+**Rate limiting lives in the application, and that is now the only place it lives.** `Config.kt` implements `DAYMARK_RATE_LIMIT_RPS` (default 5), `DAYMARK_AUTH_LOCKOUT_FAILS` (8) / `_SECONDS` (900), `DAYMARK_TOTP_LOCKOUT_FAILS` (5) / `_SECONDS` (300), and `DAYMARK_REISSUE_MAX_PER_HOUR` (3) — all keyed on the real client IP **only if `DAYMARK_TRUSTED_PROXIES` is set correctly**, which is requirement 4 in §3.1 and the operator's job. That is the layer that actually knows which endpoints are sensitive.
 
-**Decision: option (a) — rely on the application layer.** `Config.kt` already implements `DAYMARK_RATE_LIMIT_RPS` (default 5), `DAYMARK_AUTH_LOCKOUT_FAILS` (8) / `_SECONDS` (900), `DAYMARK_TOTP_LOCKOUT_FAILS` (5) / `_SECONDS` (300), and `DAYMARK_REISSUE_MAX_PER_HOUR` (3) — all keyed on the real client IP **once `DAYMARK_TRUSTED_PROXIES` is set correctly**, which §2 now does. That is the layer that actually knows which endpoints are sensitive, and taking this option is what lets the deployment run a stock digest-pinned image forever with no build pipeline.
+**If you want proxy-layer rate limiting too, your proxy decides how.** Traefik has `rateLimit` as a first-class middleware; nginx has `limit_req`; Cosmos Cloud has a per-route limiter in its UI. For Caddy the answer is more involved, and it is recorded here because it is the counter-intuitive one:
 
-**If proxy-layer rate limiting is a hard requirement,** here is the complete opt-in — with its cost stated:
+**Stock Caddy 2.11 has no rate limiting.** It is not a directive; the current directives index contains zero occurrences of "rate". Anyone saying `rate_limit` works on a stock Caddy is wrong. The complete opt-in, with its cost stated:
 
-`reverse-proxy/Dockerfile.caddy`
+`Dockerfile.caddy`
 ```dockerfile
 FROM caddy:2.11.4-builder-alpine AS builder
 RUN xcaddy build v2.11.4 --with github.com/mholt/caddy-ratelimit
@@ -614,9 +340,7 @@ Caddyfile addition (inside the site block; `rate_limit` is ordered before `basic
 ```
 **Cost:** you now build and maintain your own Caddy binary. You lose "pin an official digest and forget it," and you must rebuild on every Caddy security release. The module is by Caddy's author but is **explicitly not an official Caddy repo**; its WIP notice was removed 2026-01-16 and it gained subnet limiting (`ipv4_prefix`/`ipv6_prefix`) in May 2026, but its `go.mod` still requires caddy v2.10.0, so building against 2.11.4 relies on xcaddy upgrading the dependency. **Build it before committing to it.**
 
-**Middle ground (option c):** `fail2ban` reading the JSON log. Keeps the stock image, blocks persistent abusers at the firewall. Requires `level INFO` on the access log, which reintroduces the per-request trail — so it trades the §5 privacy posture for abuse resistance. Do not adopt it by default.
-
-If proxy-layer rate limiting is genuinely non-negotiable, **that — and only that — is a legitimate reason to choose Traefik v3.7.10 instead**, where `rateLimit` is a first-class built-in middleware.
+**Middle ground:** `fail2ban` reading the proxy's access log. Keeps a stock image, blocks persistent abusers at the firewall. Requires a full per-request access log, which reintroduces exactly the trail §5 exists to avoid keeping — so it trades the privacy posture for abuse resistance. Do not adopt it without deciding that trade deliberately.
 
 ---
 
@@ -800,16 +524,19 @@ A pinned-and-rotting base is now considered worse than an unpinned one. Digest p
 
 ### 5.1 Architecture
 
-| | Container logs | Caddy access log | Audit log |
-|---|---|---|---|
-| **Where** | Docker `local` driver | Caddy stderr → `local` driver | SQLite `AuditStore` |
-| **Subject** | process output | a TCP request | a semantic action |
-| **Read by** | operator | operator | **the OWNER (data subject)** |
-| **Content** | app WARN/ERROR only | 5xx only | actor / action / objectRef |
-| **Integrity** | none | none | SHA-256 hash chain, append-only |
-| **Retention** | size-bounded (3 × 10m) | same | 90 days, operator-configurable |
+Two layers, not three — the access log left with the bundled proxy and is now the operator's to
+configure, or not.
 
-Worst case log disk: 2 containers × 3 files × 10 MiB = **60 MiB uncompressed ceiling**, less in practice since `local` compresses rotated files. Nothing else writes logs. **Disk cannot fill from logging.** Retention is bounded by size, not time, so on a quiet server logs self-expire in days and there is no time-based policy to forget.
+| | Container logs | Audit log |
+|---|---|---|
+| **Where** | Docker `local` driver | SQLite `AuditStore` |
+| **Subject** | process output | a semantic action |
+| **Read by** | operator | **the OWNER (data subject)** |
+| **Content** | app WARN/ERROR only | actor / action / objectRef |
+| **Integrity** | none | SHA-256 hash chain, append-only |
+| **Retention** | size-bounded (3 × 10m) | 90 days, operator-configurable |
+
+Worst case log disk: 1 container × 3 files × 10 MiB = **30 MiB uncompressed ceiling**, less in practice since `local` compresses rotated files. Nothing else in this stack writes logs. **Disk cannot fill from logging** — but that ceiling now covers only what this compose file starts. A proxy with an unbounded access log on the same disk reintroduces the whole problem, so set rotation caps on it too.
 
 `docker compose logs` works normally with the `local` driver. Its on-disk format is internal and not readable by external file-tailing agents — normally a drawback, here a mild privacy feature.
 
@@ -827,7 +554,7 @@ These are specific to Daymark, not a generic list:
 
 ### 5.3 Redact / coarsen
 
-- **Client IP: OFF by default at both layers.** `DAYMARK_ACCESS_LOG_SOURCE_IP=false` (confirmed consumed by `Config.kt:130`) and `request>remote_ip delete` in Caddy. The reason is correct as stated in the repo: an IP geolocates both the clinic *and* the patient. If ever needed for abuse triage: `request>remote_ip ip_mask { ipv4 16  ipv6 32 }` — **never `ip_mask 0`, which disables masking**.
+- **Client IP: OFF in the app** (`DAYMARK_ACCESS_LOG_SOURCE_IP=false`, confirmed consumed by `Config.kt:130`), **and it should be off in your proxy's access log too.** The reason is correct as stated in the repo: an IP geolocates both the clinic *and* the patient. Caddy's form is `request>remote_ip delete`; if you genuinely need it for abuse triage, coarsen rather than keep it — `request>remote_ip ip_mask { ipv4 16  ipv6 32 }`, and **never `ip_mask 0`, which disables masking**. This is now a request, not a guarantee: this repo cannot enforce anything about a log it does not write.
 - **User-Agent: delete.** It fingerprints the patient's device, and you already know it's the app.
 - **Timestamps:** second granularity, `TZ=UTC` (set in compose). Sub-second timing on a low-volume single-user server is itself a behavioral signal.
 
@@ -883,27 +610,27 @@ Ordered by **real-world likelihood × impact**. Status: ✅ = mitigated by the c
 | **2** | **Netty 4.1.116.Final request-smuggling primitives.** Ktor 3.0.3 (confirmed in `server/build.gradle.kts:11`) transitively pins Netty 4.1.116.Final. **CVE-2025-58056** (bare-LF chunk terminator; the advisory names nginx as the desyncing front-end class — you are building exactly that topology), **CVE-2025-67735** (CRLF in request URI), **CVE-2026-42587** (br/zstd/snappy decompression bomb bypasses `maxAllocation`). Bump `ktorVersion` → **3.5.2** (pins Netty 4.2.13.Final, at or above all three fixes). Verify: `./gradlew dependencies --configuration runtimeClasspath \| grep -i netty`. | ❌ **code change** |
 | **3** | **logback-classic 1.5.12** (confirmed, `build.gradle.kts:12`) is the exact top affected version of CVE-2024-12798 (Janino EL injection → RCE) / CVE-2024-12801 (SaxEventRecorder SSRF). Minimum fix **1.5.13**. | ❌ **code change** |
 | **4** | **bcprov-jdk18on 1.79** (confirmed, `build.gradle.kts:32`) falls inside CVE-2026-0636 (LDAP injection, affects 1.74–1.83). Fixed 1.84; latest 1.85.2. | ❌ **code change** |
-| **5** | **App exposed directly to the internet / Docker publishes past UFW.** Docker DNATs in `PREROUTING` and traverses `FORWARD`; UFW's rules live in `INPUT`, so `ufw deny 8080` does nothing to `-p 8080:8080`. Re-verified: still true by design in 2026. | ✅ app has **no** `ports:`, sits on `internal: true` + `gateway_mode_ipv4: isolated` |
-| **6** | **Host-header link poisoning.** `RouteUrls.resolveBaseUrl()` falls back to the client `Host` header when `DAYMARK_PUBLIC_BASE_URL` is unset. `POST /v1/invite` then emits — **via your SMTP server** — an invite link on an attacker domain carrying `#id=<inviteId>&s=<secret>`. `RecoveryRoutes` correctly refuses the fallback; `TherapistAuthRoutes` does not. | ⚠️ `DAYMARK_PUBLIC_BASE_URL` set + `:443 { abort }` catch-all at the edge. **Still open in code:** make it fail closed at startup |
+| **5** | **App exposed directly to the internet / Docker publishes past UFW.** Docker DNATs in `PREROUTING` and traverses `FORWARD`; UFW's rules live in `INPUT`, so `ufw deny 8080` does nothing to `-p 8080:8080`. Re-verified: still true by design in 2026. | ✅ still holds, by a different route. The app publishes to `127.0.0.1` only, and the UFW-bypass applies to `0.0.0.0` bindings: a loopback DNAT rule is unreachable from the LAN whatever UFW says. The no-egress override has no published port at all. *(Was: "no `ports:`, `internal: true` + isolated" — that topology went with the bundled proxy; see §2.0.)* |
+| **6** | **Host-header link poisoning.** `RouteUrls.resolveBaseUrl()` falls back to the client `Host` header when `DAYMARK_PUBLIC_BASE_URL` is unset. `POST /v1/invite` then emits — **via your SMTP server** — an invite link on an attacker domain carrying `#id=<inviteId>&s=<secret>`. `RecoveryRoutes` correctly refuses the fallback; `TherapistAuthRoutes` does not. | ⚠️ `DAYMARK_PUBLIC_BASE_URL` is set unconditionally by compose (derived from the required `DAYMARK_DOMAIN`), so the fallback is not reachable in a compose deployment. The second line of defence — a catch-all refusing unknown `Host` — is now **requirement 5 in §3.1**, i.e. the operator's proxy, and unverifiable from here. **Still open in code:** make it fail closed at startup |
 
 ### P1 — deployment shape
 
 | # | Item | Status |
 |---|---|---|
 | **7** | **No resource limits → any bug is a host-wide DoS.** No `mem_limit`/`pids_limit`/`ulimits`, and a JVM with no container limit sizes its heap off *host* RAM. | ✅ `deploy.resources.limits` + `ulimits` + `-XX:MaxRAMPercentage=70` + `ExitOnOutOfMemoryError` |
-| **8** | **Unbounded request bodies on unauthenticated routes.** Confirmed: `readCapped()` is applied only in `SyncRoutes.kt:40,78` and `RelationRoutes.kt:135`. `RecoveryRoutes.kt:66,88,115` and `TherapistAuthRoutes.kt:80,97,114,142` use bare `call.receive<T>()` — including `POST /v1/recovery/request`, which requires **no credential at all**. An anonymous multi-GB body is a heap-exhaustion primitive. | ⚠️ Caddy `request_body max_size 28MB` caps the worst case. **Open in code:** apply `readCapped()` (or a ~64 KiB global JSON cap) to all 7 routes |
+| **8** | **Unbounded request bodies on unauthenticated routes.** Confirmed: `readCapped()` is applied only in `SyncRoutes.kt:40,78` and `RelationRoutes.kt:135`. `RecoveryRoutes.kt:66,88,115` and `TherapistAuthRoutes.kt:80,97,114,142` use bare `call.receive<T>()` — including `POST /v1/recovery/request`, which requires **no credential at all**. An anonymous multi-GB body is a heap-exhaustion primitive. | ✅ **fixed in code since this audit.** `RequestLimits.kt` adds a 64 KiB cap and all 7 bare `call.receive<T>()` calls now use `receiveCappedJson<T>()`; `/v1/recovery/request` checks its rate budget *before* reading the body. The Caddy `request_body max_size` that originally capped the worst case is gone — §3.1 requirement 8 asks the operator's proxy for the same thing as defence in depth. |
 | **9** | **Unbounded log growth.** `restart: unless-stopped` + `log.error(..., cause)` on every unhandled throwable + no `logging:` block = unrotated stack traces on the same disk as `/data`. `json-file` defaults to `max-size: -1`. | ✅ `local` driver, 10m × 3, compressed |
 | **10** | **Unpinned mutable base image tags** (all four `FROM` lines today). Non-reproducible builds; a tag repoint is invisible. `21-jre-jammy` also ties you to Ubuntu 22.04 (standard support ends April 2027). | ✅ all four pinned by index digest; ❌ Renovate not yet configured |
 | **11** | **`curl` in the runtime image.** Gives any RCE a working HTTP client inside a container that has the blob volume mounted. This is the *security* argument for distroless, distinct from the size argument. | ✅ distroless — no curl, no shell, no package manager |
 | **12** | **HEALTHCHECK in shell form on a shell-less base.** Wrapped in `/bin/sh -c` → cannot execute → container pins `unhealthy` forever, and Docker **never restarts on unhealthy** so the failure is silent. | ✅ exec-form static Go binary |
-| **13** | **Slowloris / missing downstream timeouts.** Netty is non-blocking so connection-count slowloris is weak, but no read/idle timeouts existed at either layer. | ✅ Caddy `read_header 10s`, `read_body 120s`, `idle 120s` + `pids` limit |
+| **13** | **Slowloris / missing downstream timeouts.** Netty is non-blocking so connection-count slowloris is weak, but no read/idle timeouts existed at either layer. | ⚠️ **partly regressed.** The `pids` limit and Netty's non-blocking model still apply, but the `read_header 10s` / `read_body 120s` / `idle 120s` timeouts were Caddy's and left with it. Nothing in the app bounds a slow-dribbling request. Now §3.1 requirement 8; **open** for any operator who does not set it. |
 | **14** | **Secrets in `environment:`** — leak into `docker inspect`, crash dumps, child processes, and logs. | ✅ `secrets:` with `file:` sources, mounted `0400` at `/run/secrets/`, consumed via `*_FILE` |
-| **15** | **Docker socket exposure.** Currently zero in the repo; Traefik's Docker provider and the standard Alloy discovery config are the two things that would introduce it. Mounting it `:ro` is **not** a mitigation — the API is not read-only because the file is. | ✅ Caddy needs no socket; no logging agent adopted |
+| **15** | **Docker socket exposure.** Currently zero in the repo; Traefik's Docker provider and the standard Alloy discovery config are the two things that would introduce it. Mounting it `:ro` is **not** a mitigation — the API is not read-only because the file is. | ✅ stronger than before: this stack starts one container and mounts no socket at all. Note the flip side — a Traefik or Cosmos Cloud front-end typically *does* want the socket, so the exposure moves into the operator's proxy and out of this repo's control. |
 | **16** | **Docker Engine 29.3.x is missing security fixes** (docker cp host-root escape, seccomp/AppArmor bypass, BuildKit). | ❌ **host prerequisite** — upgrade to 29.7.2 |
-| **17** | **Double CSP header → intersection → libsodium WASM breaks.** The app already sends CSP; a naive edge CSP without `'wasm-unsafe-eval'` silently kills all in-browser crypto. | ✅ `?`-prefixed (set-if-absent) + verbatim copy; **must be verified** per §9.2 |
-| **18** | **`X-Forwarded-For` append semantics.** Caddy **appends** the client IP to any inbound XFF; the old Caddyfile comment claiming otherwise was factually wrong. Safe today only because `ClientAddress.resolve()` walks right-to-left — a left-to-right refactor turns a global-lockout DoS into an unlimited-attempts bypass. | ✅ `header_up X-Forwarded-For {client_ip}` replaces it at the edge; ❌ **regression test still needed** |
-| **19** | **Sensitive identifiers in logs** (`relRef` + stack trace at `Application.kt:98`). | ⚠️ Caddy log is 5xx-only and filtered; ❌ the app-side leak is **open** |
-| **20** | **Cert renewal failure as an availability event.** LE `tlsserver` is now 45-day, default `classic` goes 64-day on 2027-02-10 — shorter windows make hand-rolled renewal fail faster and hurt more. | ✅ Caddy ACME-native with ARI (RFC 9773); `caddy_data` persisted |
+| **17** | **Double CSP header → intersection → libsodium WASM breaks.** The app already sends CSP; a naive edge CSP without `'wasm-unsafe-eval'` silently kills all in-browser crypto. | ⚠️ **now the operator's to get right.** The app's CSP is the only one this repo controls; the set-if-absent edge copy went with Caddy. Written up as §3.1 requirement 7, including the specific failure — a proxy-added CSP without `'wasm-unsafe-eval'` intersects with the app's and silently kills in-browser decryption. |
+| **18** | **`X-Forwarded-For` append semantics.** Caddy **appends** the client IP to any inbound XFF; the old Caddyfile comment claiming otherwise was factually wrong. Safe today only because `ClientAddress.resolve()` walks right-to-left — a left-to-right refactor turns a global-lockout DoS into an unlimited-attempts bypass. | ✅ the regression test exists: `ClientAddressTest` covers a forged prefix, a direct connection forging the header, and hex-hostname / leading-zero octet inputs. The edge-side `header_up ... {client_ip}` replacement is gone with Caddy, so right-to-left is no longer belt-and-braces — it is the only thing standing between an appended chain and a spoof, which is why the test matters more now, not less. §3.1 requirement 3 states the append-or-replace contract. |
+| **19** | **Sensitive identifiers in logs** (`relRef` + stack trace at `Application.kt:98`). | ❌ **open, and less covered than it was.** The 5xx-only filtered access log was Caddy's. `Application.kt` still logs `call.request.local.uri` — which contains `relRef` — with a full stack trace. |
+| **20** | **Cert renewal failure as an availability event.** LE `tlsserver` is now 45-day, default `classic` goes 64-day on 2027-02-10 — shorter windows make hand-rolled renewal fail faster and hurt more. | ➖ **out of scope now.** Certificates belong entirely to the operator's proxy. The finding stands as guidance (§7): pick a proxy with a native ACME client and persist its certificate store, because 45–64 day certs punish hand-rolled renewal. |
 
 ### P2 — supply chain and posture
 
@@ -918,7 +645,7 @@ Ordered by **real-world likelihood × impact**. Status: ✅ = mitigated by the c
 | **27** | **IDOR latent in the plain sync API.** `/v1/snapshots/{lineage}/{version}` is gated by exactly one global bearer token — no per-lineage authorization — and `GET /v1/snapshots` **enumerates every lineage on the server**. Fine for the documented single-owner model; a privilege escalation the moment anyone deploys this for a practice with more than one client, which the project explicitly contemplates. | ❌ open — enforce the single-tenant invariant or add a per-lineage owner column now |
 | **28** | **`DAYMARK_COOKIE_INSECURE`** exists for dev — one env var from session cookies over plaintext. | ⚠️ not set; add a startup refusal when it is set together with a `https://` public base URL |
 | **29** | **TOTP enroll/verify are unauthenticated POSTs with no CSRF token and no `Origin`/`Sec-Fetch-Site` check.** A cross-site POST cannot read the response, but it can burn the per-credential counter and lock a therapist out (5 fails → 300 s). Low severity, real. | ❌ open — check `Sec-Fetch-Site: same-origin` |
-| **30** | **Path-traversal via proxy/app normalisation mismatch.** The app side is fine (Ktor rejects traversal; blob paths derive from a `^[A-Za-z0-9_-]{1,64}$` charset with a `Long` version). Risk is a proxy decoding `%2e%2e%2f` before forwarding, and the three shipped proxy examples disagreeing on sub-path prefix stripping. | ✅ nginx/Traefik examples removed; Caddy is not `handle_path` here; ❌ fuzz test open |
+| **30** | **Path-traversal via proxy/app normalisation mismatch.** The app side is fine (Ktor rejects traversal; blob paths derive from a `^[A-Za-z0-9_-]{1,64}$` charset with a `Long` version). Risk is a proxy decoding `%2e%2e%2f` before forwarding, and the three shipped proxy examples disagreeing on sub-path prefix stripping. | ⚠️ **the mismatch risk moved rather than closed.** No proxy is shipped, so no proxy's normalisation is this repo's to guarantee; the four examples in `docs/alternatives/` still disagree on prefix stripping, which is why §3.1 requirement 6 states the rule rather than leaving it to the examples. App side unchanged and fine. ❌ fuzz test open |
 | **31** | **CIS/OWASP baseline items** — seccomp default (never `unconfined`), AppArmor `docker-default`, `no-new-privileges`, `cap_drop: ALL`, non-root, read-only rootfs + tmpfs, `init: true`. | ✅ all applied |
 
 ### Checked negatives — record these as *checked*, not absent
@@ -1070,7 +797,7 @@ Consolidated and deduplicated across all five reports. Everything a 2024/2025-tr
 | **Proxy body cap.** Report 1: 28MB, above the app's 26 MiB, so the app returns its own semantic 413. Report 5: match exactly (26m at nginx). | **Report 1.** Semantic errors from the layer that understands them beat opaque proxy truncation. Report 5's *underlying* finding still stands and is fixed: the old nginx `32m` vs app 26 MiB mismatch meant nginx buffered 6 MiB the app would reject. |
 | **`DAYMARK_SIZE_PADDING`.** Report 3 asserts the project "already pads blobs via `DAYMARK_SIZE_PADDING`." | **Report 3 is wrong.** I grepped the whole server source: no such variable, and no padding logic. Blob sizes are **not** padded. Corrected in §6 — size-bucketing is a known-unmitigated item, not an existing control. |
 | **`DAYMARK_ACCESS_LOG_SOURCE_IP` / `_RETENTION_DAYS` wiring.** Report 3 listed as unverified. | **Resolved: both ARE consumed** — `Config.kt:129` and `Config.kt:130`. Set them in compose with confidence. |
-| **Reverse-proxy examples.** All reports assume the three example configs coexist. | **Removed nginx.conf and traefik.md.** They disagree with each other on sub-path prefix stripping (report 5's finding) and nginx.conf's missing `default_server` is what makes the Host-poisoning path reachable. One tested config beats three untested inconsistent ones. |
+| **Reverse-proxy examples.** All reports assume the three example configs coexist. | **Superseded 2026-08-09.** The original resolution — keep only the Caddyfile, move the others to `docs/alternatives/` — assumed one of them was the shipped config. None is now. All four (`Caddyfile`, `Caddyfile.lan`, `nginx.conf`, `traefik.md`) live in `docs/alternatives/` as equal, untested references, and the inconsistency the report found is answered by §3.1 requirement 6 stating the rule instead. |
 
 ---
 
@@ -1078,10 +805,9 @@ Consolidated and deduplicated across all five reports. Everything a 2024/2025-tr
 
 ### 9.1 Re-verify before merge — all digests
 
-Official images are rebuilt whenever the base is patched; the digest changes even though the version does not. **Every digest in this spec was resolved on 2026-08-08 and must be re-resolved.** A pinned digest that is 8 months stale is worse than a pinned tag — put a calendar reminder on it (quarterly, or on any Caddy/distroless security release).
+Official images are rebuilt whenever the base is patched; the digest changes even though the version does not. **Every digest in this spec was resolved on 2026-08-08 and must be re-resolved.** A pinned digest that is 8 months stale is worse than a pinned tag — put a calendar reminder on it (quarterly, or on any distroless/node/gradle security release). The Caddy digest is no longer among them — nothing in this repo pulls that image.
 
 ```sh
-docker buildx imagetools inspect caddy:2.11.4-alpine --format '{{.Manifest.Digest}}'
 curl -sSI -H 'Accept: application/vnd.oci.image.index.v1+json' \
   https://gcr.io/v2/distroless/java21-debian13/manifests/nonroot | grep -i docker-content-digest
 TOK=$(curl -s "https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/node:pull" | jq -r .token)
@@ -1099,28 +825,39 @@ Pin **index (multi-arch) digests**, never per-arch manifest digests — the latt
 
 ### 9.2 Must be tested on first deploy (in this order)
 
-1. **Caddy binds :443 as a non-root user.** Bring the stack up and confirm Caddy binds and completes an ACME order **before cutting DNS over**. If it fails, apply the documented fallback (drop `user:` + `sysctls:`, keep `cap_drop:[ALL]` + `cap_add:[NET_BIND_SERVICE]`).
-2. **Exactly ONE `Content-Security-Policy` header, containing `wasm-unsafe-eval`.**
+CI now covers items that used to live here: `docker compose config` on both files, both topologies
+booted to `healthy`, the published loopback port serving `/healthz`, egress failing from the network,
+a container resolving `daymark-companion` by name on the no-egress network, and the `!reset` really
+removing the host binding. What remains is what only a real deployment can answer — everything that
+depends on the operator's proxy.
+
+1. **Exactly ONE `Content-Security-Policy` header, containing `wasm-unsafe-eval`.**
    `curl -skI https://your.host/ | grep -ci '^content-security-policy:'` must return `1`.
-   If two appear, **delete the `?Content-Security-Policy` line entirely** — the app already covers every app response.
-3. **`caddy validate`** on the Caddyfile: `docker run --rm -v $PWD/reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro caddy:2.11.4-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile`
-4. **Caddy healthcheck actually works** — confirm `wget` exists in the alpine base and the :2020 site responds.
-5. **`docker compose config`** parses clean, and `pids` under `deploy.resources.limits` doesn't error.
-6. **Fresh `docker compose up` succeeds without a manual chown** (image-side `/data` ownership at 65532).
-7. **A `/recover` and `/portal/invite` URL actually resolve** — see §9.3 item 3.
+   If two appear, your proxy is adding its own — turn that off for this route (§3.1 requirement 7).
+   Two CSPs intersect, and the intersection kills in-browser decryption.
+2. **The app sees your proxy's address, and honours its `X-Forwarded-For`.** With
+   `DAYMARK_TRUSTED_PROXIES` unset, send one request through the proxy and read the warning:
+   `docker compose logs companion | grep X-Forwarded-For` names the exact address to configure. Set
+   it, restart, and confirm the warning stops.
+3. **A request with a forged `X-Forwarded-For` from outside does not change the app's view of the
+   client.** Send `X-Forwarded-For: 1.2.3.4` through the proxy and confirm lockout accounting still
+   tracks your real address — this is the difference between a DoS and an unlimited-attempts bypass.
+4. **An unknown `Host` is refused** (§3.1 requirement 5), and **HSTS is present** on a real response.
+5. **Fresh `docker compose up` succeeds without a manual chown** (image-side `/data` ownership at 65532).
+6. **A `/recover` and `/portal/invite` URL actually resolve** — see §9.3 item 3.
 
 ### 9.3 Confidence per major decision
 
 | Decision | Confidence | What could not be checked |
 |---|---|---|
-| **Caddy over Traefik/nginx** | **High.** Three independent reports converge; the reasoning (ACME-native, ARI, no socket, short config) is structural, not version-dependent. | Nothing material. |
+| **Caddy over Traefik/nginx** | ~~High~~ **moot as a shipping decision** — no proxy is bundled. The comparison stands as guidance for an operator choosing one. | Nothing material. |
 | **Caddy 2.11.4-alpine + digest** | **High** on the version, **medium** on the digest (rebuilt frequently). | The exact release date (2026-06-03 vs 2026-07-16) conflicts between reports. |
 | **Caddyfile syntax** | **Medium-high.** Every directive, subdirective and field path was verified against Caddy's own parser source (`filterencoder.go`, `filters.go`, `builtins.go`, `server.go`), but **no report was able to run `caddy validate`** — no Docker daemon in any research environment. | Whether `?`-prefixed deferred headers behave as documented on reverse-proxied responses **in this exact version** — no test was found or run. `resp_headers>Set-Cookie delete` is a by-convention field path, not source-verified. |
 | **`header_up X-Forwarded-For {client_ip}` replaces rather than appends** | **Medium.** `header_up` with a single value is documented as set-semantics, and `{client_ip}` is a real placeholder. But the interaction ordering with Caddy's *automatic* XFF appending was not tested. | **Test:** log the received XFF at the app and send `X-Forwarded-For: 1.2.3.4` from outside. If the chain still appears, rely on the app's right-to-left walk (which is correct) and add the regression test. |
 | **Distroless java21-debian13:nonroot** | **High.** Image config blob read directly: `JAVA_VERSION=21.0.12`, `User=65532`, `Entrypoint=["/usr/bin/java","-jar"]`, 33 layers / ~63.5 MB. | Whether it ships a full JDK or a reduced/jlinked runtime (the distroless BUILD file didn't expose `temurin-21-jre` vs `-jdk`). Only matters for the rejected JVM-native healthcheck option. Also: whether the bundled JDK patch level is current — distroless has historically lagged upstream CPUs. Check with `docker run --rm --entrypoint=/usr/bin/java <digest> -version`. |
 | **Shell-form HEALTHCHECK breaks on distroless** | **High.** Docker's shell-form wrapping in `/bin/sh -c` is documented behaviour; distroless demonstrably has no shell. This is the highest-confidence correction in the spec. | — |
-| **`user:` + `ip_unprivileged_port_start` sysctl for Caddy** | **Low-medium.** Reasoned from kernel/Docker mechanics, **not from a document fetched**. Explicitly flagged by its own report as "the single most likely thing in the compose file to bite you." | **Test it (§9.2 item 1).** Fallback is written into the file. |
-| **`internal: true` + `gateway_mode_ipv4: isolated`** | **High** — read from Docker's own port-publishing and bridge-driver docs. | Interaction with an explicit `ipam` subnet on an isolated network was not tested. If it fails, drop the `ipam` block and read Caddy's address with `docker compose exec caddy hostname -i`, then pin that /32. |
+| **`user:` + `ip_unprivileged_port_start` sysctl for Caddy** | **Moot.** Nothing in this repo binds a privileged port any more, so the least-verified line in the original spec is simply gone rather than resolved. Kept as a warning to anyone reintroducing a proxy container as non-root under `no-new-privileges`. | Never tested; never will be here. |
+| **`internal: true` + `gateway_mode_ipv4: isolated`** | **High, and now empirically tested** — CI boots the no-egress override, proves name resolution across it and egress failure from it, and asserts no host port survives. What the original entry got *wrong* was assuming published ports would still work on such a network; they do not ([moby/moby#36174](https://github.com/moby/moby/issues/36174)), which is the whole reason there are two topologies. | Nothing outstanding on this row. The weaker claim is the *default* topology's `enable_ip_masquerade: false`: CI proves egress does not complete, not that packets never leave. §2.1 gives the `DOCKER-USER` rule that closes it. |
 | **`local` log driver defaults** | **High** — read from docker/docs source (20m × 5, compression on; `json-file` `max-size: -1`). | — |
 | **Caddy `level ERROR` = 5xx only** | **High** — verified in `modules/caddyhttp/server.go:logRequest` (InfoLevel, escalating to ErrorLevel at status ≥ 500). | — |
 | **`ip_mask 0` disables masking** | **High** — verified in `IPMaskFilter.Provision` / `parseRawToMask`. | — |
