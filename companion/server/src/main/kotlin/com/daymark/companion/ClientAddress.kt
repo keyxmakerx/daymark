@@ -139,15 +139,46 @@ object ClientAddress {
     private fun stripBrackets(host: String): String =
         if (host.startsWith("[") && host.endsWith("]")) host.substring(1, host.length - 1) else host
 
-    /** Parses a literal address to bytes. Never resolves DNS: only numeric literals are accepted. */
+    /**
+     * Parses a literal address to bytes. **Never resolves DNS.**
+     *
+     * An earlier version enforced that with a charset filter and then called
+     * `InetAddress.getByName`. The filter permitted hex digits so that IPv6 literals would pass —
+     * which also let `dead.cafe` through, and `getByName` duly resolved it over the network. So a
+     * hop in an attacker-influenced `X-Forwarded-For` chain could make this server perform a DNS
+     * lookup of the attacker's choosing. Unreachable in the shipped Caddy topology, which replaces
+     * the header rather than appending to it, but one L4 load balancer away from being live.
+     *
+     * Now the parsing is done here rather than delegated:
+     * - a colon means IPv6, and a DNS hostname cannot contain one, so `getByName` is safe;
+     * - anything else must be a dotted-quad IPv4, built byte by byte;
+     * - everything else is rejected.
+     */
     private fun toBytes(address: String): ByteArray? {
         val host = stripBrackets(address.trim())
         if (host.isEmpty()) return null
-        // Reject anything that is not a numeric literal, so this can never trigger a DNS lookup on
-        // an attacker-supplied string.
-        if (!host.all { it.isDigit() || it == '.' || it == ':' || (it in 'a'..'f') || (it in 'A'..'F') || it == '%' }) {
-            return null
+
+        if (host.contains(':')) {
+            // Hostnames cannot contain ':', so this can only be an IPv6 literal (possibly with a
+            // %zone suffix). getByName does not hit the network for one.
+            return runCatching { InetAddress.getByName(host).address }.getOrNull()
         }
-        return runCatching { InetAddress.getByName(host).address }.getOrNull()
+
+        // IPv4 dotted-quad, parsed by hand so no name-resolution path is reachable at all.
+        val parts = host.split('.')
+        if (parts.size != 4) return null
+        val bytes = ByteArray(4)
+        for (i in 0 until 4) {
+            val p = parts[i]
+            // Reject "", "1234", "01" — leading zeros are how octal-vs-decimal parser
+            // disagreements turn into allowlist bypasses.
+            if (p.isEmpty() || p.length > 3) return null
+            if (!p.all { it.isDigit() }) return null
+            if (p.length > 1 && p[0] == '0') return null
+            val v = p.toIntOrNull() ?: return null
+            if (v > 255) return null
+            bytes[i] = v.toByte()
+        }
+        return bytes
     }
 }

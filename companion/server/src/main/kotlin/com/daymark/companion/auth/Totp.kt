@@ -29,16 +29,31 @@ object Totp {
      * Constant-time verify: true if [presented] equals the code for any step within ±1 of
      * [epochSeconds]. The loop always runs the full window (no early-return timing leak).
      */
-    fun verify(secret: ByteArray, presented: String, epochSeconds: Long): Boolean {
+    fun verify(secret: ByteArray, presented: String, epochSeconds: Long): Boolean =
+        verifyStep(secret, presented, epochSeconds) != null
+
+    /**
+     * Constant-time verify that returns **which step matched**, or null.
+     *
+     * The step is what makes a code single-use. RFC 6238 §5.2 requires that a code be accepted at
+     * most once — otherwise anyone who observes one (shoulder-surfing, a screenshot, a phished
+     * prompt) can replay it for the remainder of the ±90s window, and each acceptance here mints an
+     * independent 8-hour session that outlives the victim logging out. Callers must pass the
+     * returned step to `AuthStore.consumeTotpStep`, which rejects any step already spent.
+     *
+     * Same constant-time property as before: the loop always runs the full window rather than
+     * returning early, so response timing does not reveal which step matched.
+     */
+    fun verifyStep(secret: ByteArray, presented: String, epochSeconds: Long): Long? {
         val counter = epochSeconds / STEP_SECONDS
-        var ok = false
+        var matched = Long.MIN_VALUE
         for (d in -DRIFT_STEPS..DRIFT_STEPS) {
             val candidate = codeForCounter(secret, counter + d)
             if (MessageDigest.isEqual(candidate.toByteArray(Charsets.US_ASCII), presented.toByteArray(Charsets.US_ASCII))) {
-                ok = true
+                matched = counter + d
             }
         }
-        return ok
+        return if (matched == Long.MIN_VALUE) null else matched
     }
 
     private fun codeForCounter(secret: ByteArray, counter: Long): String {

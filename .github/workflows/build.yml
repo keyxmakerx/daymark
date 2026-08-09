@@ -6,6 +6,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Least privilege, matching companion.yml and release.yml. Without this the workflow inherits the
+# repository default, which may be read/write — more than a build that only reads code and uploads
+# artifacts ever needs.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest

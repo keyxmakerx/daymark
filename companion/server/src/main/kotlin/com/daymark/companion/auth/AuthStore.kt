@@ -55,10 +55,22 @@ class AuthStore(
                     secret_b64    TEXT    NOT NULL,
                     fail_count    INTEGER NOT NULL DEFAULT 0,
                     locked_until  INTEGER NOT NULL DEFAULT 0,
-                    created_at    INTEGER NOT NULL
+                    created_at    INTEGER NOT NULL,
+                    -- Highest TOTP step already spent by this credential. RFC 6238 5.2: a code must
+                    -- be accepted at most once. Without this a code stays replayable for the whole
+                    -- +/-90s window, and every acceptance mints an independent 8h session that
+                    -- outlives the victim logging out.
+                    last_used_step INTEGER NOT NULL DEFAULT 0
                 )
                 """.trimIndent(),
             )
+            // Databases created before last_used_step existed will not gain it from CREATE TABLE IF
+            // NOT EXISTS. SQLite has no ADD COLUMN IF NOT EXISTS and errors on a duplicate column,
+            // so the failure is swallowed deliberately: this is the additive-column idiom, not a
+            // swallowed bug.
+            runCatching {
+                st.execute("ALTER TABLE totp ADD COLUMN last_used_step INTEGER NOT NULL DEFAULT 0")
+            }
             // One credential per relationship: a second enroll attempt for a relRef that already
             // has a live credential is rejected (insert-only enroll), so an attacker cannot enroll
             // a second forged credential bound to the same relRef.
@@ -270,6 +282,26 @@ class AuthStore(
                 if (!rs.next()) return null
                 TotpRecord(rs.getString(1), rs.getString(2), rs.getInt(3), rs.getLong(4))
             }
+        }
+    }
+
+    /**
+     * Atomically spend a TOTP step, returning false if it was already used.
+     *
+     * The compare and the write happen in ONE statement under the same lock every other totp
+     * mutation takes. Doing it as read-then-write would leave a window in which two concurrent
+     * requests both observe the old `last_used_step` and both succeed — which is precisely the
+     * replay this is meant to stop, just narrower.
+     *
+     * `>` rather than `>=` is deliberate: the step 0 default means a freshly enrolled credential
+     * has spent nothing, and steps only ever increase.
+     */
+    fun consumeTotpStep(credentialId: String, step: Long): Boolean = synchronized(lock) {
+        conn.prepareStatement(
+            "UPDATE totp SET last_used_step=? WHERE credential_id=? AND last_used_step < ?",
+        ).use { ps ->
+            ps.setLong(1, step); ps.setString(2, credentialId); ps.setLong(3, step)
+            return ps.executeUpdate() > 0
         }
     }
 

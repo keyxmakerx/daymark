@@ -170,7 +170,12 @@ fun Route.therapistAuthRoutes(
                 return@post
             }
             val secretBytes = decodeSecret(rec.secretB64)
-            val ok = secretBytes != null && Totp.verify(secretBytes, req.code, now / 1000)
+            // A correct code is not enough — it must also be UNSPENT. consumeTotpStep is the
+            // atomic compare-and-set that makes it single-use (RFC 6238 5.2); a replayed code
+            // therefore lands on the failure path below, indistinguishable to the caller from a
+            // wrong one, and counts against the lockout like any other bad attempt.
+            val matchedStep = secretBytes?.let { Totp.verifyStep(it, req.code, now / 1000) }
+            val ok = matchedStep != null && authStore.consumeTotpStep(req.credentialId, matchedStep)
             if (!ok) {
                 val locked = authStore.recordTotpFailure(req.credentialId, totpLockoutFails, totpLockoutSeconds * 1000)
                 if (locked > now) {

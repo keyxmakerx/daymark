@@ -130,6 +130,48 @@ class ClientAddressTest {
     }
 
     @Test
+    fun `a hostname made only of hex-looking characters is still never resolved`() {
+        // This is the case the test above MISSED. The old implementation filtered by charset and
+        // then called InetAddress.getByName; the filter allowed a-f so IPv6 literals would pass,
+        // which also admitted names like "dead.cafe" — and getByName resolved them over real DNS.
+        // "evil.example.com" never exercised that path because it failed the filter first, so the
+        // test passed for the wrong reason.
+        for (name in listOf("dead.cafe", "cafe", "abc", "deadbeef", "face.b00c")) {
+            assertEquals(
+                "10.89.0.2",
+                ClientAddress.resolve("10.89.0.2", listOf(name), proxy),
+                "'$name' must not be treated as an address (and must not be resolved)",
+            )
+        }
+    }
+
+    @Test
+    fun `malformed IPv4 octets are rejected rather than coerced`() {
+        for (bad in listOf("1.2.3", "1.2.3.4.5", "256.1.1.1", "1.2.3.999", "1.2.3.", ".1.2.3")) {
+            assertEquals(
+                "10.89.0.2",
+                ClientAddress.resolve("10.89.0.2", listOf(bad), proxy),
+                "'$bad' is not a valid address",
+            )
+        }
+    }
+
+    @Test
+    fun `leading-zero octets are rejected, not read as octal`() {
+        // "010.1.1.1" is 8.1.1.1 to an octal-aware parser and 10.1.1.1 to a decimal one.
+        // Disagreements of exactly this kind are how allowlist bypasses happen, so reject outright.
+        assertEquals("10.89.0.2", ClientAddress.resolve("10.89.0.2", listOf("010.1.1.1"), proxy))
+        assertEquals("10.89.0.2", ClientAddress.resolve("10.89.0.2", listOf("01.2.3.4"), proxy))
+    }
+
+    @Test
+    fun `well-formed IPv4 still parses`() {
+        assertEquals("203.0.113.9", ClientAddress.resolve("10.89.0.2", listOf("203.0.113.9"), proxy))
+        assertEquals("0.0.0.0", ClientAddress.resolve("10.89.0.2", listOf("0.0.0.0"), proxy))
+        assertEquals("255.255.255.255", ClientAddress.resolve("10.89.0.2", listOf("255.255.255.255"), proxy))
+    }
+
+    @Test
     fun `IPv4 and IPv6 do not match across families`() {
         val v4 = ClientAddress.parseTrusted("10.89.0.2/32")
         assertFalse(ClientAddress.isTrusted("2001:db8::1", v4))
