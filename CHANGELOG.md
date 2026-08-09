@@ -177,6 +177,28 @@ All notable changes to this project are documented here. The format is based on
   permission and makes no network connections.
 
 ### Security
+- **Companion deployment — the bundled reverse proxy is gone.** `companion/docker-compose.yml` now
+  starts the application and nothing else, published on `127.0.0.1:8080` for whichever proxy you
+  already run (Cosmos Cloud, Caddy, Traefik, nginx, a tunnel) to terminate TLS in front of. Bundling
+  one meant shipping ACME, a certificate volume, a `:80`/`:443` binding and a privileged-port
+  workaround for an audience that already has a proxy. What your proxy must do is now written down
+  as a nine-point contract in `docs/COMPANION_DEPLOYMENT_HARDENING.md` §3, and worked configs for
+  Caddy / nginx / Traefik moved to `docs/alternatives/` where their status as untested references is
+  stated rather than implied.
+  - `docker-compose.no-egress.yml` is the stronger opt-in topology for a **containerised** proxy: no
+    published port, `internal: true` + `gateway_mode_ipv4: isolated`, so the app has no route off its
+    network at all. It has to be opt-in because published ports **do not work** on Docker `internal:`
+    networks ([moby/moby#36174](https://github.com/moby/moby/issues/36174)) — a host-side proxy could
+    not reach the app that way. Both topologies are now booted and probed in CI.
+  - `DAYMARK_TRUSTED_PROXIES` defaults to **empty** — trust nothing. Because setting it wrong fails
+    *silently* (forwarded headers ignored, every lockout keying on the proxy, so eight bad tokens
+    from one attacker lock out everybody), the server now logs one warning naming the address it
+    actually saw, the first time a forwarded header arrives while the list is empty.
+- **Companion — `/readyz`.** `/healthz` returning 200 never proved the server could accept a write;
+  a read-only volume, a volume owned by the wrong UID and a full disk all leave HTTP working
+  perfectly. `/readyz` probes the data directory and returns 503 when it cannot, and the container's
+  own health check now uses it. Both endpoints stay unauthenticated and content-free — the reason
+  for a failure goes to the operator's log, not to an anonymous caller.
 - PIN moved to PBKDF2 (210k iterations, random salt) in AES-256 `EncryptedSharedPreferences`,
   with failed-attempt lockout/backoff; transparent upgrade from the old hash.
 - Re-lock on background; `FLAG_SECURE` when locked; strong (Class 3) biometrics only.
