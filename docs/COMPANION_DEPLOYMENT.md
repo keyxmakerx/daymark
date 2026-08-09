@@ -17,6 +17,19 @@
 > tracks ship at all in the first Companion release — or whether sync lands first —
 > is an unresolved sequencing decision; see [COMPANION_SCOPE.md](COMPANION_SCOPE.md).
 >
+> **AS SHIPPED (updated 2026-08-09).** Code now exists, and where it differs from this
+> design document, the code wins. The two differences that matter here: there is **no
+> bundled reverse proxy** of any kind — `companion/docker-compose.yml` starts the
+> application and nothing else, published on `127.0.0.1:8080` for whatever proxy the
+> operator already runs (Cosmos Cloud, Caddy, Traefik, nginx) — and the internal-network
+> topology this document draws in §1.1 is the **opt-in** `docker-compose.no-egress.yml`,
+> used when that proxy is itself a container. It is opt-in because **published ports do
+> not work on Docker `internal:` networks** ([moby/moby#36174](https://github.com/moby/moby/issues/36174)),
+> so a host-side proxy cannot reach the app that way. The requirements the proxy must
+> satisfy are stated as a contract in
+> [COMPANION_DEPLOYMENT_HARDENING.md §3](COMPANION_DEPLOYMENT_HARDENING.md#3-your-reverse-proxy--the-contract);
+> §4 below is still good background on *why* those requirements exist.
+>
 > This document is the **deployment / operations** track. For *what the Companion is*
 > see [COMPANION_SCOPE.md](COMPANION_SCOPE.md); for *how it is built* see
 > [COMPANION_ARCHITECTURE.md](COMPANION_ARCHITECTURE.md); for the *threat model and
@@ -435,6 +448,12 @@ secrets:
 All examples assume the companion is reachable from the proxy as
 `http://companion:8080` on the shared internal network. Each covers upstream TLS
 termination, `X-Forwarded-*` / trusted-proxy handling, and a sub-path mount variant.
+
+> **As shipped**, the container is named `daymark-companion`, so a containerised proxy on
+> the shared network reaches it at `http://daymark-companion:8080`, and a proxy running on
+> the Docker host reaches it at `http://127.0.0.1:8080` instead. Maintained versions of
+> these examples live in [`alternatives/`](alternatives/); the snippets below are the
+> design-time originals and are not kept in sync with them.
 
 ### 4.0 Trusted-proxy contract (read first)
 

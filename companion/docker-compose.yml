@@ -1,14 +1,44 @@
 # Daymark Companion — hardened deployment.
 #
-#   cp .env.example .env && edit          # DAYMARK_DOMAIN, DAYMARK_ACME_EMAIL
+# THERE IS NO BUNDLED REVERSE PROXY. This stack starts the application and nothing
+# else. It speaks plain HTTP on 127.0.0.1:8080 and expects YOUR proxy — Cosmos Cloud,
+# Caddy, Traefik, nginx, NPM, a Cloudflare tunnel — to terminate TLS in front of it.
+# Worked configs for several proxies live in docs/alternatives/.
+#
+#   cp .env.example .env && edit          # DAYMARK_DOMAIN, DAYMARK_TRUSTED_PROXIES
 #   mkdir -p secrets && chmod 700 secrets
 #   openssl rand -base64 48 | tr -d '\n' > secrets/auth_token
 #   sudo chown 65532:65532 secrets/auth_token && chmod 400 secrets/auth_token
+#   docker compose up -d --build
 #
 #   ^ the chown matters. Compose ignores the secrets uid/gid/mode keys outside Swarm, so
 #     the container sees the HOST file's ownership. Left as root:root 0600, UID 65532
 #     cannot read it and the server exits on startup.
-#   docker compose up -d --build
+#
+# TWO THINGS YOUR PROXY MUST DO. Neither is optional. The full nine-point contract is
+# §3 of docs/COMPANION_DEPLOYMENT_HARDENING.md; these two are the ones that bite first.
+#
+#   1. Set DAYMARK_TRUSTED_PROXIES to the proxy's source address AS THE APP SEES IT.
+#      Leave it unset and every per-client control — sync auth lockout, TOTP lockout,
+#      the recovery rate limit — keys on the proxy instead of the client, so all clients
+#      share one bucket and eight bad tokens from one attacker lock out everybody.
+#
+#   2. Add Strict-Transport-Security at the proxy. The app sends CSP, X-Frame-Options,
+#      X-Content-Type-Options and Referrer-Policy on every response, but deliberately
+#      NOT HSTS, because it cannot know whether it is behind TLS.
+#
+# HOW YOUR PROXY REACHES THE APP — pick whichever matches your setup:
+#
+#   a. Proxy running on the Docker HOST as a process
+#        Point it at http://127.0.0.1:8080. Nothing more to do; that is the default.
+#
+#   b. Proxy running in a CONTAINER (Cosmos Cloud, Traefik, NPM, a containerised Caddy)
+#        Attach it to this stack's network and address the app by name:
+#            docker network connect daymark-companion_back <your-proxy-container>
+#            upstream: http://daymark-companion:8080
+#        Then apply the no-egress override, which drops the published host port and
+#        takes the app's route to the outside world away completely:
+#            docker compose -f docker-compose.yml -f docker-compose.no-egress.yml up -d
 #
 # NO top-level `version:` key — obsolete since Compose v2; current Compose warns on it.
 
@@ -35,69 +65,7 @@ x-logging: &logging
 
 services:
 
-  # ── Reverse proxy / TLS terminator ───────────────────────────────────────
-  caddy:
-    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
-    container_name: daymark-caddy
-    <<: *hardened
-    logging: *logging
-    depends_on:
-      companion:
-        condition: service_healthy
-
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"          # HTTP/3. Delete this line to disable QUIC.
-
-    networks:
-      edge: {}
-      back:
-        ipv4_address: 10.89.0.2   # pinned so DAYMARK_TRUSTED_PROXIES is deterministic
-
-    environment:
-      DAYMARK_DOMAIN:     "${DAYMARK_DOMAIN:?set in .env, e.g. daymark.example.com}"
-      DAYMARK_ACME_EMAIL: "${DAYMARK_ACME_EMAIL:?set in .env}"
-
-    volumes:
-      - ./reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data         # certs + ACME account keys — MUST persist or you will
-      - caddy_config:/config     # burn Let's Encrypt rate limits on every redeploy
-
-    # Bind :80/:443 as a non-root user with ZERO capabilities.
-    # The image ships `setcap cap_net_bind_service=+ep` on the binary, but that file
-    # capability is IGNORED under no-new-privileges, and Docker grants no ambient caps to
-    # a non-root `user:`. So `cap_add: [NET_BIND_SERVICE]` + `user:` does NOT work.
-    # The namespaced sysctl below lowers the privileged-port floor inside THIS netns only.
-    # ↳ MUST BE TESTED (see §9.2). Fallback if it fails: drop `user:` and `sysctls:`,
-    #   keep cap_drop:[ALL] + cap_add:[NET_BIND_SERVICE] (root inside a stripped container).
-    user: "10002:10002"
-    sysctls:
-      net.ipv4.ip_unprivileged_port_start: "0"
-
-    tmpfs:
-      - /tmp:size=16m,mode=1777,noexec,nosuid,nodev
-
-    ulimits:
-      nofile: { soft: 8192, hard: 16384 }
-
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: "0.50"
-          pids: 128
-
-    # busybox wget (present in the alpine base) against the container-local :2020
-    # health site defined in the Caddyfile. Not published to the host.
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:2020/healthz"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 10s
-
-  # ── Application ──────────────────────────────────────────────────────────
+  # ── Application (the only service) ───────────────────────────────────────
   companion:
     build:
       context: .
@@ -107,7 +75,14 @@ services:
     <<: *hardened
     logging: *logging
 
-    # NO ports: — reachable ONLY via Caddy on `back`.
+    # Published to LOOPBACK ONLY by default, never 0.0.0.0 — a reverse proxy on this host
+    # can reach it, nothing on the LAN can. Override DAYMARK_BIND_IP only if your proxy is
+    # on another machine AND the link between them is already encrypted; the app speaks
+    # plain HTTP and authenticates with a bearer token, so anything that can read the wire
+    # can read the token.
+    ports:
+      - "${DAYMARK_BIND_IP:-127.0.0.1}:${DAYMARK_HOST_PORT:-8080}:8080"
+
     networks:
       back:
         ipv4_address: 10.89.0.3
@@ -123,18 +98,22 @@ services:
       DAYMARK_LOG_LEVEL: "warn"
       TZ:                "UTC"
 
-      # THE most important line in this file. Unset = every internet client shares one
-      # lockout bucket; 8 bad bearer tokens from one attacker locks out everyone for 15
-      # minutes. Pinned /32, never a bridge-wide CIDR — a co-resident container could
-      # otherwise forge X-Forwarded-For and evade lockout entirely.
-      DAYMARK_TRUSTED_PROXIES: "10.89.0.2/32"
+      # THE most important line in this file, and it is EMPTY BY DEFAULT ON PURPOSE:
+      # trust no forwarded headers until the operator names the proxy. Set it in .env to
+      # the proxy's exact source IP/CIDR. Never a whole bridge CIDR — any co-resident
+      # container could then forge X-Forwarded-For and walk past the auth lockout.
+      # Getting it WRONG fails quiet (headers ignored, one shared lockout bucket), so the
+      # server logs a loud one-time warning if forwarded headers arrive while this is
+      # unset. Watch for it on first boot.
+      DAYMARK_TRUSTED_PROXIES: "${DAYMARK_TRUSTED_PROXIES:-}"
 
-      # Required once SMTP or the therapist portal is enabled. Without it,
+      # The real external origin, as clients type it. Not a LAN alias: this is the
+      # WebAuthn RP-ID and the base URL for invite links in outbound email. Without it,
       # RouteUrls.resolveBaseUrl() falls back to the client-supplied Host header and
       # emails an attacker-controlled invite link. See §6 item 6.
-      DAYMARK_PUBLIC_BASE_URL:  "https://${DAYMARK_DOMAIN}"
-      DAYMARK_WEBAUTHN_RP_ID:   "${DAYMARK_DOMAIN}"
-      DAYMARK_WEBAUTHN_ORIGINS: "https://${DAYMARK_DOMAIN}"
+      DAYMARK_PUBLIC_BASE_URL:  "${DAYMARK_PUBLIC_SCHEME:-https}://${DAYMARK_DOMAIN:?set in .env, e.g. daymark.example.com}"
+      DAYMARK_WEBAUTHN_RP_ID:   "${DAYMARK_DOMAIN:?set in .env, e.g. daymark.example.com}"
+      DAYMARK_WEBAUTHN_ORIGINS: "${DAYMARK_PUBLIC_SCHEME:-https}://${DAYMARK_DOMAIN:?set in .env, e.g. daymark.example.com}"
 
       DAYMARK_AUTH_TOKEN_FILE: "/run/secrets/companion_auth_token"
 
@@ -194,32 +173,34 @@ services:
       start_interval: 2s        # Engine >= 25: fast first-start convergence
 
 networks:
-  # Internet-facing. Caddy only. Needed for ACME.
-  edge:
-    driver: bridge
-    driver_opts:
-      com.docker.network.bridge.name: dmk-edge
-
-  # Caddy <-> app only. No egress, no route to host services.
+  # One network. The app is its only member unless you attach your own proxy container.
   back:
     driver: bridge
-    internal: true
     driver_opts:
       com.docker.network.bridge.name: dmk-back
-      # `internal: true` ALONE is not enough: Docker still assigns the bridge a host-side
-      # address, so an "internal" container can reach host services bound to 0.0.0.0.
-      # `isolated` removes that address. It is only valid together with internal: true.
-      com.docker.network.bridge.gateway_mode_ipv4: isolated
-      # Do NOT set enable_icc:"false" — it would block caddy -> companion. Isolation here
-      # comes from this network having exactly two members.
+
+      # No NAT for outbound traffic. The app has no business dialling out: everything it
+      # needs is on disk, and the one deliberate exception (SMTP) is off by default. With
+      # masquerade disabled, packets leave the host carrying a 10.89.0.0/24 source, which
+      # nothing upstream will route a reply to — so egress does not complete.
+      #
+      # Be precise about what this buys: packets still LEAVE, they just get no answer. It
+      # is not the same as dropping them, and it does not stop the container reaching
+      # services bound to 0.0.0.0 on this host via the bridge gateway. For the airtight
+      # version — a network with no gateway address at all — use
+      # docker-compose.no-egress.yml, which needs your proxy to be a container on this
+      # network, because published ports do NOT work on Docker `internal:` networks
+      # (moby/moby#36174, still open).
+      #
+      # Enabling outbound SMTP means turning this back on; see §2.1 of
+      # docs/COMPANION_DEPLOYMENT_HARDENING.md.
+      com.docker.network.bridge.enable_ip_masquerade: "false"
     ipam:
       config:
         - subnet: 10.89.0.0/24
 
 volumes:
   blobs:
-  caddy_data:
-  caddy_config:
 
 secrets:
   companion_auth_token:

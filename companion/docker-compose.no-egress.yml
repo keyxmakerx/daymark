@@ -1,0 +1,63 @@
+# Daymark Companion — no-egress override. OPT-IN.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.no-egress.yml up -d --build
+#
+# Use this when YOUR REVERSE PROXY IS A CONTAINER (Cosmos Cloud in its normal mode,
+# Traefik, Nginx Proxy Manager) rather than a process on the Docker host. It is the
+# strongest posture the app can run in, and it costs you the published host port.
+#
+# WHAT IT CHANGES
+#   - `internal: true` puts real DROP rules in the FORWARD chain: nothing on this network
+#     can reach any other network, in either direction. Not "replies don't come back" —
+#     dropped.
+#   - `gateway_mode_ipv4: isolated` goes one step further and stops Docker assigning the
+#     bridge a host-side address at all (moby/moby#49262). Without that address, an
+#     "internal" container can still reach services bound to 0.0.0.0 on the host; with it,
+#     there is no address to reach them through.
+#   - The published port is removed, because it would not work anyway: containers on an
+#     `internal:` bridge network do not get their port bindings set up, even for
+#     127.0.0.1 (moby/moby#36174 — open since 2018, still open). Leaving `ports:` in place
+#     would only look like it worked.
+#
+# WHAT YOU MUST DO
+#   Attach your proxy container to this network and address the app by container name:
+#
+#     docker network connect daymark-companion_back <your-proxy-container>
+#     # upstream / target: http://daymark-companion:8080
+#
+#   Or, from your proxy's own compose file:
+#
+#     networks:
+#       daymark:
+#         name: daymark-companion_back
+#         external: true
+#
+#   Your proxy stays on its own internet-facing network for TLS and ACME; this network is
+#   only the path to the app. Then set DAYMARK_TRUSTED_PROXIES in .env to the address the
+#   proxy gets on THIS network — read it off the daymark-companion_back row, not any other:
+#
+#     docker inspect <your-proxy-container> \
+#       --format '{{range $n, $c := .NetworkSettings.Networks}}{{$n}} {{$c.IPAddress}}{{"\n"}}{{end}}'
+#
+#   It is allocated from 10.89.0.0/24, and the app itself is pinned at 10.89.0.3.
+#
+#   If your proxy has its own "give this container a private network" feature, let it create
+#   the network OR attach it to this one — not both, or the app sees whichever address Docker
+#   routes from and your allowlist misses.
+#
+# NOT COMPATIBLE WITH OUTBOUND SMTP. There is no egress path here at all, by design.
+
+services:
+  companion:
+    # Compose >= 2.24 `!reset`: delete the key inherited from the base file rather than
+    # merging into it. Port lists merge by default, so plain omission would keep it.
+    ports: !reset []
+
+networks:
+  back:
+    internal: true
+    # !override, not a merge: the base file's enable_ip_masquerade key is meaningless on
+    # an internal network, and `isolated` is only valid together with internal: true.
+    driver_opts: !override
+      com.docker.network.bridge.name: dmk-back
+      com.docker.network.bridge.gateway_mode_ipv4: isolated
