@@ -29,7 +29,7 @@ dependencies {
     // for deriving opaque routing ids from inbox tokens. This never touches the E2EE key
     // hierarchy (that stays client-side); the server holds nothing that decrypts. MIT-style
     // license, no native libs. See docs/COMPANION_SECURITY.md §4/§5.
-    implementation("org.bouncycastle:bcprov-jdk18on:1.79")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.85")
     // ktor-server-forwarded-header is intentionally NOT pulled in yet: the trust-none
     // default means we do not honour X-Forwarded-* until the sync milestone wires a
     // pinned-proxy allowlist (see docs/COMPANION_DEPLOYMENT.md).
