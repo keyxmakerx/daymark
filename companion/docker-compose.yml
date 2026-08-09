@@ -15,7 +15,8 @@
 #     the container sees the HOST file's ownership. Left as root:root 0600, UID 65532
 #     cannot read it and the server exits on startup.
 #
-# TWO THINGS YOUR PROXY MUST DO. Neither is optional; see docs/COMPANION_DEPLOYMENT.md §4.
+# TWO THINGS YOUR PROXY MUST DO. Neither is optional. The full nine-point contract is
+# §3 of docs/COMPANION_DEPLOYMENT_HARDENING.md; these two are the ones that bite first.
 #
 #   1. Set DAYMARK_TRUSTED_PROXIES to the proxy's source address AS THE APP SEES IT.
 #      Leave it unset and every per-client control — sync auth lockout, TOTP lockout,
@@ -28,10 +29,10 @@
 #
 # HOW YOUR PROXY REACHES THE APP — pick whichever matches your setup:
 #
-#   a. Proxy on the Docker HOST (nginx, Caddy, or Cosmos in host-network mode)
+#   a. Proxy running on the Docker HOST as a process
 #        Point it at http://127.0.0.1:8080. Nothing more to do; that is the default.
 #
-#   b. Proxy in a CONTAINER (Cosmos Cloud's normal mode, Traefik, NPM)
+#   b. Proxy running in a CONTAINER (Cosmos Cloud, Traefik, NPM, a containerised Caddy)
 #        Attach it to this stack's network and address the app by name:
 #            docker network connect daymark-companion_back <your-proxy-container>
 #            upstream: http://daymark-companion:8080
