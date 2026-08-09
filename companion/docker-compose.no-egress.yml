@@ -34,8 +34,16 @@
 #
 #   Your proxy stays on its own internet-facing network for TLS and ACME; this network is
 #   only the path to the app. Then set DAYMARK_TRUSTED_PROXIES in .env to the address the
-#   proxy gets on THIS network (`docker inspect` it — it is allocated from 10.89.0.0/24,
-#   and the app is pinned at 10.89.0.3).
+#   proxy gets on THIS network — read it off the daymark-companion_back row, not any other:
+#
+#     docker inspect <your-proxy-container> \
+#       --format '{{range $n, $c := .NetworkSettings.Networks}}{{$n}} {{$c.IPAddress}}{{"\n"}}{{end}}'
+#
+#   It is allocated from 10.89.0.0/24, and the app itself is pinned at 10.89.0.3.
+#
+#   If your proxy has its own "give this container a private network" feature, let it create
+#   the network OR attach it to this one — not both, or the app sees whichever address Docker
+#   routes from and your allowlist misses.
 #
 # NOT COMPATIBLE WITH OUTBOUND SMTP. There is no egress path here at all, by design.
 

@@ -256,8 +256,9 @@ Pick one and make `DAYMARK_BASE_PATH` agree with it.
 CSP headers on the same response are **intersected** by the browser, not overridden. The app's
 policy includes `'wasm-unsafe-eval'` because all decryption happens in a libsodium WASM module in
 the browser; a proxy adding a "hardened" CSP without it silently kills every crypto operation in the
-viewer, with no error a non-expert would connect to the cause. If your proxy sets security headers
-by default (Cosmos Cloud does), either turn CSP off for this route or make it byte-identical.
+viewer, with no error a non-expert would connect to the cause. If your proxy has a "security headers" or
+"harden this route" toggle, check what CSP it emits before enabling it: either turn CSP off for
+this route or make it byte-identical to the app's.
 Caddy's set-if-absent form is a `?`-prefixed header; nginx `add_header` has **no** set-if-absent
 form, which is one of the reasons the nginx example needs care.
 
@@ -289,12 +290,24 @@ docker compose -f docker-compose.yml -f docker-compose.no-egress.yml up -d --bui
 docker network connect daymark-companion_back cosmos-server
 ```
 
-Then add a route in the Cosmos UI with target `http://daymark-companion:8080`, enable
-`Strict-Transport-Security` in its security settings, and set `DAYMARK_TRUSTED_PROXIES` in `.env` to
-the address Cosmos was given on that network (`docker inspect cosmos-server`, look for the
-`daymark-companion_back` entry). Cosmos's "Force secure network" feature does the network attachment
-for you, but it creates its *own* network — either let it, and set `DAYMARK_TRUSTED_PROXIES`
-accordingly, or attach it to ours as above. Do not do both.
+Then add a route in the Cosmos UI with target `http://daymark-companion:8080`, and set
+`DAYMARK_TRUSTED_PROXIES` in `.env` to the address Cosmos was given on that network:
+
+```sh
+docker inspect cosmos-server \
+  --format '{{range $n, $c := .NetworkSettings.Networks}}{{$n}} {{$c.IPAddress}}{{"\n"}}{{end}}'
+```
+
+Take the address on the `daymark-companion_back` row, not any other, and write it as a `/32`.
+
+**Not verified from here, so check it in your install rather than trusting this paragraph:** whether
+your Cosmos version adds security headers of its own to proxied routes (requirement 7 — a second CSP
+breaks in-browser decryption, so look at the response headers before and after enabling any
+"harden this route" option), whether it sends HSTS (requirement 2 — if not, add it), and whether its
+per-container private-network feature attaches to an existing network or creates its own. If it
+creates its own, use *that* network instead of `docker network connect` above and read
+`DAYMARK_TRUSTED_PROXIES` from it the same way — but do not do both, or the app will see whichever
+address Docker happens to route from and the allowlist will miss.
 
 ### 3.3 The bundled Caddyfiles
 
