@@ -58,7 +58,24 @@ fun main() {
         config.mailer.validate()
         log.info("Outbound SMTP is ENABLED (the one deliberate egress exception): host={} port={} tls={}", config.mailer.host, config.mailer.port, config.mailer.tls)
     }
-    embeddedServer(Netty, port = config.port, host = config.bindAddr) {
+    // Read/idle timeouts. These used to be the bundled reverse proxy's job — `read_header 10s`,
+    // `read_body 120s`, `idle 120s` — and they left with it, so until now nothing in the
+    // deployment bounded how slowly a client could dribble a request. Netty being non-blocking
+    // makes connection-count slowloris weak, not the slow-request kind. The operator's proxy is
+    // asked for the same thing (COMPANION_DEPLOYMENT_HARDENING.md 3.1 requirement 9), but the app
+    // must not depend on a proxy it cannot see to have a floor.
+    //
+    // 120 s for the body, not 10: a 25 MiB snapshot over a slow mobile uplink is a legitimate
+    // long request, and cutting those off would be a worse bug than the one being closed.
+    embeddedServer(
+        Netty,
+        port = config.port,
+        host = config.bindAddr,
+        configure = {
+            requestReadTimeoutSeconds = 120
+            responseWriteTimeoutSeconds = 120
+        },
+    ) {
         module(config)
     }.start(wait = true)
 }

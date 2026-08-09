@@ -41,10 +41,28 @@ class Readiness(
 
     private val cache = AtomicReference<Cached?>(null)
     private val lastLogged = AtomicReference<String?>(null)
+    private val probeLock = Any()
+    private val probes = java.util.concurrent.atomic.AtomicInteger(0)
+
+    /** Visible for tests: how many disk probes have actually run. */
+    internal fun probeCount(): Int = probes.get()
 
     fun check(): Result {
         val now = clock()
         cache.get()?.let { if (now - it.at < ttlMs) return it.result }
+
+        // Single-flight, not just cached. The TTL alone bounds probes per unit time only when
+        // requests are serialised: N callers arriving together all see a stale cache, all probe,
+        // and the endpoint does N fsyncs — which is the amplification the cache exists to stop,
+        // and which the original test for it could not have caught, being single-threaded.
+        // Double-checked so the losers return the fresh result rather than queueing for their own.
+        synchronized(probeLock) {
+            cache.get()?.let { if (clock() - it.at < ttlMs) return it.result }
+            return refreshLocked(clock())
+        }
+    }
+
+    private fun refreshLocked(now: Long): Result {
         val result = probe()
         cache.set(Cached(now, result))
         // Log edges only. A failing probe every 30 s for a week is noise that buries the moment it
@@ -58,6 +76,7 @@ class Readiness(
     }
 
     private fun probe(): Result {
+        probes.incrementAndGet()
         val dir = File(dataDir)
         if (!dir.isDirectory) return Result(false, "$dataDir is not a directory")
 
