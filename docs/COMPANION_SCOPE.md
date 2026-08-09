@@ -365,7 +365,8 @@ summarized here so the scope is not read as a stronger promise than it is.
 | ~~"No server, so no server-side surface."~~ | **False for the opt-in Sync flavor.** The owner→therapist path is a genuine plaintext egress to a **third human party**, stated honestly in `PRIVACY.md`/`SECURITY.md`. |
 
 Additional documented limits: TOTP-fallback therapists use a weaker,
-server-stored-Argon2id authenticating secret (a parallel custody path); endpoint
+server-stored-**cleartext** authenticating secret (a parallel custody path — the seed cannot be
+hashed, because verification recomputes the code from it); endpoint
 compromise of either device is out of model; and v1 is locked to **one therapist /
 one keypair / one device** with **no key escrow** (loss = owner re-invitation +
 re-pair).

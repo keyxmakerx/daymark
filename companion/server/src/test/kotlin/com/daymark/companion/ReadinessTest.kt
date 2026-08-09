@@ -66,9 +66,34 @@ class ReadinessTest {
     }
 
     @Test
-    fun `results are cached, so an anonymous caller cannot force one disk write per request`() {
-        // This endpoint is unauthenticated and it touches the disk. Without the cache, a GET flood
-        // becomes a write+fsync flood on the same volume that holds every snapshot.
+    fun `concurrent callers share one probe, not one each`() {
+        // The TTL alone does NOT bound writes under load: N callers arriving while the cache is
+        // stale all see it stale, all probe, and the endpoint does N fsyncs. The original version
+        // of this file asserted "an anonymous caller cannot force one disk write per request" from
+        // a single-threaded test, which could only ever demonstrate the TTL — it named a property
+        // it did not test. This is that property.
+        val dir = tempDir()
+        val r = Readiness(dir.absolutePath, ttlMs = 60_000)
+        val threads = 16
+        val start = java.util.concurrent.CountDownLatch(1)
+        val done = java.util.concurrent.CountDownLatch(threads)
+        repeat(threads) {
+            Thread {
+                start.await()
+                r.check()
+                done.countDown()
+            }.start()
+        }
+        start.countDown()
+        assertTrue(done.await(30, java.util.concurrent.TimeUnit.SECONDS), "threads did not finish")
+
+        assertEquals(1, r.probeCount(), "$threads concurrent callers caused ${r.probeCount()} disk probes")
+    }
+
+    @Test
+    fun `results are cached across the TTL`() {
+        // This endpoint is unauthenticated and it touches the disk, so a GET flood must not become
+        // a write+fsync flood on the volume that holds every snapshot.
         val dir = tempDir()
         var now = 1_000L
         val r = Readiness(dir.absolutePath, ttlMs = 5_000) { now }

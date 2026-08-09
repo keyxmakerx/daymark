@@ -185,7 +185,15 @@ class AuthStore(
                     return RedeemResult(RedeemStatus.OK, relRef, scope, ticket)
                 }
                 // Wrong secret: bump fail count, apply capped backoff. Never consume the invite.
-                val newFails = failCount + 1
+                //
+                // Serving a lockout clears the debt that caused it — the same reset
+                // `recordTotpFailure` does, and for the same reason. Without it `fail_count` only
+                // ever climbs, so the FIRST failure after any expired lockout immediately re-armed
+                // another one, and the backoff shift grew with it: one mistyped character past the
+                // threshold escalated to the 1-hour cap and stayed there. The therapist could not
+                // enrol at all, and the only remedy was the owner minting a fresh invite.
+                val priorFails = if (lockedUntil in 1..now) 0 else failCount
+                val newFails = priorFails + 1
                 val locked = if (newFails >= lockoutFails) {
                     val backoff = lockoutBaseMs shl (newFails - lockoutFails).coerceAtMost(6) // cap the shift
                     now + backoff.coerceAtMost(3_600_000L) // cap at 1h

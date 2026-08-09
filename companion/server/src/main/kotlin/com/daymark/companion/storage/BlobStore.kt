@@ -1,5 +1,6 @@
 package com.daymark.companion.storage
 
+import java.io.FileOutputStream
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -7,6 +8,7 @@ import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.sql.Connection
 import java.sql.DriverManager
+import java.sql.SQLException
 import kotlin.io.path.exists
 
 /** Non-secret metadata the server keeps about one stored ciphertext blob. */
@@ -52,7 +54,13 @@ class BlobStore(
         conn = DriverManager.getConnection("jdbc:sqlite:${root.resolve("index.db")}")
         conn.createStatement().use { st ->
             st.execute("PRAGMA journal_mode=WAL")
-            st.execute("PRAGMA synchronous=NORMAL")
+            // FULL, not NORMAL. Under WAL, `NORMAL` does not fsync at commit — it is durable
+            // across an application crash but can lose recent commits to a power cut or a kernel
+            // panic. That is a reasonable default for a cache and the wrong one here: the server
+            // answers 201 Created, and a client that has been told its snapshot is stored may
+            // legitimately stop being the only copy of it. The cost is one fsync per PUT on a
+            // workload measured in snapshots per day.
+            st.execute("PRAGMA synchronous=FULL")
             st.execute(
                 """
                 CREATE TABLE IF NOT EXISTS snapshots (
@@ -89,26 +97,66 @@ class BlobStore(
 
         val hash = sha256Hex(bytes)
         val now = clock()
+        val dir = blobsDir.resolve(lineage)
+        val target = dir.resolve("$version.blob")
+        var tmp: Path? = null
         try {
-            val dir = blobsDir.resolve(lineage)
             Files.createDirectories(dir)
-            val target = dir.resolve("$version.blob")
-            val tmp = Files.createTempFile(tmpDir, "put", ".tmp")
-            Files.write(tmp, bytes)
-            Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE)
+            tmp = Files.createTempFile(tmpDir, "put", ".tmp")
+            // fsync before the move. Without it the rename can be durable while the bytes it
+            // points at are still only in the page cache, which is the one ordering that turns a
+            // power cut into a *corrupt* blob rather than a missing one.
+            FileOutputStream(tmp.toFile()).use { out ->
+                out.write(bytes)
+                out.flush()
+                out.fd.sync()
+            }
+
+            // Index row, THEN the blob, THEN commit — and all three inside one transaction.
+            //
+            // The previous order was blob-then-row with no transaction at all, so a failing
+            // INSERT (disk full, index corruption) left the bytes sitting at their final path
+            // with nothing pointing at them, and the caller got a 500. Worse, the append-only
+            // guard above reads the *index*, so the client's retry sailed past `exists()` and
+            // silently overwrote a file it believed it was creating.
+            //
+            // This way every failure leaves the pair consistent: a rollback un-does the row and
+            // the `finally` removes the temp, so nothing is half-written. The one residue a hard
+            // crash can still leave is a moved file with an uncommitted row — an orphan byte
+            // range that costs disk and nothing else, and which the next PUT of that version
+            // legitimately replaces (hence REPLACE_EXISTING, stated rather than relied upon:
+            // POSIX rename(2) clobbers regardless, so the old ATOMIC_MOVE was overwriting by
+            // accident on every platform this ships to).
+            conn.autoCommit = false
+            try {
+                conn.prepareStatement(
+                    "INSERT INTO snapshots(lineage, version, size, content_hash, created_at) VALUES (?,?,?,?,?)",
+                ).use { ps ->
+                    ps.setString(1, lineage)
+                    ps.setLong(2, version)
+                    ps.setLong(3, bytes.size.toLong())
+                    ps.setString(4, hash)
+                    ps.setLong(5, now)
+                    ps.executeUpdate()
+                }
+                Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+                conn.commit()
+            } catch (e: Throwable) {
+                runCatching { conn.rollback() }
+                throw e
+            } finally {
+                conn.autoCommit = true
+            }
         } catch (e: IOException) {
             throw BlobStoreException("disk write failed: ${e.message}", BlobStoreException.Kind.DISK_FULL)
-        }
-
-        conn.prepareStatement(
-            "INSERT INTO snapshots(lineage, version, size, content_hash, created_at) VALUES (?,?,?,?,?)",
-        ).use { ps ->
-            ps.setString(1, lineage)
-            ps.setLong(2, version)
-            ps.setLong(3, bytes.size.toLong())
-            ps.setString(4, hash)
-            ps.setLong(5, now)
-            ps.executeUpdate()
+        } catch (e: SQLException) {
+            throw BlobStoreException("index write failed: ${e.message}", BlobStoreException.Kind.DISK_FULL)
+        } finally {
+            // The temp file is gone after a successful move, so this only fires on the failure
+            // paths — which is exactly where it was missing. A disk-full PUT used to leave its
+            // temp file behind on the disk that was already full, and /data/tmp is on the
+            // persistent volume, so the orphans survived restarts and compounded.
+            tmp?.let { runCatching { Files.deleteIfExists(it) } }
         }
 
         pruneLocked(lineage)
@@ -157,9 +205,22 @@ class BlobStore(
      */
     fun putKeyparams(bytes: ByteArray) = synchronized(lock) {
         if (bytes.size > 4096) throw BlobStoreException("keyparams too large", BlobStoreException.Kind.TOO_LARGE)
-        val tmp = Files.createTempFile(tmpDir, "kp", ".tmp")
-        Files.write(tmp, bytes)
-        Files.move(tmp, root.resolve("keyparams.json"), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        var tmp: Path? = null
+        try {
+            tmp = Files.createTempFile(tmpDir, "kp", ".tmp")
+            FileOutputStream(tmp.toFile()).use { out ->
+                out.write(bytes)
+                out.flush()
+                out.fd.sync()
+            }
+            Files.move(tmp, root.resolve("keyparams.json"), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        } catch (e: IOException) {
+            // Was uncaught, so a full disk here surfaced as a bare 500 while the identical failure
+            // one method up mapped to 507. Same cause, same volume, two different answers.
+            throw BlobStoreException("disk write failed: ${e.message}", BlobStoreException.Kind.DISK_FULL)
+        } finally {
+            tmp?.let { runCatching { Files.deleteIfExists(it) } }
+        }
     }
 
     fun getKeyparams(): ByteArray? = synchronized(lock) {

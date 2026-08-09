@@ -321,15 +321,26 @@ jobs:
           # The other half of that trade: no NAT for outbound, so egress does not complete.
           # Tested from a probe container on the same network, because egress is a property
           # of the network and the app image has no shell to test from.
+          #
+          # NON-VACUOUS FIRST. A bare `if docker run … wget 1.1.1.1; then fail; fi` reports
+          # success whenever `docker run` exits non-zero for ANY reason — image missing,
+          # bad network name, wget flag unsupported, daemon hiccup. It cannot tell "egress
+          # is blocked" from "the probe never ran", which is the same failure the INTERNET
+          # check in build.yml guards against and which this step shipped with anyway. So
+          # prove the probe works on this network before trusting its negative.
           echo "== the network has no working egress =="
           net="$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}' daymark-companion)"
+          docker run --rm --network "$net" alpine:3 \
+            wget -q -T 10 -O /dev/null http://daymark-companion:8080/healthz \
+            || { echo "::error::the egress probe cannot reach the app on $net, so its result would prove nothing"; \
+                 docker compose logs companion || true; docker compose down -v || true; exit 1; }
           if docker run --rm --network "$net" alpine:3 \
                wget -q -T 6 -O /dev/null http://1.1.1.1/ 2>/dev/null; then
             echo "::error::egress SUCCEEDED from the app network — enable_ip_masquerade:false is not holding, and the compose comment claiming no egress is wrong"
             docker compose down -v || true
             exit 1
           fi
-          echo "egress blocked as designed."
+          echo "egress blocked as designed (and the probe was proven able to run)."
 
           # The trusted-proxy contract's silent failure mode, made loud. .env ships with
           # DAYMARK_TRUSTED_PROXIES empty, so a forwarded header must produce exactly one
@@ -380,6 +391,8 @@ jobs:
                  docker compose -f docker-compose.yml -f docker-compose.no-egress.yml logs companion || true; \
                  docker compose -f docker-compose.yml -f docker-compose.no-egress.yml down -v || true; exit 1; }
 
+          # Non-vacuous by construction here: the check above already proved a probe container
+          # runs on this network and reaches the app, so a failure below is about egress.
           echo "== and still has no egress =="
           if docker run --rm --network "$net" alpine:3 \
                wget -q -T 6 -O /dev/null http://1.1.1.1/ 2>/dev/null; then
