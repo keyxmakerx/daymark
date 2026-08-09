@@ -310,7 +310,13 @@ Argon2id passphrase** (never under the TOTP secret). The TOTP authenticating sec
 
 - is **distinct** from the single-use bootstrap invite code,
 - is **client-set, high-entropy, rotatable**,
-- is **never sent in cleartext**, and is stored server-side only as an Argon2id hash.
+- is **never sent in cleartext** over the wire, but **IS stored on the server in the clear**
+  (base64, `AuthStore.totp.secret_b64`). This is not a lapse and cannot be fixed by hashing it:
+  TOTP verification requires the verifier to recompute the code, which requires the shared
+  secret itself. *(Corrected 2026-08-09 — this line previously claimed "stored server-side only
+  as an Argon2id hash", which understated the breach impact of the very thing the paragraph
+  exists to flag. The invite code, session tokens and inbox tokens ARE hashed; the TOTP seed
+  structurally cannot be.)*
 
 This is a **phishable, server-stored authenticating secret** that breaks the "server
 holds nothing that authenticates" property — documented in [§11](#11-out-of-scope--honest-limits),
@@ -677,8 +683,10 @@ fetch, assignment/game-plan publish, session expiry) — never client-supplied.
   acuity proxies, and withdrawal de-anonymization, but cannot fully hide the existence
   and cadence of a relationship on a self-hosted box.
 - **TOTP is a weaker parallel custody path.** It places a phishable, server-stored
-  (Argon2id-hashed) authenticating secret on the box, breaking "server holds nothing
-  that authenticates." `signCount` regression and synced-passkey (`signCount=0`)
+  **cleartext** authenticating secret on the box, breaking "server holds nothing that
+  authenticates." A server breach therefore yields the ability to mint valid codes for as long
+  as the credential lives — not a hash an attacker must first crack. Rotation is the only
+  remedy; there is no hashing option, because the verifier needs the seed. `signCount` regression and synced-passkey (`signCount=0`)
   clone-detection are not reliable for cloud-synced credentials.
 - **Audit suppression is undetectable until the chain ships (R12).** Forgery is
   prevented; silent omission is not, absent the signed monotonic sequence.

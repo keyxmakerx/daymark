@@ -21,7 +21,14 @@
   const startedOnRecoveryLink = typeof window !== 'undefined' && /(?:^|[#&])t=/.test(window.location.hash)
   let source = $state<Source>(startedOnRecoveryLink ? 'recover' : 'file')
 
-  const online = typeof navigator !== 'undefined' ? navigator.onLine : false
+  // Which posture the trust strip should state. Derived from the tab, NOT from
+  // navigator.onLine — being offline this instant says nothing about whether the surface
+  // would call out, and the strip used to go green on exactly that reasoning. Once a
+  // backup is loaded the strip describes the tab that loaded it, which is why `data`
+  // does not reset this.
+  const trustSurface: 'local' | 'sync' | 'account' = $derived(
+    source === 'sync' ? 'sync' : source === 'owner' || source === 'recover' ? 'account' : 'local',
+  )
 
   function load(text: string, name: string) {
     error = ''
@@ -74,7 +81,7 @@
   </header>
 
   <main>
-    <TrustBar {online} />
+    <TrustBar surface={trustSurface} />
 
     {#if !data}
       <section class="intro">

@@ -137,7 +137,7 @@ users.
 > (`https://192.168.1.10`), an `.local` mDNS name, or a self-signed cert the OS does
 > not trust **cannot register passkeys** in most browsers. Those deployments are
 > **officially documented-as-unsupported for the WebAuthn-PRF path**; the therapist
-> must use the **TOTP fallback** (a weaker, server-stored-Argon2id-hash custody path,
+> must use the **TOTP fallback** (a weaker, server-stored-**cleartext** custody path,
 > honestly flagged in [COMPANION_SECURITY.md](COMPANION_SECURITY.md) §limits). The
 > RP-ID and origin allowlist are **config-pinned** (`DAYMARK_WEBAUTHN_RP_ID` +
 > origin allowlist), **never** derived from a client-controllable `Host` /
@@ -788,8 +788,8 @@ writable. `cap_drop: ALL` and `no-new-privileges` carry over unchanged.
   a network-enumeration / DoS guard, **not** a confidentiality boundary. (It *is* an
   integrity/availability lever, which is why the §2 limits exist.)
 - The **WebAuthn-PRF reading key never reaches the server.** The token, the TOTP
-  fallback's Argon2id-hashed secret, and the bootstrap invite code are the only
-  authenticating material the server stores — and the TOTP secret is honestly flagged
+  fallback's **cleartext** secret (it cannot be hashed — the verifier must recompute the
+  code), and the bootstrap invite code are the only authenticating material the server stores — and the TOTP secret is honestly flagged
   as a weaker parallel custody path in [COMPANION_SECURITY.md](COMPANION_SECURITY.md).
 
 ---
