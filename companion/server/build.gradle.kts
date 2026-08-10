@@ -5,7 +5,7 @@ plugins {
     // with an internal error, which is what 2.3-era .kotlin_metadata looks like to a 2.1 reader.
     // So the CVE fix and the language bump are one change; they cannot be landed separately.
     kotlin("jvm") version "2.3.21"
-    kotlin("plugin.serialization") version "2.3.21"
+    kotlin("plugin.serialization") version "2.4.10"
     application
     id("com.gradleup.shadow") version "8.3.5"
 }
