@@ -90,6 +90,38 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
+      # "Which Netty are we actually on?" was unanswerable from the repo — there is no lockfile
+      # and no verification metadata, so the audit had to mark its own premise unverified. It is a
+      # transitive of Ktor, which means a Ktor downgrade, a resolution rule, or a new dependency
+      # dragging in an older codec can all put it back under the CVE line silently. Assert it.
+      #
+      # CVE-2025-58056 (bare-LF chunk terminator), CVE-2025-67735 (CRLF in request URI) and
+      # CVE-2026-42587 (decompression bomb bypassing maxAllocation) are all fixed at or below
+      # 4.2.13.Final. Ktor 3.5.2 currently brings 4.2.16.Final.
+      - name: Resolved Netty must be at or above the CVE fixes
+        run: |
+          set -euo pipefail
+          ./gradlew -q dependencies --configuration runtimeClasspath > /tmp/deps.txt || true
+          echo "== resolved netty artifacts =="
+          grep -oE 'io\.netty:netty-[a-z0-9-]+:[0-9]+\.[0-9]+\.[0-9]+' /tmp/deps.txt | sort -u || true
+
+          # Non-vacuous: if Netty is absent from the graph the grep would find nothing and a naive
+          # check would "pass". Netty is not optional here — ktor-server-netty is the engine.
+          found=$(grep -oE 'io\.netty:netty-codec-http:[0-9]+\.[0-9]+\.[0-9]+' /tmp/deps.txt \
+                  | head -1 | cut -d: -f3 || true)
+          if [ -z "$found" ]; then
+            echo "::error::netty-codec-http not found in runtimeClasspath — the check cannot mean anything"
+            exit 1
+          fi
+
+          min=4.2.13
+          lowest=$(printf '%s\n%s\n' "$found" "$min" | sort -V | head -1)
+          if [ "$lowest" != "$min" ] && [ "$found" != "$min" ]; then
+            echo "::error::netty-codec-http $found is BELOW $min — reintroduces CVE-2025-58056 / CVE-2025-67735 / CVE-2026-42587"
+            exit 1
+          fi
+          echo "netty-codec-http $found >= $min"
+
       - name: Run tests
         run: ./gradlew test --stacktrace
 
