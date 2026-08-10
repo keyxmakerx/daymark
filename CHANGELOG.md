@@ -177,6 +177,20 @@ All notable changes to this project are documented here. The format is based on
   permission and makes no network connections.
 
 ### Security
+- **Companion server — three CVE bumps, and the Kotlin move they required.** `ktor 3.0.3 → 3.5.2`
+  brings Netty `4.1.116.Final → 4.2.16.Final`, above the fixes for CVE-2025-58056 (bare-LF chunk
+  terminator), CVE-2025-67735 (CRLF in the request URI) and CVE-2026-42587 (decompression bomb
+  bypassing `maxAllocation`). Alongside it, `logback 1.5.12 → 1.5.13` (CVE-2024-12798 Janino EL
+  injection → RCE, CVE-2024-12801 SaxEventRecorder SSRF) and `bcprov-jdk18on 1.79 → 1.85`
+  (CVE-2026-0636 LDAP injection).
+  - The Ktor bump could not be landed on its own: on Kotlin 2.1.0 it crashed the compiler with an
+    internal error rather than failing to compile, because Ktor 3.5.2 is built with Kotlin 2.3.21
+    and 2.3-era metadata is unreadable to a 2.1 reader. So the server moves to Kotlin 2.3.21 in the
+    same change. Dependabot had been retrying this bump and failing since the ecosystem was added.
+  - CI now asserts the **resolved** Netty version is at or above 4.2.13, because it arrives
+    transitively and nothing in the repo could previously answer "which Netty are we on?" — the
+    audit had to record its own premise as unverified. The check fails loudly if Netty is absent
+    from the graph, so it cannot pass by finding nothing.
 - **Companion deployment — the bundled reverse proxy is gone.** `companion/docker-compose.yml` now
   starts the application and nothing else, published on `127.0.0.1:8080` for whichever proxy you
   already run (Cosmos Cloud, Caddy, Traefik, nginx, a tunnel) to terminate TLS in front of. Bundling
