@@ -29,6 +29,17 @@ See [COMPANION_WEB_DESIGN.md](../COMPANION_WEB_DESIGN.md)
 |---|---|
 | [`web-01-console.png`](./web-01-console.png) | The reinvented console: **Team & roles** (editable org, role table, sysadmin has no clinical access) and the **client workspace** (patient + care team + notes with open/private tabs + provenance‑labeled assessments + consent/access trail, all in one view). |
 | [`web-02-access-guard-and-builder.png`](./web-02-access-guard-and-builder.png) | The **Access guard** (behavioral‑IDS flags table, a paused session with step‑up + kill‑switch actions, and true revocation shown as live key‑rotation) and the provenance‑aware **builder** (author items, required provenance tier, honesty‑gate run before publish). |
+| [`web-03-clinician-redesign.png`](./web-03-clinician-redesign.png) | The **"cool chrome, warm content"** direction and the six clinician screens it generates: sign‑in as a stated contract, **Today**, the **calendar** (four event kinds told apart by shape), the **client record** (band trend, provenance, the boundary in the margin), **Assign** with its four‑step lifecycle, and the dark **server‑admin console** (live log, audit chain, and the "what this console must never show" specification). Plus the extended token system — chrome layer, structural indigo, one alarm hue — and the motion inventory. |
+| [`web-04-roles-builders-compliance.png`](./web-04-roles-builders-compliance.png) | The access‑control model from [COMPANION_ACCESS_CONTROL.md](../COMPANION_ACCESS_CONTROL.md) given a UI: the **three planes**, one appointment rendered **four times** (front desk / clinician / org admin / sysadmin, three of them footed `decrypts: nothing`), the **front‑desk console**, the **plan builder**, the **tool builder** with its honesty gate as a live linter, the **prescriber delta**, the **admin identity console** (2FA by factor *kind*, behavioural guard, friction budget), and the **compliance lanes** — what can be automated, what must be a human assessment, and why no compliance score is ever rendered. |
+
+> **Note on re‑rendering 03 and 04:** both are long, scroll‑revealed pages. Render them with
+> `--force-prefers-reduced-motion` (which makes the page mark every section visible immediately)
+> and `--force-device-scale-factor=1` — at 2× the page exceeds Chromium's ~16 384 px texture limit:
+> ```
+> chromium --headless=new --hide-scrollbars --force-prefers-reduced-motion \
+>   --window-size=1400,15000 --virtual-time-budget=8000 \
+>   --screenshot=out.png "file://$PWD/web-03-clinician-redesign.html"
+> ```
 
 ## Still to render
 - Patient's **own** console (their care team, grant/revoke, own audit log) — register TBD (warm app vs. crisp console).

@@ -1,0 +1,1524 @@
+<title>Daymark — Roles, builders &amp; compliance renders</title>
+
+<style>
+/* ═══ TOKENS — identical to deck one, so the two read as one system ═══════ */
+:root {
+  --deck:#ece5d9; --deck-2:#e4dccd; --paper:#f4efe6; --sheet:#fcfaf5;
+  --ink:#2a2722; --ink-soft:#6b655b; --ink-faint:#a49c8e; --subtle:#5f5a4e;
+  --hair:#e7dfd1; --hair-strong:#cbc1ae;
+  --chrome:#e4e7ec; --chrome-2:#d8dce4; --chrome-hair:#c6ccd6; --chrome-ink:#38414e; --chrome-soft:#626d7d;
+  --indigo:#3f5f7f; --indigo-deep:#2f4a64; --indigo-wash:#dde5ee;
+  --clay:#a8574a; --clay-wash:#f2ded9; --amber:#9c7128; --amber-wash:#f0e6d1;
+  --mood-1:#ae5747; --mood-2:#c27c46; --mood-3:#c6a24e; --mood-4:#8fa268; --mood-5:#5e8a66;
+  --mood-1-wash:#f0dad4; --mood-2-wash:#f1e2d2; --mood-3-wash:#f1e8d0; --mood-4-wash:#e3e8d6; --mood-5-wash:#d9e6dc;
+  --shadow:0 1px 2px rgba(42,39,34,.06), 0 10px 30px rgba(42,39,34,.07);
+  --shadow-lg:0 2px 4px rgba(42,39,34,.07), 0 24px 60px rgba(42,39,34,.13);
+  --serif:'Iowan Old Style','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;
+  --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --mono:ui-monospace,'SF Mono','Cascadia Code',Menlo,Consolas,monospace;
+  --con-bg:#161b22; --con-2:#1c222b; --con-3:#222a34; --con-hair:#2c3540;
+  --con-ink:#e2e7ed; --con-soft:#8c96a4; --con-faint:#626c79;
+  --con-accent:#82a6cb; --con-warn:#d2a253; --con-crit:#cf7364;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --deck:#121110; --deck-2:#1a1916; --paper:#1b1a17; --sheet:#24221d;
+    --ink:#ebe5d8; --ink-soft:#b7af9e; --ink-faint:#7c7568; --subtle:#9b927f;
+    --hair:#34312a; --hair-strong:#4a463c;
+    --chrome:#1e232b; --chrome-2:#262c36; --chrome-hair:#333b46; --chrome-ink:#c8cfd9; --chrome-soft:#8b95a3;
+    --indigo:#7fa3c8; --indigo-deep:#9dbbd9; --indigo-wash:#22303e;
+    --clay:#c9806f; --clay-wash:#3a2c28; --amber:#cfa458; --amber-wash:#3a3128;
+    --mood-1-wash:#3a2c28; --mood-2-wash:#3a3128; --mood-3-wash:#3a3528; --mood-4-wash:#2f362a; --mood-5-wash:#2a3530;
+    --shadow:0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.4);
+    --shadow-lg:0 2px 4px rgba(0,0,0,.55), 0 24px 60px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"] {
+  --deck:#121110; --deck-2:#1a1916; --paper:#1b1a17; --sheet:#24221d;
+  --ink:#ebe5d8; --ink-soft:#b7af9e; --ink-faint:#7c7568; --subtle:#9b927f;
+  --hair:#34312a; --hair-strong:#4a463c;
+  --chrome:#1e232b; --chrome-2:#262c36; --chrome-hair:#333b46; --chrome-ink:#c8cfd9; --chrome-soft:#8b95a3;
+  --indigo:#7fa3c8; --indigo-deep:#9dbbd9; --indigo-wash:#22303e;
+  --clay:#c9806f; --clay-wash:#3a2c28; --amber:#cfa458; --amber-wash:#3a3128;
+  --mood-1-wash:#3a2c28; --mood-2-wash:#3a3128; --mood-3-wash:#3a3528; --mood-4-wash:#2f362a; --mood-5-wash:#2a3530;
+  --shadow:0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.4);
+  --shadow-lg:0 2px 4px rgba(0,0,0,.55), 0 24px 60px rgba(0,0,0,.5);
+}
+
+*,*::before,*::after { box-sizing: border-box; }
+body { margin:0; background:var(--deck); color:var(--ink); font-family:var(--sans); font-size:16px; line-height:1.6; -webkit-font-smoothing:antialiased; }
+h1,h2,h3,h4 { font-family:var(--serif); font-weight:600; line-height:1.15; margin:0; text-wrap:balance; }
+p { margin:0; }
+a { color:var(--indigo); text-underline-offset:3px; }
+:focus-visible { outline:2px solid var(--indigo); outline-offset:3px; border-radius:4px; }
+.wrap { max-width:1200px; margin:0 auto; padding:0 28px; }
+.eyebrow { font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--chrome-soft); }
+.mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+
+/* ═══ MASTHEAD ════════════════════════════════════════════════════════════ */
+.masthead { border-bottom:1px solid var(--hair); background:linear-gradient(180deg,color-mix(in oklab,var(--deck-2) 70%,transparent),transparent); padding:46px 0 40px; }
+.mast-top { display:flex; justify-content:space-between; align-items:baseline; gap:20px; flex-wrap:wrap; margin-bottom:30px; }
+.mast-mark { display:flex; align-items:baseline; gap:12px; }
+.mast-mark strong { font-family:var(--serif); font-size:19px; font-weight:600; letter-spacing:-.01em; }
+.mast-mark span { font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--chrome-soft); }
+.tbtn { font:inherit; font-size:12px; font-family:var(--mono); letter-spacing:.06em; text-transform:uppercase; background:var(--chrome); color:var(--chrome-ink); border:1px solid var(--chrome-hair); border-radius:4px; padding:6px 12px; cursor:pointer; transition:background 140ms ease,border-color 140ms ease,transform 140ms ease; }
+.tbtn:hover { background:var(--chrome-2); border-color:var(--chrome-soft); }
+.tbtn:active { transform:translateY(1px); }
+.mast-h { font-size:clamp(34px,5vw,56px); letter-spacing:-.022em; max-width:18ch; }
+.mast-h em { font-style:normal; color:var(--indigo); }
+.mast-dek { margin-top:20px; max-width:64ch; font-size:18px; color:var(--ink-soft); line-height:1.65; }
+.mast-meta { margin-top:28px; display:flex; gap:10px; flex-wrap:wrap; }
+
+.chip { font-family:var(--mono); font-size:11px; letter-spacing:.07em; text-transform:uppercase; padding:5px 10px; border-radius:3px; border:1px solid var(--chrome-hair); color:var(--chrome-ink); background:var(--chrome); white-space:nowrap; }
+.chip.mark-new { border-color:var(--indigo); color:var(--indigo); background:var(--indigo-wash); }
+.chip.mark-warn { border-color:var(--amber); color:var(--amber); background:var(--amber-wash); }
+.chip.mark-crit { border-color:var(--clay); color:var(--clay); background:var(--clay-wash); }
+
+/* plane stamp — the new structural device for this deck */
+.plane { display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; padding:4px 9px; border-radius:3px; border:1px solid; white-space:nowrap; }
+.plane::before { content:''; width:6px; height:6px; flex:0 0 auto; }
+.pl-data { color:var(--mood-1); border-color:color-mix(in oklab,var(--mood-1) 40%,transparent); background:var(--mood-1-wash); }
+.pl-data::before { border-radius:999px; background:currentColor; }
+.pl-ctrl { color:var(--indigo); border-color:color-mix(in oklab,var(--indigo) 42%,transparent); background:var(--indigo-wash); }
+.pl-ctrl::before { background:currentColor; }
+.pl-mon { color:var(--chrome-soft); border-color:var(--chrome-hair); background:var(--chrome); }
+.pl-mon::before { background:currentColor; transform:rotate(45deg); }
+
+section { padding:72px 0; border-bottom:1px solid var(--hair); }
+section:last-of-type { border-bottom:0; }
+.reveal { opacity:0; transform:translateY(18px); }
+.reveal.seen { opacity:1; transform:none; transition:opacity 620ms cubic-bezier(.22,.7,.28,1),transform 620ms cubic-bezier(.22,.7,.28,1); }
+.sec-head { display:grid; grid-template-columns:190px minmax(0,1fr); gap:34px; align-items:start; margin-bottom:34px; }
+.sec-head-l { display:flex; flex-direction:column; gap:10px; align-items:flex-start; padding-top:6px; }
+.sec-head h2 { font-size:clamp(24px,3vw,33px); letter-spacing:-.018em; max-width:24ch; }
+.sec-head p { margin-top:14px; color:var(--ink-soft); max-width:68ch; font-size:16.5px; }
+.sec-head p + p { margin-top:12px; }
+@media (max-width:860px) { .sec-head { grid-template-columns:1fr; gap:14px; } }
+
+/* ═══ THREE PLANES DIAGRAM ════════════════════════════════════════════════ */
+.planes { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+@media (max-width:860px) { .planes { grid-template-columns:1fr; } }
+.plane-col { border:1px solid var(--hair-strong); border-radius:10px; overflow:hidden; box-shadow:var(--shadow); display:flex; flex-direction:column; }
+.plane-col > header { padding:16px 18px 14px; border-bottom:1px solid var(--hair); }
+.plane-col h3 { font-size:19px; margin:11px 0 6px; }
+.plane-col > header p { font-size:13.5px; color:var(--ink-soft); }
+.pc-data { background:var(--sheet); }
+.pc-ctrl { background:var(--indigo-wash); }
+.pc-mon  { background:var(--chrome); }
+.pc-ctrl h3, .pc-mon h3 { font-family:var(--sans); font-size:16px; letter-spacing:-.005em; }
+.plane-body { padding:15px 18px 18px; flex:1; }
+.plane-lbl { font-family:var(--mono); font-size:9.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--chrome-soft); display:block; margin-bottom:9px; }
+.who-list { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
+.who-chip { font-size:12px; padding:4px 9px; border-radius:4px; border:1px solid var(--hair-strong); background:var(--sheet); color:var(--ink-soft); }
+.who-chip.key { border-color:var(--mood-1); color:var(--mood-1); background:var(--mood-1-wash); font-weight:500; }
+.who-chip.no { opacity:.45; text-decoration:line-through; }
+.plane-body p { font-size:12.5px; color:var(--subtle); line-height:1.55; }
+.plane-rule { margin-top:22px; border:1px solid var(--ink); border-left-width:3px; background:var(--sheet); border-radius:9px; padding:18px 22px; }
+.plane-rule p { font-size:15.5px; color:var(--ink); max-width:80ch; }
+.plane-rule strong { font-family:var(--serif); }
+
+/* ═══ FOUR-ACCOUNT COMPARISON ═════════════════════════════════════════════ */
+.four { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+@media (max-width:980px) { .four { grid-template-columns:repeat(2,1fr); } }
+@media (max-width:560px) { .four { grid-template-columns:1fr; } }
+.acct { border:1px solid var(--hair-strong); border-radius:10px; overflow:hidden; box-shadow:var(--shadow); display:flex; flex-direction:column; background:var(--paper); }
+.acct > header { padding:11px 14px; border-bottom:1px solid var(--hair); background:var(--chrome); display:flex; flex-direction:column; gap:6px; }
+.acct h4 { font-family:var(--sans); font-size:13.5px; font-weight:600; color:var(--chrome-ink); }
+.acct-scr { padding:14px; flex:1; display:flex; flex-direction:column; gap:10px; min-height:186px; }
+.acct.sys .acct-scr { background:var(--con-bg); color:var(--con-ink); }
+.acct.sys > header { background:var(--con-2); border-bottom-color:var(--con-hair); }
+.acct.sys h4 { color:var(--con-ink); }
+.acct-line { font-size:13px; color:var(--ink-soft); }
+.acct-line b { color:var(--ink); font-weight:600; }
+.acct-big { font-family:var(--serif); font-size:17px; }
+.acct-mono { font-family:var(--mono); font-size:11px; color:var(--ink-faint); word-break:break-all; line-height:1.6; }
+.acct.sys .acct-mono { color:var(--con-faint); }
+.acct.sys .acct-line { color:var(--con-soft); }
+.acct-foot { padding:11px 14px; border-top:1px solid var(--hair); background:var(--sheet); font-family:var(--mono); font-size:10px; letter-spacing:.05em; text-transform:uppercase; color:var(--chrome-soft); }
+.acct.sys .acct-foot { background:var(--con-2); border-top-color:var(--con-hair); color:var(--con-faint); }
+.acct-foot b { color:var(--mood-1); font-weight:500; }
+.redact { display:inline-block; background:repeating-linear-gradient(135deg,var(--hair-strong) 0 5px,transparent 5px 10px); border:1px dashed var(--hair-strong); border-radius:3px; color:transparent; user-select:none; padding:0 6px; }
+
+/* ═══ FRAME + APP SHELL ═══════════════════════════════════════════════════ */
+.frame { border:1px solid var(--hair-strong); border-radius:12px; overflow:hidden; box-shadow:var(--shadow-lg); background:var(--paper); }
+.frame-bar { display:flex; align-items:center; gap:12px; background:var(--chrome-2); border-bottom:1px solid var(--chrome-hair); padding:9px 14px; }
+.frame-url { flex:1; font-family:var(--mono); font-size:11.5px; color:var(--chrome-soft); background:var(--chrome); border:1px solid var(--chrome-hair); border-radius:999px; padding:4px 12px; display:flex; align-items:center; gap:7px; min-width:0; }
+.frame-url b { font-weight:500; color:var(--chrome-ink); }
+.frame-tag { font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--chrome-soft); }
+.lockglyph { width:9px; height:11px; flex:0 0 auto; border:1.4px solid currentColor; border-radius:1.5px; position:relative; margin-right:1px; }
+.lockglyph::before { content:''; position:absolute; left:1.4px; right:1.4px; top:-4.4px; height:5px; border:1.4px solid currentColor; border-bottom:0; border-radius:4px 4px 0 0; }
+.frame-scroll { overflow-x:auto; }
+.app { min-width:1020px; display:grid; grid-template-columns:196px minmax(0,1fr); background:var(--paper); }
+
+.rail { background:var(--chrome); border-right:1px solid var(--chrome-hair); padding:16px 0 14px; display:flex; flex-direction:column; min-height:560px; }
+.rail-mark { padding:2px 16px 18px; }
+.rail-mark strong { font-family:var(--serif); font-size:16px; display:block; color:var(--chrome-ink); letter-spacing:-.01em; }
+.rail-mark span { font-family:var(--mono); font-size:9.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--chrome-soft); }
+.rail-group { padding:0 10px; display:flex; flex-direction:column; gap:1px; }
+.rail-lbl { font-family:var(--mono); font-size:9.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--chrome-soft); padding:16px 6px 7px; }
+.rail-item { display:flex; align-items:center; gap:9px; font-size:13.5px; color:var(--chrome-ink); padding:7px 8px; border-radius:5px; cursor:pointer; border-left:2px solid transparent; transition:background 130ms ease,border-color 130ms ease; }
+.rail-item:hover { background:var(--chrome-2); }
+.rail-item.on { background:var(--chrome-2); border-left-color:var(--indigo); color:var(--indigo-deep); font-weight:500; }
+.rail-item.dim { opacity:.4; cursor:not-allowed; }
+.rail-item i { width:13px; height:13px; flex:0 0 auto; border:1.3px solid currentColor; border-radius:2px; opacity:.55; }
+.rail-item.i-round i { border-radius:999px; }
+.rail-item.i-dash i { border-style:dashed; }
+.rail-item.i-rot i { transform:rotate(45deg); }
+.rail-item .ct { margin-left:auto; font-family:var(--mono); font-size:10.5px; color:var(--chrome-soft); font-variant-numeric:tabular-nums; }
+.rail-item .ct.crit { color:var(--clay); }
+.rail-foot { margin-top:auto; padding:14px 16px 0; border-top:1px solid var(--chrome-hair); }
+.rail-foot .kv { font-family:var(--mono); font-size:10.5px; color:var(--chrome-soft); display:flex; justify-content:space-between; padding:3px 0; font-variant-numeric:tabular-nums; }
+
+.main { display:flex; flex-direction:column; min-width:0; }
+.topbar { display:flex; align-items:center; gap:12px; padding:14px 24px; border-bottom:1px solid var(--hair); background:var(--paper); flex-wrap:wrap; position:relative; z-index:6; }
+.topbar h3 { font-size:20px; letter-spacing:-.012em; }
+.topbar .sp { flex:1; }
+.trust { display:inline-flex; align-items:center; gap:8px; font-family:var(--mono); font-size:10.5px; letter-spacing:.05em; color:var(--chrome-ink); background:var(--chrome); border:1px solid var(--chrome-hair); border-radius:3px; padding:4px 10px; }
+.body { padding:22px 24px 28px; display:flex; flex-direction:column; gap:18px; position:relative; z-index:1; isolation:isolate; }
+
+.sheet { background:var(--sheet); border:1px solid var(--hair); border-radius:10px; box-shadow:var(--shadow); }
+.sheet-hd { display:flex; align-items:center; gap:10px; padding:13px 18px; border-bottom:1px solid var(--hair); flex-wrap:wrap; }
+.sheet-hd h4 { font-size:15px; }
+.sheet-hd .sp { flex:1; }
+.sheet-bd { padding:16px 18px; }
+.note-strip { font-size:12.5px; color:var(--subtle); padding:9px 18px; background:var(--mood-3-wash); border-top:1px solid var(--hair); border-radius:0 0 10px 10px; }
+.note-strip.crit { background:var(--clay-wash); color:var(--ink-soft); }
+
+table.t { width:100%; border-collapse:collapse; font-size:13.5px; }
+table.t th { text-align:left; font-family:var(--mono); font-size:10px; font-weight:500; letter-spacing:.12em; text-transform:uppercase; color:var(--chrome-soft); padding:0 12px 9px; border-bottom:1px solid var(--hair); white-space:nowrap; }
+table.t td { padding:11px 12px; border-bottom:1px solid var(--hair); vertical-align:middle; }
+table.t tr:last-child td { border-bottom:0; }
+table.t tbody tr { transition:background 130ms ease; }
+table.t tbody tr:hover { background:color-mix(in oklab,var(--indigo-wash) 55%,transparent); }
+td.num,th.num { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+.who2 { display:flex; align-items:center; gap:10px; }
+.who-av { width:26px; height:26px; border-radius:4px; background:var(--indigo-wash); border:1px solid color-mix(in oklab,var(--indigo) 30%,transparent); display:grid; place-items:center; font-family:var(--mono); font-size:10.5px; color:var(--indigo-deep); flex:0 0 auto; }
+.who-nm { font-family:var(--serif); font-size:15px; }
+.who-ref { font-family:var(--mono); font-size:10px; color:var(--ink-faint); display:block; line-height:1.3; }
+
+.pill { display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:11px; letter-spacing:.05em; text-transform:uppercase; padding:3px 9px; border-radius:3px; border:1px solid; white-space:nowrap; }
+.pill::before { content:''; width:5px; height:5px; border-radius:1px; background:currentColor; }
+.p-sched { color:var(--chrome-soft); border-color:var(--chrome-hair); background:transparent; }
+.p-deliv { color:var(--indigo); border-color:color-mix(in oklab,var(--indigo) 40%,transparent); background:var(--indigo-wash); }
+.p-done  { color:var(--sheet); border-color:var(--ink); background:var(--ink); }
+.p-over  { color:var(--sheet); border-color:var(--clay); background:var(--clay); }
+.p-none  { color:var(--clay); border-color:color-mix(in oklab,var(--clay) 45%,transparent); background:var(--clay-wash); background-image:repeating-linear-gradient(135deg,transparent 0 4px,color-mix(in oklab,var(--clay) 12%,transparent) 4px 8px); }
+
+.mini-btn { font:inherit; font-size:12px; background:var(--sheet); color:var(--ink); border:1px solid var(--hair-strong); border-radius:5px; padding:4px 11px; cursor:pointer; transition:background 130ms ease,transform 130ms ease; }
+.mini-btn:hover { background:var(--paper); }
+.mini-btn:active { transform:translateY(1px); }
+.mini-btn.pri { background:var(--ink); color:var(--sheet); border-color:var(--ink); }
+.mini-btn.pri[disabled] { background:var(--hair-strong); border-color:var(--hair-strong); color:var(--sheet); cursor:not-allowed; opacity:.7; }
+.mini-btn.danger { border-color:var(--clay); color:var(--clay); }
+
+.field { display:flex; flex-direction:column; gap:5px; margin-bottom:14px; }
+.field label { font-family:var(--mono); font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--chrome-soft); }
+.inp { border:1px solid var(--hair-strong); background:var(--paper); color:var(--ink); border-radius:6px; padding:8px 11px; font:inherit; font-size:13.5px; width:100%; }
+.seg { display:flex; border:1px solid var(--hair-strong); border-radius:6px; overflow:hidden; width:fit-content; max-width:100%; flex-wrap:wrap; }
+.seg button { font:inherit; font-size:12.5px; background:var(--paper); color:var(--ink-soft); border:0; border-right:1px solid var(--hair-strong); padding:6px 13px; cursor:pointer; transition:background 130ms ease,color 130ms ease; }
+.seg button:last-child { border-right:0; }
+.seg button.on { background:var(--ink); color:var(--sheet); }
+.seg button[disabled] { opacity:.4; cursor:not-allowed; }
+
+.side-note { background:var(--sheet); border:1px solid var(--hair); border-radius:10px; padding:16px; align-self:start; }
+.side-note h5 { font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--chrome-soft); font-weight:500; margin:0 0 12px; }
+.side-note ul { margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:10px; }
+.side-note li { font-size:12.5px; color:var(--ink-soft); padding-left:17px; position:relative; line-height:1.5; }
+.side-note li::before { content:'·'; position:absolute; left:5px; color:var(--indigo); font-weight:700; }
+.side-note li.no::before { content:'×'; color:var(--clay); font-size:11px; left:4px; top:1px; }
+
+/* builders */
+.b2 { display:grid; grid-template-columns:minmax(0,1fr) 272px; gap:18px; }
+.b3 { display:grid; grid-template-columns:246px minmax(0,1fr) 268px; gap:18px; }
+.item-card { border:1px solid var(--hair); border-radius:8px; background:var(--paper); padding:11px 13px; display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:11px; align-items:start; margin-bottom:9px; }
+.item-kind { font-family:var(--mono); font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; padding:3px 7px; border-radius:3px; border:1px solid var(--hair-strong); color:var(--subtle); white-space:nowrap; }
+.item-kind.goal { border-color:var(--indigo); color:var(--indigo); background:var(--indigo-wash); }
+.item-kind.exercise { border-color:var(--mood-4); color:var(--mood-4); background:var(--mood-4-wash); }
+.item-kind.task { border-color:var(--mood-3); color:var(--mood-3); background:var(--mood-3-wash); }
+.item-kind.note { border-color:var(--hair-strong); }
+.item-t { font-family:var(--serif); font-size:15px; }
+.item-d { font-size:12.5px; color:var(--ink-soft); margin-top:3px; }
+.grip { font-family:var(--mono); font-size:12px; color:var(--ink-faint); cursor:grab; }
+
+.gate-list { display:flex; flex-direction:column; gap:9px; }
+.gate-row { display:grid; grid-template-columns:16px minmax(0,1fr); gap:9px; align-items:start; font-size:12.5px; line-height:1.45; }
+.gate-row .g { font-family:var(--mono); font-size:12px; line-height:1.3; }
+.gate-row.pass .g { color:var(--indigo); }
+.gate-row.fail .g { color:var(--clay); }
+.gate-row.pass { color:var(--ink-soft); }
+.gate-row.fail { color:var(--ink); }
+.gate-row code { font-family:var(--mono); font-size:11.5px; color:var(--clay); }
+
+.band-edit { display:grid; grid-template-columns:64px 64px minmax(0,1fr) 96px; gap:8px; align-items:center; margin-bottom:7px; }
+.band-edit .sw { width:100%; height:30px; border-radius:5px; border:1px solid var(--hair-strong); }
+.tiny { font-family:var(--mono); font-size:11px; border:1px solid var(--hair-strong); background:var(--paper); color:var(--ink); border-radius:5px; padding:5px 7px; width:100%; }
+
+/* admin */
+.con { min-width:1020px; background:var(--con-bg); color:var(--con-ink); display:grid; grid-template-columns:178px minmax(0,1fr); }
+.con-rail { background:var(--con-2); border-right:1px solid var(--con-hair); padding:16px 0; display:flex; flex-direction:column; min-height:640px; }
+.con-rail .rail-mark strong { color:var(--con-ink); }
+.con-rail .rail-mark span,.con-rail .rail-lbl { color:var(--con-faint); }
+.con-item { display:flex; align-items:center; gap:9px; font-size:13px; color:var(--con-soft); padding:6px 8px; border-radius:5px; border-left:2px solid transparent; cursor:pointer; transition:background 130ms ease; }
+.con-item:hover { background:var(--con-3); }
+.con-item.on { background:var(--con-3); color:var(--con-accent); border-left-color:var(--con-accent); }
+.con-item i { width:11px; height:11px; border:1.3px solid currentColor; border-radius:2px; opacity:.6; flex:0 0 auto; }
+.con-item .ct { margin-left:auto; font-family:var(--mono); font-size:10px; }
+.con-item .ct.warn { color:var(--con-warn); }
+.con-item .ct.crit { color:var(--con-crit); }
+.con-main { display:flex; flex-direction:column; min-width:0; }
+.con-top { display:flex; align-items:center; gap:14px; padding:13px 20px; border-bottom:1px solid var(--con-hair); flex-wrap:wrap; }
+.con-top h3 { font-family:var(--sans); font-size:15px; font-weight:600; color:var(--con-ink); letter-spacing:-.005em; }
+.con-top .sp { flex:1; }
+.con-kv { font-family:var(--mono); font-size:10.5px; color:var(--con-faint); }
+.con-kv b { color:var(--con-soft); font-weight:400; }
+.con-body { padding:18px 20px 22px; display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:18px; }
+.con-card { background:var(--con-2); border:1px solid var(--con-hair); border-radius:8px; overflow:hidden; }
+.con-card > header { display:flex; align-items:center; gap:9px; padding:10px 14px; border-bottom:1px solid var(--con-hair); }
+.con-card h5 { font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--con-soft); font-weight:500; margin:0; }
+.con-card > header .sp { flex:1; }
+.con-card .cb { padding:13px 14px; }
+table.ct-t { width:100%; border-collapse:collapse; font-family:var(--mono); font-size:11.5px; }
+table.ct-t th { text-align:left; font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--con-faint); font-weight:500; padding:0 12px 8px; border-bottom:1px solid var(--con-hair); }
+table.ct-t td { padding:8px 12px; border-bottom:1px solid var(--con-hair); color:var(--con-soft); white-space:nowrap; }
+table.ct-t tr:last-child td { border-bottom:0; }
+table.ct-t tbody tr:hover { background:var(--con-3); }
+.mfa { font-family:var(--mono); font-size:10px; letter-spacing:.06em; text-transform:uppercase; padding:2px 7px; border-radius:3px; border:1px solid; }
+.mfa.key { color:var(--con-accent); border-color:color-mix(in oklab,var(--con-accent) 50%,transparent); }
+.mfa.totp { color:var(--con-warn); border-color:color-mix(in oklab,var(--con-warn) 50%,transparent); }
+.mfa.none { color:var(--con-crit); border-color:var(--con-crit); background:color-mix(in oklab,var(--con-crit) 14%,transparent); }
+.con-metric { display:flex; align-items:baseline; gap:8px; padding:7px 0; border-bottom:1px dashed var(--con-hair); font-family:var(--mono); font-size:11.5px; }
+.con-metric:last-child { border-bottom:0; }
+.con-metric .k { color:var(--con-faint); flex:1; }
+.con-metric .v { color:var(--con-ink); font-variant-numeric:tabular-nums; }
+.con-metric .v.warn { color:var(--con-warn); }
+.con-metric .v.crit { color:var(--con-crit); }
+.con-guard { border:1px solid var(--con-warn); border-left-width:3px; border-radius:8px; background:color-mix(in oklab,var(--con-warn) 9%,var(--con-2)); padding:14px 16px; }
+.con-guard h5 { font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--con-warn); margin:0 0 11px; font-weight:500; }
+.con-guard ul { margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:10px; }
+.con-guard li { font-family:var(--sans); font-size:12.5px; color:var(--con-soft); line-height:1.5; padding-left:16px; position:relative; }
+.con-guard li::before { content:'·'; position:absolute; left:5px; color:var(--con-accent); font-weight:700; }
+.con-guard code { font-family:var(--mono); font-size:11.5px; color:var(--con-accent); }
+.frict { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px 12px; font-size:12.5px; align-items:center; }
+.frict .fa { color:var(--con-soft); font-family:var(--sans); }
+.frict .fb { font-family:var(--mono); font-size:10px; letter-spacing:.06em; text-transform:uppercase; padding:2px 7px; border-radius:3px; border:1px solid; white-space:nowrap; }
+.f-none { color:var(--con-faint); border-color:var(--con-hair); }
+.f-step { color:var(--con-warn); border-color:color-mix(in oklab,var(--con-warn) 50%,transparent); }
+.f-cheap { color:var(--con-accent); border-color:color-mix(in oklab,var(--con-accent) 50%,transparent); }
+.f-glass { color:var(--con-crit); border-color:var(--con-crit); background:color-mix(in oklab,var(--con-crit) 12%,transparent); }
+
+/* compliance lanes */
+.lanes { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+@media (max-width:900px) { .lanes { grid-template-columns:1fr; } }
+.lane { background:var(--sheet); border:1px solid var(--hair); border-radius:10px; box-shadow:var(--shadow); display:flex; flex-direction:column; overflow:hidden; }
+.lane > header { padding:15px 18px 13px; border-bottom:1px solid var(--hair); }
+.lane h4 { font-size:16px; margin:9px 0 5px; }
+.lane > header p { font-size:12.5px; color:var(--subtle); }
+.lane-body { padding:14px 18px 18px; flex:1; display:flex; flex-direction:column; gap:13px; }
+.tool { border-bottom:1px dashed var(--hair); padding-bottom:12px; }
+.tool:last-child { border-bottom:0; padding-bottom:0; }
+.tool-t { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+.tool-t strong { font-size:14px; }
+.tool-lic { font-family:var(--mono); font-size:10px; color:var(--chrome-soft); letter-spacing:.05em; }
+.tool p { font-size:12.5px; color:var(--ink-soft); margin-top:5px; line-height:1.5; }
+.tool .pullbar { display:flex; align-items:center; gap:7px; margin-top:8px; font-family:var(--mono); font-size:10px; color:var(--chrome-soft); }
+.tool .pullbar i { width:6px; height:6px; border-radius:999px; background:var(--indigo); flex:0 0 auto; }
+.tool .pullbar i.man { background:var(--amber); border-radius:1px; }
+
+.verdict { background:var(--sheet); border:1px solid var(--hair-strong); border-left:3px solid var(--clay); border-radius:10px; padding:24px 26px; margin-top:20px; }
+.verdict h3 { font-size:19px; margin-bottom:12px; }
+.verdict p { font-size:15px; color:var(--ink-soft); max-width:78ch; }
+.verdict p + p { margin-top:11px; }
+.verdict strong { color:var(--ink); }
+
+.notes { display:grid; grid-template-columns:repeat(auto-fit,minmax(238px,1fr)); margin-top:22px; border-top:1px solid var(--hair); }
+.note { padding:18px 20px 18px 0; border-right:1px solid var(--hair); }
+.note:last-child { border-right:0; }
+.note h5 { font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--chrome-soft); font-weight:500; margin:0 0 8px; }
+.note p { font-size:13.5px; color:var(--ink-soft); line-height:1.55; }
+.note code { font-family:var(--mono); font-size:12px; color:var(--indigo); background:var(--indigo-wash); padding:1px 5px; border-radius:3px; }
+@media (max-width:700px) { .note { border-right:0; border-bottom:1px solid var(--hair); padding-right:0; } .note:last-child { border-bottom:0; } }
+
+.honest { background:var(--sheet); border:1px solid var(--hair-strong); border-left:3px solid var(--clay); border-radius:10px; padding:26px 28px; }
+.honest h3 { font-size:20px; margin-bottom:14px; }
+.honest ul { margin:0; padding:0; list-style:none; display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:13px 30px; }
+.honest li { font-size:14px; color:var(--ink-soft); padding-left:18px; position:relative; line-height:1.55; }
+.honest li::before { content:'×'; position:absolute; left:2px; top:1px; color:var(--clay); font-family:var(--mono); font-size:12px; }
+.honest code { font-family:var(--mono); font-size:12.5px; color:var(--indigo); }
+
+footer { padding:44px 0 60px; }
+footer p { font-family:var(--mono); font-size:11.5px; color:var(--ink-faint); letter-spacing:.04em; }
+footer p + p { margin-top:8px; }
+footer a { color:var(--chrome-soft); }
+
+@media (prefers-reduced-motion: reduce) {
+  *,*::before,*::after { animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; scroll-behavior:auto !important; }
+  .reveal { opacity:1; transform:none; }
+}
+</style>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="mast-top">
+      <div class="mast-mark"><strong>Daymark</strong><span>Companion / deck two</span></div>
+      <button class="tbtn" id="theme" type="button" aria-label="Switch colour theme">Theme</button>
+    </div>
+    <h1 class="mast-h">The front desk<br><em>does not hold a key.</em></h1>
+    <p class="mast-dek">
+      Your instinct about the scheduler was right, and it is already written down —
+      <code style="font-family:var(--mono);font-size:.85em">docs/COMPANION_ACCESS_CONTROL.md</code> has the
+      Front desk role, the three-plane rule, and an "asked and answered" row quoting almost your exact
+      question. What it has never had is a screen. This deck renders that model, plus the plan builder,
+      the tool builder, what a prescriber's account changes, and the honest answer on compliance tooling.
+    </p>
+    <div class="mast-meta">
+      <span class="chip">Renders only — nothing built</span>
+      <span class="chip mark-new">7 surfaces</span>
+      <span class="chip">Model quoted from the repo</span>
+      <span class="chip mark-warn">Compliance section is sourced, read it carefully</span>
+    </div>
+  </div>
+</header>
+
+<!-- ══ THREE PLANES ═══════════════════════════════════════════════════════ -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">The model</span><span class="chip">Already specified</span></div>
+      <div>
+        <h2>Three planes, and who is allowed to stand in each.</h2>
+        <p>
+          Least privilege usually fails because it is enforced by hiding columns. Here it is enforced by
+          key custody: a role decides what you may <em>ask</em> for, and only a patient's grant hands over a
+          wrapped key. The front desk does not have a mood column switched off — they were never given
+          anything that decrypts to a mood.
+        </p>
+      </div>
+    </div>
+
+    <div class="planes">
+      <div class="plane-col pc-data">
+        <header>
+          <span class="plane pl-data">Data plane</span>
+          <h3>Ciphertext, and the keys to it</h3>
+          <p>Patients hold keys. Clinicians hold grants — a wrapped key the patient authorised. The server never sees plaintext.</p>
+        </header>
+        <div class="plane-body">
+          <span class="plane-lbl">Normally holds a key</span>
+          <div class="who-list">
+            <span class="who-chip key">Patient</span>
+            <span class="who-chip key">Clinician</span>
+            <span class="who-chip key">Psychiatrist</span>
+            <span class="who-chip">Assistant · narrowed</span>
+            <span class="who-chip">Supervisor · by grant only</span>
+          </div>
+          <span class="plane-lbl">Never</span>
+          <div class="who-list">
+            <span class="who-chip no">Front desk</span>
+            <span class="who-chip no">Org admin</span>
+            <span class="who-chip no">Sysadmin</span>
+          </div>
+          <p>A supervisor reads through an explicit, consented grant — never by title. Seniority is not a decryption key.</p>
+        </div>
+      </div>
+
+      <div class="plane-col pc-ctrl">
+        <header>
+          <span class="plane pl-ctrl">Control plane</span>
+          <h3>Who may do what</h3>
+          <p>Roles, membership, grant and revoke, step-up policy. Server-enforced, operating on the capability graph and metadata.</p>
+        </header>
+        <div class="plane-body">
+          <span class="plane-lbl">Operates here</span>
+          <div class="who-list">
+            <span class="who-chip">Org admin</span>
+            <span class="who-chip">Front desk · invites</span>
+            <span class="who-chip">Patient · their own grants</span>
+          </div>
+          <span class="plane-lbl">Scope</span>
+          <div class="who-list"><span class="who-chip">One practice — not global</span></div>
+          <p>An org admin manages membership for their practice and can revoke anyone. Management authority and read capability are deliberately different objects.</p>
+        </div>
+      </div>
+
+      <div class="plane-col pc-mon">
+        <header>
+          <span class="plane pl-mon">Monitoring plane</span>
+          <h3>What happened, not what was said</h3>
+          <p>The hash-chained audit log and the behavioural guard. Metadata only, short retention, minimum logging.</p>
+        </header>
+        <div class="plane-body">
+          <span class="plane-lbl">Reads here</span>
+          <div class="who-list">
+            <span class="who-chip">Patient · their own trail</span>
+            <span class="who-chip">Org admin · review</span>
+            <span class="who-chip">Sysadmin · ops only</span>
+          </div>
+          <span class="plane-lbl">Guard response</span>
+          <div class="who-list"><span class="who-chip">Step up, never hard-lock</span></div>
+          <p>A hard lockout could cut off a clinician mid-session with someone in crisis. The guard pauses a token and demands re-auth instead.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="plane-rule">
+      <p>
+        <strong>The rule that makes it coherent:</strong> admins live in the control and monitoring planes,
+        <strong>never</strong> the data plane. That is how "an admin can revoke anyone and see who accessed
+        what, yet cannot read a single clinical note" is true rather than marketing. There is no single god
+        admin who both manages everyone and can read everything.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ FOUR ACCOUNTS ══════════════════════════════════════════════════════ -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">The proof</span><span class="chip mark-new">New</span></div>
+      <div>
+        <h2>One person, one appointment, four accounts.</h2>
+        <p>
+          Tuesday 11 August, 15:30, the client the clinician calls M-04. Below is the entire screen each
+          account renders. This is the design review that matters: if the front-desk pane ever grows a mood
+          pixel, something upstream broke.
+        </p>
+      </div>
+    </div>
+
+    <div class="four">
+      <div class="acct">
+        <header><span class="plane pl-ctrl">Control</span><h4>Front desk</h4></header>
+        <div class="acct-scr">
+          <div class="acct-big">15:30 — 16:20</div>
+          <div class="acct-line"><b>M-04</b> · Room 2</div>
+          <div class="acct-line">with Dr. Okonkwo</div>
+          <span class="pill p-done">Confirmed</span>
+          <div class="acct-line" style="margin-top:auto;font-size:12px;color:var(--subtle)">Reschedule · Cancel · Resend invite</div>
+        </div>
+        <div class="acct-foot">decrypts: <b>nothing</b></div>
+      </div>
+
+      <div class="acct">
+        <header><span class="plane pl-data">Data</span><h4>Clinician</h4></header>
+        <div class="acct-scr">
+          <div class="acct-big">M-04</div>
+          <div class="acct-line" style="display:flex;align-items:center;gap:7px">
+            <i style="width:9px;height:20px;border-radius:2px;background:var(--mood-5);display:inline-block"></i>
+            <span>Steadier <span class="mono" style="font-size:11px;color:var(--ink-faint)">↑ 3 wk</span></span>
+          </div>
+          <div class="acct-line">Daily wellbeing · <span class="mono">17 / 20</span> · 11 Aug</div>
+          <div class="acct-line" style="font-size:12px;color:var(--subtle)">Focus &amp; follow-through · 21 / 32 · 28 Jul</div>
+          <span class="pill p-deliv" style="align-self:flex-start">1 open item</span>
+        </div>
+        <div class="acct-foot">decrypts: <b>the shares granted</b></div>
+      </div>
+
+      <div class="acct">
+        <header><span class="plane pl-mon">Monitoring</span><h4>Org admin</h4></header>
+        <div class="acct-scr">
+          <div class="acct-line"><b>rel_93de…b710</b></div>
+          <div class="acct-mono">member: okonkwo@practice<br>role: clinician<br>grants: 4 of 8 caps<br>since: 2026-03-02</div>
+          <div class="acct-line" style="font-size:12px">Audit: 418 events, chain ok</div>
+          <div class="acct-line" style="margin-top:auto"><span class="redact">nnnnnnnnnnnnnn</span></div>
+        </div>
+        <div class="acct-foot">decrypts: <b>nothing</b></div>
+      </div>
+
+      <div class="acct sys">
+        <header><span class="plane pl-mon">Monitoring</span><h4>Sysadmin</h4></header>
+        <div class="acct-scr">
+          <div class="acct-mono" style="font-size:11.5px">PUT /sync/blobs/shares<br>obj_9c1e4a7b…<br>24 118 bytes<br>application/octet-stream</div>
+          <div class="acct-line" style="font-size:12px">fsync ok · txn committed</div>
+          <div class="acct-mono">sha256 b41f…7e09</div>
+          <div class="acct-line" style="margin-top:auto;font-size:12px">no key material on this host</div>
+        </div>
+        <div class="acct-foot">decrypts: <b>nothing</b></div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <h5>Minimum necessary, rendered</h5>
+        <p>The front desk pane holds a time, a room, a name they already say out loud, and a confirmation.
+        Four fields. Anything more is a design regression, and it is small enough to check by eye in a
+        review.</p>
+      </div>
+      <div class="note">
+        <h5>Redaction is not the mechanism</h5>
+        <p>The hatched block in the org-admin pane is what a UI-level control looks like — a thing that
+        exists and is covered up. It appears once here to name the pattern we are <em>not</em> using. The
+        other three panes are empty because there is no key, not because there is a filter.</p>
+      </div>
+      <div class="note">
+        <h5>The org does not own the client</h5>
+        <p>A practice is a membership and addressing convenience. The client holds their keys, can see the
+        current care team, and can prune it. Removing a clinician from the practice triggers revocation and
+        key rotation.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ FRONT DESK CONSOLE ═════════════════════════════════════════════════ -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">Surface 1</span><span class="plane pl-ctrl">Control plane</span><span class="chip mark-new">New</span></div>
+      <div>
+        <h2>Front desk — the most boring screen in the product, on purpose.</h2>
+        <p>
+          Zero pixels of the mood palette. No bands, no scores, no plans, no notes, no trend. The clinical
+          navigation items are not hidden, they are visibly present and disabled — so a scheduler knows the
+          tool has a clinical side and knows they are not in it.
+        </p>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-bar">
+        <span class="frame-tag">Chromium</span>
+        <span class="frame-url"><span class="lockglyph" aria-hidden="true"></span><b>daymark.example.com</b>/desk</span>
+        <span class="frame-tag">front desk · scheduling metadata only</span>
+      </div>
+      <div class="frame-scroll">
+        <div class="app">
+          <nav class="rail">
+            <div class="rail-mark"><strong>Daymark</strong><span>Front desk</span></div>
+            <div class="rail-group">
+              <div class="rail-item on"><i></i>Day sheet<span class="ct">9</span></div>
+              <div class="rail-item"><i></i>Calendar</div>
+              <div class="rail-item i-round"><i></i>Invites<span class="ct">2</span></div>
+              <div class="rail-item i-dash"><i></i>Rooms</div>
+            </div>
+            <div class="rail-lbl">Not your role</div>
+            <div class="rail-group">
+              <div class="rail-item dim"><i></i>Shared data</div>
+              <div class="rail-item dim i-rot"><i></i>Game plans</div>
+              <div class="rail-item dim"><i></i>Assign</div>
+            </div>
+            <div class="rail-foot">
+              <div class="kv"><span>role</span><span>front desk</span></div>
+              <div class="kv"><span>grants held</span><span>0</span></div>
+              <div class="kv"><span>session</span><span>21:04</span></div>
+            </div>
+          </nav>
+
+          <div class="main">
+            <div class="topbar">
+              <h3>Tuesday, 11 August</h3>
+              <span class="sp"></span>
+              <span class="trust"><span class="lockglyph" aria-hidden="true"></span>No clinical keys held by this account</span>
+            </div>
+            <div class="body">
+              <div class="sheet">
+                <div class="sheet-hd"><h4>Day sheet</h4><span class="sp"></span><span class="chip">3 clinicians · 9 appointments</span></div>
+                <div class="sheet-bd" style="padding:14px 6px 6px">
+                  <table class="t">
+                    <thead><tr><th class="num" style="padding-left:18px">Time</th><th>Client</th><th>Clinician</th><th>Room</th><th>Status</th><th></th></tr></thead>
+                    <tbody>
+                      <tr><td class="num" style="padding-left:18px">09:00</td><td>R.T.</td><td>Okonkwo</td><td>2</td><td><span class="pill p-done">Confirmed</span></td><td style="text-align:right"><button class="mini-btn" type="button">Move</button></td></tr>
+                      <tr><td class="num" style="padding-left:18px">10:00</td><td>Anke</td><td>Vasquez</td><td>1</td><td><span class="pill p-done">Confirmed</span></td><td style="text-align:right"><button class="mini-btn" type="button">Move</button></td></tr>
+                      <tr><td class="num" style="padding-left:18px">11:30</td><td>P.L.</td><td>Okonkwo</td><td>2</td><td><span class="pill p-none">No reply</span></td><td style="text-align:right"><button class="mini-btn" type="button">Remind</button></td></tr>
+                      <tr><td class="num" style="padding-left:18px">13:00</td><td>J.</td><td>Vasquez</td><td>3</td><td><span class="pill p-sched">Held</span></td><td style="text-align:right"><button class="mini-btn" type="button">Confirm</button></td></tr>
+                      <tr><td class="num" style="padding-left:18px">15:30</td><td>M-04</td><td>Okonkwo</td><td>2</td><td><span class="pill p-done">Confirmed</span></td><td style="text-align:right"><button class="mini-btn" type="button">Move</button></td></tr>
+                      <tr><td class="num" style="padding-left:18px">16:45</td><td>Wren</td><td>Sato</td><td>1</td><td><span class="pill p-over">Cancelled</span></td><td style="text-align:right"><button class="mini-btn" type="button">Rebook</button></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p class="note-strip">
+                  Names on this screen are the labels the practice uses to run a diary. They are not linked
+                  to any clinical record this account can open, and nothing on this page decrypts.
+                </p>
+              </div>
+
+              <div style="display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px">
+                <div class="sheet">
+                  <div class="sheet-hd"><h4>Invites</h4><span class="sp"></span><span class="chip">membership logistics</span></div>
+                  <div class="sheet-bd" style="padding:14px 6px 6px">
+                    <table class="t">
+                      <thead><tr><th style="padding-left:18px">Sent to</th><th>Kind</th><th class="num">Sent</th><th>State</th></tr></thead>
+                      <tbody>
+                        <tr><td style="padding-left:18px">new client · code 7QF2-BD</td><td>Client enrolment</td><td class="num">10 Aug</td><td><span class="pill p-deliv">Opened</span></td></tr>
+                        <tr><td style="padding-left:18px">l.sato@practice</td><td>Staff — clinician</td><td class="num">8 Aug</td><td><span class="pill p-sched">Pending</span></td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <p class="note-strip crit">
+                    Sending an invite does not grant anything. It creates an account that must then be
+                    granted, separately, by the person whose data it is.
+                  </p>
+                </div>
+
+                <aside class="side-note">
+                  <h5>What this account cannot do</h5>
+                  <ul>
+                    <li class="no">Open a share, plan, note or score — no key exists for this role</li>
+                    <li class="no">Change anyone's role or add a clinician (org admin, with step-up)</li>
+                    <li class="no">See which self-checks a person has been given</li>
+                    <li class="no">Read the relationship audit log — that is the patient's and the org admin's</li>
+                    <li>Move, cancel and confirm appointments; resend invites; manage rooms</li>
+                  </ul>
+                </aside>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <h5>Disabled beats hidden, here</h5>
+        <p>Elsewhere hiding is right. For staff roles, showing the greyed clinical section tells a
+        scheduler the boundary exists and is deliberate, which is exactly the thing that stops someone
+        asking a clinician to "just look it up for me".</p>
+      </div>
+      <div class="note">
+        <h5>grants held: 0</h5>
+        <p>The rail footer states the account's key custody as a number, permanently. It is the cheapest
+        possible audit: a front-desk account whose grant count is ever non-zero is a finding, visible
+        without opening a log.</p>
+      </div>
+      <div class="note">
+        <h5>The one warm colour is a cancellation</h5>
+        <p>Clay appears once, on a cancelled slot. No mood token is loaded on this route at all — which is
+        also how you test it, by asserting the mood custom properties are absent from the computed style.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ PLAN BUILDER ═══════════════════════════════════════════════════════ -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">Surface 2</span><span class="plane pl-data">Data plane</span><span class="chip">Redesigned</span></div>
+      <div>
+        <h2>Plan builder — free text, so the framing has to work harder.</h2>
+        <p>
+          <code>GamePlanAuthor.svelte</code> exists: items of four kinds, a review cadence, sign-then-seal to
+          the owner, and an append-only lineage with supersede and withdraw. What it lacks is any sense of
+          composition — and free text is the one place a clinician can write something diagnostic by
+          accident, so the disclaimer is framing, not a footnote.
+        </p>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-bar">
+        <span class="frame-tag">Chromium</span>
+        <span class="frame-url"><span class="lockglyph" aria-hidden="true"></span><b>daymark.example.com</b>/therapist/plans/new</span>
+        <span class="frame-tag">authorGamePlan · granted</span>
+      </div>
+      <div class="frame-scroll">
+        <div class="app">
+          <nav class="rail">
+            <div class="rail-mark"><strong>Daymark</strong><span>Clinician</span></div>
+            <div class="rail-group">
+              <div class="rail-item"><i></i>Today<span class="ct">3</span></div>
+              <div class="rail-item"><i></i>Calendar</div>
+              <div class="rail-item i-round"><i></i>People<span class="ct">6</span></div>
+            </div>
+            <div class="rail-lbl">Do</div>
+            <div class="rail-group">
+              <div class="rail-item i-dash"><i></i>Assign</div>
+              <div class="rail-item on"><i></i>Game plans</div>
+              <div class="rail-item i-rot"><i></i>Shared data</div>
+            </div>
+            <div class="rail-foot">
+              <div class="kv"><span>plan</span><span>v3 draft</span></div>
+              <div class="kv"><span>seals to</span><span>bx_2f9a…</span></div>
+            </div>
+          </nav>
+
+          <div class="main">
+            <div class="topbar">
+              <h3>Game plan for M-04</h3>
+              <span class="chip">supersedes v2 · 14 Jul</span>
+              <span class="sp"></span>
+              <span class="trust"><span class="lockglyph" aria-hidden="true"></span>Signed by you, sealed to them</span>
+              <span class="chip mark-warn">Non-diagnostic</span>
+            </div>
+            <div class="body">
+              <div class="b2">
+                <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+
+                  <div class="sheet">
+                    <div class="sheet-hd"><h4>Plan items</h4><span class="sp"></span><span class="chip">4 items · drag to order</span></div>
+                    <div class="sheet-bd">
+                      <div class="item-card">
+                        <span class="item-kind goal">Goal</span>
+                        <span><span class="item-t">Get to bed before midnight four nights a week</span><span class="item-d">Your call which four. Weekends count.</span></span>
+                        <span class="grip" aria-hidden="true">⠿</span>
+                      </div>
+                      <div class="item-card">
+                        <span class="item-kind exercise">Exercise</span>
+                        <span><span class="item-t">The 4-7-8 breath before the first email of the day</span><span class="item-d">Two rounds. If it makes you feel worse, stop — that happens to some people and it is not a failure.</span></span>
+                        <span class="grip" aria-hidden="true">⠿</span>
+                      </div>
+                      <div class="item-card">
+                        <span class="item-kind task">Task</span>
+                        <span><span class="item-t">Write down the one thing that went least badly each day</span><span class="item-d">One line. Stays on your phone; I will never see it.</span></span>
+                        <span class="grip" aria-hidden="true">⠿</span>
+                      </div>
+                      <div class="item-card">
+                        <span class="item-kind note">Note</span>
+                        <span><span class="item-t">What we agreed about the August trip</span><span class="item-d">You are not obligated to go. We will talk about it either way on the 18th.</span></span>
+                        <span class="grip" aria-hidden="true">⠿</span>
+                      </div>
+
+                      <div style="border:1px dashed var(--hair-strong);border-radius:8px;padding:13px;margin-top:13px">
+                        <div class="seg" style="margin-bottom:11px">
+                          <button type="button" class="on">Goal</button>
+                          <button type="button">Exercise</button>
+                          <button type="button">Task</button>
+                          <button type="button">Note</button>
+                        </div>
+                        <div class="field" style="margin-bottom:9px"><label for="pt">Title</label><input class="inp" id="pt" value="" placeholder="Short, in their language"></div>
+                        <div class="field" style="margin-bottom:11px"><label for="pd">Detail (optional)</label><textarea class="inp" id="pd" rows="2" placeholder="Why, or what to do if it does not work"></textarea></div>
+                        <button class="mini-btn" type="button">Add item</button>
+                      </div>
+                    </div>
+                    <p class="note-strip">
+                      Guidance only — non-diagnostic. A plan is something to try, written by a person who
+                      knows you. It is not a treatment protocol and it is not a record of what is wrong with you.
+                    </p>
+                  </div>
+
+                  <div class="sheet">
+                    <div class="sheet-hd"><h4>Review</h4><span class="sp"></span></div>
+                    <div class="sheet-bd" style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+                      <div class="field" style="margin:0">
+                        <label>Revisit this together</label>
+                        <div class="seg">
+                          <button type="button">Every week</button>
+                          <button type="button" class="on">Every 2 weeks</button>
+                          <button type="button">Every month</button>
+                          <button type="button">No cadence</button>
+                        </div>
+                      </div>
+                      <p style="font-size:12.5px;color:var(--subtle);max-width:34ch">
+                        A cadence puts a reminder on their phone to reread this, not to report on it.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <aside style="display:flex;flex-direction:column;gap:16px">
+                  <div class="side-note">
+                    <h5>Lineage — append-only</h5>
+                    <div style="display:flex;flex-direction:column;gap:0">
+                      <div style="display:grid;grid-template-columns:44px 1fr;gap:9px;padding:8px 0;border-bottom:1px dashed var(--hair)">
+                        <span class="mono" style="font-size:11px;color:var(--indigo)">v3</span>
+                        <span style="font-size:12.5px">draft — not sent</span>
+                      </div>
+                      <div style="display:grid;grid-template-columns:44px 1fr;gap:9px;padding:8px 0;border-bottom:1px dashed var(--hair)">
+                        <span class="mono" style="font-size:11px;color:var(--ink-faint)">v2</span>
+                        <span style="font-size:12.5px">published 14 Jul · <span style="color:var(--subtle)">current for them</span></span>
+                      </div>
+                      <div style="display:grid;grid-template-columns:44px 1fr;gap:9px;padding:8px 0">
+                        <span class="mono" style="font-size:11px;color:var(--ink-faint)">v1</span>
+                        <span style="font-size:12.5px">published 2 Jun · superseded</span>
+                      </div>
+                    </div>
+                    <p style="font-size:11.5px;color:var(--subtle);margin-top:12px;line-height:1.5;border-top:1px solid var(--hair);padding-top:11px">
+                      Withdrawing v2 removes it from their app and leaves a withdrawal in the lineage. Nothing
+                      is deleted from history — for them or for you.
+                    </p>
+                  </div>
+
+                  <div class="side-note" style="border-color:var(--amber);background:var(--amber-wash)">
+                    <h5 style="color:var(--amber)">Publishing needs step-up</h5>
+                    <p style="font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin-bottom:12px">
+                      Signing a plan into someone's app is a new, hard-to-unsee thing in their life. Re-auth
+                      once, here — and never again for reading what you already hold.
+                    </p>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap">
+                      <button class="mini-btn pri" type="button">Sign &amp; publish v3</button>
+                      <button class="mini-btn" type="button">Save draft</button>
+                    </div>
+                    <button class="mini-btn danger" style="margin-top:9px;width:100%" type="button">Withdraw v2</button>
+                    <p style="font-size:11px;color:var(--subtle);margin-top:9px;line-height:1.45">
+                      Withdrawal is deliberately one click and no re-auth. The safe direction is never the
+                      expensive one.
+                    </p>
+                  </div>
+                </aside>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <h5>The item kinds are the only place the mood ramp bends</h5>
+        <p>Goal is indigo (structure), but exercise and task borrow mood-4 and mood-3 as category tints.
+        It is the one deliberate exception in the system, justified because these are the person's own
+        content categories, not interface state — and it is worth arguing about in review.</p>
+      </div>
+      <div class="note">
+        <h5>Asymmetric friction, made visible</h5>
+        <p>Publish carries step-up MFA; withdraw carries none. Putting both buttons in the same card is
+        what makes the asymmetry a design statement instead of an implementation detail nobody notices.</p>
+      </div>
+      <div class="note">
+        <h5>Detail fields do the safety work</h5>
+        <p>"If it makes you feel worse, stop" and "stays on your phone; I will never see it" are the kind
+        of lines a plan needs. The composer should probably prompt for them rather than hope — a real
+        open question for the clinician to answer.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ TOOL BUILDER ═══════════════════════════════════════════════════════ -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">Surface 3</span><span class="plane pl-data">Data plane</span><span class="chip mark-new">New UI, real engine</span></div>
+      <div>
+        <h2>Tool builder — the honesty gate as a live linter.</h2>
+        <p>
+          The quiz maker already has a back end. <code>builder.ts</code> compiles a draft and
+          <code>validateDraft()</code> runs the same gate the shipped catalog passes, so the UI can show live
+          errors and only enable Publish when it clears. The interesting design problem is that the gate is
+          not a form validator — it is a set of clinical-honesty rules, and it should read like one.
+        </p>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-bar">
+        <span class="frame-tag">Chromium</span>
+        <span class="frame-url"><span class="lockglyph" aria-hidden="true"></span><b>daymark.example.com</b>/therapist/tools/new</span>
+        <span class="frame-tag">draft — never published</span>
+      </div>
+      <div class="frame-scroll">
+        <div class="app">
+          <nav class="rail">
+            <div class="rail-mark"><strong>Daymark</strong><span>Clinician</span></div>
+            <div class="rail-group">
+              <div class="rail-item"><i></i>Today<span class="ct">3</span></div>
+              <div class="rail-item"><i></i>Calendar</div>
+              <div class="rail-item i-round"><i></i>People<span class="ct">6</span></div>
+            </div>
+            <div class="rail-lbl">Do</div>
+            <div class="rail-group">
+              <div class="rail-item i-dash"><i></i>Assign</div>
+              <div class="rail-item"><i></i>Game plans</div>
+              <div class="rail-item on i-rot"><i></i>Tools</div>
+            </div>
+            <div class="rail-foot">
+              <div class="kv"><span>tier</span><span>custom</span></div>
+              <div class="kv"><span>gate</span><span>2 failing</span></div>
+            </div>
+          </nav>
+
+          <div class="main">
+            <div class="topbar">
+              <h3>New self-check</h3>
+              <span class="sp"></span>
+              <span class="trust"><span class="lockglyph" aria-hidden="true"></span>Draft is local until it passes the gate</span>
+              <span class="chip mark-warn">Non-diagnostic</span>
+            </div>
+            <div class="body">
+              <div class="b3">
+
+                <div style="display:flex;flex-direction:column;gap:16px">
+                  <div class="sheet">
+                    <div class="sheet-hd"><h4>What is this?</h4></div>
+                    <div class="sheet-bd">
+                      <div class="field"><label for="ti">Title</label><input class="inp" id="ti" value="Evening wind-down check"></div>
+                      <div class="field"><label for="ii">Id</label><input class="inp mono" id="ii" style="font-size:12px" value="evening-winddown"></div>
+                      <div class="field" style="margin-bottom:9px">
+                        <label>Provenance tier</label>
+                        <div class="seg" id="tier">
+                          <button type="button" class="on" data-t="custom">Custom</button>
+                          <button type="button" data-t="adapted" disabled>Adapted</button>
+                          <button type="button" data-t="validated" disabled>Validated</button>
+                        </div>
+                      </div>
+                      <p style="font-size:11.5px;color:var(--subtle);line-height:1.5">
+                        Anyone may publish <strong>Custom</strong> — it self-discloses and can never pose as
+                        clinical. <strong>Adapted</strong> and <strong>Validated</strong> are gated to
+                        credentialed roles at the access-control layer and require a resolving ledger
+                        reference. Your role does not carry them.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div class="sheet">
+                    <div class="sheet-hd"><h4>Bands</h4><span class="sp"></span><span class="chip">must be contiguous</span></div>
+                    <div class="sheet-bd">
+                      <div class="band-edit"><input class="tiny mono" value="0"><input class="tiny mono" value="7"><input class="tiny" value="A rough evening"><span class="sw" style="background:var(--mood-2)"></span></div>
+                      <div class="band-edit"><input class="tiny mono" value="8"><input class="tiny mono" value="15"><input class="tiny" value="A mixed evening"><span class="sw" style="background:var(--mood-3)"></span></div>
+                      <div class="band-edit"><input class="tiny mono" value="17"><input class="tiny mono" value="24"><input class="tiny" value="A settled evening"><span class="sw" style="background:var(--mood-4)"></span></div>
+                      <p style="font-size:11.5px;color:var(--clay);margin-top:9px;line-height:1.45">
+                        Gap at 16 — a score of 16 would render as "—". Bands on an integer sum must be contiguous.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="sheet">
+                  <div class="sheet-hd"><h4>Items</h4><span class="sp"></span><span class="chip">5 · 4 scored</span></div>
+                  <div class="sheet-bd">
+                    <div class="item-card"><span class="item-kind note">Info</span><span><span class="item-t" style="font-size:14px">A short, private reflection — not a diagnosis.</span><span class="item-d">Shown before the first item.</span></span><span class="grip" aria-hidden="true">⠿</span></div>
+                    <div class="item-card"><span class="item-kind task">Likert</span><span><span class="item-t" style="font-size:14px">The last hour before bed felt like my own.</span><span class="item-d">Never · Rarely · Sometimes · Often · Very often</span></span><span class="grip" aria-hidden="true">⠿</span></div>
+                    <div class="item-card"><span class="item-kind task">Likert</span><span><span class="item-t" style="font-size:14px">I put the phone down before I meant to pick it up again.</span><span class="item-d">Never · Rarely · Sometimes · Often · Very often</span></span><span class="grip" aria-hidden="true">⠿</span></div>
+                    <div class="item-card"><span class="item-kind task">Likert</span><span><span class="item-t" style="font-size:14px">Getting to sleep took about as long as I expected.</span><span class="item-d">Never · Rarely · Sometimes · Often · Very often</span></span><span class="grip" aria-hidden="true">⠿</span></div>
+                    <div class="item-card" style="border-color:var(--clay);background:var(--clay-wash)"><span class="item-kind" style="border-color:var(--clay);color:var(--clay)">Free text</span><span><span class="item-t" style="font-size:14px">Anything else about tonight?</span><span class="item-d" style="color:var(--clay)">Scored — free text cannot contribute to a score. Mark it excluded, or drop it.</span></span><span class="grip" aria-hidden="true">⠿</span></div>
+                    <button class="mini-btn" style="margin-top:6px" type="button">Add item</button>
+                  </div>
+                  <p class="note-strip">
+                    Band framing: "A description of your own evening, not a diagnosis, screen, or clinical
+                    threshold." This sentence is required, checked by pattern, and shown with every result.
+                  </p>
+                </div>
+
+                <aside style="display:flex;flex-direction:column;gap:16px">
+                  <div class="side-note">
+                    <h5>Honesty gate — 7 of 9</h5>
+                    <div class="gate-list">
+                      <div class="gate-row pass"><span class="g">✓</span><span>Declares <code style="color:var(--indigo)">nonDiagnostic: true</code> and <code style="color:var(--indigo)">noScreeningFlag: true</code></span></div>
+                      <div class="gate-row pass"><span class="g">✓</span><span>Opens with the non-diagnostic disclaimer before item one</span></div>
+                      <div class="gate-row pass"><span class="g">✓</span><span>No self-harm or suicidality items — structurally absent by design</span></div>
+                      <div class="gate-row pass"><span class="g">✓</span><span>Licence-clean: reproduces no third-party instrument</span></div>
+                      <div class="gate-row pass"><span class="g">✓</span><span>Band labels are descriptive, never a verdict or cut-off</span></div>
+                      <div class="gate-row pass"><span class="g">✓</span><span>Band framing states it is not a diagnosis, screen or threshold</span></div>
+                      <div class="gate-row pass"><span class="g">✓</span><span>No scored item is conditionally hidden by branching</span></div>
+                      <div class="gate-row fail"><span class="g">✕</span><span>Bands must be contiguous — gap at <code>16</code></span></div>
+                      <div class="gate-row fail"><span class="g">✕</span><span>Item <code>e5</code> is free text and cannot be scored</span></div>
+                    </div>
+                    <button class="mini-btn pri" style="width:100%;margin-top:14px" type="button" disabled>Publish — 2 to fix</button>
+                    <p style="font-size:11px;color:var(--subtle);margin-top:9px;line-height:1.45">
+                      The same function that gates this button gates the shipped catalog. There is no
+                      author-only path around it.
+                    </p>
+                  </div>
+
+                  <div class="side-note">
+                    <h5>Where it lands</h5>
+                    <ul>
+                      <li>Published to your practice's catalog as <strong>Custom ✎</strong></li>
+                      <li>Every person who receives it sees the tier badge and the disclaimer first</li>
+                      <li class="no">It cannot claim a tier your role does not carry</li>
+                      <li class="no">It cannot be assigned to someone who has not granted assign.questionnaire</li>
+                    </ul>
+                  </div>
+                </aside>
+
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <h5>Nine checks, phrased as claims</h5>
+        <p>"Band labels are descriptive, never a verdict" reads as a promise about the tool. "labels[]
+        must match /^(?!.*\b(mild|moderate|severe)\b)/" reads as a form error. Same rule, and only one of
+        them teaches the author what the product believes.</p>
+      </div>
+      <div class="note">
+        <h5>Two tiers are greyed, not absent</h5>
+        <p>Adapted and Validated stay in the segmented control, disabled, with the reason stated. A
+        clinician needs to know the tiers exist and that publishing one is a credential question, not a
+        missing feature.</p>
+      </div>
+      <div class="note">
+        <h5>The gap at 16 is the good bug</h5>
+        <p>It is exactly the mistake a careful person makes — three tidy ranges typed by hand — and it
+        silently produces a "—" band months later. Catching it live, with the number named, is worth more
+        than any amount of documentation.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ PRESCRIBER ═════════════════════════════════════════════════════════ -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">Surface 4</span><span class="plane pl-data">Data plane</span><span class="chip">Delta, not a new app</span></div>
+      <div>
+        <h2>A prescriber's account — three additions and one hard stop.</h2>
+        <p>
+          You asked whether a doctor's page would differ. Mostly no, and that is the right answer: the role
+          catalog gives a psychiatrist the same reads as a clinician plus the ability to publish Validated
+          and Adapted tools. The differences worth building are about <em>co-treatment</em>, not about
+          medicine — because the moment this tool touches dosing it becomes a different product with a
+          different regulatory life.
+        </p>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="lanes-2">
+      <div class="lane">
+        <header>
+          <span class="plane pl-ctrl">What changes</span>
+          <h4>Three additions</h4>
+          <p>Everything else is the clinician surface, unmodified.</p>
+        </header>
+        <div class="lane-body">
+          <div class="tool">
+            <div class="tool-t"><strong>Publish Adapted and Validated tools</strong><span class="tool-lic">role-gated</span></div>
+            <p>The tier picker in the tool builder unlocks, and with it a required ledger reference that must
+            resolve to a known anchor. A Validated tool shows its source citation instead of a warning.</p>
+          </div>
+          <div class="tool">
+            <div class="tool-t"><strong>Co-treating, visible on both sides</strong><span class="tool-lic">care_relationships</span></div>
+            <p>A care role of primary, co-treating, covering or supervising. The client sees the whole team and
+            can prune it. A psychiatrist and a psychotherapist working the same case each hold their own grant.</p>
+          </div>
+          <div class="tool">
+            <div class="tool-t"><strong>Referral as a control-plane object</strong><span class="tool-lic">proposes, never moves a key</span></div>
+            <p>A referral proposes a relationship. It becomes real when the client consents, and consent is
+            what issues the grant. One clinician never hands another their key.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="lane" style="border-left:3px solid var(--clay)">
+        <header>
+          <span class="plane pl-data">Hard stop</span>
+          <h4>What a prescriber account still is not</h4>
+          <p>Naming this now is cheaper than removing it later.</p>
+        </header>
+        <div class="lane-body">
+          <div class="tool">
+            <div class="tool-t"><strong>Not a medication record</strong></div>
+            <p>No drug list, no dose, no titration schedule, no interaction checking, no e-prescribing. Those
+            are regulated clinical decision support and belong to an EHR that has been through that process.</p>
+          </div>
+          <div class="tool">
+            <div class="tool-t"><strong>Not a diagnosis field</strong></div>
+            <p>There is no place to record one, deliberately. Every instrument in the catalog carries
+            <code style="font-family:var(--mono);font-size:11.5px">nonDiagnostic: true</code> as a validated
+            invariant, and a free-text plan is framed as guidance.</p>
+          </div>
+          <div class="tool">
+            <div class="tool-t"><strong>Not a clinical record of authority</strong></div>
+            <p>It is the client's tool, and the client can revoke and prune. A practice that needs a record
+            it controls needs an EHR; this sits alongside one, it does not replace it.</p>
+          </div>
+          <div class="tool">
+            <div class="tool-t"><strong>Not a crisis channel</strong></div>
+            <p>Nothing here is monitored in real time. The safety plan is the person's own and is never a
+            suggestion card; the crisis row hands off and does not dial.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ ADMIN: IDENTITY & POSTURE ══════════════════════════════════════════ -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">Surface 5</span><span class="plane pl-mon">Monitoring</span><span class="chip mark-new">New</span></div>
+      <div>
+        <h2>Admin — who can get in, how hard, and what the guard is seeing.</h2>
+        <p>
+          Your 2FA-coverage instinct is the right first screen. The subtlety is that the honest answer is
+          not a percentage: WebAuthn and TOTP are not the same assurance, and the product's own banner says
+          so out loud. So the roster ranks by factor <em>kind</em>, and the two accounts with no second
+          factor are named rather than counted.
+        </p>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-bar">
+        <span class="frame-tag">Chromium</span>
+        <span class="frame-url"><span class="lockglyph" aria-hidden="true"></span><b>daymark.example.com</b>/admin/identity</span>
+        <span class="frame-tag">org admin · control + monitoring only</span>
+      </div>
+      <div class="frame-scroll">
+        <div class="con">
+          <nav class="con-rail">
+            <div class="rail-mark"><strong>Daymark</strong><span>Practice admin</span></div>
+            <div class="rail-group">
+              <div class="con-item"><i></i>Operations</div>
+              <div class="con-item on"><i style="border-radius:999px"></i>Identity<span class="ct crit">2</span></div>
+              <div class="con-item"><i style="border-style:dashed"></i>Behavioural guard<span class="ct warn">1</span></div>
+              <div class="con-item"><i style="transform:rotate(45deg)"></i>Audit review</div>
+            </div>
+            <div class="rail-lbl">Policy</div>
+            <div class="rail-group">
+              <div class="con-item"><i></i>Step-up rules</div>
+              <div class="con-item"><i></i>Membership</div>
+              <div class="con-item"><i></i>Compliance</div>
+            </div>
+            <div class="rail-foot" style="border-top-color:var(--con-hair)">
+              <div class="kv" style="color:var(--con-faint)"><span>members</span><span>7</span></div>
+              <div class="kv" style="color:var(--con-faint)"><span>your grants</span><span>0</span></div>
+            </div>
+          </nav>
+
+          <div class="con-main">
+            <div class="con-top">
+              <h3>Identity &amp; second factors</h3>
+              <span class="sp"></span>
+              <span class="con-kv">webauthn <b>3</b></span>
+              <span class="con-kv">totp only <b>2</b></span>
+              <span class="con-kv" style="color:var(--con-crit)">none <b>2</b></span>
+            </div>
+
+            <div class="con-body">
+              <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+                <div class="con-card">
+                  <header><h5>Members — ranked by factor strength</h5><span class="sp"></span><span class="con-kv">7 accounts</span></header>
+                  <div class="cb" style="padding:12px 0 0">
+                    <table class="ct-t">
+                      <thead><tr><th style="padding-left:14px">account</th><th>role</th><th>2nd factor</th><th>last auth</th><th>cred age</th><th>grants</th></tr></thead>
+                      <tbody>
+                        <tr><td style="padding-left:14px">okonkwo</td><td>clinician</td><td><span class="mfa key">webauthn</span></td><td>2026-08-11</td><td>112 d</td><td>4</td></tr>
+                        <tr><td style="padding-left:14px">vasquez</td><td>psychiatrist</td><td><span class="mfa key">webauthn</span></td><td>2026-08-11</td><td>96 d</td><td>6</td></tr>
+                        <tr><td style="padding-left:14px">admin.ree</td><td>org admin</td><td><span class="mfa key">webauthn</span></td><td>2026-08-10</td><td>240 d</td><td>0</td></tr>
+                        <tr><td style="padding-left:14px">sato</td><td>clinician</td><td><span class="mfa totp">totp</span></td><td>2026-08-09</td><td>31 d</td><td>2</td></tr>
+                        <tr><td style="padding-left:14px">t.assist</td><td>assistant</td><td><span class="mfa totp">totp</span></td><td>2026-08-11</td><td>18 d</td><td>1</td></tr>
+                        <tr><td style="padding-left:14px">desk.01</td><td>front desk</td><td><span class="mfa none">none</span></td><td>2026-08-11</td><td>402 d</td><td>0</td></tr>
+                        <tr><td style="padding-left:14px">l.sato</td><td>clinician · pending</td><td><span class="mfa none">none</span></td><td>never</td><td>—</td><td>0</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="cb">
+                    <p style="font-family:var(--sans);font-size:12.5px;color:var(--con-soft);line-height:1.55">
+                      <strong style="color:var(--con-crit)">desk.01</strong> has no second factor and a
+                      402-day-old credential. It holds zero grants, so it cannot read clinical content — but it
+                      can move appointments and send invites, and an invite is how a new account gets created.
+                      <strong style="color:var(--con-crit)">l.sato</strong> is an unaccepted staff invite;
+                      pending accounts should expire, and this one has not.
+                    </p>
+                  </div>
+                </div>
+
+                <div class="con-card">
+                  <header><h5>Behavioural guard — last 7 days</h5><span class="sp"></span><span class="con-kv">watches behaviour, not content</span></header>
+                  <div class="cb" style="padding:12px 0 0">
+                    <table class="ct-t">
+                      <thead><tr><th style="padding-left:14px">when</th><th>account</th><th>signal</th><th>response</th></tr></thead>
+                      <tbody>
+                        <tr><td style="padding-left:14px">08-11 02:14</td><td>sato</td><td class="act" style="color:var(--con-warn)">off-hours bulk access · 11 clients</td><td>stepped up, passed</td></tr>
+                        <tr><td style="padding-left:14px">08-09 19:40</td><td>desk.01</td><td class="act" style="color:var(--con-warn)">new geography</td><td>stepped up, passed</td></tr>
+                        <tr><td style="padding-left:14px">08-07 11:02</td><td>—</td><td class="act" style="color:var(--con-crit)">auth-failure spike · 8 in 90 s</td><td>token paused</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="cb">
+                    <p style="font-family:var(--sans);font-size:12.5px;color:var(--con-soft);line-height:1.55">
+                      Every response is a step-up, never a hard lock. A lockout could cut off a clinician
+                      mid-session with someone in crisis, which is its own harm. Retention here is short on
+                      purpose — a rich behavioural store is its own target.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:16px">
+                <div class="con-card">
+                  <header><h5>Friction budget — as configured</h5></header>
+                  <div class="cb">
+                    <div class="frict">
+                      <span class="fa">Read what you hold a grant for</span><span class="fb f-none">none</span>
+                      <span class="fa">Author a note or plan</span><span class="fb f-none">session</span>
+                      <span class="fa">Grant, extend or widen a share</span><span class="fb f-step">step-up</span>
+                      <span class="fa">Add/remove member, change role</span><span class="fb f-step">step-up</span>
+                      <span class="fa">Revoke · kill switch</span><span class="fb f-cheap">cheap</span>
+                      <span class="fa">Break-glass access</span><span class="fb f-glass">max + notify</span>
+                    </div>
+                    <p style="font-family:var(--sans);font-size:12px;color:var(--con-faint);margin-top:13px;line-height:1.5">
+                      Friction goes where the risk is. Charging the same price for reading today's note and
+                      adding a clinician mis-prices both, and people route around the expensive one.
+                    </p>
+                  </div>
+                </div>
+
+                <div class="con-card">
+                  <header><h5>Session &amp; recovery</h5></header>
+                  <div class="cb">
+                    <div class="con-metric"><span class="k">idle expiry</span><span class="v">15 min</span></div>
+                    <div class="con-metric"><span class="k">absolute expiry</span><span class="v">8 h</span></div>
+                    <div class="con-metric"><span class="k">webauthn</span><span class="v crit">501 stub</span></div>
+                    <div class="con-metric"><span class="k">totp secret at rest</span><span class="v warn">cleartext</span></div>
+                    <div class="con-metric"><span class="k">recovery rate limit</span><span class="v">on</span></div>
+                    <div class="con-metric"><span class="k">pending invites</span><span class="v warn">1 · no expiry</span></div>
+                  </div>
+                </div>
+
+                <div class="con-guard">
+                  <h5>Two of these are honest bad news</h5>
+                  <ul>
+                    <li><strong style="color:var(--con-ink)">WebAuthn is a 501 stub.</strong> The stronger custody path the sign-in banner points at does not exist yet. Until it does, every clinician is on the lower-assurance TOTP path and the banner is the only thing telling them.</li>
+                    <li><strong style="color:var(--con-ink)">TOTP seeds are stored in cleartext</strong> in <code>totp.secret_b64</code>. That is structurally required for TOTP to work server-side, and it means a disk image is a factor-bypass. It is an argument for WebAuthn, not a bug to hide.</li>
+                    <li>An admin reading this screen sees roles, factor kinds, credential ages and grant <em>counts</em> — never a grant's contents, never a client list, never a note.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <h5>Rank by kind, not by a percentage</h5>
+        <p>"71% MFA coverage" would put WebAuthn and TOTP in the same bucket, which the product's own
+        assurance banner refuses to do. Sorting the roster by factor strength makes the weakest accounts
+        the first thing read, with no arithmetic in between.</p>
+      </div>
+      <div class="note">
+        <h5>grants: 0 does the work again</h5>
+        <p>The same column that proves the front desk is safe proves the org admin is. It appears on the
+        admin's own rail footer too — the person looking at this screen can see, at all times, that they
+        hold none.</p>
+      </div>
+      <div class="note">
+        <h5>Bad news gets the amber panel</h5>
+        <p>The WebAuthn stub and the cleartext TOTP seed are surfaced to the admin in the console rather
+        than buried in <code>COMPANION_SECURITY.md</code>. An operator who cannot see the gap cannot make a
+        decision about it.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ COMPLIANCE ═════════════════════════════════════════════════════════ -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">Surface 6</span><span class="plane pl-mon">Monitoring</span><span class="chip mark-warn">Sourced — check me</span></div>
+      <div>
+        <h2>Compliance — what can actually be downloaded, and what cannot.</h2>
+        <p>
+          You asked whether there is a HIPAA tool out there that could be pulled in, kept updated, and run
+          from the admin console. There are three separate things wearing that name, only one of which
+          automates, and none of which makes anyone compliant. Splitting them is most of the answer.
+        </p>
+      </div>
+    </div>
+
+    <div class="lanes">
+      <div class="lane">
+        <header>
+          <span class="chip mark-new">Automatable</span>
+          <h4>Continuous technical checks</h4>
+          <p>Real software, self-hosted, pulls signature updates. This is the lane that can live in the console.</p>
+        </header>
+        <div class="lane-body">
+          <div class="tool">
+            <div class="tool-t"><strong>Wazuh</strong><span class="tool-lic">GPL-2.0 · self-hosted</span></div>
+            <p>Open-source SIEM/XDR whose default rules are tagged with HIPAA identifiers — a rule joins a
+            requirement by putting <code style="font-family:var(--mono);font-size:11.5px">hipaa_164.312.b</code>
+            in its group tag. Ships HIPAA dashboards; custom rules can be mapped the same way.</p>
+            <div class="pullbar"><i></i>ruleset updates · automatic</div>
+          </div>
+          <div class="tool">
+            <div class="tool-t"><strong>OpenSCAP + SCAP Security Guide</strong><span class="tool-lic">host hardening</span></div>
+            <p>Machine-readable benchmark content for the host the container runs on. Answers "is the box
+            configured the way we said", which is a large slice of the technical safeguards.</p>
+            <div class="pullbar"><i></i>content updates · automatic</div>
+          </div>
+          <div class="tool">
+            <div class="tool-t"><strong>Trivy or Grype, against the pinned digest</strong><span class="tool-lic">OSV feed</span></div>
+            <p>Scans the exact image the console already displays. The vulnerability database syncs on a
+            schedule and works from a local mirror, which matters given this stack has no egress.</p>
+            <div class="pullbar"><i></i>vuln DB · scheduled sync</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="lane">
+        <header>
+          <span class="chip mark-warn">Human, downloadable</span>
+          <h4>The assessment itself</h4>
+          <p>This is the closest thing to "a HIPAA tool you download and run" — and it produces a document, not a verdict.</p>
+        </header>
+        <div class="lane-body">
+          <div class="tool">
+            <div class="tool-t"><strong>HHS OCR / ASTP Security Risk Assessment Tool</strong><span class="tool-lic">free · v3.6.1</span></div>
+            <p>A downloadable Windows desktop app, with an Excel workbook alternative, published by the US
+            government for small and medium practices. v3.6 added a reviewed-by confirmation that records
+            approvals and dates for audit tracking, and moved its risk scale to NIST language.</p>
+            <div class="pullbar"><i class="man"></i>updates · manual, by version</div>
+          </div>
+          <div class="tool">
+            <div class="tool-t"><strong>What it is not</strong></div>
+            <p>It does not inspect your deployment, cannot see this server, and issues no certification. It
+            walks an organisation through a structured self-assessment. The output is a risk analysis a
+            practice must own, revisit, and act on — which is exactly what the Security Rule asks for.</p>
+          </div>
+          <div class="tool">
+            <div class="tool-t"><strong>How the console helps</strong></div>
+            <p>By exporting evidence the assessment asks for and cannot otherwise get: session expiry
+            settings, factor coverage per account, audit retention, encryption posture, the image digest,
+            and the dates of the last review. Fill-in-the-blanks, not a score.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="lane">
+        <header>
+          <span class="chip">Machine-readable law</span>
+          <h4>Control catalogs you can diff</h4>
+          <p>The format that lets a checklist be pulled and re-pulled when the rule changes.</p>
+        </header>
+        <div class="lane-body">
+          <div class="tool">
+            <div class="tool-t"><strong>NIST SP 800-66r2</strong><span class="tool-lic">final · free</span></div>
+            <p>NIST's guide to implementing the HIPAA Security Rule. Appendix D catalogs each standard and
+            implementation specification and maps it to Cybersecurity Framework subcategories and SP 800-53r5
+            controls — the mapping that turns a legal clause into something testable.</p>
+            <div class="pullbar"><i class="man"></i>revision · rare, versioned</div>
+          </div>
+          <div class="tool">
+            <div class="tool-t"><strong>NIST CPRT + OSCAL</strong><span class="tool-lic">machine-readable</span></div>
+            <p>The mappings are published through NIST's reference tool, and OSCAL is the standard format for
+            representing control catalogs as data. Storing the readiness checklist in OSCAL rather than a
+            markdown list is what makes "the rule changed, what moved?" a diff instead of a re-read.</p>
+            <div class="pullbar"><i></i>catalog fetch · scriptable</div>
+          </div>
+          <div class="tool">
+            <div class="tool-t"><strong>The rule is still moving</strong></div>
+            <p>The proposed Security Rule overhaul was published 6 January 2025 and is <strong>not final</strong>.
+            OMB's Unified Agenda now targets July 2027 for final action, pushed back from spring 2026, and
+            over 4,000 comments were filed. The current Security Rule remains in force.</p>
+            <div class="pullbar"><i class="man"></i>watch · RIN 0945-AA22</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="verdict">
+      <h3>The sentence that has to survive contact with a real practice</h3>
+      <p>
+        <strong>Software is HIPAA-ready; a deployment plus an organisation is what is compliant.</strong>
+        That line is already in <code style="font-family:var(--mono);font-size:.86em">COMPANION_ACCESS_CONTROL.md</code>,
+        and every screen in this deck has to keep it true. A console can show that encryption is on, that
+        sessions expire, that the audit chain verifies, that two accounts have no second factor. It cannot
+        show that a practice has written policies, trained its workforce, signed business associate
+        agreements, or has a breach-notification procedure — and those are not edge cases, they are most of
+        the Security Rule.
+      </p>
+      <p>
+        So the honest console does two things and refuses a third. It <strong>runs the technical checks</strong>
+        continuously and shows them plainly. It <strong>exports evidence</strong> into the format a human
+        assessment wants. And it <strong>never renders a compliance score</strong>, a percentage, or a green
+        shield — because the one thing worse than no compliance tooling is a dashboard that tells a small
+        practice it is compliant when it is not.
+      </p>
+      <p>
+        Your repo already names the gate, and it is stricter than anything above: an external HIPAA
+        Security-Rule assessment <em>and</em> an independent crypto/RBAC audit before any real patient. The
+        proposed rule's headline requirements — MFA everywhere, encryption at rest, asset inventory, annual
+        audits — are mostly things this design already intends, so building toward it is a cheap bet even
+        though it may not land until 2027.
+      </p>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <h5>Self-auditing is the strongest lane</h5>
+        <p>You are right that it matters most. The hash-chained log, the grant-count invariants, the "front
+        desk holds zero grants" assertion — those are checks the system can run against itself continuously,
+        and unlike a downloaded questionnaire they fail loudly when someone breaks them.</p>
+      </div>
+      <div class="note">
+        <h5>Egress is a design constraint here</h5>
+        <p>The compose stack deliberately has no route out. Every feed above has to work from a local
+        mirror or a scheduled, operator-initiated sync — which is a feature, since a compliance agent that
+        phones home is a new data-exfiltration path in a product built to have none.</p>
+      </div>
+      <div class="note">
+        <h5>Beware the vendor lane</h5>
+        <p>There is a large market of "HIPAA compliance platforms" that are SaaS, require an account, and
+        want your evidence in their cloud. For a self-hosted, zero-knowledge product that is the wrong
+        shape — it would put a third party closer to the data than the sysadmin is.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ HONESTY ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">Before anyone forwards this</span></div>
+      <div><h2>Status of everything above.</h2></div>
+    </div>
+    <div class="honest">
+      <h3>The model is written. The screens are not.</h3>
+      <ul>
+        <li>The role catalog, three planes, consent model, friction budget and behavioural guard are quoted from <code>docs/COMPANION_ACCESS_CONTROL.md</code>. They are a specification, not shipped code — the running system is still one owner ↔ one pinned therapist, roles <code>OWNER</code> / <code>THERAPIST</code> only.</li>
+        <li>There is no org, no practice, no front desk account, no org admin and no prescriber role in the build today. All seven surfaces here are proposals.</li>
+        <li>The tool builder's gate is real — <code>builder.ts</code> and <code>validate.ts</code> exist and run those checks. The screen around them does not.</li>
+        <li>The plan builder exists as <code>GamePlanAuthor.svelte</code> with lineage, sealing and step-up. The composition, ordering and lineage panel shown here are new.</li>
+        <li>WebAuthn is a 501 stub and TOTP seeds are stored in cleartext. Both are stated in the repo and reproduced faithfully in the admin render, including on a screen an operator would actually read.</li>
+        <li>The compliance lane names real, checkable software and documents, linked below. Nothing there has been integrated, evaluated in this codebase, or tested — treat it as a shortlist to verify, not a recommendation.</li>
+        <li>I am not a lawyer and this is not legal advice. The regulatory dates are sourced but timelines move; verify against the Federal Register before making a decision on them.</li>
+        <li>Every account name, timestamp, hash and count on these screens is invented.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Daymark Companion · roles, builders &amp; compliance · deck two · 11 Aug 2026 · mockups, not implementation</p>
+    <p>
+      Sources —
+      <a href="https://documentation.wazuh.com/current/compliance/hipaa/index.html">Wazuh HIPAA compliance</a> ·
+      <a href="https://healthit.gov/privacy-security/security-risk-assessment-tool/">HHS SRA Tool</a> ·
+      <a href="https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-66r2.pdf">NIST SP 800-66r2</a> ·
+      <a href="https://pages.nist.gov/OSCAL/learn/concepts/layer/control/catalog/">OSCAL catalog model</a> ·
+      <a href="https://www.hipaajournal.com/new-hipaa-regulations/">Security Rule NPRM status</a>
+    </p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var root = document.documentElement;
+
+  document.getElementById('theme').addEventListener('click', function () {
+    var dark = root.getAttribute('data-theme') === 'dark' ||
+      (!root.hasAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    root.setAttribute('data-theme', dark ? 'light' : 'dark');
+  });
+
+  var revealables = document.querySelectorAll('.reveal');
+  if (!('IntersectionObserver' in window) || reduce) {
+    revealables.forEach(function (el) { el.classList.add('seen'); });
+  } else {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('seen'); io.unobserve(e.target); }
+      });
+    }, { rootMargin: '0px 0px -12% 0px', threshold: 0.05 });
+    revealables.forEach(function (el) { io.observe(el); });
+  }
+
+  // Segmented controls in the mockups respond, so the renders feel like tools.
+  document.querySelectorAll('.seg').forEach(function (seg) {
+    seg.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (b.disabled) return;
+        seg.querySelectorAll('button').forEach(function (o) { o.classList.remove('on'); });
+        b.classList.add('on');
+      });
+    });
+  });
+})();
+</script>
