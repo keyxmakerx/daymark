@@ -181,6 +181,9 @@ jobs:
     name: Docker — image + both compose topologies
     runs-on: ubuntu-latest
     needs: [web, server] # only spin up the builder once the checks above pass
+    permissions:
+      contents: read
+      packages: write # publish to GHCR; see the final step
     steps:
       - uses: actions/checkout@v4
 
@@ -446,3 +449,64 @@ jobs:
 
           echo "No-egress topology verified."
           docker compose -f docker-compose.yml -f docker-compose.no-egress.yml down -v
+
+      # ── Publish ────────────────────────────────────────────────────────────
+      # Deliberately the LAST steps in this job, not a separate one. Everything above has to
+      # pass first — the image serves /healthz and /readyz under the real hardening, both
+      # compose topologies boot, egress is dead, the no-egress override really removes the
+      # host binding. Only then does it become something anyone can `docker pull`. A publish
+      # job that merely `needs:` this one would have to rebuild, and a rebuilt image is not
+      # the artefact that was tested.
+      #
+      # main and manual dispatch only. Never on pull_request: that would publish code from a
+      # fork under this repository's name, before review.
+      - name: Log in to GHCR
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push the tested image to GHCR
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        run: |
+          set -euo pipefail
+          # GHCR rejects uppercase in the path, and a GitHub owner may legitimately contain
+          # capitals, so normalise rather than assume.
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          image="ghcr.io/$owner/daymark-companion"
+          sha="${{ github.sha }}"
+          short="sha-${sha:0:12}"
+
+          # Two tags with different jobs. `sha-<commit>` is immutable and is what a deployment
+          # should reference: it can never become a different build under you. `main` is a
+          # convenience pointer for "whatever is current" and is exactly the moving-tag pattern
+          # that makes an auto-updating container change behaviour overnight — so it exists, and
+          # the docs tell you not to deploy it.
+          docker tag daymark-companion:ci "$image:$short"
+          docker tag daymark-companion:ci "$image:main"
+          docker push "$image:$short"
+          docker push "$image:main"
+
+          # The digest is the only reference that is both immutable AND verifiable — a tag can be
+          # force-pushed, a digest cannot. It also closes a real gap: this repo pins its base
+          # images by digest but has never published one of its own, so "is the running image the
+          # one CI tested?" was unanswerable. Now it is.
+          digest=$(docker inspect --format='{{index .RepoDigests 0}}' "$image:$short" 2>/dev/null || true)
+          if [ -z "$digest" ]; then
+            echo "::error::pushed but could not read back a RepoDigest — do not treat this image as pinned"
+            exit 1
+          fi
+
+          {
+            echo "### Published"
+            echo
+            echo '```'
+            echo "$image:$short"
+            echo "$digest"
+            echo '```'
+            echo
+            echo "Deploy the digest, or the \`$short\` tag. Not \`:main\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "published $digest"
