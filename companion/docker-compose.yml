@@ -67,10 +67,13 @@ services:
 
   # ── Application (the only service) ───────────────────────────────────────
   companion:
+    # `build` stays because CI boots this file and because local development needs it. To run
+    # the image CI published instead of building your own, set DAYMARK_IMAGE to a digest and
+    # `docker compose pull` before `up` — see companion/README.md.
     build:
       context: .
       dockerfile: Dockerfile
-    image: daymark-companion:1.0.0
+    image: ${DAYMARK_IMAGE:-daymark-companion:1.0.0}
     container_name: daymark-companion
     <<: *hardened
     logging: *logging

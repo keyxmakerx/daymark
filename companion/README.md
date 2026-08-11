@@ -82,6 +82,39 @@ DAYMARK_SYNC_PASSPHRASE='your sync passphrase' \
 **Read it back** in the browser: open the portal → **Connect to sync** → enter the token,
 device/lineage, and passphrase. The snapshot is fetched and decrypted in your browser.
 
+## Published image
+
+CI publishes to GHCR **after** the image has passed every gate in `.github/workflows/companion.yml`
+— it serves `/healthz` and `/readyz` under the real hardening, both compose topologies boot, egress
+is dead on the app network, and the no-egress override really does remove the host binding. The
+push is the last step of that job rather than a separate one, so what ships is the exact artefact
+that was tested, not a rebuild of the same source.
+
+```
+ghcr.io/keyxmakerx/daymark-companion:sha-<commit>     # immutable — deploy this
+ghcr.io/keyxmakerx/daymark-companion@sha256:<digest>  # or this; a tag can be force-pushed, a digest cannot
+ghcr.io/keyxmakerx/daymark-companion:main             # moving pointer — do NOT deploy
+```
+
+**Deploy a digest or a `sha-` tag, never `:main`.** A moving tag plus an auto-updating container
+manager is how a server changes behaviour overnight with no diff to look at. The exact digest for
+any build is printed in that run's summary on the Actions tab.
+
+**One-time setup:** GHCR packages are created private even for a public repo. After the first
+publish, open the package in GitHub → Package settings → change visibility to public. Otherwise
+every pull needs `docker login ghcr.io` with a PAT carrying `read:packages`.
+
+To run the published image from this compose file rather than building:
+
+```bash
+export DAYMARK_IMAGE=ghcr.io/keyxmakerx/daymark-companion@sha256:<digest>
+docker compose pull && docker compose up -d
+```
+
+Building it yourself stays fully supported and is the default — nothing here requires the registry.
+Note the image is **linux/amd64 only** for now; CI does not cross-build, so an arm64 host (a Pi, an
+Apple-silicon machine) still needs a local build.
+
 ## Quick start (Docker)
 
 ```bash
