@@ -151,14 +151,20 @@
     background: var(--paper-bg); border: 1px solid var(--hairline); border-radius: var(--radius);
     font-size: 5rem; line-height: 1; cursor: pointer;
   }
-  .target { color: var(--mood-5); }
+  /* The stimulus glyph and the progress bar are apparatus, not a reading. They were --mood-5 and
+     --mood-4; nothing about a target dot is this person's reported experience. Target and
+     non-target also differ in shape (● vs ■), so the distinction survives without colour. */
+  .target { color: var(--indigo); }
   .nontarget { color: var(--ink-soft); }
   .progress { width: 100%; height: 0.4rem; display: block; }
   .progress .track { fill: var(--paper-bg); }
-  .progress .fill { fill: var(--mood-4); }
+  .progress .fill { fill: var(--indigo); }
   .hint { margin: 0; }
   kbd { font-family: var(--font-mono); background: var(--paper-bg); border: 1px solid var(--border-strong); border-radius: 4px; padding: 0 0.3rem; }
   .metrics { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
-  .warn { background: var(--mood-3-wash); border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: var(--space-3); margin: 0; color: var(--ink-soft); }
+  /* A genuine warning: this run's clock was too imprecise to trust the reaction times. Amber is
+     warn severity, and this is what it is for. It was --mood-3-wash on a plain hairline, which
+     read as neither. The copy leads with ⚠ and says so in words, so the hue is reinforcement. */
+  .warn { background: var(--amber-wash); border: 1px solid var(--amber); border-radius: var(--radius-sm); padding: var(--space-3); margin: 0; color: var(--ink-soft); }
   button.primary, button:not(.stage) { align-self: flex-start; }
 </style>

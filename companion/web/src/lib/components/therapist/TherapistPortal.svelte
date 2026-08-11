@@ -19,6 +19,7 @@
   import GamePlanAuthor from './GamePlanAuthor.svelte'
   import SharedDataView from './SharedDataView.svelte'
   import LowerAssuranceBanner from './LowerAssuranceBanner.svelte'
+  import { Callout } from '../ui'
 
   type Tab = 'allowed' | 'assign' | 'gameplan' | 'shared'
 
@@ -95,7 +96,7 @@
     </div>
 
     {#if grantError}
-      <p class="warn" role="alert">{grantError}</p>
+      <Callout tone="critical">{grantError}</Callout>
     {/if}
 
     {#if grant}
@@ -116,6 +117,23 @@
   .portal { display: flex; flex-direction: column; gap: var(--space-4); }
   .topline { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
   .tabs { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-  .tabs button.active { background: var(--ink-accent); color: var(--on-accent); border-color: var(--ink-accent); }
-  .warn { color: var(--mood-2); background: var(--mood-2-wash); border: 1px solid var(--mood-2); border-radius: var(--radius-sm); padding: var(--space-3); margin: 0; }
+
+  /*
+   * The selected section is STRUCTURE — where you are in the interface — so it takes the
+   * structural accent rather than solid ink. Ink stays reserved for the primary ACTION on a
+   * screen (the publish buttons), which keeps "where am I" and "what will this do" visually
+   * distinct instead of both shouting in the same black. aria-pressed carries the same fact
+   * without colour.
+   */
+  .tabs button.active { background: var(--indigo); color: var(--on-accent); border-color: var(--indigo); }
+
+  /*
+   * The grant-failure slot used to be washed in --mood-2 / --mood-2-wash — a person's
+   * second-worst reported day, borrowed to mean "the software refused something". What it
+   * actually renders is "Refused to trust the grant — it did not verify against the pinned
+   * owner key", which is the refusal case in the token contract and therefore clay, via
+   * ui/Callout's critical tone: full outline, role="alert", and a screen-reader severity
+   * prefix. This message is the visible face of the invariant in this file's header — an
+   * unverifiable grant yields NO granted UI — so it should read as an alarm, not as a mood.
+   */
 </style>

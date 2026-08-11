@@ -13,6 +13,7 @@
   import type { UnlockedContext } from '../../therapist/context'
   import { initAssignmentCrypto, fingerprint } from '../../assignments/crypto'
   import LowerAssuranceBanner from './LowerAssuranceBanner.svelte'
+  import { Callout } from '../ui'
 
   let { onunlock }: { onunlock: (ctx: UnlockedContext) => void } = $props()
 
@@ -94,7 +95,7 @@
   </div>
 
   <button class="primary" onclick={unlockNow} disabled={busy}>{busy ? 'Unlocking…' : 'Unlock portal'}</button>
-  {#if error}<p class="error" role="alert">{error}</p>{/if}
+  {#if error}<Callout tone="critical">{error}</Callout>{/if}
   <p class="faint note">
     Your reading passphrase is different from your authenticator. It unwraps your keys in this browser
     and is never sent to the server.
@@ -106,7 +107,7 @@
   .gate h2 { margin: 0; }
   .prov { border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); }
   .prov summary { cursor: pointer; color: var(--ink-soft); font-size: 0.9rem; }
-  .prov em { font-style: normal; color: var(--ink-faint); }
+  .prov em { font-style: normal; color: var(--text-subtle); }
   .fields, .secrets { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); }
   .secrets { margin-top: 0; }
   label { display: flex; flex-direction: column; gap: var(--space-1); font-size: 0.85rem; }
@@ -114,6 +115,14 @@
   input, textarea { font: inherit; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-bg); color: var(--ink-text); }
   textarea { font-family: var(--font-mono); resize: vertical; }
   .primary { align-self: flex-start; background: var(--ink-accent); color: var(--on-accent); border-color: var(--ink-accent); }
-  .error { color: var(--mood-1); background: var(--mood-1-wash); border: 1px solid var(--mood-1); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); margin: 0; }
+
+  /*
+   * The unlock-failure slot was --mood-1 / --mood-1-wash — the worst step of a person's own
+   * mood ramp, spent on "Wrapped-key blob is not valid JSON." A failed unlock is interface
+   * alarm, not anyone's reported experience, so it moves to ui/Callout's critical tone
+   * (--clay, closed outline, role="alert"). This is the first screen a therapist ever sees;
+   * teaching them here that red means "the software refused" — and never "this person had a
+   * bad week" — is what keeps the ramp readable everywhere after it.
+   */
   .note { margin: 0; font-size: 0.8rem; }
 </style>

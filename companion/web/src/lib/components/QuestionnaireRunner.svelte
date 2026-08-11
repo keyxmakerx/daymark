@@ -2,7 +2,8 @@
   import type { InstrumentDefinition, InstrumentResult, Item } from '../instruments/types'
   import { visibleItemIds } from '../instruments/predicate'
   import { scoreInstrument } from '../instruments/scoring'
-  import { bandFramingFor, PROVENANCE_LABEL, PROVENANCE_GLYPH, provenanceDisclaimer, provenanceSource } from '../instruments/index'
+  import { bandFramingFor, provenanceDisclaimer, provenanceSource } from '../instruments/index'
+  import { Callout, Card, ProvenanceBadge } from './ui'
 
   let { def, onDone }: { def: InstrumentDefinition; onDone?: (r: InstrumentResult) => void } = $props()
 
@@ -54,14 +55,32 @@
   }
 </script>
 
-<div class="q card">
+<!-- The provenance badge rides the card header in both phases: a reader must never have to
+     remember or scroll back to find out what instrument they are holding. -->
+{#snippet provBadge()}
+  <ProvenanceBadge tier={def.provenance.tier} />
+{/snippet}
+
+<!-- The fixed non-diagnostic framing, as Card's note-strip rather than a loose trailing
+     paragraph — it is part of the claim, not an aside filed next to it. The text is
+     definition-supplied fixed copy and is rendered verbatim. -->
+{#snippet framingNote()}
+  <p class="disclaimer">{def.framing.intro}</p>
+{/snippet}
+
+<div class="q">
+  <Card
+    title={submitted ? `${def.title} — your answers today` : def.title}
+    header={provBadge}
+    footer={submitted ? framingNote : undefined}
+  >
+    <div class="stack">
   {#if !submitted}
-    <div class="head">
-      <h2>{def.title}</h2>
-      <span class="prov prov-{def.provenance.tier}">{PROVENANCE_GLYPH[def.provenance.tier]} {PROVENANCE_LABEL[def.provenance.tier]}</span>
-    </div>
+    <!-- Fixed provenance copy. Warn severity for 'custom' (the one genuine caveat: not a
+         validated or clinical instrument); info for 'adapted', matching what ProvenanceBadge
+         already tells the reader about the tier. -->
     {#if provDisclaimer}
-      <p class="prov-disclaimer" role="note">{provDisclaimer}</p>
+      <Callout tone={def.provenance.tier === 'custom' ? 'warn' : 'info'}>{provDisclaimer}</Callout>
     {:else if provSource}
       <p class="prov-source faint">Source: {provSource}</p>
     {/if}
@@ -104,13 +123,9 @@
       {/if}
     {/each}
 
-    {#if error}<p class="error" role="alert">{error}</p>{/if}
+    {#if error}<Callout tone="critical">{error}</Callout>{/if}
     <button class="primary" onclick={submit}>Finish & see my results</button>
   {:else}
-    <div class="head">
-      <h2>{def.title} — your answers today</h2>
-      <span class="prov prov-{def.provenance.tier}">{PROVENANCE_GLYPH[def.provenance.tier]} {PROVENANCE_LABEL[def.provenance.tier]}</span>
-    </div>
     {#each result as sr (sr.scaleId)}
       <div class="result {toneClass(sr.scaleId)}">
         <p class="band">{sr.bandLabel}</p>
@@ -118,18 +133,14 @@
         <p class="framing faint">{bandFramingFor(def, sr.scaleId)}</p>
       </div>
     {/each}
-    <p class="disclaimer faint">{def.framing.intro}</p>
   {/if}
+    </div>
+  </Card>
 </div>
 
 <style>
-  .q { display: flex; flex-direction: column; gap: var(--space-4); max-width: 40rem; }
-  .head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
-  .head h2 { margin: 0; }
-  .prov { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; padding: 0.15rem 0.55rem; border-radius: 999px; border: 1px solid var(--hairline); color: var(--ink-soft); white-space: nowrap; }
-  .prov-validated { color: var(--mood-5); border-color: var(--mood-5); }
-  .prov-custom { color: var(--mood-2); border-color: var(--mood-2); }
-  .prov-disclaimer { margin: 0; font-size: 0.9rem; color: var(--ink-soft); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); background: var(--paper-bg); }
+  .q { max-width: 40rem; }
+  .stack { display: flex; flex-direction: column; gap: var(--space-4); }
   .prov-source { margin: 0; }
   .intro { margin: 0; }
   .info { background: var(--paper-bg); border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: var(--space-3); color: var(--ink-soft); }
@@ -139,13 +150,21 @@
   .opt { display: flex; gap: var(--space-2); align-items: center; }
   textarea, input[type='number'] { font: inherit; width: 100%; padding: var(--space-2); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-bg); color: var(--ink-text); }
   .result { border: 1px solid var(--hairline); border-left-width: 4px; border-radius: var(--radius-sm); padding: var(--space-3) var(--space-4); }
+
+  /* DATA — DO NOT MIGRATE THESE TO CHROME/INDIGO/CLAY/AMBER.
+     This edge is the band the person's own answers scored into, on the scale the instrument's
+     author defined. It is the same ramp BandTag paints, used for exactly what the ramp means:
+     a person's reported experience. It is never the only signal — .band prints the band's own
+     descriptive label directly above it, and .framing prints the non-diagnostic caveat below.
+     A future reader "fixing" this to indigo would be deleting the legend, not a violation. */
   .tone-neutral { border-left-color: var(--mood-3); }
   .tone-attention { border-left-color: var(--mood-2); }
   .tone-positive { border-left-color: var(--mood-5); }
+
   .band { font-family: var(--font-display); font-size: 1.15rem; margin: 0 0 var(--space-1); }
   .score { margin: 0; color: var(--ink-soft); }
   .framing { margin: var(--space-2) 0 0; }
-  .disclaimer { border-top: 1px solid var(--hairline); padding-top: var(--space-3); }
-  .error { color: var(--mood-1); background: var(--mood-1-wash); border: 1px solid var(--mood-1); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); margin: 0; }
+  /* Sits in Card's note-strip, which supplies the ground, rule and type scale. */
+  .disclaimer { margin: 0; }
   button { align-self: flex-start; }
 </style>

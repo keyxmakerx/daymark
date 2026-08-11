@@ -143,6 +143,8 @@
   .expiry { display: flex; flex-direction: column; gap: var(--space-1); font-size: 0.85rem; max-width: 12rem; }
   .expiry input { font: inherit; padding: var(--space-1) var(--space-2); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-bg); color: var(--ink-text); }
   .actions { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
-  .ok { color: var(--mood-5); font-size: 0.85rem; }
-  .error { color: var(--mood-1); font-size: 0.85rem; }
+  /* Confirmation is solid ink, never green — a green tick would be a claim this product cannot
+     make. Failure is the single alarm hue. They were --mood-5 and --mood-1. */
+  .ok { color: var(--ink-text); font-size: 0.85rem; }
+  .error { color: var(--clay); font-size: 0.85rem; }
 </style>

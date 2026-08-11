@@ -4,6 +4,7 @@
   import { emptyGrant } from '../../assignments/grant'
   import { fromBase64, toBase64 } from '../../share/sharecrypto'
   import LowerAssuranceBanner from './LowerAssuranceBanner.svelte'
+  import { Card, Callout } from '../ui'
   import type { OwnerSession, PinnedTherapist } from './session'
 
   let { onunlock }: { onunlock: (session: OwnerSession) => void } = $props()
@@ -76,49 +77,53 @@
   }
 </script>
 
-<section class="unlock card">
-  <h2>Owner console</h2>
-  <LowerAssuranceBanner />
+<div class="unlock">
+  <Card title="Owner console">
+    <div class="stack">
+      <LowerAssuranceBanner />
 
-  {#if !ownerReady}
-    <p class="hint">
-      The owner console needs your owner keys to open sealed items and sign grants/shares. In this
-      build the keys are generated in-memory for the session (custody / at-rest wrapping is a
-      separate step). Generate to begin.
-    </p>
-    <button class="primary" onclick={generateOwner} disabled={busy}>{busy ? 'Preparing…' : 'Generate owner keys'}</button>
-  {:else}
-    <p class="fp">Your owner fingerprint: <code>{ownerFp}</code></p>
-    <p class="pub faint">Share your public keys with therapists out-of-band to pin:
-      sign <code>{toBase64(ownerIdentity!.ed25519.publicKey)}</code>,
-      box <code>{toBase64(ownerIdentity!.x25519.publicKey)}</code>
-    </p>
+      {#if !ownerReady}
+        <p class="hint">
+          The owner console needs your owner keys to open sealed items and sign grants/shares. In this
+          build the keys are generated in-memory for the session (custody / at-rest wrapping is a
+          separate step). Generate to begin.
+        </p>
+        <button class="primary" onclick={generateOwner} disabled={busy}>{busy ? 'Preparing…' : 'Generate owner keys'}</button>
+      {:else}
+        <p class="fp">Your owner fingerprint: <code>{ownerFp}</code></p>
+        <p class="pub faint">Share your public keys with therapists out-of-band to pin:
+          sign <code>{toBase64(ownerIdentity!.ed25519.publicKey)}</code>,
+          box <code>{toBase64(ownerIdentity!.x25519.publicKey)}</code>
+        </p>
 
-    <fieldset class="add">
-      <legend>Pin a therapist (after verifying out-of-band)</legend>
-      <label><span>Display name</span><input type="text" bind:value={tName} autocomplete="off" /></label>
-      <label><span>Ed25519 public key (base64url)</span><input type="text" bind:value={tSignPubB64} autocomplete="off" /></label>
-      <label><span>X25519 public key (base64url)</span><input type="text" bind:value={tBoxPubB64} autocomplete="off" /></label>
-      <label><span>Inbox token (OOB)</span><input type="password" bind:value={tInboxToken} autocomplete="off" /></label>
-      <button onclick={addTherapist}>Pin therapist</button>
-    </fieldset>
+        <fieldset class="add">
+          <legend>Pin a therapist (after verifying out-of-band)</legend>
+          <label><span>Display name</span><input type="text" bind:value={tName} autocomplete="off" /></label>
+          <label><span>Ed25519 public key (base64url)</span><input type="text" bind:value={tSignPubB64} autocomplete="off" /></label>
+          <label><span>X25519 public key (base64url)</span><input type="text" bind:value={tBoxPubB64} autocomplete="off" /></label>
+          <label><span>Inbox token (OOB)</span><input type="password" bind:value={tInboxToken} autocomplete="off" /></label>
+          <button onclick={addTherapist}>Pin therapist</button>
+        </fieldset>
 
-    {#if pinnedView.length > 0}
-      <ul class="pinned">
-        {#each pinnedView as t (t.id)}
-          <li><strong>{t.displayName}</strong> · <span class="sas">{t.fingerprintWords}</span></li>
-        {/each}
-      </ul>
-    {/if}
+        {#if pinnedView.length > 0}
+          <ul class="pinned">
+            {#each pinnedView as t (t.id)}
+              <li><strong>{t.displayName}</strong> · <span class="sas">{t.fingerprintWords}</span></li>
+            {/each}
+          </ul>
+        {/if}
 
-    <button class="primary" onclick={enter}>Enter console</button>
-  {/if}
+        <button class="primary" onclick={enter}>Enter console</button>
+      {/if}
 
-  {#if error}<p class="error" role="alert">{error}</p>{/if}
-</section>
+      {#if error}<Callout tone="critical">{error}</Callout>{/if}
+    </div>
+  </Card>
+</div>
 
 <style>
-  .unlock { display: flex; flex-direction: column; gap: var(--space-3); max-width: 40rem; }
+  .unlock { max-width: 40rem; }
+  .stack { display: flex; flex-direction: column; gap: var(--space-3); }
   .hint { margin: 0; color: var(--ink-soft); font-size: 0.9rem; }
   .fp code, .pub code { font-family: var(--font-mono); font-size: 0.75rem; word-break: break-all; }
   .pub { margin: 0; font-size: 0.8rem; }
@@ -129,5 +134,4 @@
   input { font: inherit; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-bg); color: var(--ink-text); }
   .pinned { margin: 0; padding-left: var(--space-4); font-size: 0.9rem; }
   .sas { font-family: var(--font-mono); font-size: 0.75rem; }
-  .error { color: var(--mood-1); margin: 0; font-size: 0.85rem; }
 </style>

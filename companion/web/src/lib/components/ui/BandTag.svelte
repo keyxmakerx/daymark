@@ -109,11 +109,11 @@
   /* Faint, because the label of an unshared band names a thing we have no data for. The word
      "unshared" itself is carried by the accessible name, never by this colour alone. */
   .label[data-level='none'] {
-    color: var(--ink-faint);
+    color: var(--text-subtle);
   }
 
   .trend {
-    color: var(--ink-faint);
+    color: var(--text-subtle);
     font-size: 0.75rem;
   }
 

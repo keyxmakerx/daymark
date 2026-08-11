@@ -8,12 +8,13 @@
   import type { Grant, AssignmentType, AssignmentPayload, Cadence } from '../../assignments/types'
   import { hasCapability } from '../../therapist/grant'
   import { assignableQuestionnaires, assignableTasks } from '../../therapist/catalog'
-  import { PROVENANCE_LABEL, PROVENANCE_GLYPH } from '../../instruments'
+  import { PROVENANCE_LABEL } from '../../instruments'
   import { buildAssignment, preflight, publishAssignment } from '../../therapist/assignClient'
   import { describeAssignment } from '../../assignments/describe'
   import type { UnlockedContext } from '../../therapist/context'
   import NonDiagnosticBanner from './NonDiagnosticBanner.svelte'
   import StepUpDialog from './StepUpDialog.svelte'
+  import { Callout, ProvenanceBadge } from '../ui'
 
   let {
     ctx,
@@ -99,7 +100,11 @@
           {#each questionnaires as q (q.id)}<option value={q.id}>{q.title}{q.tier ? ' · ' + PROVENANCE_LABEL[q.tier] : ''}</option>{/each}
         </select>
       </label>
-      {#if selectedTier}<p class="tiernote faint">{PROVENANCE_GLYPH[selectedTier]} {PROVENANCE_LABEL[selectedTier]} — the person sees this label when they take it.</p>{/if}
+      <!-- The glyph + tier name are now rendered by ui/ProvenanceBadge, which reads the SAME
+           PROVENANCE_GLYPH / PROVENANCE_LABEL maps this line used to index by hand — so the
+           visible words are unchanged, the badge cannot drift from the disclaimer that gates
+           the catalog, and 'Custom' picks up the warn treatment it gets everywhere else. -->
+      {#if selectedTier}<p class="tiernote faint"><ProvenanceBadge tier={selectedTier} /> — the person sees this label when they take it.</p>{/if}
     {:else}
       <p class="denied faint">You do not have the "Assign self-checks" capability.</p>
     {/if}
@@ -139,17 +144,20 @@
   <label class="field"><span>Note (optional)</span><input type="text" bind:value={note} placeholder="Short context for this person" /></label>
 
   {#if draft}
-    <div class="preview" class:bad={check && !check.ok}>
+    <!-- The live pre-flight is the SAME rejection the owner's validator will apply, so a failing
+         draft is a refusal and takes ui/Callout's critical tone; a passing one is the interface
+         restating what you composed, which is info. Neither is anyone's mood. -->
+    <Callout tone={check && !check.ok ? 'critical' : 'info'}>
       <p class="pv-line">{previewText}</p>
       {#if check && !check.ok}
         <ul class="errs">{#each check.errors as e (e)}<li>{e}</li>{/each}</ul>
       {/if}
-    </div>
+    </Callout>
   {/if}
 
   <button class="primary" onclick={() => (stepUpOpen = true)} disabled={!draft || (check ? !check.ok : true)}>Publish assignment</button>
   {#if status}<p class="ok" role="status">{status}</p>{/if}
-  {#if error}<p class="error" role="alert">{error}</p>{/if}
+  {#if error}<Callout tone="critical">{error}</Callout>{/if}
 </section>
 
 <StepUpDialog open={stepUpOpen} action="Publish assignment" onconfirm={() => { stepUpOpen = false; publish() }} oncancel={() => (stepUpOpen = false)} />
@@ -158,17 +166,29 @@
   .assign { display: flex; flex-direction: column; gap: var(--space-3); }
   .assign h3 { margin: 0; }
   .tabs { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-  .tabs button.active { background: var(--ink-accent); color: var(--on-accent); border-color: var(--ink-accent); }
+  /* Selected assignment type — structure ("which builder am I in"), so indigo. Solid ink stays
+     reserved for the one irreversible action on this screen, the publish button below. */
+  .tabs button.active { background: var(--indigo); color: var(--on-accent); border-color: var(--indigo); }
   .field { display: flex; flex-direction: column; gap: var(--space-1); font-size: 0.85rem; max-width: 28rem; }
   .field span { color: var(--ink-soft); }
   .cadence { display: flex; gap: var(--space-3); }
   select, input { font: inherit; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-bg); color: var(--ink-text); }
-  .preview { border: 1px solid var(--mood-5); background: var(--mood-5-wash); border-radius: var(--radius-sm); padding: var(--space-3); }
-  .preview.bad { border-color: var(--mood-1); background: var(--mood-1-wash); }
   .pv-line { margin: 0; }
-  .errs { margin: var(--space-2) 0 0; padding-left: var(--space-4); font-size: 0.85rem; color: var(--mood-1); }
+
+  /*
+   * The pre-flight rejections list. Was --mood-1 — the worst step of a person's own ramp, spent
+   * on "cadence count must be at least 1". Validation failure is the refusal case: clay.
+   */
+  .errs { margin: var(--space-2) 0 0; padding-left: var(--space-4); font-size: 0.85rem; color: var(--clay); }
   .denied { margin: 0; }
   .primary { align-self: flex-start; background: var(--ink-accent); color: var(--on-accent); border-color: var(--ink-accent); }
-  .ok { margin: 0; color: var(--mood-5); }
-  .error { margin: 0; color: var(--mood-1); }
+
+  /*
+   * "Published assignment v3." — a confirmation, and confirmations are SOLID INK, never green.
+   * This was --mood-5: the colour of the best day this person has reported, used to congratulate
+   * the therapist on a successful write. Ink is emphatic without claiming anything about what
+   * was published, which is the only claim this product is in a position to make. role="status"
+   * carries it to a screen reader; no hue is doing the work.
+   */
+  .ok { margin: 0; color: var(--ink-text); font-weight: 600; }
 </style>

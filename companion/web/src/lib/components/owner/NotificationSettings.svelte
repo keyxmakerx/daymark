@@ -6,6 +6,7 @@
    * works regardless (matches /v1/owner/notifications' gate: sync token configured).
    */
   import type { PortalClient } from '../../sync/portal'
+  import { Card, Callout } from '../ui'
 
   let { client }: { client: PortalClient | null } = $props()
 
@@ -69,53 +70,59 @@
   })
 </script>
 
-<div class="notify card">
-  <h4>Notifications</h4>
-  <p class="hint">
-    Optional, off by default. Requires the operator to have configured outbound SMTP. Emails carry
-    only an event type and a link to the portal — never record content. This also enables
-    <strong>access-token recovery</strong>: if you lose your owner access token, a link to reset it
-    can be sent here.
-  </p>
+<div class="notify">
+  <Card>
+    <div class="stack">
+      <h4>Notifications</h4>
+      <p class="hint">
+        Optional, off by default. Requires the operator to have configured outbound SMTP. Emails carry
+        only an event type and a link to the portal — never record content. This also enables
+        <strong>access-token recovery</strong>: if you lose your owner access token, a link to reset it
+        can be sent here.
+      </p>
 
-  {#if !client}
-    <p class="empty faint">Connect to a server above to manage notifications.</p>
-  {:else}
-    <label class="email-field">
-      <span>Notification email <em>(stored in plaintext on the server; see COMPANION_SECURITY.md)</em></span>
-      <input type="email" bind:value={email} placeholder="you@example.com" autocomplete="off" />
-    </label>
-
-    <fieldset class="events">
-      <legend>Notify me when…</legend>
-      {#each EVENTS as ev (ev.key)}
-        <label class="event">
-          <input type="checkbox" checked={events.has(ev.key)} onchange={() => toggle(ev.key)} />
-          <span>{ev.label}</span>
+      {#if !client}
+        <p class="empty faint">Connect to a server above to manage notifications.</p>
+      {:else}
+        <label class="email-field">
+          <span>Notification email <em>(stored in plaintext on the server; see COMPANION_SECURITY.md)</em></span>
+          <input type="email" bind:value={email} placeholder="you@example.com" autocomplete="off" />
         </label>
-      {/each}
-    </fieldset>
 
-    <div class="row">
-      <button class="primary" onclick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
-      {#if status}<span class="status">{status}</span>{/if}
+        <fieldset class="events">
+          <legend>Notify me when…</legend>
+          {#each EVENTS as ev (ev.key)}
+            <label class="event">
+              <input type="checkbox" checked={events.has(ev.key)} onchange={() => toggle(ev.key)} />
+              <span>{ev.label}</span>
+            </label>
+          {/each}
+        </fieldset>
+
+        <div class="row">
+          <button class="primary" onclick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+          {#if status}<span class="status">{status}</span>{/if}
+        </div>
+      {/if}
+
+      {#if error}<Callout tone="critical">{error}</Callout>{/if}
     </div>
-  {/if}
-
-  {#if error}<p class="error" role="alert">{error}</p>{/if}
+  </Card>
 </div>
 
 <style>
-  .notify { display: flex; flex-direction: column; gap: var(--space-3); max-width: 34rem; }
+  .notify { max-width: 34rem; }
+  .stack { display: flex; flex-direction: column; gap: var(--space-3); }
   .hint { margin: 0; font-size: 0.85rem; color: var(--ink-soft); }
   .empty { margin: 0; }
   .email-field { display: flex; flex-direction: column; gap: var(--space-1); font-size: 0.85rem; }
-  .email-field em { color: var(--ink-faint); font-style: normal; }
+  .email-field em { color: var(--text-subtle); font-style: normal; }
   input[type='email'] { font: inherit; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-bg); color: var(--ink-text); }
   .events { display: flex; flex-direction: column; gap: var(--space-2); border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: var(--space-3); }
   .events legend { padding: 0 var(--space-2); color: var(--ink-soft); font-size: 0.85rem; }
   .event { display: flex; align-items: center; gap: var(--space-2); font-size: 0.85rem; }
   .row { display: flex; align-items: center; gap: var(--space-3); }
+  /* "Saved." is a confirmation, and confirmation in this product is solid ink — never a
+     green tick, which would be a claim the product is not entitled to make. */
   .status { font-size: 0.8rem; color: var(--ink-soft); }
-  .error { color: var(--mood-1); margin: 0; font-size: 0.85rem; }
 </style>

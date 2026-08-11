@@ -72,8 +72,12 @@
   .sync { display: flex; flex-direction: column; gap: var(--space-3); max-width: 34rem; }
   .warn-banner {
     margin: 0;
-    background: var(--mood-3-wash);
-    border: 1px solid var(--hairline);
+    /* The lower-assurance banner is a genuine warning — the page is served by the server it
+       talks to — so it takes warn severity. It was --mood-3-wash inside a plain hairline: a
+       person's mid mood step, reading as neither information nor warning. The prose is
+       untouched. */
+    background: var(--amber-wash);
+    border: 1px solid var(--amber);
     border-radius: var(--radius-sm);
     padding: var(--space-3);
     font-size: 0.9rem;
@@ -81,7 +85,7 @@
   }
   label { display: flex; flex-direction: column; gap: var(--space-1); font-size: 0.9rem; }
   label span { color: var(--ink-soft); }
-  label em { color: var(--ink-faint); font-style: normal; }
+  label em { color: var(--text-subtle); font-style: normal; }
   input {
     font: inherit;
     padding: var(--space-2) var(--space-3);
@@ -91,5 +95,6 @@
     color: var(--ink-text);
   }
   button { align-self: flex-start; }
-  .error { color: var(--mood-1); background: var(--mood-1-wash); border: 1px solid var(--mood-1); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); margin: 0; }
+  /* Failure takes the single alarm hue; it was --mood-1, a person's worst reported day. */
+  .error { color: var(--clay); background: var(--clay-wash); border: 1px solid var(--clay); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); margin: 0; }
 </style>

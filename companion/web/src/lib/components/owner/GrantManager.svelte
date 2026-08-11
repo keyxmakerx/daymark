@@ -2,6 +2,7 @@
   import { ALL_CAPABILITIES, type Capability, type ApplyMode, type Grant } from '../../assignments/types'
   import { setCapability, signGrant, encodeSignedGrant } from '../../assignments/grant'
   import CapabilityRow from './CapabilityRow.svelte'
+  import { Chip } from '../ui'
   import type { OwnerSession, PinnedTherapist } from './session'
   import { PortalClient } from '../../sync/portal'
 
@@ -84,7 +85,7 @@
       <span class="none">Nothing granted yet.</span>
     {:else}
       {#each grantedList as cap (cap)}
-        <span class="chip">{cap}{draft.capabilities[cap]?.apply === 'auto' ? ' · auto' : ''}</span>
+        <Chip tone="accent">{cap}{draft.capabilities[cap]?.apply === 'auto' ? ' · auto' : ''}</Chip>
       {/each}
     {/if}
   </div>
@@ -118,11 +119,26 @@
   .grants { display: flex; flex-direction: column; gap: var(--space-3); }
   .hint { margin: 0; color: var(--ink-soft); font-size: 0.9rem; }
   .summary { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-  .chip { background: var(--mood-5-wash); border: 1px solid var(--hairline); border-radius: 999px; padding: 0.15rem var(--space-3); font-size: 0.75rem; font-family: var(--font-mono); }
-  .none { color: var(--ink-faint); font-size: 0.85rem; }
+
+  /* The granted-capability chips are now ui/Chip, tone 'accent', and their CSS is deleted.
+     A capability name is a scope — a machine fact qualifying the row next to it — which is
+     exactly what Chip is for, and "granted" is a selected/enabled state, which is indigo.
+     The old rule washed each chip in --mood-5-wash: a permission the owner switched on was
+     being drawn in the top step of that person's mood ramp. The ramp is DATA only. */
+
+  /* Was --ink-faint, which is decorative by contract and misses AA as body text (2.37:1 on
+     paper). This is real prose a reader has to be able to read, so it takes --text-subtle. */
+  .none { color: var(--text-subtle); font-size: 0.85rem; }
+
   .list { display: flex; flex-direction: column; }
   .revoke-note { margin: 0; font-size: 0.8rem; }
   .actions { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
-  .ok { color: var(--mood-5); font-size: 0.85rem; }
-  .error { color: var(--mood-1); font-size: 0.85rem; }
+
+  /* Confirmation is solid ink, never green. A published grant is a fact, not a reassurance,
+     and there is no success token in this system (app.css, invariant 2). Was --mood-5.
+     The role="status" / role="alert" split, and the words, carry this apart from the colour. */
+  .ok { color: var(--ink-text); font-size: 0.85rem; }
+
+  /* Publishing failed — the single alarm hue. Was --mood-1, the "awful" step of the ramp. */
+  .error { color: var(--clay); font-size: 0.85rem; }
 </style>

@@ -68,6 +68,7 @@
   .head h3 { margin: 0; }
   .prov { margin: 0; font-size: 0.85rem; }
   .empty { margin: 0; }
-  .error { color: var(--mood-1); background: var(--mood-1-wash); border: 1px solid var(--mood-1); border-radius: var(--radius-sm); padding: var(--space-3); margin: 0; }
+  /* Failure takes the single alarm hue; it was --mood-1, a person's worst reported day. */
+  .error { color: var(--clay); background: var(--clay-wash); border: 1px solid var(--clay); border-radius: var(--radius-sm); padding: var(--space-3); margin: 0; }
   code { font-family: var(--font-mono); background: var(--paper-bg); padding: 0 0.25rem; border-radius: 4px; font-size: 0.8em; }
 </style>

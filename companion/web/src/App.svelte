@@ -143,15 +143,26 @@
   .shell { max-width: var(--maxw); margin: 0 auto; padding: var(--space-5) var(--space-4) var(--space-8); display: flex; flex-direction: column; gap: var(--space-5); min-height: 100vh; }
   .topbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
   .brand { display: flex; align-items: center; gap: var(--space-3); }
-  .mark { width: 2rem; height: 2rem; border-radius: 0.5rem; background: linear-gradient(135deg, var(--mood-4), var(--mood-5)); box-shadow: var(--elevation); }
+  /* The brand mark is structural, not a reading: it says "Daymark", not "this person had a good
+     day". It was a --mood-4 → --mood-5 gradient, which spent the top two steps of a person's
+     reported-experience ramp on a logo. Structural accent instead. */
+  .mark { width: 2rem; height: 2rem; border-radius: 0.5rem; background: linear-gradient(135deg, var(--indigo), var(--indigo-deep)); box-shadow: var(--elevation); }
   .tagline { margin: 0; font-size: 0.9rem; }
   main { display: flex; flex-direction: column; gap: var(--space-5); flex: 1; }
   .intro { display: flex; flex-direction: column; gap: var(--space-4); }
   .note { max-width: 42rem; }
-  .error { color: var(--mood-1); background: var(--mood-1-wash); border: 1px solid var(--mood-1); border-radius: var(--radius-sm); padding: var(--space-3) var(--space-4); margin: 0; }
+  /* Failure is the single alarm hue. It was --mood-1, the step meaning "this person reported an
+     awful day" — interface state wearing a person's data. */
+  .error { color: var(--clay); background: var(--clay-wash); border: 1px solid var(--clay); border-radius: var(--radius-sm); padding: var(--space-3) var(--space-4); margin: 0; }
   .filemeta { margin: 0; }
   .tabs { display: flex; gap: var(--space-2); }
-  .tabs button.active { background: var(--ink-accent); color: var(--on-accent); border-color: var(--ink-accent); }
+  /* The selected source is STRUCTURE — "where am I" — so it takes the structural accent, the
+     same as every other tab bar in the product (OwnerConsole, TherapistPortal, AssignSurface,
+     PinnedTherapistPicker, CapabilityRow, Dashboard's range control). This one site was still
+     on --ink-accent, which is content ink and reads as emphasis on a person's material; solid
+     ink stays reserved for the primary ACTION on a screen. aria-pressed already carries the
+     selection, so the fill is never the only signal. */
+  .tabs button.active { background: var(--indigo); color: var(--on-accent); border-color: var(--indigo); }
   .foot { border-top: 1px solid var(--hairline); padding-top: var(--space-4); font-size: 0.85rem; }
   .status { font-style: italic; }
   code { font-family: var(--font-mono); background: var(--paper-bg); padding: 0 0.25rem; border-radius: 4px; }

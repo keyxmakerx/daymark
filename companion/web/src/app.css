@@ -82,7 +82,11 @@
   --c-ink-subtle: #5f5a4e;
   --c-hairline-day: #e7dfd1;
   --c-accent-day: #33302a;
-  --c-border-day: #cbc1ae;
+  /* Darkened from #cbc1ae (1.56:1 on --paper-bg). This is the boundary of every
+     button, input, textarea and select, and those controls sit on a sheet that is
+     1.10:1 against the page — so the border is the ONLY thing that identifies them
+     as controls, which puts it squarely under SC 1.4.11's 3:1. */
+  --c-border-day: #9B8864;
 
   /* ---- Warm paper, night ------------------------------------------------- */
   --c-night-bg: #1b1a17;
@@ -92,14 +96,18 @@
   --c-night-ink-faint: #7c7568;
   --c-night-ink-subtle: #9b927f;
   --c-night-hairline: #34312a;
-  --c-night-border: #4a463c;
+  /* Lightened from #4a463c (1.69:1 on --paper-sheet). Same reasoning as
+     --c-border-day: control boundary, SC 1.4.11, 3:1. */
+  --c-night-border: #726B5C;
 
   /* ---- Cool chrome, day -------------------------------------------------- */
   --c-chrome-day: #E4E7EC;
   --c-chrome-2-day: #D8DCE4;
   --c-chrome-hair-day: #C6CCD6;
   --c-chrome-ink-day: #38414E;
-  --c-chrome-soft-day: #626D7D;
+  /* Darkened from #626D7D (4.23:1 on --chrome — below AA). See the CONTRAST
+     CORRECTIONS block above the semantic tier. */
+  --c-chrome-soft-day: #586170;
 
   /* ---- Cool chrome, night ------------------------------------------------ */
   --c-chrome-night: #1E232B;
@@ -120,9 +128,14 @@
   /* ---- Alarm (clay) ------------------------------------------------------ */
   /* The single alarm hue. One hue, so "something is wrong" is unmistakable and
      unrepeatable — the moment there are two reds, neither means anything. */
-  --c-clay-day: #A8574A;
-  --c-clay-wash-day: #F2DED9;
-  --c-clay-night: #C9806F;
+  /* Darkened from #A8574A (3.93:1 on --clay-wash — below AA). */
+  --c-clay-day: #9A5044;
+  /* Lightened from #F2DED9. Callout's critical tone paints --ink-soft body copy on this wash
+     (Callout.svelte: the title carries the tone, the body stays prose) and that pair measured
+     4.46:1 — under AA by a hair, on the ground every error banner in the app renders on. */
+  --c-clay-wash-day: #F3E0DB;
+  /* Lightened from #C9806F (4.33:1 on --clay-wash — below AA). */
+  --c-clay-night: #CB8473;
   /* Shares a value with --c-mood-1-wash-night, because both are a warm tint on
      the same dark ground. Kept as its own primitive so the alarm hue can move
      without dragging the data ramp with it. */
@@ -131,7 +144,9 @@
   /* ---- Warn (amber) ------------------------------------------------------ */
   /* Warn severity only — provenance "Custom", console warn rows. Not alarm,
      not "attention", and never a stand-in for success. */
-  --c-amber-day: #9C7128;
+  /* Darkened from #9C7128 (3.53:1 on --amber-wash — below AA, and this badge
+     renders on every provenance row in the catalogue). */
+  --c-amber-day: #866122;
   --c-amber-wash-day: #F0E6D1;
   --c-amber-night: #CFA458;
   /* Same coincidence as --c-clay-wash-night vs the mood ramp; same reasoning. */
@@ -142,11 +157,15 @@
   --c-link-night: #9bb6cf;
 
   /* ---- Focus ring -------------------------------------------------------- */
-  /* These currently coincide with --c-mood-5 / --c-mood-4. That is a collision of
-     values, not of meaning: focus is interface state and must be free to move
-     without touching the data ramp, so it gets its own primitives. */
-  --c-focus-day: #5e8a66;
-  --c-focus-night: #8fa268;
+  /* These used to be byte-identical to --c-mood-5 / --c-mood-4, which meant the
+     focus indicator rendered in the exact green a "rad" mood bar is painted in:
+     an interface state wearing a person's data. They now carry the indigo, which
+     is what the design system already names for focus. They stay their OWN
+     primitives — a coincidence of value with --c-indigo-* is fine, a dependency
+     on it is not, because focus must be free to move without dragging structure
+     (or the data ramp) along with it. */
+  --c-focus-day: #3F5F7F;
+  --c-focus-night: #7FA3C8;
 
   /* ---- Mood ramp, awful → rad -------------------------------------------- */
   /* A PERSON'S DATA. Fixed, never algorithmically recoloured, never borrowed for
@@ -175,6 +194,87 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   CONTRAST CORRECTIONS — DO NOT "TIDY" THESE BACK
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Seven primitives above carry values that look arbitrary and are not. Each was
+   solved numerically — hue and saturation held, lightness walked until the pair
+   cleared its WCAG 2.x threshold — because the original value failed against a
+   ground the product actually renders it on. The "worst ground" column is the
+   tightest surface that token appears on anywhere in the app, not just the one
+   that was failing. Reverting any of these to the prettier original reintroduces
+   a measured, reproducible accessibility defect.
+
+   Thresholds: 4.5:1 body text (SC 1.4.3) · 3:1 focus indicators and control
+   boundaries (SC 1.4.11).
+
+   TOKEN            THEME   BEFORE  → AFTER    RATIO         FAILING GROUND
+   ───────────────────────────────────────────────────────────────────────────
+   --chrome-soft    light   #626D7D → #586170  4.23 → 5.04   --chrome
+                                               worst ground 4.55 (--chrome-2)
+     Every .u-label in the app: nav group labels, table headers, timestamps.
+
+   --clay           light   #A8574A → #9A5044  3.93 → 4.50   --clay-wash
+                                               worst ground 4.50 (--clay-wash)
+     The single alarm hue on its own wash: errors, refusals, overdue, revoked.
+
+   --amber          light   #9C7128 → #866122  3.53 → 4.52   --amber-wash
+                                               worst ground 4.52 (--amber-wash)
+     The "Custom" provenance badge, which renders on EVERY row of the catalogue.
+
+   --focus-ring     light   #5E8A66 → #3F5F7F  n/a  → 5.37   --chrome
+   --focus-ring     dark    #8FA268 → #7FA3C8  n/a  → 5.99   --chrome
+     Not a contrast fix. These were byte-identical to --mood-5 and --mood-4, so
+     the focus indicator was painted in the exact green of a "rad" mood bar —
+     interface state wearing a person's data, the one thing the ramp forbids.
+     They now carry the indigo the design system already names for focus.
+     Worst ground after the change: 4.84 light (--chrome-2), 4.83 dark.
+
+   --clay           dark    #C9806F → #CB8473  4.33 → 4.51   --clay-wash
+
+   --clay-wash      light   #F2DED9 → #F3E0DB  4.46 → 4.54   --ink-soft on it
+                                               (--clay on it also rises 4.50 → 4.58)
+     Callout[critical] renders its BODY in --ink-soft and spends the tone on the title only,
+     so the pair that decides this wash is ink-soft/clay-wash, not clay/clay-wash. It measured
+     4.46:1 — under AA — and it is the ground of every error banner in both apps (13 call
+     sites). Lightening the wash fixes the body and gives the title headroom it did not have.
+
+   --border-strong  light   #cbc1ae → #9B8864  1.56 → 3.01   --paper-bg
+   --border-strong  dark    #4a463c → #726B5C  1.69 → 3.01   --paper-sheet
+     Found by the audit, not specified. This is the boundary of every button,
+     input, textarea and select. Those controls fill with --paper-sheet on a
+     --paper-bg page — 1.10:1 — so the border is the sole visual evidence that
+     they are controls at all. SC 1.4.11 applies and 1.56:1 missed it by half.
+
+   DELIBERATELY NOT CHANGED — the audit flagged these and they are correct as-is:
+
+     --ink-faint as text (2.37 light / 3.81 dark). The token is decorative by
+     contract and mirrors Color.kt; raising it to 4.5:1 lands on --text-subtle
+     and collapses the three-tier ink scale. The component defect this note used
+     to describe is now CLOSED: every site that painted real text with it —
+     SyncPanel, OwnerConsole, RecoverAccess, CapabilityRow, AuditList,
+     InvitePanel, NotificationSettings, LoginGate and BandTag — now uses
+     --text-subtle, which is what that token exists for. --ink-faint keeps its
+     decorative contract and currently has no text callers. If one appears, it
+     is a bug in the component, not a reason to flatten the scale here.
+
+     --mood-* as a text colour (1.98–4.48). The ramp is a person's data and is
+     fixed by invariant 1; it may not be recoloured to pass a contrast check,
+     because that would change what a person's 3 looks like. Every site
+     currently doing this is a STATE misuse migrating to --clay/--amber/ink.
+
+     --mood-* bars and dots as graphical objects (1.98–2.67). BandTag, TrustBar
+     and the caveat banners all render an always-present text label carrying the
+     full meaning, with the mark aria-hidden. Redundant encoding, so SC 1.4.11's
+     "required to understand" does not attach.
+
+     --hairline and --chrome-hair as rules (1.16–1.39). Dividers and the borders
+     of static, text-labelled pills — not controls, not required-to-understand
+     graphics. Anything whose identity as a CONTROL depends on its border uses
+     --border-strong, which is why --border-strong is held to 3:1 and these
+     are not.
+
+   ═══════════════════════════════════════════════════════════════════════════
    TIER 2 — SEMANTIC ROLES
    The only names a component may reference.
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -234,6 +334,14 @@
   /* ---- Alarm: needs a human, overdue, refused, destructive ---------------- */
   --clay: var(--c-clay-day);
   --clay-wash: var(--c-clay-wash-day);
+  /* COMPANION_DESIGN_SYSTEM.md §2.3 names a --danger role, so code has one to
+     reach for. It is an ALIAS, not a second alarm hue — the whole point of --clay
+     is that there is exactly one red, because the moment there are two, neither
+     means anything. Needs no per-theme redefinition: both this and --clay are
+     declared on :root, so the dark blocks re-point --clay and --danger follows.
+     There is deliberately no --success counterpart; see invariant 2. */
+  --danger: var(--clay);
+  --danger-wash: var(--clay-wash);
 
   /* ---- Warn severity only ------------------------------------------------ */
   --amber: var(--c-amber-day);

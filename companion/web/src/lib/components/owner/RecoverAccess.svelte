@@ -6,6 +6,7 @@
    * login: that is the point of a recovery path.
    */
   import { requestAccessRecovery, confirmAccessRecovery } from '../../sync/portal'
+  import { Card, Callout } from '../ui'
 
   let serverUrl = $state('')
   let email = $state('')
@@ -74,58 +75,63 @@
   }
 </script>
 
-<section class="recover card">
-  <h2>Recover server access</h2>
-  <p class="hint">
-    Lost your owner access token? If you registered a notification email, you can request a new
-    one here. This recovers <strong>server access only</strong> — it cannot restore your PIN or
-    your end-to-end-encryption passphrase, and it cannot decrypt anything on its own.
-  </p>
+<div class="recover">
+  <Card title="Recover server access">
+    <div class="stack">
+      <p class="hint">
+        Lost your owner access token? If you registered a notification email, you can request a new
+        one here. This recovers <strong>server access only</strong> — it cannot restore your PIN or
+        your end-to-end-encryption passphrase, and it cannot decrypt anything on its own.
+      </p>
 
-  <label class="field">
-    <span>Server URL <em>(blank = this server)</em></span>
-    <input type="url" bind:value={serverUrl} placeholder="https://daymark.example.com" autocomplete="off" />
-  </label>
-
-  <fieldset class="step">
-    <legend>1. Request a recovery link</legend>
-    <label class="field">
-      <span>Registered email</span>
-      <input type="email" bind:value={email} placeholder="you@example.com" autocomplete="off" />
-    </label>
-    <button class="primary" onclick={request} disabled={busy}>{busy ? 'Requesting…' : 'Send recovery link'}</button>
-    {#if requestStatus}<p class="status">{requestStatus}</p>{/if}
-  </fieldset>
-
-  <fieldset class="step">
-    <legend>2. Confirm the link</legend>
-    <label class="field">
-      <span>Confirmation token <em>(from the link in your email)</em></span>
-      <input type="text" bind:value={confirmToken} autocomplete="off" />
-    </label>
-    <button class="primary" onclick={confirm} disabled={busy}>{busy ? 'Confirming…' : 'Confirm and re-issue'}</button>
-    {#if confirmStatus}<p class="status">{confirmStatus}</p>{/if}
-    {#if newToken}
       <label class="field">
-        <span>New owner access token <em>(shown once — save it now)</em></span>
-        <input type="text" readonly value={newToken} aria-label="New owner access token" />
+        <span>Server URL <em>(blank = this server)</em></span>
+        <input type="url" bind:value={serverUrl} placeholder="https://daymark.example.com" autocomplete="off" />
       </label>
-      <button onclick={copyToken}>Copy token</button>
-    {/if}
-  </fieldset>
 
-  {#if error}<p class="error" role="alert">{error}</p>{/if}
-</section>
+      <fieldset class="step">
+        <legend>1. Request a recovery link</legend>
+        <label class="field">
+          <span>Registered email</span>
+          <input type="email" bind:value={email} placeholder="you@example.com" autocomplete="off" />
+        </label>
+        <button class="primary" onclick={request} disabled={busy}>{busy ? 'Requesting…' : 'Send recovery link'}</button>
+        {#if requestStatus}<p class="status">{requestStatus}</p>{/if}
+      </fieldset>
+
+      <fieldset class="step">
+        <legend>2. Confirm the link</legend>
+        <label class="field">
+          <span>Confirmation token <em>(from the link in your email)</em></span>
+          <input type="text" bind:value={confirmToken} autocomplete="off" />
+        </label>
+        <button class="primary" onclick={confirm} disabled={busy}>{busy ? 'Confirming…' : 'Confirm and re-issue'}</button>
+        {#if confirmStatus}<p class="status">{confirmStatus}</p>{/if}
+        {#if newToken}
+          <label class="field">
+            <span>New owner access token <em>(shown once — save it now)</em></span>
+            <input type="text" readonly value={newToken} aria-label="New owner access token" />
+          </label>
+          <button onclick={copyToken}>Copy token</button>
+        {/if}
+      </fieldset>
+
+      {#if error}<Callout tone="critical">{error}</Callout>{/if}
+    </div>
+  </Card>
+</div>
 
 <style>
-  .recover { display: flex; flex-direction: column; gap: var(--space-4); max-width: 34rem; }
+  .recover { max-width: 34rem; }
+  .stack { display: flex; flex-direction: column; gap: var(--space-4); }
   .hint { margin: 0; color: var(--ink-soft); font-size: 0.9rem; }
   .field { display: flex; flex-direction: column; gap: var(--space-1); font-size: 0.85rem; }
-  .field em { color: var(--ink-faint); font-style: normal; }
+  .field em { color: var(--text-subtle); font-style: normal; }
   input { font: inherit; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-bg); color: var(--ink-text); }
   input[readonly] { font-family: var(--font-mono); font-size: 0.8rem; }
   .step { display: flex; flex-direction: column; gap: var(--space-3); border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: var(--space-3); }
   .step legend { padding: 0 var(--space-2); color: var(--ink-soft); font-size: 0.85rem; }
+  /* Confirmation, never green: solid-ink family only. A recovery that worked is stated in
+     words — the product has no success hue to spend here. */
   .status { margin: 0; font-size: 0.85rem; color: var(--ink-soft); }
-  .error { color: var(--mood-1); margin: 0; font-size: 0.85rem; }
 </style>

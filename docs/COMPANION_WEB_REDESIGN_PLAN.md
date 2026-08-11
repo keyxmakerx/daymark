@@ -12,10 +12,15 @@
 - [The one contradiction that needs a decision](#the-one-contradiction-that-needs-a-decision)
 - [Phase 1 — token layer + primitives](#phase-1--token-layer--primitives)
 - [Phase 2 — the migration](#phase-2--the-migration)
+- [Spec corrections beyond §2.3](#spec-corrections-beyond-23)
 - [Phase 3 — the missing screens](#phase-3--the-missing-screens)
 - [Phase 4 — the admin console](#phase-4--the-admin-console)
 - [Explicitly not in this plan](#explicitly-not-in-this-plan)
 - [Verification](#verification)
+
+**Status:** Phase 1 landed. Phase 2's migration and its spec amendment are written; the phase
+closes when both oracles are green (see [Phase 2 — verification](#phase-2--verification)).
+Phases 3 and 4 are unstarted.
 
 ---
 
@@ -46,20 +51,25 @@ new location.
 
 ### The measured problem
 
-The complaint that the UI has "only one colour" is precise and countable:
+The complaint that the UI has "only one colour" is precise and countable. Baseline, before
+Phase 1:
 
-| Measure | Count |
-|---|---|
-| Svelte components in `companion/web/src` | 36 |
-| …that hand-roll their own `<style>` block | 36 |
-| …that reference the mood ramp (`--mood-*`) | 31 |
-| Total `var(--mood-*)` references | 105 |
-| Components in `src/lib/components/ui/` | 0 |
+| Measure | Baseline | After Phases 1–2 |
+|---|---|---|
+| Svelte components in `companion/web/src` | 36 | 47 (36 + 11 `ui/` primitives) |
+| …that hand-roll their own `<style>` block | 36 | falling as primitives absorb them |
+| …that reference the mood ramp (`--mood-*`) | 31 | **6**, all data surfaces |
+| Total `var(--mood-*)` references | 105 | **23**, all data |
+| Components in `src/lib/components/ui/` | 0 | **11** |
 
-The mood scale is doing double duty — a person's score *and* every banner, warning, capability row
+The mood scale was doing double duty — a person's score *and* every banner, warning, capability row
 and trust strip. That is the entire cause of the flat, one-note feel, and it is also a correctness
 problem: a palette that encodes data cannot simultaneously encode interface state without the two
 becoming unreadable from each other.
+
+The residual 23 references are the point of the exercise, not a remainder to grind down: they are
+the charts, the band tags and the scored-result edge, where the ramp *is* the legend. A future
+count of zero would mean the product had stopped colouring a person's data.
 
 ---
 
@@ -93,6 +103,31 @@ console.
 **This plan proceeds on the renders' model.** If that is wrong, it must be reversed now, before
 Phase 2 touches 31 files. §2.3 is amended by this document rather than silently diverged from; the
 amendment should be written back into COMPANION_DESIGN_SYSTEM.md once Phase 1 lands.
+
+### Resolved — the amendment has landed
+
+[COMPANION_DESIGN_SYSTEM.md](./COMPANION_DESIGN_SYSTEM.md) **§2.3 has been rewritten** and now
+records the renders' model as the specification. The `--danger: var(--c-mood-1)` /
+`--success: var(--c-mood-5)` / `--warning: var(--c-mood-2)` mapping is gone from the spec, not
+merely diverged from in code. What §2.3 now carries:
+
+- **§2.3.0** the generating rule, "cool chrome, warm content".
+- **§2.3.1** the mood ramp is DATA ONLY, as an invariant with a named test —
+  `companion/web/src/lib/components/ui/invariants.test.ts`, group (c) — plus the DATA/STATE
+  classification rule and an honest statement of the test's scope (`ui/` only; the data surfaces
+  outside it use the ramp legitimately).
+- **§2.3.2** there is deliberately no `--success`, and why in one sentence.
+- **§2.3.3** the two-tier model, now real, and where it lives.
+- **§2.3.4** the chrome / indigo / clay / amber contract, with indigo never encoding data and
+  clay the single alarm hue. `--danger` survives as an alias of `--clay`, so code has the role
+  name the old spec promised without a second red entering the system.
+- **§2.3.5** the pinned severity decisions, including the non-diagnostic strip as *information*
+  on the chrome ground rather than a warning.
+- **§2.3.6** the measured accessibility corrections with their ratios, marked normative.
+- **§2.3.7** the hairline/`--border-strong` rule, with `--border-strong`'s corrected values.
+
+Sections that contradicted the amendment were fixed with it: §2.2, §2.4, §3.1, §3.2, §4, §5, §6.2,
+§6.3, §9, and the document's front-matter status banner. See "Spec corrections beyond §2.3" below.
 
 ---
 
@@ -166,25 +201,45 @@ primitives.
 toggle produced *light* tokens with a dark form-control hint. It now redefines all 30 themed tokens.
 The in-UI theme toggle the old comment called "future" would not have worked; now it will.
 
-### Carried into Phase 2
+### Carried into Phase 2 — resolved
 
-- **A live invariant violation predating this work.** `ToolBuilder.svelte:214,224` use
-  `var(--accent, var(--mood-5))`, and `--accent` is defined nowhere in the codebase — so the fallback
-  is active and a selected segmented-control button and a link are painted from the mood ramp right
-  now. `--indigo` exists for exactly this role. (Line 214 also hardcodes `#fff`.)
-- **`--focus-ring` resolves to `#5E8A66`, the same value as `--mood-5`.** Phase 1 gave focus its own
-  primitive so it can move independently without regressing anything, but a focus ring currently
-  renders the same green as a "rad" mood bar. Worth changing on purpose rather than leaving as a
-  coincidence.
-- Only **2** hardcoded colour literals remain in non-`ui/` components — the migration is smaller than
-  the 105 mood references suggest.
+Each of these was carried forward from Phase 1 and each is now closed. Resolutions are recorded
+here rather than deleted, because the *reasoning* is the part worth keeping.
+
+- **~~A live invariant violation predating this work.~~ Resolved.** `ToolBuilder.svelte:214,224`
+  used `var(--accent, var(--mood-5))` against an `--accent` defined nowhere, so the fallback was
+  live and a selected segmented-control button and a link were painted from the mood ramp. Both
+  moved to `--indigo`, which is the token that exists for exactly this role. The hardcoded `#fff`
+  on line 214 went with them.
+  *Note the shape of this bug:* it was invisible because the code named a plausible token. A
+  fallback that fires is indistinguishable from an intended value at the call site, and only
+  resolving it in a browser shows the ramp. Prefer no fallback over a mood-ramp fallback.
+- **~~`--focus-ring` resolves to `#5E8A66`, the same value as `--mood-5`.~~ Resolved, and it was
+  worse than "a coincidence".** Light `--focus-ring` was byte-identical to `--mood-5` and dark to
+  `--mood-4`, so **the focus ring rendered as a "rad" mood bar** — interface state wearing a
+  person's data, which is precisely what invariant 1 forbids. It now carries the indigo, keeping
+  its own `--c-focus-*` primitives so focus can move without dragging structure or the ramp along.
+  Recorded permanently in design-system §2.3.6.
+- **~~Only 2 hardcoded colour literals remain in non-`ui/` components.~~ Resolved** with the rest
+  of the migration; the guard is now tree-wide rather than a count in a document.
+
+Two items were **added** to Phase 2 by the audit that ran alongside it:
+
+- **Seven failing contrast pairs**, in `--chrome-soft`, `--clay`, `--amber` and `--border-strong`.
+  `--border-strong` was the serious one at 1.56:1 — it is the sole boundary of every button, input,
+  textarea and select, drawn on a sheet that is 1.10:1 against the page. All were solved
+  numerically and the ratios are pinned in design-system §2.3.6, which is normative.
+- **Eleven components use `--ink-faint` as real text** (2.37:1 light). Not fixed by changing the
+  token — `--ink-faint` is decorative by contract and raising it collapses the three-tier ink
+  scale — but by switching those call sites to `--text-subtle`. Tracked as component defects.
 
 ## Phase 2 — the migration
 
-31 components, 105 references. Mechanical but not blind — each reference is either *data* (stays
-mood) or *state* (moves to the new vocabulary), and only reading it decides which. Migrate by
-directory (`owner/`, then `therapist/`, then top-level), one commit each, `pnpm check && pnpm test`
-green between them. Delete each component's local `<style>` block as its primitives land.
+**Scope: 31 components, 105 `var(--mood-*)` references.** Mechanical but not blind — each
+reference is either *data* (stays mood) or *state* (moves to the new vocabulary), and only reading
+what renders it decides which. Migrate by directory (`owner/`, then `therapist/`, then top-level),
+one commit each, `pnpm check && pnpm test` green between them. Delete each component's local
+`<style>` block as its primitives land.
 
 Two known bugs to fix while in there:
 
@@ -193,6 +248,117 @@ Two known bugs to fix while in there:
   template string, plus the unit test that should have caught it.
 - `web/fonts/` contains only a README. `app.css` declares Fraunces and Inter and both silently fall
   back. Vendoring the two subset woff2 files is a separate, network-dependent commit.
+
+### Phase 2 — what it settled
+
+The durable output of Phase 2 is not the diff, it is the **classification**. Every `var(--mood-*)`
+in the tree was read and sorted into exactly two bins:
+
+- **DATA — kept the ramp.** `charts/Sparkline.svelte` (the plotted mood series), `Overview.svelte`
+  and `Dashboard.svelte` (mood-count bars, activity-delta bars, trend line),
+  `QuestionnaireRunner.svelte` (the band edge on a scored result), and `ui/BandTag.svelte`. In
+  these, **the ramp is the legend** — an "awful" bar must be the colour an "awful" mood is
+  everywhere else, so recolouring them to a neutral series palette would delete meaning rather
+  than add clarity. Each site carries an in-file `/* DATA — do not migrate */` note naming why,
+  because the next reader's instinct will be to "fix" it.
+- **STATE — moved.** Banners, errors, selected tabs, links, focus, callout rails, capability rows,
+  the trust strip. These went to `--chrome-*` / `--indigo` / `--clay` / `--amber` per the pinned
+  decisions in design-system §2.3.5.
+
+Three specific outcomes worth naming:
+
+- **The trust strip sits on the chrome ground.** It previously drew `--mood-3`. It is not a
+  warning and not a data surface — it is the instrument describing its own posture — so it takes
+  the quiet chrome ground. It may never be painted green under any state.
+- **The fixed non-diagnostic banners became chrome, not amber.** They are *information*, part of
+  the instrument, and reading as "something is wrong" was itself a small dishonesty. This is what
+  frees amber to mean warning. The **lower-assurance banner stayed a warning** and took amber.
+- **All fixed copy is byte-identical.** The non-diagnostic banners, the lower-assurance banner, the
+  provenance disclaimers, the audit caveats and the crisis/safety copy are non-server-supplied
+  constants. Containers were restyled; **no prose changed**. Verify with `git diff` on any file
+  carrying such copy — this is a release gate, not a code-review preference.
+
+### Phase 2 — verification
+
+Both oracles must be green, per the standard at the bottom of this document. **A phase is not done
+until they are, and "the migration is written" is not the same claim.**
+
+```
+cd companion/web
+pnpm check     # svelte-check — baseline 387 files / 0 errors; 403 / 0 after Phase 1
+pnpm test      # vitest — baseline 172 passed / 5 skipped; 195 / 5 after Phase 1
+```
+
+The guard grew with the migration. `ui/invariants.test.ts` polices the eleven primitives by
+reading its own directory, which cannot become a tree-wide claim; Phase 2 made a claim about
+*every* file, so it needs a guard over the whole tree —
+`src/lib/components/invariants.tree.test.ts`. That suite walks all of `src/` and asserts, with
+every list proven non-empty before it is filtered: no file outside the allowlisted data surfaces
+names a mood token; no style block contains a hex; no component references a token `app.css` does
+not define; and the fixed copy still reads exactly as it reads.
+
+> **Two failure modes this suite is built against, both of which have already happened here.**
+> A grep-shaped guard goes green when it matches *nothing* — rename a directory and
+> `expect(offenders).toEqual([])` reports success on the empty set, and being green it removes the
+> appetite to write a real one. And a guard run over raw text is satisfied by the *comment
+> explaining* the rule instead of by the rule, since the migration left "this used to be
+> `--mood-5-wash`" in nearly every file it touched. Structural assertions therefore run over
+> comment-stripped code; copy assertions run over markup with script and style removed, so a
+> sentence quoted in a comment cannot stand in for the sentence a person reads.
+
+**Known-stale assertions to clear before the phase closes.** Two pre-existing tests encode the
+*old* state and now fail correctly-changed code. Neither is a defect in the migration; both need
+the assertion updated, not the code reverted:
+
+- `ui/invariants.test.ts` pins `LIGHT_VALUES` / `DARK_VALUES` at the pre-audit hexes
+  (`--chrome-soft: #626d7d`, `--clay: #a8574a` / `#c9806f`, `--amber: #9c7128`). Applying the
+  §2.3.6 corrections fails five of them. Update the pins to the corrected values — and keep
+  pinning, because the pin is what stops a silent re-point.
+- `trustbar.test.ts` asserts `expect(trustBarCode).toMatch(/--mood-3/)`. That was written to prove
+  the strip was not green by showing it was amber-ish; once the strip moved to the chrome ground
+  the positive half of the assertion became wrong. Keep `not.toMatch(/--mood-5/)`, and replace the
+  positive half with an assertion that the strip is on `--chrome`.
+
+## Spec corrections beyond §2.3
+
+Writing the §2.3 amendment meant reading the rest of
+[COMPANION_DESIGN_SYSTEM.md](./COMPANION_DESIGN_SYSTEM.md) against the code. It contradicted the
+implementation in more places than the one this plan was chartered to settle. All were corrected in
+the spec; none required a code change, because in every case the *code* was right and the document
+was describing something that had never been built or had been built under another name.
+
+| Where | The contradiction | Correction |
+|---|---|---|
+| Front matter | "⚠️ STATUS: DESIGN ONLY — NO CODE EXISTS YET." An app, a token layer, eleven primitives, charts and a served CSP all exist. | Replaced with a BUILT / NOT BUILT table and per-section status markers. A blanket "nothing is implemented" is now the *false* claim. |
+| §2.2 | A `--fs-display … --fs-mono` type scale. | Never implemented. Sizes are set per-component off the 16px base. Marked unbuilt. |
+| §2.2 | Fraunces + Inter "vendored, served `'self'`". | `web/fonts/` holds a README; the `@font-face` rules in `app.css` are **commented out** and both faces fall back to system stacks. The product does not currently render in either font. |
+| §2.3 | `--bg`, `--surface`, `--surface-2`, `--text`, `--text-muted`, `--text-faint`, `--accent`, `--elev-0..3`, `--c-sky-*`. | None exist. Replaced with the real names (`--paper-bg`, `--paper-sheet`, `--ink-text`, `--ink-soft`, `--ink-faint`, `--ink-accent`, `--elevation`). |
+| §2.3.1 → §2.3.7 | `--border-strong` specified as `#B7AD9B` / `#5A5648`. | Never implemented; what shipped was `#cbc1ae` / `#4a463c` at **1.56:1** and **1.69:1**. Corrected to `#9B8864` / `#726B5C` at 3.01:1, with the reasoning. |
+| §2.4 | `--sp-1..8`, `--r-sm/md/lg/xl/pill`, `--measure`, `--container-max`, `--hairline-w`. | Shipped as `--space-1..8` (no `-7`), `--radius`, `--radius-sm`, `--maxw`. The rest do not exist. |
+| §3.1 | A high-contrast mode via `[data-contrast="high"]` / `@media (prefers-contrast: more)`, with a CSS block. | **Nothing in the product responds to a high-contrast preference.** No such block, no such attribute. Marked NOT BUILT, and §6.2's "high-contrast mode pushes toward AAA" demoted from fact to goal. |
+| §3.1 | A pre-paint theme bootstrap at `/assets/theme-bootstrap.js` and a `localStorage` toggle. | Neither exists; `index.html` loads one module. The `[data-theme]` mechanism *is* complete — it is ready and unwired. |
+| §3.2 | `--ease-standard`, `--ease-entrance`, `--dur-fast/base/slow`, `.route-enter`. | No motion tokens exist. The global `prefers-reduced-motion` block **does**, and covers every element — so the reduced-motion guarantee holds without them. |
+| §4 | A ~60-component inventory read as delivered. | Eleven exist. A status table names them; the note warns that feature components elsewhere in the tree are screens, not a library, and must not be counted. |
+| §5 | Charts "styled by tokens (`--series-*`, …)". | `--series-1..5` were never implemented **and should not be**. A mood chart is data and is drawn on the mood ramp — the ramp is the legend. A neutral series palette is right only for future non-mood charts. `--text-muted` in the same sentence is likewise not a token. |
+| §6.3 | "CI runs axe-core over rendered routes" and a CSS contrast validator. | Neither exists, and there is no component-rendering harness at all. Replaced with a description of `invariants.test.ts` — what it does assert, and the two things it cannot. |
+| §9 | An all-unticked checklist that read as a plan. | Rewritten so a box is ticked only if you can go read the thing, with split lines where half shipped. |
+
+One theme runs through the whole table: **the document repeatedly named tokens that were never
+built, and the code repeatedly built tokens the document never named.** A two-tier token model
+makes that class of drift cheap to detect — the semantic tier is a short, finite list — which is
+part of the argument for §2.3.3 beyond theming convenience.
+
+### One contradiction left open, in a document this plan does not own
+
+[COMPANION_UX.md](./COMPANION_UX.md) §10 reserves a green **`--trust-locked`** token "for surfaces
+where assurance is genuinely high" — and then §10.1 rules that no served page ever qualifies,
+which is the very rule the no-`--success` decision generalises from. The token does not exist in
+`app.css` and, under design-system §2.3.2, must never be added: **a green token defined for a case
+the same document says never occurs is a green tick waiting for someone to find a use for it.**
+
+COMPANION_UX.md §10 needs the amendment §2.3 just received. It is flagged in design-system §2.3.2
+and left to that document's owner rather than changed here — but it is the one place a future
+"success green" could still enter the system with a citation behind it, so it should not sit long.
 
 ## Phase 3 — the missing screens
 
@@ -247,9 +413,22 @@ Both oracles run locally in this repo — there is no need to wait on CI for the
 ```
 cd companion/web
 pnpm install --frozen-lockfile
-pnpm check     # svelte-check: 387 files, 0 errors at baseline
-pnpm test      # vitest: 172 passed, 5 skipped at baseline
+pnpm check     # svelte-check: 387 files, 0 errors at baseline; 403 / 0 after Phase 1
+pnpm test      # vitest: 172 passed, 5 skipped at baseline; 195 / 5 after Phase 1
 ```
 
-Any phase that does not leave both green is not done. CI (`.github/workflows/companion.yml`) remains
-the authority for the server, the container and the egress assertions.
+**Any phase that does not leave both green is not done.** Not "done with a known failure", not
+"done pending a test update" — the counts are the gate, and a phase summary that reports work
+completed without reporting the oracle is not a summary. CI (`.github/workflows/companion.yml`)
+remains the authority for the server, the container and the egress assertions.
+
+Three things the oracles do **not** cover, so they stay human gates:
+
+- **Fixed copy.** No test can tell you that a reworded banner is worse. After touching any file
+  carrying non-diagnostic, lower-assurance, provenance, audit-caveat or crisis copy, run `git diff`
+  on it and confirm no prose changed.
+- **The DATA/STATE call.** The tree-wide guard enforces an *allowlist* of files permitted to name
+  the mood ramp. It cannot tell you a given reference inside an allowlisted file is data. Only
+  reading what renders it does that.
+- **Computed contrast.** Nothing recomputes the design-system §2.3.6 ratios. A green `pnpm test`
+  is not evidence that a new colour pair passes.

@@ -242,19 +242,30 @@ const THEMED_TOKENS = [
   ...CHROME_TOKENS, ...INDIGO_TOKENS, ...ALARM_TOKENS, ...MOOD_WASH,
 ]
 
+/**
+ * Four of these are NOT the values the design brief first specified, and must not be "corrected"
+ * back to them: --chrome-soft, --clay and --amber (light) and --clay (dark) were each darkened or
+ * lightened until they cleared WCAG AA against the ground the product actually renders them on.
+ * The arithmetic, the failing ground and the resulting ratio are recorded in app.css under
+ * CONTRAST CORRECTIONS. Asserting the pre-correction values here would turn this suite into a
+ * ratchet pulling a measured accessibility defect back in.
+ */
 const LIGHT_VALUES: Record<string, string> = {
   '--chrome': '#e4e7ec', '--chrome-2': '#d8dce4', '--chrome-hair': '#c6ccd6',
-  '--chrome-ink': '#38414e', '--chrome-soft': '#626d7d',
+  '--chrome-ink': '#38414e', '--chrome-soft': '#586170', // was #626d7d — 4.23:1 on --chrome
   '--indigo': '#3f5f7f', '--indigo-deep': '#2f4a64', '--indigo-wash': '#dde5ee',
-  '--clay': '#a8574a', '--clay-wash': '#f2ded9',
-  '--amber': '#9c7128', '--amber-wash': '#f0e6d1',
+  // clay was #a8574a — 3.93:1 on --clay-wash. clay-wash was #f2ded9 — 4.46:1 against the
+  // --ink-soft body copy Callout[critical] renders on it, which is under AA on the ground
+  // every error banner in both apps uses.
+  '--clay': '#9a5044', '--clay-wash': '#f3e0db',
+  '--amber': '#866122', '--amber-wash': '#f0e6d1', // amber was #9c7128 — 3.53:1 on --amber-wash
 }
 
 const DARK_VALUES: Record<string, string> = {
   '--chrome': '#1e232b', '--chrome-2': '#262c36', '--chrome-hair': '#333b46',
   '--chrome-ink': '#c8cfd9', '--chrome-soft': '#8b95a3',
   '--indigo': '#7fa3c8', '--indigo-deep': '#9dbbd9', '--indigo-wash': '#22303e',
-  '--clay': '#c9806f', '--clay-wash': '#3a2c28',
+  '--clay': '#cb8473', '--clay-wash': '#3a2c28', // clay was #c9806f — 4.33:1 on --clay-wash
   '--amber': '#cfa458', '--amber-wash': '#3a3128',
 }
 

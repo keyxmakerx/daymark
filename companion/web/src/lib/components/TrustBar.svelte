@@ -22,6 +22,28 @@
    * So: no green, and no self-asserted "makes no network requests" — a tampered page could
    * not be trusted to police itself, which is why the copy points at integrity verification
    * instead. The strip now states the posture of the surface you are actually on.
+   *
+   * TOKENS. The strip used to be washed in --mood-3-wash with a --mood-3 dot: the middle of
+   * the DATA ramp, borrowed to mean "caution". The ramp encodes a person's reported experience
+   * and nothing else (app.css, invariant 1), and the posture of a browser tab is not that
+   * person's experience — so this was STATE wearing DATA's colours. It now takes the quiet
+   * chrome ground, for the same reason NonDiagnosticBanner does:
+   *
+   *   - It is INFORMATION, not an alarm. It states what this surface is, and App.svelte renders
+   *     it on EVERY surface, always. Amber is warn severity; spending it on something permanent
+   *     wears it out until nothing means "warning" — and on the sync tab this strip stacks
+   *     directly above SyncPanel's lower-assurance banner, which is a genuine warning and needs
+   *     to stay visibly louder than its own frame.
+   *   - Chrome is the machine talking about itself, which is exactly what this sentence is.
+   *   - And it is still not green, which is the invariant that got this component rewritten.
+   *
+   * NOT ui/Callout: all three of its tones paint a coloured left rail, and a permanent frame
+   * around the whole app should not read as a severity. Same call, same reasoning, as
+   * owner/NonDiagnosticBanner.
+   *
+   * The decorative dot is gone rather than recoloured. It was aria-hidden and carried no
+   * meaning the sentence did not already carry; a mark whose only job was to be mood-3 has no
+   * job once it is not mood-3.
    */
   // Kept inline rather than exported: a type exported from a Svelte 5 instance script is not
   // importable by consumers (that needs `<script module>`), and one shared union is not worth
@@ -33,7 +55,6 @@
 </script>
 
 <aside class="trust" aria-label="Privacy and trust">
-  <span class="dot" aria-hidden="true"></span>
   <p>
     {#if surface === 'local'}
       <strong>Meant to run offline.</strong> This tab reads your backup in the browser and
@@ -52,26 +73,16 @@
 </aside>
 
 <style>
+  /* Chrome, never a wash from the data ramp and never green. Per COMPANION_UX.md 10.1 there
+     is no green state for any of these surfaces: served portal JS is lower-assurance
+     regardless of what the network is doing this second. See the header for why this is the
+     quiet chrome ground rather than amber. */
   .trust {
-    display: flex;
-    gap: var(--space-3);
-    align-items: flex-start;
-    /* Caution, never the green wash. Per COMPANION_UX.md 10.1 there is no green state for
-       any of these surfaces: served portal JS is lower-assurance regardless of what the
-       network is doing this second. */
-    background: var(--mood-3-wash);
-    border: 1px solid var(--hairline);
+    background: var(--chrome);
+    border: 1px solid var(--chrome-hair);
     border-radius: var(--radius);
     padding: var(--space-3) var(--space-4);
     font-size: 0.9rem;
   }
-  .trust p { margin: 0; color: var(--ink-soft); }
-  .dot {
-    width: 0.6rem;
-    height: 0.6rem;
-    border-radius: 999px;
-    margin-top: 0.35rem;
-    flex: 0 0 auto;
-    background: var(--mood-3);
-  }
+  .trust p { margin: 0; color: var(--chrome-ink); }
 </style>

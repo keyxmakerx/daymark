@@ -4,6 +4,7 @@
   import NonDiagnosticBanner from './NonDiagnosticBanner.svelte'
   import type { OwnerSession, PinnedTherapist } from './session'
   import { PortalClient } from '../../sync/portal'
+  import { Callout, EmptyState } from '../ui'
 
   let {
     session,
@@ -63,13 +64,13 @@
   </div>
 
   {#if error}
-    <p class="error" role="alert">{error}</p>
+    <Callout tone="critical">{error}</Callout>
   {/if}
 
   {#if !loaded && !busy}
-    <p class="empty faint">Refresh to fetch assignments from your therapists.</p>
+    <EmptyState title="Refresh to fetch assignments from your therapists." />
   {:else if loaded && items.length === 0}
-    <p class="empty faint">No assignments to review.</p>
+    <EmptyState title="No assignments to review." />
   {:else}
     <div class="cards">
       {#each items as item, idx (item.raw.lineage + ':' + item.raw.version)}
@@ -89,6 +90,4 @@
   .bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
   .bar h3 { margin: 0; }
   .cards { display: flex; flex-direction: column; gap: var(--space-3); }
-  .empty { margin: 0; }
-  .error { color: var(--mood-1); background: var(--mood-1-wash); border: 1px solid var(--mood-1); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); margin: 0; }
 </style>

@@ -78,7 +78,12 @@
   .menu .t { font-family: var(--font-display); font-size: 1.05rem; }
   .menu .s { font-size: 0.85rem; }
   .prov { font-weight: 600; }
-  .prov-validated { color: var(--mood-5); }
-  .prov-custom { color: var(--mood-2); }
+  /* Provenance tiers. "Validated" is a verification, and verification is solid ink here — it was
+     --mood-5, a green tick in all but shape, which is the one claim this product may not make.
+     "Custom" is warn severity by the token contract, and amber is where that lives; it was
+     --mood-2. Both tiers are also spelled out in words beside the mark, so neither depends on
+     colour to be read. */
+  .prov-validated { color: var(--ink-text); }
+  .prov-custom { color: var(--amber); }
   .runbar { display: flex; gap: var(--space-3); }
 </style>

@@ -119,13 +119,17 @@
   .console { display: flex; flex-direction: column; gap: var(--space-4); }
   .topline { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
   .tabs { display: flex; gap: var(--space-2); }
-  .tabs button.active { background: var(--ink-accent); color: var(--on-accent); border-color: var(--ink-accent); }
+  /* The active tab is structure, not content: --indigo is the system's one accent for "where
+     you are" (active nav, links, focus ring). --ink-accent is the content ink and reads as
+     emphasis on a person's material, which a section tab is not. aria-pressed already carries
+     the selection for assistive tech, so the fill is never the only signal. */
+  .tabs button.active { background: var(--indigo); color: var(--on-accent); border-color: var(--indigo); }
   .conn { border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); }
   .conn summary { cursor: pointer; font-size: 0.9rem; color: var(--ink-soft); }
   .conn-body { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); }
   .conn-body label { display: flex; flex-direction: column; gap: var(--space-1); font-size: 0.85rem; }
   .conn-body label span { color: var(--ink-soft); }
-  .conn-body em { color: var(--ink-faint); font-style: normal; }
+  .conn-body em { color: var(--text-subtle); font-style: normal; }
   input { font: inherit; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-bg); color: var(--ink-text); }
   .cstatus { font-size: 0.8rem; color: var(--ink-soft); }
   .who { padding-bottom: var(--space-2); }
