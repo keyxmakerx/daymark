@@ -1,12 +1,48 @@
 /*
- * Daymark Companion — design tokens ("Modern Paper, Big Screen")
- * The palette mirrors the flagship app's ui/theme/Color.kt 1:1, with web-only
- * additions (focus ring, link, large-surface elevation). No CDN, no remote fonts.
+ * Daymark Companion — design tokens
+ *
+ * THE RULE THAT GENERATED THIS SYSTEM: "cool chrome, warm content."
+ *
+ * Chrome is the cool, dense, monospaced layer — navigation rails, top bars, table
+ * heads, metadata, timestamps, IDs, console and admin surfaces. It is the machine
+ * talking about itself. It uses the grey-blue --chrome-* ground, --chrome-soft
+ * uppercase mono micro-labels, and --indigo for structure (active nav, links,
+ * structural marks). Chrome recedes; it is never the subject.
+ *
+ * Content is warm paper — a person's entries, moods, notes, answers. It keeps the
+ * "Modern Paper" palette mirrored 1:1 from the flagship app's ui/theme/Color.kt.
+ * Warm ink on warm paper, generous spacing, display type. Content is the subject.
+ *
+ * Two invariants this file exists to protect:
+ *
+ *   1. THE MOOD RAMP IS DATA ONLY. --mood-1..--mood-5 and their -wash variants
+ *      encode a person's reported experience and nothing else. They must never be
+ *      borrowed to signal interface state (selection, hover, validity, progress).
+ *      Interface state is the job of --chrome-*, --indigo-*, --clay-* and --amber-*.
+ *
+ *   2. THERE IS DELIBERATELY NO SUCCESS/GREEN TOKEN. "Healthy" is the absence of
+ *      colour, not the presence of green. A green tick is a claim — that we checked,
+ *      that it held, that you may stop reading — and this product is not in a
+ *      position to make it. The trust strip in particular may never be painted green.
+ *      Alarm has exactly one hue (--clay: needs a human, overdue, refused,
+ *      destructive) and warning exactly one (--amber: warn severity only).
+ *
+ * TOKEN LAYERING (two tiers, per COMPANION_DESIGN_SYSTEM.md §2.3):
+ *
+ *      --c-*  PRIMITIVES  raw hex, light and dark, named for what they ARE.
+ *         ↓              (this is the layer that mirrors Color.kt)
+ *   semantic  ROLES       named for what they are FOR. Components reference
+ *                          ONLY these. Theming is remapping at :root /
+ *                          [data-theme], never editing a component.
+ *
+ * A component that reaches for a --c-* primitive has skipped the layer where the
+ * meaning lives, and should be treated as a bug.
  *
  * Fonts: the design calls for self-hosted Fraunces (display) + Inter (text) variable
  * woff2, subset and served 'self'. Until those binaries are vendored into web/fonts/
  * (see web/fonts/README.md), we fall back to a high-quality system stack so the build
  * stays fully offline and CSP-clean. Drop the woff2 files in and uncomment @font-face.
+ * No CDN, no remote fonts.
  */
 
 /*
@@ -26,6 +62,125 @@
 }
 */
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   TIER 1 — PRIMITIVES
+   Raw values. Never referenced by a component. Named for what they are, not
+   what they are for. Both themes live here side by side; the semantic tier
+   below decides which one a role gets.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ---- Warm paper, day (Color.kt) ---------------------------------------- */
+  --c-paper: #f4efe6;
+  --c-sheet: #fcfaf5;
+  --c-ink: #2a2722;
+  --c-ink-soft: #6b655b;
+  --c-ink-faint: #a49c8e;
+  /* Accessible small print. --c-ink-faint fails WCAG AA as body text, so footnote
+     text uses this darker tone (>=4.5:1 on paper) while the faint tone stays
+     decorative. */
+  --c-ink-subtle: #5f5a4e;
+  --c-hairline-day: #e7dfd1;
+  --c-accent-day: #33302a;
+  --c-border-day: #cbc1ae;
+
+  /* ---- Warm paper, night ------------------------------------------------- */
+  --c-night-bg: #1b1a17;
+  --c-night-sheet: #24221d;
+  --c-night-ink: #ebe5d8;
+  --c-night-ink-soft: #b7af9e;
+  --c-night-ink-faint: #7c7568;
+  --c-night-ink-subtle: #9b927f;
+  --c-night-hairline: #34312a;
+  --c-night-border: #4a463c;
+
+  /* ---- Cool chrome, day -------------------------------------------------- */
+  --c-chrome-day: #E4E7EC;
+  --c-chrome-2-day: #D8DCE4;
+  --c-chrome-hair-day: #C6CCD6;
+  --c-chrome-ink-day: #38414E;
+  --c-chrome-soft-day: #626D7D;
+
+  /* ---- Cool chrome, night ------------------------------------------------ */
+  --c-chrome-night: #1E232B;
+  --c-chrome-2-night: #262C36;
+  --c-chrome-hair-night: #333B46;
+  --c-chrome-ink-night: #C8CFD9;
+  --c-chrome-soft-night: #8B95A3;
+
+  /* ---- Structural accent (indigo) ---------------------------------------- */
+  /* Structure, never data: active nav, links, focus, structural marks. */
+  --c-indigo-day: #3F5F7F;
+  --c-indigo-deep-day: #2F4A64;
+  --c-indigo-wash-day: #DDE5EE;
+  --c-indigo-night: #7FA3C8;
+  --c-indigo-deep-night: #9DBBD9;
+  --c-indigo-wash-night: #22303E;
+
+  /* ---- Alarm (clay) ------------------------------------------------------ */
+  /* The single alarm hue. One hue, so "something is wrong" is unmistakable and
+     unrepeatable — the moment there are two reds, neither means anything. */
+  --c-clay-day: #A8574A;
+  --c-clay-wash-day: #F2DED9;
+  --c-clay-night: #C9806F;
+  /* Shares a value with --c-mood-1-wash-night, because both are a warm tint on
+     the same dark ground. Kept as its own primitive so the alarm hue can move
+     without dragging the data ramp with it. */
+  --c-clay-wash-night: #3A2C28;
+
+  /* ---- Warn (amber) ------------------------------------------------------ */
+  /* Warn severity only — provenance "Custom", console warn rows. Not alarm,
+     not "attention", and never a stand-in for success. */
+  --c-amber-day: #9C7128;
+  --c-amber-wash-day: #F0E6D1;
+  --c-amber-night: #CFA458;
+  /* Same coincidence as --c-clay-wash-night vs the mood ramp; same reasoning. */
+  --c-amber-wash-night: #3A3128;
+
+  /* ---- Link -------------------------------------------------------------- */
+  --c-link-day: #4a6b8a;
+  --c-link-night: #9bb6cf;
+
+  /* ---- Focus ring -------------------------------------------------------- */
+  /* These currently coincide with --c-mood-5 / --c-mood-4. That is a collision of
+     values, not of meaning: focus is interface state and must be free to move
+     without touching the data ramp, so it gets its own primitives. */
+  --c-focus-day: #5e8a66;
+  --c-focus-night: #8fa268;
+
+  /* ---- Mood ramp, awful → rad -------------------------------------------- */
+  /* A PERSON'S DATA. Fixed, never algorithmically recoloured, never borrowed for
+     interface state. The solid ramp is identical in both themes — a 3 is a 3 at
+     midnight. Only the washes shift, because they sit on different ground. */
+  --c-mood-1: #ae5747;
+  --c-mood-2: #c27c46;
+  --c-mood-3: #c6a24e;
+  --c-mood-4: #8fa268;
+  --c-mood-5: #5e8a66;
+  --c-mood-1-wash-day: #f0dad4;
+  --c-mood-2-wash-day: #f1e2d2;
+  --c-mood-3-wash-day: #f1e8d0;
+  --c-mood-4-wash-day: #e3e8d6;
+  --c-mood-5-wash-day: #d9e6dc;
+  --c-mood-1-wash-night: #3a2c28;
+  --c-mood-2-wash-night: #3a3128;
+  --c-mood-3-wash-night: #3a3528;
+  --c-mood-4-wash-night: #2f362a;
+  --c-mood-5-wash-night: #2a3530;
+
+  /* ---- Elevation --------------------------------------------------------- */
+  /* Held whole rather than as colour parts: the shadow IS the primitive. */
+  --c-elev-day: 0 1px 2px rgba(42, 39, 34, 0.06), 0 8px 24px rgba(42, 39, 34, 0.06);
+  --c-elev-night: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TIER 2 — SEMANTIC ROLES
+   The only names a component may reference.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Themeless foundations — type, rhythm, geometry. Identical in every theme, so
+   they are declared once and never redefined below. */
 :root {
   /* Type */
   --font-text: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -44,67 +199,160 @@
   --radius: 0.625rem;
   --radius-sm: 0.375rem;
   --maxw: 64rem;
+}
 
-  /* Light "paper" palette (Color.kt) */
-  --paper-bg: #f4efe6;
-  --paper-sheet: #fcfaf5;
-  --ink-text: #2a2722;
-  --ink-soft: #6b655b;
-  --ink-faint: #a49c8e;
-  /* Accessible small-print colour. --ink-faint fails WCAG AA as body text, so footnote
-     text uses this darker tone (>=4.5:1 on paper) while --ink-faint stays decorative. */
-  --text-subtle: #5f5a4e;
-  --hairline: #e7dfd1;
-  --ink-accent: #33302a;
-  --on-accent: #fcfaf5;
+/* The complete LIGHT palette. Every colour role in the system is defined here and
+   only here; the dark blocks below re-point the same names at night primitives. */
+:root {
+  /* ---- Content layer: warm paper ----------------------------------------- */
+  --paper-bg: var(--c-paper);
+  --paper-sheet: var(--c-sheet);
+  --ink-text: var(--c-ink);
+  --ink-soft: var(--c-ink-soft);
+  --ink-faint: var(--c-ink-faint);
+  --text-subtle: var(--c-ink-subtle);
+  /* Decorative separator, ~1.16:1 — grouping only. Anything whose identity as a
+     control depends on its border uses --border-strong (design system §2.3.1). */
+  --hairline: var(--c-hairline-day);
+  --border-strong: var(--c-border-day);
+  --ink-accent: var(--c-accent-day);
+  --on-accent: var(--c-sheet);
+  --elevation: var(--c-elev-day);
 
-  /* Web-only tokens */
-  --focus-ring: #5e8a66;
-  --link: #4a6b8a;
-  --border-strong: #cbc1ae;
-  --elevation: 0 1px 2px rgba(42, 39, 34, 0.06), 0 8px 24px rgba(42, 39, 34, 0.06);
+  /* ---- Chrome layer: navigation, tables, metadata, controls, admin -------- */
+  --chrome: var(--c-chrome-day);
+  --chrome-2: var(--c-chrome-2-day);
+  --chrome-hair: var(--c-chrome-hair-day);
+  --chrome-ink: var(--c-chrome-ink-day);
+  --chrome-soft: var(--c-chrome-soft-day);
 
-  /* Mood scale (1→5) and washes */
-  --mood-1: #ae5747;
-  --mood-2: #c27c46;
-  --mood-3: #c6a24e;
-  --mood-4: #8fa268;
-  --mood-5: #5e8a66;
-  --mood-1-wash: #f0dad4;
-  --mood-2-wash: #f1e2d2;
-  --mood-3-wash: #f1e8d0;
-  --mood-4-wash: #e3e8d6;
-  --mood-5-wash: #d9e6dc;
+  /* ---- Structural accent — never encodes data ---------------------------- */
+  --indigo: var(--c-indigo-day);
+  --indigo-deep: var(--c-indigo-deep-day);
+  --indigo-wash: var(--c-indigo-wash-day);
+
+  /* ---- Alarm: needs a human, overdue, refused, destructive ---------------- */
+  --clay: var(--c-clay-day);
+  --clay-wash: var(--c-clay-wash-day);
+
+  /* ---- Warn severity only ------------------------------------------------ */
+  --amber: var(--c-amber-day);
+  --amber-wash: var(--c-amber-wash-day);
+
+  /* ---- Interaction ------------------------------------------------------- */
+  --focus-ring: var(--c-focus-day);
+  --link: var(--c-link-day);
+
+  /* ---- Data: the mood ramp ----------------------------------------------- */
+  /* BandTag is the only component permitted to reference these. */
+  --mood-1: var(--c-mood-1);
+  --mood-2: var(--c-mood-2);
+  --mood-3: var(--c-mood-3);
+  --mood-4: var(--c-mood-4);
+  --mood-5: var(--c-mood-5);
+  --mood-1-wash: var(--c-mood-1-wash-day);
+  --mood-2-wash: var(--c-mood-2-wash-day);
+  --mood-3-wash: var(--c-mood-3-wash-day);
+  --mood-4-wash: var(--c-mood-4-wash-day);
+  --mood-5-wash: var(--c-mood-5-wash-day);
 
   color-scheme: light dark;
 }
 
+/* Dark by system preference. Opted out of by an explicit light choice, so the
+   toggle below can win in both directions. Redefines semantic roles only —
+   primitives are theme-independent by construction. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --paper-bg: #1b1a17;
-    --paper-sheet: #24221d;
-    --ink-text: #ebe5d8;
-    --ink-soft: #b7af9e;
-    --ink-faint: #7c7568;
-    --hairline: #34312a;
-    --text-subtle: #9b927f; /* AA-compliant small print on dark paper */
-    --ink-accent: #ebe5d8;
-    --on-accent: #1b1a17;
-    --focus-ring: #8fa268;
-    --link: #9bb6cf;
-    --border-strong: #4a463c;
-    --elevation: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
-    --mood-1-wash: #3a2c28;
-    --mood-2-wash: #3a3128;
-    --mood-3-wash: #3a3528;
-    --mood-4-wash: #2f362a;
-    --mood-5-wash: #2a3530;
+  :root:not([data-theme="light"]) {
+    --paper-bg: var(--c-night-bg);
+    --paper-sheet: var(--c-night-sheet);
+    --ink-text: var(--c-night-ink);
+    --ink-soft: var(--c-night-ink-soft);
+    --ink-faint: var(--c-night-ink-faint);
+    --text-subtle: var(--c-night-ink-subtle); /* AA-compliant small print on dark paper */
+    --hairline: var(--c-night-hairline);
+    --border-strong: var(--c-night-border);
+    --ink-accent: var(--c-night-ink);
+    --on-accent: var(--c-night-bg);
+    --elevation: var(--c-elev-night);
+
+    --chrome: var(--c-chrome-night);
+    --chrome-2: var(--c-chrome-2-night);
+    --chrome-hair: var(--c-chrome-hair-night);
+    --chrome-ink: var(--c-chrome-ink-night);
+    --chrome-soft: var(--c-chrome-soft-night);
+
+    --indigo: var(--c-indigo-night);
+    --indigo-deep: var(--c-indigo-deep-night);
+    --indigo-wash: var(--c-indigo-wash-night);
+
+    --clay: var(--c-clay-night);
+    --clay-wash: var(--c-clay-wash-night);
+
+    --amber: var(--c-amber-night);
+    --amber-wash: var(--c-amber-wash-night);
+
+    --focus-ring: var(--c-focus-night);
+    --link: var(--c-link-night);
+
+    /* Solid mood ramp is intentionally absent: a 3 is a 3 in either theme.
+       Only the washes change ground. */
+    --mood-1-wash: var(--c-mood-1-wash-night);
+    --mood-2-wash: var(--c-mood-2-wash-night);
+    --mood-3-wash: var(--c-mood-3-wash-night);
+    --mood-4-wash: var(--c-mood-4-wash-night);
+    --mood-5-wash: var(--c-mood-5-wash-night);
   }
 }
 
-/* Explicit override hooks for a future in-UI theme toggle. */
-:root[data-theme='light'] { color-scheme: light; }
-:root[data-theme='dark'] { color-scheme: dark; }
+/* Dark by explicit choice. Identical redefinitions, so an in-UI toggle beats the
+   system preference in both directions. */
+:root[data-theme="dark"] {
+  --paper-bg: var(--c-night-bg);
+  --paper-sheet: var(--c-night-sheet);
+  --ink-text: var(--c-night-ink);
+  --ink-soft: var(--c-night-ink-soft);
+  --ink-faint: var(--c-night-ink-faint);
+  --text-subtle: var(--c-night-ink-subtle);
+  --hairline: var(--c-night-hairline);
+  --border-strong: var(--c-night-border);
+  --ink-accent: var(--c-night-ink);
+  --on-accent: var(--c-night-bg);
+  --elevation: var(--c-elev-night);
+
+  --chrome: var(--c-chrome-night);
+  --chrome-2: var(--c-chrome-2-night);
+  --chrome-hair: var(--c-chrome-hair-night);
+  --chrome-ink: var(--c-chrome-ink-night);
+  --chrome-soft: var(--c-chrome-soft-night);
+
+  --indigo: var(--c-indigo-night);
+  --indigo-deep: var(--c-indigo-deep-night);
+  --indigo-wash: var(--c-indigo-wash-night);
+
+  --clay: var(--c-clay-night);
+  --clay-wash: var(--c-clay-wash-night);
+
+  --amber: var(--c-amber-night);
+  --amber-wash: var(--c-amber-wash-night);
+
+  --focus-ring: var(--c-focus-night);
+  --link: var(--c-link-night);
+
+  --mood-1-wash: var(--c-mood-1-wash-night);
+  --mood-2-wash: var(--c-mood-2-wash-night);
+  --mood-3-wash: var(--c-mood-3-wash-night);
+  --mood-4-wash: var(--c-mood-4-wash-night);
+  --mood-5-wash: var(--c-mood-5-wash-night);
+}
+
+/* Tell the UA which form controls and scrollbars to draw. */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BASE
+   ═══════════════════════════════════════════════════════════════════════════ */
 
 *,
 *::before,
@@ -167,6 +415,37 @@ button.primary { background: var(--ink-accent); color: var(--on-accent); border-
   padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0, 0, 0, 0);
   white-space: nowrap; border: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   UTILITIES
+   The handful of things every chrome primitive repeats. Kept here rather than
+   copied into each component's <style>, so a change lands in one place.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Machine text: IDs, hashes, timestamps, counts. tabular-nums so digits in a
+   column line up and a changing number does not make the row twitch. */
+.u-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The chrome micro-label. Small, tracked-out, uppercase mono — it reads as a
+   field name rather than as prose, which is exactly what it is. */
+.u-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--chrome-soft);
+}
+
+/* Wide content (tables, code, key material) scrolls inside its own box so the
+   page body never scrolls sideways. */
+.u-scroll-x {
+  overflow-x: auto;
+  max-width: 100%;
 }
 
 @media (prefers-reduced-motion: reduce) {

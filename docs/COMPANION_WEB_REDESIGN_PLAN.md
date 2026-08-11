@@ -142,6 +142,43 @@ owns this: `topbar { position: relative; z-index: 6 }`, `rail { z-index: 7 }`,
 `body { position: relative; z-index: 1; isolation: isolate }`. Fixed in the render; must not be
 re-broken in the component.
 
+### Phase 1 — landed
+
+Verified independently of the agents that produced it: `pnpm check` 403 files / 0 errors,
+`pnpm test` 195 passed / 5 skipped / 0 failed (baseline was 387/0 and 172/5). 11 components,
+3 type modules, a barrel, and 23 invariant tests.
+
+**The invariants were mutation-tested, not assumed.** Injecting `var(--mood-4)` into `Card.svelte`
+fails 2 tests; injecting `#22c55e` fails 2 others. Both mutations were confirmed to have actually
+applied to the file before the suite was run — a first attempt patched a selector that did not exist,
+the suite passed, and that "pass" meant nothing. Any future change to these tests must be re-proven
+the same way.
+
+**Token preservation was checked in a real CSS engine**, not by parsing. Three pages (plain,
+`data-theme="dark"`, and a copy with only the media *condition* neutralised) were rendered in headless
+Chromium and `getComputedStyle` was read for all 36 pre-existing tokens. Light and system-dark are
+byte-identical to `HEAD`. This method replaced a hand-rolled resolver that reported 18 false
+mismatches because it matched `:root` by first occurrence and collapsed all three blocks onto the
+primitives.
+
+**One deliberate behaviour change, which the agent's "no values changed" summary understated.**
+`:root[data-theme='dark']` previously set `color-scheme: dark` and nothing else — the explicit dark
+toggle produced *light* tokens with a dark form-control hint. It now redefines all 30 themed tokens.
+The in-UI theme toggle the old comment called "future" would not have worked; now it will.
+
+### Carried into Phase 2
+
+- **A live invariant violation predating this work.** `ToolBuilder.svelte:214,224` use
+  `var(--accent, var(--mood-5))`, and `--accent` is defined nowhere in the codebase — so the fallback
+  is active and a selected segmented-control button and a link are painted from the mood ramp right
+  now. `--indigo` exists for exactly this role. (Line 214 also hardcodes `#fff`.)
+- **`--focus-ring` resolves to `#5E8A66`, the same value as `--mood-5`.** Phase 1 gave focus its own
+  primitive so it can move independently without regressing anything, but a focus ring currently
+  renders the same green as a "rad" mood bar. Worth changing on purpose rather than leaving as a
+  coincidence.
+- Only **2** hardcoded colour literals remain in non-`ui/` components — the migration is smaller than
+  the 105 mood references suggest.
+
 ## Phase 2 — the migration
 
 31 components, 105 references. Mechanical but not blind — each reference is either *data* (stays
