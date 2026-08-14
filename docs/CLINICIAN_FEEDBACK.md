@@ -216,6 +216,20 @@ imposed on someone and must be rationed, visible, and adjustable. Reminders are 
 interruption with no affordance side and no rationing beyond on/off. That framing is probably the
 answer to item 4, and it came from her.
 
-**Pending:** evidence review across adaptive notification timing, affirmations, check-in modality,
-activity boards, goals, clinician reports, and low-mood response. Nothing above is a commitment until
-that lands and is checked.
+**Evidence review: landed.** See [EVIDENCE_REVIEW_2026-08.md](./EVIDENCE_REVIEW_2026-08.md). Four of
+her suggestions are supported, three are contradicted, and one of her stated mechanisms is inverted:
+
+| Her suggestion | Verdict |
+|---|---|
+| Fixed repeating reminders get ignored | **Supported** — assume a half-life in weeks |
+| "They only open from a notification → it's working" | **Inverted** — that is a 3.66x stimulus response that says nothing about fit |
+| Make timing dynamic | **Equipoise** — unproven in both directions; the *frequency* half is better supported than the *timing* half |
+| Affirmations matter | **Split** — values-writing yes, positive self-statements harm this population |
+| Kanban board with mood + text | **Half** — BA is strongly evidenced, but columns carry state and drop *when*, which is the load-bearing attribute |
+| Fill the PDF's white space | **Contradicted** — alert fatigue is well quantified; the white space may be the feature |
+| Horizontal timeline | **Neutral** — timeline vs table is close to a wash |
+| Note excerpts capped at a sentence | **Contradicted, strongly** — the best-supported decision in the review is to hold the scores-and-bands line |
+| Low-mood support off the main layout | **Supported** — and already built |
+
+The single most useful thing she produced is not in any paper: the **affordance vs interruption**
+framing, which she reached independently of `stats/SupportOffer.kt`.
