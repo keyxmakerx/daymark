@@ -65,23 +65,64 @@ there is no efficacy evidence on the other side.
 
 ---
 
-## 2. Affirmations — two different things, and the popular one is the harmful one
+## 2. Affirmations — three different things, and the popular one is the weakest
 
-**The single highest-stakes finding, and it is verified.**
+**CORRECTED after a second verification pass. An earlier draft of this document called the harm
+finding "verified" and treated it as established. It is not — it is contested.**
 
 - **Positive self-statements** — the consumer-app deck of "I am enough". Wood, Perunovic & Lee (2009,
-  *Psychological Science* 20, 860–866): people with **low self-esteem who repeated "I'm a lovable
-  person" felt *worse*** than people who said nothing. High self-esteem felt slightly better. The
-  population it harms is precisely Daymark's.
+  *Psychological Science* 20, 860–866) found people with **low self-esteem who repeated "I'm a lovable
+  person" felt *worse*** than people who said nothing. **But a later study failed to replicate it**
+  ("On the failure to replicate past findings regarding positive affirmations and self-esteem",
+  *Journal of Contextual Behavioral Science*, 2019) — low-self-esteem participants in the
+  positive-statement condition did *not* report worse mood or reduced self-regard. So the honest
+  status is: **one striking finding, one failed replication, and no demonstrated benefit on either
+  side.** Do not cite the harm as established.
 - **Self-affirmation theory** — writing briefly about *your own most important values*, not about
-  yourself. Real evidence base: a 2025 meta-analysis across 129 tests / 67 studies / 17,700+
-  participants found significant but **modest** well-being gains; in education d ≈ 0.41, concentrated
-  in identity-threatened groups rather than everyone.
+  yourself. A 2025 meta-analysis across 129 tests / 67 studies / 17,700+ participants found
+  significant but **modest** well-being gains; in education d ≈ 0.41, concentrated in
+  identity-threatened groups.
+- **Self-compassion** — the best-evidenced of the three, and the one nobody asked about. Meta-analytic
+  effect on depression **g ≈ 0.66** (moderate), with 21 RCTs of longer-term interventions showing
+  medium-to-large decreases in depression, anxiety and distress. Critically, **Compassion Focused
+  Therapy (Gilbert) was developed specifically for people with shame and self-criticism** — precisely
+  the population that worries us here.
 
-**Build values-writing. Do not ship positive self-statements.** They share a word and nothing else.
-Values work is also the better first payload for the therapist-authorable builder, because it is
-inherently personal and prompt-driven — whereas canned statements are what a static content list
-gives you and what the evidence says not to ship.
+### Why the replacement is structural, not a matter of gating
+
+The mechanism that made the backfire plausible is **self-verification theory** (Swann): people seek
+information confirming their existing self-view, *even when that view is negative*. That theory is
+well established independently of whether Wood's specific result replicates, and it gives a principled
+rule that does not depend on the contested finding:
+
+> **Never require the person to assert a positive claim about themselves that they do not believe.**
+
+Self-compassion content satisfies this by construction. *"This is a hard moment; hard moments happen
+to people"* is not a claim about your worth, so there is nothing to contradict. Values-writing
+satisfies it too — *"what matters to me"* is not a self-evaluation. **Only the statement deck fails
+it**, and it is also the one with no demonstrated benefit.
+
+**Build self-compassion and values-writing. Do not ship positive self-statements.** Not primarily
+because they harm — that is contested — but because they are the only one of the three with an
+unproven upside *and* a plausible downside mechanism, which is a bad trade at any threshold.
+
+### On gating it behind a measured threshold
+
+The proposal was to let the clinic side gate affirmation content on a self-esteem threshold. Three
+reasons to prefer a different lever:
+
+1. **The harm it guards against is contested**, so the gate would be built on the weakest finding here.
+2. **Measuring self-esteem in order to gate is functionally a screen.** Every catalog instrument
+   carries `nonDiagnostic: true` and `noScreeningFlag: true`. An instrument whose score changes what
+   the app does to you is a screen regardless of what the flag says, and it would be the first one.
+3. **An automated threshold silently classifies the person.** If someone discovers they were filtered
+   out of content for scoring low, that is an inference about themselves delivered by software — the
+   exact harm the product exists to avoid.
+
+**What to build instead:** make the content structurally safe (above) so no gate is needed, and keep a
+**clinician-side availability switch** — a human deciding a module is or is not right for someone.
+That is the existing capability-grant model, needs no new mechanism, no new instrument, and no
+threshold. Human judgement where the evidence is thin; structure where it is not.
 
 ---
 

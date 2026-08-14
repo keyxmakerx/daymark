@@ -224,7 +224,7 @@ her suggestions are supported, three are contradicted, and one of her stated mec
 | Fixed repeating reminders get ignored | **Supported** — assume a half-life in weeks |
 | "They only open from a notification → it's working" | **Inverted** — that is a 3.66x stimulus response that says nothing about fit |
 | Make timing dynamic | **Equipoise** — unproven in both directions; the *frequency* half is better supported than the *timing* half |
-| Affirmations matter | **Split** — values-writing yes, positive self-statements harm this population |
+| Affirmations matter | **Three-way split** — self-compassion (g≈0.66) > values-writing (d≈0.41) > statement decks (unproven, and the harm finding failed to replicate) |
 | Kanban board with mood + text | **Half** — BA is strongly evidenced, but columns carry state and drop *when*, which is the load-bearing attribute |
 | Fill the PDF's white space | **Contradicted** — alert fatigue is well quantified; the white space may be the feature |
 | Horizontal timeline | **Neutral** — timeline vs table is close to a wash |
