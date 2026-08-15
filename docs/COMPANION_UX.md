@@ -74,8 +74,20 @@ All three share one shell (header wordmark, theme toggle, lock/sign-out, a persi
 
 The Companion web UI is the flagship "modern paper" language (see [DESIGN.md](DESIGN.md) and [COMPANION_DESIGN_SYSTEM.md](COMPANION_DESIGN_SYSTEM.md)) ported to the web, **honestly recolored for the web's lower assurance** (a subtle but real signal that this is the convenience path, not the phone).
 
+> **STATUS: SKETCH, NOT THE SHIPPED NAMES.** The block below is the pre-implementation
+> proposal and was written before `companion/web/src/app.css` existed. There is no
+> `companion-tokens.css`; the real file is `app.css`, and it renames most of this
+> (`--paper` → `--paper-bg`, `--sheet` → `--paper-sheet`, `--ink` → `--ink-text`,
+> `--soft` → `--ink-soft`, `--faint` → `--ink-faint`, `--accent` → `--ink-accent`,
+> `--radius-card`/`--radius-chip` → `--radius`/`--radius-sm`, `--hair` → `--hairline`).
+> The `--trust-*` family was **never implemented and must not be**: §10.1 and §496 below
+> rule out painting a served page green, and `COMPANION_DESIGN_SYSTEM.md` §2.3.2
+> generalises that into a ban on health-coloured status tokens, enforced by
+> `companion/web/src/lib/components/ui/invariants.test.ts` group (d). Only the mood ramp
+> survives unrenamed. Kept for the reasoning, which still holds; do not copy the names.
+
 ```css
-/* companion-tokens.css — vendored, no @import, no web-font CDN */
+/* companion-tokens.css — the ORIGINAL PROPOSAL; superseded by app.css, see the note above */
 :root {
   /* paper (light) — mirrors DESIGN.md Color.kt */
   --paper:    #F4EFE6;  --sheet:   #FCFAF5;  --ink:     #2A2722;
