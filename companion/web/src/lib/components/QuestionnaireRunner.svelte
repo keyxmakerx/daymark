@@ -7,6 +7,13 @@
 
   let { def, onDone }: { def: InstrumentDefinition; onDone?: (r: InstrumentResult) => void } = $props()
 
+  /** No scales at all — a guided exercise rather than a questionnaire. */
+  const unscored = $derived((def.scoring?.scales ?? []).length === 0)
+  /** The last info item's body: what the exercise itself says on the way out. */
+  const closingBody = $derived(
+    [...def.items].reverse().find((i) => i.type === 'info' && !!i.body)?.body ?? '',
+  )
+
   const provDisclaimer = $derived(provenanceDisclaimer(def.provenance))
   const provSource = $derived(provenanceSource(def.provenance))
 
@@ -124,7 +131,17 @@
     {/each}
 
     {#if error}<Callout tone="critical">{error}</Callout>{/if}
-    <button class="primary" onclick={submit}>Finish & see my results</button>
+    <button class="primary" onclick={submit}>{unscored ? 'Finish' : 'Finish & see my results'}</button>
+  {:else if unscored}
+    <!--
+      A guided exercise has no scales, so `result` is empty and the scored branch below would render
+      an empty card under a "your results" heading. There is no score to show and that is the point:
+      these end by saying so, using the definition's own closing words rather than copy invented here.
+    -->
+    <div class="done">
+      <p class="closing">{closingBody || 'That is the end.'}</p>
+      <p class="framing faint">Nothing here was scored, and nothing you wrote leaves this device.</p>
+    </div>
   {:else}
     {#each result as sr (sr.scaleId)}
       <div class="result {toneClass(sr.scaleId)}">
@@ -140,6 +157,8 @@
 
 <style>
   .q { max-width: 40rem; }
+  .done { display: flex; flex-direction: column; gap: var(--space-3); }
+  .closing { font-family: var(--font-display); font-size: 1.05rem; line-height: 1.5; margin: 0; }
   .stack { display: flex; flex-direction: column; gap: var(--space-4); }
   .prov-source { margin: 0; }
   .intro { margin: 0; }

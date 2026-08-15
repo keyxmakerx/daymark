@@ -33,6 +33,23 @@ describe('unknown refs fail closed (finding 1)', () => {
     }
   })
 
+  it('does not treat inherited object properties as present (prototype-chain hole)', () => {
+    // The first fail-closed fix used `ref in answers`, and `in` walks the prototype chain — so
+    // `constructor`, `toString`, `__proto__` and `hasOwnProperty` all tested as PRESENT and `ne`
+    // returned true on them. Any authored definition could reach it. The original tests missed it
+    // because they only ever asked about a genuinely-absent key.
+    const answers = { real: 3 }
+    for (const ref of ['constructor', 'toString', '__proto__', 'hasOwnProperty', 'valueOf']) {
+      expect(evalPredicate(P({ ref, op: 'ne', value: 1 }), answers), `${ref} must fail closed`).toBe(false)
+      expect(evalPredicate(P({ ref, op: 'eq', value: 1 }), answers), `${ref} must fail closed`).toBe(false)
+    }
+    const visible = visibleItemIds(
+      [{ id: 'gated', visibleWhen: P({ ref: 'constructor', op: 'ne', value: 1 }) }],
+      answers,
+    )
+    expect(visible.has('gated')).toBe(false)
+  })
+
   it('specifically pins `ne`, which is the one that regressed', () => {
     expect(evalPredicate(P({ ref: 'absent', op: 'ne', value: 1 }), answers)).toBe(false)
   })

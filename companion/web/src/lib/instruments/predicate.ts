@@ -37,7 +37,11 @@ function evalLeaf(ref: string, op: PredicateOp, value: unknown, answers: Answers
    *
    * Absence is not a value to compare against. If we have not been told, we do not show.
    */
-  if (!(ref in answers)) return false
+  // `Object.hasOwn`, NOT `ref in answers`: `in` walks the prototype chain, so `constructor`,
+  // `toString`, `__proto__` and `hasOwnProperty` all tested as PRESENT and `ne` returned true on
+  // them — the exact fail-open this guard exists to close, reachable from any authored definition.
+  // The first version of this fix used `in` and its tests only covered a genuinely-absent key.
+  if (!Object.hasOwn(answers, ref)) return false
   const a = answers[ref]
   switch (op) {
     case 'eq':
