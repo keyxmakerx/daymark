@@ -35,8 +35,7 @@
           {
             "fieldPath": "photoPath",
             "columnName": "photoPath",
-            "affinity": "TEXT",
-            "notNull": false
+            "affinity": "TEXT"
           }
         ],
         "primaryKey": {
@@ -44,9 +43,7 @@
           "columnNames": [
             "id"
           ]
-        },
-        "indices": [],
-        "foreignKeys": []
+        }
       },
       {
         "tableName": "activities",
@@ -88,9 +85,7 @@
           "columnNames": [
             "id"
           ]
-        },
-        "indices": [],
-        "foreignKeys": []
+        }
       },
       {
         "tableName": "entry_activity",
@@ -126,8 +121,7 @@
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_entry_activity_activityId` ON `${TABLE_NAME}` (`activityId`)"
           }
-        ],
-        "foreignKeys": []
+        ]
       },
       {
         "tableName": "journal_entries",
@@ -174,8 +168,7 @@
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_journal_entries_dateTime` ON `${TABLE_NAME}` (`dateTime`)"
           }
-        ],
-        "foreignKeys": []
+        ]
       },
       {
         "tableName": "goals",
@@ -196,8 +189,7 @@
           {
             "fieldPath": "activityId",
             "columnName": "activityId",
-            "affinity": "INTEGER",
-            "notNull": false
+            "affinity": "INTEGER"
           },
           {
             "fieldPath": "targetPerWeek",
@@ -237,9 +229,7 @@
           "columnNames": [
             "id"
           ]
-        },
-        "indices": [],
-        "foreignKeys": []
+        }
       },
       {
         "tableName": "sleep_logs",
@@ -310,8 +300,7 @@
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_sleep_logs_night` ON `${TABLE_NAME}` (`night`)"
           }
-        ],
-        "foreignKeys": []
+        ]
       },
       {
         "tableName": "treatments",
@@ -347,9 +336,7 @@
           "columnNames": [
             "id"
           ]
-        },
-        "indices": [],
-        "foreignKeys": []
+        }
       },
       {
         "tableName": "trackers",
@@ -409,9 +396,7 @@
           "columnNames": [
             "id"
           ]
-        },
-        "indices": [],
-        "foreignKeys": []
+        }
       },
       {
         "tableName": "tracker_logs",
@@ -464,8 +449,7 @@
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_tracker_logs_trackerId` ON `${TABLE_NAME}` (`trackerId`)"
           }
-        ],
-        "foreignKeys": []
+        ]
       },
       {
         "tableName": "reminders",
@@ -507,9 +491,7 @@
           "columnNames": [
             "id"
           ]
-        },
-        "indices": [],
-        "foreignKeys": []
+        }
       },
       {
         "tableName": "assessment_results",
@@ -562,8 +544,7 @@
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_assessment_results_key` ON `${TABLE_NAME}` (`key`)"
           }
-        ],
-        "foreignKeys": []
+        ]
       },
       {
         "tableName": "thought_records",
@@ -646,8 +627,7 @@
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_thought_records_dateTime` ON `${TABLE_NAME}` (`dateTime`)"
           }
-        ],
-        "foreignKeys": []
+        ]
       },
       {
         "tableName": "safety_plan_items",
@@ -700,8 +680,7 @@
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_safety_plan_items_section` ON `${TABLE_NAME}` (`section`)"
           }
-        ],
-        "foreignKeys": []
+        ]
       },
       {
         "tableName": "offer_records",
@@ -757,11 +736,9 @@
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_offer_records_offeredAt` ON `${TABLE_NAME}` (`offeredAt`)"
           }
-        ],
-        "foreignKeys": []
+        ]
       }
     ],
-    "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
       "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2788d49123cd090bdbc8a875ead1671a')"
