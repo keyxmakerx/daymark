@@ -42,6 +42,12 @@ object AppModule {
                 AppDatabase.MIGRATION_12_13,
                 AppDatabase.MIGRATION_13_14,
                 AppDatabase.MIGRATION_14_15,
+                // Every migration declared on AppDatabase must appear in this list. A migration
+                // written and not registered here is invisible until an upgrade: Room finds no path
+                // from the installed version to the new one and throws IllegalStateException on the
+                // first database access, on the phone of someone who already had data. New installs
+                // are unaffected, which is why it survives testing.
+                AppDatabase.MIGRATION_15_16,
             )
             .build()
 
@@ -83,6 +89,9 @@ object AppModule {
 
     @Provides
     fun provideOfferRecordDao(db: AppDatabase): com.daymark.app.data.dao.OfferRecordDao = db.offerRecordDao()
+
+    @Provides
+    fun provideLifeEventDao(db: AppDatabase): com.daymark.app.data.dao.LifeEventDao = db.lifeEventDao()
 
     @Provides
     @Singleton

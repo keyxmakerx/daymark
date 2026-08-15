@@ -33,8 +33,9 @@ import com.daymark.app.data.entity.Treatment
         com.daymark.app.data.entity.SafetyPlanItem::class,
         com.daymark.app.data.entity.OfferRecord::class,
         com.daymark.app.data.entity.GoalStep::class,
+        com.daymark.app.data.entity.LifeEvent::class,
     ],
-    version = 15,
+    version = 16,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -52,6 +53,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun safetyPlanDao(): com.daymark.app.data.dao.SafetyPlanDao
     abstract fun offerRecordDao(): com.daymark.app.data.dao.OfferRecordDao
     abstract fun goalStepDao(): com.daymark.app.data.dao.GoalStepDao
+    abstract fun lifeEventDao(): com.daymark.app.data.dao.LifeEventDao
 
     /** Seeds a sensible set of starter activities on first install. */
     class SeedCallback : Callback() {
@@ -327,6 +329,42 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_goal_steps_goalId` " +
                         "ON `goal_steps` (`goalId`)",
+                )
+            }
+        }
+
+        /**
+         * v16 adds `life_events` — the person's own marks on their history. Existing data is
+         * preserved; nothing else in the schema is touched.
+         *
+         * The SQL is Room's own generated form for
+         * [com.daymark.app.data.entity.LifeEvent], column for column and in declaration order,
+         * because `runMigrationsAndValidate` compares this table against what Room would have
+         * written and a difference in wording fails the comparison even when the meaning matches.
+         * `epochDay` is `INTEGER NOT NULL` — a *day number*, not a timestamp, following
+         * `sleep_logs.night`.
+         *
+         * `index_life_events_epochDay` is the index the entity declares, and it is not decoration:
+         * every read of this table is by date. An index present on the entity and missing from the
+         * migration is the drift this file has shipped before — it does not fail at runtime, it
+         * fails the schema comparison on someone else's change.
+         *
+         * No foreign key and no cascade. A life event belongs to nothing else; it is not a child of
+         * a goal, an entry or a journal page, and it must survive the deletion of everything around
+         * it.
+         */
+        val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `life_events` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`epochDay` INTEGER NOT NULL, " +
+                        "`label` TEXT NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_life_events_epochDay` " +
+                        "ON `life_events` (`epochDay`)",
                 )
             }
         }

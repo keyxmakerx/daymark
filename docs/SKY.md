@@ -135,24 +135,29 @@ than by discipline at the call site.
 | Check-in | `mood_entries` | `SELECT id, dateTime, moodLevel FROM mood_entries` | new projection on `EntryDao` |
 | Journal | `journal_entries` | `SELECT id, dateTime FROM journal_entries` | new projection on `JournalDao` — **must not select `title` or `body`** |
 | Project step | `goal_steps` | `SELECT id, completedAt FROM goal_steps WHERE state = 'done' AND completedAt IS NOT NULL` | new projection on `GoalStepDao` |
-| Exercise | — | — | **unresolved, see below** |
+| Practice | — | — | **unresolved, see below** |
 | Goal reached | — | — | **blocked, see below** |
-| Life event | — | — | **new table, see below** |
+| Life event | `life_events` | `SELECT id, epochDay FROM life_events` — **must not select `label`** | table built; projection and `SkyRepository` still to write |
 
-**Three gaps in the data model, each a decision rather than a task:**
+**Two gaps left in the data model, each a decision rather than a task, and one now closed:**
 
 - **"Goal reached" has nothing to read.** `data/entity/Goal.kt` has `archived` and no completion
   field at all, and a habit goal has no notion of being reached in the first place. Either a
   `reachedAt: Long?` column is added, or kind 4 is dropped and a project's completion is expressed
   by its steps. §D5 says abandoning must never be counted as failure, so `archived` **must not** be
   read as "reached" — that would draw a star for giving up and call it an achievement.
-- **"Exercise" has no obvious source.** The nearest existing record is `thought_records` (a CBT
-  exercise the person completed and dated). `assessment_results` is the other candidate and is a
-  worse fit: a questionnaire run carries a score and a band, and a star for it sits close to the
-  scoring the Sky refuses to do. Recommendation: `ThoughtRecord` → `EXERCISE`, and leave assessment
+- **"Practice" has no obvious source.** The nearest existing record is `thought_records` (a CBT
+  practice the person worked through and dated). `assessment_results` is the other candidate and is
+  a worse fit: a questionnaire run carries a score and a band, and a star for it sits close to the
+  scoring the Sky refuses to do. Recommendation: `ThoughtRecord` → `PRACTICE`, and leave assessment
   runs off until the prescribed-module work in §D3 gives them a proper "assignment run" record.
-- **Life events are a new table.** `SkyKind.LIFE_EVENT` is laid out and drawn as the loudest form,
-  and there is nothing to load into it. Needs an entity, a DAO, a migration and an owner (§12.5).
+  (The kind was called `EXERCISE`; it was renamed because it was read as *physical* exercise, which
+  is a goal and not a kind. See §2.)
+- **Life events are a new table — now built.** `life_events` is `(id, epochDay, label, createdAt)`
+  with `epochDay` indexed, added in schema v16; entity, DAO, migration, Hilt binding, backup
+  round-trip and a `ui/lifeevents/` screen exist. What is still missing is the Sky's own side: the
+  no-text projection above, the `SkyRepository` that merges it in, and a navigation entry (§11
+  open question 1).
 
 **Wiring:** a `SkyRepository` merging the projections into `List<SkyRecord>` and converting
 `epochMillis → LocalDate.toEpochDay()` **at that boundary**, with the zone (`sky/` deliberately has
@@ -258,7 +263,7 @@ Six kinds, exactly. This list is closed; adding a seventh is a design decision, 
 | # | Kind | Source of truth | What one star means | Authored by |
 |---|---|---|---|---|
 | 1 | **Check-in** | `MoodEntry` | one logged check-in | the person |
-| 2 | **Exercise** | completed exercise / assignment run | one completed run | the person |
+| 2 | **Practice** | a therapeutic practice worked through — thought record, breathing, compassion | one practice used | the person |
 | 3 | **Journal entry** | `JournalEntry` | one entry written | the person |
 | 4 | **Goal reached** | `Goal` (→ project, per [D5](./DECISIONS_2026-08.md#d5-goals-become-projects--containers-for-concrete-steps)) | a goal the person marked reached | the person |
 | 5 | **Project step** | a step within a project | one step completed | the person |
@@ -267,6 +272,14 @@ Six kinds, exactly. This list is closed; adding a seventh is a design decision, 
 **Every kind is an act the person performed.** Nothing on the Sky is derived, detected, scored,
 inferred or synthesised. If a star is on the Sky, the person did the thing. This is the single
 sentence that makes the whole surface defensible, and it is why kind 6 is the only new data type.
+
+**Kind 2 was called "Exercise" and is now "Practice"** (`SkyKind.PRACTICE`, wire key `practice`).
+It always meant a *therapeutic* practice — a thought record, a breathing exercise, a
+self-compassion or values exercise — but every reader arrives at "exercise star" with a run or a
+gym session in mind, and the maintainer read it that way on his own design. Physical exercise needs
+no kind of its own: it is a goal, either a habit goal or a project with steps, and it already
+reaches the Sky through kinds 4 and 5. "Session" and "tool" were the other candidates — a session
+is something you attend, a tool is something the app owns rather than something the person did.
 
 ### 2.1 Rules that fall out of "every star is an act"
 
@@ -280,7 +293,7 @@ sentence that makes the whole surface defensible, and it is why kind 6 is the on
   ([D5](./DECISIONS_2026-08.md#d5-goals-become-projects--containers-for-concrete-steps)), including
   here. An abandoned project's completed steps keep their stars — the steps happened; abandoning is
   not a failure and does not retract history.
-- **No negative star.** There is no glyph for a missed reminder, a skipped exercise, or a broken
+- **No negative star.** There is no glyph for a missed reminder, a practice skipped, or a broken
   intention. The Sky records what was done, never what was not.
 - **A goal reached is one star, not a bigger one.** Reaching a goal is a kind, not a rank (§3.4).
 
@@ -390,7 +403,7 @@ They differ in what surrounds the core:
 | Kind | Form | Silhouette in one word |
 |---|---|---|
 | Check-in | core + soft halo | a breath |
-| Exercise | core + open ring | a circuit |
+| Practice | core + open ring | a circuit |
 | Journal entry | core + short underline beneath | a written line |
 | Goal reached | core + four-point cross-rays | a glint |
 | Project step | core + a hairline **thread** back to the previous step of the same project | a link |
@@ -480,7 +493,7 @@ it makes the writing feel watched. The Sky is a worse place for it than the comp
 reasons: it is a surface people show to other people ("look at my sky"), and it is a surface people
 screenshot. A shoulder-surfer at L4 must learn nothing but that something was written.
 
-The same restraint applies more weakly to the other kinds — an exercise star names the exercise, a
+The same restraint applies more weakly to the other kinds — a practice star names the practice, a
 check-in star gives the mood label the person chose and their own note only if they tap through. When
 in doubt, the Sky names the act and hands off to the feature that owns the content.
 
@@ -742,7 +755,7 @@ No measurement is possible in this environment. Everything below is a **budget a
 | Profile | Span | Stars | Notes |
 |---|---|---|---|
 | Typical | 2 years | ~1,200 | one check-in most days, occasional other kinds |
-| Heavy | 5 years | ~6,000 | 2 check-ins/day plus exercises, journal, project steps |
+| Heavy | 5 years | ~6,000 | 2 check-ins/day plus practices, journal, project steps |
 | Extreme | 10 years | ~15,000 | the number the architecture must not fall over at |
 
 Plus the decorative field, which is a fixed cost independent of data.
@@ -905,12 +918,14 @@ device.
 4. **Performance is budgeted, not measured** (§8.3). Every number is still a target on a device. The
    one exception is the precompute step, which is now real: 5,393 records → 5,393 stars → 120 rows
    in 15–29 ms on a plain JVM. Frame time, cold open and peak heap remain unmeasured.
-5. **The life-event record is new schema.** §2.2 describes it; it needs a migration and an owner. It
-   is now also the only kind with a laid-out glyph and nothing to load into it (§0.4).
+5. **The life-event record is built; its wiring to the Sky is not.** `life_events` landed in schema
+   v16 with the entity, DAO, migration, Hilt binding, backup round-trip and an add/list/delete
+   screen under `ui/lifeevents/`. What is still open is the no-text projection, the `SkyRepository`
+   that merges it with the other kinds, and where the screen hangs in navigation (§11 question 1).
 5a. **Two more data gaps found while wiring the kinds** (§0.4): "goal reached" has no column to read
    — and `archived` **must not** be pressed into service, because that would draw a star for giving
-   up and call it an achievement, against §D5. "Exercise" has no unambiguous source;
-   `thought_records` is the recommendation and `assessment_results` is the one to avoid.
+   up and call it an achievement, against §D5. "Practice" (formerly "Exercise") has no unambiguous
+   source; `thought_records` is the recommendation and `assessment_results` is the one to avoid.
 6. **Proposed copy in §5.1 is new copy for a new surface**, not fixed copy. Any non-diagnostic,
    provenance or privacy sentence appearing near the Sky (§6.4) must be reused verbatim from existing
    constants rather than written to fit this surface's tone.

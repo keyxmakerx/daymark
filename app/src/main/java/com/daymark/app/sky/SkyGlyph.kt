@@ -147,9 +147,9 @@ object SkyGlyph {
         else -> 0
     }
 
-    /** The open ring around an exercise star, and the outer ring on a life event. `0` = no ring. */
+    /** The open ring around a practice star, and the outer ring on a life event. `0` = no ring. */
     fun ringRadiusDp(kind: SkyKind): Float = when (kind) {
-        SkyKind.EXERCISE -> 4.4f
+        SkyKind.PRACTICE -> 4.4f
         SkyKind.LIFE_EVENT -> 7.0f
         else -> 0f
     }

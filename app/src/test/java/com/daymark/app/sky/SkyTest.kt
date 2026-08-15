@@ -1,6 +1,7 @@
 package com.daymark.app.sky
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -383,7 +384,7 @@ class SkyTest {
             SkyRecord(SkyKind.CHECK_IN, 1L, day, moodLevel = 2),
             SkyRecord(SkyKind.CHECK_IN, 2L, day, moodLevel = 4),
             SkyRecord(SkyKind.JOURNAL, 3L, day),
-            SkyRecord(SkyKind.EXERCISE, 4L, day),
+            SkyRecord(SkyKind.PRACTICE, 4L, day),
             SkyRecord(SkyKind.PROJECT_STEP, 5L, day),
             SkyRecord(SkyKind.GOAL_REACHED, 6L, day),
         )
@@ -529,6 +530,37 @@ class SkyTest {
         for (kind in SkyKind.entries) assertEquals(kind, SkyKind.fromKey(kind.key))
         assertEquals("kind keys are not unique", SkyKind.entries.size, SkyKind.entries.map { it.key }.toSet().size)
     }
+
+    /**
+     * The kind that means a thought record must not read as a jog.
+     *
+     * It was `EXERCISE("exercise", "An exercise you finished.")`, and the maintainer read his own
+     * design as physical exercise — which is the strongest evidence there is that a user would.
+     * Physical exercise is a goal and has stars already; nothing is lost by taking the word back.
+     */
+    @Test
+    fun `the practice kind cannot be read as physical exercise`() {
+        // The detector fires on the copy this replaced, in both the key and the line. Without this
+        // the sweep below would pass against a vocabulary that never changed.
+        assertTrue("detector is broken", readsAsWorkout("exercise"))
+        assertTrue("detector is broken", readsAsWorkout("An exercise you finished."))
+        assertTrue("detector is broken", readsAsWorkout("A workout you did."))
+        assertFalse("detector is too greedy", readsAsWorkout("A practice you used."))
+
+        assertEquals("practice", SkyKind.PRACTICE.key)
+        for (kind in SkyKind.entries) {
+            assertFalse("${kind.name}'s key reads as a workout: ${kind.key}", readsAsWorkout(kind.key))
+            assertFalse(
+                "${kind.name} says \"${kind.introduction}\", which reads as physical exercise",
+                readsAsWorkout(kind.introduction),
+            )
+        }
+        // And the line has to say what the kind is, not merely avoid saying what it is not.
+        assertTrue(SkyKind.PRACTICE.introduction.lowercase().contains("practice"))
+    }
+
+    private fun readsAsWorkout(text: String): Boolean =
+        listOf("exercise", "workout", "gym", "cardio", "training").any { text.contains(it, ignoreCase = true) }
 
     @Test
     fun `no introduction congratulates anyone`() {

@@ -118,7 +118,7 @@ class SkyGlyphTest {
         assertEquals(4, SkyGlyph.rayCount(SkyKind.LIFE_EVENT))
         assertEquals(0, SkyGlyph.rayCount(SkyKind.CHECK_IN))
         assertEquals(0, SkyGlyph.rayCount(SkyKind.JOURNAL))
-        assertEquals(0, SkyGlyph.rayCount(SkyKind.EXERCISE))
+        assertEquals(0, SkyGlyph.rayCount(SkyKind.PRACTICE))
         assertEquals(0, SkyGlyph.rayCount(SkyKind.PROJECT_STEP))
     }
 

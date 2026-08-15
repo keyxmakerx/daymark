@@ -13,6 +13,7 @@ import com.daymark.app.data.entity.EntryActivityCrossRef
 import com.daymark.app.data.entity.Goal
 import com.daymark.app.data.entity.GoalStep
 import com.daymark.app.data.entity.JournalEntry
+import com.daymark.app.data.entity.LifeEvent
 import com.daymark.app.data.entity.AssessmentResult
 import com.daymark.app.data.entity.MoodEntry
 import com.daymark.app.data.entity.ThoughtRecord
@@ -138,6 +139,25 @@ data class BackupSafetyPlanItem(
     val id: Long, val section: String, val position: Int, val text: String, val detail: String,
 )
 
+/**
+ * One `life_events` row. Added in v15, alongside the table.
+ *
+ * All four columns, including [createdAt], which nothing displays. A backup that dropped it would
+ * silently rewrite every restored row's creation time to zero, and the field a person cannot see is
+ * the one whose loss nothing reports.
+ *
+ * [epochDay] is a day number (`LocalDate.toEpochDay()`), not millis — see
+ * [com.daymark.app.data.entity.LifeEvent]. It is carried across verbatim, so a backup restored on a
+ * phone in another timezone puts the event back on the day the person chose.
+ */
+@Serializable
+data class BackupLifeEvent(
+    val id: Long,
+    val epochDay: Long,
+    val label: String,
+    val createdAt: Long = 0,
+)
+
 @Serializable
 data class BackupData(
     /**
@@ -194,6 +214,18 @@ data class BackupData(
      * the boards looked like they had never been written.
      */
     val goalSteps: List<BackupGoalStep> = emptyList(),
+    /**
+     * The marks the person placed on their own history. Added in v15.
+     *
+     * Defaulted like everything else added since v1, so a v14 file still reads — a person's older
+     * backup must never become unreadable because a table was added after they took it.
+     *
+     * This list is the one in the file that cannot be reconstructed from anything else. A check-in,
+     * a journal entry and a project step are all recoverable in spirit from the person's own memory
+     * of what they did; a life event is a decision they made once about what mattered, in their own
+     * words, and there is no second copy of it anywhere on the device.
+     */
+    val lifeEvents: List<BackupLifeEvent> = emptyList(),
 )
 
 /**
@@ -255,6 +287,7 @@ class BackupManager @Inject constructor(
     private val achievementsStore: com.daymark.app.data.AchievementsStore,
     private val thoughtRecordDao: com.daymark.app.data.dao.ThoughtRecordDao,
     private val safetyPlanDao: com.daymark.app.data.dao.SafetyPlanDao,
+    private val lifeEventDao: com.daymark.app.data.dao.LifeEventDao,
     // The reception ledger, held only to be able to empty it on a REPLACE — see importReplace.
     // Deliberately the repository and not `OfferRecordDao`: the repository is the seam that decides
     // what may be read out of that table, and a backup path has no business reading rows at all.
@@ -316,6 +349,9 @@ class BackupManager @Inject constructor(
             },
             safetyPlan = safetyPlanDao.getAll().map {
                 BackupSafetyPlanItem(it.id, it.section, it.position, it.text, it.detail)
+            },
+            lifeEvents = lifeEventDao.getAll().map {
+                BackupLifeEvent(it.id, it.epochDay, it.label, it.createdAt)
             },
         )
         return json.encodeToString(data)
@@ -436,6 +472,13 @@ class BackupManager @Inject constructor(
         data.safetyPlan.forEach {
             safetyPlanDao.insert(SafetyPlanItem(it.id, it.section, it.position, it.text, it.detail))
         }
+        // Life events keep the ids the file gives them, like every other REPLACE insert. They have
+        // no foreign key in either direction, so nothing needs remapping — and nothing else points
+        // at a life event, which is why an id collision here cannot misfile anything.
+        lifeEventDao.deleteAll()
+        data.lifeEvents.forEach {
+            lifeEventDao.insert(LifeEvent(it.id, it.epochDay, it.label, it.createdAt))
+        }
 
         /*
          * The reception ledger is emptied here, and it is the one table with no matching restore
@@ -550,6 +593,14 @@ class BackupManager @Inject constructor(
                 SafetyPlanItem(0, s.section, safetyPlanDao.nextPosition(s.section), s.text, s.detail),
             )
         }
+        // Life events take fresh row ids, like every other MERGE insert, so a row from the file
+        // cannot land on top of one already on this phone. `epochDay` and `label` are
+        // carried across unchanged: a merge must not move the date or edit the words. Duplicates are
+        // left alone rather than de-duplicated by (day, label) — two people can be remembered on one
+        // date, and the same line written twice is the person's to delete, not this code's to judge.
+        data.lifeEvents.forEach { e ->
+            lifeEventDao.insert(LifeEvent(0, e.epochDay, e.label, e.createdAt))
+        }
     }
 
     /**
@@ -575,7 +626,9 @@ class BackupManager @Inject constructor(
         android.util.Base64.decode(text, android.util.Base64.NO_WRAP)
 
     companion object {
-        // v14 adds `goalSteps` and `BackupGoal.kind`. Both are defaulted, so a v13 file still reads.
-        const val CURRENT_VERSION = 14
+        // v15 adds `lifeEvents`, defaulted, so a v14 file still reads. The bump is what stops a
+        // file written by this build from claiming to be v14: a v14 reader would accept it and
+        // drop the life events without saying so.
+        const val CURRENT_VERSION = 15
     }
 }

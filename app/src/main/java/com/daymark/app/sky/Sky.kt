@@ -355,7 +355,7 @@ object Sky {
  * **Every kind is an act the person performed.** Nothing on the Sky is derived, detected, scored,
  * inferred or synthesised — if a star is there, the person did the thing. That is what lets the
  * surface exist at all, and it is why there is no kind for a notification sent, an offer made, an
- * app open, a suggestion declined, a missed reminder or a skipped exercise. There is no negative
+ * app open, a suggestion declined, a missed reminder or a practice skipped. There is no negative
  * star. The reception ledger `docs/DECISIONS_2026-08.md` §D1a describes is the decision engine's
  * private business and never appears here.
  *
@@ -368,7 +368,25 @@ object Sky {
  */
 enum class SkyKind(val key: String, val introduction: String) {
     CHECK_IN("check_in", "A check-in you logged."),
-    EXERCISE("exercise", "An exercise you finished."),
+
+    /**
+     * A therapeutic practice the person worked through — a thought record, a breathing exercise, a
+     * self-compassion or values exercise.
+     *
+     * **This was `EXERCISE`, and the name was the whole defect.** A reader arrives at "exercise
+     * star" with physical exercise in mind; the maintainer did, on his own design, which is the
+     * strongest evidence available that users would too. Physical exercise needs no kind of its
+     * own — it is a goal, either a habit goal or a project with steps, and it already reaches the
+     * sky through [GOAL_REACHED] and [PROJECT_STEP] like any other goal.
+     *
+     * `SESSION` and `TOOL` were the other two candidates and both were dropped: a session is
+     * something you attend, and a tool is something the app owns rather than something the person
+     * did — which is the one claim every kind here has to be able to make.
+     *
+     * [introduction] says *used*, not *finished*. A practice worked halfway through is still a
+     * practice used, and "finished" quietly grades the attempt.
+     */
+    PRACTICE("practice", "A practice you used."),
     JOURNAL("journal", "An entry you wrote."),
     GOAL_REACHED("goal_reached", "A goal you reached."),
     PROJECT_STEP("project_step", "A step you completed."),
