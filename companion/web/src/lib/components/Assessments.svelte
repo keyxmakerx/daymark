@@ -1,6 +1,6 @@
 <script lang="ts">
   import { CATALOG, getInstrument, PROVENANCE_LABEL, PROVENANCE_GLYPH } from '../instruments'
-  import type { InstrumentResult, TaskResult } from '../instruments/types'
+  import type { InstrumentDefinition, InstrumentResult, TaskResult } from '../instruments/types'
   import { ATTENTION_TASK } from '../tasks/attention'
   import QuestionnaireRunner from './QuestionnaireRunner.svelte'
   import AttentionTask from './AttentionTask.svelte'
@@ -32,20 +32,30 @@
     a.click()
     URL.revokeObjectURL(url)
   }
+
+  /**
+   * What to call this in the list. A definition with no scales measures nothing and produces no
+   * band — calling it a questionnaire contradicts its own framing, which opens "This is a personal
+   * reflection exercise". The two guided exercises added to the catalog were both labelled
+   * "Questionnaire" here.
+   */
+  function kindOf(inst: InstrumentDefinition): string {
+    return (inst.scoring?.scales ?? []).length === 0 ? 'Guided exercise' : 'Questionnaire'
+  }
 </script>
 
 <div class="assess">
   {#if !selection}
     <p class="muted lead">
-      Sit-down self-checks and a focus exercise for a big screen. Everything runs and stays
-      on this device — <strong>non-diagnostic</strong>, license-clean, and never uploaded.
+      Sit-down self-checks, guided exercises, and a focus task for a big screen. Everything runs
+      and stays on this device — <strong>non-diagnostic</strong>, license-clean, and never uploaded.
     </p>
     <ul class="menu">
       {#each CATALOG as inst (inst.instrumentId)}
         <li>
           <button onclick={() => (selection = { kind: 'instrument', id: inst.instrumentId })}>
             <span class="t">{inst.title}</span>
-            <span class="s faint">Questionnaire · ~{inst.estimatedMinutes ?? 3} min · <span class="prov prov-{inst.provenance.tier}">{PROVENANCE_GLYPH[inst.provenance.tier]} {PROVENANCE_LABEL[inst.provenance.tier]}</span></span>
+            <span class="s faint">{kindOf(inst)} · ~{inst.estimatedMinutes ?? 3} min · <span class="prov prov-{inst.provenance.tier}">{PROVENANCE_GLYPH[inst.provenance.tier]} {PROVENANCE_LABEL[inst.provenance.tier]}</span></span>
           </button>
         </li>
       {/each}
@@ -58,7 +68,7 @@
     </ul>
   {:else}
     <div class="runbar">
-      <button onclick={back}>← All self-checks</button>
+      <button onclick={back}>← Back to the list</button>
       {#if lastResult}<button onclick={download}>Download result (JSON)</button>{/if}
     </div>
 
@@ -78,7 +88,12 @@
   .menu .t { font-family: var(--font-display); font-size: 1.05rem; }
   .menu .s { font-size: 0.85rem; }
   .prov { font-weight: 600; }
-  .prov-validated { color: var(--mood-5); }
-  .prov-custom { color: var(--mood-2); }
+  /* Provenance tiers. "Validated" is a verification, and verification is solid ink here — it was
+     --mood-5, a green tick in all but shape, which is the one claim this product may not make.
+     "Custom" is warn severity by the token contract, and amber is where that lives; it was
+     --mood-2. Both tiers are also spelled out in words beside the mark, so neither depends on
+     colour to be read. */
+  .prov-validated { color: var(--ink-text); }
+  .prov-custom { color: var(--amber); }
   .runbar { display: flex; gap: var(--space-3); }
 </style>

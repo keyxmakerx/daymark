@@ -64,8 +64,12 @@
     text-align: center;
     transition: border-color 120ms ease, background 120ms ease;
   }
+  /* STATE, not data: "a file is over this target" is an interface fact about a control, so it
+     takes the structural accent. It used to be washed in --mood-5-wash, which painted a hover
+     state in the colour of a person's best day. The change of ground is not the only signal —
+     the border also thickens in tone against the dashed rest state. */
   .dropzone:hover,
-  .dropzone.dragging { border-color: var(--focus-ring); background: var(--mood-5-wash); }
+  .dropzone.dragging { border-color: var(--indigo); background: var(--indigo-wash); }
   .big { font-family: var(--font-display); font-size: 1.25rem; margin: 0 0 var(--space-2); }
   .link-like { color: var(--link); text-decoration: underline; }
 </style>

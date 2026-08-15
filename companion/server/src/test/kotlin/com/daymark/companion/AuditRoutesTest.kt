@@ -93,6 +93,7 @@ class AuditRoutesTest {
 
         // Owner authors a share; a therapist session then reads it (the real access path).
         client.put("/v1/rel/$relRef/shares/lin/0") {
+            header("X-Share-Meta", "eyJzaGFyZUlkIjogInQiLCAidmVyc2lvbiI6IDAsICJleHBpcnkiOiA0MTAyNDQ0ODAwMDAwLCAib3duZXJTaWduaW5nRnAiOiAiZnAifQ")
             header("X-Rel-Token", inboxToken); header(HttpHeaders.Authorization, "Bearer $ownerToken")
             setBody(byteArrayOf(1, 2, 3, 4, 5)) // opaque ciphertext bytes, never logged
         }

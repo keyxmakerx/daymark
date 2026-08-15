@@ -127,4 +127,81 @@ class AuthGuardTest {
         now += 61_000
         assertEquals(AuthGuard.Result.OK, guard.authorize("peer", "new-token"))
     }
+
+    /*
+     * THE RATCHET. `count` was cleared only by a successful auth, so once a source crossed the
+     * threshold every later failure re-armed a FULL lockout. One wrong request per window held a
+     * source out forever — and where `sourceId` is shared (the misconfigured-proxy case
+     * DAYMARK_TRUSTED_PROXIES warns about, where every request keys to the proxy) that is one
+     * request per period to lock out every user of the server, indefinitely, for free.
+     */
+
+    @Test
+    fun `one failure per lockout window cannot hold a source out forever`() {
+        var now = 0L
+        val guard = AuthGuard("good", lockoutThreshold = 2, lockoutMillis = 1_000, ratePerSecond = 100, clock = { now })
+
+        assertEquals(AuthGuard.Result.BAD_TOKEN, guard.authorize("peer", "wrong"))
+        assertEquals(AuthGuard.Result.BAD_TOKEN, guard.authorize("peer", "wrong"))
+        assertEquals(AuthGuard.Result.LOCKED, guard.authorize("peer", "good"), "threshold should lock")
+
+        // The attacker's whole budget: one wrong request just after each lockout expires.
+        repeat(20) {
+            now += 1_001
+            assertEquals(AuthGuard.Result.BAD_TOKEN, guard.authorize("peer", "wrong"))
+        }
+
+        // Under the old rule the count is now 22, so this single failure re-arms a full lockout and
+        // the legitimate holder of the token is never served again.
+        now += 1_001 + 4 * 1_000 // past the lockout AND past the forget window
+        assertEquals(
+            AuthGuard.Result.OK,
+            guard.authorize("peer", "good"),
+            "a source that went quiet must be forgiven rather than ratcheted",
+        )
+    }
+
+    @Test
+    fun `escalation still holds for a source that keeps hammering`() {
+        // The forgiveness must not become an amnesty: without pauses, nothing is forgiven.
+        var now = 0L
+        val guard = AuthGuard("good", lockoutThreshold = 3, lockoutMillis = 10_000, ratePerSecond = 100, clock = { now })
+        repeat(3) {
+            now += 10
+            guard.authorize("peer", "wrong")
+        }
+        assertEquals(AuthGuard.Result.LOCKED, guard.authorize("peer", "good"))
+
+        // Waiting out one lockout, but not the forget window, keeps the count.
+        now += 10_001
+        assertEquals(AuthGuard.Result.BAD_TOKEN, guard.authorize("peer", "wrong"))
+        assertEquals(AuthGuard.Result.LOCKED, guard.authorize("peer", "good"), "the 4th failure must re-lock immediately")
+    }
+
+    @Test
+    fun `locked-out sources do not accumulate forever`() {
+        /*
+         * The eviction predicate required `count < lockoutThreshold`, which a locked-out source can
+         * never satisfy again — so those entries were permanently un-evictable and the map grew
+         * without bound, seeded by exactly the traffic this class exists to survive. That is the
+         * same unbounded-growth bug already fixed for `buckets`, left in place one line below it.
+         */
+        var now = 0L
+        val guard = AuthGuard("good", lockoutThreshold = 2, lockoutMillis = 1_000, ratePerSecond = 100, clock = { now }, maxEntries = 4)
+
+        repeat(10) { i ->
+            guard.authorize("flood-$i", "wrong")
+            guard.authorize("flood-$i", "wrong") // crosses the threshold, arming a lockout
+        }
+        assertTrue(guard.trackedFailures() >= 10, "the flood should be tracked while it is live")
+
+        // Long past both the lockouts and the forget window: none of these carries live state.
+        now += 1_000 * 4 + 2_000
+        guard.authorize("trigger", "good")
+
+        assertTrue(
+            guard.trackedFailures() <= 2,
+            "expired failure entries must be evictable; still tracking ${guard.trackedFailures()}",
+        )
+    }
 }

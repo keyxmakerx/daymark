@@ -69,16 +69,23 @@
     padding: var(--space-3) 0;
     border-bottom: 1px solid var(--hairline);
   }
-  .row.on { background: var(--mood-5-wash); border-radius: var(--radius-sm); padding-left: var(--space-3); padding-right: var(--space-3); }
+  /* STATE, not data: this wash marks a control the owner has switched on, so it takes the
+     structural accent. It used to be --mood-5-wash, which painted "capability granted" in the
+     exact green a person's best-reported day is drawn in — the data ramp lent to interface
+     state. Colour is not the only signal: the switch says "Granted"/"Off" in words. */
+  .row.on { background: var(--indigo-wash); border-radius: var(--radius-sm); padding-left: var(--space-3); padding-right: var(--space-3); }
   .text { flex: 1; min-width: 0; }
   .head { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; }
   .title { font-weight: 600; }
-  .capid { font-family: var(--font-mono); font-size: 0.75rem; color: var(--ink-faint); }
+  .capid { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-subtle); }
   .desc { margin: var(--space-1) 0 0; color: var(--ink-soft); font-size: 0.85rem; }
   .controls { display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-end; flex: 0 0 auto; }
   .switch { display: flex; align-items: center; gap: var(--space-2); font-size: 0.85rem; }
   .segmented { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden; }
   .segmented button { border: none; border-radius: 0; padding: var(--space-1) var(--space-3); font-size: 0.8rem; background: var(--paper-bg); }
-  .segmented button.active { background: var(--ink-accent); color: var(--on-accent); }
+  /* Selected segment = structural emphasis, so indigo rather than content ink (pinned
+     decision: active tab / selected item / link / focus ring are all --indigo). aria-pressed
+     carries the same fact for anyone who cannot see the fill. */
+  .segmented button.active { background: var(--indigo); color: var(--on-accent); }
   .segmented button:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

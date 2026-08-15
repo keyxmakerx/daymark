@@ -1,5 +1,15 @@
 <script lang="ts">
-  /* Hand-rolled SVG sparkline — no charting library. Renders daily average mood. */
+  /*
+   * Hand-rolled SVG sparkline — no charting library. Renders daily average mood.
+   *
+   * THIS FILE'S MOOD TOKEN IS DATA AND MUST STAY. The token sweep that moved interface state
+   * off the mood ramp (banners, errors, selected tabs, the brand mark) deliberately does not
+   * touch this component. The plotted line IS a person's reported mood, on the ramp's own 1..5
+   * scale, and the ramp is the vocabulary that scale is drawn in — that is the whole point of
+   * having it. Repainting this indigo or ink would strip the chart of the only colour in the
+   * product licensed to mean "how someone said they felt". See the note on .line below before
+   * "fixing" it.
+   */
   import type { DailyMood } from '../stats'
 
   let { points, label }: { points: DailyMood[]; label: string } = $props()
@@ -54,6 +64,9 @@
 <style>
   .spark { margin: 0; }
   svg { width: 100%; height: 120px; display: block; }
+  /* DATA, not state. This stroke is the person's own mood series; a chart of the mood scale is
+     exactly what the ramp exists for, and the figcaption states the range in words so the
+     meaning does not depend on the colour. Do not migrate this to --indigo/--ink. */
   .line {
     fill: none;
     stroke: var(--mood-5);

@@ -277,7 +277,9 @@ class BackupManager @Inject constructor(
         activityDao.insertAll(
             data.activities.map { ActivityEntity(it.id, it.name, it.iconKey, it.sortOrder, it.archived) },
         )
-        data.entries.forEach { entryDao.insert(MoodEntry(it.id, it.dateTime, it.moodLevel, it.note, it.photoPath)) }
+        data.entries.forEach {
+            entryDao.insert(MoodEntry(it.id, it.dateTime, it.moodLevel, it.note, safePhotoName(it.photoPath)))
+        }
         entryDao.insertCrossRefs(data.refs.map { EntryActivityCrossRef(it.entryId, it.activityId) })
         data.journal.forEach { journalDao.insert(JournalEntry(it.id, it.dateTime, it.title, it.body)) }
         data.goals.forEach {
@@ -329,7 +331,9 @@ class BackupManager @Inject constructor(
 
         val entryIdMap = HashMap<Long, Long>()
         data.entries.forEach { e ->
-            val photo = e.photoPath?.let { photoNameMap[it] ?: it }
+            // `photoNameMap[it] ?: it` falls through to the backup's own string when no photo blob
+            // matched — which is exactly the case the guarded writeBytes door never sees.
+            val photo = safePhotoName(e.photoPath?.let { photoNameMap[it] ?: it })
             val newId = entryDao.insert(MoodEntry(0, e.dateTime, e.moodLevel, e.note, photo))
             entryIdMap[e.id] = newId
         }
@@ -384,6 +388,22 @@ class BackupManager @Inject constructor(
             )
         }
     }
+
+    /**
+     * A photo name from a backup, or null if it is not one this app could have written.
+     *
+     * A backup file is untrusted input — it can be hand-edited, or handed to someone by a person
+     * who wants to see what happens. `photoPath` was the one field that reached the database
+     * without being checked: the photo *blobs* went through `PhotoStore.writeBytes`, which
+     * validates the name, but an entry naming a photo the backup does not include skipped that door
+     * entirely and was written verbatim. `../../databases/daymark.db` then sat in the entry until
+     * an ordinary swipe-delete resolved it and unlinked the journal.
+     *
+     * Dropping to null is the right failure: a name we cannot serve is a missing photo, and the
+     * entry — the writing, which is the part that matters — is kept and imported.
+     */
+    private fun safePhotoName(relPath: String?): String? =
+        relPath?.takeIf { com.daymark.app.data.PhotoStore.isSafeName(it) }
 
     private fun encodeBase64(bytes: ByteArray): String =
         android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)

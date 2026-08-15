@@ -65,21 +65,54 @@
 </article>
 
 <style>
+  /*
+   * TOKENS. Every colour on this card was a mood-ramp reference and every one of them was
+   * STATE, not DATA: a signature verdict, a rejection list, a destructive button. Nothing here
+   * is a person's reported experience, so nothing here may wear the ramp (app.css, invariant 1).
+   *
+   * The four verdicts are told apart by three things before hue: their written label (always
+   * present, never abbreviated), the fill FORM (solid vs. wash), and — for a failure — the
+   * card's own outline turning clay. Colour is never carrying this alone.
+   *
+   * WHY THE BADGE IS NOT ui/Chip. VERIFIED must be solid ink: "verified" is a confirmation, and
+   * confirmations in this product are emphatic ink, never green — a green tick here would be a
+   * claim the product is not in a position to make. Chip offers neutral / accent / warn /
+   * critical and deliberately has no solid-ink tone, so adopting it would mean the three failure
+   * verdicts became Chips and VERIFIED stayed local, giving four sibling badges in one row two
+   * different sets of box metrics. Kept local and retokened instead.
+   */
   .item { display: flex; flex-direction: column; gap: var(--space-2); }
-  .item.bad { border-color: var(--mood-1); }
+
+  /* A failed verdict is a needs-a-human state: the single alarm hue, not the bottom of the
+     mood ramp. Redundant with the badge and the reason list below it. */
+  .item.bad { border-color: var(--clay); }
+
   .head { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; }
-  .badge { font-size: 0.7rem; font-weight: 600; padding: 0.1rem var(--space-2); border-radius: 999px; text-transform: uppercase; letter-spacing: 0.03em; }
-  .badge.verified { background: var(--mood-5-wash); color: var(--mood-5); border: 1px solid var(--mood-5); }
-  .badge.rejected, .badge.untrusted_key, .badge.open_failed { background: var(--mood-1-wash); color: var(--mood-1); border: 1px solid var(--mood-1); }
+  .badge { font-size: 0.7rem; font-weight: 600; padding: 0.1rem var(--space-2); border-radius: 999px; text-transform: uppercase; letter-spacing: 0.03em; border: 1px solid transparent; }
+
+  /* Solid ink, emphatic and claim-free. Was --mood-5 — the "rad" step of a person's mood ramp
+     used to mean "this signature checked out", which is both a category error and the closest
+     thing to a green tick this palette can produce. */
+  .badge.verified { background: var(--ink-accent); color: var(--on-accent); border-color: var(--ink-accent); }
+
+  /* Refused, untrusted, unopenable — alarm. */
+  .badge.rejected, .badge.untrusted_key, .badge.open_failed { background: var(--clay-wash); color: var(--clay); border-color: var(--clay); }
+
   .from { font-size: 0.85rem; color: var(--ink-soft); }
   .when { font-size: 0.8rem; }
   .preview { margin: 0; font-weight: 500; }
   .note { margin: 0; color: var(--ink-soft); font-style: italic; }
   .requires { margin: 0; font-size: 0.8rem; color: var(--ink-accent); }
-  .errors { margin: 0; padding-left: var(--space-4); color: var(--mood-1); font-size: 0.8rem; }
+
+  /* The reasons a bundle was refused. */
+  .errors { margin: 0; padding-left: var(--space-4); color: var(--clay); font-size: 0.8rem; }
+
   .fp { margin: 0; font-size: 0.75rem; }
   .fp code { font-family: var(--font-mono); }
   .actions { display: flex; gap: var(--space-2); }
-  .danger { border-color: var(--mood-1); color: var(--mood-1); }
+
+  /* Decline is destructive and irreversible from here — clay, the one hue that means that. */
+  .danger { border-color: var(--clay); color: var(--clay); }
+
   .decided { text-transform: capitalize; color: var(--ink-soft); font-size: 0.85rem; }
 </style>

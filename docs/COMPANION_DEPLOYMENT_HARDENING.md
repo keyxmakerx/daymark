@@ -26,7 +26,7 @@
 # Daymark Companion — Hardened Deployment Implementation Spec
 
 **Date:** 2026-08-08 · **Target:** replace the Milestone-1 scaffold with a production `docker compose` deployment
-**Repo paths:** `/home/user/daymark/companion/` (build context = this directory)
+**Repo paths:** `companion/` (build context = this directory)
 
 Everything below was cross-checked against the actual repo. Where the five reports disagreed, the conflict is stated inline and resolved with reasoning. Digests are as-resolved by the reports on 2026-08-08 and **must be re-verified before merge** (§9.1).
 
@@ -66,7 +66,7 @@ findings themselves were verified against primary sources on 2026-08-08 and stil
 
 ## 2. `docker-compose.yml`
 
-**Path:** `/home/user/daymark/companion/docker-compose.yml` — the live file. It is deliberately
+**Path:** `companion/docker-compose.yml` — the live file. It is deliberately
 **not reproduced here**: an earlier revision of this document inlined the whole thing, and the copy
 started drifting from the original within a day. What follows is the reasoning that does not fit in
 the file's own comments.
@@ -131,7 +131,7 @@ The default network disables NAT masquerading and the no-egress override has no 
 egress allowlists. If the operator enables SMTP (base topology only; the no-egress override is
 incompatible by design):
 
-**`/home/user/daymark/companion/docker-compose.smtp.yml`**
+**`companion/docker-compose.smtp.yml`**
 ```yaml
 services:
   companion:
@@ -361,7 +361,7 @@ Caddyfile addition (inside the site block; `rate_limit` is ordered before `basic
 
 ## 4. The revised Dockerfile
 
-### 4.1 New file: `/home/user/daymark/companion/healthcheck/main.go`
+### 4.1 New file: `companion/healthcheck/main.go`
 
 Stdlib only — no `go.sum`, no third-party module, **no network access at build time**. This satisfies the "no third-party origins" rule at build time as well as runtime.
 
@@ -395,7 +395,7 @@ func main() {
 }
 ```
 
-### 4.2 `/home/user/daymark/companion/Dockerfile` (replacement)
+### 4.2 `companion/Dockerfile` (replacement)
 
 ```dockerfile
 # syntax=docker/dockerfile:1
@@ -521,7 +521,7 @@ Note: buildx ≥0.10 already attaches **provenance** by default unless disabled 
 
 ### 4.7 Renovate — so the pins don't rot
 
-`/home/user/daymark/renovate.json`
+`renovate.json`
 ```json
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",

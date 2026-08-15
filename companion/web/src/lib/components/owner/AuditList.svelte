@@ -3,6 +3,7 @@
   import type { PinnedTherapist } from './session'
   import AuditCaveat from './AuditCaveat.svelte'
   import { auditActionLabel, auditActorLabel } from './auditLabels'
+  import { Callout, EmptyState } from '../ui'
 
   let {
     therapist,
@@ -69,13 +70,13 @@
   </div>
 
   {#if error}
-    <p class="error" role="alert">{error}</p>
+    <Callout tone="critical">{error}</Callout>
   {/if}
 
   {#if !loaded && !busy}
-    <p class="empty faint">Refresh to fetch this therapist's access log.</p>
+    <EmptyState title="Refresh to fetch this therapist's access log." />
   {:else if loaded && events.length === 0}
-    <p class="empty faint">No access events recorded yet.</p>
+    <EmptyState title="No access events recorded yet." />
   {:else}
     <ul class="entries">
       {#each events as ev (ev.seq)}
@@ -107,8 +108,6 @@
   }
   .who { font-weight: 600; }
   .what { color: var(--ink-soft); flex: 1; }
-  .when { color: var(--ink-faint); font-size: 0.85rem; white-space: nowrap; }
+  .when { color: var(--text-subtle); font-size: 0.85rem; white-space: nowrap; }
   .more { align-self: flex-start; }
-  .empty { margin: 0; }
-  .error { color: var(--mood-1); background: var(--mood-1-wash); border: 1px solid var(--mood-1); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); margin: 0; }
 </style>

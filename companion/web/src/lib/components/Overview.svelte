@@ -82,6 +82,12 @@
   .d-label { fill: var(--ink-soft); font-size: 14px; }
   .d-count { fill: var(--ink-soft); font-size: 14px; font-family: var(--font-mono); }
   .d-track { fill: var(--paper-bg); stroke: var(--hairline); stroke-width: 1; }
+  /* DATA — these five fills ARE the mood distribution. Each bar is a count of the person's own
+     check-ins at that level, so the ramp here is the legend, not interface state: awful reads red
+     and rad reads green because that is what the person chose, in the same order they chose it
+     from. Repointing these at the chrome vocabulary would delete the chart's meaning rather than
+     fix a violation. Hue is never the sole carrier — every row prints its label and count as text
+     beside the bar. This is one of the six files the tree-wide invariant allowlists for --mood-*. */
   .m1 { fill: var(--mood-1); }
   .m2 { fill: var(--mood-2); }
   .m3 { fill: var(--mood-3); }

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { PortalClient, relRefOf, type InviteResponse } from '../../sync/portal'
   import type { PinnedTherapist } from './session'
+  import { Card, Callout } from '../ui'
 
   let {
     therapist,
@@ -50,39 +51,41 @@
   }
 </script>
 
-<div class="invite card">
-  <h4>Invite {therapist.displayName}</h4>
-  <p class="oob">
-    <strong>Out-of-band is the secure channel.</strong> The link below is a single-use, expiring
-    bootstrap — it carries no secret the server can use to impersonate anyone. Deliver it in
-    person or over a channel you trust, and confirm the fingerprint words:
-    <span class="sas">{therapist.fingerprintWords}</span>
-  </p>
+<Card>
+  <div class="invite">
+    <h4>Invite {therapist.displayName}</h4>
+    <p class="oob">
+      <strong>Out-of-band is the secure channel.</strong> The link below is a single-use, expiring
+      bootstrap — it carries no secret the server can use to impersonate anyone. Deliver it in
+      person or over a channel you trust, and confirm the fingerprint words:
+      <span class="sas">{therapist.fingerprintWords}</span>
+    </p>
 
-  {#if !invite}
-    <button class="primary" onclick={() => mint(false)} disabled={busy}>{busy ? 'Minting…' : 'Create invite link'}</button>
-  {:else}
-    <label class="linkbox">
-      <span>Single-use invite link (expires {new Date(invite.expiresAt).toISOString()})</span>
-      <input type="text" readonly value={invite.link} aria-label="Invite link" />
-    </label>
-    <div class="row">
-      <button onclick={copyLink}>{copied ? 'Copied' : 'Copy link'}</button>
-    </div>
-  {/if}
-
-  {#if smtpEnabled}
-    <div class="email">
-      <label>
-        <span>Send by email <em>(optional convenience — link only, no records)</em></span>
-        <input type="email" bind:value={email} placeholder="therapist@example.com" autocomplete="off" />
+    {#if !invite}
+      <button class="primary" onclick={() => mint(false)} disabled={busy}>{busy ? 'Minting…' : 'Create invite link'}</button>
+    {:else}
+      <label class="linkbox">
+        <span>Single-use invite link (expires {new Date(invite.expiresAt).toISOString()})</span>
+        <input type="text" readonly value={invite.link} aria-label="Invite link" />
       </label>
-      <button onclick={() => mint(true)} disabled={busy || !email}>Send email invite</button>
-    </div>
-  {/if}
+      <div class="row">
+        <button onclick={copyLink}>{copied ? 'Copied' : 'Copy link'}</button>
+      </div>
+    {/if}
 
-  {#if error}<p class="error" role="alert">{error}</p>{/if}
-</div>
+    {#if smtpEnabled}
+      <div class="email">
+        <label>
+          <span>Send by email <em>(optional convenience — link only, no records)</em></span>
+          <input type="email" bind:value={email} placeholder="therapist@example.com" autocomplete="off" />
+        </label>
+        <button onclick={() => mint(true)} disabled={busy || !email}>Send email invite</button>
+      </div>
+    {/if}
+
+    {#if error}<Callout tone="critical">{error}</Callout>{/if}
+  </div>
+</Card>
 
 <style>
   .invite { display: flex; flex-direction: column; gap: var(--space-3); }
@@ -95,6 +98,5 @@
   .row { display: flex; gap: var(--space-2); }
   .email { display: flex; flex-direction: column; gap: var(--space-2); border-top: 1px solid var(--hairline); padding-top: var(--space-3); }
   .email label { display: flex; flex-direction: column; gap: var(--space-1); font-size: 0.85rem; }
-  .email em { color: var(--ink-faint); font-style: normal; }
-  .error { color: var(--mood-1); margin: 0; font-size: 0.85rem; }
+  .email em { color: var(--text-subtle); font-style: normal; }
 </style>

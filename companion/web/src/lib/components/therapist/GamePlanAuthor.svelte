@@ -113,7 +113,13 @@
 <style>
   .gp { display: flex; flex-direction: column; gap: var(--space-3); }
   .gp h3 { margin: 0; }
-  .disclaimer { border: 1px solid var(--mood-2); background: var(--mood-2-wash); border-radius: var(--radius-sm); padding: var(--space-3); font-size: 0.9rem; }
+  /* "Guidance, not treatment" is the same kind of statement as the non-diagnostic banner directly
+     above it: INFORMATION about what this instrument is, present on every game plan. It takes the
+     same quiet chrome ground and carries no coloured rail, so it reads as part of the instrument
+     rather than as something being wrong. It was --mood-2 on --mood-2-wash — a fixed,
+     product-supplied caveat painted in a person's second-worst reported day. The prose is
+     untouched. */
+  .disclaimer { border: 1px solid var(--chrome-hair); background: var(--chrome); color: var(--chrome-ink); border-radius: var(--radius-sm); padding: var(--space-3); font-size: 0.9rem; }
   .add { display: flex; gap: var(--space-2); align-items: flex-end; flex-wrap: wrap; }
   .field { display: flex; flex-direction: column; gap: var(--space-1); font-size: 0.85rem; }
   .field.grow { flex: 1; min-width: 12rem; }
@@ -129,6 +135,7 @@
   .review { display: flex; align-items: flex-end; gap: var(--space-3); flex-wrap: wrap; }
   .rlabel { align-self: center; }
   .primary { align-self: flex-start; background: var(--ink-accent); color: var(--on-accent); border-color: var(--ink-accent); }
-  .ok { margin: 0; color: var(--mood-5); }
-  .error { margin: 0; color: var(--mood-1); }
+  /* Confirmation is solid ink, never green. Failure is the single alarm hue. Were --mood-5/1. */
+  .ok { margin: 0; color: var(--ink-text); }
+  .error { margin: 0; color: var(--clay); }
 </style>

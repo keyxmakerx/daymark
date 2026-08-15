@@ -144,17 +144,31 @@
   .body { padding: 0 var(--space-4) var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
   .controls { display: flex; gap: var(--space-2); }
   .controls button { padding: var(--space-1) var(--space-3); font-size: 0.85rem; }
-  .controls button.active { background: var(--ink-accent); color: var(--on-accent); border-color: var(--ink-accent); }
+  /* STATE, not data: which range the reader has selected is a fact about the interface, so it
+     takes the structural accent. aria-pressed carries the same fact without colour. */
+  .controls button.active { background: var(--indigo); color: var(--on-accent); border-color: var(--indigo); }
   .range { margin: 0; }
   .dist { width: 100%; height: auto; }
   .dist .lbl { fill: var(--ink-soft); font-size: 14px; font-family: var(--font-text); }
   .dist .track { fill: var(--paper-bg); stroke: var(--hairline); }
+
+  /* DATA — do not "fix" these. Each bar counts a person's own entries at that mood level, and
+     the ramp is the legend: an "awful" bar must be the same colour as an "awful" mood anywhere
+     else. Every row also prints its label and count as text, and the svg carries an aria-label
+     listing both, so the hue is never the sole carrier. */
   .m1 { fill: var(--mood-1); } .m2 { fill: var(--mood-2); } .m3 { fill: var(--mood-3); } .m4 { fill: var(--mood-4); } .m5 { fill: var(--mood-5); }
   .assoc { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
   .assoc li { display: grid; grid-template-columns: 8rem 1fr 3rem 2.5rem; align-items: center; gap: var(--space-2); }
   .an { color: var(--ink-text); }
   .delta { width: 100%; height: 16px; }
   .delta .axis { stroke: var(--hairline); }
+
+  /* DATA — do not "fix" these to clay/amber. The bar is the person's own average mood on days
+     carrying this activity, measured against their own overall average, so the hue is reading
+     off the mood ramp exactly as the ramp intends: above-average days are drawn in the colour
+     of an above-average mood. It is not a judgement of the activity — the copy above says
+     association, not causation — and the signed number and the bar's side of the axis both
+     state the direction without colour. */
   .delta .pos { fill: var(--mood-5); }
   .delta .neg { fill: var(--mood-2); }
   .ad { text-align: right; color: var(--ink-soft); }
@@ -162,5 +176,10 @@
   .assess { display: grid; gap: var(--space-1); }
   .ah { display: flex; justify-content: space-between; align-items: baseline; }
   .trend { width: 100%; height: 34px; }
+
+  /* DATA — this line plots a person's own self-check scores over time, the same class of mark
+     Sparkline draws for mood, and it stays on the data ramp for the same reason: the chart
+     layer is where the ramp belongs. It encodes no state and makes no claim about the scores —
+     the band is stated in words beside it ("latest: …") and in the svg's aria-label. */
   .trend .line { fill: none; stroke: var(--mood-5); stroke-width: 2; vector-effect: non-scaling-stroke; }
 </style>

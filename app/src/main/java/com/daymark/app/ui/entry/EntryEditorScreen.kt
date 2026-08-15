@@ -56,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.daymark.app.data.ImageStrip
 import com.daymark.app.ui.theme.moodLabels
 import com.daymark.app.model.Mood
 import com.daymark.app.ui.components.ActivityChip
@@ -242,6 +243,19 @@ fun EntryEditorScreen(
                     Text("  Add photo")
                 }
             }
+            /*
+             * Said before the picker opens, not after — the decision this informs is whether to
+             * attach the photo at all, and a notice that arrives once it is already stored is
+             * telling someone about a choice they have finished making.
+             *
+             * The wording lives in ImageStrip beside the code that makes it true, and a test holds
+             * it to describing what happens to the file rather than making a broader claim.
+             */
+            Text(
+                ImageStrip.STRIP_NOTICE,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
             Button(
                 onClick = viewModel::save,

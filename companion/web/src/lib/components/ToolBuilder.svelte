@@ -205,13 +205,19 @@
   .editor { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
   section { display: flex; flex-direction: column; gap: var(--space-2); border-top: 1px solid var(--hairline); padding-top: var(--space-3); }
   .lab { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); font-weight: 600; }
-  .req { color: var(--mood-1); }
+  /* The required-field marker is a validation demand, not a reading; it was --mood-1. */
+  .req { color: var(--clay); }
   .fld { display: flex; flex-direction: column; gap: var(--space-1); font-size: 0.85rem; color: var(--ink-soft); }
   input, textarea, select { font: inherit; padding: var(--space-2); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-bg); color: var(--ink-text); }
   .hint { margin: 0; color: var(--ink-soft); font-size: 0.75rem; }
   .seg { display: flex; gap: var(--space-1); }
   .seg button { flex: 1; padding: var(--space-2); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-bg); color: var(--ink-soft); }
-  .seg button.on { background: var(--accent, var(--mood-5)); color: #fff; border-color: transparent; font-weight: 600; }
+  /* This rule read `var(--accent, var(--mood-5))`. `--accent` is defined nowhere in app.css, so
+     the fallback always won and the selected segment — pure interface state — was painted in the
+     top step of a person's mood ramp, silently and with nothing to warn about it. A selected
+     control is structural emphasis: indigo, on the paired on-accent ink rather than a hardcoded
+     #fff that could not follow the theme. font-weight carries the selection without the hue. */
+  .seg button.on { background: var(--indigo); color: var(--on-accent); border-color: transparent; font-weight: 600; }
   .disc { margin: 0; font-size: 0.82rem; color: var(--ink-soft); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); padding: var(--space-2); background: var(--paper-bg); }
   .item { border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
   .item-head { display: flex; justify-content: space-between; align-items: center; }
@@ -221,10 +227,15 @@
   .grow { flex: 1; } .num { width: 4.5rem; }
   .range { flex-direction: row; gap: var(--space-3); }
   .add { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-  .link { background: none; border: none; color: var(--accent, var(--mood-5)); font: inherit; font-size: 0.82rem; cursor: pointer; padding: 0; }
-  .link.danger { color: var(--mood-1); }
-  .gate ul { margin: 0; padding-left: 1.1rem; color: var(--mood-1); font-size: 0.82rem; display: flex; flex-direction: column; gap: 2px; }
-  .gate.pass .lab { color: var(--mood-5); }
+  /* Same undefined-`--accent` fallback as the segment above: links were resolving to --mood-5.
+     A link is structural accent. Destructive links and the honesty gate's outstanding-errors
+     list are alarm; both were --mood-1. The gate's passing label is a confirmation, so it is
+     solid ink rather than green — and it says "✓ passes" or "— N to fix" in words either way,
+     so the state is never carried by colour alone. */
+  .link { background: none; border: none; color: var(--indigo); font: inherit; font-size: 0.82rem; cursor: pointer; padding: 0; }
+  .link.danger { color: var(--clay); }
+  .gate ul { margin: 0; padding-left: 1.1rem; color: var(--clay); font-size: 0.82rem; display: flex; flex-direction: column; gap: 2px; }
+  .gate.pass .lab { color: var(--ink-text); }
   .primary:disabled { opacity: 0.5; }
   .preview { position: sticky; top: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); border-left: 1px solid var(--hairline); padding-left: var(--space-4); }
   @media (max-width: 52rem) { .builder { grid-template-columns: 1fr; } .preview { border-left: none; border-top: 1px solid var(--hairline); padding-left: 0; padding-top: var(--space-3); position: static; } }

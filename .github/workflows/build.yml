@@ -72,14 +72,6 @@ jobs:
         # a device — but it does prove they still compile against the current schema and DAOs.
         run: ./gradlew assembleFossDebugAndroidTest --stacktrace
 
-      - name: Fail if the exported Room schemas drifted from what is committed
-        # Worth more than it looks. Room's own equality check (DatabaseBundle.isSchemaEqual)
-        # compares ONLY entities and views — never identityHash, version, or setupQueries — so a
-        # committed schema carrying a wrong identityHash would be invisible to every build. This
-        # step is the only thing that would catch it, and it also catches an entity change that
-        # forgot to bump the version.
-        run: git diff --exit-code -- app/schemas
-
       - name: Install build-tools (for aapt2)
         run: sdkmanager --install "build-tools;36.0.0"
 
@@ -103,6 +95,70 @@ jobs:
             echo "::error::the foss flavor must stay network-free — INTERNET leaked into its merged manifest"
             exit 1
           fi
+
+      - name: Fail if the exported Room schemas drifted from what is committed
+        # THIS STEP USED TO BE INERT AND PASSED FOR IT.
+        #
+        # It was `git diff --exit-code -- app/schemas` on its own, which assumes the build rewrites
+        # the schema. It does not: Room only *creates* a schema file when one is absent (that is the
+        # whole reason committing 13.json fixed the "Empty schema file" crash — see the v13 commit),
+        # and an up-to-date or cache-restored KSP task does not run at all. So there was never
+        # anything to diff, and the step reported green over a hand-written v14 schema that carried
+        # v13's identityHash — impossible for a real export, since v14 adds an entity.
+        #
+        # Nothing else would have caught it. Room's own DatabaseBundle.isSchemaEqual compares
+        # entities and views only, never identityHash, and instrumented tests need a device. The
+        # damage lands on MigrationTestHelper, which stamps the bundle's hash into room_master_table
+        # and then fails integrity validation against the real database — on a contributor's machine,
+        # attributed to their change.
+        #
+        # So: force the export, then diff. `--rerun-tasks --no-build-cache` is the same cache-bypass
+        # that had to be used by hand to produce 13.json; making it permanent is the point, because
+        # the previous version of that fix was a temporary step that got removed, which is precisely
+        # how this recurred.
+        run: |
+          set -euo pipefail
+          VERSION=$(grep -oP 'version\s*=\s*\K[0-9]+' app/src/main/java/com/daymark/app/data/AppDatabase.kt | head -1)
+          SCHEMA="app/schemas/com.daymark.app.data.AppDatabase/${VERSION}.json"
+          echo "Regenerating schema v${VERSION} with the build cache bypassed"
+          rm -f "$SCHEMA"
+          ./gradlew :app:kspFossDebugKotlin --no-build-cache --rerun-tasks --stacktrace
+
+          # Guard against a vacuous pass. If the export silently stopped landing here, the file
+          # would simply be absent after the `rm` and `git diff` would report a deletion — but a
+          # zero-byte file (the exact v13 failure) would diff clean against nothing and this step
+          # would go green having verified less than nothing.
+          if [ ! -s "$SCHEMA" ]; then
+            echo "::error::$SCHEMA is missing or empty after a forced KSP run — the export is not"
+            echo "::error::landing, so this check cannot verify anything. Do not treat green as proof."
+            exit 1
+          fi
+          COUNT=$(python3 -c "import json;print(len(json.load(open('$SCHEMA'))['database']['entities']))")
+          echo "Regenerated $SCHEMA — $COUNT entities, identityHash $(python3 -c "import json;print(json.load(open('$SCHEMA'))['database']['identityHash'])")"
+
+          if ! git diff --quiet -- app/schemas; then
+            echo "::error::The committed Room schema does not match what Room generates."
+            echo "::error::Take the room-schemas artifact and commit it as-is — never hand-edit a"
+            echo "::error::schema, the identityHash must be Room's own."
+            echo "--- what differs (committed = -, Room's own = +) ---"
+            # The DIFF, not the file. An earlier version of this step cat'd the whole schema, which
+            # buried a two-line discrepancy under 770 lines of JSON that was already correct — a
+            # failure message nobody can read is barely better than no failure message.
+            git --no-pager diff --stat -- app/schemas
+            git --no-pager diff --unified=1 -- app/schemas
+            exit 1
+          fi
+
+      - name: Upload the regenerated Room schemas
+        # Runs even when the step above fails — that is when it is worth having, since the artifact
+        # is the fix. There is no Android SDK on the dev machine, so a correct schema can only come
+        # from a machine like this one.
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: room-schemas
+          path: app/schemas/
+          if-no-files-found: error
 
       - name: Upload foss debug APK
         uses: actions/upload-artifact@v7

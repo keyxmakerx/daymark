@@ -42,7 +42,10 @@ class AuthGuard(
     /** Visible for tests: how many per-source buckets are currently retained. */
     internal fun trackedSources(): Int = buckets.size
 
-    private data class FailState(var count: Int, var lockedUntil: Long)
+    /** Failure entries currently held. Separate from [trackedSources]: they leak independently. */
+    internal fun trackedFailures(): Int = failures.size
+
+    private data class FailState(var count: Int, var lockedUntil: Long, var lastFailureAt: Long)
     private class Bucket(var tokens: Double, var last: Long)
 
     fun authorize(sourceId: String, presented: String?): Result {
@@ -70,14 +73,37 @@ class AuthGuard(
         tokenBytes = newToken.toByteArray(Charsets.UTF_8)
     }
 
+    /**
+     * Record a failed attempt, and arm a lockout once the threshold is reached.
+     *
+     * ## The count decays, and it has to
+     *
+     * `count` used to be cleared only by a *successful* auth. Nothing else ever reset it, so once a
+     * source crossed [lockoutThreshold] it stayed above it forever, and every single later failure
+     * re-armed a **full** lockout. One wrong request per window was therefore enough to keep a
+     * source locked out permanently — and since `sourceId` is the client address, an attacker who
+     * can share a source with real users (the misconfigured-proxy case
+     * `DAYMARK_TRUSTED_PROXIES` already warns about, where every request keys to the proxy) could
+     * hold *everyone* out with one request per lockout period, indefinitely, at no cost.
+     *
+     * So a source that has gone quiet for [FORGET_MULTIPLIER] × the lockout period is forgiven and
+     * starts again from zero. That keeps the property worth having — repeat offenders inside a
+     * window escalate — while removing the ratchet. Someone who mistypes a token, waits out the
+     * lockout and comes back an hour later gets a clean slate, which is the behaviour a person
+     * would expect and the previous code did not give them.
+     */
     private fun recordFailure(sourceId: String) {
         val now = clock()
         failures.compute(sourceId) { _, prev ->
-            val count = (prev?.count ?: 0) + 1
+            val forgiven = prev == null || now - prev.lastFailureAt >= forgetMillis
+            val count = if (forgiven) 1 else prev.count + 1
             val locked = if (count >= lockoutThreshold) now + lockoutMillis else (prev?.lockedUntil ?: 0L)
-            FailState(count, locked)
+            FailState(count, locked, now)
         }
     }
+
+    /** How long a quiet source keeps its failure count before it is forgiven and reset. */
+    private val forgetMillis: Long get() = lockoutMillis * FORGET_MULTIPLIER
 
     /**
      * Keep the per-source maps from growing without bound under a many-source flood: when
@@ -111,7 +137,19 @@ class AuthGuard(
         if (now - prev < SWEEP_INTERVAL_MS) return
         if (!lastSweep.compareAndSet(prev, now)) return
 
-        failures.entries.removeIf { it.value.lockedUntil <= now && it.value.count < lockoutThreshold }
+        /*
+         * `&& count < lockoutThreshold` used to be here, and it made every locked-out source
+         * PERMANENTLY un-evictable: the count never fell back below the threshold, so those entries
+         * could never satisfy the predicate no matter how long ago their lockout expired. The map
+         * grew without bound, seeded by exactly the traffic this class exists to survive — the same
+         * unbounded-growth bug the comment above describes fixing for `buckets`, left in place one
+         * line below it.
+         *
+         * The right question is the one the bucket sweep asks: does this entry still carry live
+         * state? A failure count carries none once the source has been quiet long enough to be
+         * forgiven, because `recordFailure` would reset it anyway on the next attempt.
+         */
+        failures.entries.removeIf { it.value.lockedUntil <= now && now - it.value.lastFailureAt >= forgetMillis }
         val cap = ratePerSecond.toDouble().coerceAtLeast(1.0)
         buckets.entries.removeIf { e ->
             synchronized(e.value) {
@@ -157,6 +195,16 @@ class AuthGuard(
 
         /** Minimum gap between sweeps. One second is the full refill window for any bucket. */
         private const val SWEEP_INTERVAL_MS = 1_000L
+
+        /**
+         * A source is forgiven after this many lockout periods of silence.
+         *
+         * Four is a judgement, not a derivation: long enough that hammering through one lockout and
+         * resuming still escalates, short enough that a person who mistyped a token and came back
+         * later is not carrying it around. The important property is only that it is *finite* —
+         * with no decay at all, one failed request per lockout window locks a source out forever.
+         */
+        private const val FORGET_MULTIPLIER = 4L
 
         /** Length-independent constant-time compare (MessageDigest.isEqual is constant-time). */
         fun constantTimeEquals(a: ByteArray, b: ByteArray): Boolean = MessageDigest.isEqual(a, b)

@@ -6,12 +6,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.daymark.app.data.ActivityRepository
 import com.daymark.app.data.EntryRepository
+import com.daymark.app.data.OfferLedgerRepository
 import com.daymark.app.data.PhotoStore
 import com.daymark.app.data.SettingsRepository
 import com.daymark.app.data.entity.ActivityEntity
 import com.daymark.app.data.entity.MoodEntry
+import com.daymark.app.data.entity.OfferKind
+import com.daymark.app.data.entity.OfferOutcome
 import com.daymark.app.security.AutoLockController
-import com.daymark.app.stats.SupportOffer
+import com.daymark.app.stats.InterruptionBudget
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,7 +38,7 @@ data class EntryEditorUiState(
     val saved: Boolean = false,
     /**
      * True when this save may *take you* to the support space. Rationed by
-     * [com.daymark.app.stats.SupportOffer]; off unless the person asked to be taken there.
+     * [com.daymark.app.stats.InterruptionBudget]; off unless the person asked to be taken there.
      */
     val offerSupport: Boolean = false,
     /** Whether the person has opted into gentle support at all. */
@@ -57,6 +60,7 @@ class EntryEditorViewModel @Inject constructor(
     private val entryRepository: EntryRepository,
     private val activityRepository: ActivityRepository,
     private val settingsRepository: SettingsRepository,
+    private val offerLedger: OfferLedgerRepository,
     private val photoStore: PhotoStore,
     private val autoLock: AutoLockController,
     savedStateHandle: SavedStateHandle,
@@ -159,15 +163,81 @@ class EntryEditorViewModel @Inject constructor(
             // Being moved somewhere you didn't ask to go is the expensive kind of offer, so it is
             // rationed and off by default. The corner action above is the unrationed one.
             val now = System.currentTimeMillis()
-            val interrupt = s.moodLevel <= LOW_MOOD_MAX && s.gentleSupportOn &&
-                SupportOffer.shouldInterrupt(
-                    frequency = settingsRepository.supportOfferFrequency,
-                    lastOfferedAt = settingsRepository.supportOfferLastShownAt,
-                    nowMillis = now,
-                )
-            if (interrupt) settingsRepository.supportOfferLastShownAt = now
+            // The two conditions in front of the gate are the feature's own and stay here: the
+            // arbiter is asked *whether* it may interrupt, never *what* the interruption is about.
+            val interrupt = s.moodLevel <= LOW_MOOD_MAX && s.gentleSupportOn && mayOffer(now)
+            if (interrupt) {
+                settingsRepository.supportOfferLastShownAt = now
+                recordOffer(now)
+            }
             _uiState.update { it.copy(saved = true, offerSupport = interrupt) }
         }
+    }
+
+    /**
+     * May the support space take the person over right now? — the whole of what this screen asks
+     * the decision engine, and the same question [com.daymark.app.stats.SupportOffer] answered
+     * before the ledger existed.
+     *
+     * The person's declared frequency is still the ceiling: [InterruptionBudget] may step it down
+     * when offers are being waved away and can never step it up, so nothing here can produce a
+     * shorter gap than the setting they chose.
+     *
+     * The arguments are assembled by hand rather than through `OfferLedgerRepository.mayInterrupt`
+     * for one reason — [SettingsRepository.supportOfferLastShownAt]. That preference is where every
+     * offer made before the ledger shipped was recorded, and an upgrade must not read as "never
+     * asked" and permit an extra interruption on the first hard day. Taking the later of the two
+     * timestamps is the safe direction of that merge: a more recent last-offer only ever lengthens
+     * the wait. Both readings are [OfferKind.SUPPORT]'s own — pairing one kind's rows with
+     * another's reception is the mistake available here, and it is not made.
+     */
+    private suspend fun mayOffer(now: Long): Boolean {
+        val recent = offerLedger.recentOffers(OfferKind.SUPPORT)
+        return InterruptionBudget.shouldInterrupt(
+            declared = settingsRepository.supportOfferFrequency,
+            reception = InterruptionBudget.receptionOf(
+                kind = InterruptionBudget.Kind.SUPPORT,
+                recent = recent,
+                saidStop = offerLedger.saidStop(OfferKind.SUPPORT),
+            ),
+            // A zero stamp is not "no record" here — it is GentleSupportViewModel.setFrequency
+            // deliberately clearing the ration because the person just re-declared how often they
+            // want this. Taking maxOf with the ledger would re-supply the timestamp that reset just
+            // cleared, and someone reaching for the setting to ask for MORE would still be held off
+            // with nothing on screen explaining the wait — the exact failure that KDoc forbids.
+            // Their new declaration wins over the engine's memory of the old one.
+            lastOfferedAt = if (settingsRepository.supportOfferLastShownAt == 0L) {
+                0L
+            } else {
+                maxOf(
+                    InterruptionBudget.lastOfferedAt(InterruptionBudget.Kind.SUPPORT, recent),
+                    settingsRepository.supportOfferLastShownAt,
+                )
+            },
+            nowMillis = now,
+        )
+    }
+
+    /**
+     * Writes the ledger line for an offer this screen just made. Called only when the offer is
+     * actually made, because a line means "the app asked" and nothing else.
+     *
+     * The line must be written here rather than left for whoever learns the outcome: `offeredAt` is
+     * what the minimum-gap timer counts from, so an offer with no row is an offer that never
+     * happened, and the next one is permitted *sooner* — the one direction nothing in this system
+     * may move.
+     *
+     * **Why [OfferOutcome.ACCEPTED] and not something else.** This editor's offer is to *take the
+     * person to the support space*, and by the time this line is written that is what is happening.
+     * What they do once they are there is the support space's knowledge, not this screen's, and the
+     * key chosen is the one the engine weighs at zero — it leaves the declared frequency exactly as
+     * the person set it, which is the only honest treatment of an outcome the caller cannot see. It
+     * is not a claim that they found it useful, and it can never make the app ask more than the
+     * setting allows. A dismissal recorded from the support space itself, once that surface can
+     * tell, is a strictly better line than this one.
+     */
+    private suspend fun recordOffer(now: Long) {
+        offerLedger.record(OfferKind.SUPPORT, OfferOutcome.ACCEPTED, now)
     }
 
     fun delete() {

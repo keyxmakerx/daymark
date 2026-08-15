@@ -32,8 +32,15 @@ export function describeAssignment(a: Assignment): string {
   const cad = a.cadence ? `, ${describeCadence(a.cadence)}` : ''
   const p = a.payload as Record<string, unknown>
   switch (a.type) {
-    case 'questionnaire':
-      return `Assign the ${instrumentTitle(String(p.instrumentId))} self-check${cad}.`
+    case 'questionnaire': {
+      // The noun used to be appended unconditionally, and every shipped catalog title already
+      // ends in "self-check" — so the owner's preview read "the Daily wellbeing self-check
+      // self-check". Append it only when the title does not already carry it, and trim so an
+      // empty title cannot leave a doubled space.
+      const title = instrumentTitle(String(p.instrumentId)).trim()
+      const phrase = /self-check$/i.test(title) ? title : `${title} self-check`.trim()
+      return `Assign the ${phrase}${cad}.`
+    }
     case 'task':
       return `Assign the ${taskTitle(String(p.taskId))} task${cad}.`
     case 'largeAssessment': {

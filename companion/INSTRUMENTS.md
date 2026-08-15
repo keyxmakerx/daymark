@@ -40,4 +40,31 @@ with its verbatim WHO notice) can be added later with their notice machinery.
 - **Notes:** our own informal splits (never the source cutoff); explicitly a within-person,
   non-diagnostic reflection; no self-harm item.
 
+<a id="compassion-hard-moment"></a>
+
+### A hard moment — `compassion-hard-moment`
+
+- **Type:** guided exercise (unscored — `scoring.scales` is empty; every writing item is
+  `excludeFromScoring`, so nothing here can enter a share).
+- **Licence / source:** Self-authored, original wording. GPL-3.0. Draws on compassion-focused
+  practice; reproduces no published script.
+- **Attribution:** none required (self-authored).
+- **Notes:** built to satisfy the rule in docs/EVIDENCE_REVIEW_2026-08.md §2 — never require the
+  person to assert a positive claim about themselves they do not believe. Nothing asks anyone to
+  say they are good or lovable, which is why it needs no gate before being offered to someone at
+  their lowest. No self-harm item.
+
+<a id="values-what-matters"></a>
+
+### What matters to you — `values-what-matters`
+
+- **Type:** guided exercise (unscored; one select for orientation, the rest free writing, all
+  `excludeFromScoring`).
+- **Licence / source:** Self-authored, original wording. GPL-3.0. Draws on values-clarification
+  methods; reproduces no published instrument.
+- **Attribution:** none required (self-authored).
+- **Notes:** values writing, not self-evaluation — the writing is about what the person cares
+  about rather than about them, which is what keeps it clear of the positive-self-statement
+  problem. No self-harm item.
+
 See `docs/COMPANION_FEATURES.md` for the engine design and the planned wider catalog.

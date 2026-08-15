@@ -22,6 +22,17 @@ enum class AuditAction(val wire: String) {
     ASSIGNMENT_PUBLISH("assignment.publish"),
     GAMEPLAN_PUBLISH("gameplan.publish"),
     SESSION_EXPIRED("session.expired"),
+
+    /** The owner withdrew a share lineage. Recorded so withdrawal is never a silent operation. */
+    SHARE_REVOKE("share.revoke"),
+
+    /**
+     * A read of an expired or withdrawn share was refused.
+     *
+     * The owner's log distinguishes expiry from revocation; the therapist's 410 does not. That
+     * asymmetry is the point — the owner is entitled to know what their own access control did.
+     */
+    SHARE_DENIED("share.denied"),
 }
 
 data class AuditEvent(

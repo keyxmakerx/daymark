@@ -6,14 +6,42 @@ import type { Predicate, PredicateOp } from './types'
 
 export type Answers = Record<string, unknown>
 
-export function evalPredicate(p: Predicate, answers: Answers): boolean {
-  if ('all' in p) return p.all.every((c) => evalPredicate(c, answers))
-  if ('any' in p) return p.any.some((c) => evalPredicate(c, answers))
+/**
+ * Recursion bound. A definition may be authored by a clinician and runs on someone else's
+ * device, so a hostile or merely buggy tree must not be able to take the runner down: 50k
+ * nested `all` nodes previously threw "Maximum call stack size exceeded". Validation rejects
+ * over-deep trees at authoring time; this is the belt to that braces, and it is deliberately
+ * generous — real dialogue nests two or three deep.
+ */
+export const MAX_PREDICATE_DEPTH = 16
+
+export function evalPredicate(p: Predicate, answers: Answers, depth = 0): boolean {
+  if (depth > MAX_PREDICATE_DEPTH) {
+    throw new Error(`predicate nested deeper than ${MAX_PREDICATE_DEPTH}`)
+  }
+  if ('all' in p) return p.all.every((c) => evalPredicate(c, answers, depth + 1))
+  if ('any' in p) return p.any.some((c) => evalPredicate(c, answers, depth + 1))
   if ('ref' in p) return evalLeaf(p.ref, p.op, p.value, answers)
   throw new Error('invalid predicate node')
 }
 
 function evalLeaf(ref: string, op: PredicateOp, value: unknown, answers: Answers): boolean {
+  /*
+   * UNKNOWN REF FAILS CLOSED — for every operator, including `ne`.
+   *
+   * Without this, `ne` alone failed OPEN: `undefined !== 3` is true, so a branch gated on a
+   * signal that does not exist would SHOW rather than hide. Every other operator already
+   * returned false. The realistic trigger is not malice but drift — content authored against a
+   * signal a later release renames, or an unanswered item in a branching questionnaire — and the
+   * failure was silent either way.
+   *
+   * Absence is not a value to compare against. If we have not been told, we do not show.
+   */
+  // `Object.hasOwn`, NOT `ref in answers`: `in` walks the prototype chain, so `constructor`,
+  // `toString`, `__proto__` and `hasOwnProperty` all tested as PRESENT and `ne` returned true on
+  // them — the exact fail-open this guard exists to close, reachable from any authored definition.
+  // The first version of this fix used `in` and its tests only covered a genuinely-absent key.
+  if (!Object.hasOwn(answers, ref)) return false
   const a = answers[ref]
   switch (op) {
     case 'eq':

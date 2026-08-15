@@ -7,6 +7,25 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **The PDF report is now four sides, and you decide what's on each.** *The glance* (the shape of
+  the range), *the detail* (per-instrument series), *in their own words* (your journal writing), and
+  *for the conversation* (questions to bring). Side three **only exists if you switched it on** and
+  there is writing in range — an entry falling between two dates is not consent to print it, and the
+  report says which of the two things you did in so many words ("you turned it on for the whole
+  range" reads differently from "you ticked these"), because on the one side where the strength of
+  the consent is the point, the software must not describe a deliberation that never happened.
+  - The last side prints **questions, never recommendations** — "ask about the three harder days in
+    week two", not "the patient should". They can be switched off entirely. What it will and will
+    not say is a bright line in the code, not a tone of voice.
+  - The whole page geometry moved into `ReportLayout.kt`, which imports nothing from Android. That
+    sounds like housekeeping and is not: layout arithmetic was previously only observable by looking
+    at a rendered PDF on a device, so a column that overflowed by two points was invisible to CI.
+    It now has 980 lines of tests that run anywhere.
+- **Guided exercises sit beside questionnaires** in the clinician tool: a hard-moment exercise and a
+  values exercise, neither of which is scored, because a compassion practice has no score and giving
+  it one would invent a number a clinician might reasonably act on. The assignment list labels each
+  by what it actually is, rather than calling everything a "Questionnaire" — the previous behaviour
+  told a clinician they were assigning a measure when they were assigning an exercise.
 - **My safety plan**: short lists you write **while things are steady**, so a harder moment doesn't
   have to start from a blank page — *warning signs I notice*, *things that help*, *people I can
   reach*, plus an optional *reasons I want to stay* that is **offered rather than assumed** (it's
@@ -136,6 +155,30 @@ All notable changes to this project are documented here. The format is based on
 - **First-run onboarding wizard** (skippable): daily-reminder setup, optional PIN lock.
 
 ### Changed
+- **One place now decides whether the app may interrupt you.** Each feature used to ration its own
+  interruptions, which meant nothing could see the total: three features each politely limiting
+  themselves to "twice a week" is six. The interruption budget is asked a single question —
+  *may I interrupt, right now* — and it is deliberately **not told what about**. It has no access to
+  your mood, your writing, or which feature is asking, so it cannot become a thing that infers a
+  clinical state from your behaviour and then acts on it. It answers from how previous offers landed
+  and nothing else.
+  - **Reminders are not rationed by it**, and that is a reversal of the first implementation. A
+    reminder at 9am is one you asked for at 9am; an alarm clock that decides you have been ignoring
+    it and drops to weekly is broken, not considerate. The first cut let two unanswered firings
+    silently collapse a three-a-day schedule to one a week, with no setting anywhere to put it back.
+    Reminders now record how they landed — the budget learns from them — and fire exactly when you
+    said.
+  - Outcomes live in a new local `offer_record` table (schema **v13 → v14**, migration included).
+    It stores that the app asked and how that went. It does not store what was asked about.
+- **Companion web visuals rebuilt on a two-tier token layer.** Raw values are declared once and
+  referenced by role, so the three theme states (light, `prefers-color-scheme`, explicit toggle)
+  cannot silently disagree — a colour defined only inside a media query was previously possible and
+  is now a test failure. Four tokens that failed WCAG AA contrast were found this way and corrected,
+  including the amber used on the badge that appears on every row of the client list (3.53:1).
+  - **The mood ramp is data and only data.** Those five colours mean "this is what the person
+    logged". Using one for a button, a chart series, or a status pill makes the interface look like
+    it is agreeing or disagreeing with them, so the ramp is now unavailable outside the places that
+    render mood, enforced tree-wide rather than by convention.
 - **Dependabot now knows which upgrades this project cannot take**, so it stops reopening
   un-mergeable PRs every week. Five of them were failing CI on repeat: Hilt 2.60.1 (Dagger ≥2.59
   hard-requires AGP 9), Kotlin 2.4.0 (Kotlin and KSP are version-locked and bumped in separate PRs;
@@ -177,6 +220,54 @@ All notable changes to this project are documented here. The format is based on
   permission and makes no network connections.
 
 ### Security
+- **Photos keep the picture and nothing else.** A JPEG straight off a phone camera carries GPS
+  latitude and longitude to five decimal places, the exact capture time, and the device's make,
+  model and serial. Daymark has no location feature, and it would be a strange promise to make on
+  the settings screen while filing the coordinates of someone's bedroom in their journal, where a
+  backup file carries them onward to whoever ends up with it.
+  - Every photo is now decoded to pixels and re-encoded. A bitmap has nowhere to keep a tag, so the
+    tags are gone by construction rather than by a filter that has to list them all correctly.
+  - **This was already happening, and that was the problem.** It fell out of resizing, nothing said
+    so, and the obvious optimisation — "we have the bytes, just copy the file" — is faster, sharper,
+    deletes code, and silently puts every tag back. A test now fails that change with an explanation
+    instead of letting it through review.
+  - **Photos arriving in a backup are re-encoded too.** That path used to write whatever the file
+    carried, so a backup made before the strip, or merged from another install, walked its EXIF in
+    through the door nobody looks at. It costs a generation of JPEG quality on restore, which is
+    better than an import path whose privacy depends on which version wrote the file.
+  - **Photos are no longer stored sideways.** Cameras don't rotate pixels; they set an orientation
+    tag, and `BitmapFactory` ignores it — so portrait photos were decoded as landscape and re-saved
+    with the tag stripped, losing which way was up for good. The rotation is now applied to the
+    pixels themselves. All eight EXIF orientations are handled, including the four mirrored ones
+    that front cameras produce.
+  - **And they're no longer randomly half-resolution.** The downscaler halved until it was under the
+    limit, which overshoots: a 3200px photo landed on exactly 1600, a 3300px photo on 825. Two
+    near-identical originals, one visibly blurry, no way to tell why.
+- **Clinician-authored branching logic runs in a sandbox that fails closed.** A therapist can make a
+  question conditional on an earlier answer. That is a small expression language, and a small
+  expression language on a server is where the interesting bugs live, so it evaluates a fixed
+  structure (`all` / `any` / `ref` / `op` / `value`) and never a string — no `eval`, no `Function`,
+  nothing reachable from authored content to the host.
+  - **A missing answer was treatable as present.** The guard tested `ref in answers`, and `in` walks
+    the JavaScript prototype chain: `constructor`, `toString` and `__proto__` all reported as
+    answered questions, so a predicate referencing one would branch on an object property rather
+    than fail closed. Now `Object.hasOwn`. Found by auditing my own guard, not by a report.
+  - **Nesting is capped at 16.** Unbounded recursion on operator-authored content is a stack
+    overflow waiting for a deep enough form.
+- **The documentation is now answerable to the tree.** Four times in one working session a document
+  asserted something about this repository that was not true — design tokens described as "reserved"
+  that existed nowhere, a path naming a file that was never written, two security findings left in
+  the present tense as open defects for a day after both were fixed, with a proposed fix describing
+  what the code already did. A test now checks the mechanically checkable half: every file path the
+  docs name resolves, and every design token they name is either defined or **declared absent with a
+  reason**, split into forbidden / superseded / unbuilt.
+  - The forbidden list is the load-bearing part. `--success` and the `--trust-*` family must never
+    exist: a green "all clear" is a clinical claim this product does not get to make, and the
+    deployment guide's own argument is that a served page is lower-assurance no matter what it says
+    about itself. Both the absence and the documentation of the absence are now asserted.
+  - It immediately found six paths printed as `/home/user/daymark/...` in the deployment hardening
+    guide — an address that exists on no reader's machine — and two token sketches presented as
+    shipping CSS. Both corrected.
 - **Companion server — three CVE bumps, and the Kotlin move they required.** `ktor 3.0.3 → 3.5.2`
   brings Netty `4.1.116.Final → 4.2.16.Final`, above the fixes for CVE-2025-58056 (bare-LF chunk
   terminator), CVE-2025-67735 (CRLF in the request URI) and CVE-2026-42587 (decompression bomb

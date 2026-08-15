@@ -13,7 +13,7 @@ import org.junit.runner.RunWith
 
 /**
  * Verifies the Room migrations preserve user data and produce the expected schema. Covers every
- * hop for which an exported start schema exists (3 → 13). The 1.json / 2.json start schemas predate
+ * hop for which an exported start schema exists (3 → 14). The 1.json / 2.json start schemas predate
  * `exportSchema`, so MIGRATION_1_2 and MIGRATION_2_3 can't be validated here — they are retained
  * for correctness and must never be deleted (see docs/ARCHITECTURE.md).
  *
@@ -44,6 +44,7 @@ class MigrationTest {
         AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7,
         AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_8_9, AppDatabase.MIGRATION_9_10,
         AppDatabase.MIGRATION_10_11, AppDatabase.MIGRATION_11_12, AppDatabase.MIGRATION_12_13,
+        AppDatabase.MIGRATION_13_14,
     )
 
     @Test
@@ -142,6 +143,36 @@ class MigrationTest {
     }
 
     @Test
+    fun migrate13To14_createsOfferRecordsTable_withBothIndices() {
+        helper.createDatabase(TEST_DB, 13).close()
+        helper.runMigrationsAndValidate(TEST_DB, 14, true, AppDatabase.MIGRATION_13_14).use { db ->
+            db.execSQL(
+                "INSERT INTO offer_records (id, kind, offeredAt, outcome) " +
+                    "VALUES (1, 'companion', 1000, 'dismissed')",
+            )
+            db.query("SELECT kind, offeredAt, outcome FROM offer_records WHERE id = 1").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("companion", c.getString(0))
+                assertEquals(1000L, c.getLong(1))
+                assertEquals("dismissed", c.getString(2))
+            }
+            // runMigrationsAndValidate already compares against 14.json, but name the indices
+            // explicitly: the ledger's two reads (narrow by kind, order by offeredAt) both depend
+            // on them, and an index silently missing from a hand-written migration is exactly the
+            // kind of drift this file exists to catch.
+            db.query(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'offer_records' " +
+                    "ORDER BY name",
+            ).use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("index_offer_records_kind", c.getString(0))
+                assertTrue(c.moveToNext())
+                assertEquals("index_offer_records_offeredAt", c.getString(0))
+            }
+        }
+    }
+
+    @Test
     fun migrateAll_from3_toLatest() {
         helper.createDatabase(TEST_DB, 3).use { db ->
             db.execSQL(
@@ -150,7 +181,7 @@ class MigrationTest {
         }
         // Keep this target in step with AppDatabase's @Database(version = …) on every schema bump —
         // running to a stale version silently stops exercising the newest migrations.
-        helper.runMigrationsAndValidate(TEST_DB, 13, true, *allMigrations).use { db ->
+        helper.runMigrationsAndValidate(TEST_DB, 14, true, *allMigrations).use { db ->
             db.query("SELECT note FROM mood_entries WHERE id = 7").use { c ->
                 assertTrue(c.moveToFirst())
                 assertEquals("kept", c.getString(0))

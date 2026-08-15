@@ -572,7 +572,14 @@ Content-Security-Policy:
 
 ### 7.2 Modern-paper design tokens (web mirror of the app)
 
+> **STATUS: SKETCH, NOT THE SHIPPED NAMES.** Written before `companion/web/src/app.css`
+> existed. The real names are `--paper-bg`, `--paper-sheet`, `--ink-text`, `--ink-soft`,
+> `--ink-faint`, `--ink-accent`, `--font-display`, `--font-text`; `--surface` and
+> `--font-serif`/`--font-sans` were never implemented. See
+> `COMPANION_DESIGN_SYSTEM.md` §2.3.4 for the semantic contract that replaced this.
+
 ```css
+/* the ORIGINAL PROPOSAL — superseded by app.css, see the note above */
 :root{
   /* light "paper" */
   --paper:#F4EFE6; --surface:#FCFAF5; --ink:#2A2722; --soft:#6B655B;

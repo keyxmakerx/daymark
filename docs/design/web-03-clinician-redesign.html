@@ -1,0 +1,2059 @@
+<title>Daymark — Clinician tool, redesign renders</title>
+
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   TOKENS
+   Light palette is complete on bare :root. Dark redefines tokens only, in two
+   places, so system-default and explicit-toggle both resolve.
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  /* deck ground — a shade deeper than the app's paper so sheets read as sheets */
+  --deck:        #ece5d9;
+  --deck-2:      #e4dccd;
+  --paper:       #f4efe6;
+  --sheet:       #fcfaf5;
+
+  --ink:         #2a2722;
+  --ink-soft:    #6b655b;
+  --ink-faint:   #a49c8e;
+  --subtle:      #5f5a4e;
+  --hair:        #e7dfd1;
+  --hair-strong: #cbc1ae;
+
+  /* cool chrome layer — navigation, tables, metadata, controls */
+  --chrome:      #e4e7ec;
+  --chrome-2:    #d8dce4;
+  --chrome-hair: #c6ccd6;
+  --chrome-ink:  #38414e;
+  --chrome-soft: #626d7d;
+
+  /* structural accent. never used to encode data. */
+  --indigo:      #3f5f7f;
+  --indigo-deep: #2f4a64;
+  --indigo-wash: #dde5ee;
+
+  /* the single alarm hue, and the one warning hue */
+  --clay:        #a8574a;
+  --clay-wash:   #f2ded9;
+  --amber:       #9c7128;
+  --amber-wash:  #f0e6d1;
+
+  /* mood 1→5 — reserved for a person's data. never for interface state. */
+  --mood-1: #ae5747; --mood-2: #c27c46; --mood-3: #c6a24e; --mood-4: #8fa268; --mood-5: #5e8a66;
+  --mood-1-wash: #f0dad4; --mood-2-wash: #f1e2d2; --mood-3-wash: #f1e8d0;
+  --mood-4-wash: #e3e8d6; --mood-5-wash: #d9e6dc;
+
+  --shadow:   0 1px 2px rgba(42,39,34,.06), 0 10px 30px rgba(42,39,34,.07);
+  --shadow-lg:0 2px 4px rgba(42,39,34,.07), 0 24px 60px rgba(42,39,34,.13);
+
+  /* type */
+  --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono:  ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+
+  /* admin console — a deliberately single-look surface, identical in both themes */
+  --con-bg:     #161b22;
+  --con-2:      #1c222b;
+  --con-3:      #222a34;
+  --con-hair:   #2c3540;
+  --con-ink:    #e2e7ed;
+  --con-soft:   #8c96a4;
+  --con-faint:  #626c79;
+  --con-accent: #82a6cb;
+  --con-warn:   #d2a253;
+  --con-crit:   #cf7364;
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --deck:        #121110;
+    --deck-2:      #1a1916;
+    --paper:       #1b1a17;
+    --sheet:       #24221d;
+    --ink:         #ebe5d8;
+    --ink-soft:    #b7af9e;
+    --ink-faint:   #7c7568;
+    --subtle:      #9b927f;
+    --hair:        #34312a;
+    --hair-strong: #4a463c;
+    --chrome:      #1e232b;
+    --chrome-2:    #262c36;
+    --chrome-hair: #333b46;
+    --chrome-ink:  #c8cfd9;
+    --chrome-soft: #8b95a3;
+    --indigo:      #7fa3c8;
+    --indigo-deep: #9dbbd9;
+    --indigo-wash: #22303e;
+    --clay:        #c9806f;
+    --clay-wash:   #3a2c28;
+    --amber:       #cfa458;
+    --amber-wash:  #3a3128;
+    --mood-1-wash: #3a2c28; --mood-2-wash: #3a3128; --mood-3-wash: #3a3528;
+    --mood-4-wash: #2f362a; --mood-5-wash: #2a3530;
+    --shadow:    0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.4);
+    --shadow-lg: 0 2px 4px rgba(0,0,0,.55), 0 24px 60px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"] {
+  --deck:        #121110;
+  --deck-2:      #1a1916;
+  --paper:       #1b1a17;
+  --sheet:       #24221d;
+  --ink:         #ebe5d8;
+  --ink-soft:    #b7af9e;
+  --ink-faint:   #7c7568;
+  --subtle:      #9b927f;
+  --hair:        #34312a;
+  --hair-strong: #4a463c;
+  --chrome:      #1e232b;
+  --chrome-2:    #262c36;
+  --chrome-hair: #333b46;
+  --chrome-ink:  #c8cfd9;
+  --chrome-soft: #8b95a3;
+  --indigo:      #7fa3c8;
+  --indigo-deep: #9dbbd9;
+  --indigo-wash: #22303e;
+  --clay:        #c9806f;
+  --clay-wash:   #3a2c28;
+  --amber:       #cfa458;
+  --amber-wash:  #3a3128;
+  --mood-1-wash: #3a2c28; --mood-2-wash: #3a3128; --mood-3-wash: #3a3528;
+  --mood-4-wash: #2f362a; --mood-5-wash: #2a3530;
+  --shadow:    0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.4);
+  --shadow-lg: 0 2px 4px rgba(0,0,0,.55), 0 24px 60px rgba(0,0,0,.5);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BASE
+   ═══════════════════════════════════════════════════════════════════════════ */
+* , *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--deck);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4 { font-family: var(--serif); font-weight: 600; line-height: 1.15; margin: 0; text-wrap: balance; }
+p { margin: 0; }
+a { color: var(--indigo); text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--indigo); outline-offset: 3px; border-radius: 4px; }
+
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 28px; }
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--chrome-soft);
+}
+
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MASTHEAD
+   ═══════════════════════════════════════════════════════════════════════════ */
+.masthead {
+  border-bottom: 1px solid var(--hair);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--deck-2) 70%, transparent), transparent);
+  padding: 46px 0 40px;
+}
+.mast-top { display: flex; justify-content: space-between; align-items: baseline; gap: 20px; flex-wrap: wrap; margin-bottom: 30px; }
+.mast-mark { display: flex; align-items: baseline; gap: 12px; }
+.mast-mark strong { font-family: var(--serif); font-size: 19px; font-weight: 600; letter-spacing: -.01em; }
+.mast-mark span { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--chrome-soft); }
+
+.tbtn {
+  font: inherit; font-size: 12px; font-family: var(--mono);
+  letter-spacing: .06em; text-transform: uppercase;
+  background: var(--chrome); color: var(--chrome-ink);
+  border: 1px solid var(--chrome-hair); border-radius: 4px;
+  padding: 6px 12px; cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+.tbtn:hover { background: var(--chrome-2); border-color: var(--chrome-soft); }
+.tbtn:active { transform: translateY(1px); }
+
+.mast-h { font-size: clamp(34px, 5vw, 56px); letter-spacing: -.022em; max-width: 17ch; }
+.mast-h em { font-style: normal; color: var(--indigo); }
+.mast-dek { margin-top: 20px; max-width: 62ch; font-size: 18px; color: var(--ink-soft); line-height: 1.65; }
+.mast-meta { margin-top: 28px; display: flex; gap: 10px; flex-wrap: wrap; }
+
+.chip {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
+  padding: 5px 10px; border-radius: 3px; border: 1px solid var(--chrome-hair);
+  color: var(--chrome-ink); background: var(--chrome); white-space: nowrap;
+}
+.chip.mark-new  { border-color: var(--indigo); color: var(--indigo); background: var(--indigo-wash); }
+.chip.mark-warn { border-color: var(--amber); color: var(--amber); background: var(--amber-wash); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTIONS + REVEAL
+   ═══════════════════════════════════════════════════════════════════════════ */
+section { padding: 72px 0; border-bottom: 1px solid var(--hair); }
+section:last-of-type { border-bottom: 0; }
+
+.reveal { opacity: 0; transform: translateY(18px); }
+.reveal.seen { opacity: 1; transform: none; transition: opacity 620ms cubic-bezier(.22,.7,.28,1), transform 620ms cubic-bezier(.22,.7,.28,1); }
+
+.sec-head { display: grid; grid-template-columns: 190px minmax(0,1fr); gap: 34px; align-items: start; margin-bottom: 34px; }
+.sec-head-l { display: flex; flex-direction: column; gap: 12px; padding-top: 6px; }
+.sec-head h2 { font-size: clamp(24px, 3vw, 33px); letter-spacing: -.018em; max-width: 22ch; }
+.sec-head p { margin-top: 14px; color: var(--ink-soft); max-width: 68ch; font-size: 16.5px; }
+@media (max-width: 860px) { .sec-head { grid-template-columns: 1fr; gap: 14px; } }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THESIS — two columns, the split that generates the whole system
+   ═══════════════════════════════════════════════════════════════════════════ */
+.thesis { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid var(--hair-strong); border-radius: 10px; overflow: hidden; box-shadow: var(--shadow); }
+@media (max-width: 800px) { .thesis { grid-template-columns: 1fr; } }
+.th-col { padding: 30px 30px 34px; }
+.th-warm { background: var(--sheet); }
+.th-cool { background: var(--chrome); border-left: 1px solid var(--hair-strong); }
+@media (max-width: 800px) { .th-cool { border-left: 0; border-top: 1px solid var(--hair-strong); } }
+.th-col h3 { font-size: 21px; margin: 12px 0 10px; }
+.th-cool h3 { font-family: var(--sans); font-size: 16px; letter-spacing: -.005em; color: var(--chrome-ink); }
+.th-col p { font-size: 15px; color: var(--ink-soft); }
+.th-cool p { color: var(--chrome-soft); font-size: 14.5px; }
+.th-list { margin: 18px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 9px; }
+.th-list li { font-size: 14px; padding-left: 16px; position: relative; color: var(--ink-soft); }
+.th-list li::before { content: ''; position: absolute; left: 0; top: .62em; width: 6px; height: 1px; background: var(--hair-strong); }
+.th-cool .th-list li { font-family: var(--mono); font-size: 12.5px; color: var(--chrome-soft); }
+.th-cool .th-list li::before { background: var(--chrome-hair); }
+.th-rule { height: 3px; border-radius: 2px; background: var(--mood-3); width: 46px; }
+.th-cool .th-rule { background: var(--indigo); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SYSTEM SHEET
+   ═══════════════════════════════════════════════════════════════════════════ */
+.sys { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 20px; }
+.panel { background: var(--sheet); border: 1px solid var(--hair); border-radius: 10px; padding: 22px; box-shadow: var(--shadow); }
+.panel > h4 { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--chrome-soft); font-weight: 500; margin-bottom: 16px; }
+
+.sw-row { display: flex; align-items: center; gap: 12px; padding: 7px 0; border-bottom: 1px dashed var(--hair); }
+.sw-row:last-child { border-bottom: 0; }
+.sw { width: 30px; height: 30px; border-radius: 4px; flex: 0 0 auto; border: 1px solid rgba(42,39,34,.14); }
+.sw-name { font-size: 13.5px; flex: 1; }
+.sw-hex { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); }
+.sw-note { font-size: 12px; color: var(--subtle); display: block; }
+
+.type-spec { display: flex; flex-direction: column; gap: 18px; }
+.type-row { border-bottom: 1px dashed var(--hair); padding-bottom: 16px; }
+.type-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.type-samp-serif { font-family: var(--serif); font-size: 27px; letter-spacing: -.015em; }
+.type-samp-sans  { font-family: var(--sans); font-size: 17px; }
+.type-samp-mono  { font-family: var(--mono); font-size: 14px; letter-spacing: .01em; }
+.type-meta { font-family: var(--mono); font-size: 11px; color: var(--chrome-soft); letter-spacing: .06em; text-transform: uppercase; margin-top: 7px; }
+
+/* status vocabulary */
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .05em; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 3px; border: 1px solid; white-space: nowrap;
+}
+.pill::before { content: ''; width: 5px; height: 5px; border-radius: 1px; background: currentColor; }
+.p-sched { color: var(--chrome-soft); border-color: var(--chrome-hair); background: transparent; }
+.p-deliv { color: var(--indigo); border-color: color-mix(in oklab, var(--indigo) 40%, transparent); background: var(--indigo-wash); }
+.p-accept{ color: var(--indigo-deep); border-color: var(--indigo); background: var(--indigo-wash); }
+.p-done  { color: var(--sheet); border-color: var(--ink); background: var(--ink); }
+.p-declin{ color: var(--chrome-soft); border-color: var(--chrome-hair); background: transparent; text-decoration: line-through; }
+.p-none  { color: var(--clay); border-color: color-mix(in oklab, var(--clay) 45%, transparent); background: var(--clay-wash);
+           background-image: repeating-linear-gradient(135deg, transparent 0 4px, color-mix(in oklab, var(--clay) 12%, transparent) 4px 8px); }
+.p-over  { color: var(--sheet); border-color: var(--clay); background: var(--clay); }
+
+.stat-legend { display: flex; flex-direction: column; gap: 11px; }
+.stat-legend div { display: flex; align-items: center; gap: 12px; }
+.stat-legend span.sl-txt { font-size: 13px; color: var(--ink-soft); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RENDER FRAME
+   ═══════════════════════════════════════════════════════════════════════════ */
+.render { margin-top: 8px; }
+.frame {
+  border: 1px solid var(--hair-strong);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  background: var(--paper);
+}
+.frame-bar {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--chrome-2); border-bottom: 1px solid var(--chrome-hair);
+  padding: 9px 14px;
+}
+.frame-url {
+  flex: 1; font-family: var(--mono); font-size: 11.5px; color: var(--chrome-soft);
+  background: var(--chrome); border: 1px solid var(--chrome-hair); border-radius: 999px;
+  padding: 4px 12px; display: flex; align-items: center; gap: 7px; min-width: 0;
+}
+.frame-url b { font-weight: 500; color: var(--chrome-ink); }
+.frame-tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--chrome-soft); }
+.lockglyph { width: 9px; height: 11px; flex: 0 0 auto; border: 1.4px solid currentColor; border-radius: 1.5px; position: relative; margin-right: 1px; }
+.lockglyph::before { content: ''; position: absolute; left: 1.4px; right: 1.4px; top: -4.4px; height: 5px; border: 1.4px solid currentColor; border-bottom: 0; border-radius: 4px 4px 0 0; }
+
+.frame-scroll { overflow-x: auto; }
+.app { min-width: 1020px; display: grid; grid-template-columns: 196px minmax(0,1fr); background: var(--paper); }
+
+/* left rail — cool chrome */
+.rail { background: var(--chrome); border-right: 1px solid var(--chrome-hair); padding: 16px 0 14px; display: flex; flex-direction: column; min-height: 560px; }
+.rail-mark { padding: 2px 16px 18px; }
+.rail-mark strong { font-family: var(--serif); font-size: 16px; display: block; color: var(--chrome-ink); letter-spacing: -.01em; }
+.rail-mark span { font-family: var(--mono); font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--chrome-soft); }
+.rail-group { padding: 0 10px; display: flex; flex-direction: column; gap: 1px; }
+.rail-lbl { font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--chrome-soft); padding: 16px 6px 7px; }
+.rail-item {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 13.5px; color: var(--chrome-ink);
+  padding: 7px 8px; border-radius: 5px; cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: background 130ms ease, border-color 130ms ease;
+}
+.rail-item:hover { background: var(--chrome-2); }
+.rail-item.on { background: var(--chrome-2); border-left-color: var(--indigo); color: var(--indigo-deep); font-weight: 500; }
+.rail-item i { width: 13px; height: 13px; flex: 0 0 auto; border: 1.3px solid currentColor; border-radius: 2px; opacity: .55; }
+.rail-item.i-cal i { border-top-width: 4px; }
+.rail-item.i-people i { border-radius: 999px; }
+.rail-item.i-assign i { border-radius: 2px; border-style: dashed; }
+.rail-item.i-shared i { transform: rotate(45deg); }
+.rail-item .ct { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--chrome-soft); font-variant-numeric: tabular-nums; }
+.rail-foot { margin-top: auto; padding: 14px 16px 0; border-top: 1px solid var(--chrome-hair); }
+.rail-foot .kv { font-family: var(--mono); font-size: 10.5px; color: var(--chrome-soft); display: flex; justify-content: space-between; padding: 3px 0; font-variant-numeric: tabular-nums; }
+
+/* main column */
+.main { display: flex; flex-direction: column; min-width: 0; }
+/* z-index + isolation: a hovered calendar cell lifts with z-index, and without these it
+   painted its shadow over the top bar and the rail. The body owns its own stacking context. */
+.topbar { display: flex; align-items: center; gap: 14px; padding: 14px 24px; border-bottom: 1px solid var(--hair); background: var(--paper); flex-wrap: wrap; position: relative; z-index: 6; }
+.topbar h3 { font-size: 20px; letter-spacing: -.012em; }
+.topbar .sp { flex: 1; }
+.rail { position: relative; z-index: 7; }
+
+/* the trust strip — NEVER green */
+.trust {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .05em;
+  color: var(--chrome-ink); background: var(--chrome); border: 1px solid var(--chrome-hair);
+  border-radius: 3px; padding: 4px 10px;
+}
+.body { padding: 22px 24px 28px; display: flex; flex-direction: column; gap: 18px; position: relative; z-index: 1; isolation: isolate; }
+
+.sheet { background: var(--sheet); border: 1px solid var(--hair); border-radius: 10px; box-shadow: var(--shadow); }
+.sheet-hd { display: flex; align-items: center; gap: 10px; padding: 13px 18px; border-bottom: 1px solid var(--hair); }
+.sheet-hd h4 { font-size: 15px; }
+.sheet-hd .sp { flex: 1; }
+.sheet-bd { padding: 16px 18px; }
+
+.note-strip { font-size: 12.5px; color: var(--subtle); padding: 9px 18px; background: var(--mood-3-wash); border-top: 1px solid var(--hair); border-radius: 0 0 10px 10px; }
+
+/* tables */
+table.t { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+table.t th {
+  text-align: left; font-family: var(--mono); font-size: 10px; font-weight: 500;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--chrome-soft);
+  padding: 0 12px 9px; border-bottom: 1px solid var(--hair); white-space: nowrap;
+}
+table.t td { padding: 11px 12px; border-bottom: 1px solid var(--hair); vertical-align: middle; }
+table.t tr:last-child td { border-bottom: 0; }
+table.t tbody tr { transition: background 130ms ease; }
+table.t tbody tr:hover { background: color-mix(in oklab, var(--indigo-wash) 55%, transparent); }
+td.num, th.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.who { display: flex; align-items: center; gap: 10px; }
+.who-av { width: 26px; height: 26px; border-radius: 4px; background: var(--indigo-wash); border: 1px solid color-mix(in oklab, var(--indigo) 30%, transparent);
+          display: grid; place-items: center; font-family: var(--mono); font-size: 10.5px; color: var(--indigo-deep); flex: 0 0 auto; }
+.who-nm { font-family: var(--serif); font-size: 15px; }
+.who-ref { font-family: var(--mono); font-size: 10px; color: var(--ink-faint); display: block; line-height: 1.3; }
+
+/* band chip — mood colour, data only */
+.band { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; }
+.band i { width: 9px; height: 20px; border-radius: 2px; flex: 0 0 auto; }
+.band .tr { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
+
+/* attention strip */
+.attn { border: 1px solid var(--clay); border-left-width: 3px; background: var(--clay-wash); border-radius: 8px; overflow: hidden; }
+.attn-hd { padding: 11px 16px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--clay); border-bottom: 1px solid color-mix(in oklab, var(--clay) 26%, transparent); }
+.attn-row { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-bottom: 1px solid color-mix(in oklab, var(--clay) 16%, transparent); font-size: 13.5px; }
+.attn-row:last-child { border-bottom: 0; }
+.attn-row .sp { flex: 1; }
+.mini-btn { font: inherit; font-size: 12px; background: var(--sheet); color: var(--ink); border: 1px solid var(--hair-strong); border-radius: 5px; padding: 4px 11px; cursor: pointer; transition: background 130ms ease, transform 130ms ease; }
+.mini-btn:hover { background: var(--paper); }
+.mini-btn:active { transform: translateY(1px); }
+.mini-btn.pri { background: var(--ink); color: var(--sheet); border-color: var(--ink); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CALENDAR
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cal-wrap { display: grid; grid-template-columns: minmax(0,1fr) 288px; gap: 18px; }
+.cal-nav { display: flex; align-items: center; gap: 10px; }
+.cal-nav h4 { font-size: 17px; min-width: 150px; }
+.nav-btn { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid var(--hair-strong); background: var(--sheet); color: var(--ink-soft); border-radius: 5px; cursor: pointer; font: inherit; font-size: 13px; line-height: 1; transition: background 130ms ease; }
+.nav-btn:hover { background: var(--paper); }
+
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+.cal-dow { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--chrome-soft); padding: 0 0 8px 4px; }
+.cal-cell {
+  min-height: 84px; border-top: 1px solid var(--hair); border-left: 1px solid var(--hair);
+  padding: 6px 6px 7px; cursor: pointer; position: relative;
+  transition: background 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+.cal-grid > .cal-cell:nth-child(7n+8) { border-left: 0; }
+.cal-cell:hover { background: var(--sheet); box-shadow: var(--shadow); transform: translateY(-1px); z-index: 2; }
+.cal-cell.out { opacity: .38; }
+.cal-cell.sel { background: var(--sheet); box-shadow: inset 0 0 0 2px var(--indigo); z-index: 3; }
+.cal-d { font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.cal-cell.today .cal-d { background: var(--ink); color: var(--sheet); border-radius: 3px; padding: 1px 5px; }
+.cal-ev { display: flex; align-items: center; gap: 5px; margin-top: 4px; font-size: 10.5px; color: var(--ink-soft); line-height: 1.25;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-ev i { width: 4px; height: 11px; border-radius: 1px; flex: 0 0 auto; }
+.cal-ev.e-due   i { background: var(--indigo); }
+.cal-ev.e-share i { background: var(--mood-4); }
+.cal-ev.e-sess  i { background: transparent; box-shadow: inset 0 0 0 1.2px var(--ink-soft); }
+.cal-ev.e-late  i { background: var(--clay); }
+.cal-more { font-family: var(--mono); font-size: 9.5px; color: var(--ink-faint); margin-top: 3px; }
+.dotpop { animation: bloom 420ms cubic-bezier(.2,.9,.3,1) backwards; }
+@keyframes bloom { from { transform: scaleY(.2); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.agenda { background: var(--sheet); border: 1px solid var(--hair); border-radius: 10px; padding: 16px; align-self: start; }
+.agenda h5 { font-family: var(--serif); font-size: 15px; margin: 0 0 3px; font-weight: 600; }
+.agenda .ag-sub { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); letter-spacing: .06em; text-transform: uppercase; }
+.ag-item { border-top: 1px solid var(--hair); padding: 11px 0 10px; display: flex; flex-direction: column; gap: 5px; }
+.ag-item:first-of-type { margin-top: 12px; }
+.ag-t { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); }
+.ag-n { font-size: 13.5px; }
+.ag-empty { border-top: 1px solid var(--hair); margin-top: 12px; padding-top: 14px; font-size: 13px; color: var(--subtle); }
+
+.legend { display: flex; gap: 16px; flex-wrap: wrap; padding-top: 12px; }
+.legend div { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink-soft); }
+.legend i { width: 4px; height: 12px; border-radius: 1px; }
+
+/* 12-week ribbon */
+.ribbon { display: flex; gap: 3px; align-items: flex-end; }
+.ribbon i { width: 9px; height: 22px; border-radius: 2px; background: var(--hair); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CLIENT RECORD
+   ═══════════════════════════════════════════════════════════════════════════ */
+.rec { display: grid; grid-template-columns: 236px minmax(0,1fr) 254px; gap: 18px; }
+.rec-id { background: var(--sheet); border: 1px solid var(--hair); border-radius: 10px; padding: 16px; align-self: start; }
+.cap-row { display: flex; align-items: baseline; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--hair); }
+.cap-row:last-child { border-bottom: 0; }
+.cap-row .cn { font-size: 12.5px; flex: 1; }
+.cap-row .ci { font-family: var(--mono); font-size: 9.5px; color: var(--ink-faint); }
+.cap-row.off { opacity: .45; }
+.cap-mark { width: 13px; font-family: var(--mono); font-size: 11px; color: var(--indigo); }
+.cap-row.off .cap-mark { color: var(--ink-faint); }
+
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: 176px; overflow: visible; }
+.spark-line { fill: none; stroke: var(--indigo); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.spark-line.draw { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); }
+.seen .spark-line.draw { animation: draw 1500ms cubic-bezier(.4,0,.2,1) forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+.spark-area { fill: color-mix(in oklab, var(--indigo) 12%, transparent); opacity: 0; }
+.seen .spark-area { animation: fadein 800ms 700ms ease forwards; }
+@keyframes fadein { to { opacity: 1; } }
+.grid-line { stroke: var(--hair); stroke-width: 1; }
+.axis-lbl { font-family: var(--mono); font-size: 9px; fill: var(--ink-faint); letter-spacing: .06em; }
+.pt { opacity: 0; }
+.seen .pt { animation: fadein 300ms ease forwards; }
+
+.prov { display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+        border: 1px solid var(--hair-strong); border-radius: 3px; padding: 2px 7px; color: var(--subtle); }
+.prov.custom { border-color: var(--amber); color: var(--amber); background: var(--amber-wash); }
+
+.side-note { background: var(--sheet); border: 1px solid var(--hair); border-radius: 10px; padding: 16px; align-self: start; }
+.side-note h5 { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--chrome-soft); font-weight: 500; margin: 0 0 12px; }
+.side-note ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.side-note li { font-size: 12.5px; color: var(--ink-soft); padding-left: 17px; position: relative; line-height: 1.5; }
+.side-note li::before { content: '·'; position: absolute; left: 5px; color: var(--indigo); font-weight: 700; }
+.side-note li.no::before { content: '×'; color: var(--clay); font-size: 11px; left: 4px; top: 1px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ASSIGN — lifecycle + composer
+   ═══════════════════════════════════════════════════════════════════════════ */
+.asn { display: grid; grid-template-columns: 262px minmax(0,1fr) 262px; gap: 18px; }
+.cat-item { border: 1px solid var(--hair); border-radius: 8px; padding: 11px 13px; cursor: pointer; background: var(--sheet); margin-bottom: 9px;
+            transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease; }
+.cat-item:hover { border-color: var(--hair-strong); transform: translateY(-1px); box-shadow: var(--shadow); }
+.cat-item.on { border-color: var(--indigo); box-shadow: inset 0 0 0 1px var(--indigo); }
+.cat-item h5 { font-family: var(--serif); font-size: 14.5px; margin: 0 0 5px; font-weight: 600; }
+.cat-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.cat-min { font-family: var(--mono); font-size: 10px; color: var(--ink-faint); }
+
+.field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+.field label { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--chrome-soft); }
+.inp { border: 1px solid var(--hair-strong); background: var(--paper); color: var(--ink); border-radius: 6px; padding: 8px 11px; font: inherit; font-size: 13.5px; }
+.seg { display: flex; gap: 0; border: 1px solid var(--hair-strong); border-radius: 6px; overflow: hidden; width: fit-content; }
+.seg button { font: inherit; font-size: 12.5px; background: var(--paper); color: var(--ink-soft); border: 0; border-right: 1px solid var(--hair-strong); padding: 6px 13px; cursor: pointer; transition: background 130ms ease, color 130ms ease; }
+.seg button:last-child { border-right: 0; }
+.seg button.on { background: var(--ink); color: var(--sheet); }
+
+.preview { background: var(--paper); border: 1px dashed var(--hair-strong); border-radius: 8px; padding: 13px 15px; }
+.preview .pv-l { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--chrome-soft); }
+.preview .pv-t { font-family: var(--serif); font-size: 16px; margin-top: 6px; line-height: 1.4; }
+
+.life { display: flex; flex-direction: column; gap: 0; }
+.life-step { display: grid; grid-template-columns: 22px 1fr; gap: 11px; padding-bottom: 15px; position: relative; }
+.life-step:last-child { padding-bottom: 0; }
+.life-step::after { content: ''; position: absolute; left: 10.5px; top: 22px; bottom: 0; width: 1px; background: var(--hair); }
+.life-step:last-child::after { display: none; }
+.life-n { width: 21px; height: 21px; border-radius: 999px; display: grid; place-items: center; font-family: var(--mono); font-size: 10px;
+          border: 1px solid var(--hair-strong); color: var(--ink-faint); background: var(--sheet); z-index: 1; }
+.life-step.done .life-n { background: var(--ink); border-color: var(--ink); color: var(--sheet); }
+.life-step.now .life-n { border-color: var(--indigo); color: var(--indigo); box-shadow: 0 0 0 3px var(--indigo-wash); }
+.life-t { font-size: 13px; }
+.life-s { font-size: 11.5px; color: var(--subtle); font-family: var(--mono); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SIGN-IN
+   ═══════════════════════════════════════════════════════════════════════════ */
+.gate { min-width: 1020px; display: grid; grid-template-columns: 1.05fr .95fr; min-height: 520px; }
+.gate-l { background: var(--paper); padding: 44px 44px 40px; display: flex; flex-direction: column; justify-content: center; gap: 22px; }
+.gate-l h2 { font-size: 30px; letter-spacing: -.02em; max-width: 15ch; }
+.gate-l > p { font-size: 15.5px; color: var(--ink-soft); max-width: 46ch; }
+.gate-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 4px; }
+.gate-cols h6 { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--chrome-soft); font-weight: 500; margin: 0 0 10px; }
+.gate-cols ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 9px; }
+.gate-cols li { font-size: 13px; color: var(--ink-soft); padding-left: 17px; position: relative; line-height: 1.45; }
+.gate-cols li::before { content: '·'; position: absolute; left: 5px; color: var(--indigo); font-weight: 700; }
+.gate-cols .neg li::before { content: '×'; color: var(--clay); font-size: 11px; left: 4px; }
+.gate-r { background: var(--chrome); border-left: 1px solid var(--chrome-hair); padding: 40px 36px; display: flex; flex-direction: column; justify-content: center; gap: 16px; }
+.gate-r h4 { font-size: 17px; color: var(--chrome-ink); }
+.banner-lo { background: var(--amber-wash); border: 1px solid color-mix(in oklab, var(--amber) 40%, transparent); border-left-width: 3px; border-radius: 7px; padding: 12px 14px; font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; }
+.banner-lo strong { color: var(--amber); }
+.verify { font-family: var(--mono); font-size: 10.5px; color: var(--chrome-soft); background: var(--chrome-2); border: 1px solid var(--chrome-hair); border-radius: 6px; padding: 9px 11px; word-break: break-all; line-height: 1.55; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ADMIN CONSOLE — the one dark surface, identical in both themes
+   ═══════════════════════════════════════════════════════════════════════════ */
+.con { min-width: 1020px; background: var(--con-bg); color: var(--con-ink); display: grid; grid-template-columns: 178px minmax(0,1fr); }
+.con-rail { background: var(--con-2); border-right: 1px solid var(--con-hair); padding: 16px 0; display: flex; flex-direction: column; min-height: 620px; }
+.con-rail .rail-mark strong { color: var(--con-ink); }
+.con-rail .rail-mark span { color: var(--con-faint); }
+.con-rail .rail-lbl { color: var(--con-faint); }
+.con-item { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--con-soft); padding: 6px 8px; border-radius: 5px; border-left: 2px solid transparent; cursor: pointer; transition: background 130ms ease; }
+.con-item:hover { background: var(--con-3); }
+.con-item.on { background: var(--con-3); color: var(--con-accent); border-left-color: var(--con-accent); }
+.con-item .ct { margin-left: auto; font-family: var(--mono); font-size: 10px; }
+.con-item .ct.warn { color: var(--con-warn); }
+.con-item .ct.crit { color: var(--con-crit); }
+
+.con-main { display: flex; flex-direction: column; min-width: 0; }
+.con-top { display: flex; align-items: center; gap: 14px; padding: 13px 20px; border-bottom: 1px solid var(--con-hair); flex-wrap: wrap; }
+.con-top h3 { font-family: var(--sans); font-size: 15px; font-weight: 600; color: var(--con-ink); letter-spacing: -.005em; }
+.con-top .sp { flex: 1; }
+.con-kv { font-family: var(--mono); font-size: 10.5px; color: var(--con-faint); }
+.con-kv b { color: var(--con-soft); font-weight: 400; }
+.con-body { padding: 18px 20px 22px; display: grid; grid-template-columns: minmax(0,1fr) 282px; gap: 18px; }
+
+.con-card { background: var(--con-2); border: 1px solid var(--con-hair); border-radius: 8px; overflow: hidden; }
+.con-card > header { display: flex; align-items: center; gap: 9px; padding: 10px 14px; border-bottom: 1px solid var(--con-hair); }
+.con-card h5 { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--con-soft); font-weight: 500; margin: 0; }
+.con-card > header .sp { flex: 1; }
+.con-card .cb { padding: 13px 14px; }
+
+.live { font-family: var(--mono); font-size: 11.5px; line-height: 1.75; max-height: 246px; overflow: hidden; padding: 8px 0; }
+.live-row { display: grid; grid-template-columns: 62px 54px minmax(0,1fr); gap: 10px; padding: 2px 14px 2px 11px; border-left: 3px solid transparent; }
+.live-row.new { animation: slidein 380ms cubic-bezier(.2,.8,.3,1); }
+@keyframes slidein { from { opacity: 0; transform: translateY(-7px); } to { opacity: 1; transform: none; } }
+.live-ts { color: var(--con-faint); }
+.live-lv { letter-spacing: .06em; }
+.live-msg { color: var(--con-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lv-warn { border-left-color: var(--con-warn); }
+.lv-warn .live-lv { color: var(--con-warn); }
+.lv-crit { border-left-color: var(--con-crit); background: color-mix(in oklab, var(--con-crit) 8%, transparent); }
+.lv-crit .live-lv { color: var(--con-crit); }
+.lv-crit .live-msg { color: var(--con-ink); }
+.lv-info .live-lv { color: var(--con-faint); }
+
+table.ct-t { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11.5px; }
+table.ct-t th { text-align: left; font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--con-faint); font-weight: 500; padding: 0 12px 8px; border-bottom: 1px solid var(--con-hair); }
+table.ct-t td { padding: 8px 12px; border-bottom: 1px solid var(--con-hair); color: var(--con-soft); white-space: nowrap; }
+table.ct-t tr:last-child td { border-bottom: 0; }
+table.ct-t tbody tr:hover { background: var(--con-3); }
+table.ct-t td.act { color: var(--con-accent); }
+table.ct-t td.act.f { color: var(--con-crit); }
+.con-metric { display: flex; align-items: baseline; gap: 8px; padding: 7px 0; border-bottom: 1px dashed var(--con-hair); font-family: var(--mono); font-size: 11.5px; }
+.con-metric:last-child { border-bottom: 0; }
+.con-metric .k { color: var(--con-faint); flex: 1; }
+.con-metric .v { color: var(--con-ink); font-variant-numeric: tabular-nums; }
+.con-metric .v.warn { color: var(--con-warn); }
+.con-metric .v.crit { color: var(--con-crit); }
+
+.con-guard { border: 1px solid var(--con-warn); border-left-width: 3px; border-radius: 8px; background: color-mix(in oklab, var(--con-warn) 9%, var(--con-2)); padding: 14px 16px; }
+.con-guard h5 { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--con-warn); margin: 0 0 11px; font-weight: 500; }
+.con-guard ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.con-guard li { font-family: var(--sans); font-size: 12.5px; color: var(--con-soft); line-height: 1.5; padding-left: 16px; position: relative; }
+.con-guard li::before { content: '×'; position: absolute; left: 3px; top: 0; color: var(--con-crit); font-family: var(--mono); font-size: 11px; }
+.con-guard li.ok::before { content: '·'; color: var(--con-accent); font-weight: 700; left: 5px; }
+.con-guard code { font-family: var(--mono); font-size: 11.5px; color: var(--con-accent); }
+
+.chain { display: flex; flex-direction: column; gap: 9px; }
+.chain-bar { display: flex; gap: 2px; }
+.chain-bar i { flex: 1; height: 15px; border-radius: 1px; background: var(--con-accent); opacity: .34; }
+.chain-bar i.v { opacity: .9; }
+.chain-verdict { font-family: var(--mono); font-size: 11px; color: var(--con-accent); }
+.chain-caveat { font-size: 12px; color: var(--con-soft); line-height: 1.5; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   NOTES UNDER EACH RENDER
+   ═══════════════════════════════════════════════════════════════════════════ */
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(238px, 1fr)); gap: 0; margin-top: 22px; border-top: 1px solid var(--hair); }
+.note { padding: 18px 20px 18px 0; border-right: 1px solid var(--hair); }
+.note:last-child { border-right: 0; }
+.note h5 { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--chrome-soft); font-weight: 500; margin: 0 0 8px; }
+.note p { font-size: 13.5px; color: var(--ink-soft); line-height: 1.55; }
+.note code { font-family: var(--mono); font-size: 12px; color: var(--indigo); background: var(--indigo-wash); padding: 1px 5px; border-radius: 3px; }
+@media (max-width: 700px) { .note { border-right: 0; border-bottom: 1px solid var(--hair); padding-right: 0; } .note:last-child { border-bottom: 0; } }
+
+/* motion inventory */
+.motion { display: grid; grid-template-columns: repeat(auto-fit, minmax(232px, 1fr)); gap: 16px; }
+.mo { background: var(--sheet); border: 1px solid var(--hair); border-radius: 10px; overflow: hidden; }
+.mo-stage { height: 108px; display: grid; place-items: center; background: var(--paper); border-bottom: 1px solid var(--hair); overflow: hidden; position: relative; }
+.mo-meta { padding: 13px 15px; }
+.mo-meta h5 { font-size: 13.5px; font-family: var(--sans); font-weight: 600; margin: 0 0 4px; }
+.mo-meta p { font-size: 12px; color: var(--subtle); line-height: 1.5; }
+.mo-meta .spec { font-family: var(--mono); font-size: 10.5px; color: var(--chrome-soft); margin-top: 7px; display: block; }
+
+.demo-card { width: 116px; height: 56px; background: var(--sheet); border: 1px solid var(--hair-strong); border-radius: 7px; box-shadow: var(--shadow); animation: rise 2.6s cubic-bezier(.22,.7,.28,1) infinite; }
+@keyframes rise { 0%,12% { opacity: 0; transform: translateY(16px); } 40%,78% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(16px); } }
+.demo-tabs { display: flex; gap: 2px; position: relative; padding-bottom: 7px; }
+.demo-tabs span { font-size: 12px; color: var(--ink-soft); padding: 3px 11px; }
+.demo-ind { position: absolute; bottom: 0; height: 2px; background: var(--indigo); border-radius: 2px; width: 52px; animation: slide 3s cubic-bezier(.5,0,.2,1) infinite; }
+@keyframes slide { 0%,26% { transform: translateX(0); width: 52px; } 50%,72% { transform: translateX(54px); width: 46px; } 96%,100% { transform: translateX(0); width: 52px; } }
+.demo-spark { width: 140px; height: 46px; }
+.demo-spark path { fill: none; stroke: var(--indigo); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 190; animation: sweep 3s ease-in-out infinite; }
+@keyframes sweep { 0% { stroke-dashoffset: 190; } 55%,88% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 190; } }
+.demo-log { font-family: var(--mono); font-size: 10px; width: 150px; display: flex; flex-direction: column; gap: 3px; }
+.demo-log i { height: 7px; border-radius: 1px; background: var(--chrome-2); animation: tick 2.4s ease infinite backwards; }
+.demo-log i:nth-child(1) { width: 82%; animation-delay: 0s; }
+.demo-log i:nth-child(2) { width: 64%; animation-delay: .3s; }
+.demo-log i:nth-child(3) { width: 91%; background: color-mix(in oklab, var(--amber) 40%, var(--chrome-2)); animation-delay: .6s; }
+.demo-log i:nth-child(4) { width: 55%; animation-delay: .9s; }
+@keyframes tick { 0% { opacity: 0; transform: translateY(-5px); } 22%,86% { opacity: 1; transform: none; } 100% { opacity: .25; } }
+.demo-cell { width: 74px; height: 62px; border: 1px solid var(--hair); border-radius: 5px; padding: 5px; background: var(--sheet); animation: lift 2.8s ease-in-out infinite; display: flex; flex-direction: column; gap: 4px; }
+@keyframes lift { 0%,22% { transform: none; box-shadow: none; } 45%,72% { transform: translateY(-3px); box-shadow: var(--shadow); } 100% { transform: none; box-shadow: none; } }
+.demo-cell b { font-family: var(--mono); font-size: 9px; color: var(--ink-faint); font-weight: 400; }
+.demo-cell i { height: 8px; border-radius: 1px; }
+.demo-pills { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+
+/* honesty */
+.honest { background: var(--sheet); border: 1px solid var(--hair-strong); border-left: 3px solid var(--clay); border-radius: 10px; padding: 26px 28px; }
+.honest h3 { font-size: 20px; margin-bottom: 14px; }
+.honest ul { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(290px,1fr)); gap: 13px 30px; }
+.honest li { font-size: 14px; color: var(--ink-soft); padding-left: 18px; position: relative; line-height: 1.55; }
+.honest li::before { content: '×'; position: absolute; left: 2px; top: 1px; color: var(--clay); font-family: var(--mono); font-size: 12px; }
+.honest code { font-family: var(--mono); font-size: 12.5px; color: var(--indigo); }
+
+footer { padding: 44px 0 60px; }
+footer p { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); letter-spacing: .04em; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important; animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important; scroll-behavior: auto !important;
+  }
+  .reveal { opacity: 1; transform: none; }
+}
+</style>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="mast-top">
+      <div class="mast-mark">
+        <strong>Daymark</strong>
+        <span>Companion / clinician web</span>
+      </div>
+      <button class="tbtn" id="theme" type="button" aria-label="Switch colour theme">Theme</button>
+    </div>
+    <h1 class="mast-h">Cool chrome,<br><em>warm content.</em></h1>
+    <p class="mast-dek">
+      Six screens for the clinician side of Daymark, plus the server admin console. The current build
+      dresses everything as warm paper, which makes a working tool read like a personal essay. Termix
+      and Zerobyte dress everything as chrome, which is why they feel sharp — and why they feel edgy.
+      The merge is a rule, not a mood board: <strong>chrome gets the cool, dense, monospaced discipline;
+      a person's data keeps the paper.</strong> Neither crosses into the other.
+    </p>
+    <div class="mast-meta">
+      <span class="chip">Renders only — no implementation</span>
+      <span class="chip mark-new">4 screens new</span>
+      <span class="chip">2 redesigned</span>
+      <span class="chip mark-warn">Copy is real, drawn from the codebase</span>
+    </div>
+  </div>
+</header>
+
+<!-- ══ THESIS ══════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">The rule</span></div>
+      <div>
+        <h2>One split decides every colour, every typeface, every border radius.</h2>
+        <p>
+          Ask of any pixel: is this the person, or is this the machinery? Everything follows. It also
+          answers the two complaints at once — the interface gains the second and third colour dimensions
+          it was missing, and it gains them without turning a mental-health tool into a terminal.
+        </p>
+      </div>
+    </div>
+    <div class="thesis">
+      <div class="th-col th-warm">
+        <div class="th-rule"></div>
+        <h3>Content layer — the person</h3>
+        <p>Their answers, their bands, their trend, the words they read. Unhurried, generous, set in serif on paper. This is where the mood scale lives and the <em>only</em> place it lives.</p>
+        <ul class="th-list">
+          <li>Paper sheets, 10px radius, soft elevation</li>
+          <li>Serif display, 1.6 line-height, room to breathe</li>
+          <li>Mood 1–5 encodes data, never interface state</li>
+          <li>Sentence case, plain language, no clinical framing</li>
+        </ul>
+      </div>
+      <div class="th-col th-cool">
+        <div class="th-rule"></div>
+        <h3>Chrome layer — the machinery</h3>
+        <p>Navigation, tables, timestamps, key fingerprints, capability ids, statuses, the admin console. Cool grey-blue, tight, monospaced, tabular. Borrowed straight from Termix and Zerobyte — and confined here so it never touches the content.</p>
+        <ul class="th-list">
+          <li>chrome ground · 4–5px radius · 1px hairlines</li>
+          <li>mono + tabular-nums for every number</li>
+          <li>indigo #3f5f7f = structure only, never data</li>
+          <li>clay #a8574a = the one alarm hue in the system</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ SYSTEM SHEET ════════════════════════════════════════════════════════ -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">System</span><span class="chip mark-new">New dimensions</span></div>
+      <div>
+        <h2>Three colour dimensions where there was one.</h2>
+        <p>
+          Today the mood ramp does double duty: it colours a person's score <em>and</em> every warning,
+          tab, and banner in the app. That is the "only one colour" feeling. Splitting them gives the
+          mood ramp back to the data and hands the interface its own vocabulary — a structural accent, a
+          single alarm hue, and a status ramp that carries most of its meaning in <em>form</em> rather than hue.
+        </p>
+      </div>
+    </div>
+
+    <div class="sys">
+      <div class="panel">
+        <h4>Content palette — unchanged</h4>
+        <div class="sw-row"><span class="sw" style="background:#f4efe6"></span><span class="sw-name">Paper<span class="sw-note">page ground</span></span><span class="sw-hex">#f4efe6</span></div>
+        <div class="sw-row"><span class="sw" style="background:#fcfaf5"></span><span class="sw-name">Sheet<span class="sw-note">cards, surfaces</span></span><span class="sw-hex">#fcfaf5</span></div>
+        <div class="sw-row"><span class="sw" style="background:#2a2722"></span><span class="sw-name">Ink<span class="sw-note">text, and "done"</span></span><span class="sw-hex">#2a2722</span></div>
+        <div class="sw-row"><span class="sw" style="background:linear-gradient(90deg,#ae5747,#c27c46,#c6a24e,#8fa268,#5e8a66)"></span><span class="sw-name">Mood 1→5<span class="sw-note">data only, from now on</span></span><span class="sw-hex">5 stops</span></div>
+      </div>
+
+      <div class="panel">
+        <h4>Chrome palette — new</h4>
+        <div class="sw-row"><span class="sw" style="background:#e4e7ec"></span><span class="sw-name">Chrome<span class="sw-note">rails, bars, table heads</span></span><span class="sw-hex">#e4e7ec</span></div>
+        <div class="sw-row"><span class="sw" style="background:#3f5f7f"></span><span class="sw-name">Indigo<span class="sw-note">structure &amp; focus, never data</span></span><span class="sw-hex">#3f5f7f</span></div>
+        <div class="sw-row"><span class="sw" style="background:#a8574a"></span><span class="sw-name">Clay<span class="sw-note">the only alarm hue</span></span><span class="sw-hex">#a8574a</span></div>
+        <div class="sw-row"><span class="sw" style="background:#9c7128"></span><span class="sw-name">Amber<span class="sw-note">reserved for warn severity</span></span><span class="sw-hex">#9c7128</span></div>
+        <div class="sw-row"><span class="sw" style="background:#161b22"></span><span class="sw-name">Console<span class="sw-note">admin surface, both themes</span></span><span class="sw-hex">#161b22</span></div>
+      </div>
+
+      <div class="panel">
+        <h4>Status — form first, hue last</h4>
+        <div class="stat-legend">
+          <div><span class="pill p-sched">Scheduled</span><span class="sl-txt">outline, no fill</span></div>
+          <div><span class="pill p-deliv">Delivered</span><span class="sl-txt">tinted</span></div>
+          <div><span class="pill p-accept">Accepted</span><span class="sl-txt">tinted + bordered</span></div>
+          <div><span class="pill p-done">Completed</span><span class="sl-txt">solid ink — not green</span></div>
+          <div><span class="pill p-declin">Declined</span><span class="sl-txt">struck through, quiet</span></div>
+          <div><span class="pill p-none">No response</span><span class="sl-txt">hatched, clay</span></div>
+          <div><span class="pill p-over">Overdue</span><span class="sl-txt">solid clay</span></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h4>Type — three roles</h4>
+        <div class="type-spec">
+          <div class="type-row">
+            <div class="type-samp-serif">Focus &amp; follow-through</div>
+            <span class="type-meta">Display · Fraunces (target) → Iowan Old Style · content only</span>
+          </div>
+          <div class="type-row">
+            <div class="type-samp-sans">Suggest a check-in reminder every week.</div>
+            <span class="type-meta">UI · Inter (target) → system-ui · controls &amp; body</span>
+          </div>
+          <div class="type-row">
+            <div class="type-samp-mono">2026-08-11 14:02:07Z  share.open  rel_7f3a…c19b</div>
+            <span class="type-meta">Data · ui-monospace · tabular-nums · all chrome</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <h5>Why "done" is ink, not green</h5>
+        <p>In a product whose trust strip is forbidden from ever going green, a green checkmark would be
+        a claim. Completion is a fact, not a verdict — so it is set in solid ink, and the only chroma in
+        the whole status ramp belongs to things that need a human.</p>
+      </div>
+      <div class="note">
+        <h5>Fonts are declared but not shipped</h5>
+        <p><code>app.css</code> names Fraunces and Inter, and <code>web/fonts/</code> contains only a
+        README. Every screen you are looking at — and every screen a clinician sees today — is running
+        the fallback stack. Vendoring the two subset woff2 files is a one-commit fix.</p>
+      </div>
+      <div class="note">
+        <h5>The dark console does not flip</h5>
+        <p>The admin surface stays dark in light mode too. It is a different room, entered deliberately,
+        and holding it fixed is what stops the console's severity colours from having to work on two
+        grounds.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 1. SIGN IN ══════════════════════════════════════════════════════════ -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">Screen 1</span><span class="chip">Redesigned</span></div>
+      <div>
+        <h2>Sign in — what you are about to see, and what you will never see.</h2>
+        <p>
+          Today this is a passphrase box on an empty page. A clinician arriving from a link has no way to
+          tell what this tool is, who runs it, or what it will show them. The fix is not a marketing
+          paragraph: it is a two-column contract, stated before they type anything. The negative column is
+          the more important one.
+        </p>
+      </div>
+    </div>
+
+    <div class="render">
+      <div class="frame">
+        <div class="frame-bar">
+          <span class="frame-tag">Chromium</span>
+          <span class="frame-url"><span class="lockglyph" aria-hidden="true"></span><b>daymark.example.com</b>/therapist</span>
+          <span class="frame-tag">self-hosted · not ours</span>
+        </div>
+        <div class="frame-scroll">
+          <div class="gate">
+            <div class="gate-l">
+              <span class="eyebrow">Daymark Companion</span>
+              <h2>A window your client opened for you.</h2>
+              <p>
+                Daymark lives on your client's phone. This page shows only the slice they chose to hand
+                over, on a server they or someone they trust runs. Nothing here is a diagnosis, a screen,
+                or a clinical record.
+              </p>
+              <div class="gate-cols">
+                <div>
+                  <h6>What you get</h6>
+                  <ul>
+                    <li>Scores and descriptive bands from self-checks they completed</li>
+                    <li>The ability to suggest self-checks, tasks, goals and reminders</li>
+                    <li>A written game plan you author, that they can accept or ignore</li>
+                    <li>Dates: what is due, what arrived, what went unanswered</li>
+                  </ul>
+                </div>
+                <div class="neg">
+                  <h6>What you never get</h6>
+                  <ul>
+                    <li>Raw journal entries, notes, or anything they wrote</li>
+                    <li>Location, contacts, or anything from the rest of their phone</li>
+                    <li>The power to make anything happen — every item needs their acceptance</li>
+                    <li>Access that outlives their revocation, which is instant and unilateral</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+            <div class="gate-r">
+              <h4>Unlock this browser session</h4>
+              <div class="field">
+                <label for="g1">Passphrase</label>
+                <input class="inp" id="g1" type="password" value="............" readonly>
+              </div>
+              <div class="field">
+                <label for="g2">One-time code</label>
+                <input class="inp mono" id="g2" type="text" value="418 902" readonly style="letter-spacing:.18em">
+              </div>
+              <button class="mini-btn pri" style="padding:9px 16px" type="button">Unlock</button>
+              <div class="banner-lo">
+                <strong>Lower-assurance path (TOTP).</strong> Your reading key is unwrapped in this browser
+                under a passphrase. Because the page is served by the server it talks to, a tampered page
+                could capture your passphrase or keys — a convenience path, not a zero-knowledge guarantee.
+                Keys are held in memory only and wiped when you log out or go idle.
+              </div>
+              <div class="verify">
+                verify before trusting this page ↓<br>
+                ghcr.io/keyxmakerx/daymark-companion<br>
+                @sha256:4f2b9e…a7d1c0
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <div class="note">
+          <h5>The banner keeps its exact words</h5>
+          <p>That paragraph is not design copy — it is fixed, non-server-supplied text from
+          <code>LowerAssuranceBanner.svelte</code>. The redesign changes where it sits and how it is
+          weighted, never what it says.</p>
+        </div>
+        <div class="note">
+          <h5>The digest is a control, not a footnote</h5>
+          <p>The banner tells the reader to verify the image digest and then, today, gives them nothing to
+          verify against. Putting the pinned digest on the sign-in page turns an instruction into an
+          action.</p>
+        </div>
+        <div class="note">
+          <h5>Warm left, cool right</h5>
+          <p>The explanation is content, so it is paper and serif. The credential form is machinery, so it
+          is chrome. The seam down the middle is the whole system stated once, before a clinician has
+          learned any of it.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 2. TODAY ════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">Screen 2</span><span class="chip mark-new">New</span></div>
+      <div>
+        <h2>Today — the things that need a person, then everything else.</h2>
+        <p>
+          There is no landing screen at all right now; the portal opens on a capability list. A clinician
+          with six clients needs one answer on arrival: <em>what changed, and what is waiting on me.</em>
+          Only genuine exceptions get clay. The roster below it is deliberately quiet.
+        </p>
+      </div>
+    </div>
+
+    <div class="render">
+      <div class="frame">
+        <div class="frame-bar">
+          <span class="frame-tag">Chromium</span>
+          <span class="frame-url"><span class="lockglyph" aria-hidden="true"></span><b>daymark.example.com</b>/therapist/today</span>
+          <span class="frame-tag">session 12:41 remaining</span>
+        </div>
+        <div class="frame-scroll">
+          <div class="app">
+            <nav class="rail">
+              <div class="rail-mark"><strong>Daymark</strong><span>Clinician</span></div>
+              <div class="rail-group">
+                <div class="rail-item on"><i></i>Today<span class="ct">3</span></div>
+                <div class="rail-item i-cal"><i></i>Calendar</div>
+                <div class="rail-item i-people"><i></i>People<span class="ct">6</span></div>
+              </div>
+              <div class="rail-lbl">Do</div>
+              <div class="rail-group">
+                <div class="rail-item i-assign"><i></i>Assign</div>
+                <div class="rail-item"><i></i>Game plans</div>
+                <div class="rail-item i-shared"><i></i>Shared data</div>
+              </div>
+              <div class="rail-foot">
+                <div class="kv"><span>session</span><span>12:41</span></div>
+                <div class="kv"><span>keys</span><span>in memory</span></div>
+                <div class="kv"><span>server</span><span>self-hosted</span></div>
+              </div>
+            </nav>
+
+            <div class="main">
+              <div class="topbar">
+                <h3>Tuesday, 11 August</h3>
+                <span class="sp"></span>
+                <span class="trust"><span class="lockglyph" aria-hidden="true"></span>TOTP path · keys in memory only</span>
+                <span class="chip mark-warn">Non-diagnostic</span>
+              </div>
+              <div class="body">
+
+                <div class="attn">
+                  <div class="attn-hd">Needs you — 3</div>
+                  <div class="attn-row">
+                    <span class="pill p-none">No response</span>
+                    <span>Wren has not opened the <strong>Daily wellbeing self-check</strong> published 9 days ago.</span>
+                    <span class="sp"></span>
+                    <button class="mini-btn" type="button">Withdraw</button>
+                    <button class="mini-btn" type="button">Leave it</button>
+                  </div>
+                  <div class="attn-row">
+                    <span class="pill p-declin">Declined</span>
+                    <span>R.T. declined the reminder cadence you suggested on 4 Aug.</span>
+                    <span class="sp"></span>
+                    <button class="mini-btn" type="button">See what they saw</button>
+                  </div>
+                  <div class="attn-row">
+                    <span class="pill p-over">Expires</span>
+                    <span>Your grant from <strong>M-04</strong> expires in 6 days unless they renew it.</span>
+                    <span class="sp"></span>
+                    <button class="mini-btn" type="button">Details</button>
+                  </div>
+                </div>
+
+                <div class="sheet">
+                  <div class="sheet-hd">
+                    <h4>People</h4>
+                    <span class="sp"></span>
+                    <span class="chip">6 active relationships</span>
+                  </div>
+                  <div class="sheet-bd" style="padding:14px 6px 6px">
+                    <table class="t">
+                      <thead>
+                        <tr>
+                          <th style="padding-left:18px">Person</th>
+                          <th>Latest band</th>
+                          <th>Last shared</th>
+                          <th>Open items</th>
+                          <th class="num">Next due</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td style="padding-left:18px"><div class="who"><span class="who-av">WR</span><span><span class="who-nm">Wren</span><span class="who-ref">rel_7f3a…c19b</span></span></div></td>
+                          <td><span class="band"><i style="background:var(--mood-2)"></i>Harder stretch<span class="tr">↓ 2 wk</span></span></td>
+                          <td class="num">2 Aug</td>
+                          <td><span class="pill p-none">No response</span></td>
+                          <td class="num">—</td>
+                        </tr>
+                        <tr>
+                          <td style="padding-left:18px"><div class="who"><span class="who-av">RT</span><span><span class="who-nm">R.T.</span><span class="who-ref">rel_1c88…4e02</span></span></div></td>
+                          <td><span class="band"><i style="background:var(--mood-4)"></i>Steadier<span class="tr">→ flat</span></span></td>
+                          <td class="num">10 Aug</td>
+                          <td><span class="pill p-accept">Accepted</span></td>
+                          <td class="num">14 Aug</td>
+                        </tr>
+                        <tr>
+                          <td style="padding-left:18px"><div class="who"><span class="who-av">M4</span><span><span class="who-nm">M-04</span><span class="who-ref">rel_93de…b710</span></span></div></td>
+                          <td><span class="band"><i style="background:var(--mood-3)"></i>Mixed<span class="tr">↑ 3 wk</span></span></td>
+                          <td class="num">11 Aug</td>
+                          <td><span class="pill p-done">Completed</span></td>
+                          <td class="num">18 Aug</td>
+                        </tr>
+                        <tr>
+                          <td style="padding-left:18px"><div class="who"><span class="who-av">AN</span><span><span class="who-nm">Anke</span><span class="who-ref">rel_25b1…8fa4</span></span></div></td>
+                          <td><span class="band"><i style="background:var(--mood-5)"></i>Steadier<span class="tr">↑ 5 wk</span></span></td>
+                          <td class="num">9 Aug</td>
+                          <td><span class="pill p-deliv">Delivered</span></td>
+                          <td class="num">16 Aug</td>
+                        </tr>
+                        <tr>
+                          <td style="padding-left:18px"><div class="who"><span class="who-av">J·</span><span><span class="who-nm">J.</span><span class="who-ref">rel_6a07…d3c5</span></span></div></td>
+                          <td><span class="band" style="color:var(--ink-faint)"><i style="background:var(--hair-strong)"></i>Not shared yet</span></td>
+                          <td class="num">—</td>
+                          <td><span class="pill p-sched">Scheduled</span></td>
+                          <td class="num">12 Aug</td>
+                        </tr>
+                        <tr>
+                          <td style="padding-left:18px"><div class="who"><span class="who-av">PL</span><span><span class="who-nm">P.L.</span><span class="who-ref">rel_4fb2…9a13</span></span></div></td>
+                          <td><span class="band"><i style="background:var(--mood-4)"></i>Steadier<span class="tr">→ flat</span></span></td>
+                          <td class="num">7 Aug</td>
+                          <td><span class="pill p-declin">Declined</span></td>
+                          <td class="num">—</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <p class="note-strip">
+                    Bands are descriptive summaries of a person's own answers over time — a within-person
+                    trend, never a screen, a cut-off, or a diagnosis. "Harder stretch" is not a severity level.
+                  </p>
+                </div>
+
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <div class="note">
+          <h5>Names belong to the clinician, not the server</h5>
+          <p>The server stores relationships as an opaque <code>relRef</code>. The roster should render a
+          label the clinician sets in their own browser, with the ref shown beneath it — so the box on the
+          shelf never becomes the place client identities live.</p>
+        </div>
+        <div class="note">
+          <h5>Six rows, one colour of alarm</h5>
+          <p>Five of six rows are quiet on purpose. If "Declined" and "Delivered" both shouted, the one
+          that matters would not. Clay appears three times on this screen and each one is a genuine
+          exception.</p>
+        </div>
+        <div class="note">
+          <h5>"Not shared yet" is a real state</h5>
+          <p>A relationship can exist with nothing shared through it. Rendering that as an empty band
+          rather than a zero keeps the table from implying a low score where there is simply no data.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 3. CALENDAR ═════════════════════════════════════════════════════════ -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">Screen 3</span><span class="chip mark-new">New — the named gap</span></div>
+      <div>
+        <h2>Calendar — four kinds of event, told apart by shape.</h2>
+        <p>
+          There is no calendar anywhere in <code>companion/web/src</code> today. Cadence is the product's
+          spine — "every week", "every 2 weeks" — and it has never had a surface. Click any day.
+        </p>
+      </div>
+    </div>
+
+    <div class="render">
+      <div class="frame">
+        <div class="frame-bar">
+          <span class="frame-tag">Chromium</span>
+          <span class="frame-url"><span class="lockglyph" aria-hidden="true"></span><b>daymark.example.com</b>/therapist/calendar</span>
+          <span class="frame-tag">August 2026</span>
+        </div>
+        <div class="frame-scroll">
+          <div class="app">
+            <nav class="rail">
+              <div class="rail-mark"><strong>Daymark</strong><span>Clinician</span></div>
+              <div class="rail-group">
+                <div class="rail-item"><i></i>Today<span class="ct">3</span></div>
+                <div class="rail-item i-cal on"><i></i>Calendar</div>
+                <div class="rail-item i-people"><i></i>People<span class="ct">6</span></div>
+              </div>
+              <div class="rail-lbl">Do</div>
+              <div class="rail-group">
+                <div class="rail-item i-assign"><i></i>Assign</div>
+                <div class="rail-item"><i></i>Game plans</div>
+                <div class="rail-item i-shared"><i></i>Shared data</div>
+              </div>
+              <div class="rail-foot">
+                <div class="kv"><span>session</span><span>12:08</span></div>
+                <div class="kv"><span>keys</span><span>in memory</span></div>
+              </div>
+            </nav>
+
+            <div class="main">
+              <div class="topbar">
+                <div class="cal-nav">
+                  <button class="nav-btn" id="cal-prev" type="button" aria-label="Previous month">‹</button>
+                  <h4 id="cal-title">August 2026</h4>
+                  <button class="nav-btn" id="cal-next" type="button" aria-label="Next month">›</button>
+                </div>
+                <span class="sp"></span>
+                <span class="trust"><span class="lockglyph" aria-hidden="true"></span>TOTP path · keys in memory only</span>
+                <span class="chip mark-warn">Non-diagnostic</span>
+              </div>
+              <div class="body">
+                <div class="cal-wrap">
+                  <div>
+                    <div class="cal-grid" id="cal-grid"></div>
+                    <div class="legend">
+                      <div><i style="background:var(--indigo)"></i>Assignment due</div>
+                      <div><i style="background:var(--mood-4)"></i>Data shared with you</div>
+                      <div><i style="box-shadow:inset 0 0 0 1.2px var(--ink-soft)"></i>Session you noted</div>
+                      <div><i style="background:var(--clay)"></i>Passed with no response</div>
+                    </div>
+
+                    <div class="sheet" style="margin-top:18px">
+                      <div class="sheet-hd">
+                        <h4>Last 12 weeks</h4>
+                        <span class="sp"></span>
+                        <span class="chip">completion, all people</span>
+                      </div>
+                      <div class="sheet-bd">
+                        <div class="ribbon" id="ribbon"></div>
+                        <p style="font-size:12.5px;color:var(--subtle);margin-top:11px">
+                          One mark per day. Height is how many of that day's due items were completed; colour
+                          is the band of what came back. Gaps are gaps — nothing is inferred to fill them.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <aside class="agenda">
+                    <h5 id="ag-title">Tuesday 11 August</h5>
+                    <span class="ag-sub" id="ag-sub">today</span>
+                    <div id="ag-body"></div>
+                  </aside>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <div class="note">
+          <h5>Shape carries the kind, colour carries the state</h5>
+          <p>Due is an indigo bar, shared is a filled mood square, a session is an outline, a lapse is
+          clay. Four event types stay distinguishable in a 4×11px mark, and the whole thing still reads if
+          you cannot separate red from green.</p>
+        </div>
+        <div class="note">
+          <h5>The calendar shows that, never what</h5>
+          <p>A shared-data mark says a bundle arrived and which band it carried. It does not open an
+          entry, because there are no entries here to open — the constraint is upstream of the design.</p>
+        </div>
+        <div class="note">
+          <h5>Hover lifts, click commits</h5>
+          <p>Cells rise 1px and take elevation on hover; selection is a 2px indigo inset that survives
+          month changes. Marks bloom in on a 24ms stagger when a month renders — enough to read as arrival,
+          short enough to never be waited on.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 4. CLIENT RECORD ════════════════════════════════════════════════════ -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">Screen 4</span><span class="chip">Redesigned</span></div>
+      <div>
+        <h2>One person — the trend, its provenance, and the boundary in the margin.</h2>
+        <p>
+          The existing shared-data view is a list of decrypted bundles. What a clinician actually reads is
+          direction over time. The right-hand margin is not decoration: it is the boundary of this screen,
+          kept visible while they are looking at the thing the boundary constrains.
+        </p>
+      </div>
+    </div>
+
+    <div class="render">
+      <div class="frame">
+        <div class="frame-bar">
+          <span class="frame-tag">Chromium</span>
+          <span class="frame-url"><span class="lockglyph" aria-hidden="true"></span><b>daymark.example.com</b>/therapist/people/rel_93de…b710</span>
+          <span class="frame-tag">grant verified against pinned owner key</span>
+        </div>
+        <div class="frame-scroll">
+          <div class="app">
+            <nav class="rail">
+              <div class="rail-mark"><strong>Daymark</strong><span>Clinician</span></div>
+              <div class="rail-group">
+                <div class="rail-item"><i></i>Today<span class="ct">3</span></div>
+                <div class="rail-item i-cal"><i></i>Calendar</div>
+                <div class="rail-item i-people on"><i></i>People<span class="ct">6</span></div>
+              </div>
+              <div class="rail-lbl">Do</div>
+              <div class="rail-group">
+                <div class="rail-item i-assign"><i></i>Assign</div>
+                <div class="rail-item"><i></i>Game plans</div>
+                <div class="rail-item i-shared"><i></i>Shared data</div>
+              </div>
+              <div class="rail-foot">
+                <div class="kv"><span>session</span><span>11:52</span></div>
+                <div class="kv"><span>grant</span><span>verified</span></div>
+              </div>
+            </nav>
+
+            <div class="main">
+              <div class="topbar">
+                <h3>M-04</h3>
+                <span class="chip">relationship since 2 Mar 2026</span>
+                <span class="sp"></span>
+                <span class="trust"><span class="lockglyph" aria-hidden="true"></span>TOTP path · keys in memory only</span>
+                <span class="chip mark-warn">Non-diagnostic</span>
+              </div>
+              <div class="body">
+                <div class="rec">
+
+                  <div class="rec-id">
+                    <h5 style="font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--chrome-soft);font-weight:500;margin:0 0 12px">Granted to you</h5>
+                    <div class="cap-row"><span class="cap-mark">●</span><span class="cn">View shared data<span class="ci">read.share</span></span></div>
+                    <div class="cap-row"><span class="cap-mark">●</span><span class="cn">Assign self-checks<span class="ci">assign.questionnaire</span></span></div>
+                    <div class="cap-row"><span class="cap-mark">●</span><span class="cn">Suggest reminders<span class="ci">assign.reminder</span></span></div>
+                    <div class="cap-row"><span class="cap-mark">●</span><span class="cn">Write a game plan<span class="ci">authorGamePlan</span></span></div>
+                    <div class="cap-row off"><span class="cap-mark">○</span><span class="cn">Assign tasks<span class="ci">assign.task</span></span></div>
+                    <div class="cap-row off"><span class="cap-mark">○</span><span class="cn">Assign bundles<span class="ci">assign.largeAssessment</span></span></div>
+                    <div class="cap-row off"><span class="cap-mark">○</span><span class="cn">Suggest goals<span class="ci">assign.goal</span></span></div>
+                    <div class="cap-row off"><span class="cap-mark">○</span><span class="cn">Suggest app settings<span class="ci">suggest.setting</span></span></div>
+                    <p style="font-size:11.5px;color:var(--subtle);margin-top:14px;line-height:1.5">
+                      They set these. They can withdraw any of them at any time, and you find out by the
+                      control disappearing.
+                    </p>
+                  </div>
+
+                  <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+                    <div class="sheet">
+                      <div class="sheet-hd">
+                        <h4>Daily wellbeing self-check</h4>
+                        <span class="prov custom">✎ Custom</span>
+                        <span class="sp"></span>
+                        <span class="chip">14 check-ins · Mar–Aug</span>
+                      </div>
+                      <div class="sheet-bd">
+                        <div class="chart">
+                          <svg viewBox="0 0 620 176" role="img" aria-label="Band trend from March to August: lower in spring, mixed through June, steadier since July.">
+                            <line class="grid-line" x1="46" y1="20"  x2="612" y2="20"></line>
+                            <line class="grid-line" x1="46" y1="70"  x2="612" y2="70"></line>
+                            <line class="grid-line" x1="46" y1="120" x2="612" y2="120"></line>
+                            <line class="grid-line" x1="46" y1="150" x2="612" y2="150"></line>
+                            <text class="axis-lbl" x="0" y="24">STEADIER</text>
+                            <text class="axis-lbl" x="0" y="74">MIXED</text>
+                            <text class="axis-lbl" x="0" y="124">HARDER</text>
+                            <path class="spark-area" d="M60,132 L106,124 L152,136 L198,110 L244,96 L290,104 L336,78 L382,84 L428,62 L474,54 L520,60 L566,38 L566,150 L60,150 Z"></path>
+                            <path class="spark-line draw" style="--len:640" d="M60,132 L106,124 L152,136 L198,110 L244,96 L290,104 L336,78 L382,84 L428,62 L474,54 L520,60 L566,38"></path>
+                            <circle class="pt" cx="60"  cy="132" r="3.5" fill="var(--mood-1)" style="animation-delay:.35s"></circle>
+                            <circle class="pt" cx="106" cy="124" r="3.5" fill="var(--mood-2)" style="animation-delay:.47s"></circle>
+                            <circle class="pt" cx="152" cy="136" r="3.5" fill="var(--mood-1)" style="animation-delay:.59s"></circle>
+                            <circle class="pt" cx="198" cy="110" r="3.5" fill="var(--mood-2)" style="animation-delay:.71s"></circle>
+                            <circle class="pt" cx="244" cy="96"  r="3.5" fill="var(--mood-3)" style="animation-delay:.83s"></circle>
+                            <circle class="pt" cx="290" cy="104" r="3.5" fill="var(--mood-2)" style="animation-delay:.95s"></circle>
+                            <circle class="pt" cx="336" cy="78"  r="3.5" fill="var(--mood-3)" style="animation-delay:1.07s"></circle>
+                            <circle class="pt" cx="382" cy="84"  r="3.5" fill="var(--mood-3)" style="animation-delay:1.19s"></circle>
+                            <circle class="pt" cx="428" cy="62"  r="3.5" fill="var(--mood-4)" style="animation-delay:1.31s"></circle>
+                            <circle class="pt" cx="474" cy="54"  r="3.5" fill="var(--mood-4)" style="animation-delay:1.43s"></circle>
+                            <circle class="pt" cx="520" cy="60"  r="3.5" fill="var(--mood-4)" style="animation-delay:1.55s"></circle>
+                            <circle class="pt" cx="566" cy="38"  r="4.5" fill="var(--mood-5)" stroke="var(--sheet)" stroke-width="2" style="animation-delay:1.67s"></circle>
+                            <text class="axis-lbl" x="52"  y="168">MAR</text>
+                            <text class="axis-lbl" x="236" y="168">MAY</text>
+                            <text class="axis-lbl" x="420" y="168">JUL</text>
+                            <text class="axis-lbl" x="546" y="168">AUG</text>
+                          </svg>
+                        </div>
+                      </div>
+                      <p class="note-strip">
+                        Custom-made — a personal reflection tool, not a validated or clinical instrument.
+                        Not for diagnosis. Bands are this person's own answers compared with their own
+                        history; they are not comparable to anyone else's.
+                      </p>
+                    </div>
+
+                    <div class="sheet">
+                      <div class="sheet-hd"><h4>What arrived</h4><span class="sp"></span><span class="chip">newest first</span></div>
+                      <div class="sheet-bd" style="padding:14px 6px 6px">
+                        <table class="t">
+                          <thead><tr><th style="padding-left:18px">Received</th><th>Tool</th><th>Provenance</th><th class="num">Score</th><th>Band</th></tr></thead>
+                          <tbody>
+                            <tr><td class="num" style="padding-left:18px">11 Aug</td><td>Daily wellbeing self-check</td><td><span class="prov custom">✎ Custom</span></td><td class="num">17 / 20</td><td><span class="band"><i style="background:var(--mood-5)"></i>Steadier</span></td></tr>
+                            <tr><td class="num" style="padding-left:18px">4 Aug</td><td>Daily wellbeing self-check</td><td><span class="prov custom">✎ Custom</span></td><td class="num">14 / 20</td><td><span class="band"><i style="background:var(--mood-4)"></i>Steadier</span></td></tr>
+                            <tr><td class="num" style="padding-left:18px">28 Jul</td><td>Focus &amp; follow-through self-check</td><td><span class="prov custom">✎ Custom</span></td><td class="num">21 / 32</td><td><span class="band"><i style="background:var(--mood-3)"></i>Mixed</span></td></tr>
+                            <tr><td class="num" style="padding-left:18px">21 Jul</td><td>Daily wellbeing self-check</td><td><span class="prov custom">✎ Custom</span></td><td class="num">13 / 20</td><td><span class="band"><i style="background:var(--mood-4)"></i>Steadier</span></td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+
+                  <aside class="side-note">
+                    <h5>The edge of this screen</h5>
+                    <ul>
+                      <li>Scores and descriptive bands, exactly as the catalog computes them</li>
+                      <li>Which tool, which version, and what tier it claims</li>
+                      <li>When a bundle was shared and when you opened it — both logged for them</li>
+                      <li class="no">Item-level answers, free-text notes, journal entries</li>
+                      <li class="no">Anything from a day they did not choose to share</li>
+                      <li class="no">A comparison to anyone but themselves</li>
+                    </ul>
+                    <p style="font-size:11.5px;color:var(--subtle);margin-top:14px;line-height:1.5;border-top:1px solid var(--hair);padding-top:12px">
+                      Every catalog tool today is <strong>Custom</strong> — self-authored original items,
+                      deliberately not the ASRS, WHO-5, or any licensed scale. There is no Validated tier
+                      in this build, and the badge is there so you never have to guess.
+                    </p>
+                  </aside>
+
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <div class="note">
+          <h5>The y-axis is bands, not numbers</h5>
+          <p>Plotting a raw sum invites a clinician to read a cut-off that does not exist. Labelling the
+          axis with the same descriptive bands the person sees on their phone keeps both sides of the
+          relationship looking at the same object.</p>
+        </div>
+        <div class="note">
+          <h5>Provenance appears four times</h5>
+          <p>Once per row and once in the header, because a clinician who scrolls past the disclaimer once
+          should still meet it at the point of reading a number. <code>Custom ✎</code> is the amber badge —
+          the only place amber appears outside the console.</p>
+        </div>
+        <div class="note">
+          <h5>Withdrawn capabilities render as absent</h5>
+          <p>The greyed rows are what this person has <em>not</em> granted. If the signed grant fails to
+          verify against the pinned owner key, none of this screen renders at all — the current build
+          already refuses, and the redesign keeps that refusal loud.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 5. ASSIGN ═══════════════════════════════════════════════════════════ -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">Screen 5</span><span class="chip">Redesigned</span></div>
+      <div>
+        <h2>Assign — a suggestion, with its whole life visible before you send it.</h2>
+        <p>
+          The clinician cannot make anything happen; they can only offer. Making the four-step lifecycle
+          part of the composer, rather than a status discovered later, is what stops "assign" from feeling
+          like a command. Pick a tool and a cadence — the preview is the exact sentence the person will
+          read on their phone.
+        </p>
+      </div>
+    </div>
+
+    <div class="render">
+      <div class="frame">
+        <div class="frame-bar">
+          <span class="frame-tag">Chromium</span>
+          <span class="frame-url"><span class="lockglyph" aria-hidden="true"></span><b>daymark.example.com</b>/therapist/assign</span>
+          <span class="frame-tag">4 of 8 capabilities granted</span>
+        </div>
+        <div class="frame-scroll">
+          <div class="app">
+            <nav class="rail">
+              <div class="rail-mark"><strong>Daymark</strong><span>Clinician</span></div>
+              <div class="rail-group">
+                <div class="rail-item"><i></i>Today<span class="ct">3</span></div>
+                <div class="rail-item i-cal"><i></i>Calendar</div>
+                <div class="rail-item i-people"><i></i>People<span class="ct">6</span></div>
+              </div>
+              <div class="rail-lbl">Do</div>
+              <div class="rail-group">
+                <div class="rail-item i-assign on"><i></i>Assign</div>
+                <div class="rail-item"><i></i>Game plans</div>
+                <div class="rail-item i-shared"><i></i>Shared data</div>
+              </div>
+              <div class="rail-foot">
+                <div class="kv"><span>session</span><span>10:19</span></div>
+                <div class="kv"><span>grant</span><span>verified</span></div>
+              </div>
+            </nav>
+
+            <div class="main">
+              <div class="topbar">
+                <h3>Suggest something to M-04</h3>
+                <span class="sp"></span>
+                <span class="trust"><span class="lockglyph" aria-hidden="true"></span>TOTP path · keys in memory only</span>
+                <span class="chip mark-warn">Non-diagnostic</span>
+              </div>
+              <div class="body">
+                <div class="asn">
+
+                  <div>
+                    <h5 style="font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--chrome-soft);font-weight:500;margin:0 0 11px">Catalog · 2 tools</h5>
+                    <div class="cat-item on" data-tool="Daily wellbeing self-check">
+                      <h5>Daily wellbeing self-check</h5>
+                      <div class="cat-meta"><span class="prov custom">✎ Custom</span><span class="cat-min">≈2 min · 6 items</span></div>
+                    </div>
+                    <div class="cat-item" data-tool="Focus &amp; follow-through self-check">
+                      <h5>Focus &amp; follow-through self-check</h5>
+                      <div class="cat-meta"><span class="prov custom">✎ Custom</span><span class="cat-min">≈3 min · 9 items</span></div>
+                    </div>
+                    <div class="cat-item" style="opacity:.45;cursor:not-allowed">
+                      <h5>Steady Attention</h5>
+                      <div class="cat-meta"><span class="prov">task</span><span class="cat-min">assign.task not granted</span></div>
+                    </div>
+                    <p style="font-size:11.5px;color:var(--subtle);margin-top:12px;line-height:1.5">
+                      Custom-made — a personal reflection tool, not a validated or clinical instrument.
+                      Not for diagnosis.
+                    </p>
+                  </div>
+
+                  <div class="sheet">
+                    <div class="sheet-hd"><h4>Compose</h4><span class="sp"></span><span class="chip">assign.questionnaire</span></div>
+                    <div class="sheet-bd">
+                      <div class="field">
+                        <label>Cadence</label>
+                        <div class="seg" id="cadence">
+                          <button type="button" data-c="once">Once</button>
+                          <button type="button" class="on" data-c="every week">Every week</button>
+                          <button type="button" data-c="every 2 weeks">Every 2 weeks</button>
+                          <button type="button" data-c="every month">Every month</button>
+                        </div>
+                      </div>
+                      <div class="field">
+                        <label for="a-note">Note to them (optional, plain language)</label>
+                        <textarea class="inp" id="a-note" rows="3" style="resize:vertical">No pressure on this one — if a week goes by and you skip it, that's fine. I mostly want to see how the stretch after our last session felt to you.</textarea>
+                      </div>
+                      <div class="preview">
+                        <span class="pv-l">What they will see</span>
+                        <div class="pv-t" id="pv">Assign the Daily wellbeing self-check self-check, every week.</div>
+                      </div>
+                      <div style="display:flex;gap:9px;margin-top:16px;align-items:center">
+                        <button class="mini-btn pri" style="padding:9px 16px" type="button">Publish suggestion</button>
+                        <button class="mini-btn" type="button">Save draft</button>
+                        <span style="font-size:11.5px;color:var(--subtle);margin-left:auto">Encrypted to their key in this browser before it leaves.</span>
+                      </div>
+                    </div>
+                    <p class="note-strip">
+                      Publishing does not schedule anything. It places an offer in their inbox. They accept,
+                      decline, or leave it — and you see which.
+                    </p>
+                  </div>
+
+                  <aside class="side-note">
+                    <h5>What happens next</h5>
+                    <div class="life">
+                      <div class="life-step done"><span class="life-n">1</span><span><span class="life-t">Published</span><span class="life-s">encrypted, stored</span></span></div>
+                      <div class="life-step now"><span class="life-n">2</span><span><span class="life-t">Delivered</span><span class="life-s">their phone fetched it</span></span></div>
+                      <div class="life-step"><span class="life-n">3</span><span><span class="life-t">Accepted</span><span class="life-s">or declined — their call</span></span></div>
+                      <div class="life-step"><span class="life-n">4</span><span><span class="life-t">Completed</span><span class="life-s">result shared only if granted</span></span></div>
+                    </div>
+                    <p style="font-size:11.5px;color:var(--subtle);margin-top:16px;line-height:1.5;border-top:1px solid var(--hair);padding-top:12px">
+                      Step 4 is not implied by step 3. Someone can accept a self-check, complete it, and
+                      still never share the result — and that is a normal outcome, not a failure state.
+                    </p>
+                  </aside>
+
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <div class="note">
+          <h5>A real copy bug, rendered honestly</h5>
+          <p>The preview reads "the Daily wellbeing self-check <em>self-check</em>" because
+          <code>describeAssignment()</code> appends the word "self-check" to a title that already ends in
+          it. It is in the build today; the fix is one template string in <code>describe.ts</code>.</p>
+        </div>
+        <div class="note">
+          <h5>Ungranted is visible, not hidden</h5>
+          <p>Steady Attention stays in the list, greyed, with <code>assign.task not granted</code> in mono.
+          Hiding it would leave the clinician wondering what the tool can do; showing it makes the
+          person's boundary legible instead of invisible.</p>
+        </div>
+        <div class="note">
+          <h5>Numbering is earned here</h5>
+          <p>Steps 1–4 are a genuine ordered lifecycle, which is the only reason they get numbers. Nothing
+          else in this deck is numbered, because nothing else is a sequence.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 6. ADMIN CONSOLE ════════════════════════════════════════════════════ -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">Screen 6</span><span class="chip mark-new">New</span><span class="chip mark-warn">Read the caveats</span></div>
+      <div>
+        <h2>Admin console — for the person who runs the box, and no further.</h2>
+        <p>
+          This is the one screen where the Termix influence goes all the way. It is also the screen with
+          the sharpest security question, and the answer is a hard line: <strong>the server admin is not
+          the owner.</strong> Operational health, auth pressure, and integrity of the log — yes. The
+          relationship audit trail, which is owner-readable and metadata-only, does not appear here. The
+          amber panel is not a disclaimer; it is the specification.
+        </p>
+      </div>
+    </div>
+
+    <div class="render">
+      <div class="frame">
+        <div class="frame-bar">
+          <span class="frame-tag">Chromium</span>
+          <span class="frame-url"><span class="lockglyph" aria-hidden="true"></span><b>daymark.example.com</b>/admin</span>
+          <span class="frame-tag">separate credential from any clinician</span>
+        </div>
+        <div class="frame-scroll">
+          <div class="con">
+            <nav class="con-rail">
+              <div class="rail-mark"><strong>Daymark</strong><span>Server admin</span></div>
+              <div class="rail-group">
+                <div class="con-item on"><i style="width:11px;height:11px;border:1.3px solid currentColor;border-radius:2px;opacity:.6"></i>Operations</div>
+                <div class="con-item"><i style="width:11px;height:11px;border:1.3px solid currentColor;border-radius:999px;opacity:.6"></i>Auth pressure<span class="ct warn">14</span></div>
+                <div class="con-item"><i style="width:11px;height:11px;border:1.3px dashed currentColor;border-radius:2px;opacity:.6"></i>Log integrity</div>
+                <div class="con-item"><i style="width:11px;height:11px;border:1.3px solid currentColor;opacity:.6;transform:rotate(45deg)"></i>Storage</div>
+              </div>
+              <div class="rail-lbl">Config</div>
+              <div class="rail-group">
+                <div class="con-item"><i style="width:11px;height:11px;border:1.3px solid currentColor;border-radius:2px;opacity:.6"></i>Proxy &amp; trust<span class="ct crit">!</span></div>
+                <div class="con-item"><i style="width:11px;height:11px;border:1.3px solid currentColor;border-radius:2px;opacity:.6"></i>Retention</div>
+              </div>
+              <div class="rail-foot" style="border-top-color:var(--con-hair)">
+                <div class="kv" style="color:var(--con-faint)"><span>uptime</span><span>6d 04h</span></div>
+                <div class="kv" style="color:var(--con-faint)"><span>/readyz</span><span>200</span></div>
+              </div>
+            </nav>
+
+            <div class="con-main">
+              <div class="con-top">
+                <h3>Operations</h3>
+                <span class="sp"></span>
+                <span class="con-kv">image <b>@sha256:4f2b9e…a7d1c0</b></span>
+                <span class="con-kv">heap <b>218 / 537 MiB</b></span>
+                <span class="con-kv">rss <b>431 MiB</b></span>
+              </div>
+
+              <div class="con-body">
+                <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+
+                  <div class="con-card">
+                    <header>
+                      <h5>Live — application log</h5>
+                      <span class="sp"></span>
+                      <span class="con-kv" id="live-count">tailing</span>
+                    </header>
+                    <div class="live" id="live"></div>
+                  </div>
+
+                  <div class="con-card">
+                    <header><h5>Audit chain — metadata only, owner-readable</h5><span class="sp"></span><span class="con-kv">rel_93de…b710</span></header>
+                    <div class="cb" style="padding:12px 0 0">
+                      <table class="ct-t">
+                        <thead><tr><th style="padding-left:14px">seq</th><th>ts (utc)</th><th>actor</th><th>action</th><th>object</th></tr></thead>
+                        <tbody>
+                          <tr><td style="padding-left:14px">00418</td><td>2026-08-11 14:02:07</td><td>therapist</td><td class="act">share.open</td><td>obj_9c1e…</td></tr>
+                          <tr><td style="padding-left:14px">00417</td><td>2026-08-11 13:58:44</td><td>therapist</td><td class="act">auth.success</td><td>—</td></tr>
+                          <tr><td style="padding-left:14px">00416</td><td>2026-08-11 13:58:12</td><td>therapist</td><td class="act f">auth.fail</td><td>—</td></tr>
+                          <tr><td style="padding-left:14px">00415</td><td>2026-08-11 09:31:50</td><td>owner</td><td class="act">assignment.publish</td><td>obj_4a70…</td></tr>
+                          <tr><td style="padding-left:14px">00414</td><td>2026-08-10 22:14:03</td><td>therapist</td><td class="act">session.expired</td><td>—</td></tr>
+                          <tr><td style="padding-left:14px">00413</td><td>2026-08-10 18:07:29</td><td>therapist</td><td class="act">gameplan.publish</td><td>obj_2b55…</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div class="cb">
+                      <div class="chain">
+                        <div class="chain-bar" id="chainbar"></div>
+                        <div class="chain-verdict">418 / 418 entries hash-verified · head 9e41c7…8ab2</div>
+                        <p class="chain-caveat">
+                          This proves the returned history is <strong>internally consistent</strong> — no stored
+                          entry was altered or reordered without breaking every hash after it. It does not
+                          prove the history is <strong>complete</strong>. A hostile server can decline to append
+                          an event, or truncate the chain and serve a shorter run that verifies perfectly.
+                          The chain is server-computed, not clinician-signed, so it adds no non-repudiation.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:16px">
+
+                  <div class="con-card">
+                    <header><h5>Pressure — last 24h</h5></header>
+                    <div class="cb">
+                      <div class="con-metric"><span class="k">auth.fail</span><span class="v warn">14</span></div>
+                      <div class="con-metric"><span class="k">lockout</span><span class="v crit">2</span></div>
+                      <div class="con-metric"><span class="k">rate-limited (429)</span><span class="v">61</span></div>
+                      <div class="con-metric"><span class="k">rate limit rps</span><span class="v">5</span></div>
+                      <div class="con-metric"><span class="k">distinct buckets</span><span class="v crit">1</span></div>
+                      <div class="con-metric"><span class="k">enrol.ok</span><span class="v">0</span></div>
+                    </div>
+                  </div>
+
+                  <div class="con-card">
+                    <header><h5>Data policy — as configured</h5></header>
+                    <div class="cb">
+                      <div class="con-metric"><span class="k">source ip in audit</span><span class="v">off</span></div>
+                      <div class="con-metric"><span class="k">audit retention</span><span class="v">90 d</span></div>
+                      <div class="con-metric"><span class="k">trusted proxies</span><span class="v crit">unset</span></div>
+                      <div class="con-metric"><span class="k">blob store</span><span class="v">2.4 GiB</span></div>
+                      <div class="con-metric"><span class="k">disk free</span><span class="v warn">11 %</span></div>
+                      <div class="con-metric"><span class="k">egress</span><span class="v">no route</span></div>
+                    </div>
+                  </div>
+
+                  <div class="con-guard">
+                    <h5>What this console must never show</h5>
+                    <ul>
+                      <li>Blob contents, keys, TOTP seeds or codes, or which individual record was read. The audit taxonomy names events, never content — and this console reads the same table.</li>
+                      <li>A clinician's relationship history to an admin who is not the owner. The audit log is <em>owner-readable</em>. Admin sees counts and integrity, not another person's trail.</li>
+                      <li class="ok">Turning on <code>DAYMARK_ACCESS_LOG_SOURCE_IP</code> converts this log into a record of where people were. Off by default, and the console should say so where you flip it.</li>
+                      <li class="ok">Raising <code>DAYMARK_ACCESS_LOG_RETENTION_DAYS</code> past 90 raises exactly how much a seized disk reveals. Retention is a privacy control wearing an ops label.</li>
+                      <li class="ok"><code>DAYMARK_TRUSTED_PROXIES</code> unset means every lockout keys on the proxy, so one bucket serves everybody — the <span style="color:var(--con-crit)">1 distinct bucket</span> above is that bug, visible.</li>
+                      <li class="ok">Opening this console is itself an event. If admin access is not logged somewhere the admin cannot edit, the log's promise is only as good as the admin.</li>
+                    </ul>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <div class="note">
+          <h5>No green in the console either</h5>
+          <p>Severity runs faint → amber → clay, and "healthy" is simply the absence of colour. A green
+          "all clear" would be the same overclaim the trust strip is forbidden from making, one layer
+          down.</p>
+        </div>
+        <div class="note">
+          <h5>"1 distinct bucket" is a finding, not a stat</h5>
+          <p>With <code>DAYMARK_TRUSTED_PROXIES</code> unset, every client shares one rate-limit bucket, so
+          eight bad tokens from one attacker lock out everybody. Today that misconfiguration fails silently.
+          Here it is a red number next to the config that caused it.</p>
+        </div>
+        <div class="note">
+          <h5>The chain caveat is not small print</h5>
+          <p>It gets a full paragraph directly under the verdict, at body size, because "418 / 418 verified"
+          is precisely the phrase that would otherwise be read as "nothing was hidden from me". Internal
+          consistency is not completeness.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ MOTION ══════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">Motion</span></div>
+      <div>
+        <h2>Six movements, and a rule about when they run.</h2>
+        <p>
+          Unhurried means slow enough to read as arrival and short enough that nobody waits on it: 120–160ms
+          for anything under a pointer, 400–700ms for anything entering the page, and a single easing curve
+          throughout. Nothing loops, nothing pulses, nothing bounces. Every one of these collapses to zero
+          under <code>prefers-reduced-motion</code>, including the console's live tail, which stops
+          appending rather than appending invisibly.
+        </p>
+      </div>
+    </div>
+
+    <div class="motion">
+      <div class="mo">
+        <div class="mo-stage"><div class="demo-card"></div></div>
+        <div class="mo-meta"><h5>Surface arrival</h5><p>Sheets rise 18px into place as they enter the viewport, once each.</p><span class="spec">620ms · cubic-bezier(.22,.7,.28,1)</span></div>
+      </div>
+      <div class="mo">
+        <div class="mo-stage"><div class="demo-tabs"><span>Overview</span><span>Shared</span><div class="demo-ind"></div></div></div>
+        <div class="mo-meta"><h5>Section indicator</h5><p>The underline travels between tabs instead of cutting; the panel cross-fades under it.</p><span class="spec">240ms · width + transform</span></div>
+      </div>
+      <div class="mo">
+        <div class="mo-stage"><svg class="demo-spark" viewBox="0 0 140 46"><path d="M4,38 L28,30 L52,34 L76,20 L100,24 L124,8"></path></svg></div>
+        <div class="mo-meta"><h5>Trend draw</h5><p>The band line draws left to right, then points fade in on a 120ms stagger.</p><span class="spec">1500ms draw · 120ms stagger</span></div>
+      </div>
+      <div class="mo">
+        <div class="mo-stage"><div class="demo-cell"><b>11</b><i style="background:var(--indigo);width:70%"></i><i style="background:var(--mood-4);width:52%"></i></div></div>
+        <div class="mo-meta"><h5>Calendar lift</h5><p>Day cells rise 1px and take elevation on hover; marks bloom vertically on month change.</p><span class="spec">140ms lift · 420ms bloom</span></div>
+      </div>
+      <div class="mo">
+        <div class="mo-stage"><div class="demo-log"><i></i><i></i><i></i><i></i></div></div>
+        <div class="mo-meta"><h5>Log tail</h5><p>New rows slide down 7px and settle. The tail is capped, never auto-scrolled out from under a cursor.</p><span class="spec">380ms · pauses off-screen</span></div>
+      </div>
+      <div class="mo">
+        <div class="mo-stage"><div class="demo-pills"><span class="pill p-deliv">Delivered</span><span class="pill p-done">Completed</span></div></div>
+        <div class="mo-meta"><h5>Status change</h5><p>Pills cross-fade background and border together, so the shape never jumps as the state advances.</p><span class="spec">180ms · background + border-color</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ HONESTY ═════════════════════════════════════════════════════════════ -->
+<section>
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">Before anyone forwards this</span></div>
+      <div>
+        <h2>What these renders are not.</h2>
+      </div>
+    </div>
+    <div class="honest">
+      <h3>Nothing here is built.</h3>
+      <ul>
+        <li>Four of these six screens do not exist in any form. There is no calendar, no Today, no client record, and no admin console anywhere in <code>companion/web/src</code>.</li>
+        <li>The two "redesigned" screens exist as a bare login and a tab strip. Everything shown around them is proposal.</li>
+        <li>The admin console reads from tables and config keys that are real, but the endpoint, the credential separating admin from owner, and the integrity check are all unbuilt.</li>
+        <li>Band labels, trend arrows and the 12-week ribbon assume a summarisation layer that has not been written or reviewed.</li>
+        <li>Fraunces and Inter are named in <code>app.css</code> and absent from <code>web/fonts/</code>. These renders use the fallback stack, exactly like the live build.</li>
+        <li>Every score, name, timestamp, digest and hash on these screens is invented. The tool titles, capability ids, audit actions and fixed banner copy are not — those are quoted from the repository.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Daymark Companion · clinician web · redesign renders · 11 Aug 2026 · mockups, not implementation</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ── theme toggle ─────────────────────────────────────────────────────── */
+  var root = document.documentElement;
+  document.getElementById('theme').addEventListener('click', function () {
+    var dark = root.getAttribute('data-theme') === 'dark' ||
+      (!root.hasAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    root.setAttribute('data-theme', dark ? 'light' : 'dark');
+  });
+
+  /* ── reveal on scroll ─────────────────────────────────────────────────── */
+  var revealables = document.querySelectorAll('.reveal');
+  if (!('IntersectionObserver' in window) || reduce) {
+    revealables.forEach(function (el) { el.classList.add('seen'); });
+  } else {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('seen'); io.unobserve(e.target); }
+      });
+    }, { rootMargin: '0px 0px -12% 0px', threshold: 0.06 });
+    revealables.forEach(function (el) { io.observe(el); });
+  }
+
+  /* ── calendar ─────────────────────────────────────────────────────────── */
+  var MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  var TODAY = { y: 2026, m: 7, d: 11 };
+
+  // key: 'y-m-d' → events. Fictional, but shaped like real cadence data.
+  var EVENTS = {
+    '2026-7-3':  [{ k: 'due',   t: 'Anke · wellbeing self-check' }],
+    '2026-7-4':  [{ k: 'share', t: 'P.L. · Steadier', c: 'var(--mood-4)' }, { k: 'sess', t: 'R.T. · session' }],
+    '2026-7-5':  [{ k: 'late',  t: 'Wren · no response, 9 d' }],
+    '2026-7-7':  [{ k: 'share', t: 'M-04 · Mixed', c: 'var(--mood-3)' }, { k: 'due', t: 'R.T. · focus self-check' }],
+    '2026-7-9':  [{ k: 'share', t: 'Anke · Steadier', c: 'var(--mood-5)' }],
+    '2026-7-10': [{ k: 'share', t: 'R.T. · Steadier', c: 'var(--mood-4)' }, { k: 'sess', t: 'M-04 · session' }],
+    '2026-7-11': [
+      { k: 'share', t: 'M-04 · Steadier 17/20', c: 'var(--mood-5)' },
+      { k: 'due',   t: 'Anke · wellbeing self-check' },
+      { k: 'sess',  t: 'Wren · session 15:30' }
+    ],
+    '2026-7-12': [{ k: 'due', t: 'J. · first self-check' }],
+    '2026-7-14': [{ k: 'due', t: 'R.T. · wellbeing self-check' }, { k: 'sess', t: 'Anke · session' }],
+    '2026-7-16': [{ k: 'due', t: 'Anke · wellbeing self-check' }],
+    '2026-7-18': [{ k: 'due', t: 'M-04 · wellbeing self-check' }, { k: 'sess', t: 'R.T. · session' }],
+    '2026-7-19': [{ k: 'late', t: 'Wren · grant lapses' }],
+    '2026-7-21': [{ k: 'due', t: 'R.T. · wellbeing self-check' }],
+    '2026-7-24': [{ k: 'sess', t: 'M-04 · session' }],
+    '2026-7-25': [{ k: 'due', t: 'Anke · focus self-check' }],
+    '2026-7-28': [{ k: 'due', t: 'R.T. · wellbeing self-check' }, { k: 'due', t: 'M-04 · wellbeing self-check' }],
+    '2026-6-29': [{ k: 'share', t: 'M-04 · Mixed', c: 'var(--mood-3)' }],
+    '2026-6-31': [{ k: 'due', t: 'R.T. · wellbeing self-check' }],
+    '2026-8-1':  [{ k: 'due', t: 'Anke · wellbeing self-check' }],
+    '2026-8-4':  [{ k: 'sess', t: 'Wren · session' }]
+  };
+
+  var KIND_CLASS = { due: 'e-due', share: 'e-share', sess: 'e-sess', late: 'e-late' };
+  var KIND_WORD  = { due: 'Due', share: 'Shared with you', sess: 'Session', late: 'Lapsed' };
+
+  var view = { y: 2026, m: 7 };
+  var sel  = { y: 2026, m: 7, d: 11 };
+
+  var grid    = document.getElementById('cal-grid');
+  var title   = document.getElementById('cal-title');
+  var agTitle = document.getElementById('ag-title');
+  var agSub   = document.getElementById('ag-sub');
+  var agBody  = document.getElementById('ag-body');
+
+  function key(y, m, d) { return y + '-' + m + '-' + d; }
+
+  function renderMonth(animate) {
+    title.textContent = MONTHS[view.m] + ' ' + view.y;
+    grid.textContent = '';
+
+    DOW.forEach(function (d) {
+      var h = document.createElement('div');
+      h.className = 'cal-dow';
+      h.textContent = d;
+      grid.appendChild(h);
+    });
+
+    var first = new Date(view.y, view.m, 1);
+    var lead = (first.getDay() + 6) % 7;            // Monday-first
+    var daysIn = new Date(view.y, view.m + 1, 0).getDate();
+    var prevDays = new Date(view.y, view.m, 0).getDate();
+    var cells = [];
+
+    for (var i = lead - 1; i >= 0; i--) cells.push({ d: prevDays - i, out: true, m: view.m - 1, y: view.y });
+    for (var d1 = 1; d1 <= daysIn; d1++) cells.push({ d: d1, out: false, m: view.m, y: view.y });
+    while (cells.length % 7 !== 0) cells.push({ d: cells.length - lead - daysIn + 1, out: true, m: view.m + 1, y: view.y });
+
+    var stagger = 0;
+    cells.forEach(function (c) {
+      var cell = document.createElement('div');
+      cell.className = 'cal-cell' + (c.out ? ' out' : '');
+      if (!c.out && c.y === TODAY.y && c.m === TODAY.m && c.d === TODAY.d) cell.classList.add('today');
+      if (!c.out && c.y === sel.y && c.m === sel.m && c.d === sel.d) cell.classList.add('sel');
+
+      var num = document.createElement('div');
+      num.className = 'cal-d';
+      num.textContent = c.d;
+      cell.appendChild(num);
+
+      var evs = (!c.out && EVENTS[key(c.y, c.m, c.d)]) || [];
+      evs.slice(0, 2).forEach(function (ev) {
+        var row = document.createElement('div');
+        row.className = 'cal-ev ' + KIND_CLASS[ev.k] + (animate && !reduce ? ' dotpop' : '');
+        if (animate && !reduce) { row.style.animationDelay = (stagger * 12) + 'ms'; stagger++; }
+        var mark = document.createElement('i');
+        if (ev.k === 'share' && ev.c) mark.style.background = ev.c;
+        row.appendChild(mark);
+        row.appendChild(document.createTextNode(ev.t));
+        cell.appendChild(row);
+      });
+      if (evs.length > 2) {
+        var more = document.createElement('div');
+        more.className = 'cal-more';
+        more.textContent = '+' + (evs.length - 2) + ' more';
+        cell.appendChild(more);
+      }
+
+      if (!c.out) {
+        cell.tabIndex = 0;
+        cell.setAttribute('role', 'button');
+        cell.setAttribute('aria-label', c.d + ' ' + MONTHS[c.m] + ', ' + (evs.length || 'no') + ' events');
+        var pick = function () { sel = { y: c.y, m: c.m, d: c.d }; renderMonth(false); renderAgenda(); };
+        cell.addEventListener('click', pick);
+        cell.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); }
+        });
+      }
+      grid.appendChild(cell);
+    });
+  }
+
+  function renderAgenda() {
+    var isToday = sel.y === TODAY.y && sel.m === TODAY.m && sel.d === TODAY.d;
+    var dt = new Date(sel.y, sel.m, sel.d);
+    var dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dt.getDay()];
+    agTitle.textContent = dayName + ' ' + sel.d + ' ' + MONTHS[sel.m];
+    agSub.textContent = isToday ? 'today' : (sel.y + '-' + String(sel.m + 1).padStart(2, '0') + '-' + String(sel.d).padStart(2, '0'));
+
+    agBody.textContent = '';
+    var evs = EVENTS[key(sel.y, sel.m, sel.d)] || [];
+    if (!evs.length) {
+      var e = document.createElement('div');
+      e.className = 'ag-empty';
+      e.textContent = 'Nothing on this day. Empty is a normal week — the tool does not fill it in.';
+      agBody.appendChild(e);
+      return;
+    }
+    evs.forEach(function (ev) {
+      var item = document.createElement('div');
+      item.className = 'ag-item';
+      var t = document.createElement('span');
+      t.className = 'ag-t';
+      t.textContent = KIND_WORD[ev.k];
+      var n = document.createElement('span');
+      n.className = 'ag-n';
+      n.textContent = ev.t;
+      item.appendChild(t);
+      item.appendChild(n);
+      agBody.appendChild(item);
+    });
+  }
+
+  document.getElementById('cal-prev').addEventListener('click', function () {
+    view.m--; if (view.m < 0) { view.m = 11; view.y--; } renderMonth(true);
+  });
+  document.getElementById('cal-next').addEventListener('click', function () {
+    view.m++; if (view.m > 11) { view.m = 0; view.y++; } renderMonth(true);
+  });
+
+  renderMonth(false);
+  renderAgenda();
+
+  /* ── 12-week ribbon ───────────────────────────────────────────────────── */
+  var HEIGHTS = [8,22,14,22,0,22,18,22,22,10,22,22,0,0,22,16,22,22,22,8,22,0,22,22,14,22,22,22,22,18,22,22,22,0,22,22];
+  var TONES = ['var(--mood-2)','var(--mood-3)','var(--mood-3)','var(--mood-4)','','var(--mood-4)','var(--mood-3)','var(--mood-4)','var(--mood-4)','var(--mood-2)','var(--mood-5)','var(--mood-4)','','','var(--mood-4)','var(--mood-3)','var(--mood-5)','var(--mood-4)','var(--mood-5)','var(--mood-2)','var(--mood-4)','','var(--mood-5)','var(--mood-4)','var(--mood-3)','var(--mood-5)','var(--mood-5)','var(--mood-4)','var(--mood-5)','var(--mood-3)','var(--mood-5)','var(--mood-5)','var(--mood-4)','','var(--mood-5)','var(--mood-5)'];
+  var ribbon = document.getElementById('ribbon');
+  HEIGHTS.forEach(function (h, i) {
+    var b = document.createElement('i');
+    b.style.height = (h || 4) + 'px';
+    if (h && TONES[i]) b.style.background = TONES[i];
+    b.title = h ? 'completed' : 'nothing due, or nothing returned';
+    ribbon.appendChild(b);
+  });
+
+  /* ── assign composer ──────────────────────────────────────────────────── */
+  var pv = document.getElementById('pv');
+  var tool = 'Daily wellbeing self-check';
+  var cad = 'every week';
+  function preview() {
+    // Rendered verbatim from describeAssignment(), duplicated "self-check" and all.
+    pv.textContent = 'Assign the ' + tool + ' self-check, ' + cad + '.';
+  }
+  document.querySelectorAll('.cat-item[data-tool]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      document.querySelectorAll('.cat-item[data-tool]').forEach(function (o) { o.classList.remove('on'); });
+      el.classList.add('on');
+      tool = el.getAttribute('data-tool').replace(/&amp;/g, '&');
+      preview();
+    });
+  });
+  document.querySelectorAll('#cadence button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('#cadence button').forEach(function (o) { o.classList.remove('on'); });
+      b.classList.add('on');
+      cad = b.getAttribute('data-c');
+      preview();
+    });
+  });
+
+  /* ── console live tail ────────────────────────────────────────────────── */
+  var LINES = [
+    ['info', 'GET /readyz 200 · 3ms · probe 1 of 1'],
+    ['warn', 'forwarded header seen but DAYMARK_TRUSTED_PROXIES is unset — ignoring, one shared bucket'],
+    ['info', 'POST /sync/current 200 · 41ms · 18.2 KiB'],
+    ['warn', 'auth.fail · therapist credential · attempt 3 of 8 before lockout'],
+    ['info', 'GET /healthz 200 · 1ms'],
+    ['crit', 'lockout engaged · 8 consecutive failures · bucket = proxy address (see trusted-proxies)'],
+    ['info', 'audit append seq=00418 action=share.open chain ok'],
+    ['info', 'blob put 24.1 KiB · fsync ok · txn committed'],
+    ['warn', 'rate limit 429 · 5 rps · 61 in last 24h'],
+    ['info', 'GET /readyz 200 · 2ms'],
+    ['warn', 'disk free 11% on /data · blob writes will fail below 2%'],
+    ['info', 'session.expired · idle guard · keys zeroized'],
+    ['info', 'GET /sync/index 200 · 12ms'],
+    ['crit', 'sqlite: SQLITE_FULL mapped to DISK_FULL · put rolled back, temp cleared'],
+    ['info', 'audit retention sweep · 0 rows past 90 d']
+  ];
+  var live = document.getElementById('live');
+  var liveCount = document.getElementById('live-count');
+  var idx = 0, clock = 14 * 3600 + 2 * 60 + 7, timer = null, visible = false;
+
+  function stamp() {
+    clock += 3 + Math.floor(Math.random() * 40);
+    var h = Math.floor(clock / 3600) % 24, m = Math.floor(clock / 60) % 60, s = clock % 60;
+    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+  function push(animate) {
+    var L = LINES[idx % LINES.length]; idx++;
+    var row = document.createElement('div');
+    row.className = 'live-row lv-' + L[0] + (animate ? ' new' : '');
+    var a = document.createElement('span'); a.className = 'live-ts';  a.textContent = stamp();
+    var b = document.createElement('span'); b.className = 'live-lv';  b.textContent = L[0].toUpperCase();
+    var c = document.createElement('span'); c.className = 'live-msg'; c.textContent = L[1];
+    row.appendChild(a); row.appendChild(b); row.appendChild(c);
+    live.insertBefore(row, live.firstChild);
+    while (live.children.length > 11) live.removeChild(live.lastChild);
+    if (liveCount) liveCount.textContent = 'tailing · ' + idx + ' lines';
+  }
+  for (var i = 0; i < 11; i++) push(false);
+
+  if (!reduce && 'IntersectionObserver' in window) {
+    new IntersectionObserver(function (entries) {
+      visible = entries[0].isIntersecting;
+      if (visible && !timer) timer = setInterval(function () { push(true); }, 2600);
+      else if (!visible && timer) { clearInterval(timer); timer = null; }
+    }, { threshold: 0.15 }).observe(live);
+  }
+
+  /* ── chain bar ────────────────────────────────────────────────────────── */
+  var cb = document.getElementById('chainbar');
+  for (var j = 0; j < 44; j++) {
+    var seg = document.createElement('i');
+    if (j > 30) seg.className = 'v';
+    cb.appendChild(seg);
+  }
+})();
+</script>

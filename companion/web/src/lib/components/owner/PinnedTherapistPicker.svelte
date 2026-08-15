@@ -36,7 +36,9 @@
 <style>
   .picker { display: flex; flex-wrap: wrap; gap: var(--space-2); }
   .picker button { display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem; text-align: left; padding: var(--space-2) var(--space-3); }
-  .picker button.active { background: var(--ink-accent); color: var(--on-accent); border-color: var(--ink-accent); }
+  /* Selected item = structural accent (--indigo), matching the console's tabs and the nav
+     rail. aria-pressed carries the selection independently of colour. */
+  .picker button.active { background: var(--indigo); color: var(--on-accent); border-color: var(--indigo); }
   .name { font-weight: 600; }
   .sas { font-family: var(--font-mono); font-size: 0.7rem; opacity: 0.85; }
   .none { margin: 0; }

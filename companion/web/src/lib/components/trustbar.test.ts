@@ -53,7 +53,15 @@ describe('trust strip — honesty gate', () => {
     // "so green would overclaim". The old code used --mood-5 (green) whenever navigator.onLine
     // was false, which is the reasoning that rule exists to reject.
     expect(trustBarCode).not.toMatch(/--mood-5/)
-    expect(trustBarCode).toMatch(/--mood-3/)
+    // This used to read `toMatch(/--mood-3/)`: the strip proved it was not green by being
+    // painted the MIDDLE of the mood ramp instead. That was the same category error one step
+    // down. The ramp encodes a person's reported experience and nothing else, and the posture
+    // of a browser tab is not that person's experience — so the strip now names no step of the
+    // ramp at all, which is strictly stronger than pinning it to the middle one.
+    expect(trustBarCode).not.toMatch(/--mood-/)
+    // Positive half, so this cannot pass by the strip losing its background entirely: it is
+    // painted the quiet chrome ground, the machine describing itself.
+    expect(trustBarCode).toMatch(/background:\s*var\(--chrome\)/)
   })
 
   it('does not decide its posture from network state', () => {
