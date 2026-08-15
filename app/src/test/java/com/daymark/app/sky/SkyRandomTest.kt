@@ -12,7 +12,7 @@ import org.junit.Test
  * notice: a typo in one of the three constants still produces plausible-looking scatter, and the
  * only symptom is that the sky is a slightly worse sky than it should be, forever. So the first
  * test compares against the **published SplitMix64 vectors** rather than against a value this
- * implementation produced — a self-consistency test would pass just as happily with a wrong
+ * implementation produced — a self-consistency test would pass as happily with a wrong
  * constant in it.
  *
  * The rest check the two properties the Sky actually depends on: that a hash is a function of its

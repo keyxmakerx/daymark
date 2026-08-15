@@ -1,9 +1,10 @@
 # The Sky — design specification
 
-> Status: **designed, not built.** Specifies section 2 of [PLAN_2026-08-NEXT.md](./PLAN_2026-08-NEXT.md).
-> No Kotlin has been written. Nothing here has been compiled, rendered or measured — there is no
-> Android SDK in the authoring environment, so every performance number below is a *budget to verify*,
-> not a result.
+> Status: **the decision layer is built and tested; nothing is rendered.** Specifies section 2 of
+> [PLAN_2026-08-NEXT.md](./PLAN_2026-08-NEXT.md). §0 below is the line between what exists in the
+> tree and what is still only this document. There is still no Android SDK in the authoring
+> environment, so every performance number in §8 remains a *budget to verify* rather than a result —
+> but the layout arithmetic itself has now been compiled and run, and §0.3 records what that caught.
 
 The foundation ships today: [`YearInStarsGrid.kt`](../app/src/main/java/com/daymark/app/ui/components/YearInStarsGrid.kt)
 draws a year as a night sky, and [`ReviewYearScreen.kt`](../app/src/main/java/com/daymark/app/ui/insights/ReviewYearScreen.kt)
@@ -29,6 +30,151 @@ than one scale*.
 
 §9 records where the shipped component contradicts this specification. Those are statements about
 what the Sky must do, **not** instructions to change `YearInStarsGrid` — see §12.
+
+---
+
+## 0. Built vs designed
+
+Everything below §0 is the design as it was written. This section is the only place that says what
+of it exists.
+
+### 0.1 What is built
+
+`app/src/main/java/com/daymark/app/sky/` — six files, **zero `import` statements between them**, the
+discipline `stats/InterruptionBudget.kt`, `export/ReportLayout.kt`, `goals/GoalBoard.kt` and
+`data/ImageStrip.kt` already keep. Every decision this document makes about *what the sky is* lives
+there and is executable on a plain JVM.
+
+| File | What it owns | Spec |
+|---|---|---|
+| `Sky.kt` | `SkyKind`, `SkyRecord`, `SkyLayout`, the layout pass, the text equivalent | §2, §3.1, §7.5 |
+| `SkyGlyph.kt` | core/halo geometry, kind forms, `SkyDetail` zoom thresholds, `SkyOptions` | §3.3, §3.4, §4 |
+| `SkyPalette.kt` | the night palette, WCAG contrast, ramp equalisation | §3.2, §7.1 |
+| `SkyField.kt` | the decorative field, per tile | §1.2 M1 |
+| `SkyRandom.kt` | SplitMix64 as hash and as stream; `SkySeed` | §3.1 |
+| `SkyCalendar.kt` | proleptic-Gregorian date arithmetic, so the layout needs no `java.time` | §3.1 |
+
+`app/src/test/java/com/daymark/app/sky/` — **71 tests, all passing**, run under JUnit 4 on a plain
+JVM with `kotlinc` 2.0.21. They are not illustrative: six deliberate regressions were introduced in
+a scratch copy and each was caught (§0.3).
+
+### 0.2 What is designed only
+
+- **`ui/sky/` is empty. Nothing renders.** Compose cannot be compiled in this environment, and a
+  file in the main source set that does not compile breaks the build for everyone. The renderer is
+  specified in §0.5 and is not written.
+- **The life-event record (§2.2) does not exist.** `SkyKind.LIFE_EVENT` is defined and laid out; the
+  table, the DAO and the migration are not written.
+- **Nothing is wired.** No DAO projection, no repository, no view model, no navigation entry. §0.4
+  lists exactly what is needed, all of it outside `sky/`.
+- **§4's zoom interaction, §5's accretion flags, §6.4's export, §7.3's semantics, §7.5's list *UI*.**
+  The list's *data* is built (`Sky.list`); the surface that presents it is not.
+- **Every number in §8 is still a budget.** The one thing now measured is the layout pass itself:
+  5,393 records became 5,393 stars across 120 month rows in **15–29 ms** on a plain JVM. That is the
+  precompute step of §8.2 rule 1, not the frame budget.
+
+### 0.3 What building it caught
+
+Four findings, none of which was visible from the document.
+
+1. **The contrast floor fails, and it fails asymmetrically.** §12.1 asked for a measurement. Against
+   `#16150F`: awful `#AE5747` **3.70:1** (under the 4.5 floor), bad `#C27C46` 5.46, meh `#C6A24E`
+   7.56, good `#8FA268` 6.56, rad `#5E8A66` 4.62. The floor failure is the smaller problem. The
+   larger one is that **the mid-ramp is drawn at more than twice the contrast of the worst mood** —
+   so the raw ramp ranks the moods by visibility, with the hardest one faintest, which is precisely
+   the cruelty §1 exists to prevent, arriving by way of a palette rather than a decision.
+   `SkyPalette.equalised` therefore does not lift to the floor; it moves **every** colour to exactly
+   5.0:1, scaling in linear light so hue survives. This resolves §11 open question 4: **equalise**,
+   not lift, reject or warn. It works for person-customised palettes too — swept over 5,832 colours,
+   worst result 4.968:1 — because it takes a colour rather than a level.
+2. **`NIGHT_FAINT` is not faint.** `#8E887A` measures **5.18:1**, effectively identical to the
+   target every data star is drawn at. It is a *desaturated* value, not a low-contrast one. Gutter
+   labels and the project thread are legible without anyone fixing them, but the chrome cannot
+   recede by being fainter, because it is not — separation from the person's stars has to come from
+   stroke weight, size and form.
+3. **A project step and a check-in were the same glyph.** §3.3 distinguishes a project step by the
+   hairline thread back to the *previous* step. A thread is a property of a pair, so the **first
+   step of every project** had nothing to draw and rendered as a plain core — identical to a
+   check-in, on a surface where form is the only thing carrying kind. `SkyGlyph.threadStubDp` makes
+   the link part of the glyph, drawn alone when there is no predecessor.
+4. **"Quieter" needed an arithmetic definition or it would drift.** §3.4 says a hard day is softer
+   and wider, and that is one step from "dimmer". Holding peak alpha and widening the halo was tried
+   and rejected: it makes hard days emit *more* light, which is an inverted ranking rather than no
+   ranking. What is built holds **total light constant** — `haloPeakAlpha` is defined as
+   `HALO_LIGHT / radius²`, so the product is fixed by construction and not by a table someone has to
+   keep balanced. Mood redistributes light; it never changes the amount.
+
+**The tests were checked against deliberate regressions**, per the standing rule in
+[PLAN §4](./PLAN_2026-08-NEXT.md). Each was applied to a scratch copy, compiled, and confirmed to
+fail the tests named:
+
+| Regression introduced | Caught by |
+|---|---|
+| Core radius tracks mood (what `YearInStarsGrid` ships) | `the core is identical at every mood and every kind` |
+| Placement drawn from a stream instead of a per-star hash | 3 tests, incl. `a star does not move when a thousand unrelated records are added` |
+| The per-day fold discards the overflow | `a day cannot draw more than the cap, and loses nothing doing it` |
+| The text list announces every month, empty or not | `the list skips empty months without comment` |
+| Equalisation removed, raw ramp drawn | 4 tests in `SkyPaletteTest` |
+| A faint speck for every unlogged day (what `YearInStarsGrid` ships) | 4 tests, incl. `a stretch with nothing logged draws nothing` |
+
+The stream-placement regression is worth singling out: the first version of the stability test
+inserted a thousand records only *after* the watched star, and a stream is unmoved by anything
+appended after a star it has already placed. The test passed on a broken layout. It now inserts on
+both sides, which is also the real case — a backup restore and a late sync both arrive early.
+
+### 0.4 What the Sky needs that is outside `sky/`
+
+None of this was written; all of it is in files this work did not own.
+
+**A projection per kind.** One narrow query each, returning `(id, epochMillis, moodLevel?)` and
+**no text column** — §8.2 rule 7 and §4.1's privacy property, enforced at the DAO signature rather
+than by discipline at the call site.
+
+| Kind | Source | Query needed | State |
+|---|---|---|---|
+| Check-in | `mood_entries` | `SELECT id, dateTime, moodLevel FROM mood_entries` | new projection on `EntryDao` |
+| Journal | `journal_entries` | `SELECT id, dateTime FROM journal_entries` | new projection on `JournalDao` — **must not select `title` or `body`** |
+| Project step | `goal_steps` | `SELECT id, completedAt FROM goal_steps WHERE state = 'done' AND completedAt IS NOT NULL` | new projection on `GoalStepDao` |
+| Exercise | — | — | **unresolved, see below** |
+| Goal reached | — | — | **blocked, see below** |
+| Life event | — | — | **new table, see below** |
+
+**Three gaps in the data model, each a decision rather than a task:**
+
+- **"Goal reached" has nothing to read.** `data/entity/Goal.kt` has `archived` and no completion
+  field at all, and a habit goal has no notion of being reached in the first place. Either a
+  `reachedAt: Long?` column is added, or kind 4 is dropped and a project's completion is expressed
+  by its steps. §D5 says abandoning must never be counted as failure, so `archived` **must not** be
+  read as "reached" — that would draw a star for giving up and call it an achievement.
+- **"Exercise" has no obvious source.** The nearest existing record is `thought_records` (a CBT
+  exercise the person completed and dated). `assessment_results` is the other candidate and is a
+  worse fit: a questionnaire run carries a score and a band, and a star for it sits close to the
+  scoring the Sky refuses to do. Recommendation: `ThoughtRecord` → `EXERCISE`, and leave assessment
+  runs off until the prescribed-module work in §D3 gives them a proper "assignment run" record.
+- **Life events are a new table.** `SkyKind.LIFE_EVENT` is laid out and drawn as the loudest form,
+  and there is nothing to load into it. Needs an entity, a DAO, a migration and an owner (§12.5).
+
+**Wiring:** a `SkyRepository` merging the projections into `List<SkyRecord>` and converting
+`epochMillis → LocalDate.toEpochDay()` **at that boundary**, with the zone (`sky/` deliberately has
+no `java.time` and no zone); a Hilt binding in `di/AppModule.kt`; a persisted field seed
+(`SettingsRepository` is the natural home) initialised once via `SkySeed.forFirstRecord` and
+**never re-derived**, since a background that changes on deletion is a shape deletion left behind;
+and a navigation entry, which is §11 open question 1 and is not resolved here.
+
+### 0.5 What the renderer must do, when someone writes it
+
+`ui/sky/` is a renderer and makes no decisions. Every number it needs is in `sky/`:
+
+- Read `NIGHT_BG` / `NIGHT_INK` / `NIGHT_FAINT` from `SkyPalette` rather than making a **fourth**
+  copy of the three values (they already exist in `YearInStarsGrid.kt:39-41` and
+  `YearKeepsakeRenderer.kt:126-128`, and that duplication is recorded as unowned).
+- Pass the person's live palette from `MaterialTheme.moodColors` through
+  `SkyPalette.equalisedRamp` — **the Sky must not hardcode mood hues** (§3.2), which is why nothing
+  in `sky/` contains one.
+- Take glyph geometry from `SkyGlyph`, zoom level from `SkyDetail.forVisibleMonths`, cull with
+  `Sky.rowRange`, and read stars out of the packed arrays without allocating.
+- Draw nothing for `SkyLayout.Emptiness.NO_RECORDS` but the field and `SkyLayout.EMPTY_LINE`.
+- Give the field `clearAndSetSemantics {}` and honour `SkyOptions`.
 
 ---
 
@@ -487,15 +633,18 @@ reachable from the same place, with the same actions.
 
 The aesthetic is the problem: the sky is beautiful *because* it is dim, sparse and low-contrast.
 
-- **Core contrast is a hard floor, not an aspiration.** Every data star's core must meet at least
-  4.5:1 against `#16150F`, at every mood level, in every person-customised palette. The sky's ink
-  (`#EBE5D8` on `#16150F`) is comfortable; **the mood ramp has not been verified** — `MoodAwful
-  #AE5747` against the sky ground is the one to check first, and the shipped component's 18%
-  lerp-toward-white exists precisely because the raw ramp was too dark. **Nobody has measured this.**
-  See §12.
-- **Custom palettes break the floor.** A person can override mood colours. Either the Sky applies the
-  same luminance lift the shipped component does and re-checks, or overrides that fall below the floor
-  are lifted on this surface only. This must be decided, not left to chance.
+- **Core contrast is a hard floor, not an aspiration.** ~~Nobody has measured this.~~ **Measured and
+  built — see §0.3 finding 1.** The raw ramp runs 3.70:1 (awful) to 7.56:1 (meh) against `#16150F`,
+  so it fails the 4.5 floor at level 1 *and* ranks the moods by visibility with the hardest one
+  faintest. `SkyPalette.equalised` moves every colour to exactly 5.0:1 rather than lifting the
+  failures, which is what makes M4's constant core radius and constant core alpha actually mean
+  equal presence.
+- **Custom palettes break the floor.** ~~This must be decided, not left to chance.~~ **Decided:
+  equalise.** The transform takes a colour rather than a level, so an override goes through the same
+  path as a shipped hue; swept over 5,832 colours the worst result is 4.968:1. A colour too dark or
+  too saturated to carry that much light on its own (a saturated blue tops out at 0.0722 relative
+  luminance) is desaturated toward the sky's ink. That visibly changes someone's chosen colour, and
+  it is the lesser harm — the alternative is a mood they cannot see.
 - **A "quiet sky" mode**, in the Sky's own controls, not buried in Settings: suppresses the decorative
   field entirely (it is the single biggest impediment to finding real stars), raises every glyph to
   maximum contrast, thickens strokes, and drops halos. This is the low-vision presentation and it
@@ -694,6 +843,23 @@ Per the standing rule in [PLAN §4](./PLAN_2026-08-NEXT.md): each of these must 
 actually fail when its subject is violated, with the violation verified to have landed in the file
 before the test is run.
 
+### 10.1 Which of them exist
+
+| # | Status |
+|---|---|
+| **P1** | **Built.** `SkyGlyphTest` sweeps core radius and core alpha over kind × mood; `SkyPaletteTest` holds contrast flat across the ramp. The checker is first pointed at a size that *does* rank moods and shown to reject it. |
+| **P2** | **Built.** `a stretch with nothing logged draws nothing`, with its detector proved first by `the absence detector can see a star`. |
+| **P3** | **Built, at the type level.** `SkyField.tile(seed, tileX, tileY)` has no data type in its signature, so there is nothing for a test to vary. Stronger than a runtime check: it shows the field *cannot* see data, not that it happens not to. |
+| **P4** | **Built.** Density over windows deliberately misaligned with the generator's own cells, tolerance derived from the sampling noise rather than picked, and the detector shown to catch a field that fills in the gaps. |
+| **P5** | **Built.** Position identical after inserting a thousand records on *both* sides of the watched star — see §0.3 on why "after" alone was not enough. |
+| **P6** | **Partly.** `sky/` contains no colour but the three night values, and the ramp arrives from the theme. The assertion that nothing else is *drawn* belongs to the renderer, which does not exist. |
+| **P7** | **Built, as geometry.** The six silhouettes are pairwise distinct in rays, ring, underline, thread stub and ray length. Rasterising and comparing pixels needs the renderer. This test already earned itself once — §0.3 finding 3. |
+| **P8** | **Not built.** `SkyRecord` has no text field, so the layout cannot hold prose; the DAO projections that must not select one are not written (§0.4). |
+| **P9** | **Not built.** The accretion flags do not exist. |
+| **P10** | **Built.** `the list skips empty months without comment`. |
+| **P11** | **Partly.** The only count `sky/` produces is `MonthHeading.itemCount`. Whether anything is *rendered* is the renderer's. |
+| **P12** | **Built.** `deleting a record leaves no trace of it` — asserted as a fingerprint equality against a layout computed as if the record had never existed, not merely as "one fewer star". |
+
 ---
 
 ## 11. Open questions
@@ -706,7 +872,8 @@ before the test is run.
    live question rather than a hypothetical.
 3. **Life events with a date range** — a bereavement is a day, a move is a fortnight. Ranges are
    specified as possible in §2.2 but not designed; a range star may need to be a different form.
-4. **The mood-ramp contrast floor under custom palettes** (§7.1) — lift, reject, or warn.
+4. ~~**The mood-ramp contrast floor under custom palettes** (§7.1) — lift, reject, or warn.~~
+   **Resolved: equalise.** None of the three offered options was right; see §0.3 finding 1.
 5. **How the Sky relates to "Review my year"** — the walkthrough is a curated sequence with
    superlatives in it; the Sky forbids superlatives. Either the walkthrough changes, or the two
    surfaces coexist with different rules, which is a coherence problem worth deciding deliberately.
@@ -717,11 +884,14 @@ before the test is run.
 
 ## 12. What a human must verify
 
-Nothing in this document has been compiled, rendered, measured or tested.
+The decision layer has been compiled and tested (§0); nothing has been rendered or measured on a
+device.
 
-1. **The contrast floor is unverified** (§7.1). `MoodAwful #AE5747` and `MoodBad #C27C46` against
-   `#16150F` need actual measurement. The shipped 18% lerp-toward-white suggests the raw ramp does not
-   clear it. This blocks M4 and P1.
+1. ~~**The contrast floor is unverified** (§7.1).~~ **Measured — §0.3 finding 1.** It failed, and
+   worse than expected: the raw ramp also *ranks* the moods by visibility, hardest one faintest.
+   `SkyPalette.equalised` unblocks M4 and P1. What still needs a human: confirming the equalised
+   ramp reads correctly on a real OLED panel at low brightness, which is a judgement no unit test
+   makes.
 2. **There is no reduced-motion support in the Android app** (§7.4). A grep across
    `app/src/main/java` finds no handling of the platform reduced-motion signal anywhere. Whatever the
    Sky hooks into does not yet exist.
@@ -732,8 +902,15 @@ Nothing in this document has been compiled, rendered, measured or tested.
    (`streak_7`, `streak_30`, `streak_100`). All of this predates
    [D6](./DECISIONS_2026-08.md#d6-things-we-are-deliberately-not-building) and none of it was touched
    by this work — it needs an owner and a decision.
-4. **Performance is budgeted, not measured** (§8.3). Every number is a target.
-5. **The life-event record is new schema.** §2.2 describes it; it needs a migration and an owner.
+4. **Performance is budgeted, not measured** (§8.3). Every number is still a target on a device. The
+   one exception is the precompute step, which is now real: 5,393 records → 5,393 stars → 120 rows
+   in 15–29 ms on a plain JVM. Frame time, cold open and peak heap remain unmeasured.
+5. **The life-event record is new schema.** §2.2 describes it; it needs a migration and an owner. It
+   is now also the only kind with a laid-out glyph and nothing to load into it (§0.4).
+5a. **Two more data gaps found while wiring the kinds** (§0.4): "goal reached" has no column to read
+   — and `archived` **must not** be pressed into service, because that would draw a star for giving
+   up and call it an achievement, against §D5. "Exercise" has no unambiguous source;
+   `thought_records` is the recommendation and `assessment_results` is the one to avoid.
 6. **Proposed copy in §5.1 is new copy for a new surface**, not fixed copy. Any non-diagnostic,
    provenance or privacy sentence appearing near the Sky (§6.4) must be reused verbatim from existing
    constants rather than written to fit this surface's tone.

@@ -17,7 +17,7 @@ import org.junit.Test
  * mood palette is theme-provided and person-overridable (§3.2), and a Sky that hardcoded the hues
  * would silently ignore a custom palette. Writing the shipped values out here means this test is
  * checking *those five colours*, and if someone changes them in `model/Mood.kt` without changing
- * them here, the test still measures what it says it measures — it just stops describing the app,
+ * them here, the test still measures what it says it measures; it stops describing the app,
  * which is what the last test in this file is for.
  */
 class SkyPaletteTest {
