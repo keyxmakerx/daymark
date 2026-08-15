@@ -48,6 +48,71 @@ feature, not here.
 day they logged a hard mood"). If that arrives, prefer passing a small opaque *priority* or
 *sensitivity* tag on the request over teaching the arbiter what a mood is.
 
+### D1a. It reads its own reception, and infers no clinical state
+
+**The proposal.** Let the arbiter see across features so it can work out *"maybe the user is
+depressed, maybe the user is annoyed by the app, maybe the user is just happy and doesn't want to
+talk about their feelings because they're good right now."*
+
+**The observation that resolves it.** Those three states take **the same action**:
+
+| Inferred state | Right response |
+|---|---|
+| Struggling | be gentler, ask less |
+| Annoyed by the app | ask less |
+| Doing fine, not in the mood | ask less |
+
+There is no branch where the answer differs, so the arbiter does not need to distinguish them. It
+needs **one variable — how its own offers are being received — not a state classifier.** That is the
+whole difference between a small component and a beast, and it falls out of the problem rather than
+being imposed on it.
+
+**What the arbiter may know: its own ledger.** Offered, accepted, dismissed, snoozed, "not now",
+"stop asking". This is not cross-feature context — it is the arbiter's own interaction history, one
+table it owns. It stays small because no feature has to feed it anything beyond the tag on the
+request it already makes.
+
+**What it must never do: infer clinical state.**
+
+1. **It would be diagnosis by side-effect.** Daymark declares `nonDiagnostic: true` on every
+   instrument. An engine that concludes "this person is depressed" and changes its behaviour has made
+   a clinical judgement with no instrument, no validation, and no consent — worse than a screen,
+   because it is invisible.
+2. **The field cannot do it reliably.** Digital-phenotyping work on inferring depression from phone
+   behaviour has **poor replicability, often fails to detect clinically relevant events, and validates
+   against unsuitable depression measures**. Reported accuracies (e.g. 76.4% for treatment response)
+   come with documented replication problems.
+3. **Its best signal is one we have banned.** The most consistent markers in that literature are
+   reduced **geographic mobility**, social-app usage and sleep. Location is prohibited outright. We
+   would be attempting the hard version of an unreliable inference with its strongest feature removed.
+
+**The invariant that makes this safe and testable:**
+
+> The arbiter's response to falling reception is **monotonic and one-directional**: it may only ever
+> ask *less*. No signal, in any combination, may cause it to ask more.
+
+This is the ethical guarantee and the engineering guarantee at once. A component that cannot escalate
+cannot become an engagement optimiser by accident, cannot nag, and cannot be quietly retuned into one
+later. It is also directly checkable in a unit test, unlike a policy expressed as intent.
+
+Escalation stays where it belongs: **the person asks for more.** That is a setting, not an inference.
+
+### D1b. One surface for the app's voice — no persona
+
+**The proposal.** A "little guy" in the corner that expands, like a support agent.
+
+**Take the surface, not the character.** The valuable half is real and worth building: **one quiet
+place where everything the app might want to say lives**, visited when the person chooses, instead of
+those things arriving as interruptions. That is the affordance side of affordance-versus-interruption
+made concrete and central, and it is what lets the arbiter say "no" so often — the message is not
+lost, it is just not shoved in front of anyone.
+
+**Drop the persona**, for the same reason the engine gets no name (D2), plus one specific to this
+shape: a chat-like agent in the corner of a mental-health app **implies it will respond to what you
+say**. It cannot — there is no LLM and we do not want one. The predictable failure is someone in a bad
+moment typing something real into a box that cannot answer. A tray with a count is honest about what
+it is; a character is not.
+
 ---
 
 ## D2. It gets no user-facing name
@@ -173,7 +238,9 @@ Recorded so they do not get re-proposed as obvious wins.
 | **Note excerpts in Companion** | Non-disclosure in therapy is the norm and is driven by anticipated consequences of being seen. This protects the one asset the product cannot regenerate: a place to write without an audience. |
 | **Inferring reminder quality from app opens** | A notification raises the probability of opening within the hour ~3.66×. It is the metric that moves most easily with nothing underneath improving. The signal must be person-declared. |
 | **Lapse-referencing notifications** | "You haven't written in 3 days" — the only documented harm signal in the notification literature, with no efficacy evidence on the other side. |
-| **A user-facing AI persona** | See D2. |
+| **A user-facing AI persona** | See D2. A chat-like agent implies it will answer; it cannot, and someone will type something real into it. |
+| **Inferring clinical state from usage** | See D1a. Diagnosis by side-effect, on an inference the field cannot replicate, whose best feature (location) we have banned. |
+| **Any signal that makes the arbiter ask *more*** | See D1a. The response function is monotonic and one-directional by design, so the component cannot be retuned into an engagement optimiser. |
 
 ---
 
