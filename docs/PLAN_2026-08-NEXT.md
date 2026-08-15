@@ -160,7 +160,25 @@ Worth writing down in full, because the failure is a general one and the specifi
 
 **The fix.** The drift step now deletes the current version's schema, re-runs `:app:kspFossDebugKotlin` with `--rerun-tasks --no-build-cache`, refuses to pass on a missing or zero-byte result, and only then diffs — printing the regenerated file and uploading it as an artifact when they disagree. That cache-bypass is the same one that had to be run by hand to produce 13.json; the previous version of this fix was a **temporary** CI step that was removed once it had served its purpose, which is exactly how the problem recurred. It is permanent now.
 
+**The outcome, on the guard's first run.** It failed, as intended, and printed what Room actually generates. The true hash is `2788d491…`; the series reads correctly again:
+
+| version | entities | identityHash |
+|---|---|---|
+| 12 | 12 | `e9bbbc41…` |
+| 13 | 13 | `2331a16f…` |
+| 14 | 14 | `2788d491…` |
+
+Everything else in the file was already correct — the regenerated `offer_records` bundle matched the committed one table-for-table, same `createSql` and both indices, and `MIGRATION_13_14` agrees with it column-for-column including creating both indices. **The migration was never wrong; only the hash was.** Which is the uncomfortable part: the defect was invisible precisely because the surrounding work was right.
+
 **The general lesson, since it is the third instance this session.** A check written against an assumption about *when* code runs — rather than against an observable output — reports green from the moment that assumption stops holding, and nothing about it looks broken. Every guard in this repo should be able to answer: *what change would make this fail?* If the answer requires a step that may not execute, it is not a guard.
+
+The three this session, all the same shape:
+
+| Guard | The assumption that quietly stopped holding |
+|---|---|
+| `git diff -- app/schemas` | that the build rewrites the schema — it only *creates* an absent one |
+| a mutation test on `Card.svelte` | that `.card-note` existed to mutate — it did not, so the "mutation" was a no-op that passed |
+| side 4's "nothing met the threshold" | that `DiscussionPrompts` had callers — it had none, so the reassurance was unconditional |
 
 1. **Verifiable now (TypeScript).** The signal vocabulary as a typed closed list with the author
    partition enforced in validation; the dialogue definition type; companion dialogue content. This is
