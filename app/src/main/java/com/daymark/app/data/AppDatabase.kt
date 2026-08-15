@@ -32,8 +32,9 @@ import com.daymark.app.data.entity.Treatment
         com.daymark.app.data.entity.ThoughtRecord::class,
         com.daymark.app.data.entity.SafetyPlanItem::class,
         com.daymark.app.data.entity.OfferRecord::class,
+        com.daymark.app.data.entity.GoalStep::class,
     ],
-    version = 14,
+    version = 15,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -50,6 +51,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun thoughtRecordDao(): com.daymark.app.data.dao.ThoughtRecordDao
     abstract fun safetyPlanDao(): com.daymark.app.data.dao.SafetyPlanDao
     abstract fun offerRecordDao(): com.daymark.app.data.dao.OfferRecordDao
+    abstract fun goalStepDao(): com.daymark.app.data.dao.GoalStepDao
 
     /** Seeds a sensible set of starter activities on first install. */
     class SeedCallback : Callback() {
@@ -284,6 +286,47 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_offer_records_offeredAt` " +
                         "ON `offer_records` (`offeredAt`)",
+                )
+            }
+        }
+
+        /**
+         * v15 makes a goal one of two shapes and gives the project shape its steps. Existing data is
+         * preserved, and existing rows keep their existing meaning — that is what the `DEFAULT
+         * 'habit'` is for, and why the column is added rather than the table rewritten.
+         *
+         * The `kind` column is `TEXT NOT NULL DEFAULT 'habit'`, matching `Goal.kind`'s
+         * `@ColumnInfo(defaultValue = "habit")`, exactly as the v11 cue/routine columns did.
+         *
+         * `goal_steps` carries **the schema's first foreign key**. The `ON UPDATE NO ACTION ON DELETE
+         * CASCADE` clause and its ordering are Room's own generated form, because Room compares this
+         * table's SQL against what it would have written and a difference in wording — not just in
+         * meaning — fails the migration test. `index_goal_steps_goalId` is the index `GoalStep`
+         * declares; it is also what stops Room warning that a foreign key's child column is
+         * unindexed, so it is not optional.
+         *
+         * Foreign keys are enforced only while `PRAGMA foreign_keys` is on. Room sets it; a raw
+         * `SupportSQLiteDatabase` does not have to. The cascade is therefore not the only thing
+         * standing between a deleted goal and orphaned steps — see [com.daymark.app.data.entity.GoalStep].
+         */
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE goals ADD COLUMN kind TEXT NOT NULL DEFAULT 'habit'")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `goal_steps` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`goalId` INTEGER NOT NULL, " +
+                        "`title` TEXT NOT NULL, " +
+                        "`state` TEXT NOT NULL, " +
+                        "`position` INTEGER NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL, " +
+                        "`completedAt` INTEGER, " +
+                        "FOREIGN KEY(`goalId`) REFERENCES `goals`(`id`) " +
+                        "ON UPDATE NO ACTION ON DELETE CASCADE )",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_goal_steps_goalId` " +
+                        "ON `goal_steps` (`goalId`)",
                 )
             }
         }

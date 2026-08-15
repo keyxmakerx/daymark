@@ -65,11 +65,23 @@ class BackupReplaceSourceTest {
         .filterNot { it.trimStart().startsWith("//") }
         .joinToString("\n")
 
-    /** The injected collaborator names, read off the constructor. */
-    private fun collaborators(src: String): List<String> =
-        Regex("""private val (\w+):""").findAll(
-            src.substringAfter("class BackupManager").substringBefore(") {"),
-        ).map { it.groupValues[1] }.toList()
+    /**
+     * The collaborator names: the constructor's `private val`s, plus any DAO taken off the injected
+     * database in the class body.
+     *
+     * That second source is not tidiness — it is the hole this count had. `goalStepDao` has no
+     * `@Provides` in `di/AppModule.kt`, so [BackupManager] reaches it through `AppDatabase` the way
+     * `GoalRepository` does, which put it outside the constructor and outside a count that only
+     * read constructor parameters. The count would have stayed green at seventeen doors while
+     * `goal_steps` was emptied by the `goals` cascade on every REPLACE and never written back: the
+     * `offer_records` failure again, in a table holding what the person wrote.
+     */
+    private fun collaborators(src: String): List<String> {
+        val body = src.substringAfter("class BackupManager")
+        val declared = Regex("""private val (\w+):""").findAll(body.substringBefore(") {"))
+        val offDatabase = Regex("""private val (\w+) = \w+\.\w+[Dd]ao\(\)""").findAll(body)
+        return (declared + offDatabase).map { it.groupValues[1] }.toList()
+    }
 
     /**
      * Everything the REPLACE path runs: `importFromJson` down to (not including) `importMerge`,
@@ -95,6 +107,9 @@ class BackupReplaceSourceTest {
         assertTrue("KDoc survived stripping", source.contains("/**") && !code.contains("/**"))
         // The two slicers must actually slice, or the checks below read the whole file and pass.
         assertTrue("constructor not found", collaborators(code).size >= 16)
+        // And the body-level half of the count must actually match something, or extending it was
+        // inert and this suite is back to reading constructor parameters alone.
+        assertTrue("goalStepDao is not counted as a door", collaborators(code).contains("goalStepDao"))
         assertTrue("replace path not sliced", replacePath(code).length in 500..6000)
         assertFalse("replace path swallowed the merge", replacePath(code).contains("activityIdMap"))
     }
@@ -129,6 +144,24 @@ class BackupReplaceSourceTest {
         )
         assertTrue("mutation did not land", collaborators(extraDao).contains("futureDao"))
         assertEquals(listOf("futureDao"), untouchedByReplace(extraDao))
+    }
+
+    /**
+     * The same mutation for the door that is not a constructor parameter.
+     *
+     * `goal_steps` is the case that showed the old count was not general: it cascades off `goals`,
+     * so `goalDao.deleteAll()` already emptied it and the boards vanished on every restore with
+     * nothing failing. A count that reads only the constructor cannot see a DAO held in the class
+     * body, and would have reported green throughout.
+     */
+    @Test
+    fun `the door count fires for a DAO held in the body rather than the constructor`() {
+        val path = replacePath(code)
+        val preFix = code.replace(path, path.replace("goalStepDao.", "unreached."))
+
+        assertFalse("mutation did not land", replacePath(preFix).contains("goalStepDao."))
+        assertTrue("mutation removed the declaration too", collaborators(preFix).contains("goalStepDao"))
+        assertEquals(listOf("goalStepDao"), untouchedByReplace(preFix))
     }
 
     @Test

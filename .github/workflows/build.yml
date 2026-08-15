@@ -136,7 +136,13 @@ jobs:
           COUNT=$(python3 -c "import json;print(len(json.load(open('$SCHEMA'))['database']['entities']))")
           echo "Regenerated $SCHEMA — $COUNT entities, identityHash $(python3 -c "import json;print(json.load(open('$SCHEMA'))['database']['identityHash'])")"
 
-          if ! git diff --quiet -- app/schemas; then
+          # `git status --porcelain`, NOT `git diff` -- and that distinction is the whole point.
+          # A schema for a NEWLY ADDED version is untracked, and `git diff` does not show untracked
+          # files at all, so the first build after a version bump would regenerate the correct
+          # 15.json, find no diff, and report green while the file it just created went uncommitted.
+          # That is the same shape as the bug this step was rebuilt to catch: a check that passes
+          # because it is looking somewhere the change cannot appear.
+          if [ -n "$(git status --porcelain -- app/schemas)" ]; then
             echo "::error::The committed Room schema does not match what Room generates."
             echo "::error::Take the room-schemas artifact and commit it as-is — never hand-edit a"
             echo "::error::schema, the identityHash must be Room's own."

@@ -6,6 +6,9 @@ import com.daymark.app.data.ActivityRepository
 import com.daymark.app.data.EntryRepository
 import com.daymark.app.data.GoalRepository
 import com.daymark.app.data.entity.Goal
+import com.daymark.app.data.entity.toStep
+import com.daymark.app.goals.GoalBoard
+import com.daymark.app.goals.GoalKind
 import com.daymark.app.stats.GoalProgress
 import com.daymark.app.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -19,11 +22,21 @@ import java.time.LocalDate
 import java.time.temporal.TemporalAdjusters
 import javax.inject.Inject
 
+/**
+ * One row of the goals list, carrying whichever of the two shapes' numbers applies.
+ *
+ * [completed]/[target] are the weekly habit count and mean nothing for a project; [project] is the
+ * step count and means nothing for a habit. Both are filled rather than modelled as a sealed type
+ * because the list needs a stable key and one card composable, and the alternative was a sealed
+ * hierarchy whose only difference is which two integers get read.
+ */
 data class GoalProgressUi(
     val goal: Goal,
+    val kind: GoalKind,
     val activityName: String?,
     val completed: Int,
     val target: Int,
+    val project: GoalBoard.Progress,
 ) {
     val fraction: Float get() = if (target <= 0) 0f else (completed.toFloat() / target).coerceIn(0f, 1f)
     val isMet: Boolean get() = completed >= target
@@ -44,17 +57,25 @@ class GoalsViewModel @Inject constructor(
         goalRepository.observeActive(),
         entryRepository.observeBetween(weekStartMillis, DateUtils.endOfDay(LocalDate.now())),
         activityRepository.observeAll(),
-    ) { goals, weekEntries, activities ->
+        // Every goal's steps in one flow; grouped by goal below. A flow per project row would
+        // resubscribe the whole list whenever any single step changed.
+        goalRepository.observeAllSteps(),
+    ) { goals, weekEntries, activities, steps ->
         val names = activities.associate { it.id to it.name }
+        val stepsByGoal = steps.groupBy { it.goalId }
         goals.map { goal ->
             val completed = goal.activityId?.let {
                 GoalProgress.completedDays(weekEntries, it, weekStartMillis)
             } ?: 0
             GoalProgressUi(
                 goal = goal,
+                kind = GoalKind.fromKey(goal.kind),
                 activityName = goal.activityId?.let { names[it] },
                 completed = completed,
                 target = goal.targetPerWeek,
+                project = GoalBoard.progressOf(
+                    stepsByGoal[goal.id].orEmpty().map { it.toStep() },
+                ),
             )
         }
     }.stateIn(

@@ -96,8 +96,10 @@ class PdfReportGenerator @Inject constructor() {
         val ctx = PageCtx(doc, w.toFloat(), h.toFloat(), data, totalPages)
         ctx.start()
 
-        // Side 3 exists only if the person switched it on *and* ticked entries. Both gates are
-        // theirs; an entry merely being in range is not inclusion.
+        // Side 3 exists only if the person switched it on *and* something survived their choice —
+        // ticked entries, or the blanket "everything in this range". Both gates are theirs; an
+        // entry merely being in range is not inclusion, and a document of three sides is the
+        // correct shape for someone who chose to share none of their writing.
         val journalSide = options.includeInTheirWords && data.journal.isNotEmpty()
         val sides = if (journalSide) 4 else 3
 
@@ -203,11 +205,19 @@ private object Copy {
      * Side 3's opt-in line, in two forms, because there are two different things the person can
      * have done and only one of them is a per-entry decision.
      *
-     * The single line this replaced said "entry by entry" over every export the shipping app can
-     * produce, and the only control that exists is one switch over the whole range — so it
+     * The single line this replaced said "entry by entry" over every export the shipping app could
+     * produce, when the only control that existed was one switch over the whole range — so it
      * described a deliberation that never happened, on the one side of the report where the
-     * strength of the consent is the point. Which form prints is decided by
+     * strength of the consent is the point. Both controls exist now
+     * (`ui/export/JournalPickerScreen.kt`), and which form prints is decided by
      * [ReportData.journalIncludedAsWholeRange], never by the renderer guessing.
+     *
+     * **Two forms, not three.** The picker has a third state — nothing chosen — and it needs no
+     * sentence here, because side 3 does not print at all and there is no page to carry one. What a
+     * reader is owed in that case is on side 4, where [NOT_IN_REPORT] already lists "any journal
+     * entry not on side 3" among the things this document does not contain. A fourth state does not
+     * exist: ticking every entry in the range is [JOURNAL_OPT_IN_PER_ENTRY], because that is what
+     * the person did.
      */
     const val JOURNAL_OPT_IN_ALL =
         "This side exists because they turned it on for the whole range: every journal entry they " +
@@ -1177,12 +1187,21 @@ private class PageCtx(
     fun sideThreeInTheirWords(data: ReportData, of: Int) {
         val n = data.journal.size
         val available = maxOf(data.journalEntriesAvailable, n)
+        val entryWord = if (available == 1) "entry" else "entries"
         sideHeader(
             index = 3,
             of = of,
             job = "in their words",
             title = "In their words",
-            subtitle = "Included by them · $n of $available ${if (available == 1) "entry" else "entries"}",
+            // "n of available" reads as a selection, and under the blanket choice there was none —
+            // it would print "26 of 26" over a decision that was never entry by entry, weakening
+            // the same distinction the opt-in line below is here to draw. Off the model, not off
+            // the counts: n == available is equally true of someone who ticked all 26 by hand.
+            subtitle = if (data.journalIncludedAsWholeRange) {
+                "Included by them · every $entryWord in this range ($available)"
+            } else {
+                "Included by them · $n of $available $entryWord"
+            },
             meta = listOf("Switched on for this export", "Off by default"),
         )
 

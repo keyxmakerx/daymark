@@ -176,10 +176,17 @@ data class ReportData(
      * when the person picked them one at a time.
      *
      * Carried because side 3's copy has to say which of the two happened, and the two are not the
-     * same consent. The only production control today is the single "Include all journal entries
-     * in range" switch, so this is true in every export the shipping app can produce; it goes false
-     * on its own when the per-entry picker sets [PdfExportOptions.includedJournalEntryIds]
-     * instead. It is a fact about the choice the person made, not an inference about the writing.
+     * same consent. Both controls now exist — `ui/export/JournalPickerScreen.kt` offers ticking and
+     * "include everything in this range" as separate actions — so this distinguishes two live paths
+     * rather than describing one. It is a fact about the choice the person made, not an inference
+     * about the writing.
+     *
+     * Read only when side 3 prints, and false when it does not: the three states are *nothing
+     * chosen* (no side 3, so no opt-in sentence to pick), *some entries ticked*
+     * ([PdfExportOptions.includedJournalEntryIds]) and *the whole range*
+     * ([PdfExportOptions.includeAllJournalInRange]). A person who takes the blanket action over a
+     * range holding no journal entries has included nothing, and this stays false for them — the
+     * whole-range sentence describes pages, and there are none.
      */
     val journalIncludedAsWholeRange: Boolean = false,
 )
@@ -322,7 +329,12 @@ class ReportDataBuilder @Inject constructor(
             instrumentSeries = instrumentSeries,
             coverageGaps = gaps,
             journalEntriesAvailable = journalInRange.size,
-            journalIncludedAsWholeRange = options.includeInTheirWords && options.includeAllJournalInRange,
+            // Keyed off what actually got included, not off the flag alone. `journal` is non-empty
+            // only when the side was switched on, so this is the old `includeInTheirWords &&`
+            // condition plus the case it missed: the blanket action over a range that holds no
+            // journal entries used to leave this true, which put "every journal entry they wrote
+            // between these dates is here" on a report with no side 3 to put it on.
+            journalIncludedAsWholeRange = options.includeAllJournalInRange && journal.isNotEmpty(),
             discussionPrompts = prompts,
         )
     }

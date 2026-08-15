@@ -27,6 +27,14 @@ interface GoalDao {
     @Delete
     suspend fun delete(goal: Goal)
 
+    /**
+     * Deletes by id, so a caller never has to rebuild a whole [Goal] out of screen state to throw
+     * one away. `GoalEditorViewModel` used to do exactly that from five of its eight fields, which
+     * worked only because `@Delete` matches on the primary key alone.
+     */
+    @Query("DELETE FROM goals WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
     // --- Backup / restore ---
 
     @Query("SELECT * FROM goals")

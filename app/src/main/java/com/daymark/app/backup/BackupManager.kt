@@ -11,6 +11,7 @@ import com.daymark.app.data.dao.TreatmentDao
 import com.daymark.app.data.entity.ActivityEntity
 import com.daymark.app.data.entity.EntryActivityCrossRef
 import com.daymark.app.data.entity.Goal
+import com.daymark.app.data.entity.GoalStep
 import com.daymark.app.data.entity.JournalEntry
 import com.daymark.app.data.entity.AssessmentResult
 import com.daymark.app.data.entity.MoodEntry
@@ -68,6 +69,37 @@ data class BackupGoal(
     // Added in v11.
     val cue: String = "",
     val routine: String = "",
+    /**
+     * A [com.daymark.app.goals.GoalKind.key]. Added in v14.
+     *
+     * It was missing for one release and the omission was silent in both directions: `BackupGoal`
+     * had no field, and `Goal.kind` is defaulted, so every positional `Goal(...)` on the import
+     * paths still compiled. A project exported and restored came back as a habit — with a weekly
+     * target it never had, an empty board, and no error anywhere to say what had happened.
+     *
+     * Carried verbatim rather than through [com.daymark.app.goals.GoalKind.fromKey]. The column is
+     * text precisely so an unrecognised kind survives being read (see `GoalKind`'s header), and
+     * coercing here would turn "a kind this build does not know" into a permanent rewrite to habit.
+     */
+    val kind: String = "habit",
+)
+
+/**
+ * One `goal_steps` row. Added in v14, alongside the table.
+ *
+ * Steps are a person's own writing about what they mean to do, so they belong in the one file that
+ * is this app's safety net. They were absent from it for a release, which was worse than an
+ * omission: see [BackupData.goalSteps].
+ */
+@Serializable
+data class BackupGoalStep(
+    val id: Long,
+    val goalId: Long,
+    val title: String,
+    val state: String,
+    val position: Int,
+    val createdAt: Long,
+    val completedAt: Long? = null,
 )
 
 @Serializable
@@ -108,6 +140,18 @@ data class BackupSafetyPlanItem(
 
 @Serializable
 data class BackupData(
+    /**
+     * The format version. [BackupManager.CURRENT_VERSION] is the authoritative number — it is what
+     * [BackupManager.exportToJson] stamps on every file it writes and what
+     * [BackupManager.importFromJson] validates against — and this default is only reached by a file
+     * with no `version` key at all,
+     * which no version of this app has ever written.
+     *
+     * So it deliberately does not track `CURRENT_VERSION`: raising it would have a file that never
+     * declared a version assert it was written by the newest build, which is the one claim the
+     * `data.version <= CURRENT_VERSION` guard exists to be able to disbelieve. Reading an
+     * undeclared version as an old one costs nothing, because every field added since is defaulted.
+     */
     val version: Int = 12,
     val exportedAt: Long,
     val entries: List<BackupEntry>,
@@ -138,7 +182,52 @@ data class BackupData(
     val thoughtRecords: List<BackupThoughtRecord> = emptyList(),
     // Added in v13: the safety plan. Local-only like the rest — this is the backup, not a share.
     val safetyPlan: List<BackupSafetyPlanItem> = emptyList(),
+    /**
+     * The steps of every project goal. Added in v14.
+     *
+     * **This list is why a restore was destroying data, not merely losing it.** `goal_steps` has the
+     * schema's first foreign key, `ON DELETE CASCADE` onto `goals`, and Room runs with
+     * `PRAGMA foreign_keys = ON`. `importReplace` calls `goalDao.deleteAll()`, so from the moment
+     * the table existed, restoring *any* backup — including one taken a minute earlier on the same
+     * phone — emptied every project's board through the cascade and put nothing back, because the
+     * file had no steps in it to put back. Nothing failed, and the goals themselves reappeared, so
+     * the boards looked like they had never been written.
+     */
+    val goalSteps: List<BackupGoalStep> = emptyList(),
 )
+
+/**
+ * The backup's steps rebound to the goal ids an import actually used, dropping any whose goal is
+ * not in [goalIdMap].
+ *
+ * **Why this is a function and not two lines inside the import.** On the MERGE path each goal is
+ * inserted as `Goal(0, ...)` and takes whatever id Room hands back, so every `goalId` in the file is
+ * stale before the steps are written. Getting the rebinding wrong does not throw — the wrong id is
+ * still a real goal — it files one person's writing about what they mean to do underneath a
+ * different goal. That failure is silent and permanent, so the arithmetic lives where a test can
+ * call it, next to `csvField` and for the same reason.
+ *
+ * **Why an unmapped step is dropped rather than kept.** `goal_steps.goalId` is a live foreign key
+ * now, so inserting a step whose goal is absent throws and takes the whole import down over one
+ * orphan line. Dropping matches how [BackupData.refs] already handles a cross-ref to a missing row.
+ * [BackupGoalStep.id] is carried through untouched; each import path decides what id to write.
+ */
+internal fun remapGoalSteps(
+    steps: List<BackupGoalStep>,
+    goalIdMap: Map<Long, Long>,
+): List<BackupGoalStep> =
+    steps.mapNotNull { step -> goalIdMap[step.goalId]?.let { step.copy(goalId = it) } }
+
+/**
+ * The map [remapGoalSteps] needs on the REPLACE path: every goal in the file, to itself.
+ *
+ * REPLACE reinserts each goal with its original id (`goalDao.insert(Goal(it.id, ...))`), so a step's
+ * `goalId` still names the right row and the identity is honest rather than a stand-in. Routing
+ * REPLACE through the same function as MERGE is the point: the orphan-dropping rule is what keeps a
+ * hand-edited file from throwing mid-import, and two copies of it would drift.
+ */
+internal fun replaceGoalIdMap(goals: List<BackupGoal>): Map<Long, Long> =
+    goals.associate { it.id to it.id }
 
 /**
  * Exports/imports the entire local database as JSON. This is the user's only safety
@@ -170,7 +259,20 @@ class BackupManager @Inject constructor(
     // Deliberately the repository and not `OfferRecordDao`: the repository is the seam that decides
     // what may be read out of that table, and a backup path has no business reading rows at all.
     private val offerLedger: com.daymark.app.data.OfferLedgerRepository,
+    database: com.daymark.app.data.AppDatabase,
 ) {
+    /**
+     * Taken off the database rather than injected, the same way `GoalRepository` takes it.
+     *
+     * `di/AppModule.kt` has a `@Provides` per DAO and has none for this one, and that file is
+     * outside the set this change was allowed to touch. `AppDatabase` is itself a `@Singleton`
+     * binding and a DAO is a cached object on it, so this behaves identically to a constructor
+     * parameter. When `provideGoalStepDao` is added it should become one — and note that
+     * `BackupReplaceSourceTest` had to learn to read this shape, because a collaborator held here
+     * instead of in the constructor is a door its count could not see.
+     */
+    private val goalStepDao = database.goalStepDao()
+
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
 
     suspend fun exportToJson(nowMillis: Long): String {
@@ -190,7 +292,10 @@ class BackupManager @Inject constructor(
             refs = entryDao.getAllCrossRefs().map { BackupRef(it.entryId, it.activityId) },
             journal = journalDao.getAll().map { BackupJournal(it.id, it.dateTime, it.title, it.body) },
             goals = goalDao.getAll().map {
-                BackupGoal(it.id, it.title, it.activityId, it.targetPerWeek, it.createdAt, it.archived, it.cue, it.routine)
+                BackupGoal(it.id, it.title, it.activityId, it.targetPerWeek, it.createdAt, it.archived, it.cue, it.routine, it.kind)
+            },
+            goalSteps = goalStepDao.getAll().map {
+                BackupGoalStep(it.id, it.goalId, it.title, it.state, it.position, it.createdAt, it.completedAt)
             },
             sleepLogs = sleepLogDao.getAll().map {
                 BackupSleepLog(it.id, it.night, it.bedTime, it.wakeTime, it.sleepLatencyMin, it.awakeMin, it.quality, it.note)
@@ -274,6 +379,12 @@ class BackupManager @Inject constructor(
         entryDao.deleteAllEntries()
         activityDao.deleteAll()
         journalDao.deleteAll()
+        // Steps before goals, though the cascade would take them anyway: the cascade needs
+        // `PRAGMA foreign_keys` on, which Room sets and a raw SupportSQLiteDatabase does not have
+        // to, and `GoalRepository.deleteById` deletes them by hand for the same reason. A restore
+        // that left orphan steps standing would attach a previous life's writing to whatever goal
+        // ids the backup happens to reuse below.
+        goalStepDao.deleteAll()
         goalDao.deleteAll()
         sleepLogDao.deleteAll()
         treatmentDao.deleteAll()
@@ -291,8 +402,15 @@ class BackupManager @Inject constructor(
         entryDao.insertCrossRefs(data.refs.map { EntryActivityCrossRef(it.entryId, it.activityId) })
         data.journal.forEach { journalDao.insert(JournalEntry(it.id, it.dateTime, it.title, it.body)) }
         data.goals.forEach {
-            goalDao.insert(Goal(it.id, it.title, it.activityId, it.targetPerWeek, it.createdAt, it.archived, it.cue, it.routine))
+            goalDao.insert(Goal(it.id, it.title, it.activityId, it.targetPerWeek, it.createdAt, it.archived, it.cue, it.routine, it.kind))
         }
+        // After the goals, never before: `goal_steps.goalId` references `goals(id)` and the pragma
+        // is on, so a step written ahead of its goal throws and aborts the restore.
+        goalStepDao.insertAll(
+            remapGoalSteps(data.goalSteps, replaceGoalIdMap(data.goals)).map {
+                GoalStep(it.id, it.goalId, it.title, it.state, it.position, it.createdAt, it.completedAt)
+            },
+        )
         data.sleepLogs.forEach {
             sleepLogDao.insert(SleepLog(it.id, it.night, it.bedTime, it.wakeTime, it.sleepLatencyMin, it.awakeMin, it.quality, it.note))
         }
@@ -387,11 +505,19 @@ class BackupManager @Inject constructor(
         entryDao.insertCrossRefs(remappedRefs)
 
         data.journal.forEach { j -> journalDao.insert(JournalEntry(0, j.dateTime, j.title, j.body)) }
+        val goalIdMap = HashMap<Long, Long>()
         data.goals.forEach { g ->
-            goalDao.insert(
-                Goal(0, g.title, g.activityId?.let { activityIdMap[it] }, g.targetPerWeek, g.createdAt, g.archived, g.cue, g.routine),
+            val newId = goalDao.insert(
+                Goal(0, g.title, g.activityId?.let { activityIdMap[it] }, g.targetPerWeek, g.createdAt, g.archived, g.cue, g.routine, g.kind),
             )
+            goalIdMap[g.id] = newId
         }
+        // After the goals for the foreign key, and through the map because the ids just changed.
+        goalStepDao.insertAll(
+            remapGoalSteps(data.goalSteps, goalIdMap).map {
+                GoalStep(0, it.goalId, it.title, it.state, it.position, it.createdAt, it.completedAt)
+            },
+        )
         // Sleep logs and treatments have no foreign keys, so merge is a plain insert with fresh ids.
         data.sleepLogs.forEach { s ->
             sleepLogDao.insert(SleepLog(0, s.night, s.bedTime, s.wakeTime, s.sleepLatencyMin, s.awakeMin, s.quality, s.note))
@@ -449,6 +575,7 @@ class BackupManager @Inject constructor(
         android.util.Base64.decode(text, android.util.Base64.NO_WRAP)
 
     companion object {
-        const val CURRENT_VERSION = 13
+        // v14 adds `goalSteps` and `BackupGoal.kind`. Both are defaulted, so a v13 file still reads.
+        const val CURRENT_VERSION = 14
     }
 }
