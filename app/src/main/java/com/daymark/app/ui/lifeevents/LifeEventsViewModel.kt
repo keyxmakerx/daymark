@@ -15,7 +15,7 @@ import javax.inject.Inject
  * The life-events screen's state and its three writes.
  *
  * **The DAO is injected here rather than a repository**, which is not the house pattern — every
- * other view model in `ui/` takes a `data/*Repository`. `data/LifeEventRepository.kt` was outside
+ * other view model in `ui/` takes a `a `data/` repository`. `data/LifeEventRepository.kt` was outside
  * the set of files this change was allowed to create, and the alternative (reaching the DAO off
  * `AppDatabase` the way `BackupManager` reaches `goalStepDao`) is the shape that already hid a
  * collaborator from a test. `provideLifeEventDao` exists in `di/AppModule.kt`, so this is a plain
