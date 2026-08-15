@@ -31,8 +31,9 @@ import com.daymark.app.data.entity.Treatment
         Tracker::class, TrackerLog::class, Reminder::class, AssessmentResult::class,
         com.daymark.app.data.entity.ThoughtRecord::class,
         com.daymark.app.data.entity.SafetyPlanItem::class,
+        com.daymark.app.data.entity.OfferRecord::class,
     ],
-    version = 13,
+    version = 14,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -48,6 +49,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun assessmentDao(): com.daymark.app.data.dao.AssessmentDao
     abstract fun thoughtRecordDao(): com.daymark.app.data.dao.ThoughtRecordDao
     abstract fun safetyPlanDao(): com.daymark.app.data.dao.SafetyPlanDao
+    abstract fun offerRecordDao(): com.daymark.app.data.dao.OfferRecordDao
 
     /** Seeds a sensible set of starter activities on first install. */
     class SeedCallback : Callback() {
@@ -250,6 +252,38 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_safety_plan_items_section` " +
                         "ON `safety_plan_items` (`section`)",
+                )
+            }
+        }
+
+        /**
+         * v14 adds the reception ledger (`offer_records`); existing data is preserved.
+         *
+         * Three columns and a primary key, and that is deliberately the whole table — see
+         * [com.daymark.app.data.entity.OfferRecord]. It records that the app asked and how that
+         * landed, never anything about the person, so there is no free-text column here and no
+         * migration may ever add one.
+         *
+         * Both indices exist because the two questions the arbiter asks are "when did this kind of
+         * offer last happen?" and "how did the recent ones land?" — `kind` narrows, `offeredAt`
+         * orders.
+         */
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `offer_records` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`kind` TEXT NOT NULL, " +
+                        "`offeredAt` INTEGER NOT NULL, " +
+                        "`outcome` TEXT NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_offer_records_kind` " +
+                        "ON `offer_records` (`kind`)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_offer_records_offeredAt` " +
+                        "ON `offer_records` (`offeredAt`)",
                 )
             }
         }

@@ -1,25 +1,35 @@
 package com.daymark.app.stats
 
-import com.daymark.app.data.entity.OfferKind
-import com.daymark.app.data.entity.OfferOutcome
-import com.daymark.app.data.entity.OfferRecord
-
 /**
  * The permission gate, generalised — one budget per calling feature.
  *
  * [SupportOffer] is the prototype and keeps its own setting and its own wording; this is the same
  * rule with the two additions `docs/DECISIONS_2026-08.md` §D1/§D1a describe, and nothing else:
  *
- *  - a **kind** ([OfferKind]), so the companion, reminders, assignments and the support space each
- *    spend a separate budget and one talkative feature cannot use up another's;
- *  - the engine's **own reception ledger** ([OfferRecord]), so a feature that is being waved away
- *    asks less.
+ *  - a **kind** ([Kind]), so the companion, reminders, assignments and the support space each spend
+ *    a separate budget and one talkative feature cannot use up another's;
+ *  - the engine's **own reception ledger** ([Offer]), so a feature that is being waved away asks
+ *    less.
  *
  * It is deliberately the same size as the prototype, and the rule that keeps it that way is §D1's:
  * **features ask a yes/no question, they do not push context in.** Nothing here knows what a goal,
  * a mood, an entry or a check-in is, and the moment something needs to hand this file domain state,
- * that logic belongs in the feature. Pure and Android-free like the rest of `stats/` — the caller
- * owns persistence and the clock.
+ * that logic belongs in the feature. The caller owns persistence and the clock.
+ *
+ * ## Why the ledger arrives as [Offer] and not as a database row
+ *
+ * `stats/` is pure and Android-free — no Room types, no report types, no clock — the same rule
+ * [DiscussionPrompts] states and keeps by taking a [DiscussionPrompts.Inputs] instead of a
+ * `ReportData`. The reception ledger is persisted in a Room table, so this file takes [Offer]:
+ * three plain fields carrying exactly the three columns `docs/COMPANION_DIALOGUE.md` specifies,
+ * with the data layer mapping its rows onto them. The dependency runs one way — data reads stats,
+ * never the reverse — so nothing here can acquire an Android dependency by having an entity handed
+ * to it, and the unit tests keep running on a plain JVM because there is nothing else they could do.
+ *
+ * [Offer.kind] and [Offer.outcome] stay **raw keys** rather than enums on purpose. A key this
+ * version does not recognise — an older backup, a hand-edited file, a row a later version wrote —
+ * is a case this engine has to decide, and it decides it quietly (see [restraintOf]). Parsing on
+ * the way in would move that decision upstream, out of reach of the sweeps below.
  *
  * ## What it must never do
  *
@@ -43,12 +53,84 @@ import com.daymark.app.data.entity.OfferRecord
  *     gap can only grow or stay the same.
  *  3. **An inference may quiet the app; only the person may silence it.** Reception alone bottoms
  *     out at [SupportOfferFrequency.OncePerWeek]. Reaching [SupportOfferFrequency.Never] takes the
- *     person's own setting or their own [OfferOutcome.STOP].
+ *     person's own setting or their own [Outcome.STOP].
  *
  * Escalation stays where §D1a puts it: the person asks for more, in a setting, and never as
  * something this file worked out about them.
  */
 object InterruptionBudget {
+
+    /**
+     * Which feature is asking.
+     *
+     * The engine still knows nothing about what any of these *are* — only that they are different
+     * callers, each spending its own budget, which is the whole of §D1's generalisation. [key] is
+     * what the ledger row stores, so the mapping on the data side is a string comparison and an old
+     * row always reads back.
+     */
+    enum class Kind(val key: String) {
+        /** The companion surfacing itself unprompted. Opening it deliberately is not an offer. */
+        COMPANION("companion"),
+
+        /** A scheduled reminder firing. */
+        REMINDER("reminder"),
+
+        /** A prescribed module being put in front of the person. */
+        ASSIGNMENT("assignment"),
+
+        /** The support space offering itself after a hard day — see [SupportOffer]. */
+        SUPPORT("support"),
+        ;
+
+        companion object {
+            /** Unknown keys (an older backup, a hand-edited file) resolve to null, never crash. */
+            fun fromKey(key: String?): Kind? = entries.firstOrNull { it.key == key }
+        }
+    }
+
+    /**
+     * What became of an offer.
+     *
+     * These are deliberately not ranked and none of them is a "good" outcome. [DISMISSED] is a
+     * person exercising the control they were given, and treating it as a failure to be corrected
+     * is how a component like this turns into an engagement optimiser.
+     */
+    enum class Outcome(val key: String) {
+        /** They took it up. */
+        ACCEPTED("accepted"),
+
+        /** They waved it away this time. Says nothing about the next time. */
+        DISMISSED("dismissed"),
+
+        /** Not now — asked to be come back to. */
+        SNOOZED("snoozed"),
+
+        /**
+         * Stop asking. Unlike the others this is a standing preference rather than a fact about one
+         * moment: once written it holds until the person lifts it themselves.
+         */
+        STOP("stop"),
+        ;
+
+        companion object {
+            /** Unknown keys (an older backup, a hand-edited file) resolve to null, never crash. */
+            fun fromKey(key: String?): Outcome? = entries.firstOrNull { it.key == key }
+        }
+    }
+
+    /**
+     * One line of the reception ledger, as this engine needs it — the app having asked for
+     * someone's attention, and what became of it.
+     *
+     * Three fields and no fourth. There is no note, no answer, no dialogue text, no mood: the
+     * moment this carries content it stops being a ledger of interruptions and starts being a
+     * record of a person. [kind] is a [Kind.key] and [outcome] an [Outcome.key], both as stored.
+     */
+    data class Offer(
+        val kind: String,
+        val offeredAt: Long,
+        val outcome: String,
+    )
 
     /**
      * How the offers of one kind are landing.
@@ -79,23 +161,6 @@ object InterruptionBudget {
     /** What [minimumGapMillis] returns for [SupportOfferFrequency.Never]: a gap that never elapses. */
     const val NEVER_GAP_MILLIS = Long.MAX_VALUE
 
-    /** The frequency ladder, quietest first. An index into this is a rung. */
-    private val LADDER = listOf(
-        SupportOfferFrequency.Never,
-        SupportOfferFrequency.OncePerWeek,
-        SupportOfferFrequency.OncePerDay,
-        SupportOfferFrequency.EveryTime,
-    )
-
-    /**
-     * The quietest rung reception on its own can reach — [SupportOfferFrequency.OncePerWeek].
-     *
-     * Being ignored makes the app *quiet*, not absent. Silence is a thing the person chooses, by
-     * their setting or by saying stop, because an engine that can switch a feature off on its own
-     * reading of a few dismissals has made a decision the person cannot see and did not ask for.
-     */
-    private const val QUIETEST_INFERRED_RUNG = 1
-
     /** How many of a kind's most recent offers reception is read from. Fixed, not tuned. */
     const val RECENT_WINDOW = 5
 
@@ -103,23 +168,65 @@ object InterruptionBudget {
     private const val QUIET_AT = 3
 
     /**
+     * The shortest permitted spacing between interruptions, so "asks less" has a number the tests
+     * can compare. Permitted rate is 1/gap, so a gap that never shrinks is a rate that never rises.
+     *
+     * This `when` is exhaustive, and it is the **single definition of quietness in the file**:
+     * [LADDER] is derived from it below, so a fifth [SupportOfferFrequency] cannot be added without
+     * the compiler stopping here first, and cannot be given a gap without taking its correct rung
+     * automatically. The previous hand-maintained ladder could silently disagree with these
+     * numbers; nothing can now, because there is only one of them.
+     */
+    fun minimumGapMillis(frequency: SupportOfferFrequency): Long = when (frequency) {
+        SupportOfferFrequency.Never -> NEVER_GAP_MILLIS
+        SupportOfferFrequency.OncePerWeek -> WEEK_MILLIS
+        SupportOfferFrequency.OncePerDay -> DAY_MILLIS
+        SupportOfferFrequency.EveryTime -> 0L
+    }
+
+    /**
+     * The frequency ladder, quietest first. An index into this is a rung.
+     *
+     * Derived rather than written down: longest gap first *is* quietest first, and sorting
+     * `entries` by the exhaustive [minimumGapMillis] means the ladder holds every frequency exactly
+     * once by construction. Two frequencies sharing a gap would sit in an arbitrary but stable
+     * order, and stepping between them would change nothing, so the invariant survives that too —
+     * `InterruptionBudgetTest` asserts the gaps are distinct anyway, because a rung that hands out
+     * the same number as its neighbour is not a rung.
+     */
+    private val LADDER: List<SupportOfferFrequency> =
+        SupportOfferFrequency.entries.sortedByDescending { minimumGapMillis(it) }
+
+    /**
+     * The quietest rung reception on its own can reach — the quietest frequency that is not
+     * silence, which today is [SupportOfferFrequency.OncePerWeek].
+     *
+     * Being ignored makes the app *quiet*, not absent. Silence is a thing the person chooses, by
+     * their setting or by saying stop, because an engine that can switch a feature off on its own
+     * reading of a few dismissals has made a decision the person cannot see and did not ask for.
+     * Derived from [LADDER] for the same reason the ladder is derived: expressed as the rule rather
+     * than as the number 1, it stays correct if the ladder ever grows a step.
+     */
+    private val QUIETEST_INFERRED_RUNG: Int =
+        LADDER.indexOfFirst { minimumGapMillis(it) != NEVER_GAP_MILLIS }.coerceAtLeast(0)
+
+    /**
      * The starting frequency for a kind, before the person has said otherwise.
      *
      * These are **judgement calls, not evidence** — the same honesty [SupportOfferFrequency]'s own
-     * default is recorded with. [OfferKind.REMINDER] starts at [SupportOfferFrequency.EveryTime]
-     * because the person already chose those times themselves and the engine has no business
-     * second-guessing a schedule; reception can still quiet it, which is the only direction
-     * anything here moves.
+     * default is recorded with. [Kind.REMINDER] starts at [SupportOfferFrequency.EveryTime] because
+     * the person already chose those times themselves and the engine has no business second-guessing
+     * a schedule; reception can still quiet it, which is the only direction anything here moves.
      */
-    fun defaultFrequency(kind: OfferKind): SupportOfferFrequency = when (kind) {
-        OfferKind.COMPANION -> SupportOfferFrequency.OncePerDay
-        OfferKind.REMINDER -> SupportOfferFrequency.EveryTime
-        OfferKind.ASSIGNMENT -> SupportOfferFrequency.OncePerDay
-        OfferKind.SUPPORT -> SupportOfferFrequency.DEFAULT
+    fun defaultFrequency(kind: Kind): SupportOfferFrequency = when (kind) {
+        Kind.COMPANION -> SupportOfferFrequency.OncePerDay
+        Kind.REMINDER -> SupportOfferFrequency.EveryTime
+        Kind.ASSIGNMENT -> SupportOfferFrequency.OncePerDay
+        Kind.SUPPORT -> SupportOfferFrequency.DEFAULT
     }
 
     /** When this kind last asked, or 0 if it never has. Rows of other kinds are ignored. */
-    fun lastOfferedAt(kind: OfferKind, recent: List<OfferRecord>): Long =
+    fun lastOfferedAt(kind: Kind, recent: List<Offer>): Long =
         recent.filter { it.kind == kind.key }.maxOfOrNull { it.offeredAt } ?: 0L
 
     /**
@@ -131,22 +238,22 @@ object InterruptionBudget {
      *
      * [saidStop] is the standing "stop asking" preference, which outlives the window: unlike the
      * other outcomes it is a preference rather than a fact about one moment, so callers read it
-     * separately (`OfferRecordDao.hasOutcome`) and it is not left to chance that the row is still
-     * inside [RECENT_WINDOW]. It has no default on purpose — forgetting it means carrying on
-     * asking someone who asked you not to.
+     * separately (the ledger DAO's `hasOutcome`) and it is not left to chance that the row is still
+     * inside [RECENT_WINDOW]. It has no default on purpose — forgetting it means carrying on asking
+     * someone who asked you not to.
      */
     fun receptionOf(
-        kind: OfferKind,
-        recent: List<OfferRecord>,
+        kind: Kind,
+        recent: List<Offer>,
         saidStop: Boolean,
     ): Reception {
         if (saidStop) return Reception.Closed
         val mine = recent.filter { it.kind == kind.key }
-        if (mine.any { OfferOutcome.fromKey(it.outcome) == OfferOutcome.STOP }) return Reception.Closed
+        if (mine.any { Outcome.fromKey(it.outcome) == Outcome.STOP }) return Reception.Closed
         val restraint = mine
             .sortedByDescending { it.offeredAt }
             .take(RECENT_WINDOW)
-            .sumOf { restraintOf(OfferOutcome.fromKey(it.outcome)) }
+            .sumOf { restraintOf(Outcome.fromKey(it.outcome)) }
         return when {
             restraint <= 0 -> Reception.Open
             restraint < QUIET_AT -> Reception.Easing
@@ -157,23 +264,23 @@ object InterruptionBudget {
     /**
      * How much quiet each outcome buys.
      *
-     * **Not a ranking of outcomes, and nothing here is a failure to be corrected** — [OfferRecord]'s
-     * own note on that is the rule, and this obeys it in the only way that matters: every weight is
-     * zero or greater, so an outcome can lengthen the gap and has no way of shortening one.
-     * [OfferOutcome.ACCEPTED] weighing nothing is not a reward for good behaviour; it leaves the
-     * person's setting exactly as they set it, which is also the most it could ever do.
+     * **Not a ranking of outcomes, and nothing here is a failure to be corrected** — [Outcome]'s own
+     * note on that is the rule, and this obeys it in the only way that matters: every weight is zero
+     * or greater, so an outcome can lengthen the gap and has no way of shortening one.
+     * [Outcome.ACCEPTED] weighing nothing is not a reward for good behaviour; it leaves the person's
+     * setting exactly as they set it, which is also the most it could ever do.
      *
      * An outcome this version does not recognise — an older backup, a hand-edited file, a key a
      * later version added — reads as the quieter interpretation. Version drift must fail towards
      * asking less, never towards asking more.
      */
-    private fun restraintOf(outcome: OfferOutcome?): Int = when (outcome) {
-        OfferOutcome.ACCEPTED -> 0
-        OfferOutcome.SNOOZED -> 1
-        OfferOutcome.DISMISSED -> 2
+    private fun restraintOf(outcome: Outcome?): Int = when (outcome) {
+        Outcome.ACCEPTED -> 0
+        Outcome.SNOOZED -> 1
+        Outcome.DISMISSED -> 2
         // Already handled as Reception.Closed above; weighted anyway so that if that ever stops
         // being true, the fallthrough is towards quiet rather than towards asking more.
-        OfferOutcome.STOP -> QUIET_AT
+        Outcome.STOP -> QUIET_AT
         null -> 2
     }
 
@@ -196,24 +303,14 @@ object InterruptionBudget {
             Reception.Easing -> 1
             Reception.Quiet -> 2
         }
-        // LADDER is hand-maintained, so unlike the `when`s above nothing forces it to stay in
-        // sync with SupportOfferFrequency. A fifth member would compile clean and then index -1
-        // here at runtime. Fail loudly at the seam instead, and never quieter than declared.
+        // Unreachable now that LADDER is derived from SupportOfferFrequency.entries rather than
+        // hand-maintained — every frequency is on it exactly once. Kept as the floor it always was:
+        // if a future refactor ever reintroduces a ladder that can miss a member, the failure is
+        // "leave the person's setting alone", never "ask more".
         val declaredRung = LADDER.indexOf(declared)
         if (declaredRung < 0) return declared
         val stepped = (declaredRung - stepsDown).coerceAtLeast(QUIETEST_INFERRED_RUNG)
         return LADDER[minOf(declaredRung, stepped)]
-    }
-
-    /**
-     * The shortest permitted spacing between interruptions, so "asks less" has a number the tests
-     * can compare. Permitted rate is 1/gap, so a gap that never shrinks is a rate that never rises.
-     */
-    fun minimumGapMillis(frequency: SupportOfferFrequency): Long = when (frequency) {
-        SupportOfferFrequency.Never -> NEVER_GAP_MILLIS
-        SupportOfferFrequency.OncePerWeek -> WEEK_MILLIS
-        SupportOfferFrequency.OncePerDay -> DAY_MILLIS
-        SupportOfferFrequency.EveryTime -> 0L
     }
 
     /**
@@ -242,9 +339,9 @@ object InterruptionBudget {
      * since it leaves no way to pair one kind's timestamp with another kind's reception.
      */
     fun shouldInterrupt(
-        kind: OfferKind,
+        kind: Kind,
         declared: SupportOfferFrequency,
-        recent: List<OfferRecord>,
+        recent: List<Offer>,
         saidStop: Boolean,
         nowMillis: Long,
     ): Boolean = shouldInterrupt(

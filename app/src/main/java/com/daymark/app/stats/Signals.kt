@@ -1,5 +1,9 @@
 package com.daymark.app.stats
 
+import java.time.Clock
+import java.time.Instant
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -335,4 +339,320 @@ object Signals {
             .filter { surface in it.surfaces }
             .take(limit)
             .toList()
+}
+
+/* ==============================================================================================
+ * Below this line: a second, unrelated vocabulary that happens to share the word "signal".
+ *
+ * [Signals] above is the card engine — what to *surface* on Home, Insights and the support space.
+ * [CompanionSignals] below is the closed eight-fact substrate the companion dialogue *branches on*
+ * (docs/COMPANION_DIALOGUE.md). They share no types and neither reads the other. Kept in one file
+ * only because the file is named for the word; if that ever reads as a suggestion that they are the
+ * same layer, split it — nothing depends on them being co-located.
+ * ============================================================================================*/
+
+/**
+ * The companion signal vocabulary, device side — the twin of
+ * `companion/web/src/lib/companion/signals.ts`.
+ *
+ * The same eight definitions run on both sides of the product: the web side owns authoring
+ * (which signals a clinician may branch on, and the message when they may not), and this side
+ * computes the values a dialogue is then evaluated against. **The names, the types and the author
+ * partition here must match that file exactly** — they are one vocabulary, not two that resemble
+ * each other, and `CompanionSignalsTest` pins every one of them so drift fails a build rather than
+ * a person's evening.
+ *
+ * ## What this is for
+ *
+ * `docs/COMPANION_DIALOGUE.md` — "The signal vocabulary". These eight facts are the whole substrate
+ * a dialogue may branch on. The list is CLOSED on purpose: every signal is a coupling point, and
+ * the closed list is what keeps the companion from becoming the beast `docs/DECISIONS_2026-08.md`
+ * §D1 warns about. A ninth is a design decision, not a patch, and the test asserting the count is
+ * there so that argument cannot be skipped.
+ *
+ * ## What it is not
+ *
+ * **Nothing here infers anything about a person, and nothing here is named for a state.**
+ * [Values.hardDaysLast7] is a count of days the person logged a check-in in one of the lower bands
+ * of the scale *they* picked from — their own data handed back, never a judgement about them
+ * (§D1b, reflect-never-label). There is no threshold in this file above which someone becomes a
+ * category, because there is no category. A test walks this object's members and fails on any name
+ * that reads as a clinical label, since that is the shape the drift would take.
+ *
+ * **Nothing here can make the app ask more.** These are read-only facts. The decision to interrupt
+ * belongs to [InterruptionBudget], whose response to falling reception is monotonic and
+ * one-directional (§D1a); computing a value here never widens anyone's budget.
+ *
+ * **Nothing here is a streak.** [Values.checkInsLast7] counts non-consecutively, which is the form
+ * §D6 permits: there is no run to break and nothing to lose.
+ *
+ * ## Purity
+ *
+ * Free of Android and Room types like the rest of `stats/`. The caller does the DAO reads, maps
+ * them to [Inputs], and owns the clock — so this unit-tests on the JVM with a fixed [Clock] and has
+ * no way to reach the person's data on its own.
+ */
+object CompanionSignals {
+
+    /**
+     * Bumped when a signal is added, removed or renamed, and equal to `SIGNAL_VOCABULARY_VERSION`
+     * in `signals.ts` — a definition records the version it was authored against so drift fails
+     * loudly rather than silently changing behaviour.
+     */
+    const val VOCABULARY_VERSION: Int = 1
+
+    /** Who may author a dialogue definition, and therefore who may branch on a signal. */
+    enum class Author(val key: String) {
+        APP("app"),
+        THERAPIST("therapist"),
+        ;
+
+        companion object {
+            /** Unknown roles resolve to null, never to a permissive default. */
+            fun fromKey(key: String?): Author? = entries.firstOrNull { it.key == key }
+        }
+    }
+
+    /** Shape of the value the host supplies for a signal. */
+    enum class Type(val key: String) {
+        INT("int"),
+        BOOL("bool"),
+        ENUM("enum"),
+        STRING_ARRAY("stringArray"),
+    }
+
+    /**
+     * The closed vocabulary. Exactly eight, in the declaration order of `signals.ts`.
+     *
+     * [authors] is Finding 3's partition: predicates evaluate privately on the device, but the arms
+     * of a branch differ in ways a therapist CAN observe (a module delivered, accepted, completed),
+     * so an authored branch is an oracle for whatever it tested. Hence the rule — *a predicate may
+     * only reference signals its author is already permitted to see.* Therapist-authored dialogue
+     * gets [PRESCRIBED_MODULES] (they issued them) and [TIME_OF_DAY] (carries nothing private).
+     *
+     * [neverDisclosable] is stronger than app-only: app-only is a partition, this is a prohibition
+     * that outlives any future widening of that partition by consent.
+     */
+    enum class Name(
+        val key: String,
+        val type: Type,
+        val authors: Set<Author>,
+        val neverDisclosable: Boolean = false,
+    ) {
+        DAYS_SINCE_LAST_OPEN("daysSinceLastOpen", Type.INT, setOf(Author.APP)),
+        DAYS_SINCE_LAST_CHECK_IN("daysSinceLastCheckIn", Type.INT, setOf(Author.APP)),
+        CHECK_INS_LAST_7("checkInsLast7", Type.INT, setOf(Author.APP)),
+        HARD_DAYS_LAST_7("hardDaysLast7", Type.INT, setOf(Author.APP)),
+        HAS_SAFETY_PLAN("hasSafetyPlan", Type.BOOL, setOf(Author.APP), neverDisclosable = true),
+        PRESCRIBED_MODULES("prescribedModules", Type.STRING_ARRAY, setOf(Author.APP, Author.THERAPIST)),
+        LAST_OFFER_OUTCOME("lastOfferOutcome", Type.ENUM, setOf(Author.APP)),
+        TIME_OF_DAY("timeOfDay", Type.ENUM, setOf(Author.APP, Author.THERAPIST)),
+        ;
+
+        companion object {
+            /** Unknown keys (older content, a typo, a renamed signal) resolve to null. */
+            fun fromKey(key: String?): Name? = entries.firstOrNull { it.key == key }
+        }
+    }
+
+    /** The signals [author] may branch on, in declaration order. */
+    fun namesFor(author: Author): List<Name> = Name.entries.filter { author in it.authors }
+
+    /**
+     * Whether [author] may branch on [name] — the device-side half of Finding 1's "do both". The
+     * web side rejects a bad reference at authoring time with a message someone can act on; this
+     * catches content that drifted past it anyway, and it fails closed by construction because an
+     * unknown [Name] cannot be constructed.
+     */
+    fun mayBranchOn(name: Name, author: Author): Boolean = author in name.authors
+
+    /**
+     * The values `timeOfDay` may take, matching `TIME_OF_DAY` in `companion/content.ts`. Coarse on
+     * purpose: an exact clock reading is a behavioural trace; four buckets are a greeting.
+     */
+    enum class TimeOfDay(val key: String) {
+        MORNING("morning"),
+        DAY("day"),
+        EVENING("evening"),
+        NIGHT("night"),
+        ;
+
+        companion object {
+            /**
+             * @param hour hour-of-day 0..23 in the person's own time zone.
+             *
+             * The bands are [Greeting]'s, deliberately: the companion saying "evening" while the
+             * header says "Good afternoon" is the app disagreeing with itself in front of someone.
+             * The late-night band runs to 5am for the same reason it does there — 3am is not
+             * "night, still" as an observation about the person, it is just what the clock says.
+             */
+            fun forHour(hour: Int): TimeOfDay = when (hour) {
+                in 5..11 -> MORNING
+                in 12..16 -> DAY
+                in 17..21 -> EVENING
+                else -> NIGHT
+            }
+        }
+    }
+
+    /**
+     * The values `lastOfferOutcome` may take — the reception ledger's `outcome` column, and the
+     * same four keys as `LAST_OFFER_OUTCOME` in `companion/content.ts`.
+     *
+     * Spelled out rather than read from `data.entity.OfferOutcome` so this file stays free of Room
+     * types; `CompanionSignalsTest` asserts the two lists are identical, which is the check that
+     * would otherwise be a comment nobody runs.
+     */
+    val OFFER_OUTCOME_KEYS: List<String> = listOf("accepted", "dismissed", "snoozed", "stop")
+
+    /**
+     * Mood levels at or below this are the lower bands of the fixed 1..5 scale — Awful and Bad, the
+     * words the person picked from (`model/Mood.kt`). The same boundary the support action uses.
+     *
+     * It is a boundary on a scale, not a boundary on a person: what is above and below it are two
+     * groups of *entries*, and nothing in this file joins them up into a statement about anyone.
+     */
+    const val LOWER_BAND_MAX_LEVEL: Int = 2
+
+    /** The window "last 7" means: today and the six days before it, in the person's own zone. */
+    const val WINDOW_DAYS: Int = 7
+
+    /** One check-in, reduced to the two fields the vocabulary needs. */
+    data class CheckIn(
+        /** Epoch millis of the moment the entry is *for* (`MoodEntry.dateTime`). */
+        val atMillis: Long,
+        /** 1..5, worst to best (`model/Mood.kt`). A level outside that range counts as neither. */
+        val moodLevel: Int,
+    )
+
+    /**
+     * Everything the eight signals are derived from, already read. The caller owns the DAOs; this
+     * is the whole of what it has to hand over, and it is deliberately less than the app knows.
+     */
+    data class Inputs(
+        /** When the person last opened Daymark. Null — or 0, the "never" sentinel — on a new install. */
+        val lastOpenedAtMillis: Long? = null,
+        /** Their check-ins. Any order; only the last [WINDOW_DAYS] days and the newest one are read. */
+        val checkIns: List<CheckIn> = emptyList(),
+        /** Whether they have written a safety plan of their own. Not whether they need one. */
+        val hasSafetyPlan: Boolean = false,
+        /** Ids of modules currently assigned to them *and accepted by them*. */
+        val prescribedModuleIds: List<String> = emptyList(),
+        /** The `outcome` of the newest reception-ledger row, or null when nothing has been offered. */
+        val lastOfferOutcomeKey: String? = null,
+    )
+
+    /**
+     * The eight values, computed.
+     *
+     * A null is "there is no such fact yet", which is an ordinary state and not an error: on a new
+     * install nobody has ever opened the app before now and nobody has checked in. It is kept
+     * distinct from zero because they say opposite things — "0 days since" is *today*, and telling
+     * someone on their first evening that it has been a while would be both wrong and unkind.
+     */
+    data class Values(
+        /** Whole days since the person last opened Daymark. Null when they never have. */
+        val daysSinceLastOpen: Int?,
+        /** Whole days since the person last recorded a check-in. Null when there are none. */
+        val daysSinceLastCheckIn: Int?,
+        /** How many check-ins they recorded in the last [WINDOW_DAYS] days. Not consecutive. */
+        val checkInsLast7: Int,
+        /**
+         * How many of the last [WINDOW_DAYS] days carry a check-in they logged in a lower mood
+         * band. 0..[WINDOW_DAYS], because it counts days and not entries — three entries on one
+         * day are one day. A count of what they logged, never a judgement about them.
+         */
+        val hardDaysLast7: Int,
+        /** Whether they have written a safety plan of their own. */
+        val hasSafetyPlan: Boolean,
+        /** Ids of the modules assigned to them and accepted by them. */
+        val prescribedModules: List<String>,
+        /** How they answered the last thing the app offered. Null when nothing has been offered. */
+        val lastOfferOutcome: String?,
+        /** Coarse part of the day on the device clock. Always present; carries nothing private. */
+        val timeOfDay: TimeOfDay,
+    ) {
+        /**
+         * The pseudo-answers a dialogue is evaluated against, keyed by [Name.key] — the bridge
+         * described in `docs/COMPANION_DIALOGUE.md`: `Answers` is a plain map, so a signal is
+         * injected as an answer and `{ ref: 'hardDaysLast7', op: 'gte', value: 3 }` evaluates with
+         * no engine changes.
+         *
+         * **A signal with no value is omitted, not defaulted.** The evaluator fails an absent ref
+         * closed, so an omission drifts the dialogue toward its fallback line — the most ordinary
+         * thing to say — where a stand-in number would silently answer a question about a person
+         * that nobody has the answer to.
+         *
+         * [hasSafetyPlan] goes in as a real Boolean. The authored predicate asks `gte 1` because
+         * the DSL has no boolean literal and its evaluator coerces numerically, so both a boolean
+         * and a 0/1 host read correctly; the failure this avoids is in the direction of not showing
+         * someone the plan they wrote for themselves.
+         */
+        fun asAnswers(): Map<String, Any> {
+            val out = LinkedHashMap<String, Any>()
+            daysSinceLastOpen?.let { out[Name.DAYS_SINCE_LAST_OPEN.key] = it }
+            daysSinceLastCheckIn?.let { out[Name.DAYS_SINCE_LAST_CHECK_IN.key] = it }
+            out[Name.CHECK_INS_LAST_7.key] = checkInsLast7
+            out[Name.HARD_DAYS_LAST_7.key] = hardDaysLast7
+            out[Name.HAS_SAFETY_PLAN.key] = hasSafetyPlan
+            out[Name.PRESCRIBED_MODULES.key] = prescribedModules
+            lastOfferOutcome?.let { out[Name.LAST_OFFER_OUTCOME.key] = it }
+            out[Name.TIME_OF_DAY.key] = timeOfDay.key
+            return out
+        }
+    }
+
+    /**
+     * Compute all eight from [inputs] and [clock], which supplies both the instant and the person's
+     * time zone. Total: there is no input for which this throws, because a new install and a device
+     * whose clock is wrong are both ordinary rather than exceptional.
+     *
+     * **A stored timestamp later than now reads as now.** Clocks go backwards — a time-zone change,
+     * a manual edit, a restored backup — and the alternatives are worse than clamping: a negative
+     * "days since" is a number no copy is written for, and dropping the entry would quietly
+     * discount something the person logged. This is the same treatment `SupportOffer` gives a
+     * future `lastOfferedAt`, and it errs toward the app being quieter rather than louder.
+     */
+    fun compute(inputs: Inputs, clock: Clock): Values {
+        val zone = clock.zone
+        val nowMillis = clock.millis()
+        val now = Instant.ofEpochMilli(nowMillis).atZone(zone)
+        val today = now.toLocalDate()
+        val windowStart = today.minusDays((WINDOW_DAYS - 1).toLong())
+
+        // Clamped, so a future timestamp reads as today rather than as a negative age.
+        fun dayOf(millis: Long): LocalDate =
+            Instant.ofEpochMilli(minOf(millis, nowMillis)).atZone(zone).toLocalDate()
+
+        // Coerced because this number ends up inside a sentence someone reads. The clamp above
+        // already makes it non-negative; the range guard is for the absurd stored value — a
+        // corrupt row, a restored backup — that would otherwise overflow Int and come back as a
+        // number with the wrong sign entirely.
+        fun daysSince(millis: Long): Int =
+            ChronoUnit.DAYS.between(dayOf(millis), today).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
+
+        val lastOpenedAt = inputs.lastOpenedAtMillis?.takeIf { it > 0L }
+        val lastCheckInAt = inputs.checkIns.maxOfOrNull { it.atMillis }
+
+        val inWindow = inputs.checkIns.filter { dayOf(it.atMillis) >= windowStart }
+        val lowerBandDays = inWindow
+            .filter { it.moodLevel in 1..LOWER_BAND_MAX_LEVEL }
+            .map { dayOf(it.atMillis) }
+            .toSet()
+
+        return Values(
+            daysSinceLastOpen = lastOpenedAt?.let { daysSince(it) },
+            daysSinceLastCheckIn = lastCheckInAt?.let { daysSince(it) },
+            checkInsLast7 = inWindow.size,
+            hardDaysLast7 = lowerBandDays.size,
+            hasSafetyPlan = inputs.hasSafetyPlan,
+            // Distinct and blank-free: a duplicate id would let `includes` be true twice over and a
+            // blank one is not a module, and neither is worth a branch behaving oddly over.
+            prescribedModules = inputs.prescribedModuleIds.filter { it.isNotBlank() }.distinct(),
+            // An outcome key this version does not recognise is dropped rather than passed through,
+            // so a predicate on it fails closed instead of comparing against a string nobody wrote.
+            lastOfferOutcome = inputs.lastOfferOutcomeKey?.takeIf { it in OFFER_OUTCOME_KEYS },
+            timeOfDay = TimeOfDay.forHour(now.hour),
+        )
+    }
 }

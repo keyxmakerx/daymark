@@ -7,8 +7,20 @@
 
 The foundation ships today: [`YearInStarsGrid.kt`](../app/src/main/java/com/daymark/app/ui/components/YearInStarsGrid.kt)
 draws a year as a night sky, and [`ReviewYearScreen.kt`](../app/src/main/java/com/daymark/app/ui/insights/ReviewYearScreen.kt)
-already walks a person through one. The design system reserves the surface and its tokens
-(`--c-sky-bg #16150F`, `--c-sky-ink #EBE5D8`, `--c-sky-faint #8E887A`, "night-sky parity").
+already walks a person through one. Its palette is three `internal val`s at
+[`YearInStarsGrid.kt:39-41`](../app/src/main/java/com/daymark/app/ui/components/YearInStarsGrid.kt) —
+`NightBg #16150F`, `NightInk #EBE5D8`, `NightFaint #8E887A` — repeated as canvas ints in
+[`YearKeepsakeRenderer.kt:126-128`](../app/src/main/java/com/daymark/app/export/YearKeepsakeRenderer.kt).
+
+> **Correction, verified at HEAD.** This paragraph previously said "the design system reserves the
+> surface and its tokens (`--c-sky-bg` / `--c-sky-ink` / `--c-sky-faint`, 'night-sky parity')".
+> **No such tokens exist.** They are not in `companion/web/src/app.css`, not in any component, and no
+> longer in `COMPANION_DESIGN_SYSTEM.md` — §2.3 named them once and the audit recorded in
+> [COMPANION_WEB_REDESIGN_PLAN.md](./COMPANION_WEB_REDESIGN_PLAN.md) ("Spec corrections beyond §2.3")
+> removed them as never-built. "Night-sky parity" remains only as a §4.6 inventory line for an
+> unbuilt `YearInStars` web component. The three colour values are real and live in Kotlin; nothing
+> in the design system is reserved for them, and the duplication between the two Kotlin files is
+> itself unowned. A Sky on the web would be introducing this palette, not consuming it.
 
 **The Sky is that idea promoted from a chart to a place.** A chart is looked at; a place is entered,
 moved through, and returned to. The difference is not visual polish — it is that a place is *stable*

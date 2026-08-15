@@ -8,7 +8,10 @@ Sky.
 
 ## 1. The report — four sides, each dedicated, each filled
 
-Renders: [`design/web-05-report-projects.png`](./design/README.md). Density is wanted; the constraint
+Renders: [`design/web-06-report-projects.html`](./design/web-06-report-projects.html) — corrected;
+this line named `web-05-report-projects.png`, which does not exist. `web-05` is the companion deck,
+and neither `web-05` nor `web-06` has been re-rendered to PNG yet, so the HTML is the artefact.
+Density is wanted; the constraint
 that survives is **one job per side**, not sparseness for its own sake.
 
 **Reconciling "fill it up" with the alert-fatigue evidence.** The finding is about elements
@@ -60,10 +63,29 @@ justification for a clinical action in a clinician's report.
 > you are and where you are going … a beautiful unique ID of who you were and who you are, the history
 > of what you've accomplished written into the stars."*
 
-**Foundation exists.** `app/src/main/java/com/daymark/app/ui/components/YearInStarsGrid.kt` ships
-today, and the design system already reserves a fixed night-sky surface with its own tokens
-(`--c-sky-bg #16150F`, `--c-sky-ink #EBE5D8`, `--c-sky-faint #8E887A`) described as "night-sky
-parity". The Sky is that idea promoted from a chart to a place.
+**Foundation exists — in Kotlin only.**
+`app/src/main/java/com/daymark/app/ui/components/YearInStarsGrid.kt` ships today and draws a year as
+a night sky on a fixed dark palette, held as three `internal val`s at
+[`YearInStarsGrid.kt:39-41`](../app/src/main/java/com/daymark/app/ui/components/YearInStarsGrid.kt):
+`NightBg #16150F`, `NightInk #EBE5D8`, `NightFaint #8E887A`. The same three values are repeated as
+canvas ints in [`YearKeepsakeRenderer.kt:126-128`](../app/src/main/java/com/daymark/app/export/YearKeepsakeRenderer.kt).
+The Sky is that idea promoted from a chart to a place.
+
+> **Correction.** An earlier version of this paragraph said the design system "reserves a fixed
+> night-sky surface with its own tokens `--c-sky-bg` / `--c-sky-ink` / `--c-sky-faint`". **It does
+> not, and it never did.** Those token names appear nowhere in `companion/web/src/app.css` or
+> anywhere else in the tree — the only surviving mentions were in this document and in
+> [SKY.md](./SKY.md), both of which are corrected. `COMPANION_DESIGN_SYSTEM.md` §2.3 did once name
+> `--c-sky-*` among its tokens; that was removed as part of the same audit that struck several other
+> never-built token families from that spec, and it is recorded in
+> [COMPANION_WEB_REDESIGN_PLAN.md](./COMPANION_WEB_REDESIGN_PLAN.md), "Spec corrections beyond §2.3".
+> The phrase "night-sky parity" survives in the design system only as a line in the §4.6 chart
+> inventory describing a `YearInStars` web component that has not been built.
+>
+> The three colours are real; the tokens are not. A web Sky would be **introducing** these values to
+> the design system, not consuming something already reserved for it — and it would need a decision
+> about a surface whose palette is fixed against both themes, which the token layer has no
+> precedent for.
 
 **What becomes a star:** a check-in, a completed exercise, a journal entry, a goal reached, a project
 step, and a **major life event the person adds themselves**.
@@ -130,40 +152,99 @@ Recorded because one was violated during the Phase 2 workflow, destroying uncomm
 
 ## 5. Landed, and what is NOT wired (read before trusting green CI)
 
-The build sprint landed the TypeScript substrate fully wired and verified, and the Kotlin work
-partly wired. **Green CI on this commit does not mean the arbiter or the ledger are live.** Recorded
-so nobody reads a passing build as more than it is.
+**Green CI is the weaker claim.** For the web it means both oracles ran; for Android it means the
+code compiled and the JVM unit tests passed. It does not mean a migration was ever executed, a
+notification ever posted, or a schema ever generated. This section exists so a passing build is not
+read as more than that.
 
-**Wired and working**
-- Signal vocabulary, author partition, dialogue types and planner, companion dialogue content —
-  `pnpm check` 413 files / 0 errors, `pnpm test` 402 passed / 5 skipped (baseline 406 / 242).
-- Predicate depth + node bounds at validation, on top of the runtime bound already shipped.
-- The four-side report: `ReportDataBuilder` now calls `DiscussionPrompts.texts(...)`, so side 4
-  prints real prompts. **This was a false-assurance bug caught in review** — the generator's
-  "nothing met the threshold" line asserts that a threshold was evaluated, and nothing had ever
-  called the rules. Printing that sentence over an uncomputed result is worse than printing nothing.
-- Journal export: the deleted `includeJournal` parameter broke the only production call site.
-  Fixed, and `includeAllJournalInRange` added as an explicit flag rather than letting an empty
+### Live — a real code path reaches it
+
+- **The arbiter, generalised, with two production callers.**
+  `app/src/main/java/com/daymark/app/stats/InterruptionBudget.kt` now takes a `Kind` and the
+  engine's own reception, and is called from:
+  - `ui/entry/EntryEditorViewModel.kt:196` — the support-space offer after a hard day. This
+    **replaced** the `SupportOffer.shouldInterrupt` call; `SupportOffer` survives only for its
+    `summary(frequency)` settings copy, used by `ui/support/GentleSupportScreen.kt:108`.
+  - `notifications/ReminderScheduler.kt:104` — whether a fired reminder actually posts. The alarm
+    itself is untouched: `schedule()` still arms every day at the time the person set, because a
+    reminder that stopped scheduling itself would not be "asking less", it would be broken.
+  - The two conditions in front of the editor's gate (`moodLevel <= LOW_MOOD_MAX`,
+    `gentleSupportOn`) stayed in the feature. The arbiter is asked *whether* it may interrupt,
+    never *what about* — §D1's rule, kept.
+- **The reception ledger, schema v14.** `data/entity/OfferRecord.kt` is registered in
+  `AppDatabase` (`@Database` entity list, `abstract fun offerRecordDao()`, `version = 14`),
+  `MIGRATION_13_14` exists and is in both `AppModule`'s builder and
+  `MigrationTest.allMigrations`, and `data/OfferLedgerRepository.kt` is the seam that maps rows onto
+  the arbiter's plain `Offer` type. Both readers write their own lines: the editor on making an
+  offer, the scheduler on posting a notification (and nothing at all on a suppressed one — a line
+  means the app asked, and it did not).
+- **`stats/` is Android-free again.** The previously-deferred leak is closed:
+  `InterruptionBudget.kt` now has **zero imports**, taking `Offer` — three plain fields — instead of
+  a Room entity, exactly as `DiscussionPrompts.Inputs` does. The mapping lives in
+  `OfferLedgerRepository.budgetKind(...)`.
+- **The monotonic invariant is executed, not asserted in prose.**
+  `app/src/test/java/com/daymark/app/stats/InterruptionBudgetTest.kt` sweeps
+  kind × declared frequency × ledger × standing stop × clock. See §D1 of
+  [DECISIONS_2026-08.md](./DECISIONS_2026-08.md) for which sweep catches what.
+- **The TypeScript substrate**, unchanged in this sprint and still fully verified: signal
+  vocabulary, author partition, dialogue types and planner, companion dialogue content, predicate
+  bounds at validation on top of the runtime bound. **Measured at HEAD**, not carried forward:
+  `pnpm check` **413 files / 0 errors**, `pnpm test` **403 passed / 5 skipped** across 32 files.
+  (This line previously read "402 passed / 5 skipped (baseline 406 / 242)"; the 403rd test is the
+  prototype-chain regression added in `96e6f11`.)
+- **The four-side report.** `ReportDataBuilder` calls `DiscussionPrompts.texts(...)`
+  (`export/ReportData.kt:277`), so side 4 prints real prompts. **This was a false-assurance bug
+  caught in review** — the generator's "nothing met the threshold" line asserts that a threshold was
+  evaluated, and nothing had ever called the rules. Printing that sentence over an uncomputed result
+  is worse than printing nothing. Page arithmetic moved into the Android-free
+  `export/ReportLayout.kt`, so pagination is testable without a device.
+- **Journal export.** `includeAllJournalInRange` is an explicit flag rather than letting an empty
   `includedJournalEntryIds` mean "everything" — that convention would be fail-open on the most
   sensitive content in the product.
 
-**Written, tested, and NOT connected**
-- `InterruptionBudget` has no production caller. The app still gates on `SupportOffer`. The
-  generalisation is staged, not live.
-- `OfferRecord` / `OfferRecordDao` are **not registered in `AppDatabase`**. Room only walks entities
-  reachable from `@Database`, so KSP stays silent and the `offer_records` table simply will not
-  exist. Wiring it requires, together: registration, `abstract fun offerRecordDao()`, a version bump
-  13 → 14, `MIGRATION_13_14`, that migration added to `MigrationTest.allMigrations`, a committed
-  `app/schemas/…/14.json` (CI fails on schema drift), and a provider in `AppModule`. **The schema
-  JSON cannot be generated without an Android build**, so this must be done in an environment that
-  has one.
-- The per-entry journal picker does not exist. The switch is honestly labelled "Include all journal
-  entries in range" until it does.
+### Needs a real Android build before it can be trusted
 
-**Known and deliberately deferred**
-- `InterruptionBudget` imports a Room entity while its header claims the `stats/` package is
-  Android-free. It compiles and the JVM tests run, so CI will not catch it. The fix is a plain input
-  type in `stats/` with mapping on the data side, mirroring `DiscussionPrompts.Inputs`.
+**This is the blocking item, and it is one file.**
+`app/schemas/com.daymark.app.data.AppDatabase/14.json` was **hand-written from 13.json**, because
+Room's schema exporter runs under KSP during an Android build and there is no Android SDK here. The
+`offer_records` entity, its columns and both indices were added by hand and read correctly — but
+**`identityHash` is still byte-identical to 13.json's** (`2331a16f112909957695b8d7180a9467`), which
+it cannot be: the hash is computed over the entity set, and the entity set changed.
+
+Consequences, precisely:
+
+- `Room.databaseBuilder` verifies the identity hash at open time. Against this file, a v14 database
+  either fails to open or fails validation.
+- `MigrationTest.runMigrationsAndValidate(TEST_DB, 14, …)` compares the migrated schema against this
+  JSON and will fail — including the new `migrate13To14_createsOfferRecordsTable_withBothIndices`
+  and the `migrateAll_from3_toLatest` hop, both of which are `androidTest` and therefore **do not
+  run in this environment or in the JVM half of CI**.
+- CI's schema-drift check compares the committed JSON against a generated one, so the first real
+  build is where this surfaces.
+
+**The fix is mechanical and cannot be done here:** build the app once with the Android SDK, let KSP
+regenerate `14.json`, and commit the generated file in place of the hand-written one. Diff it before
+committing — anything beyond `identityHash` differing means the hand-written entity block was wrong
+too. Until that has happened, treat "the ledger is live" as *written and wired*, not *verified*.
+
+### Written, tested, and NOT connected
+
+- **`CompanionSignals`** (`stats/Signals.kt:395`, appended below the unrelated `Signals` feed engine) is
+  the Kotlin mirror of the eight-signal vocabulary and the author partition, unit-tested in
+  `stats/SignalsTest.kt:203`. **It has no production caller.** There is no companion surface in the
+  Android app and no path by which authored dialogue reaches a device, so nothing computes these
+  values for real yet.
+- **`InterruptionBudget.Kind.COMPANION` and `.ASSIGNMENT`** have budgets, defaults and ledger keys,
+  and nothing calls them. Only `SUPPORT` and `REMINDER` are wired.
+- **Dialogue transport, signing and the authoring capability** — none of it exists on either side.
+  See the checklist in [COMPANION_DIALOGUE.md](./COMPANION_DIALOGUE.md), which now says which boxes
+  are closed and which are not.
+- **The per-entry journal picker** does not exist. The switch is honestly labelled "Include all
+  journal entries in range" until it does.
+
+### Known and deliberately deferred
+
 - The D6 "no streaks" rule holds in the report but not in the app: `MoodStats.currentStreak` still
-  drives Home, Stats, Insights, Achievements and the `streak_milestone` signal. The report copy has
-  been corrected so it no longer claims a project-wide decision that has not been made.
+  drives Home (`HomeViewModel.kt:51`), Stats (`StatsViewModel.kt:71`) and the `streak_milestone`
+  signal (`stats/Signals.kt:180`). The report copy has been corrected so it no longer claims a
+  project-wide decision that has not been made.

@@ -171,6 +171,17 @@ data class ReportData(
      * hint of subject: the shape of what someone withheld is itself a disclosure.
      */
     val journalEntriesAvailable: Int = 0,
+    /**
+     * True when side 3's contents were included by one blanket choice over the whole range, false
+     * when the person picked them one at a time.
+     *
+     * Carried because side 3's copy has to say which of the two happened, and the two are not the
+     * same consent. The only production control today is the single "Include all journal entries
+     * in range" switch, so this is true in every export the shipping app can produce; it goes false
+     * on its own when the per-entry picker sets [PdfExportOptions.includedJournalEntryIds]
+     * instead. It is a fact about the choice the person made, not an inference about the writing.
+     */
+    val journalIncludedAsWholeRange: Boolean = false,
 )
 
 @Singleton
@@ -299,10 +310,19 @@ class ReportDataBuilder @Inject constructor(
             entries = reportEntries,
             journal = journal,
             periodReview = periodReview,
-            sha256Hex = sha256Hex(canonicalPayload(options.fromMillis, options.toMillis, reportEntries, journal)),
+            sha256Hex = sha256Hex(
+                canonicalPayload(
+                    options.fromMillis,
+                    options.toMillis,
+                    reportEntries,
+                    journal,
+                    instrumentSeries,
+                ),
+            ),
             instrumentSeries = instrumentSeries,
             coverageGaps = gaps,
             journalEntriesAvailable = journalInRange.size,
+            journalIncludedAsWholeRange = options.includeInTheirWords && options.includeAllJournalInRange,
             discussionPrompts = prompts,
         )
     }
@@ -389,24 +409,68 @@ class ReportDataBuilder @Inject constructor(
     )
 
     companion object {
+        /** The canonicalisation every report printed before the instrument series was covered. */
+        const val CANONICAL_VERSION_V1 = "daymark-report-v1"
+
+        /** The current canonicalisation: v1's entries and journal, plus the instrument series. */
+        const val CANONICAL_VERSION = "daymark-report-v2"
+
         /**
          * A deterministic, order-stable string over the report's source data, used for the
          * authenticity hash. Excludes the volatile "generated at" timestamp on purpose so the
          * same data always hashes the same.
          *
-         * Still v1, and still entries + journal only. The instrument series, coverage gaps and
-         * prompts are all derived from entries that are already covered, so nothing verifiable was
-         * lost by leaving the payload alone — and changing what v1 hashes would silently break
-         * every report already in someone's filing cabinet.
+         * **v2 adds the instrument series, and that is the whole reason for the bump.** v1 hashed
+         * entries and journal only, which is a strict subset of what the report prints: side 1's
+         * per-instrument plots, every band label, the single flag and side 4's discussion prompts
+         * are all computed from [instruments], which comes from the assessment table and never
+         * reached the payload. So the page told a clinician the hash covered the report while the
+         * QR verified only the half of it nobody would bother to alter. Covering the series makes
+         * the sentence true rather than rewording it.
+         *
+         * Coverage gaps, the trend and the period review stay out because each is computed from
+         * [entries], which is covered — recomputing them from a verified payload reproduces them
+         * exactly. That argument was applied to the instrument series once and it was wrong there,
+         * because those scores are not derived from entries at all.
+         *
+         * [instruments] is defaulted so the four-argument form still compiles, and an empty list is
+         * the honest encoding of a range with no self-check results in it. Anything new that
+         * computes a hash must pass the series it printed, or it will stamp a v2 label on a v1
+         * subset — which is the defect this bump exists to remove.
          */
         fun canonicalPayload(
             fromMillis: Long,
             toMillis: Long,
             entries: List<ReportEntry>,
             journal: List<ReportJournalEntry>,
+            instruments: List<ReportInstrumentSeries> = emptyList(),
+        ): String = payload(CANONICAL_VERSION, fromMillis, toMillis, entries, journal, instruments)
+
+        /**
+         * The v1 payload, byte for byte.
+         *
+         * Kept computable because reports printed before the bump are in filing cabinets carrying a
+         * v1 hash, and a verifier handed one of those files still has to be able to check it.
+         * Nothing in this repository calls it — there is no verifier yet — so it stands as the
+         * specification of the old bytes rather than as live code.
+         */
+        fun canonicalPayloadV1(
+            fromMillis: Long,
+            toMillis: Long,
+            entries: List<ReportEntry>,
+            journal: List<ReportJournalEntry>,
+        ): String = payload(CANONICAL_VERSION_V1, fromMillis, toMillis, entries, journal, emptyList())
+
+        private fun payload(
+            version: String,
+            fromMillis: Long,
+            toMillis: Long,
+            entries: List<ReportEntry>,
+            journal: List<ReportJournalEntry>,
+            instruments: List<ReportInstrumentSeries>,
         ): String {
             val sb = StringBuilder()
-            sb.append("daymark-report-v1\n")
+            sb.append(version).append('\n')
             sb.append("range:").append(fromMillis).append('-').append(toMillis).append('\n')
             entries.sortedWith(compareBy({ it.dateTime }, { it.moodLevel })).forEach { e ->
                 sb.append("E|").append(e.dateTime).append('|').append(e.moodLevel)
@@ -417,6 +481,32 @@ class ReportDataBuilder @Inject constructor(
             journal.sortedBy { it.dateTime }.forEach { j ->
                 sb.append("J|").append(j.dateTime).append('|').append(j.title.replace("\n", " "))
                     .append('|').append(j.body.replace("\n", " ")).append('\n')
+            }
+            // Every field the report reads off a series, because every one of them is printed or
+            // decides what a printed number means: the tier picks which provenance sentence the
+            // table carries, the raw range is what makes a score "7 of 20" rather than a bare 7,
+            // the band label is printed on side 1 and is what a discussion prompt keys on, and the
+            // check-in note is reproduced verbatim beside its score. Sorted at every level so the
+            // hash is stable under the order the DAO happens to return.
+            instruments.sortedBy { it.id }.forEach { s ->
+                sb.append("I|").append(s.id).append('|').append(s.title.replace("\n", " "))
+                    .append('|').append(s.provenanceTier.name)
+                    .append('|').append(s.directionInWords.replace("\n", " "))
+                    .append('|').append(s.rangeMin).append('|').append(s.rangeMax)
+                    .append('\n')
+                s.points
+                    .sortedWith(compareBy({ it.date.toString() }, { it.score }, { it.bandLabel }))
+                    .forEach { p ->
+                        sb.append("P|").append(s.id).append('|').append(p.date.toString())
+                            .append('|').append(p.score)
+                            .append('|').append(p.bandLabel.replace("\n", " "))
+                            .append('|').append(p.note.replace("\n", " "))
+                            .append('\n')
+                    }
+                s.ownBandWording.sortedBy { it.bandLabel }.forEach { w ->
+                    sb.append("W|").append(s.id).append('|').append(w.bandLabel.replace("\n", " "))
+                        .append('|').append(w.inTheirWords.replace("\n", " ")).append('\n')
+                }
             }
             return sb.toString()
         }

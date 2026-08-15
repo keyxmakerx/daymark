@@ -34,9 +34,17 @@ import kotlin.math.roundToInt
  *     bottom.
  *
  * This file is the renderer and nothing else. What a prompt may say lives in
- * [com.daymark.app.stats.DiscussionPrompts]; what a series *is* lives in [ReportInstrumentSeries].
- * The only thing derived here is layout — plus each series' own usual-range band, which is a property
- * of the drawing rather than of the data (it is the shape the points are plotted against).
+ * [com.daymark.app.stats.DiscussionPrompts]; what a series *is* lives in [ReportInstrumentSeries];
+ * and **where things land lives in [ReportLayout]**, which is pure and Android-free so the page
+ * arithmetic can be checked without a device. What is left here is drawing — plus each series' own
+ * usual-range band, which is a property of the drawing rather than of the data (it is the shape the
+ * points are plotted against).
+ *
+ * **A side is a section, not a sheet face.** Sides 1 and 2 routinely run past one page — three
+ * scored self-checks is enough on their own — so a side is printed as a logical section that may
+ * span physical pages: the first page carries the full header, every later page carries a
+ * continuation strip naming the side it belongs to, and the footer counts physical pages against a
+ * total the document really has. That total is why [generate] renders twice; see there.
  *
  * Deliberate omissions, each of which would be a product-invariant breach:
  *  - **No streaks.** [ReportData] no longer carries one, and [ReportData.periodReview] is not
@@ -55,11 +63,37 @@ import kotlin.math.roundToInt
 @Singleton
 class PdfReportGenerator @Inject constructor() {
 
+    /**
+     * Renders twice, and keeps the second one.
+     *
+     * The footer states "page 3 of 7", and the only honest way to print that N is to have counted
+     * the pages. A [PdfDocument] page cannot be reopened once finished, so page 1's footer would
+     * otherwise have to guess a total the document does not yet have — which is the defect being
+     * fixed, not a smaller version of it. The first pass therefore draws the whole document with no
+     * total, purely to count physical pages, and is discarded; the second draws it again with the
+     * count in hand.
+     *
+     * The two passes agree by construction: same inputs, same code, and the footer is drawn at a
+     * fixed position that no block's flow depends on, so widening "page 3" to "page 3 of 7" cannot
+     * move a break. Rendering is deterministic — nothing here reads a clock or a random source.
+     */
     fun generate(data: ReportData, options: PdfExportOptions, out: OutputStream) {
+        val counting = render(data, options, totalPages = null)
+        val pages = counting.pages
+        counting.doc.close()
+
+        val final = render(data, options, totalPages = pages)
+        final.doc.writeTo(out)
+        final.doc.close()
+    }
+
+    private class Pass(val doc: PdfDocument, val pages: Int)
+
+    private fun render(data: ReportData, options: PdfExportOptions, totalPages: Int?): Pass {
         val doc = PdfDocument()
         val w = options.paperSize.widthPt
         val h = options.paperSize.heightPt
-        val ctx = PageCtx(doc, w.toFloat(), h.toFloat(), data)
+        val ctx = PageCtx(doc, w.toFloat(), h.toFloat(), data, totalPages)
         ctx.start()
 
         // Side 3 exists only if the person switched it on *and* ticked entries. Both gates are
@@ -73,8 +107,7 @@ class PdfReportGenerator @Inject constructor() {
         ctx.sideFourForTheConversation(data, options, sides)
 
         ctx.finish()
-        doc.writeTo(out)
-        doc.close()
+        return Pass(doc, ctx.pageCount)
     }
 }
 
@@ -112,6 +145,13 @@ private fun fmt1(v: Double) = String.format("%.1f", v)
 private object Copy {
 
     const val FOOTER = "Daymark · self-reported data, not a clinical assessment"
+
+    /**
+     * Appended to a side's eyebrow on the second and later physical pages of that side. A side is a
+     * section with one job, not a sheet face, and sides 1 and 2 routinely run long — so the pages
+     * after the first say which side they belong to rather than arriving unidentified.
+     */
+    const val CONTINUED = "CONTINUED"
 
     const val DECLARE_TITLE = "What this is."
     const val DECLARE_BODY =
@@ -159,7 +199,25 @@ private object Copy {
             "Inside the live clinician portal a decline stays invisible, so that accepting never " +
             "becomes a performance."
 
-    const val JOURNAL_OPT_IN =
+    /**
+     * Side 3's opt-in line, in two forms, because there are two different things the person can
+     * have done and only one of them is a per-entry decision.
+     *
+     * The single line this replaced said "entry by entry" over every export the shipping app can
+     * produce, and the only control that exists is one switch over the whole range — so it
+     * described a deliberation that never happened, on the one side of the report where the
+     * strength of the consent is the point. Which form prints is decided by
+     * [ReportData.journalIncludedAsWholeRange], never by the renderer guessing.
+     */
+    const val JOURNAL_OPT_IN_ALL =
+        "This side exists because they turned it on for the whole range: every journal entry they " +
+            "wrote between these dates is here, not a selection out of them. The app defaults to " +
+            "not including any of it. Nothing here was selected by the software, summarised, or " +
+            "excerpted — each entry is whole, exactly as written, and they saw this page before " +
+            "sending it."
+
+    /** The per-entry form. Prints when the person ticked entries one at a time. */
+    const val JOURNAL_OPT_IN_PER_ENTRY =
         "This side exists because they turned it on, entry by entry. The app defaults to not " +
             "including any of it. Nothing here was selected by the software, summarised, or " +
             "excerpted — each entry is whole, exactly as written, and they saw this page before " +
@@ -397,15 +455,31 @@ private class PageCtx(
     private val pageW: Float,
     private val pageH: Float,
     private val data: ReportData,
+    /**
+     * Physical pages in the finished document, or null on the counting pass. The footer states a
+     * total only when it has been counted; it never asserts one.
+     */
+    private val totalPages: Int?,
 ) {
-    private val margin = 42f
-    private val contentW = pageW - 2 * margin
-    private val footerSpace = 46f
+    private val margin = ReportLayout.MARGIN
+    private val contentW = ReportLayout.contentWidth(pageW)
 
     private var pageNum = 0
     private lateinit var page: PdfDocument.Page
     private lateinit var canvas: Canvas
     private var y = 0f
+
+    /** Physical pages emitted so far. Read after [finish] to get the document's page count. */
+    val pageCount: Int get() = pageNum
+
+    /**
+     * The side currently being drawn, or null between sides. Held so that a page break *inside* a
+     * side can label the page it opens; cleared before the break that starts the next side, which
+     * belongs to that next side and not to the one just finished.
+     */
+    private var side: SideRef? = null
+
+    private class SideRef(val index: Int, val of: Int, val job: String)
 
     private val sans = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
     private val sansBold = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
@@ -444,11 +518,30 @@ private class PageCtx(
         drawFooter()
         doc.finishPage(page)
         start()
+        // A break inside a side opens a page that belongs to that side. Say so, so that no page in
+        // the document arrives without telling the reader what it is part of.
+        side?.let { continuationStrip(it) }
+    }
+
+    /**
+     * The eyebrow that identifies the second and later pages of a side. Same wording as the side's
+     * own header, with [Copy.CONTINUED] appended — a reader who lands mid-side sees the same line
+     * they saw on the side's first page.
+     */
+    private fun continuationStrip(s: SideRef) {
+        canvas.drawText(
+            "SIDE ${s.index} OF ${s.of} · ${s.job.uppercase()} · ${Copy.CONTINUED}",
+            margin, y + ReportLayout.CONTINUATION_BASELINE,
+            paint(7.5f, FAINT, bold = true).apply { letterSpacing = 0.1f },
+        )
+        y += ReportLayout.CONTINUATION_RULE_LEAD
+        canvas.drawLine(margin, y, pageW - margin, y, hairline)
+        y += ReportLayout.CONTINUATION_RULE_TO_CONTENT
     }
 
     /** Breaks to a new page when [space] will not fit. Returns true if it did. */
     private fun ensure(space: Float): Boolean {
-        if (y + space > pageH - footerSpace) {
+        if (!ReportLayout.fits(y, space, pageH)) {
             newPage()
             return true
         }
@@ -457,27 +550,32 @@ private class PageCtx(
 
     /** Places the next block flush against the bottom of the page, breaking first if it will not fit. */
     private fun anchorBottom(blockH: Float) {
-        if (y + blockH > pageH - footerSpace) newPage()
-        y = (pageH - footerSpace - blockH).coerceAtLeast(margin)
+        if (!ReportLayout.fits(y, blockH, pageH)) newPage()
+        y = (ReportLayout.contentLimit(pageH) - blockH).coerceAtLeast(margin)
     }
 
     private fun drawFooter() {
         val p = paint(7.5f, FAINT)
-        canvas.drawLine(margin, pageH - footerSpace + 6, pageW - margin, pageH - footerSpace + 6, hairline)
-        canvas.drawText(Copy.FOOTER, margin, pageH - 22f, p)
-        val right = "page $pageNum · SHA-256 ${data.sha256Hex.take(12)}…"
-        canvas.drawText(right, pageW - margin - p.measureText(right), pageH - 22f, p)
+        val ruleY = ReportLayout.footerRuleY(pageH)
+        canvas.drawLine(margin, ruleY, pageW - margin, ruleY, hairline)
+        val baseline = pageH - ReportLayout.FOOTER_TEXT_RISE
+        canvas.drawText(Copy.FOOTER, margin, baseline, p)
+        // "of N" only once N has been counted (see PdfReportGenerator.generate). On the counting
+        // pass there is no total yet, and a total is never assumed.
+        val counter = if (totalPages != null) "page $pageNum of $totalPages" else "page $pageNum"
+        val right = "$counter · SHA-256 ${data.sha256Hex.take(12)}…"
+        canvas.drawText(right, pageW - margin - p.measureText(right), baseline, p)
     }
 
     // ---- shared primitives ----
 
     private fun sectionLabel(text: String) {
-        ensure(20f)
+        ensure(ReportLayout.SECTION_LABEL_RESERVE)
         canvas.drawText(text.uppercase(), margin, y + 8f, paint(8f, FAINT, bold = true).apply { letterSpacing = 0.08f })
-        y += 18f
+        y += ReportLayout.SECTION_LABEL_H
     }
 
-    private fun lineHeight(p: Paint) = p.textSize * 1.35f
+    private fun lineHeight(p: Paint) = ReportLayout.lineHeight(p.textSize)
 
     /** Flowing body copy. Breaks across pages a line at a time. */
     private fun paragraph(text: String, p: Paint, x: Float = margin, width: Float = contentW) {
@@ -497,51 +595,71 @@ private class PageCtx(
     private fun noteBox(blocks: List<Pair<Paint, String>>) {
         val innerW = contentW - 20f
         val wrapped = blocks.map { (p, t) -> p to wrap(t, p, innerW) }
-        var h = 16f
-        wrapped.forEach { (p, ls) -> h += ls.size * lineHeight(p) + 3f }
-        ensure(h + 12f)
+        // Wrapping needs a Paint and stays here; the height it implies is arithmetic and does not.
+        val h = ReportLayout.noteBoxHeight(wrapped.map { (p, ls) -> ls.size to p.textSize })
+        ensure(h + ReportLayout.NOTE_BOX_TRAILING)
         val top = y
-        y += 8f
+        y += ReportLayout.NOTE_BOX_PAD
         wrapped.forEach { (p, ls) ->
             ls.forEach { ln ->
                 canvas.drawText(ln, margin + 10f, y + p.textSize * 0.85f, p)
                 y += lineHeight(p)
             }
-            y += 3f
+            y += ReportLayout.NOTE_BOX_BLOCK_GAP
         }
-        y += 8f
+        y += ReportLayout.NOTE_BOX_PAD
         canvas.drawRoundRect(margin, top, pageW - margin, y, 3f, 3f, hairline)
-        y += 12f
+        y += ReportLayout.NOTE_BOX_TRAILING
     }
 
     /**
-     * Starts a side. Each side gets its own sheet face; side 1 reuses the page [start] already
-     * opened rather than wasting a blank one.
+     * Starts a side. A side begins on a fresh page; side 1 reuses the page [start] already opened
+     * rather than wasting a blank one. `of` counts **sides**, which is a real number — 3 or 4,
+     * depending on whether side 3 was switched on — and the pages a side then takes are reported by
+     * the footer and by [continuationStrip], never inferred from this line.
      */
     private fun sideHeader(index: Int, of: Int, job: String, title: String, subtitle: String, meta: List<String>) {
+        // Cleared first: the break below opens the *next* side's first page, which carries a full
+        // header and must not also be stamped as a continuation of the side just finished.
+        side = null
         if (y > margin) newPage()
+        side = SideRef(index, of, job)
+
+        val top = y
         canvas.drawText(
             "SIDE $index OF $of · ${job.uppercase()}",
-            margin, y + 8f,
+            margin, y + ReportLayout.HEADER_EYEBROW_BASELINE,
             paint(7.5f, FAINT, bold = true).apply { letterSpacing = 0.1f },
         )
-        y += 16f
-        canvas.drawText(title, margin, y + 14f, paint(17f, INK, bold = true))
+        y += ReportLayout.HEADER_EYEBROW_ADVANCE
+        canvas.drawText(title, margin, y + ReportLayout.HEADER_TITLE_BASELINE, paint(17f, INK, bold = true))
         val mp = paint(8f, FAINT)
         meta.forEachIndexed { i, line ->
-            canvas.drawText(line, pageW - margin - mp.measureText(line), y + 4f + i * 11f, mp)
+            canvas.drawText(
+                line,
+                pageW - margin - mp.measureText(line),
+                y + ReportLayout.HEADER_META_BASELINE + i * ReportLayout.HEADER_META_STEP,
+                mp,
+            )
         }
-        y += 22f
+        y += ReportLayout.HEADER_TITLE_ADVANCE
         if (subtitle.isNotBlank()) {
-            canvas.drawText(subtitle, margin, y + 8f, paint(9f, SOFT))
-            y += 14f
+            canvas.drawText(subtitle, margin, y + ReportLayout.HEADER_SUBTITLE_BASELINE, paint(9f, SOFT))
+            y += ReportLayout.HEADER_SUBTITLE_ADVANCE
         }
-        y += 2f
+        // The rule clears whichever of the two columns finishes lower. Side 1's default path has a
+        // blank subtitle and three meta lines, so the right-hand column is the lower one and the
+        // old fixed offset put this rule straight through the generation date.
+        y = ReportLayout.headerRuleY(top, meta.size, subtitle.isNotBlank())
         canvas.drawLine(margin, y, pageW - margin, y, hairline)
-        y += 16f
+        y += ReportLayout.HEADER_RULE_TO_CONTENT
     }
 
-    /** Column header row for a table, redrawn whenever a table spills onto a new page. */
+    /**
+     * Column header row for a table, redrawn whenever a table spills onto a new page. Costs
+     * [ReportLayout.TABLE_HEAD_H]; callers reserve that *plus* a minimum row, so a head can never
+     * be left stranded over nothing at the foot of a page.
+     */
     private fun tableHead(vararg cols: Pair<Float, String>) {
         val hp = paint(7f, FAINT, bold = true).apply { letterSpacing = 0.06f }
         cols.forEach { (x, label) -> canvas.drawText(label, x, y + 7f, hp) }
@@ -633,9 +751,17 @@ private class PageCtx(
      * Irregular sampling therefore shows as irregular spacing — points sit at their real date.
      */
     private fun instrumentPlot(inst: Instrument) {
-        val plotH = 84f
-        val densityH = 8f
-        ensure(14f + 12f + plotH + 14f + densityH + 14f + 10f)
+        val plotH = ReportLayout.PLOT_H
+        val densityH = ReportLayout.DENSITY_H
+        // Reserved to the point, from the two rows that are conditional in the drawing below. The
+        // band-wording paragraphs that may follow are not counted: they flow a line at a time and
+        // re-check for themselves.
+        ensure(
+            ReportLayout.instrumentPlotReserve(
+                hasDirection = inst.direction.isNotBlank(),
+                hasDensity = inst.weeklyCounts.isNotEmpty(),
+            ),
+        )
 
         val np = paint(10f, INK, bold = true)
         canvas.drawText(inst.title, margin, y + 8f, np)
@@ -643,10 +769,10 @@ private class PageCtx(
         canvas.drawText(inst.tier.label, margin + np.measureText(inst.title) + 8f, y + 8f, tp)
         val meta = "${inst.points.size} entries · ${inst.scaleLabel}"
         canvas.drawText(meta, pageW - margin - tp.measureText(meta), y + 8f, tp)
-        y += 14f
+        y += ReportLayout.PLOT_TITLE_H
         if (inst.direction.isNotBlank()) {
             canvas.drawText(inst.direction, margin, y + 7f, paint(8f, SOFT))
-            y += 12f
+            y += ReportLayout.PLOT_DIRECTION_H
         }
 
         val top = y
@@ -691,12 +817,12 @@ private class PageCtx(
             }
         }
 
-        y = top + plotH + 4f
+        y = top + plotH + ReportLayout.PLOT_AXIS_GAP
         val ax = paint(6.5f, FAINT)
         canvas.drawText(rangeStart.format(DAY_MONTH).uppercase(), left, y + 6f, ax)
         val endLabel = rangeEnd.format(DAY_MONTH).uppercase()
         canvas.drawText(endLabel, right - ax.measureText(endLabel), y + 6f, ax)
-        y += 12f
+        y += ReportLayout.PLOT_AXIS_H
 
         // Sampling density — how much of the period each point actually stands for.
         val weeks = inst.weeklyCounts
@@ -708,11 +834,11 @@ private class PageCtx(
                 cell.alpha = if (count == 0) 16 else (40 + 175 * count / maxCount).coerceAtMost(215)
                 canvas.drawRect(left + i * cw + 0.6f, y, left + (i + 1) * cw - 0.6f, y + densityH, cell)
             }
-            y += densityH + 3f
+            y += densityH + ReportLayout.DENSITY_GAP
             val dl = paint(6.5f, FAINT)
             canvas.drawText(Copy.DENSITY_LEFT, left, y + 5f, dl)
             canvas.drawText(Copy.DENSITY_RIGHT, right - dl.measureText(Copy.DENSITY_RIGHT), y + 5f, dl)
-            y += 12f
+            y += ReportLayout.DENSITY_LABEL_H
         }
 
         // The person's own words for a band, printed because on a self-authored tool the label
@@ -724,12 +850,15 @@ private class PageCtx(
             }
             y += 4f
         }
-        y += 6f
+        y += ReportLayout.PLOT_TRAILING
     }
 
     /** What ran and what came back. No streaks, and no percentage of anything completed. */
     private fun completionSummary(data: ReportData) {
-        ensure(52f)
+        // The block is the section label plus a 42pt figure row: 60, not the 52 this used to ask
+        // for, which under-reserved by 8 and could push the labels under the figures into the
+        // footer band.
+        ensure(ReportLayout.COMPLETION_SUMMARY_RESERVE)
         sectionLabel("What ran, and what came back")
         val results = data.instrumentSeries.sumOf { it.points.size }
         val cells = listOf(
@@ -749,7 +878,9 @@ private class PageCtx(
     }
 
     private fun distribution(data: ReportData) {
-        ensure(20f + 5 * 16f)
+        // Label, five rows, and the gap that closes the block — the old 100 omitted both the gap
+        // and the difference between the label's reserve and its advance.
+        ensure(ReportLayout.DISTRIBUTION_RESERVE)
         sectionLabel("What came back, by level")
         val max = (data.moodCounts.values.maxOrNull() ?: 1).coerceAtLeast(1)
         val barLeft = margin + 60f
@@ -761,7 +892,7 @@ private class PageCtx(
             val bar = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = moodColor(lvl) }
             canvas.drawRoundRect(barLeft, y, barLeft + bw, y + 10f, 3f, 3f, bar)
             canvas.drawText(count.toString(), pageW - margin - 24f, y + 9f, paint(8.5f, SOFT))
-            y += 16f
+            y += ReportLayout.DISTRIBUTION_ROW_H
         }
         y += 8f
     }
@@ -816,7 +947,7 @@ private class PageCtx(
                 colBand to "BAND", colNote to "THEIR NOTE",
             )
         }
-        ensure(28f)
+        ensure(ReportLayout.TABLE_START_RESERVE)
         head()
 
         val body = paint(8.5f, INK)
@@ -856,7 +987,7 @@ private class PageCtx(
             )
         }
 
-        ensure(28f)
+        ensure(ReportLayout.TABLE_START_RESERVE)
         head()
 
         if (data.entries.isEmpty()) {
@@ -924,7 +1055,7 @@ private class PageCtx(
                 colCadence to "CADENCE", colOutcome to "OUTCOME",
             )
         }
-        ensure(28f)
+        ensure(ReportLayout.TABLE_START_RESERVE)
         head()
 
         val body = paint(8.5f, INK)
@@ -960,7 +1091,7 @@ private class PageCtx(
         val soft = paint(8f, SOFT)
         val step = paint(8.5f, INK)
         data.projects.forEach { p ->
-            ensure(26f)
+            ensure(ReportLayout.PROJECT_HEAD_RESERVE)
             canvas.drawText(p.title, margin, y + 8f, title)
             if (p.stateLabel.isNotBlank()) {
                 canvas.drawText(p.stateLabel, pageW - margin - soft.measureText(p.stateLabel), y + 8f, soft)
@@ -971,13 +1102,18 @@ private class PageCtx(
                 paragraph(listOf(p.cue, p.routine).filter { it.isNotBlank() }.joinToString(" → "), soft)
             }
             p.steps.forEach { s ->
-                ensure(12f)
+                ensure(ReportLayout.PROJECT_STEP_H)
                 canvas.drawText(if (s.done) "✓" else "·", margin + 8f, y + 8f, soft)
                 canvas.drawText(s.title, margin + 22f, y + 8f, step)
-                y += 12f
+                y += ReportLayout.PROJECT_STEP_H
             }
-            y += 8f
-            canvas.drawLine(margin, y - 4f, pageW - margin, y - 4f, hairline)
+            // Guarded: the last step can finish flush against the content limit, and an
+            // unconditional advance would drop this rule into the footer band. When it will not
+            // fit, the page break the next project causes is the separation.
+            if (ReportLayout.fits(y, ReportLayout.PROJECT_SEPARATOR_H, pageH)) {
+                y += ReportLayout.PROJECT_SEPARATOR_H
+                canvas.drawLine(margin, y - 4f, pageW - margin, y - 4f, hairline)
+            }
         }
         y += 6f
     }
@@ -987,11 +1123,11 @@ private class PageCtx(
         val body = paint(8.5f, INK)
         val soft = paint(8.5f, SOFT)
         data.activityStats.take(12).forEach { s ->
-            ensure(14f)
+            ensure(ReportLayout.ACTIVITY_ROW_H)
             canvas.drawText("${s.name}  (${s.count})", margin, y + 9f, body)
             val avg = fmt1(s.averageMood)
             canvas.drawText(avg, pageW - margin - soft.measureText(avg), y + 9f, soft)
-            y += 14f
+            y += ReportLayout.ACTIVITY_ROW_H
         }
         y += 8f
     }
@@ -1019,12 +1155,12 @@ private class PageCtx(
             )
             val gp = paint(8.5f, INK)
             named.forEach { g ->
-                ensure(12f)
+                ensure(ReportLayout.COVERAGE_GAP_ROW_H)
                 canvas.drawText(
                     "${g.from.format(DAY_MONTH)} – ${g.to.format(DAY_MONTH)}  (${g.days} days)",
                     margin + 10f, y + 8f, gp,
                 )
-                y += 12f
+                y += ReportLayout.COVERAGE_GAP_ROW_H
             }
         }
         y += 8f
@@ -1033,8 +1169,10 @@ private class PageCtx(
     // ---- side 3 · in their words ----
 
     /**
-     * Only reached when the person opted in and ticked entries. They print whole, in full — never
-     * excerpted, never summarised, and never selected by the software.
+     * Only reached when the person opted in — either for the whole range or entry by entry, which
+     * is what [ReportData.journalIncludedAsWholeRange] distinguishes and what the opt-in line has
+     * to say out loud. Entries print whole, in full — never excerpted, never summarised, and never
+     * selected by the software under either form of the choice.
      */
     fun sideThreeInTheirWords(data: ReportData, of: Int) {
         val n = data.journal.size
@@ -1048,13 +1186,15 @@ private class PageCtx(
             meta = listOf("Switched on for this export", "Off by default"),
         )
 
-        noteBox(listOf(paint(8.5f, SOFT) to Copy.JOURNAL_OPT_IN))
+        val optIn =
+            if (data.journalIncludedAsWholeRange) Copy.JOURNAL_OPT_IN_ALL else Copy.JOURNAL_OPT_IN_PER_ENTRY
+        noteBox(listOf(paint(8.5f, SOFT) to optIn))
 
         val titleP = paint(10f, INK, bold = true)
         val metaP = paint(7.5f, FAINT)
         val bodyP = paint(9f, INK)
         data.journal.sortedByDescending { it.dateTime }.forEach { j ->
-            ensure(34f)
+            ensure(ReportLayout.JOURNAL_ENTRY_RESERVE)
             canvas.drawText(j.title.ifBlank { "Untitled" }, margin, y + 9f, titleP)
             y += 14f
             canvas.drawText(
@@ -1063,9 +1203,16 @@ private class PageCtx(
             )
             y += 13f
             paragraph(j.body, bodyP)
-            y += 10f
-            canvas.drawLine(margin, y, pageW - margin, y, hairline)
-            y += 10f
+            // The separator is reserved, not assumed. `paragraph` breaks a line at a time and can
+            // leave y flush against the content limit, at which point an unconditional +10 puts a
+            // hairline below the footer rule — a stray mark on the one side whose whole promise is
+            // that the person's writing is reproduced untouched. When it will not fit, the page
+            // break the next entry causes is the separation.
+            if (ReportLayout.fits(y, ReportLayout.JOURNAL_SEPARATOR_H, pageH)) {
+                y += 10f
+                canvas.drawLine(margin, y, pageW - margin, y, hairline)
+                y += 10f
+            }
         }
 
         // The count of what was withheld is the whole of what this page may say about it.
@@ -1191,7 +1338,7 @@ private class PageCtx(
         val colTier = margin + 150f
         val colSource = margin + 210f
         val sourceW = pageW - margin - colSource
-        ensure(24f)
+        ensure(ReportLayout.TABLE_START_RESERVE)
         tableHead(margin to "TOOL", colTier to "TIER", colSource to "SOURCE")
 
         val name = paint(8.5f, INK)
@@ -1236,8 +1383,8 @@ private class PageCtx(
         val textW = pageW - margin - textLeft
         val noteLines = wrap(Copy.AUTHENTICITY, textP, textW)
         val textH = 16f + noteLines.size * 11f
-        // 10 for the rule, 18 for the label, then the taller of the QR and the text, plus clearance.
-        val blockH = 28f + maxOf(qrSize, textH) + 8f
+        // 10 for the rule, the section label, then the taller of the QR and the text, plus clearance.
+        val blockH = 10f + ReportLayout.SECTION_LABEL_H + maxOf(qrSize, textH) + 8f
 
         anchorBottom(blockH)
         canvas.drawLine(margin, y, pageW - margin, y, hairline)
@@ -1245,8 +1392,14 @@ private class PageCtx(
         sectionLabel("Verify this file")
 
         val top = y
-        // The QR payload and encoder are unchanged; only where it sits on the page has moved.
-        val payload = "daymark-verify:v1;range=${data.rangeLabel};sha256=${data.sha256Hex}"
+        // The envelope grammar is still v1 — semicolon-separated key=value, which is why a new key
+        // can be added without breaking it. What is new is `payload`: the hash is now computed over
+        // a different canonicalisation, and a bare hex string does not say which one. Without this
+        // token a verifier holding a report from before the bump and one from after sees two
+        // identical-looking QRs, recomputes one of them the wrong way and reports tampering on an
+        // untouched file. The version is read from the builder so the two can never drift.
+        val payload = "daymark-verify:v1;range=${data.rangeLabel};" +
+            "payload=${ReportDataBuilder.CANONICAL_VERSION};sha256=${data.sha256Hex}"
         QrEncoder.draw(
             canvas, payload, margin, top, qrSize,
             Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK },

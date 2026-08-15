@@ -18,9 +18,11 @@
 - [Explicitly not in this plan](#explicitly-not-in-this-plan)
 - [Verification](#verification)
 
-**Status:** Phase 1 landed. Phase 2's migration and its spec amendment are written; the phase
-closes when both oracles are green (see [Phase 2 — verification](#phase-2--verification)).
-Phases 3 and 4 are unstarted.
+**Status:** Phases 1 and 2 landed and closed — both oracles are green at HEAD (`pnpm check` 413
+files / 0 errors, `pnpm test` 403 passed / 5 skipped), and the two known-stale assertions that were
+the last blockers have been updated rather than reverted. Phases 3 and 4 are unstarted. All counts
+in this document were recomputed at HEAD; the ones that had drifted are corrected in place and say
+so.
 
 ---
 
@@ -29,45 +31,64 @@ Phases 3 and 4 are unstarted.
 Three corrections to assumptions made while producing the renders, all verified against the tree.
 
 **The design system is not missing — it is unimplemented.**
-[COMPANION_DESIGN_SYSTEM.md](./COMPANION_DESIGN_SYSTEM.md) is 813 lines and web-specific. §4 already
+[COMPANION_DESIGN_SYSTEM.md](./COMPANION_DESIGN_SYSTEM.md) is web-specific and, after the §2.3
+amendment and the corrections below, **1160 lines** (813 when this plan was written). §4 already
 specifies the full component inventory (`Card`, `EmptyState`, `AppShell`, `Table`, `Banner`,
 `ScorePill`/`BandTag`, `NonDiagnosticBanner`, …) with accessibility requirements per component. §2.3
 specifies a **two-tier** token model: primitives (hex, mirroring `Color.kt`) → semantic tokens, with
 UI code referencing only the semantic layer.
 
-None of that shipped. `src/app.css` is a single flat tier (`--paper-bg`, `--ink-text`, `--mood-N`)
-with no primitive/semantic split, and `src/lib/components/ui/` does not exist. All **36** components
-hand-roll a local `<style>` block.
+None of that had shipped when this plan was written: `src/app.css` was a single flat tier
+(`--paper-bg`, `--ink-text`, `--mood-N`) with no primitive/semantic split, `src/lib/components/ui/`
+did not exist, and all **36** components hand-rolled a local `<style>` block. Phase 1 built the
+two-tier layer and the eleven primitives; that paragraph is history now, and the table below carries
+the current numbers.
 
-**The tool builder already exists.** `src/lib/components/ToolBuilder.svelte` (231 lines) is wired to
+**The tool builder already exists.** `src/lib/components/ToolBuilder.svelte` (231 lines then, 242 at
+HEAD after the Phase 2 migration) is wired to
 `instruments/builder.ts` and runs `validateDraft()` live. The deck-two render labelled it "new UI,
 real engine" — half wrong. The engine *and* a UI exist; what the render proposes is a different
 presentation of the same gate (checks phrased as claims, tier picker showing locked tiers, band
 contiguity called out inline).
 
-**`docs/design/` already had a render convention**, with a README, a re-render command, and four
-prior mockups. The two new decks were filed into it as `web-03` and `web-04` rather than starting a
-new location.
+**`docs/design/` already had a render convention**, with a README, a re-render command, and six
+prior mockups (`app-01`…`app-04`, `web-01`, `web-02` — recounted; this document said four). The two
+new decks were filed into it as `web-03` and `web-04` rather than starting a new location.
 
 ### The measured problem
 
-The complaint that the UI has "only one colour" is precise and countable. Baseline, before
-Phase 1:
+The complaint that the UI has "only one colour" is precise and countable. **Every figure below was
+recomputed at HEAD**, and the baseline column was recounted from the tree at `a061e2c` (the commit
+before Phase 1) rather than copied forward:
 
 | Measure | Baseline | After Phases 1–2 |
 |---|---|---|
 | Svelte components in `companion/web/src` | 36 | 47 (36 + 11 `ui/` primitives) |
-| …that hand-roll their own `<style>` block | 36 | falling as primitives absorb them |
-| …that reference the mood ramp (`--mood-*`) | 31 | **6**, all data surfaces |
-| Total `var(--mood-*)` references | 105 | **23**, all data |
+| …that hand-roll their own `<style>` block | 36 | 47 — every component still has one |
+| …that reference the mood ramp in **code** | 32 | **5**, all data surfaces |
+| Total `var(--mood-*)` references in code | 105 | **22**, all data |
 | Components in `src/lib/components/ui/` | 0 | **11** |
+
+Three counts in this table were wrong and are corrected above. The baseline was **32** components,
+not 31 — so Phase 2's stated scope was one file short. And the post-migration figures depend on
+whether you count comments: a raw text grep finds mood tokens in **6** components and **23**
+references, but one of those, in `ToolBuilder.svelte`, is the comment recording that the site used to
+resolve to `var(--mood-5)` and no longer does. **Counted as code — which is what ships, and what the
+invariant suite measures — it is 5 components and 22 references.** The five are
+`charts/Sparkline.svelte`, `Overview.svelte`, `Dashboard.svelte`, `QuestionnaireRunner.svelte` and
+`ui/BandTag.svelte`. (`app.css` defines the ramp and `lib/mood.ts` maps a level onto it; both are
+allowlisted and neither is a component.)
+
+That distinction is not pedantry here — it is the same one the tree-wide suite is built on, and
+getting it wrong in either direction is a documented failure mode: a guard satisfied by the comment
+explaining a rule instead of by the rule.
 
 The mood scale was doing double duty — a person's score *and* every banner, warning, capability row
 and trust strip. That is the entire cause of the flat, one-note feel, and it is also a correctness
 problem: a palette that encodes data cannot simultaneously encode interface state without the two
 becoming unreadable from each other.
 
-The residual 23 references are the point of the exercise, not a remainder to grind down: they are
+The residual 22 references are the point of the exercise, not a remainder to grind down: they are
 the charts, the band tags and the scored-result edge, where the ramp *is* the legend. A future
 count of zero would mean the product had stopped colouring a person's data.
 
@@ -101,7 +122,7 @@ renders generalise that — healthy is the *absence* of colour, everywhere, incl
 console.
 
 **This plan proceeds on the renders' model.** If that is wrong, it must be reversed now, before
-Phase 2 touches 31 files. §2.3 is amended by this document rather than silently diverged from; the
+Phase 2 touches 32 files. §2.3 is amended by this document rather than silently diverged from; the
 amendment should be written back into COMPANION_DESIGN_SYSTEM.md once Phase 1 lands.
 
 ### Resolved — the amendment has landed
@@ -229,13 +250,16 @@ Two items were **added** to Phase 2 by the audit that ran alongside it:
   `--border-strong` was the serious one at 1.56:1 — it is the sole boundary of every button, input,
   textarea and select, drawn on a sheet that is 1.10:1 against the page. All were solved
   numerically and the ratios are pinned in design-system §2.3.6, which is normative.
-- **Eleven components use `--ink-faint` as real text** (2.37:1 light). Not fixed by changing the
-  token — `--ink-faint` is decorative by contract and raising it collapses the three-tier ink
-  scale — but by switching those call sites to `--text-subtle`. Tracked as component defects.
+- **~~Eleven components use `--ink-faint` as real text~~ (2.37:1 light). Resolved.** Not by changing
+  the token — `--ink-faint` is decorative by contract and raising it collapses the three-tier ink
+  scale — but by switching those call sites to `--text-subtle`. Recounted at HEAD: **no `.svelte`
+  file references `var(--ink-faint)` at all**, and eleven reference `--text-subtle`. The token is
+  still defined and still decorative; the single remaining mention of the name in a component is the
+  comment at `owner/GrantManager.svelte:129` recording why the site moved.
 
 ## Phase 2 — the migration
 
-**Scope: 31 components, 105 `var(--mood-*)` references.** Mechanical but not blind — each
+**Scope: 32 components, 105 `var(--mood-*)` references** (recounted; this line said 31). Mechanical but not blind — each
 reference is either *data* (stays mood) or *state* (moves to the new vocabulary), and only reading
 what renders it decides which. Migrate by directory (`owner/`, then `therapist/`, then top-level),
 one commit each, `pnpm check && pnpm test` green between them. Delete each component's local
@@ -243,11 +267,13 @@ one commit each, `pnpm check && pnpm test` green between them. Delete each compo
 
 Two known bugs to fix while in there:
 
-- `describeAssignment()` in `lib/assignments/describe.ts` renders *"Assign the Daily wellbeing
-  self-check **self-check**, every week."* — it appends a noun the title already ends in. One
-  template string, plus the unit test that should have caught it.
-- `web/fonts/` contains only a README. `app.css` declares Fraunces and Inter and both silently fall
-  back. Vendoring the two subset woff2 files is a separate, network-dependent commit.
+- **~~`describeAssignment()` renders *"Assign the Daily wellbeing self-check **self-check**, every
+  week."*~~ Fixed** at `lib/assignments/describe.ts:40-41`: the noun is appended only when the title
+  does not already end in it, and the title is trimmed so an empty one cannot leave a doubled space.
+- **`web/fonts/` contains only a README** — still true at HEAD. `app.css` names Fraunces and Inter in
+  `--font-display` / `--font-text` and both silently fall back to the system stack; the two
+  `@font-face` blocks remain commented out (`app.css:48-63`), which is the honest state while the
+  binaries are absent. Vendoring the two subset woff2 files is a separate, network-dependent commit.
 
 ### Phase 2 — what it settled
 
@@ -285,9 +311,14 @@ until they are, and "the migration is written" is not the same claim.**
 
 ```
 cd companion/web
-pnpm check     # svelte-check — baseline 387 files / 0 errors; 403 / 0 after Phase 1
-pnpm test      # vitest — baseline 172 passed / 5 skipped; 195 / 5 after Phase 1
+pnpm check     # svelte-check — 387/0 baseline; 403/0 after Phase 1; 413/0 at HEAD
+pnpm test      # vitest — 172/5 baseline; 195/5 after Phase 1; 403 passed / 5 skipped at HEAD
 ```
+
+The HEAD figures are higher than Phase 2's because the companion substrate landed after it
+(signal vocabulary, dialogue format and planner, companion content and their suites). They are the
+current gate; the Phase-1 and Phase-2 numbers are kept as history, not as thresholds to check
+against.
 
 The guard grew with the migration. `ui/invariants.test.ts` polices the eleven primitives by
 reading its own directory, which cannot become a tree-wide claim; Phase 2 made a claim about
@@ -306,18 +337,19 @@ not define; and the fixed copy still reads exactly as it reads.
 > comment-stripped code; copy assertions run over markup with script and style removed, so a
 > sentence quoted in a comment cannot stand in for the sentence a person reads.
 
-**Known-stale assertions to clear before the phase closes.** Two pre-existing tests encode the
-*old* state and now fail correctly-changed code. Neither is a defect in the migration; both need
-the assertion updated, not the code reverted:
+**Known-stale assertions to clear before the phase closes — both cleared.** Two pre-existing tests
+encoded the *old* state and failed correctly-changed code. Neither was a defect in the migration;
+both needed the assertion updated, not the code reverted. Recorded because the shape recurs:
 
-- `ui/invariants.test.ts` pins `LIGHT_VALUES` / `DARK_VALUES` at the pre-audit hexes
-  (`--chrome-soft: #626d7d`, `--clay: #a8574a` / `#c9806f`, `--amber: #9c7128`). Applying the
-  §2.3.6 corrections fails five of them. Update the pins to the corrected values — and keep
-  pinning, because the pin is what stops a silent re-point.
-- `trustbar.test.ts` asserts `expect(trustBarCode).toMatch(/--mood-3/)`. That was written to prove
-  the strip was not green by showing it was amber-ish; once the strip moved to the chrome ground
-  the positive half of the assertion became wrong. Keep `not.toMatch(/--mood-5/)`, and replace the
-  positive half with an assertion that the strip is on `--chrome`.
+- **`ui/invariants.test.ts` pinned `LIGHT_VALUES` / `DARK_VALUES` at the pre-audit hexes**
+  (`--chrome-soft: #626d7d`, `--clay: #a8574a` / `#c9806f`, `--amber: #9c7128`), and the §2.3.6
+  corrections failed five of them. **Repinned at the corrected values**
+  (`invariants.test.ts:253-273`), each carrying the ratio it was moved for in a comment. It is still
+  a pin, which is the point — the pin is what stops a silent re-point.
+- **`trustbar.test.ts` asserted `expect(trustBarCode).toMatch(/--mood-3/)`**, written to prove the
+  strip was not green by showing it was amber-ish; once the strip moved to the chrome ground the
+  positive half became wrong. **Now `trustbar.test.ts:55,64`**: `not.toMatch(/--mood-5/)` kept, and
+  the positive half replaced with `toMatch(/background:\s*var\(--chrome\)/)`.
 
 ## Spec corrections beyond §2.3
 
@@ -413,9 +445,12 @@ Both oracles run locally in this repo — there is no need to wait on CI for the
 ```
 cd companion/web
 pnpm install --frozen-lockfile
-pnpm check     # svelte-check: 387 files, 0 errors at baseline; 403 / 0 after Phase 1
-pnpm test      # vitest: 172 passed, 5 skipped at baseline; 195 / 5 after Phase 1
+pnpm check     # svelte-check: 413 files, 0 errors at HEAD (387/0 baseline, 403/0 after Phase 1)
+pnpm test      # vitest: 403 passed, 5 skipped across 32 files at HEAD (172/5 baseline, 195/5 after Phase 1)
 ```
+
+Of those, the two invariant suites are 54 tests: `ui/invariants.test.ts` 23, over the eleven
+primitives; `components/invariants.tree.test.ts` 31, over the whole of `src/`.
 
 **Any phase that does not leave both green is not done.** Not "done with a known failure", not
 "done pending a test update" — the counts are the gate, and a phase summary that reports work
