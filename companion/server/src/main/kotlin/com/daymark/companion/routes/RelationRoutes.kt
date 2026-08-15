@@ -23,6 +23,7 @@ import io.ktor.server.response.respond
 import io.ktor.server.response.respondBytes
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
+import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import kotlinx.serialization.Serializable
@@ -31,6 +32,15 @@ import org.slf4j.LoggerFactory
 @Serializable data class RelMetaDto(val version: Long, val size: Long, val contentHash: String, val settingKey: String? = null, val createdAt: Long)
 @Serializable data class RelVersionList(val lineage: String, val versions: List<RelMetaDto>)
 @Serializable data class RelLineageList(val lineages: List<String>)
+/**
+ * How many versions the withdrawal marked.
+ *
+ * Note what is NOT here, and in RelMetaDto either: `expiry` and `revoked`. Both would be readable
+ * by the therapist, because the version-list route is open to either counterparty — which would
+ * hand the restricted party the exact distinction the 410 exists to withhold. The owner learns the
+ * state from their own audit log.
+ */
+@Serializable data class RelRevokeResult(val lineage: String, val revokedVersions: Int)
 @Serializable data class RelPutResult(val relRef: String, val channel: String, val lineage: String, val version: Long, val size: Long, val contentHash: String)
 
 private fun RelMeta.toDto() = RelMetaDto(version, size, contentHash, settingKey, createdAt)
@@ -64,6 +74,8 @@ fun Route.relationRoutes(
     notifier: OwnerNotifier,
     publicBaseUrl: String?,
     auditSourceIp: Boolean = false,
+    /** Injectable so tests can drive expiry without sleeping. */
+    clock: () -> Long = { System.currentTimeMillis() },
 ) {
     route("/v1/rel/{relRef}/{channel}") {
 
@@ -85,6 +97,43 @@ fun Route.relationRoutes(
             }
         }
 
+        /*
+         * Withdraw a share lineage. Owner-only, and SHARES-only.
+         *
+         * SHARES-only is load-bearing, not tidiness. The obvious generalisation is "whoever writes
+         * this channel may revoke it" — but `writerRole` makes the THERAPIST the writer of
+         * assignments and gameplans, so that version of this route would hand the therapist an
+         * irreversible kill switch over the owner's own assignments, with no un-revoke and no
+         * remedy. This feature exists to constrain the therapist; it must not arm them.
+         */
+        post("/{lineage}/revoke") {
+            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds, auditStore, auditSourceIp, requireCsrf = true) ?: return@post
+            if (ctx.channel != Channel.SHARES) {
+                call.respond(HttpStatusCode.NotFound, ErrorDto("not found"))
+                return@post
+            }
+            if (ctx.role != Role.OWNER) {
+                call.respond(HttpStatusCode.Forbidden, ErrorDto("only the owner may withdraw a share"))
+                return@post
+            }
+            val lineage = call.parameters["lineage"] ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("missing lineage"))
+            try {
+                val marked = store.revokeLineage(ctx.relRef, ctx.channel, lineage)
+                auditSafely {
+                    auditStore.append(
+                        ctx.relRef,
+                        AuditActor.OWNER,
+                        AuditAction.SHARE_REVOKE,
+                        objectRef = lineage,
+                        meta = sourceIpMeta(auditSourceIp, call),
+                    )
+                }
+                call.respond(HttpStatusCode.OK, RelRevokeResult(lineage, marked))
+            } catch (e: RelationStoreException) {
+                call.failRel(e)
+            }
+        }
+
         // Fetch the highest version of a lineage (the counterparty read path).
         get("/{lineage}/current") {
             val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds, auditStore, auditSourceIp) ?: return@get
@@ -93,6 +142,10 @@ fun Route.relationRoutes(
                 val (version, bytes) = store.fetchCurrent(ctx.relRef, ctx.channel, lineage)
                 call.response.header("X-Content-Hash", RelationStore.sha256HexPublic(bytes))
                 call.response.header("X-Version", version.toString())
+                // Revocation is worthless if the browser can answer Refresh from its own cache with
+                // the old 200 and the old bytes. An octet-stream 200 with no validators is
+                // heuristically cacheable, so say no explicitly.
+                call.response.header(HttpHeaders.CacheControl, "no-store")
                 call.respondBytes(bytes, ContentType.Application.OctetStream)
                 auditFetch(auditStore, ctx, lineage, version, auditSourceIp, call)
             } catch (e: RelationStoreException) {
@@ -109,6 +162,7 @@ fun Route.relationRoutes(
             try {
                 val bytes = store.fetch(ctx.relRef, ctx.channel, lineage, version)
                 call.response.header("X-Content-Hash", RelationStore.sha256HexPublic(bytes))
+                call.response.header(HttpHeaders.CacheControl, "no-store")
                 call.respondBytes(bytes, ContentType.Application.OctetStream)
                 auditFetch(auditStore, ctx, lineage, version, auditSourceIp, call)
             } catch (e: RelationStoreException) {
@@ -132,9 +186,34 @@ fun Route.relationRoutes(
             // Non-secret routing tag; only meaningful for setting-type assignments. Validated
             // structurally by the store BEFORE the (opaque) body is read/stored.
             val settingKey = call.request.headers["X-Setting-Key"]?.trim()?.ifBlank { null }
+            /*
+             * The owner already sends the share deadline in X-Share-Meta; until now the server
+             * dropped it on the floor and expiry was enforced only by the therapist's own browser.
+             *
+             * Trusting this header is defensible precisely because the sender is not the restricted
+             * party: the OWNER writes it and the THERAPIST is bound by it. (Contrast X-Setting-Key,
+             * where the sender IS the restricted party — that one is a separate open finding.) The
+             * role check above has already established this caller is the owner before the header is
+             * read at all. And it is not load-bearing on its own: the authoritative expiry is bound
+             * into the signed AAD transcript the client verifies, so a forged header can only make
+             * an honest server refuse EARLIER, never serve later than the signed deadline.
+             *
+             * Only `expiry` is read. shareId/version/ownerSigningFp are deliberately ignored —
+             * reading more of the envelope's metadata is a step toward reading the envelope.
+             */
+            val expiry: Long?
+            if (ctx.channel == Channel.SHARES) {
+                expiry = parseShareExpiry(call.request.headers["X-Share-Meta"], clock())
+                if (expiry == null) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorDto("missing, malformed, or past share expiry"))
+                    return@put
+                }
+            } else {
+                expiry = null
+            }
             val body = call.readCappedRel(maxRequestBytes) ?: return@put
             try {
-                val putMeta = store.put(ctx.relRef, ctx.channel, lineage, version, body, settingKey)
+                val putMeta = store.put(ctx.relRef, ctx.channel, lineage, version, body, settingKey, expiry)
                 call.response.header("X-Content-Hash", putMeta.contentHash)
                 call.respond(
                     HttpStatusCode.Created,
@@ -301,6 +380,43 @@ private suspend fun ApplicationCall.readCappedRel(max: Long): ByteArray? {
     return out.toByteArray()
 }
 
+/**
+ * The share deadline out of `X-Share-Meta`, or null if there isn't a usable one.
+ *
+ * Returns null — meaning "reject this publish" on the shares channel — for absent, oversized,
+ * un-decodable, non-JSON, missing-field, non-integer, non-positive, and already-past values. Failing
+ * closed here is what keeps the grandfather rule in `gateLocked` bounded: after this change a share
+ * row with no expiry can only be one an older build wrote, never one written today.
+ *
+ * A past expiry is rejected rather than stored because the alternative is silent: the owner sees
+ * "published" and the therapist sees 410 forever, with nothing anywhere saying why.
+ *
+ * URL-safe base64 without padding, because that is what the client's `toBase64` (libsodium
+ * URLSAFE_NO_PADDING) emits. The standard decoder would reject it.
+ */
+internal fun parseShareExpiry(header: String?, now: Long, maxAheadMs: Long = 366L * 24 * 60 * 60 * 1000): Long? {
+    val raw = header?.trim() ?: return null
+    if (raw.isEmpty() || raw.length > 4096) return null // don't base64-decode an attacker-sized header
+    val json = runCatching { String(java.util.Base64.getUrlDecoder().decode(raw), Charsets.UTF_8) }.getOrNull() ?: return null
+    // Only `expiry` is read. Deliberately not shareId/version/ownerSigningFp: the server needs one
+    // number to know when to stop moving bytes, and reading more of the envelope's metadata is a
+    // step toward reading the envelope. (The header's `version` also disagrees with the sealed
+    // envelope's own from the second publish onward, so cross-checking it would be wrong.)
+    val expiry = runCatching {
+        kotlinx.serialization.json.Json.parseToJsonElement(json)
+            .let { it as? kotlinx.serialization.json.JsonObject }
+            ?.get("expiry")
+            ?.let { it as? kotlinx.serialization.json.JsonPrimitive }
+            ?.takeIf { !it.isString }
+            ?.content
+            ?.toLongOrNull()
+    }.getOrNull() ?: return null
+    if (expiry <= 0 || expiry <= now) return null
+    // Clamp rather than reject: only a modified client can exceed the UI's 365-day ceiling, and
+    // clamping keeps "effectively no expiry" from being reachable by writing a huge number.
+    return minOf(expiry, now + maxAheadMs)
+}
+
 private suspend fun ApplicationCall.failRel(e: RelationStoreException) {
     val (status, message) = when (e.kind) {
         RelationStoreException.Kind.BAD_NAME -> HttpStatusCode.BadRequest to "invalid request"
@@ -311,6 +427,22 @@ private suspend fun ApplicationCall.failRel(e: RelationStoreException) {
         RelationStoreException.Kind.DISK_FULL -> HttpStatusCode.InsufficientStorage to "insufficient storage"
         RelationStoreException.Kind.NOT_FOUND -> HttpStatusCode.NotFound to "not found"
         RelationStoreException.Kind.SETTING_KEY_NOT_ALLOWED -> HttpStatusCode.UnprocessableEntity to "setting key not allowlisted"
+        /*
+         * 410 Gone, not 404 and not 403.
+         *
+         * 404 would be a lie with teeth: the therapist client maps 404 to null and the UI renders
+         * "No share has been published for you yet", so a withdrawn share would tell the therapist
+         * the owner never shared anything.
+         *
+         * 403 means "your identity is not permitted", which is wrong — no identity may fetch this,
+         * and re-authenticating cannot help. It is also already spoken for on this surface ("wrong
+         * direction for this channel").
+         *
+         * 410 means "it was here, it is deliberately gone." True of both an elapsed deadline and a
+         * withdrawal, and already this codebase's word for it (a consumed invite returns Gone).
+         * Expired and revoked share one message on purpose — see RelationStoreException.Kind.GONE.
+         */
+        RelationStoreException.Kind.GONE -> HttpStatusCode.Gone to "no longer available"
     }
     respond(status, ErrorDto(message))
 }

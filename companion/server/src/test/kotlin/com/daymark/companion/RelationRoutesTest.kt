@@ -106,6 +106,7 @@ class RelationRoutesTest {
         val (blob, rel, auth) = stores(dir, cfg)
         application { module(cfg, blob, null, rel, auth) }
         suspend fun put(body: ByteArray) = client.put("/v1/rel/$relRef/shares/lin/0") {
+            header("X-Share-Meta", "eyJzaGFyZUlkIjogInQiLCAidmVyc2lvbiI6IDAsICJleHBpcnkiOiA0MTAyNDQ0ODAwMDAwLCAib3duZXJTaWduaW5nRnAiOiAiZnAifQ")
             header("X-Rel-Token", inboxToken); header(HttpHeaders.Authorization, "Bearer $ownerToken"); setBody(body)
         }
         assertEquals(HttpStatusCode.Created, put(byteArrayOf(1)).status)
@@ -167,6 +168,7 @@ class RelationRoutesTest {
         val ts = therapistSession(auth, relRef)
         // Therapist writing to shares (owner-only) -> 403.
         val t = client.put("/v1/rel/$relRef/shares/lin/0") {
+            header("X-Share-Meta", "eyJzaGFyZUlkIjogInQiLCAidmVyc2lvbiI6IDAsICJleHBpcnkiOiA0MTAyNDQ0ODAwMDAwLCAib3duZXJTaWduaW5nRnAiOiAiZnAifQ")
             header("X-Rel-Token", inboxToken)
             header(HttpHeaders.Cookie, "daymark_session=${ts.cookie}")
             header("X-CSRF-Token", ts.csrf)
