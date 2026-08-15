@@ -97,21 +97,71 @@ later. It is also directly checkable in a unit test, unlike a policy expressed a
 
 Escalation stays where it belongs: **the person asks for more.** That is a setting, not an inference.
 
-### D1b. One surface for the app's voice — no persona
+### D1b. The companion — a real presence, and a *client* of the arbiter
 
-**The proposal.** A "little guy" in the corner that expands, like a support agent.
+**Decided in favour of the maintainer's proposal, over two rounds of pushback from me. Recording the
+reversal because the reasoning matters more than the conclusion.**
 
-**Take the surface, not the character.** The valuable half is real and worth building: **one quiet
-place where everything the app might want to say lives**, visited when the person chooses, instead of
-those things arriving as interruptions. That is the affordance side of affordance-versus-interruption
-made concrete and central, and it is what lets the arbiter say "no" so often — the message is not
-lost, it is just not shoved in front of anyone.
+**The proposal.** A "little guy" in the corner that expands — interactive, conversational but with
+**premade** responses, aware of the person's mood history and how often they have been around,
+hideable at will. *"What if they like the arbiter?"*
 
-**Drop the persona**, for the same reason the engine gets no name (D2), plus one specific to this
-shape: a chat-like agent in the corner of a mental-health app **implies it will respond to what you
-say**. It cannot — there is no LLM and we do not want one. The predictable failure is someone in a bad
-moment typing something real into a box that cannot answer. A tray with a count is honest about what
-it is; a character is not.
+**Why I was wrong twice.**
+
+1. I argued a chat-like agent implies it will answer free text, and someone in a bad moment would type
+   something real into a box that cannot respond. **But the proposal was never a text field.** A
+   dialogue of fixed choices has no free-text failure mode — and it is *more* honest than a text box,
+   because it never pretends to parse arbitrary input. I argued against a design nobody proposed.
+2. I collapsed "sees mood history" into "infers clinical state". They are not the same, and the app
+   already shows people their own history. The real line is narrower and easy to hold:
+
+   > **Reflect, never label.** *"You logged three harder days this week"* hands someone their own data
+   > back. *"You seem depressed"* is a claim about them. The first is fine. The second is D1a.
+
+3. *"What if they like it?"* is the strongest argument in the thread and I did not engage with it. For
+   someone alone at 2am, a warm presence offering two or three things to try may be the most valuable
+   thing in the product — and warmth is **consonant** with the self-compassion content in D3, not
+   opposed to it. A tray with a badge count is not the same object and would not do that job.
+
+**The architecture, which dissolves the conflict.** The companion and the small arbiter are not in
+tension, because **the companion is a feature that calls the arbiter, not the arbiter itself**:
+
+| | **Arbiter** | **Companion** |
+|---|---|---|
+| Owns | may anything interrupt right now | mood history, dialogue content, its own UI |
+| Size | ~100 lines, no domain knowledge | a full feature, like Goals or Check-in |
+| When the person **opens it** | not consulted — no permission needed to answer someone | free to use everything it knows |
+| When it wants to **surface itself** | must ask, and may be told no | respects the answer |
+
+So the context that worried us stays *inside the companion*, where it already lives, and never leaks
+into the permission gate. Every other feature keeps calling the same three-argument function.
+
+**What the companion may do:** branch on real data (streak of hard days, time since last visit,
+whether a compassion module is prescribed, whether a safety plan exists), remember where a
+conversation left off, vary its openers so it does not feel canned, and offer concrete next steps.
+
+**What it may not do**, none of which conflicts with the proposal:
+
+- **No free-text input.** Fixed choices only. This is the maintainer's own design, recorded so it is
+  not "improved" into a chat box later by someone who thinks that is friendlier.
+- **No labels.** It reflects what was logged; it never tells someone what they are or what they feel.
+- **Hidden means hidden.** Dismissing it is one tap, it does not come back on its own, and it never
+  reappears to say it misses you. Un-hiding is a setting the person finds.
+- **Not the crisis path.** The safety plan stays the person's own, authored in advance. The companion
+  may point at it if the person has one; it never becomes it.
+
+**Illustrative dialogue** — every line premade, every branch keyed to logged data:
+
+> **"It's been about a week. No agenda."**
+> · I'm doing alright · It's been rough · Just looking around · Not now
+>
+> → *(It's been rough)* **"That tracks — three of your last seven check-ins were on the harder end."**
+> · Want something to try? · I just wanted to say it out loud · Show me what I wrote
+>
+> → *(Want something to try?)* offers what is actually available to that person: a prescribed
+> compassion exercise, an activity from their own list, or their safety plan if they made one.
+
+"I just wanted to say it out loud" is a first-class ending. Not every branch has to lead somewhere.
 
 ---
 
@@ -121,9 +171,12 @@ it is; a character is not.
 prose. In the UI it has no name and no persona. The setting that governs it is plain: *when Daymark
 asks*.
 
-**Why.** Naming it creates a character, and a character invites trust it has not earned — the same
-dynamic we avoid by refusing an LLM. Its actual advantage is that it can justify any decision in one
-sentence because it is rules. That is worth advertising; a mascot is not.
+**Why.** The arbiter is plumbing — a permission gate features call. Plumbing does not need a name, and
+its advantage is that it can justify any decision in one sentence because it is rules.
+
+**This is about the arbiter, not the companion.** D1b builds a companion with a real presence, and
+*that* may well deserve a name and a character — it is a surface a person chooses to open and talk
+with. The thing that must not become a persona is the invisible permission gate underneath it.
 
 **Explicitly not "AI".** Not because it is not useful, but because the word promises opacity and
 currently carries a liability in mental-health software specifically.
@@ -238,7 +291,7 @@ Recorded so they do not get re-proposed as obvious wins.
 | **Note excerpts in Companion** | Non-disclosure in therapy is the norm and is driven by anticipated consequences of being seen. This protects the one asset the product cannot regenerate: a place to write without an audience. |
 | **Inferring reminder quality from app opens** | A notification raises the probability of opening within the hour ~3.66×. It is the metric that moves most easily with nothing underneath improving. The signal must be person-declared. |
 | **Lapse-referencing notifications** | "You haven't written in 3 days" — the only documented harm signal in the notification literature, with no efficacy evidence on the other side. |
-| **A user-facing AI persona** | See D2. A chat-like agent implies it will answer; it cannot, and someone will type something real into it. |
+| **A free-text chat box in the companion** | See D1b. Fixed choices have no "typed something real into a box that cannot answer" failure. The companion itself is being built. |
 | **Inferring clinical state from usage** | See D1a. Diagnosis by side-effect, on an inference the field cannot replicate, whose best feature (location) we have banned. |
 | **Any signal that makes the arbiter ask *more*** | See D1a. The response function is monotonic and one-directional by design, so the component cannot be retuned into an engagement optimiser. |
 
