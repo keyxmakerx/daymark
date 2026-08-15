@@ -152,6 +152,16 @@ jobs:
             # failure message nobody can read is barely better than no failure message.
             git --no-pager diff --stat -- app/schemas
             git --no-pager diff --unified=1 -- app/schemas
+            # A NEW version's schema is untracked, so the diff above is empty for it -- the very
+            # case that needs the content most. Print any untracked schema in full; it is the only
+            # way to get it without downloading the artifact, and a failure message you cannot act
+            # on is most of the way to no failure message.
+            git ls-files --others --exclude-standard -- app/schemas | while read -r f; do
+              echo "=====NEW SCHEMA $f START====="
+              cat "$f"
+              echo ""
+              echo "=====NEW SCHEMA $f END====="
+            done
             exit 1
           fi
 
