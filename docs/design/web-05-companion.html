@@ -1,0 +1,678 @@
+<title>Daymark — The companion</title>
+
+<style>
+:root {
+  --deck:#ece5d9; --deck-2:#e4dccd; --paper:#f4efe6; --sheet:#fcfaf5;
+  --ink:#2a2722; --ink-soft:#6b655b; --ink-faint:#a49c8e; --subtle:#5f5a4e;
+  --hair:#e7dfd1; --hair-strong:#cbc1ae;
+  --chrome:#e4e7ec; --chrome-2:#d8dce4; --chrome-hair:#c6ccd6; --chrome-ink:#38414e; --chrome-soft:#586170;
+  --indigo:#3f5f7f; --indigo-deep:#2f4a64; --indigo-wash:#dde5ee;
+  --clay:#9a5044; --clay-wash:#f3e0db; --amber:#866122; --amber-wash:#f0e6d1;
+  --mood-1:#ae5747; --mood-2:#c27c46; --mood-3:#c6a24e; --mood-4:#8fa268; --mood-5:#5e8a66;
+  --mood-1-wash:#f0dad4; --mood-3-wash:#f1e8d0; --mood-4-wash:#e3e8d6; --mood-5-wash:#d9e6dc;
+  --shadow:0 1px 2px rgba(42,39,34,.06), 0 10px 30px rgba(42,39,34,.07);
+  --shadow-lg:0 2px 4px rgba(42,39,34,.07), 0 24px 60px rgba(42,39,34,.13);
+  --serif:'Iowan Old Style','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;
+  --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --mono:ui-monospace,'SF Mono','Cascadia Code',Menlo,Consolas,monospace;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --deck:#121110; --deck-2:#1a1916; --paper:#1b1a17; --sheet:#24221d;
+    --ink:#ebe5d8; --ink-soft:#b7af9e; --ink-faint:#7c7568; --subtle:#9b927f;
+    --hair:#34312a; --hair-strong:#4a463c;
+    --chrome:#1e232b; --chrome-2:#262c36; --chrome-hair:#333b46; --chrome-ink:#c8cfd9; --chrome-soft:#8b95a3;
+    --indigo:#7fa3c8; --indigo-deep:#9dbbd9; --indigo-wash:#22303e;
+    --clay:#cb8473; --clay-wash:#3a2c28; --amber:#cfa458; --amber-wash:#3a3128;
+    --mood-1-wash:#3a2c28; --mood-3-wash:#3a3528; --mood-4-wash:#2f362a; --mood-5-wash:#2a3530;
+    --shadow:0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.4);
+    --shadow-lg:0 2px 4px rgba(0,0,0,.55), 0 24px 60px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"] {
+  --deck:#121110; --deck-2:#1a1916; --paper:#1b1a17; --sheet:#24221d;
+  --ink:#ebe5d8; --ink-soft:#b7af9e; --ink-faint:#7c7568; --subtle:#9b927f;
+  --hair:#34312a; --hair-strong:#4a463c;
+  --chrome:#1e232b; --chrome-2:#262c36; --chrome-hair:#333b46; --chrome-ink:#c8cfd9; --chrome-soft:#8b95a3;
+  --indigo:#7fa3c8; --indigo-deep:#9dbbd9; --indigo-wash:#22303e;
+  --clay:#cb8473; --clay-wash:#3a2c28; --amber:#cfa458; --amber-wash:#3a3128;
+  --mood-1-wash:#3a2c28; --mood-3-wash:#3a3528; --mood-4-wash:#2f362a; --mood-5-wash:#2a3530;
+  --shadow:0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.4);
+  --shadow-lg:0 2px 4px rgba(0,0,0,.55), 0 24px 60px rgba(0,0,0,.5);
+}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--deck);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:var(--serif);font-weight:600;line-height:1.15;margin:0;text-wrap:balance}
+p{margin:0}
+a{color:var(--indigo)}
+:focus-visible{outline:2px solid var(--indigo);outline-offset:3px;border-radius:4px}
+.wrap{max-width:1180px;margin:0 auto;padding:0 28px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--chrome-soft)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+header.mast{border-bottom:1px solid var(--hair);background:linear-gradient(180deg,color-mix(in oklab,var(--deck-2) 70%,transparent),transparent);padding:44px 0 38px}
+.mast-top{display:flex;justify-content:space-between;align-items:baseline;gap:20px;flex-wrap:wrap;margin-bottom:28px}
+.mast-mark{display:flex;align-items:baseline;gap:12px}
+.mast-mark strong{font-family:var(--serif);font-size:19px}
+.mast-mark span{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--chrome-soft)}
+.tbtn{font:inherit;font-size:12px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;background:var(--chrome);color:var(--chrome-ink);border:1px solid var(--chrome-hair);border-radius:4px;padding:6px 12px;cursor:pointer;transition:background 140ms}
+.tbtn:hover{background:var(--chrome-2)}
+h1.mast-h{font-size:clamp(32px,4.6vw,52px);letter-spacing:-.022em;max-width:17ch}
+h1.mast-h em{font-style:normal;color:var(--indigo)}
+.dek{margin-top:18px;max-width:64ch;font-size:17.5px;color:var(--ink-soft)}
+.chips{margin-top:24px;display:flex;gap:9px;flex-wrap:wrap}
+.chip{font-family:var(--mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;padding:5px 10px;border-radius:3px;border:1px solid var(--chrome-hair);color:var(--chrome-ink);background:var(--chrome)}
+.chip.new{border-color:var(--indigo);color:var(--indigo);background:var(--indigo-wash)}
+.chip.warn{border-color:var(--amber);color:var(--amber);background:var(--amber-wash)}
+.chip.crit{border-color:var(--clay);color:var(--clay);background:var(--clay-wash)}
+
+section{padding:64px 0;border-bottom:1px solid var(--hair)}
+section:last-of-type{border-bottom:0}
+.sec-head{display:grid;grid-template-columns:180px minmax(0,1fr);gap:32px;align-items:start;margin-bottom:30px}
+.sec-head-l{display:flex;flex-direction:column;gap:10px;align-items:flex-start;padding-top:5px}
+.sec-head h2{font-size:clamp(23px,2.9vw,31px);letter-spacing:-.018em;max-width:24ch}
+.sec-head p{margin-top:13px;color:var(--ink-soft);max-width:68ch;font-size:16.5px}
+@media(max-width:860px){.sec-head{grid-template-columns:1fr;gap:12px}}
+
+/* ── phone ─────────────────────────────────────────────── */
+.stage{display:grid;grid-template-columns:300px minmax(0,1fr);gap:26px;align-items:start}
+@media(max-width:900px){.stage{grid-template-columns:1fr}}
+.phone{width:300px;border:10px solid #1c1a17;border-radius:34px;background:var(--paper);box-shadow:var(--shadow-lg);overflow:hidden;position:relative}
+.phone-notch{height:22px;background:#1c1a17;position:relative}
+.phone-notch::after{content:'';position:absolute;left:50%;transform:translateX(-50%);top:5px;width:74px;height:5px;border-radius:99px;background:#3a3733}
+.phone-body{min-height:508px;display:flex;flex-direction:column;position:relative;background:var(--paper)}
+.pbar{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--hair)}
+.pbar h4{font-size:15px}
+.pbar .sp{flex:1}
+.pcontent{padding:13px 14px;display:flex;flex-direction:column;gap:10px;flex:1}
+.pcard{background:var(--sheet);border:1px solid var(--hair);border-radius:10px;padding:11px 12px;box-shadow:var(--shadow)}
+.pcard .t{font-size:12.5px;color:var(--ink-soft)}
+.pcard .n{font-family:var(--serif);font-size:15px;margin-top:2px}
+.pmood{display:flex;gap:4px;margin-top:8px}
+.pmood i{flex:1;height:22px;border-radius:3px}
+
+/* the companion */
+.comp-dock{position:absolute;right:12px;bottom:12px;z-index:5}
+.comp-fab{width:50px;height:50px;border-radius:50%;border:1px solid var(--hair-strong);background:var(--sheet);box-shadow:var(--shadow-lg);cursor:pointer;display:grid;place-items:center;transition:transform 160ms cubic-bezier(.2,.8,.3,1)}
+.comp-fab:hover{transform:translateY(-2px)}
+.comp-glyph{width:19px;height:19px;border-radius:50%;border:1.6px solid var(--indigo);position:relative}
+.comp-glyph::after{content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:7px;height:1.6px;border-radius:2px;background:var(--indigo);box-shadow:0 -4px 0 var(--indigo),0 4px 0 var(--indigo)}
+.comp-dot{position:absolute;top:-1px;right:-1px;width:11px;height:11px;border-radius:50%;background:var(--indigo);border:2px solid var(--paper)}
+
+.comp-panel{position:absolute;inset:auto 10px 10px 10px;background:var(--sheet);border:1px solid var(--hair-strong);border-radius:16px;box-shadow:var(--shadow-lg);z-index:6;overflow:hidden;animation:rise 300ms cubic-bezier(.2,.8,.3,1)}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.comp-hd{display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid var(--hair);background:var(--chrome)}
+.comp-hd .nm{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--chrome-soft);flex:1}
+.comp-x{border:0;background:none;color:var(--chrome-soft);font:inherit;font-size:16px;line-height:1;cursor:pointer;padding:2px 4px;border-radius:4px}
+.comp-x:hover{background:var(--chrome-2)}
+.comp-body{padding:14px 13px 13px}
+.comp-say{font-family:var(--serif);font-size:16.5px;line-height:1.45;animation:fade 260ms ease}
+@keyframes fade{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.comp-why{font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;color:var(--indigo);background:var(--indigo-wash);border:1px solid color-mix(in oklab,var(--indigo) 26%,transparent);border-radius:4px;padding:4px 7px;margin-top:9px;display:inline-block}
+.comp-opts{display:flex;flex-direction:column;gap:7px;margin-top:13px}
+.comp-opt{text-align:left;font:inherit;font-size:13.5px;background:var(--paper);color:var(--ink);border:1px solid var(--hair-strong);border-radius:9px;padding:9px 11px;cursor:pointer;transition:border-color 140ms,transform 140ms,background 140ms}
+.comp-opt:hover{border-color:var(--indigo);background:var(--indigo-wash)}
+.comp-opt:active{transform:translateY(1px)}
+.comp-opt.end{border-style:dashed;color:var(--ink-soft)}
+.comp-end{font-size:13px;color:var(--subtle);margin-top:11px;padding-top:11px;border-top:1px solid var(--hair)}
+
+.hidden-note{position:absolute;inset:auto 12px 12px 12px;background:var(--chrome);border:1px dashed var(--chrome-hair);border-radius:10px;padding:11px 12px;font-size:12px;color:var(--chrome-soft);z-index:5}
+
+/* signals console */
+.sig{background:var(--chrome);border:1px solid var(--chrome-hair);border-radius:12px;overflow:hidden}
+.sig-hd{padding:12px 16px;border-bottom:1px solid var(--chrome-hair);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sig-hd h4{font-family:var(--sans);font-size:14px;font-weight:600;color:var(--chrome-ink)}
+.sig-hd .sp{flex:1}
+.sig-body{padding:14px 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(196px,1fr));gap:12px}
+.sig-row{display:flex;flex-direction:column;gap:5px}
+.sig-row label{font-family:var(--mono);font-size:10px;letter-spacing:.07em;color:var(--chrome-soft);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.sig-row label b{color:var(--chrome-ink);font-weight:600;font-size:11px}
+.sig-row input[type=range]{width:100%;accent-color:var(--indigo)}
+.seg{display:flex;border:1px solid var(--chrome-hair);border-radius:6px;overflow:hidden}
+.seg button{flex:1;font:inherit;font-size:11.5px;background:var(--chrome-2);color:var(--chrome-ink);border:0;border-right:1px solid var(--chrome-hair);padding:5px 4px;cursor:pointer}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--indigo);color:#fff}
+.sig-foot{padding:11px 16px;border-top:1px solid var(--chrome-hair);font-family:var(--mono);font-size:10.5px;color:var(--chrome-soft)}
+
+.trace{background:var(--sheet);border:1px solid var(--hair);border-radius:12px;margin-top:18px;overflow:hidden}
+.trace-hd{padding:11px 16px;border-bottom:1px solid var(--hair);font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--chrome-soft)}
+.trace-body{padding:12px 16px;font-family:var(--mono);font-size:11.5px;line-height:1.8;color:var(--ink-soft);max-height:180px;overflow:auto}
+.trace-body .ok{color:var(--indigo)}
+.trace-body .no{color:var(--clay)}
+.trace-body .k{color:var(--ink)}
+
+/* authoring */
+.auth{border:1px solid var(--hair-strong);border-radius:12px;overflow:hidden;box-shadow:var(--shadow-lg);background:var(--paper)}
+.auth-bar{display:flex;align-items:center;gap:12px;background:var(--chrome-2);border-bottom:1px solid var(--chrome-hair);padding:9px 14px}
+.auth-url{flex:1;font-family:var(--mono);font-size:11.5px;color:var(--chrome-soft);background:var(--chrome);border:1px solid var(--chrome-hair);border-radius:999px;padding:4px 12px}
+.auth-body{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:0;min-height:420px}
+@media(max-width:800px){.auth-body{grid-template-columns:1fr}}
+.auth-main{padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+.auth-side{background:var(--chrome);border-left:1px solid var(--chrome-hair);padding:16px 18px}
+@media(max-width:800px){.auth-side{border-left:0;border-top:1px solid var(--chrome-hair)}}
+.node{background:var(--sheet);border:1px solid var(--hair);border-radius:10px;padding:12px 14px}
+.node h5{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--chrome-soft);margin:0 0 8px;font-weight:500}
+.node .say{font-family:var(--serif);font-size:15.5px}
+.pred{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;margin-top:10px;padding:9px 11px;background:var(--paper);border:1px dashed var(--hair-strong);border-radius:8px}
+.pred select,.pred input{font:inherit;font-family:var(--mono);font-size:12px;border:1px solid var(--hair-strong);background:var(--sheet);color:var(--ink);border-radius:5px;padding:3px 6px}
+.pred select:disabled{opacity:.45;cursor:not-allowed}
+.opt-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px dashed var(--hair);font-size:13.5px}
+.opt-row:last-child{border-bottom:0}
+.opt-row .g{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
+
+.sigtable{width:100%;border-collapse:collapse;font-size:12.5px}
+.sigtable th{text-align:left;font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--chrome-soft);padding:0 6px 7px;border-bottom:1px solid var(--chrome-hair)}
+.sigtable td{padding:6px;border-bottom:1px solid var(--chrome-hair);font-family:var(--mono);font-size:11px;color:var(--chrome-ink)}
+.sigtable tr:last-child td{border-bottom:0}
+.yes{color:var(--indigo);font-weight:600}
+.no2{color:var(--clay);font-weight:600}
+
+.finding{background:var(--sheet);border:1px solid var(--hair-strong);border-left:3px solid var(--clay);border-radius:10px;padding:20px 22px;margin-bottom:14px}
+.finding h4{font-size:16.5px;margin-bottom:8px}
+.finding p{font-size:14.5px;color:var(--ink-soft)}
+.finding p+p{margin-top:9px}
+.finding code{font-family:var(--mono);font-size:12.5px;color:var(--clay);background:var(--clay-wash);padding:1px 5px;border-radius:3px}
+.finding.ok{border-left-color:var(--indigo)}
+.finding.ok code{color:var(--indigo);background:var(--indigo-wash)}
+
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));margin-top:20px;border-top:1px solid var(--hair)}
+.note{padding:17px 20px 17px 0;border-right:1px solid var(--hair)}
+.note:last-child{border-right:0}
+.note h5{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--chrome-soft);margin:0 0 7px;font-weight:500}
+.note p{font-size:13.5px;color:var(--ink-soft)}
+.note code{font-family:var(--mono);font-size:12px;color:var(--indigo)}
+@media(max-width:700px){.note{border-right:0;border-bottom:1px solid var(--hair);padding-right:0}.note:last-child{border-bottom:0}}
+
+footer{padding:40px 0 56px}
+footer p{font-family:var(--mono);font-size:11.5px;color:var(--ink-faint)}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.001ms!important;transition-duration:.001ms!important}}
+</style>
+
+<header class="mast">
+  <div class="wrap">
+    <div class="mast-top">
+      <div class="mast-mark"><strong>Daymark</strong><span>The companion</span></div>
+      <button class="tbtn" id="theme" type="button">Theme</button>
+    </div>
+    <h1 class="mast-h">It asks, <em>then it listens.</em></h1>
+    <p class="dek">
+      A presence you can open, talk to through fixed choices, and hide entirely. Every line is written
+      in advance; every branch is keyed to something you actually logged. It never guesses what you
+      feel — it hands you back what you told it. <strong>The dialogue below really runs.</strong> Change
+      the signals and watch the branches change.
+    </p>
+    <div class="chips">
+      <span class="chip new">Interactive — click through it</span>
+      <span class="chip">Engine already exists</span>
+      <span class="chip warn">3 security findings, fixes proposed</span>
+      <span class="chip crit">Nothing built</span>
+    </div>
+  </div>
+</header>
+
+<!-- ══ LIVE DIALOGUE ══ -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">How it functions</span><span class="chip new">Live</span></div>
+      <div>
+        <h2>Same person, different week, different conversation.</h2>
+        <p>
+          The panel on the right is the signal set — the eight facts the companion is allowed to know.
+          Move them and the dialogue re-plans in real time. Every "why this line" tag shows the actual
+          predicate that fired, because a system that can explain itself in one sentence is the whole
+          reason this is rules and not a model.
+        </p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="phone">
+        <div class="phone-notch"></div>
+        <div class="phone-body">
+          <div class="pbar"><h4>Today</h4><span class="sp"></span><span class="chip" style="font-size:9px;padding:3px 7px">Tue 15</span></div>
+          <div class="pcontent">
+            <div class="pcard">
+              <span class="t">How today felt</span>
+              <span class="n">Not checked in yet</span>
+              <div class="pmood">
+                <i style="background:var(--mood-1-wash)"></i><i style="background:var(--mood-3-wash)"></i>
+                <i style="background:var(--mood-4-wash)"></i><i style="background:var(--mood-5-wash)"></i>
+              </div>
+            </div>
+            <div class="pcard"><span class="t">This week</span><span class="n" id="week-line">4 check-ins</span></div>
+            <div class="pcard" style="opacity:.55"><span class="t">Goals</span><span class="n">2 active</span></div>
+          </div>
+          <div class="comp-dock" id="dock"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="sig">
+          <div class="sig-hd">
+            <h4>Signals</h4><span class="sp"></span>
+            <span class="chip" style="font-size:9.5px">closed list of 8</span>
+          </div>
+          <div class="sig-body">
+            <div class="sig-row">
+              <label for="s1">daysSinceLastOpen <b id="v1">7</b></label>
+              <input id="s1" type="range" min="0" max="21" value="7">
+            </div>
+            <div class="sig-row">
+              <label for="s2">hardDaysLast7 <b id="v2">3</b></label>
+              <input id="s2" type="range" min="0" max="7" value="3">
+            </div>
+            <div class="sig-row">
+              <label for="s3">checkInsLast7 <b id="v3">4</b></label>
+              <input id="s3" type="range" min="0" max="7" value="4">
+            </div>
+            <div class="sig-row">
+              <label>hasSafetyPlan <b id="v4">yes</b></label>
+              <div class="seg" id="s4"><button data-v="1" class="on">yes</button><button data-v="0">no</button></div>
+            </div>
+            <div class="sig-row">
+              <label>prescribedModules <b id="v5">1</b></label>
+              <div class="seg" id="s5"><button data-v="1" class="on">compassion</button><button data-v="0">none</button></div>
+            </div>
+            <div class="sig-row">
+              <label>timeOfDay <b id="v6">evening</b></label>
+              <div class="seg" id="s6"><button data-v="morning">morning</button><button data-v="day">day</button><button data-v="evening" class="on">evening</button><button data-v="night">night</button></div>
+            </div>
+          </div>
+          <div class="sig-foot">All local. None inferential. <span style="color:var(--clay)">hardDaysLast7 is a count of what you logged — never a label.</span></div>
+        </div>
+
+        <div class="trace">
+          <div class="trace-hd">Why it said that</div>
+          <div class="trace-body" id="trace"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <h5>No text box, on purpose</h5>
+        <p>Fixed choices have no "typed something real into a thing that can't answer" failure. It's
+        also more honest than a chat field, which implies parsing it will never do.</p>
+      </div>
+      <div class="note">
+        <h5>"I just wanted to say it" ends the conversation</h5>
+        <p>Not every branch leads somewhere. A first-class ending that offers nothing is what stops the
+        companion feeling like a funnel.</p>
+      </div>
+      <div class="note">
+        <h5>Hidden means hidden</h5>
+        <p>Dismiss it and it does not come back on its own, and never reappears to say it missed you.
+        Un-hiding is a setting you go and find.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ AUTHORING ══ -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">Both sides</span><span class="chip new">New</span></div>
+      <div>
+        <h2>A clinician writes dialogue with the tool they already have.</h2>
+        <p>
+          Dialogue is a definition — the same data shape as an instrument, gated by the same honesty
+          checks, carried by the same signed envelope. What changes for a clinician is which signals
+          they may branch on, and the greyed rows below are the security model made visible rather
+          than documented.
+        </p>
+      </div>
+    </div>
+
+    <div class="auth">
+      <div class="auth-bar">
+        <span class="chip" style="font-size:9.5px">Chromium</span>
+        <span class="auth-url">daymark.example.com/therapist/dialogue/new</span>
+        <span class="chip" style="font-size:9.5px">authorDialogue · granted</span>
+      </div>
+      <div class="auth-body">
+        <div class="auth-main">
+          <div class="node">
+            <h5>Opening line</h5>
+            <div class="say">"You picked up the wind-down check a couple of weeks ago. How's it been sitting?"</div>
+            <div class="pred">
+              <span style="color:var(--chrome-soft)">show when</span>
+              <select id="pref">
+                <option>prescribedModules</option>
+                <option>timeOfDay</option>
+                <option value="x" disabled>hardDaysLast7 — not yours to read</option>
+                <option value="x" disabled>hasSafetyPlan — never disclosed</option>
+                <option value="x" disabled>daysSinceLastOpen — not yours to read</option>
+                <option value="x" disabled>checkInsLast7 — not yours to read</option>
+              </select>
+              <select><option>includes</option><option>eq</option><option>ne</option></select>
+              <input value="evening-winddown" size="17">
+            </div>
+          </div>
+
+          <div class="node">
+            <h5>Replies they can pick</h5>
+            <div class="opt-row"><span class="g">1</span><span>It's been useful</span></div>
+            <div class="opt-row"><span class="g">2</span><span>I keep forgetting it</span></div>
+            <div class="opt-row"><span class="g">3</span><span>It's not for me</span></div>
+            <div class="opt-row"><span class="g">4</span><span style="color:var(--ink-soft)">I'd rather not get into it</span> <span class="chip" style="font-size:9px;padding:2px 6px">ends here</span></div>
+          </div>
+
+          <div class="node" style="border-color:var(--indigo)">
+            <h5>Branch — if "I keep forgetting it"</h5>
+            <div class="say">"That's really common. Want to try tying it to something you already do?"</div>
+            <div class="pred" style="border-style:solid;border-color:var(--indigo-wash);background:var(--indigo-wash)">
+              <span style="color:var(--indigo)">offers</span>
+              <span style="color:var(--ink)">an implementation intention — "when I ___, I will ___"</span>
+            </div>
+          </div>
+        </div>
+
+        <aside class="auth-side">
+          <h5 style="font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--chrome-soft);margin:0 0 12px;font-weight:500">Signals you may branch on</h5>
+          <table class="sigtable">
+            <thead><tr><th>signal</th><th>app</th><th>you</th></tr></thead>
+            <tbody>
+              <tr><td>prescribedModules</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+              <tr><td>timeOfDay</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+              <tr><td>shared scores</td><td class="yes">✓</td><td class="yes">✓*</td></tr>
+              <tr><td>hardDaysLast7</td><td class="yes">✓</td><td class="no2">✕</td></tr>
+              <tr><td>daysSinceLastOpen</td><td class="yes">✓</td><td class="no2">✕</td></tr>
+              <tr><td>daysSinceLastCheckIn</td><td class="yes">✓</td><td class="no2">✕</td></tr>
+              <tr><td>checkInsLast7</td><td class="yes">✓</td><td class="no2">✕</td></tr>
+              <tr><td>lastOfferOutcome</td><td class="yes">✓</td><td class="no2">✕</td></tr>
+              <tr><td>hasSafetyPlan</td><td class="yes">✓</td><td class="no2">✕</td></tr>
+            </tbody>
+          </table>
+          <p style="font-size:11.5px;color:var(--chrome-soft);margin-top:12px;line-height:1.5">
+            *only where a <code style="font-family:var(--mono)">read.share</code> grant already covers
+            them.
+          </p>
+          <p style="font-size:12px;color:var(--chrome-ink);margin-top:12px;line-height:1.5;border-top:1px solid var(--chrome-hair);padding-top:11px">
+            <strong>The rule:</strong> a predicate may only reference signals its author is already
+            permitted to see.
+          </p>
+        </aside>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ SECURITY ══ -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">Security</span><span class="chip warn">Found by running it</span></div>
+      <div>
+        <h2>What letting someone else's logic run on your phone actually costs.</h2>
+        <p>
+          Three findings, established by executing the code rather than reading the comment above it.
+          The third is the one that shapes the design.
+        </p>
+      </div>
+    </div>
+
+    <div class="finding">
+      <h4>1. <code>ne</code> fails open on a signal that doesn't exist</h4>
+      <p>
+        Every other operator returns <code>false</code> for a missing signal. <code>ne</code> returns
+        <strong>true</strong>, because <code>undefined !== 1</code>. A branch gated on a typo, or on a
+        signal a later release renamed, <em>shows</em> instead of hiding.
+      </p>
+      <p><strong>Fix:</strong> unknown refs fail closed for every operator, and validate every
+      <code>ref</code> against the closed vocabulary at authoring time so a typo is a useful error
+      rather than a silent behaviour change.</p>
+    </div>
+
+    <div class="finding">
+      <h4>2. The evaluator has no depth limit</h4>
+      <p>
+        50,000 nested <code>all: [...]</code> nodes throw <em>Maximum call stack size exceeded</em>.
+        Bounded impact — it's the person's own device and the author is someone they granted — but a
+        buggy generator hard-crashes the runner.
+      </p>
+      <p><strong>Fix:</strong> cap depth and node count at validation (16 and 256 are generous) and
+      bound the recursion defensively at evaluation too.</p>
+    </div>
+
+    <div class="finding">
+      <h4>3. Branches are an oracle — and this one is a design property, not a bug</h4>
+      <p>
+        Predicates evaluate on the device against private data, so a therapist never sees the result.
+        <strong>But they can infer it from anything they can observe.</strong> Author "if
+        <code>hardDaysLast7 ≥ 3</code>, offer a module they can accept", and the assignment lifecycle
+        the therapist already watches — delivered, accepted, completed — leaks the branch condition.
+        They learn a fact about private mood data that no grant gave them. Nothing was transmitted;
+        the shape of the interaction did it.
+      </p>
+      <p>
+        It generalises: <em>any authored branch whose arms differ in a therapist-observable way is an
+        oracle for whatever it branched on.</em>
+      </p>
+      <p><strong>Fix:</strong> partition the signal vocabulary by author — the table in the previous
+      section. It falls straight out of the capability model that already exists.</p>
+    </div>
+
+    <div class="finding ok">
+      <h4>What held up</h4>
+      <p>
+        <strong>No injection path.</strong> There is no <code>{@html}</code> anywhere in the tree;
+        authored text renders through Svelte interpolation, which escapes by default. Structural, not
+        a filter to bypass.
+      </p>
+      <p>
+        <strong>No code execution.</strong> The DSL is data — <code>all</code> / <code>any</code> /
+        <code>ref</code> / <code>op</code> / <code>value</code>. No eval, no function references. And
+        the honesty gate already rejects self-harm slots and requires non-diagnostic framing, so
+        dialogue inherits all of it for free.
+      </p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Daymark · the companion · renders, not implementation · signals and dialogue are illustrative; the branching engine, honesty gate and runner are real</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  'use strict';
+  var root=document.documentElement;
+  document.getElementById('theme').addEventListener('click',function(){
+    var dark=root.getAttribute('data-theme')==='dark'||(!root.hasAttribute('data-theme')&&matchMedia('(prefers-color-scheme: dark)').matches);
+    root.setAttribute('data-theme',dark?'light':'dark');
+  });
+
+  /* ---- the real predicate shape, evaluated the way predicate.ts does ---- */
+  function evalPred(p,a){
+    if('all' in p) return p.all.every(function(c){return evalPred(c,a)});
+    if('any' in p) return p.any.some(function(c){return evalPred(c,a)});
+    var v=a[p.ref];
+    switch(p.op){
+      case 'eq': return v===p.value;
+      case 'gte': return Number(v)>=Number(p.value);
+      case 'lte': return Number(v)<=Number(p.value);
+      case 'gt': return Number(v)>Number(p.value);
+      case 'includes': return Array.isArray(v)&&v.indexOf(p.value)>=0;
+      default: return false;
+    }
+  }
+  var human={eq:'=',gte:'≥',lte:'≤',gt:'>',includes:'includes'};
+  function describe(p){
+    if('all' in p) return p.all.map(describe).join(' and ');
+    if('any' in p) return p.any.map(describe).join(' or ');
+    return p.ref+' '+(human[p.op]||p.op)+' '+JSON.stringify(p.value);
+  }
+
+  /* ---- signals ---- */
+  var S={daysSinceLastOpen:7,hardDaysLast7:3,checkInsLast7:4,hasSafetyPlan:1,prescribedModules:['compassion-hard-moment'],timeOfDay:'evening'};
+
+  /* ---- dialogue: every line premade, every branch a predicate ---- */
+  var NODES={
+    open:{ pick:[
+      {when:{all:[{ref:'daysSinceLastOpen',op:'gte',value:5},{ref:'hardDaysLast7',op:'gte',value:3}]},
+       say:'It’s been a little while, and the days you did log were on the harder end. No agenda.'},
+      {when:{ref:'daysSinceLastOpen',op:'gte',value:5},
+       say:'It’s been about a week. No agenda — I just leave the door open.'},
+      {when:{ref:'hardDaysLast7',op:'gte',value:4},
+       say:'You’ve been here most days, and most of them were heavy ones.'},
+      {when:{ref:'checkInsLast7',op:'lte',value:1},
+       say:'Not much logged this week. That’s allowed — empty weeks are still weeks.'},
+      {when:{ref:'timeOfDay',op:'eq',value:'night'},
+       say:'Late one. Nothing here needs doing tonight.'},
+      {when:null, say:'Hello. Nothing pressing — just checking the door’s open.'}
+    ], opts:[
+      {t:'I’m doing alright',go:'ok'},
+      {t:'It’s been rough',go:'rough'},
+      {t:'Just looking around',go:'browse'},
+      {t:'Not now',go:'dismiss',end:true}
+    ]},
+    ok:{ pick:[
+      {when:{ref:'hardDaysLast7',op:'gte',value:3},
+       say:'Good. For what it’s worth, a few of this week’s check-ins were on the harder end — both things can be true.'},
+      {when:null, say:'Glad to hear it. I won’t make a project of it.'}
+    ], opts:[
+      {t:'Log today while I’m here',go:'done'},
+      {t:'That’s all',go:'dismiss',end:true}
+    ]},
+    rough:{ pick:[
+      {when:{ref:'hardDaysLast7',op:'gte',value:3},
+       say:'That tracks — {hardDaysLast7} of your last seven check-ins were on the harder end.'},
+      {when:{ref:'checkInsLast7',op:'lte',value:1},
+       say:'I don’t have much from this week to go on, so I’ll just take your word for it.'},
+      {when:null, say:'I’m sorry. Thanks for saying so.'}
+    ], opts:[
+      {t:'Want something to try?',go:'offer'},
+      {t:'I just wanted to say it out loud',go:'said',end:true},
+      {t:'Show me what I wrote',go:'done'}
+    ]},
+    offer:{ pick:[
+      {when:{ref:'prescribedModules',op:'includes',value:'compassion-hard-moment'},
+       say:'There’s the hard-moment exercise your therapist set up — about four minutes, nothing scored, nothing shared.'},
+      {when:{ref:'hasSafetyPlan',op:'eq',value:1},
+       say:'Nothing new from me, but you wrote yourself a plan for days like this. Want it?'},
+      {when:null, say:'I don’t have much to offer that you didn’t already put here yourself. Want to just log it?'}
+    ], opts:[
+      {t:'Open it',go:'done'},
+      {t:'Maybe later',go:'dismiss',end:true}
+    ]},
+    browse:{ pick:[{when:null,say:'Go ahead. I’ll be in the corner if you want me.'}],
+      opts:[{t:'Thanks',go:'dismiss',end:true}]},
+    said:{ pick:[{when:null,say:'Okay. That counts as a thing you did today.'}],opts:[]},
+    done:{ pick:[{when:null,say:'— opens that screen —'}],opts:[]}
+  };
+
+  var state={open:false,hidden:false,node:'open',trace:[]};
+  var dock=document.getElementById('dock'), trace=document.getElementById('trace');
+
+  function choose(node){
+    var n=NODES[node], log=[];
+    for(var i=0;i<n.pick.length;i++){
+      var c=n.pick[i];
+      if(!c.when){ log.push({r:'fallback',ok:true}); return {say:c.say,log:log,why:'no branch matched — fallback line'}; }
+      var ok=evalPred(c.when,S);
+      log.push({r:describe(c.when),ok:ok});
+      if(ok) return {say:c.say,log:log,why:describe(c.when)};
+    }
+    return {say:'…',log:log,why:''};
+  }
+  function fill(s){ return s.replace(/\{(\w+)\}/g,function(_,k){return S[k]}); }
+
+  function render(){
+    dock.textContent='';
+    if(state.hidden){
+      var h=document.createElement('div'); h.className='hidden-note';
+      h.textContent='Companion hidden. Settings › When Daymark asks → bring it back.';
+      dock.appendChild(h); trace.textContent='hidden — nothing evaluated'; return;
+    }
+    if(!state.open){
+      var b=document.createElement('button'); b.className='comp-fab'; b.type='button';
+      b.setAttribute('aria-label','Open the companion');
+      b.innerHTML='<span class="comp-glyph"></span>';
+      var d=document.createElement('span'); d.className='comp-dot'; b.appendChild(d);
+      b.onclick=function(){state.open=true;state.node='open';render()};
+      dock.appendChild(b);
+      trace.textContent='closed — the arbiter is only consulted if it wants to open itself';
+      return;
+    }
+    var r=choose(state.node), n=NODES[state.node];
+    var p=document.createElement('div'); p.className='comp-panel';
+    var hd=document.createElement('div'); hd.className='comp-hd';
+    hd.innerHTML='<span class="comp-glyph" style="width:15px;height:15px"></span><span class="nm">Companion</span>';
+    var x=document.createElement('button'); x.className='comp-x'; x.type='button'; x.textContent='×';
+    x.setAttribute('aria-label','Close'); x.onclick=function(){state.open=false;render()};
+    var hide=document.createElement('button'); hide.className='comp-x'; hide.type='button';
+    hide.style.fontSize='11px'; hide.textContent='hide'; hide.setAttribute('aria-label','Hide the companion');
+    hide.onclick=function(){state.hidden=true;state.open=false;render()};
+    hd.appendChild(hide); hd.appendChild(x); p.appendChild(hd);
+
+    var bd=document.createElement('div'); bd.className='comp-body';
+    var say=document.createElement('div'); say.className='comp-say'; say.textContent=fill(r.say); bd.appendChild(say);
+    if(r.why){ var w=document.createElement('div'); w.className='comp-why'; w.textContent=r.why; bd.appendChild(w); }
+    if(n.opts.length){
+      var box=document.createElement('div'); box.className='comp-opts';
+      n.opts.forEach(function(o){
+        var btn=document.createElement('button'); btn.className='comp-opt'+(o.end?' end':''); btn.type='button';
+        btn.textContent=o.t;
+        btn.onclick=function(){
+          if(o.go==='dismiss'){state.open=false;render();return}
+          state.node=o.go; render();
+        };
+        box.appendChild(btn);
+      });
+      bd.appendChild(box);
+    } else {
+      var e=document.createElement('div'); e.className='comp-end';
+      e.textContent='Conversation ends here. Nothing is queued, nothing follows up.';
+      bd.appendChild(e);
+      var back=document.createElement('button'); back.className='comp-opt'; back.type='button';
+      back.style.marginTop='11px'; back.textContent='Start over';
+      back.onclick=function(){state.node='open';render()};
+      bd.appendChild(back);
+    }
+    p.appendChild(bd); dock.appendChild(p);
+
+    trace.textContent='';
+    r.log.forEach(function(l){
+      var row=document.createElement('div');
+      row.innerHTML='<span class="'+(l.ok?'ok':'no')+'">'+(l.ok?'✓':'✕')+'</span> <span class="k">'+l.r+'</span>';
+      trace.appendChild(row);
+    });
+    var f=document.createElement('div'); f.style.marginTop='8px'; f.style.color='var(--subtle)';
+    f.textContent='node: '+state.node;
+    trace.appendChild(f);
+  }
+
+  function bindRange(id,vid,key){
+    var el=document.getElementById(id), out=document.getElementById(vid);
+    el.addEventListener('input',function(){
+      S[key]=Number(el.value); out.textContent=el.value;
+      if(key==='checkInsLast7') document.getElementById('week-line').textContent=el.value+' check-ins';
+      render();
+    });
+  }
+  bindRange('s1','v1','daysSinceLastOpen');
+  bindRange('s2','v2','hardDaysLast7');
+  bindRange('s3','v3','checkInsLast7');
+
+  function bindSeg(id,vid,fn){
+    var seg=document.getElementById(id);
+    seg.querySelectorAll('button').forEach(function(b){
+      b.addEventListener('click',function(){
+        seg.querySelectorAll('button').forEach(function(o){o.classList.remove('on')});
+        b.classList.add('on'); fn(b.getAttribute('data-v'));
+        document.getElementById(vid).textContent=b.textContent; render();
+      });
+    });
+  }
+  bindSeg('s4','v4',function(v){S.hasSafetyPlan=Number(v)});
+  bindSeg('s5','v5',function(v){S.prescribedModules=Number(v)?['compassion-hard-moment']:[]});
+  bindSeg('s6','v6',function(v){S.timeOfDay=v});
+
+  render();
+})();
+</script>

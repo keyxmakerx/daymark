@@ -1,0 +1,602 @@
+<title>Daymark — The report &amp; projects</title>
+<style>
+:root{
+ --deck:#ece5d9;--deck-2:#e4dccd;--paper:#f4efe6;--sheet:#fcfaf5;
+ --ink:#2a2722;--ink-soft:#6b655b;--ink-faint:#a49c8e;--subtle:#5f5a4e;
+ --hair:#e7dfd1;--hair-strong:#cbc1ae;
+ --chrome:#e4e7ec;--chrome-2:#d8dce4;--chrome-hair:#c6ccd6;--chrome-ink:#38414e;--chrome-soft:#586170;
+ --indigo:#3f5f7f;--indigo-deep:#2f4a64;--indigo-wash:#dde5ee;
+ --clay:#9a5044;--clay-wash:#f3e0db;--amber:#866122;--amber-wash:#f0e6d1;
+ --mood-1:#ae5747;--mood-2:#c27c46;--mood-3:#c6a24e;--mood-4:#8fa268;--mood-5:#5e8a66;
+ --mood-3-wash:#f1e8d0;--mood-4-wash:#e3e8d6;
+ --shadow:0 1px 2px rgba(42,39,34,.06),0 10px 30px rgba(42,39,34,.07);
+ --shadow-lg:0 2px 4px rgba(42,39,34,.07),0 24px 60px rgba(42,39,34,.13);
+ --serif:'Iowan Old Style','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;
+ --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+ --mono:ui-monospace,'SF Mono','Cascadia Code',Menlo,Consolas,monospace;
+ --z:.52;
+ color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+ --deck:#121110;--deck-2:#1a1916;--paper:#1b1a17;--sheet:#24221d;
+ --ink:#ebe5d8;--ink-soft:#b7af9e;--ink-faint:#7c7568;--subtle:#9b927f;
+ --hair:#34312a;--hair-strong:#4a463c;
+ --chrome:#1e232b;--chrome-2:#262c36;--chrome-hair:#333b46;--chrome-ink:#c8cfd9;--chrome-soft:#8b95a3;
+ --indigo:#7fa3c8;--indigo-deep:#9dbbd9;--indigo-wash:#22303e;
+ --clay:#cb8473;--clay-wash:#3a2c28;--amber:#cfa458;--amber-wash:#3a3128;
+ --mood-3-wash:#3a3528;--mood-4-wash:#2f362a;
+ --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 30px rgba(0,0,0,.4);
+ --shadow-lg:0 2px 4px rgba(0,0,0,.55),0 24px 60px rgba(0,0,0,.5)}}
+:root[data-theme="dark"]{
+ --deck:#121110;--deck-2:#1a1916;--paper:#1b1a17;--sheet:#24221d;
+ --ink:#ebe5d8;--ink-soft:#b7af9e;--ink-faint:#7c7568;--subtle:#9b927f;
+ --hair:#34312a;--hair-strong:#4a463c;
+ --chrome:#1e232b;--chrome-2:#262c36;--chrome-hair:#333b46;--chrome-ink:#c8cfd9;--chrome-soft:#8b95a3;
+ --indigo:#7fa3c8;--indigo-deep:#9dbbd9;--indigo-wash:#22303e;
+ --clay:#cb8473;--clay-wash:#3a2c28;--amber:#cfa458;--amber-wash:#3a3128;
+ --mood-3-wash:#3a3528;--mood-4-wash:#2f362a;
+ --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 30px rgba(0,0,0,.4);
+ --shadow-lg:0 2px 4px rgba(0,0,0,.55),0 24px 60px rgba(0,0,0,.5)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--deck);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:var(--serif);font-weight:600;line-height:1.15;margin:0;text-wrap:balance}
+p{margin:0}
+:focus-visible{outline:2px solid var(--indigo);outline-offset:3px;border-radius:4px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 26px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--chrome-soft)}
+.chip{font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;padding:4px 9px;border-radius:3px;border:1px solid var(--chrome-hair);color:var(--chrome-ink);background:var(--chrome);white-space:nowrap}
+.chip.new{border-color:var(--indigo);color:var(--indigo);background:var(--indigo-wash)}
+.chip.warn{border-color:var(--amber);color:var(--amber);background:var(--amber-wash)}
+.chip.crit{border-color:var(--clay);color:var(--clay);background:var(--clay-wash)}
+header.mast{border-bottom:1px solid var(--hair);padding:38px 0 32px;background:linear-gradient(180deg,color-mix(in oklab,var(--deck-2) 70%,transparent),transparent)}
+.mast-top{display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:22px}
+.mast-top strong{font-family:var(--serif);font-size:18px}
+.mast-top span{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--chrome-soft);margin-left:10px}
+.tbtn{font:inherit;font-size:12px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;background:var(--chrome);color:var(--chrome-ink);border:1px solid var(--chrome-hair);border-radius:4px;padding:6px 12px;cursor:pointer}
+h1.h{font-size:clamp(29px,4vw,44px);letter-spacing:-.022em;max-width:19ch}
+h1.h em{font-style:normal;color:var(--indigo)}
+.dek{margin-top:15px;max-width:64ch;font-size:16.5px;color:var(--ink-soft)}
+section{padding:52px 0;border-bottom:1px solid var(--hair)}
+section:last-of-type{border-bottom:0}
+.sec-head{display:grid;grid-template-columns:170px minmax(0,1fr);gap:26px;margin-bottom:24px;align-items:start}
+.sec-head-l{display:flex;flex-direction:column;gap:9px;align-items:flex-start;padding-top:4px}
+.sec-head h2{font-size:clamp(22px,2.7vw,28px);letter-spacing:-.018em;max-width:25ch}
+.sec-head p{margin-top:11px;color:var(--ink-soft);max-width:66ch;font-size:16px}
+@media(max-width:820px){.sec-head{grid-template-columns:1fr;gap:10px}}
+
+/* ═══ TRUE-SCALE A4 ═══ */
+.zoombar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;background:var(--chrome);border:1px solid var(--chrome-hair);border-radius:8px;padding:9px 13px}
+.zoombar label{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--chrome-soft)}
+.zoombar input{flex:1;min-width:130px;max-width:280px;accent-color:var(--indigo)}
+.zoombar .rd{font-family:var(--mono);font-size:11px;color:var(--chrome-ink)}
+.zoombar .hint{font-size:12px;color:var(--chrome-soft)}
+.sheets{display:flex;gap:18px;flex-wrap:wrap}
+.slot{width:calc(793px * var(--z));height:calc(1123px * var(--z));flex:0 0 auto;position:relative}
+.page{width:793px;height:1123px;transform:scale(var(--z));transform-origin:top left;background:var(--sheet);border:1px solid var(--hair-strong);box-shadow:var(--shadow-lg);position:absolute;top:0;left:0;padding:52px 54px 40px;font-size:12px;line-height:1.5;color:var(--ink);overflow:hidden}
+.pnum{position:absolute;right:54px;bottom:22px;font-family:var(--mono);font-size:9px;color:var(--ink-faint)}
+.pside{position:absolute;left:54px;bottom:22px;font-family:var(--mono);font-size:9px;color:var(--ink-faint);letter-spacing:.1em;text-transform:uppercase}
+.p-hd{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;border-bottom:2px solid var(--ink);padding-bottom:11px}
+.p-hd h3{font-size:26px;letter-spacing:-.01em}
+.p-hd .who{font-family:var(--mono);font-size:11px;color:var(--ink-soft);margin-top:5px}
+.p-hd .rng{text-align:right;font-family:var(--mono);font-size:10.5px;color:var(--ink-soft);line-height:1.75}
+.p-lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint);margin:19px 0 8px;font-weight:600}
+.declare{background:var(--chrome);border:1px solid var(--chrome-hair);border-radius:5px;padding:9px 11px;font-size:10.5px;color:var(--chrome-ink);line-height:1.55;margin-top:13px}
+.declare b{color:var(--ink)}
+.flag{border:1.5px solid var(--clay);border-left-width:4px;background:var(--clay-wash);border-radius:5px;padding:11px 13px;margin-top:15px}
+.flag .fl{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--clay);margin-bottom:4px}
+.flag .ft{font-size:13px;line-height:1.4}
+.flag .fs{font-size:10px;color:var(--subtle);margin-top:5px}
+.ihd{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:6px}
+.ihd h4{font-size:14px}
+.prov{font-family:var(--mono);font-size:8px;letter-spacing:.07em;text-transform:uppercase;border:1px solid var(--amber);color:var(--amber);background:var(--amber-wash);border-radius:3px;padding:1px 5px}
+.dir{font-size:10px;color:var(--subtle);font-style:italic;margin-top:3px}
+.plotbox svg{display:block;width:100%;height:104px;overflow:visible}
+.ax{font-family:var(--mono);font-size:7.5px;fill:var(--ink-faint);letter-spacing:.05em}
+.gl{stroke:var(--hair);stroke-width:1}
+.bandfill{fill:var(--mood-4-wash)}
+.dens{display:flex;gap:2px;margin-top:4px}
+.dens i{flex:1;height:7px;border-radius:1px;background:var(--hair)}
+.denslbl{display:flex;justify-content:space-between;font-family:var(--mono);font-size:7.5px;color:var(--ink-faint);margin-top:2px}
+.own{background:var(--paper);border:1px dashed var(--hair-strong);border-radius:5px;padding:8px 10px;font-size:10px;color:var(--ink-soft);line-height:1.5;margin-top:9px}
+.own b{color:var(--ink)}
+table.pt{width:100%;border-collapse:collapse;font-size:10px;margin-top:6px}
+table.pt th{text-align:left;font-family:var(--mono);font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);padding:0 6px 5px;border-bottom:1px solid var(--hair-strong);font-weight:600}
+table.pt td{padding:5px 6px;border-bottom:1px solid var(--hair);vertical-align:top}
+table.pt td.n{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.md{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:5px;vertical-align:baseline}
+.pill{font-family:var(--mono);font-size:8px;letter-spacing:.06em;text-transform:uppercase;border-radius:3px;padding:1px 5px;border:1px solid}
+.pl-done{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
+.pl-dec{color:var(--subtle);border-color:var(--hair-strong);text-decoration:line-through}
+.pl-none{color:var(--clay);border-color:var(--clay);background:var(--clay-wash)}
+.jent{border-left:2px solid var(--hair-strong);padding:2px 0 2px 11px;margin-top:11px}
+.jent .jm{font-family:var(--mono);font-size:9px;color:var(--ink-faint)}
+.jent .jt{font-family:var(--serif);font-size:13px;margin-top:2px}
+.jent .jb{font-size:10.5px;color:var(--ink-soft);line-height:1.55;margin-top:3px}
+.optnote{background:var(--indigo-wash);border:1px solid color-mix(in oklab,var(--indigo) 30%,transparent);border-radius:5px;padding:9px 11px;font-size:10px;color:var(--indigo-deep);line-height:1.55;margin-top:12px}
+.verify{display:grid;grid-template-columns:104px minmax(0,1fr);gap:15px;align-items:start;margin-top:8px}
+.qr{width:104px;height:104px;image-rendering:pixelated;border:1px solid var(--hair-strong);background:#fff}
+.vtxt{font-size:10px;color:var(--ink-soft);line-height:1.6}
+.vtxt code{font-family:var(--mono);font-size:9px;color:var(--ink);word-break:break-all}
+.absent{border-top:1px solid var(--hair);padding-top:10px;font-size:9.5px;color:var(--subtle);line-height:1.6;margin-top:14px}
+.absent b{color:var(--ink)}
+
+.sidenote{background:var(--sheet);border:1px solid var(--hair);border-radius:10px;padding:15px 16px;box-shadow:var(--shadow);margin-top:18px}
+.sidenote h5{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--chrome-soft);margin:0 0 10px;font-weight:500}
+.sidenote ul{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:9px 24px}
+.sidenote li{font-size:12.5px;color:var(--ink-soft);padding-left:16px;position:relative;line-height:1.5}
+.sidenote li::before{content:'·';position:absolute;left:5px;color:var(--indigo);font-weight:700}
+.sidenote li.no::before{content:'×';color:var(--clay);font-size:11px;left:4px}
+
+/* ═══ dynamic projects ═══ */
+.proj{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px;align-items:start}
+@media(max-width:860px){.proj{grid-template-columns:1fr}}
+.pcard{background:var(--sheet);border:1px solid var(--hair);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+.pcard>header{padding:14px 16px 12px;border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.pcard h4{font-size:17px}
+.kind{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;border-radius:3px;padding:2px 7px;border:1px solid var(--indigo);color:var(--indigo);background:var(--indigo-wash)}
+.pbody{padding:13px 16px 16px;display:flex;flex-direction:column;gap:12px}
+.step{display:grid;grid-template-columns:20px minmax(0,1fr);gap:10px;align-items:start;padding:8px 0;border-bottom:1px dashed var(--hair)}
+.step:last-of-type{border-bottom:0}
+.box{width:17px;height:17px;border-radius:4px;border:1.5px solid var(--hair-strong);background:var(--paper);cursor:pointer;display:grid;place-items:center;padding:0;transition:background 140ms,border-color 140ms}
+.box.on{background:var(--ink);border-color:var(--ink)}
+.box.on::after{content:'';width:8px;height:4px;border-left:1.6px solid var(--sheet);border-bottom:1.6px solid var(--sheet);transform:rotate(-45deg) translate(1px,-1px)}
+.step .t{font-size:14px}
+.step.done .t{color:var(--ink-faint);text-decoration:line-through}
+.step .sub{font-size:11.5px;color:var(--subtle);margin-top:2px}
+.intent{font-size:12.5px;color:var(--indigo-deep);background:var(--indigo-wash);border:1px solid color-mix(in oklab,var(--indigo) 26%,transparent);border-radius:7px;padding:8px 11px;line-height:1.45}
+
+.sug{border:1px solid var(--indigo);border-left-width:3px;background:var(--indigo-wash);border-radius:9px;padding:12px 13px;animation:sin 420ms cubic-bezier(.2,.85,.3,1)}
+@keyframes sin{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+.sug .sl{font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--indigo);margin-bottom:5px}
+.sug .st{font-size:14px;line-height:1.4}
+.sug .why{font-family:var(--mono);font-size:10px;color:var(--indigo-deep);background:var(--sheet);border:1px solid color-mix(in oklab,var(--indigo) 24%,transparent);border-radius:5px;padding:5px 8px;margin-top:8px;line-height:1.45}
+.sug .acts{display:flex;gap:7px;margin-top:10px;flex-wrap:wrap}
+.b{font:inherit;font-size:12.5px;border-radius:6px;padding:6px 12px;cursor:pointer;border:1px solid var(--hair-strong);background:var(--sheet);color:var(--ink);transition:transform 130ms,background 130ms}
+.b:active{transform:translateY(1px)}
+.b.pri{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
+.b.ghost{background:transparent;color:var(--subtle)}
+.dots{display:flex;gap:3px;flex-wrap:wrap}
+.dots i{width:13px;height:13px;border-radius:3px;background:var(--hair)}
+.dots i.f{background:var(--mood-4)}
+.count{font-family:var(--mono);font-size:12.5px;color:var(--ink-soft)}
+.quiet{font-size:11.5px;color:var(--subtle);line-height:1.5}
+.archive{font:inherit;font-size:12px;background:none;border:0;color:var(--subtle);cursor:pointer;text-decoration:underline;text-underline-offset:3px;padding:0;align-self:flex-start}
+.engine{background:var(--chrome);border:1px solid var(--chrome-hair);border-radius:12px;overflow:hidden;position:sticky;top:16px}
+.engine>header{padding:12px 15px;border-bottom:1px solid var(--chrome-hair)}
+.engine h5{font-family:var(--sans);font-size:13.5px;font-weight:600;color:var(--chrome-ink);margin:0}
+.engine .sub{font-size:11.5px;color:var(--chrome-soft);margin-top:3px}
+.ebody{padding:13px 15px;display:flex;flex-direction:column;gap:11px}
+.obs{font-family:var(--mono);font-size:10.5px;color:var(--chrome-ink);background:var(--chrome-2);border-radius:6px;padding:7px 9px;line-height:1.6}
+.obs b{color:var(--indigo)}
+.gate{border:1px dashed var(--chrome-hair);border-radius:7px;padding:9px 11px;font-size:11.5px;color:var(--chrome-soft);line-height:1.5}
+.gate.met{border-style:solid;border-color:var(--indigo);color:var(--indigo-deep);background:var(--indigo-wash)}
+.gate .gl2{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:4px}
+.log{font-family:var(--mono);font-size:10px;color:var(--chrome-soft);line-height:1.75;max-height:120px;overflow:auto;border-top:1px solid var(--chrome-hair);padding-top:9px}
+
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));margin-top:20px;border-top:1px solid var(--hair)}
+.note{padding:16px 18px 16px 0;border-right:1px solid var(--hair)}
+.note:last-child{border-right:0}
+.note h5{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--chrome-soft);margin:0 0 7px;font-weight:500}
+.note p{font-size:13px;color:var(--ink-soft);line-height:1.5}
+@media(max-width:700px){.note{border-right:0;border-bottom:1px solid var(--hair);padding-right:0}.note:last-child{border-bottom:0}}
+.names{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+.name{background:var(--sheet);border:1px solid var(--hair);border-radius:10px;padding:17px;box-shadow:var(--shadow)}
+.name h4{font-size:23px}
+.name .rd{font-family:var(--mono);font-size:10px;color:var(--chrome-soft);margin-top:4px}
+.name p{font-size:12.5px;color:var(--ink-soft);margin-top:9px;line-height:1.55}
+.name.pick{border-color:var(--indigo);box-shadow:inset 0 0 0 1px var(--indigo),var(--shadow)}
+footer{padding:34px 0 50px}
+footer p{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;transition-duration:.001ms!important}}
+</style>
+
+<header class="mast">
+  <div class="wrap">
+    <div class="mast-top">
+      <div><strong>Daymark</strong><span>Report &amp; projects · v2</span></div>
+      <button class="tbtn" id="theme" type="button">Theme</button>
+    </div>
+    <h1 class="h">Two sheets, <em>four sides, four jobs.</em></h1>
+    <p class="dek">
+      Rebuilt at true A4 scale — the last version was rendered at web size, so the type looked enormous
+      and told you nothing about how it would actually read. The verification QR is back, the journal is
+      back as a page the person switches on, and no side tries to do another side's job.
+    </p>
+  </div>
+</header>
+
+<!-- ══ PDF ══ -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">The report</span><span class="chip new">True scale</span></div>
+      <div>
+        <h2>Eight sections became four sides, each with one job.</h2>
+        <p>
+          The pages below are 793 × 1123 px — real A4 at 96 dpi — with 9 and 10 pt type, scaled down to
+          fit. That is genuinely what it looks like printed. Drag the zoom to read it.
+        </p>
+      </div>
+    </div>
+
+    <div class="zoombar">
+      <label for="z">Zoom</label>
+      <input id="z" type="range" min="35" max="130" value="52">
+      <span class="rd" id="zr">52%</span>
+      <span class="hint">Real A4 · 9–10 pt body type · sides 3 and 4 only exist if the person turns them on</span>
+    </div>
+
+    <div class="sheets">
+      <!-- ── side 1 ── -->
+      <div class="slot"><div class="page">
+        <div class="p-hd">
+          <div><h3>Between-session summary</h3>
+            <div class="who">M-04 · prepared by them, 14 Aug 2026</div></div>
+          <div class="rng">6 Jul – 14 Aug 2026<br>5 weeks · 19 check-ins<br>13 of 40 days logged</div>
+        </div>
+        <div class="declare">
+          <b>What this is.</b> Self-checks this person chose to share, with their own scores and
+          descriptive bands. Every tool is self-authored and <b>not a diagnosis, screen, or clinical
+          threshold</b>. Bands compare this person to their own history — never to anyone else.
+        </div>
+        <div class="flag">
+          <div class="fl">One thing to look at</div>
+          <div class="ft"><strong>Wind-down check has moved below their own usual range.</strong> 3 of the last 4 entries sit under the band they held through July.</div>
+          <div class="fs">A change notice, not a severity rating. It says the pattern moved — not what it means.</div>
+        </div>
+
+        <div class="p-lbl">Shared self-checks</div>
+        <div class="ihd"><h4>Daily wellbeing self-check</h4><span class="prov">✎ Custom</span><span style="flex:1"></span><span style="font-family:var(--mono);font-size:9px;color:var(--ink-faint)">11 entries · 0–20</span></div>
+        <div class="dir">Higher means more of what they called “settled and rested”.</div>
+        <div class="plotbox">
+          <svg viewBox="0 0 640 104" role="img" aria-label="Eleven wellbeing scores, most within their usual range, the last three below it.">
+            <rect class="bandfill" x="54" y="28" width="574" height="38" rx="2"></rect>
+            <line class="gl" x1="54" y1="16" x2="628" y2="16"></line>
+            <line class="gl" x1="54" y1="47" x2="628" y2="47"></line>
+            <line class="gl" x1="54" y1="78" x2="628" y2="78"></line>
+            <text class="ax" x="0" y="19">STEADIER</text><text class="ax" x="0" y="50">MIXED</text><text class="ax" x="0" y="81">HARDER</text>
+            <text class="ax" x="52" y="97">6 JUL</text><text class="ax" x="300" y="97">21 JUL</text><text class="ax" x="566" y="97">14 AUG</text>
+            <g id="pts1"></g>
+          </svg>
+        </div>
+        <div class="dens" id="dens1"></div>
+        <div class="denslbl"><span>entries per week</span><span>lighter = fewer</span></div>
+        <div class="own"><b>Their words for the low end:</b> “a rough evening — tired before I started, and it stayed that way.” Printed because the tool is self-authored: the label means what they wrote it to mean.</div>
+
+        <div class="ihd" style="margin-top:15px"><h4>Focus &amp; follow-through</h4><span class="prov">✎ Custom</span><span style="flex:1"></span><span style="font-family:var(--mono);font-size:9px;color:var(--ink-faint)">6 entries · 0–32</span></div>
+        <div class="dir">Higher means more difficulty holding a thread.</div>
+        <div class="plotbox">
+          <svg viewBox="0 0 640 74" role="img" aria-label="Six focus scores, flat, all within the usual range.">
+            <rect class="bandfill" x="54" y="20" width="574" height="30" rx="2"></rect>
+            <line class="gl" x1="54" y1="12" x2="628" y2="12"></line>
+            <line class="gl" x1="54" y1="35" x2="628" y2="35"></line>
+            <line class="gl" x1="54" y1="58" x2="628" y2="58"></line>
+            <text class="ax" x="0" y="15">EASIER</text><text class="ax" x="0" y="38">MIXED</text><text class="ax" x="0" y="61">HARDER</text>
+            <g id="pts2"></g>
+          </svg>
+        </div>
+        <div class="own" style="margin-top:6px"><b>No flag here.</b> Six entries across five weeks is thin, and nothing has moved outside their range. Stated so the absence of a flag reads as a finding rather than an oversight.</div>
+        <div class="pside">Sheet 1 · front</div><div class="pnum">1 / 4</div>
+      </div></div>
+
+      <!-- ── side 2 ── -->
+      <div class="slot"><div class="page">
+        <div class="p-hd">
+          <div><h3>Detail</h3><div class="who">Every entry behind the plots on side 1</div></div>
+          <div class="rng">M-04 · 6 Jul – 14 Aug 2026</div>
+        </div>
+
+        <div class="p-lbl">Check-ins</div>
+        <table class="pt">
+          <thead><tr><th>Date</th><th>Tool</th><th class="n">Score</th><th>Band</th><th>Their note</th></tr></thead>
+          <tbody>
+            <tr><td class="n">14 Aug</td><td>Wellbeing</td><td class="n">7 / 20</td><td><span class="md" style="background:var(--mood-2)"></span>Harder</td><td>Long day, didn’t sleep</td></tr>
+            <tr><td class="n">11 Aug</td><td>Wellbeing</td><td class="n">8 / 20</td><td><span class="md" style="background:var(--mood-2)"></span>Harder</td><td>—</td></tr>
+            <tr><td class="n">9 Aug</td><td>Focus</td><td class="n">18 / 32</td><td><span class="md" style="background:var(--mood-3)"></span>Mixed</td><td>Better in the morning</td></tr>
+            <tr><td class="n">7 Aug</td><td>Wellbeing</td><td class="n">9 / 20</td><td><span class="md" style="background:var(--mood-2)"></span>Harder</td><td>—</td></tr>
+            <tr><td class="n">4 Aug</td><td>Wellbeing</td><td class="n">14 / 20</td><td><span class="md" style="background:var(--mood-4)"></span>Steadier</td><td>Walked twice this week</td></tr>
+            <tr><td class="n">28 Jul</td><td>Focus</td><td class="n">21 / 32</td><td><span class="md" style="background:var(--mood-3)"></span>Mixed</td><td>—</td></tr>
+            <tr><td class="n">26 Jul</td><td>Wellbeing</td><td class="n">15 / 20</td><td><span class="md" style="background:var(--mood-4)"></span>Steadier</td><td>Good weekend</td></tr>
+            <tr><td class="n">21 Jul</td><td>Wellbeing</td><td class="n">16 / 20</td><td><span class="md" style="background:var(--mood-5)"></span>Steadier</td><td>—</td></tr>
+          </tbody>
+        </table>
+        <div class="own" style="margin-top:8px"><b>“Their note” is the one-line note attached to a check-in</b> — a field that has always existed, that they fill in knowing it is part of the check-in. It is not an excerpt lifted out of their journal; the journal is side 3 and is a separate decision.</div>
+
+        <div class="p-lbl">What you suggested, and what happened</div>
+        <table class="pt">
+          <thead><tr><th>Published</th><th>Item</th><th>Cadence</th><th>Outcome</th></tr></thead>
+          <tbody>
+            <tr><td class="n">12 Jul</td><td>Daily wellbeing self-check</td><td>every week</td><td><span class="pill pl-done">Completed ×5</span></td></tr>
+            <tr><td class="n">12 Jul</td><td>A hard moment (exercise)</td><td>as needed</td><td><span class="pill pl-done">Opened ×3</span></td></tr>
+            <tr><td class="n">2 Aug</td><td>Focus &amp; follow-through</td><td>every 2 weeks</td><td><span class="pill pl-none">No response</span></td></tr>
+            <tr><td class="n">2 Aug</td><td>Reminder at 21:00</td><td>daily</td><td><span class="pill pl-dec">Declined</span></td></tr>
+          </tbody>
+        </table>
+        <div class="own" style="margin-top:8px"><b>Declines are shown here because this is the person’s own export</b> — they chose to include it. Inside the live clinician portal a decline stays invisible, so that accepting never becomes a performance.</div>
+
+        <div class="p-lbl">Coverage</div>
+        <div style="font-size:10.5px;color:var(--ink-soft);line-height:1.6">
+          13 of 40 days have an entry. The gaps are gaps — nothing is interpolated, and no figure on
+          side 1 is adjusted for them. Two stretches of five or more days with nothing:
+          <span style="font-family:var(--mono)">15–20 Jul</span> and
+          <span style="font-family:var(--mono)">29 Jul – 3 Aug</span>.
+        </div>
+        <div class="pside">Sheet 1 · back</div><div class="pnum">2 / 4</div>
+      </div></div>
+
+      <!-- ── side 3 ── -->
+      <div class="slot"><div class="page">
+        <div class="p-hd">
+          <div><h3>In their words</h3><div class="who">Included by M-04 · 4 of 26 entries</div></div>
+          <div class="rng">Switched on for this export<br>Off by default</div>
+        </div>
+        <div class="optnote">
+          <b>This side exists because they turned it on, entry by entry.</b> The app defaults to not
+          including any of it. Nothing here was selected by the software, summarised, or excerpted —
+          each entry is whole, exactly as written, and they saw this page before sending it.
+        </div>
+
+        <div class="jent"><div class="jm">4 Aug · evening</div>
+          <div class="jt">Walked twice this week</div>
+          <div class="jb">Which I know sounds small written down. It was the first week since June that I did the thing I said I’d do more than once. I keep waiting to feel different about it and mostly I just feel tired, but I did go.</div></div>
+
+        <div class="jent"><div class="jm">11 Aug · late</div>
+          <div class="jt">Nothing in particular</div>
+          <div class="jb">Bad few days and I can’t point at why, which is the part that gets me. Nothing happened. I’d rather have a reason.</div></div>
+
+        <div class="jent"><div class="jm">13 Aug · morning</div>
+          <div class="jt">Re-read the plan</div>
+          <div class="jb">The bit about not having to go on the trip helped more than I expected. I think I’d already decided and wanted someone to say it was allowed.</div></div>
+
+        <div class="jent"><div class="jm">14 Aug · evening</div>
+          <div class="jt">Long day, didn’t sleep</div>
+          <div class="jb">Putting this here so I don’t have to say it out loud on Tuesday.</div></div>
+
+        <div class="absent">
+          <b>The other 22 entries are not here and are not summarised.</b> There is no count of what
+          was withheld beyond this line, no topic list, and no indication of what they are about —
+          because a shape is also a disclosure.
+        </div>
+        <div class="pside">Sheet 2 · front · optional</div><div class="pnum">3 / 4</div>
+      </div></div>
+
+      <!-- ── side 4 ── -->
+      <div class="slot"><div class="page">
+        <div class="p-hd">
+          <div><h3>Provenance &amp; verification</h3><div class="who">What these tools are, and how to check this file</div></div>
+          <div class="rng">Generated 14 Aug 2026 20:14<br>daymark-verify:v1</div>
+        </div>
+
+        <div class="p-lbl">Verify this file</div>
+        <div class="verify">
+          <canvas class="qr" id="qr" width="37" height="37"></canvas>
+          <div class="vtxt">
+            Scan with the Daymark app to check this report against the entries still on the phone. The
+            hash covers the underlying entries, so a changed number, a moved date or an added row will
+            fail the check.<br><br>
+            <code>daymark-verify:v1;range=2026-07-06..2026-08-14;<br>sha256=9e41c7a2b8…d3f08ab2</code><br><br>
+            <b style="color:var(--ink)">What it proves and what it does not.</b> It detects tampering
+            after the fact. It does not verify that self-reported data is accurate, and it is not a
+            signature — anyone holding the file can recompute it.
+          </div>
+        </div>
+
+        <div class="p-lbl">The tools in this report</div>
+        <table class="pt">
+          <thead><tr><th>Tool</th><th>Tier</th><th>Source</th></tr></thead>
+          <tbody>
+            <tr><td>Daily wellbeing self-check</td><td><span class="prov">✎ Custom</span></td><td>Self-authored, original items. Not derived from WHO-5 or any licensed scale.</td></tr>
+            <tr><td>Focus &amp; follow-through</td><td><span class="prov">✎ Custom</span></td><td>Self-authored. <b>Not</b> the ASRS — no ASRS item text or decision rule reproduced.</td></tr>
+            <tr><td>A hard moment</td><td><span class="prov">✎ Custom</span></td><td>Guided exercise. Unscored — produces no data and appears in no chart.</td></tr>
+          </tbody>
+        </table>
+        <div class="own" style="margin-top:9px">
+          <b>Every tool here is Custom tier.</b> None is a validated instrument, none has population
+          norms, and no score in this report has a clinical cut-off. Bands are splits chosen for this
+          app, and mean only what the person’s own history makes them mean.
+        </div>
+
+        <div class="absent">
+          <b>Not in this report, and not obtainable from it.</b> Location — the app collects none.
+          Anything written inside an exercise — those fields are excluded from sharing by construction,
+          not by preference. Any journal entry not on side 3. Streak counts — deliberately dropped in
+          this redesign, since a streak reports adherence to the app rather than anything about the person.
+        </div>
+        <div class="pside">Sheet 2 · back</div><div class="pnum">4 / 4</div>
+      </div></div>
+    </div>
+
+    <div class="sidenote">
+      <h5>What changed since the last render, and why</h5>
+      <ul>
+        <li><strong>True A4 scale.</strong> The previous render was web-sized, so 14 px type sat in a page that represents 595 pt. It looked enormous and told you nothing about legibility.</li>
+        <li><strong>The QR is back.</strong> Dropping it was a regression — <code>QrEncoder</code> already ships, and the verification payload is a real feature no redesign should have quietly removed.</li>
+        <li><strong>The journal is back, as its own side.</strong> A whole page someone consciously switches on is a very different act from a sentence lifted into a chart. It resolves the excerpt problem instead of dodging it.</li>
+        <li><strong>Check-in notes were never the issue.</strong> The one-line note attached to a check-in is part of the check-in and always was — it is on side 2.</li>
+        <li class="no"><strong>Streaks dropped.</strong> They are in <code>ReportData</code> today. A streak measures adherence to the app, not the person, and it is the one number here that could make a bad fortnight look like a failure.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══ DYNAMIC PROJECTS ══ -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">Projects</span><span class="chip new">Live — click it</span></div>
+      <div>
+        <h2>The dynamic part is the engine offering, and showing its working.</h2>
+        <p>
+          Last time I rendered a checklist, which was fair to call basic. The interesting behaviour is
+          not in the card — it is in what the engine notices, what it offers, and the fact that it will
+          say out loud why. Accept, edit or decline below and watch the right-hand panel.
+        </p>
+      </div>
+    </div>
+
+    <div class="proj">
+      <div class="pcard">
+        <header><span class="kind">Learning</span><h4>Get comfortable with statistics</h4></header>
+        <div class="pbody" id="steps">
+          <div class="step"><button class="box on" type="button" aria-label="Done"></button><span><span class="t">Read chapter 1</span></span></div>
+          <div class="step"><button class="box on" type="button" aria-label="Done"></button><span><span class="t">Read chapter 2</span></span></div>
+          <div class="step"><button class="box" type="button" aria-label="Mark done"></button><span><span class="t">Read chapter 3</span><span class="sub">added by you · 2 Aug</span></span></div>
+          <div class="intent"><strong>When</strong> I sit down after dinner, <strong>I will</strong> read one chapter.</div>
+          <div id="sugslot"></div>
+          <p class="quiet">No percentage, no target date. For something new and complex, the evidence favours scoring the process — sessions done, things tried — over distance to a finish line.</p>
+          <button class="archive" type="button">Put this down for now</button>
+        </div>
+      </div>
+
+      <aside class="engine">
+        <header>
+          <h5>What the engine noticed</h5>
+          <div class="sub">Rules, not a model — so it can always say why in one sentence.</div>
+        </header>
+        <div class="ebody">
+          <div class="obs">
+            checkInsLast7 <b>4</b><br>
+            stepsDone(project) <b>2 of 3</b><br>
+            lastStepAt <b>9 days ago</b><br>
+            lastOfferOutcome <b id="loo">—</b>
+          </div>
+
+          <div class="gate" id="gate">
+            <span class="gl2">Gamification offer — gated</span>
+            Only offered if this person has answered <em>at least twice</em> when a goal prompted them.
+            <b id="gatecount">1 of 2</b> so far, so it stays hidden.
+          </div>
+
+          <div class="log" id="log">waiting…</div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <h5>Every offer carries its reason</h5>
+        <p>“Because you finished two chapters and the third has sat 9 days.” If the engine can't say
+        it in one sentence, it shouldn't be offering.</p>
+      </div>
+      <div class="note">
+        <h5>Declining teaches it something specific</h5>
+        <p>Not “stop suggesting” globally — it records what was declined and asks less. The response to
+        any negative signal only ever reduces.</p>
+      </div>
+      <div class="note">
+        <h5>The game stays behind a gate</h5>
+        <p>Your rule: only offer it if they answer when a goal prompts them. Watch the gate change as
+        you accept. Gamification has a measured null in this population, so it must be earned.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ NAMES ══ -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-head-l"><span class="eyebrow">Naming</span><span class="chip warn">My pick marked</span></div>
+      <div><h2>Three for the clinician platform.</h2>
+      <p>Daymark is a nautical term — an unlit marker you navigate by in daylight. These stay in that world without being cute.</p></div>
+    </div>
+    <div class="names">
+      <div class="name pick"><h4>Casement</h4><div class="rd">a window hinged to open outward</div>
+        <p>Literally what it is: a window the client opened from their side and can close. Already the sign-in copy. Implies a limited view rather than a full record — the honest promise.</p></div>
+      <div class="name"><h4>Bearing</h4><div class="rd">a direction taken from a fixed point</div>
+        <p>What a clinician does between sessions. Sits naturally with Daymark, carries the second meaning of composure. More clinical in feel, which may be a plus.</p></div>
+      <div class="name"><h4>Cairn</h4><div class="rd">stones stacked to mark a path</div>
+        <p>Built by hand by people who came through before, marking a route without prescribing it. Warmest, weakest fit for a data tool.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer><div class="wrap"><p>Daymark · report &amp; projects · renders, not implementation · every number invented</p></div></footer>
+
+<script>
+(function(){
+ 'use strict';
+ var root=document.documentElement;
+ document.getElementById('theme').addEventListener('click',function(){
+  var d=root.getAttribute('data-theme')==='dark'||(!root.hasAttribute('data-theme')&&matchMedia('(prefers-color-scheme: dark)').matches);
+  root.setAttribute('data-theme',d?'light':'dark')});
+
+ var z=document.getElementById('z'),zr=document.getElementById('zr');
+ function setZ(){root.style.setProperty('--z',(z.value/100).toString());zr.textContent=z.value+'%'}
+ z.addEventListener('input',setZ);setZ();
+
+ var NS='http://www.w3.org/2000/svg';
+ function scatter(id,pts,lowFrom){
+  var g=document.getElementById(id);
+  pts.forEach(function(p,i){
+   var c=document.createElementNS(NS,'circle');
+   c.setAttribute('cx',p[0]);c.setAttribute('cy',p[1]);
+   var low=lowFrom>=0&&i>=lowFrom;
+   c.setAttribute('r',low?4:3.2);
+   c.setAttribute('fill',low?'var(--clay)':'var(--indigo)');
+   if(low){c.setAttribute('stroke','var(--sheet)');c.setAttribute('stroke-width','1.4')}
+   g.appendChild(c)})}
+ scatter('pts1',[[62,40],[112,34],[164,44],[216,36],[268,30],[320,42],[372,34],[424,46],[480,72],[534,76],[588,70]],8);
+ scatter('pts2',[[80,34],[190,30],[300,38],[410,32],[520,36],[610,34]],-1);
+
+ var D=[3,2,3,1,0,2,3,2,1,3,0,2,3,1],dens=document.getElementById('dens1');
+ D.forEach(function(n){var i=document.createElement('i');
+  i.style.background=n===0?'var(--hair)':'var(--indigo)';
+  i.style.opacity=n===0?'1':(0.3+n*0.2);dens.appendChild(i)});
+
+ // deterministic pseudo-QR (illustrative finder pattern, not a scannable code)
+ var cv=document.getElementById('qr'),cx=cv.getContext('2d'),N=37,s=1;
+ cx.fillStyle='#fff';cx.fillRect(0,0,N,N);cx.fillStyle='#000';
+ var seed=20260814;function rnd(){seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff}
+ for(var yy=0;yy<N;yy++)for(var xx=0;xx<N;xx++){if(rnd()>0.52)cx.fillRect(xx*s,yy*s,s,s)}
+ function finder(ox,oy){cx.fillStyle='#fff';cx.fillRect(ox,oy,9,9);cx.fillStyle='#000';
+  cx.fillRect(ox,oy,7,7);cx.fillStyle='#fff';cx.fillRect(ox+1,oy+1,5,5);cx.fillStyle='#000';cx.fillRect(ox+2,oy+2,3,3)}
+ finder(0,0);finder(N-9,0);finder(0,N-9);
+
+ // ── projects: the engine ──
+ var log=document.getElementById('log'),slot=document.getElementById('sugslot'),
+     gate=document.getElementById('gate'),gc=document.getElementById('gatecount'),loo=document.getElementById('loo');
+ var answered=1;
+ function say(t){var d=document.createElement('div');d.textContent='• '+t;log.insertBefore(d,log.firstChild)}
+ log.textContent='';say('project opened');
+
+ var SUGS=[
+  {t:'Add “Try the exercises at the end of chapter 3”?',
+   why:'because you finished 2 chapters and the third has sat 9 days',
+   add:'Try the exercises at the end of chapter 3'},
+  {t:'Move the reading to mornings for a week?',
+   why:'because 4 of your last 6 evening steps went unticked',
+   add:'Read one chapter before work'}
+ ];
+ var si=0;
+ function offer(){
+  if(si>=SUGS.length){slot.textContent='';say('nothing further to suggest');return}
+  var s=SUGS[si],box=document.createElement('div');box.className='sug';
+  box.innerHTML='<div class="sl">Suggested next step</div><div class="st">'+s.t+'</div><div class="why">'+s.why+'</div>';
+  var acts=document.createElement('div');acts.className='acts';
+  [['Add it','pri','accept'],['Edit first','','edit'],['Not this','ghost','decline']].forEach(function(a){
+   var b=document.createElement('button');b.className='b '+a[1];b.type='button';b.textContent=a[0];
+   b.onclick=function(){act(a[2],s)};acts.appendChild(b)});
+  box.appendChild(acts);slot.textContent='';slot.appendChild(box);
+ }
+ function act(kind,s){
+  loo.textContent=kind==='decline'?'declined':'accepted';
+  if(kind==='decline'){say('declined — will not re-offer this one; asking less');si++;slot.textContent='';setTimeout(offer,900);return}
+  answered++;gc.textContent=Math.min(answered,2)+' of 2';
+  if(answered>=2){gate.classList.add('met');
+   gate.innerHTML='<span class="gl2">Gamification offer — unlocked</span>They have answered twice when a goal prompted them, so the engine <em>may</em> now offer a game-like version. It is an offer, once, and never re-asked if declined.';
+   say('gate met — game version may be offered once')}
+  var step=document.createElement('div');step.className='step';
+  step.innerHTML='<button class="box" type="button" aria-label="Mark done"></button><span><span class="t">'+
+    (kind==='edit'?s.add+' (edited)':s.add)+'</span><span class="sub">'+(kind==='edit'?'you reworded it':'suggested, you accepted')+' · today</span></span>';
+  document.querySelector('#steps .intent').before(step);
+  bindBox(step.querySelector('.box'));
+  say(kind==='edit'?'accepted with your wording — reworded suggestions count as yours':'step added');
+  si++;slot.textContent='';setTimeout(offer,900);
+ }
+ function bindBox(b){b.addEventListener('click',function(){
+  b.classList.toggle('on');b.closest('.step').classList.toggle('done',b.classList.contains('on'));
+  if(b.classList.contains('on'))say('step ticked')})}
+ document.querySelectorAll('#steps .box').forEach(bindBox);
+ setTimeout(offer,600);
+})();
+</script>
