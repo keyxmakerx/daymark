@@ -136,13 +136,16 @@ jobs:
           COUNT=$(python3 -c "import json;print(len(json.load(open('$SCHEMA'))['database']['entities']))")
           echo "Regenerated $SCHEMA — $COUNT entities, identityHash $(python3 -c "import json;print(json.load(open('$SCHEMA'))['database']['identityHash'])")"
 
-          if ! git diff --exit-code -- app/schemas; then
+          if ! git diff --quiet -- app/schemas; then
             echo "::error::The committed Room schema does not match what Room generates."
-            echo "::error::The regenerated file is printed below and uploaded as the room-schemas artifact."
-            echo "::error::Commit it as-is — do not hand-edit a schema, the identityHash must be Room's own."
-            echo "=====REGENERATED SCHEMA START====="
-            cat "$SCHEMA"
-            echo "=====REGENERATED SCHEMA END====="
+            echo "::error::Take the room-schemas artifact and commit it as-is — never hand-edit a"
+            echo "::error::schema, the identityHash must be Room's own."
+            echo "--- what differs (committed = -, Room's own = +) ---"
+            # The DIFF, not the file. An earlier version of this step cat'd the whole schema, which
+            # buried a two-line discrepancy under 770 lines of JSON that was already correct — a
+            # failure message nobody can read is barely better than no failure message.
+            git --no-pager diff --stat -- app/schemas
+            git --no-pager diff --unified=1 -- app/schemas
             exit 1
           fi
 
