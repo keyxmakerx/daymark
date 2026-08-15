@@ -254,6 +254,69 @@ class ImageStripTest {
     }
 
     // ---------------------------------------------------------------------------------------
+    // Stored photo names — the path-traversal rule
+    // ---------------------------------------------------------------------------------------
+
+    @Test
+    fun `accepts the names this app actually writes`() {
+        // Non-vacuity for every rejection below: if this rule said no to everything, the tests
+        // that follow would pass while the photo feature was entirely broken.
+        for (i in 0 until 200) {
+            val name = java.util.UUID.randomUUID().toString() + ".jpg"
+            assertTrue("rejected a name the app itself produces: $name", ImageStrip.isStoredPhotoName(name))
+        }
+    }
+
+    @Test
+    fun `rejects the traversal that unlinked the journal database`() {
+        // The actual payload. A backup carrying this as an entry's photoPath, with no matching
+        // blob in its `photos` map, was written verbatim and resolved by the next swipe-delete to
+        // <filesDir>/../databases/daymark.db.
+        assertFalse(ImageStrip.isStoredPhotoName("../../databases/daymark.db"))
+    }
+
+    @Test
+    fun `rejects every shape of escape, separator and encoding trick`() {
+        val uuid = java.util.UUID.randomUUID().toString()
+        for (hostile in listOf(
+            "../../databases/daymark.db",
+            "../$uuid.jpg",
+            "..%2F..%2Fdatabases%2Fdaymark.db",
+            "subdir/$uuid.jpg",
+            "/$uuid.jpg",
+            "/etc/passwd",
+            "$uuid.jpg/../../x",
+            "..\\..\\databases\\daymark.db",
+            "$uuid.jpg\u0000.txt", // NUL truncation
+            "$uuid.jpg\n",         // the regex must be anchored, not line-anchored
+            "\n$uuid.jpg",
+            "$uuid.JPG",           // our writer only ever emits lowercase
+            "$uuid.jpg.db",
+            "$uuid.png",
+            "$uuid",               // no extension
+            ".jpg",
+            "",
+            "   ",
+            ".",
+            "..",
+        )) {
+            assertFalse("accepted a hostile name: ${hostile.replace("\u0000", "\\0")}", ImageStrip.isStoredPhotoName(hostile))
+        }
+    }
+
+    @Test
+    fun `the anchors are real — a valid name embedded in junk is still rejected`() {
+        // `Regex.matches` is whole-string in Kotlin, but this is the assumption the whole guard
+        // rests on, so it is asserted rather than assumed. A `find`-style rule here would accept
+        // every one of these.
+        val uuid = java.util.UUID.randomUUID().toString()
+        assertFalse(ImageStrip.isStoredPhotoName("../$uuid.jpg"))
+        assertFalse(ImageStrip.isStoredPhotoName("$uuid.jpg/x"))
+        assertFalse(ImageStrip.isStoredPhotoName("x$uuid.jpg"))
+        assertTrue(ImageStrip.isStoredPhotoName("$uuid.jpg"))
+    }
+
+    // ---------------------------------------------------------------------------------------
     // What the person is told
     // ---------------------------------------------------------------------------------------
 

@@ -35,13 +35,36 @@ class PhotoStore @Inject constructor(
 ) {
     private val dir: File by lazy { File(context.filesDir, DIR).apply { mkdirs() } }
 
-    fun fileFor(relPath: String): File = File(dir, relPath)
+    /**
+     * Resolves a stored photo name to a file, or **null** if the name is not one we could have
+     * written.
+     *
+     * Nullable on purpose. The previous signature returned a `File` unconditionally, which made
+     * "this name is not safe" unrepresentable and pushed the decision onto every caller — and every
+     * caller skipped it, because a non-null `File` looks like a settled answer.
+     */
+    fun fileFor(relPath: String): File? = if (isSafeName(relPath)) File(dir, relPath) else null
 
     /**
      * Guards against path traversal: photo names come from our own UUIDs, but on import they
      * arrive as untrusted JSON map keys. Only accept a bare `<uuid>.jpg` filename — never a path.
+     *
+     * ## Every door, not most of them
+     *
+     * This guard existed and was applied to [readBytes], [writeBytes] and [exists] — but not to
+     * [delete] and not to either `fileFor`, and a partial guard on a path-traversal defence is
+     * worth approximately nothing. A backup carrying
+     * `photoPath: "../../databases/daymark.db"` and no matching entry in its `photos` map never
+     * touched the guarded [writeBytes] door at all: `BackupManager` wrote the string straight onto
+     * the entry, and the first ordinary swipe-delete of that entry resolved it to
+     * `filesDir/../databases/daymark.db` and unlinked the person's entire journal — silently,
+     * because the failure is swallowed by `runCatching`, and unrecoverably, because
+     * `allowBackup="false"` means there is no OS copy.
+     *
+     * The lesson is in where the hole was: the doc comment above already said import names are
+     * untrusted. Knowing it was never the problem. Applying it at four of six doors was.
      */
-    private fun isSafeName(relPath: String): Boolean = SAFE_NAME.matches(relPath)
+    private fun isSafeName(relPath: String): Boolean = ImageStrip.isStoredPhotoName(relPath)
 
     /**
      * Imports the picked image into private storage — downscaled, turned the right way up, and with
@@ -55,9 +78,17 @@ class PhotoStore @Inject constructor(
         return name
     }
 
-    /** Deletes a stored photo by relative filename. Safe to call with a null/missing path. */
+    /**
+     * Deletes a stored photo by relative filename. Safe to call with a null, missing, or hostile
+     * path — an unsafe name deletes nothing.
+     *
+     * This is the sink that made the traversal bug destructive rather than merely ugly: it is
+     * reached from an ordinary swipe-delete once the undo window closes
+     * ([com.daymark.app.ui.entry.EntryActionsViewModel]), which is about as far from a suspicious
+     * action as it gets.
+     */
     fun delete(relPath: String?) {
-        if (relPath.isNullOrEmpty()) return
+        if (relPath.isNullOrEmpty() || !isSafeName(relPath)) return
         runCatching { File(dir, relPath).delete() }
     }
 
@@ -187,13 +218,23 @@ class PhotoStore @Inject constructor(
 
     companion object {
         const val DIR = "entry_photos"
-        /** A bare `<uuid>.jpg` filename — no directory separators, so it can't escape the dir. */
-        private val SAFE_NAME = Regex("^[0-9a-fA-F-]{36}\\.jpg$")
         /** What an unreadable or absent orientation tag counts as: don't turn the picture. */
         private const val DEFAULT_ORIENTATION = ImageStrip.ORIENTATION_UNDEFINED
 
-        /** Resolves a relative photo filename to a [File] without needing the injected store. */
-        fun fileFor(context: Context, relPath: String): File =
-            File(File(context.filesDir, DIR), relPath)
+        /**
+         * Is this a name this app could have written? Every door in this class asks before opening.
+         *
+         * Public and in the companion so the *boundary* can ask too. Depending on the sinks alone
+         * would mean a hostile path is allowed to sit in the database until something dereferences
+         * it — safe only for exactly as long as nobody adds a seventh door.
+         */
+        fun isSafeName(relPath: String): Boolean = ImageStrip.isStoredPhotoName(relPath)
+
+        /**
+         * Resolves a relative photo filename to a [File] without needing the injected store, or
+         * null if the name is not one we could have written.
+         */
+        fun fileFor(context: Context, relPath: String): File? =
+            if (isSafeName(relPath)) File(File(context.filesDir, DIR), relPath) else null
     }
 }

@@ -56,6 +56,36 @@ class PhotoStoreSourceTest {
         }
     }
 
+    /** One declaration: its name, its parameter list, and its text up to the next declaration. */
+    private data class Decl(val name: String, val signature: String, val body: String) {
+        val guarded: Boolean get() = body.contains("isSafeName")
+        val takesPhotoName: Boolean get() = signature.contains("relPath") && name != "isSafeName"
+    }
+
+    /**
+     * Every `fun` in the source, sliced at real declaration boundaries.
+     *
+     * A LIST, not a map keyed by name, and both details are scars:
+     *
+     *  - boundaries come from a regex over `fun name(` at any indentation and with any modifiers,
+     *    not from cutting at the literal `"\n    fun "`. That literal does not match
+     *    `    private fun isSafeName`, so an unguarded expression-bodied method ran past the guard's
+     *    own declaration and matched its name.
+     *  - keyed by name, the two `fileFor` OVERLOADS collided and the guarded companion one silently
+     *    replaced the unguarded instance one — so the exact half of the bug this test was written
+     *    for reported clean.
+     *
+     * Both were caught by mutating the source and finding the test unmoved, which is the only reason
+     * to ever write the mutation down.
+     */
+    private fun declarationBodies(src: String): List<Decl> {
+        val decls = Regex("""\bfun\s+(\w+)\s*\(([^)]*)\)""").findAll(src).toList()
+        return decls.mapIndexed { i, m ->
+            val end = if (i + 1 < decls.size) decls[i + 1].range.first else src.length
+            Decl(m.groupValues[1], m.groupValues[2], src.substring(m.range.last, end))
+        }
+    }
+
     private val source = sourceOf(REL)
 
     /** The file with comments and KDoc removed — claims must hold against code, not prose. */
@@ -154,6 +184,65 @@ class PhotoStoreSourceTest {
             code.contains("setAttribute"),
         )
         assertFalse("PhotoStore saves EXIF", code.contains("saveAttributes"))
+    }
+
+    @Test
+    fun `every door that takes a photo name checks it first`() {
+        /*
+         * THE BUG THIS EXISTS FOR. The guard was present and applied to readBytes, writeBytes and
+         * exists — but not to delete, and not to either fileFor. Four of six doors. A backup naming
+         * a photo it does not contain ("../../databases/daymark.db", no matching blob) therefore
+         * never met the one guarded door on the import path, was written verbatim onto the entry,
+         * and was resolved by the next ordinary swipe-delete into <filesDir>/../databases/daymark.db
+         * — unlinking the journal, silently, with no OS backup to restore from.
+         *
+         * Counting the doors is the point. A test that checked "delete is guarded" would have gone
+         * green the day someone added a seventh method.
+         */
+        val doors = declarationBodies(code).filter { it.takesPhotoName }
+
+        assertTrue("found no doors — the pattern stopped matching", doors.size >= 6)
+        assertTrue("delete must be a door under scrutiny", doors.any { it.name == "delete" })
+        // BOTH fileFor overloads, counted separately — one of them was the hole.
+        assertEquals("both fileFor overloads must be checked", 2, doors.count { it.name == "fileFor" })
+
+        val unguarded = doors.filterNot { it.guarded }.map { "${it.name}(${it.signature})" }
+        assertEquals(
+            "these take a photo name and never ask isSafeName — exactly the shape of the traversal " +
+                "bug: a guard applied to most of the doors is not a partial defence, it is the " +
+                "absence of one plus the belief that you have one",
+            emptyList<String>(),
+            unguarded,
+        )
+    }
+
+    @Test
+    fun `the every-door check is not vacuous — it catches each half of the original bug`() {
+        /*
+         * Both mutations are the real thing, and the second one caught a hole in THIS test: the
+         * body slicer originally cut at the literal "\n    fun ", which does not match
+         * "    private fun isSafeName", so an unguarded expression-bodied fileFor swallowed the
+         * guard's own DECLARATION and its name matched. A test for a partial guard that was itself
+         * partial.
+         */
+        val guardless = code
+            .replace("if (relPath.isNullOrEmpty() || !isSafeName(relPath)) return", "if (relPath.isNullOrEmpty()) return")
+        assertFalse("mutation did not land", guardless.contains("|| !isSafeName(relPath)) return"))
+        assertTrue(
+            "an unguarded delete must be detected",
+            declarationBodies(guardless).any { it.name == "delete" && !it.guarded },
+        )
+
+        val looseFileFor = code.replace(
+            Regex("fun fileFor\\(relPath: String\\): File\\? = [^\n]*"),
+            "fun fileFor(relPath: String): File = File(dir, relPath)",
+        )
+        assertFalse("mutation did not land", looseFileFor.contains("fun fileFor(relPath: String): File?"))
+        assertTrue(
+            "an unguarded fileFor must be detected — this is the one that slipped through twice, " +
+                "first past a bad body slice and then past an overload collision",
+            declarationBodies(looseFileFor).any { it.name == "fileFor" && !it.guarded },
+        )
     }
 
     @Test

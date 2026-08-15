@@ -61,6 +61,36 @@ object ImageStrip {
     const val JPEG_QUALITY = 85
 
     /**
+     * A bare `<uuid>.jpg` filename — no directory separators, so it cannot escape the photo
+     * directory.
+     */
+    private val STORED_PHOTO_NAME = Regex("^[0-9a-fA-F-]{36}\\.jpg$")
+
+    /**
+     * Is this a name this app could have written for a stored photo?
+     *
+     * The rule lives here, in the module with no imports, because it is the one piece of the photo
+     * pipeline that is purely a decision about a string — and because the bug it exists to prevent
+     * was found in code that could only be tested on a device.
+     *
+     * ## What went wrong, since the rule itself was never the problem
+     *
+     * `PhotoStore` had this check and applied it to three of its doors. `delete` and both `fileFor`
+     * overloads went unguarded. A backup naming a photo it does not actually contain
+     * (`photoPath: "../../databases/daymark.db"`, no matching `photos` entry) therefore never
+     * reached the one guarded door on the import path, was written verbatim onto the entry, and was
+     * resolved by the next ordinary swipe-delete — unlinking the journal database, silently,
+     * with `allowBackup="false"` meaning no OS copy to restore from.
+     *
+     * A path-traversal guard applied to most of the doors is not a partial defence. It is the
+     * absence of one, plus the belief that you have one.
+     *
+     * Every photo this app writes is `UUID.randomUUID()` + `.jpg`, so nothing legitimate is ever
+     * rejected by this.
+     */
+    fun isStoredPhotoName(relPath: String): Boolean = STORED_PHOTO_NAME.matches(relPath)
+
+    /**
      * The `inSampleSize` to decode with — the largest power of two that does not take the longest
      * edge below [maxDimen].
      *

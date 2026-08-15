@@ -43,8 +43,10 @@ fun EntryPhoto(
 
     LaunchedEffect(photoPath, targetPx) {
         bitmap = withContext(Dispatchers.IO) {
+            // Null for a name this app could not have written — a hostile backup's `photoPath`
+            // reaches here unchanged on an install that imported one before the guard existed.
             val file = PhotoStore.fileFor(context, photoPath)
-            if (file.exists()) {
+            if (file != null && file.exists()) {
                 runCatching { decodeDownsampled(file.absolutePath, targetPx)?.asImageBitmap() }.getOrNull()
             } else {
                 null
