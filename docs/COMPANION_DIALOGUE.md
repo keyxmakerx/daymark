@@ -40,6 +40,80 @@ signal is a coupling point.** Adding a ninth should require someone to make a ca
 All local. None inferential. **`hardDaysLast7` is a count of what the person logged, not a judgement
 about them** — the reflect-never-label rule from §D1b applies to every use of it.
 
+## The companion is a view, not the engine
+
+**Correction to an earlier framing.** §D1b called the companion "a feature that calls the arbiter",
+which reads as though the signals belong to it. They do not. The layering is:
+
+```
+signal layer  (8 facts, computed on device)   ─┬─→ arbiter        (may anything interrupt?)
+reception ledger                              ─┤
+                                               ├─→ companion      (dialogue — one consumer)
+                                               ├─→ reminders      (when, how often)
+                                               └─→ per-feature suggestion logic
+```
+
+**Everything reads the substrate; nothing owns it.** This matters because of a requirement that is
+easy to miss: *a person who never once opens the companion is still affected by it* — their reminders
+land differently, their suggestions differ, the app asks less when it is being ignored. The companion
+is the surface where that becomes visible and steerable, not the place where it happens.
+
+**The safety property that makes this acceptable for a passive user.** Someone who never interacts is
+the person most exposed to an adaptive system, because they never get the chance to correct it. The
+monotonic rule from §D1a is what protects them: **falling reception may only ever reduce prompting.**
+So the worst case for a person who ignores everything is that the app gets *quieter*. There is no
+combination of signals that makes it louder without them asking.
+
+## Two editors, one format
+
+The clinician side needs to serve two people: one who wants every data point and precise control, and
+one for whom that is immediately too much. Both are real, and the second is more common.
+
+| | **Direct** | **Guided** |
+|---|---|---|
+| For | someone who wants the full surface | someone who wants to answer a few questions |
+| Shows | every signal, predicate, branch, node | a handful of plain-language choices |
+| Produces | a definition | **the same definition** |
+
+**The rule: guided mode generates the format direct mode edits.** One artifact, two ways in. A
+clinician may start guided and open the result in the direct editor to refine it, and nothing is lost
+in translation because there is no translation. Two formats would fork the honesty gate, the signing
+path, and the security partition — and would eventually disagree.
+
+Pleasingly, guided mode is itself a dialogue tree that outputs a dialogue tree, so it is built with
+the machinery already described here.
+
+## "Lots of data points" versus the security partition
+
+These pull against each other and the tension should be named rather than smoothed over. A clinician
+wants rich branching; §Finding 3 says they may only branch on what they are already permitted to see.
+
+**Resolution: the partition is grant-driven, not fixed.** Its *default* is narrow — prescribed
+modules, time of day, answers inside their own module, and whatever a `read.share` grant already
+covers. That is more than it sounds like. Beyond that, **the person can widen it**, per signal,
+explicitly, revocably, in the same place they manage every other capability:
+
+> *"Let your therapist's dialogue respond to how often you check in."* — off by default.
+
+So a clinician gets many data points when the person agrees to it, the oracle stays closed when they
+do not, and the mechanism is the consent model that already runs everything else rather than a second
+one invented for this.
+
+## Robustness — the failure modes worth designing for now
+
+"Very robust" is concrete here, because authored content outlives the app version it was written
+against.
+
+- **Signal vocabulary is versioned.** A definition records which signal-set version it was authored
+  against. A definition referencing a signal that no longer exists must fail *closed* and be
+  reportable, never silently change behaviour (see Finding 1).
+- **No dead ends.** Every node either offers options or terminates explicitly. A node that renders no
+  line and no option is a validation error, not a blank panel.
+- **Every branch set is total.** A fallback with no predicate is mandatory, so there is always a line
+  to say. The dialogue can never fall through to nothing.
+- **Missing signals are normal, not exceptional.** A new install has no history. Every predicate must
+  behave sensibly when the substrate is empty, and that is a test case rather than an assumption.
+
 ## The reception ledger
 
 Persisted, so worth getting right once — migrations are the expensive mistake.
