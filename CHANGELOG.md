@@ -220,6 +220,29 @@ All notable changes to this project are documented here. The format is based on
   permission and makes no network connections.
 
 ### Security
+- **Photos keep the picture and nothing else.** A JPEG straight off a phone camera carries GPS
+  latitude and longitude to five decimal places, the exact capture time, and the device's make,
+  model and serial. Daymark has no location feature, and it would be a strange promise to make on
+  the settings screen while filing the coordinates of someone's bedroom in their journal, where a
+  backup file carries them onward to whoever ends up with it.
+  - Every photo is now decoded to pixels and re-encoded. A bitmap has nowhere to keep a tag, so the
+    tags are gone by construction rather than by a filter that has to list them all correctly.
+  - **This was already happening, and that was the problem.** It fell out of resizing, nothing said
+    so, and the obvious optimisation — "we have the bytes, just copy the file" — is faster, sharper,
+    deletes code, and silently puts every tag back. A test now fails that change with an explanation
+    instead of letting it through review.
+  - **Photos arriving in a backup are re-encoded too.** That path used to write whatever the file
+    carried, so a backup made before the strip, or merged from another install, walked its EXIF in
+    through the door nobody looks at. It costs a generation of JPEG quality on restore, which is
+    better than an import path whose privacy depends on which version wrote the file.
+  - **Photos are no longer stored sideways.** Cameras don't rotate pixels; they set an orientation
+    tag, and `BitmapFactory` ignores it — so portrait photos were decoded as landscape and re-saved
+    with the tag stripped, losing which way was up for good. The rotation is now applied to the
+    pixels themselves. All eight EXIF orientations are handled, including the four mirrored ones
+    that front cameras produce.
+  - **And they're no longer randomly half-resolution.** The downscaler halved until it was under the
+    limit, which overshoots: a 3200px photo landed on exactly 1600, a 3300px photo on 825. Two
+    near-identical originals, one visibly blurry, no way to tell why.
 - **Clinician-authored branching logic runs in a sandbox that fails closed.** A therapist can make a
   question conditional on an earlier answer. That is a small expression language, and a small
   expression language on a server is where the interesting bugs live, so it evaluates a fixed

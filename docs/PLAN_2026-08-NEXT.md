@@ -126,6 +126,18 @@ verified after push. TypeScript is fully verifiable locally (`pnpm check`, `pnpm
 
 That does not stop the work; it decides the order and the batching.
 
+### 3a. Things a device would prove that CI here cannot
+
+Listed so that "the tests pass" is never read as "this was observed working". Each is a real check
+with a real subject, not a caveat.
+
+| Needs a device | Standing in for it now | Why the substitute is weaker |
+|---|---|---|
+| **Import a JPEG carrying GPS tags and assert the stored file has none.** Needs a real `BitmapFactory` and `ExifInterface`. | `PhotoStoreSourceTest` asserts the structural precondition: no path into storage copies source bytes, both entry points re-encode, exactly one tag is read and none is written. | It proves the pipeline *decodes and re-encodes*, not that the output is clean. If a platform `Bitmap.compress` ever emitted a tag, this would not notice. |
+| **Photograph something in portrait, import it, look at it.** | `ImageStripTest` proves all eight EXIF orientations map to eight distinct transforms and that the mirrored four are mirrored. | It proves the decision table is right, not that the `Matrix` composes in the order the decision assumes. Mirror-then-rotate is asserted in prose and in the source, and executed nowhere. |
+| **Render one PDF and look at it.** | `ReportLayoutTest` runs the page arithmetic. | Layout is not typography. Nothing has confirmed a glyph lands where the arithmetic says. |
+| **Confirm `app/schemas/…/14.json`.** | CI's schema-drift check passes. | Its `identityHash` matches 13.json's, which should not be possible after adding an entity — so either the guard is ineffective or the hash is right for a reason nobody has verified. |
+
 1. **Verifiable now (TypeScript).** The signal vocabulary as a typed closed list with the author
    partition enforced in validation; the dialogue definition type; companion dialogue content. This is
    the substrate the Android side codes against, and getting the partition wrong is the expensive
