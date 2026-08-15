@@ -10,8 +10,9 @@ import type { InstrumentDefinition } from '../types'
 import { assertValid } from '../validate'
 import { wellbeingCheck } from './wellbeing'
 import { focusSelfCheck } from './focus'
+import { hardMomentExercise, valuesExercise } from './compassion'
 
-export const CATALOG: InstrumentDefinition[] = [wellbeingCheck, focusSelfCheck]
+export const CATALOG: InstrumentDefinition[] = [wellbeingCheck, focusSelfCheck, hardMomentExercise, valuesExercise]
 
 /** Ledger anchors the catalog references (CI verifies these exist in companion/INSTRUMENTS.md). */
 export const REQUIRED_LEDGER_ANCHORS = CATALOG.flatMap((d) => (d.ledgerRef ? [d.ledgerRef.split('#')[1]] : []))
