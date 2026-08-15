@@ -161,18 +161,31 @@ class SkyTest {
         val watched = indexOfRecord(before, SkyKind.CHECK_IN, 15L)
         assertTrue("the watched record is not in the layout", watched >= 0)
 
-        // A thousand records, spread over the following three years — the "adding today's check-in
-        // must not reflow 2019" case, at scale.
-        val later = (0 until 1000).map {
+        // A thousand records: half of them *after* the watched star — "adding today's check-in must
+        // not reflow 2019" — and half of them *before* it, which is the case a backup restore or a
+        // late-arriving sync produces. Both directions matter, and only the second catches a layout
+        // that draws its jitter from a stream: a stream is unmoved by anything appended after the
+        // star it has already placed, so an insertion-only test would pass on a design where every
+        // star's position depends on how many came before it.
+        val later = (0 until 500).map {
             SkyRecord(SkyKind.CHECK_IN, id = 10_000L + it, epochDay = start + 60 + it, moodLevel = 3)
         }
-        val after = Sky.layout(original + later)
+        val earlier = (0 until 500).map {
+            SkyRecord(SkyKind.JOURNAL, id = 20_000L + it, epochDay = start - 500 + it)
+        }
+        val after = Sky.layout(earlier + original + later)
         val moved = indexOfRecord(after, SkyKind.CHECK_IN, 15L)
         assertTrue(moved >= 0)
 
         assertEquals("x moved", before.x[watched], after.x[moved], 0f)
         assertEquals("y moved", before.y[watched], after.y[moved], 0f)
-        assertEquals("row changed", before.row[watched], after.row[moved])
+        // Compared as an absolute month, not as a row index: the earlier records legitimately move
+        // where the sky *starts*, and the star has to stay in the month it happened in.
+        assertEquals(
+            "the star changed month",
+            before.firstEpochMonth + before.row[watched],
+            after.firstEpochMonth + after.row[moved],
+        )
     }
 
     @Test
