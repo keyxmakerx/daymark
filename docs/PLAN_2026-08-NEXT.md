@@ -136,7 +136,31 @@ with a real subject, not a caveat.
 | **Import a JPEG carrying GPS tags and assert the stored file has none.** Needs a real `BitmapFactory` and `ExifInterface`. | `PhotoStoreSourceTest` asserts the structural precondition: no path into storage copies source bytes, both entry points re-encode, exactly one tag is read and none is written. | It proves the pipeline *decodes and re-encodes*, not that the output is clean. If a platform `Bitmap.compress` ever emitted a tag, this would not notice. |
 | **Photograph something in portrait, import it, look at it.** | `ImageStripTest` proves all eight EXIF orientations map to eight distinct transforms and that the mirrored four are mirrored. | It proves the decision table is right, not that the `Matrix` composes in the order the decision assumes. Mirror-then-rotate is asserted in prose and in the source, and executed nowhere. |
 | **Render one PDF and look at it.** | `ReportLayoutTest` runs the page arithmetic. | Layout is not typography. Nothing has confirmed a glyph lands where the arithmetic says. |
-| **Confirm `app/schemas/…/14.json`.** | CI's schema-drift check passes. | Its `identityHash` matches 13.json's, which should not be possible after adding an entity — so either the guard is ineffective or the hash is right for a reason nobody has verified. |
+| ~~**Confirm `app/schemas/…/14.json`.**~~ **Resolved — see §3b.** | The drift check now forces a cache-bypassed export before diffing. | It was the guard that was ineffective, and the hash that was wrong. |
+
+### 3b. The schema guard was inert, and passed for it
+
+Worth writing down in full, because the failure is a general one and the specific fix is small.
+
+**The claim.** `app/schemas/…/14.json` carried `identityHash` `2331a16f…` — byte-identical to 13.json's, while declaring one more entity. Room derives that hash from the entity set, so no real export could produce it. The history confirms it: every prior bump changed the hash, including 10→11, which did not even change the entity count.
+
+| version | entities | identityHash |
+|---|---|---|
+| 12 | 12 | `e9bbbc41…` |
+| 13 | 13 | `2331a16f…` |
+| 14 | **14** | `2331a16f…` ← same as 13 |
+
+**Why nothing caught it.** Three independent guards each had a reason not to fire:
+
+1. `git diff --exit-code -- app/schemas` assumes the build rewrites the schema. It does not — Room only *creates* a schema file when one is **absent**. That is precisely why committing 13.json fixed the "Empty schema file" crash, and the same property makes the diff a no-op forever after. There was never anything to diff.
+2. Room's own `DatabaseBundle.isSchemaEqual` compares **entities and views only** — never `identityHash`, version, or `setupQueries`.
+3. `MigrationTest` would catch it immediately, and instrumented tests need a device. CI compiles them and cannot run them.
+
+**Where the damage lands.** `MigrationTestHelper.createDatabase(…, 14)` stamps the bundle's hash into `room_master_table`; opening the real database then compares it against the hash the annotation processor compiled in, and throws. Not on the machine that introduced it — on the next contributor's, attributed to their change.
+
+**The fix.** The drift step now deletes the current version's schema, re-runs `:app:kspFossDebugKotlin` with `--rerun-tasks --no-build-cache`, refuses to pass on a missing or zero-byte result, and only then diffs — printing the regenerated file and uploading it as an artifact when they disagree. That cache-bypass is the same one that had to be run by hand to produce 13.json; the previous version of this fix was a **temporary** CI step that was removed once it had served its purpose, which is exactly how the problem recurred. It is permanent now.
+
+**The general lesson, since it is the third instance this session.** A check written against an assumption about *when* code runs — rather than against an observable output — reports green from the moment that assumption stops holding, and nothing about it looks broken. Every guard in this repo should be able to answer: *what change would make this fail?* If the answer requires a step that may not execute, it is not a guard.
 
 1. **Verifiable now (TypeScript).** The signal vocabulary as a typed closed list with the author
    partition enforced in validation; the dialogue definition type; companion dialogue content. This is
