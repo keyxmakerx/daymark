@@ -35,7 +35,12 @@ function markdownFiles(dir: string): string[] {
     .map((e) => join(dir, e.name))
 }
 
-const DOC_FILES = markdownFiles(DOCS)
+/*
+ * `docs/` plus the root-level markdown, which is where the most-read documents live. CHANGELOG.md
+ * in particular is the one document written for someone who does not have the tree open, so a path
+ * that does not resolve there is the least recoverable kind.
+ */
+const DOC_FILES = [...markdownFiles(DOCS), ...markdownFiles(REPO)]
 const DOC_TEXT = new Map(DOC_FILES.map((f) => [f, readFileSync(f, 'utf8')]))
 const APP_CSS = readFileSync(join(REPO, 'companion', 'web', 'src', 'app.css'), 'utf8')
 
