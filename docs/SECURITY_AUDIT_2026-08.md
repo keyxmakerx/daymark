@@ -16,7 +16,7 @@ This matters more than the severities, so it goes first.
 | **refuted-pass** | A skeptic attacked it and it survived. Not independently re-checked by me. |
 | **unverified** | **The skeptic returned no verdict for this row.** My workflow counted a missing verdict as survival, which is the wrong default — absence of refutation is not evidence. Treat these as *reported, not established*. |
 
-Nine of the eighteen rows are `unverified` in exactly that sense. That is a flaw in how I ran the
+Of the eleven still open, several are `unverified` in exactly that sense. That is a flaw in how I ran the
 audit, not a property of the findings, and it is written down here rather than quietly smoothed
 over. **A finding below being listed is not a claim that it is real.**
 
@@ -24,16 +24,29 @@ over. **A finding below being listed is not a claim that it is real.**
 
 | Sev | Finding | Where | Verified |
 |---|---|---|---|
-| **High** | **A hostile backup could delete the journal database.** `PhotoStore`'s `isSafeName` guard was applied to `readBytes`/`writeBytes`/`exists` but not to `delete` or either `fileFor`. A backup naming a photo it does not contain (`photoPath: "../../databases/daymark.db"`, empty `photos` map) never reached the one guarded door, was written verbatim onto the entry, and was resolved by the next ordinary swipe-delete. Silent (`runCatching`), unrecoverable (`allowBackup="false"`). | `PhotoStore.kt`, `BackupManager.kt:280,332` | **confirmed** — I traced the chain and verified the path resolution |
+| **High** | **A hostile backup could delete the journal database.** `PhotoStore`'s `isSafeName` guard was applied to `readBytes`/`writeBytes`/`exists` but not to `delete` or either `fileFor`. A backup naming a photo it does not contain (`photoPath: "../../databases/daymark.db"`, empty `photos` map) never reached the one guarded door, was written verbatim onto the entry, and was resolved by the next ordinary swipe-delete. Silent (`runCatching`), unrecoverable (`allowBackup="false"`). | `PhotoStore.kt`, `BackupManager.kt:280,332` | **confirmed** |
+| **High** | **The therapist portal never locked.** The guard was `$derived(ctx ? isLive(ctx.session) : false)`; `isLive` reads `Date.now()` internally, so the only tracked dependency was `ctx` — written twice, at unlock and logout. Evaluated once, when true by construction. Unwrapped reading keys and the decrypted share stayed in memory until the tab closed. | `TherapistPortal.svelte:71` | **confirmed** |
+| **High** | **Auth lockout ratcheted and leaked.** `count` was cleared only by a successful auth, so one wrong request per lockout window held a source out forever — and where `sourceId` is shared, that locks out everyone. Separately the eviction predicate required `count < lockoutThreshold`, which a locked-out source can never satisfy again. | `AuthGuard.kt:76,114` | **confirmed** |
 
-Fixed at both layers: every `PhotoStore` door now asks, and `BackupManager` validates at the
-boundary so a hostile path never reaches the database. Rule moved to `ImageStrip` (still zero
-imports) so it is JVM-testable. See `PhotoStoreSourceTest` — it counts the *doors*, because a test
-asserting "delete is guarded" goes green the day someone adds a seventh method.
+Each was traced by hand before being touched, and each fix is mutation-tested — the mutation
+confirmed to land, the guard confirmed to catch it, the tree restored.
+
+**Two of the three had a second bug underneath that made the obvious fix wrong on its own**, which
+is worth more than the findings themselves:
+
+- `PhotoStore` — a test asserting "delete is guarded" would go green the day someone adds a seventh
+  method, so `PhotoStoreSourceTest` counts the *doors*. Writing that test took three attempts: it
+  passed a mutated `fileFor` first because the body slicer cut at a literal that does not match
+  `private fun`, then again because the two overloads collided under a name key and the guarded one
+  masked the unguarded one. A test for a partial guard that was itself partial, twice.
+- `TherapistPortal` — `touch()`, which refreshes the idle deadline on activity, had **no production
+  caller anywhere**. Fixing the clock alone would have logged a therapist out fifteen minutes after
+  unlock while they were actively reading: not "the guard works now" but a different broken
+  behaviour, and one that would have been blamed on the lock.
 
 ## Open — ranked by what it costs a real person
 
-### 1. Share expiry and revocation are enforced only in the therapist's browser — **critical**
+### 1. Share expiry and revocation are enforced only in the therapist's browser — **critical**, still open
 
 `companion/server/.../routes/RelationRoutes.kt:89`. Verified: **unverified by the skeptic, but I
 checked the load-bearing parts myself and they hold.**
@@ -60,27 +73,7 @@ audit log records `SHARE_OPEN`: it records the access it failed to prevent.
 before serving. Not a one-liner — it touches the trust model, so it should be designed, not
 patched.
 
-### 2. Auth lockout is permanent and un-evictable — **high**, unverified
-
-`companion/server/.../auth/AuthGuard.kt:76`. `recordFailure` increments a per-source counter cleared
-only by a *successful* auth. Once a source crosses the threshold, every later failure re-arms a full
-lockout forever; and because `evictIfLarge`'s predicate requires `count < lockoutThreshold`, those
-entries can never be evicted — an unbounded-growth path as well as a permanent denial of service.
-Note `AuthStore.kt:191` already carries a comment about this exact mistake being fixed *there*, which
-suggests the same bug was fixed once in one place and not the other.
-
-### 3. Therapist portal never locks — **high**, refuted-pass (found twice)
-
-`companion/web/src/lib/components/therapist/TherapistPortal.svelte:71`. The idle/absolute guard is
-`$derived(isLive(ctx.session))`. `isLive()` reads `Date.now()` internally, but `$derived` only
-re-evaluates when a tracked dependency changes, and its only dependency is `ctx` — written exactly
-twice, at unlock and logout. So it is evaluated once, at unlock, when it is trivially true. The
-portal never locks and `zeroize()` is never reached on the idle path: unwrapped X25519/Ed25519
-reading keys and the decrypted share stay in memory indefinitely on an unattended machine.
-
-Fix: drive it from an interval (`setInterval` + a `$state` tick), so the guard actually re-evaluates.
-
-### 4. The rest
+### 2. The rest
 
 | Sev | Finding | Where | Verified |
 |---|---|---|---|
