@@ -125,3 +125,45 @@ Recorded because one was violated during the Phase 2 workflow, destroying uncomm
   reworded or reflowed.
 - Every test must fail when its subject is violated, and the violation must be confirmed to have
   actually landed in the file before the test is run.
+
+---
+
+## 5. Landed, and what is NOT wired (read before trusting green CI)
+
+The build sprint landed the TypeScript substrate fully wired and verified, and the Kotlin work
+partly wired. **Green CI on this commit does not mean the arbiter or the ledger are live.** Recorded
+so nobody reads a passing build as more than it is.
+
+**Wired and working**
+- Signal vocabulary, author partition, dialogue types and planner, companion dialogue content —
+  `pnpm check` 413 files / 0 errors, `pnpm test` 402 passed / 5 skipped (baseline 406 / 242).
+- Predicate depth + node bounds at validation, on top of the runtime bound already shipped.
+- The four-side report: `ReportDataBuilder` now calls `DiscussionPrompts.texts(...)`, so side 4
+  prints real prompts. **This was a false-assurance bug caught in review** — the generator's
+  "nothing met the threshold" line asserts that a threshold was evaluated, and nothing had ever
+  called the rules. Printing that sentence over an uncomputed result is worse than printing nothing.
+- Journal export: the deleted `includeJournal` parameter broke the only production call site.
+  Fixed, and `includeAllJournalInRange` added as an explicit flag rather than letting an empty
+  `includedJournalEntryIds` mean "everything" — that convention would be fail-open on the most
+  sensitive content in the product.
+
+**Written, tested, and NOT connected**
+- `InterruptionBudget` has no production caller. The app still gates on `SupportOffer`. The
+  generalisation is staged, not live.
+- `OfferRecord` / `OfferRecordDao` are **not registered in `AppDatabase`**. Room only walks entities
+  reachable from `@Database`, so KSP stays silent and the `offer_records` table simply will not
+  exist. Wiring it requires, together: registration, `abstract fun offerRecordDao()`, a version bump
+  13 → 14, `MIGRATION_13_14`, that migration added to `MigrationTest.allMigrations`, a committed
+  `app/schemas/…/14.json` (CI fails on schema drift), and a provider in `AppModule`. **The schema
+  JSON cannot be generated without an Android build**, so this must be done in an environment that
+  has one.
+- The per-entry journal picker does not exist. The switch is honestly labelled "Include all journal
+  entries in range" until it does.
+
+**Known and deliberately deferred**
+- `InterruptionBudget` imports a Room entity while its header claims the `stats/` package is
+  Android-free. It compiles and the JVM tests run, so CI will not catch it. The fix is a plain input
+  type in `stats/` with mapping on the data side, mirroring `DiscussionPrompts.Inputs`.
+- The D6 "no streaks" rule holds in the report but not in the app: `MoodStats.currentStreak` still
+  drives Home, Stats, Insights, Achievements and the `streak_milestone` signal. The report copy has
+  been corrected so it no longer claims a project-wide decision that has not been made.

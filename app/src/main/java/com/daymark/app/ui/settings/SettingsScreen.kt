@@ -346,7 +346,7 @@ private fun PdfOptionsDialog(
                 Spacer(Modifier.height(8.dp))
                 ToggleRow("Include notes", notes) { notes = it }
                 ToggleRow("Include charts", charts) { charts = it }
-                ToggleRow("Include journal entries", journal) { journal = it }
+                ToggleRow("Include all journal entries in range", journal) { journal = it }
             }
         },
         confirmButton = {
@@ -361,7 +361,8 @@ private fun PdfOptionsDialog(
                         rangeLabel = label,
                         includeNotes = notes,
                         includeCharts = charts,
-                        includeJournal = journal,
+                        includeInTheirWords = journal,
+                        includeAllJournalInRange = journal,
                     ),
                 )
             }) { Text("Export") }
