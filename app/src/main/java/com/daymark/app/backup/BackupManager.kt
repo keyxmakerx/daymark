@@ -142,7 +142,11 @@ data class BackupData(
 
 /**
  * Exports/imports the entire local database as JSON. This is the user's only safety
- * net in a local-only app, so it round-trips every table.
+ * net in a local-only app, so it round-trips every table a person would miss.
+ *
+ * One table is outside that rule on purpose: the reception ledger (`offer_records`) is neither
+ * exported nor restored, and a REPLACE import empties it. The end of [importReplace] says why —
+ * worth reading before adding a field for it in the name of completeness.
  */
 @Singleton
 class BackupManager @Inject constructor(
@@ -162,6 +166,10 @@ class BackupManager @Inject constructor(
     private val achievementsStore: com.daymark.app.data.AchievementsStore,
     private val thoughtRecordDao: com.daymark.app.data.dao.ThoughtRecordDao,
     private val safetyPlanDao: com.daymark.app.data.dao.SafetyPlanDao,
+    // The reception ledger, held only to be able to empty it on a REPLACE — see importReplace.
+    // Deliberately the repository and not `OfferRecordDao`: the repository is the seam that decides
+    // what may be read out of that table, and a backup path has no business reading rows at all.
+    private val offerLedger: com.daymark.app.data.OfferLedgerRepository,
 ) {
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
 
@@ -310,6 +318,35 @@ class BackupManager @Inject constructor(
         data.safetyPlan.forEach {
             safetyPlanDao.insert(SafetyPlanItem(it.id, it.section, it.position, it.text, it.detail))
         }
+
+        /*
+         * The reception ledger is emptied here, and it is the one table with no matching restore
+         * because it is not in the backup file at all.
+         *
+         * WHAT WAS WRONG. "Replace all current data" wiped twelve tables and left `offer_records`
+         * standing — BackupManager did not even hold anything that could reach it. That table is
+         * supposed to hold the app's behaviour and never the person (see OfferRecord's header), but
+         * a `kind="support"` row is written only when the entry just saved was at mood 1 or 2
+         * (`EntryEditorViewModel.save`, `LOW_MOOD_MAX`). So the rows that survived were a dated list
+         * of this person's worst days, in a table whose name reads like telemetry, on the one
+         * operation someone performs precisely because they want the old data gone. Restore an empty
+         * backup onto a phone and the journal was blank while the ledger still said which days.
+         *
+         * WHY IT IS NOT EXPORTED EITHER. Round-tripping it would put those same dates into a
+         * plaintext file that leaves the device — and buy nothing: the ledger is working state with
+         * a sixty-day retention (OfferLedgerRepository.RETENTION_DAYS), not history, and everything
+         * a person would miss is already in `entries`. A field for it here would also be the first
+         * step towards the ledger looking like data worth keeping, which is the direction
+         * `docs/DECISIONS_2026-08.md` §D1a exists to block.
+         *
+         * WHAT A PERSON WILL NOTICE. A standing "stop asking" is stored as a STOP row in this table
+         * (OfferLedgerRepository.saidStop), so clearing it lifts that preference and the support
+         * offer may start asking again after a replace-import. That is the one direction the engine
+         * may never move on its own — but this is the person's own erase, which §D1a allows and
+         * OfferLedgerRepository.clear names as its expected caller. Leaving the row to preserve the
+         * preference would mean keeping a dated row about them, which is the worse trade.
+         */
+        offerLedger.clear()
     }
 
     /** Adds backup rows alongside existing data, assigning new ids and remapping links. */

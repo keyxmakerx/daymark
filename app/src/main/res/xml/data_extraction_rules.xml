@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    What leaves this device when the OS, rather than the person, copies app data.
+
+    PRIVACY.md says "android:allowBackup=false is set, so the OS won't copy your data into
+    cloud/adb backups". That attribute alone stopped being the whole answer at Android 12: it still
+    turns off cloud backup and adb backup, but the documented note on `android:allowBackup` is that
+    it does NOT disable device-to-device transfer. The app targets SDK 35, so on any phone running
+    12 or later the D2D channel was governed by the platform default — copy everything — rather
+    than by anything this project had written down. A person moving to a new handset would have had
+    the journal, the photos and the safety plan carried across by the setup wizard, which is not
+    what the privacy statement told them.
+
+    So both channels are named here and both exclude everything. There are no <include> rules and
+    there must not be any: this file is a deny-list only by virtue of listing every domain the app
+    can write to, so a domain omitted here is a domain the platform default copies.
+
+    `root` covers the app's internal storage — files/ (photos), databases/ (the journal) and
+    shared_prefs/ (the PIN hash). `device_root` and `external` cover storage nothing in the app
+    uses today; they are listed so that the day something does start writing there, it is excluded
+    already rather than exported until someone remembers this file.
+
+    Nothing here replaces `android:allowBackup="false"`, which stays in the manifest: this resource
+    is only read on API 31+, and below that the attribute is what turns backup off.
+
+    The person's own exports (Settings -> Backup) are unaffected — those are a file they choose to
+    write, which is the only way data is meant to leave.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="device_root" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="device_root" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

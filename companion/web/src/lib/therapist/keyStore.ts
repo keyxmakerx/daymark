@@ -67,6 +67,11 @@ export async function wrap(keys: TherapistKeys, passphrase: string, params: KdfP
   plain.set(keys.sign.publicKey.subarray(0, SIGN_PK), o)
   const nonce = so.randombytes_buf(so.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES)
   const ct = so.crypto_aead_xchacha20poly1305_ietf_encrypt(plain, enc.encode(WRAP_AAD), null, nonce, master)
+  // `plain` is our own concatenation of the caller's secret keys and `master` unlocks the blob;
+  // neither is needed past this line, and both used to stay live for as long as the tab did.
+  // Wiping them does not touch the caller's own key buffers — those are theirs to zeroize().
+  plain.fill(0)
+  master.fill(0)
   const blob: WrappedKeyBlob = {
     v: 1,
     kdf: params,
@@ -91,20 +96,41 @@ export async function unwrap(blob: WrappedKeyBlob, passphrase: string): Promise<
     plain = so.crypto_aead_xchacha20poly1305_ietf_decrypt(null, ct, enc.encode(WRAP_AAD), nonce, master)
   } catch {
     throw new KeyUnwrapError('wrong reading passphrase or tampered key blob')
+  } finally {
+    // `master` opens this blob on its own, and nothing downstream needs it. It used to survive
+    // here — including on the wrong-passphrase path, where the throw skipped straight past any
+    // cleanup — so a passphrase-equivalent secret sat in the heap for the life of the tab.
+    master.fill(0)
   }
-  if (plain.length !== KEYS_LEN) throw new KeyUnwrapError('wrapped-key plaintext has the wrong length')
+  // Every exit from here on wipes `plain` first. The four keys below are slice() COPIES, so the
+  // 160-byte concatenation is a second, independent home for the therapist's secret keys; before
+  // this it was never cleared, and zeroize() — which only ever saw the copies — left it intact.
+  // What wiping buys is narrow and worth stating plainly: it shortens the window and removes the
+  // copies we made ourselves. JavaScript cannot promise more than that. The engine may have moved
+  // these bytes during GC, libsodium's WASM heap holds its own working buffers, and the
+  // passphrase arrived as an immutable string we cannot overwrite at all.
+  if (plain.length !== KEYS_LEN) {
+    plain.fill(0)
+    throw new KeyUnwrapError('wrapped-key plaintext has the wrong length')
+  }
   let o = 0
   const boxPriv = plain.slice(o, o + BOX_SK); o += BOX_SK
   const boxPub = plain.slice(o, o + BOX_PK); o += BOX_PK
   const signPriv = plain.slice(o, o + SIGN_SK); o += SIGN_SK
   const signPub = plain.slice(o, o + SIGN_PK)
+  plain.fill(0)
   return {
     box: { publicKey: boxPub, privateKey: boxPriv },
     sign: { publicKey: signPub, privateKey: signPriv },
   }
 }
 
-/** Overwrite in-memory secret key bytes. Call on logout/idle. */
+/**
+ * Overwrite in-memory secret key bytes. Call on logout/idle.
+ *
+ * This wipes the buffers this module handed out. It is not a guarantee that no copy of the keys
+ * remains anywhere in the process — see the note in unwrap().
+ */
 export function zeroize(keys: TherapistKeys | null): void {
   if (!keys) return
   keys.box.privateKey.fill(0)

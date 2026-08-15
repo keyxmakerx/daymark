@@ -1,6 +1,7 @@
 package com.daymark.companion.routes
 
 import com.daymark.companion.clientAddress
+import com.daymark.companion.auth.AttemptLimiter
 import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.auth.Secrets
@@ -26,6 +27,8 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
 
@@ -46,6 +49,25 @@ import org.slf4j.LoggerFactory
 private fun RelMeta.toDto() = RelMetaDto(version, size, contentHash, settingKey, createdAt)
 
 private val log = LoggerFactory.getLogger("com.daymark.companion.audit")
+
+/**
+ * Per-source request budget for SESSION-COOKIE callers on the relationship surface.
+ *
+ * Bearer callers were always metered: `AuthGuard.authorize` spends a token bucket on every owner
+ * request. The cookie branch of [resolveRole] never reached AuthGuard, so a signed-in therapist met
+ * no limit of any kind — and each assignments/gameplans PUT ends in a live SMTP round-trip to the
+ * owner. One session could pour "you have something to review" mail into the owner's inbox for as
+ * long as it stayed alive. For the owner of a mental-health journal that is not spam volume, it is
+ * the therapist reaching them at will down a channel they opted into for occasional notices.
+ *
+ * 120/minute sits far above the portal's real cost — a therapist screen is a handful of requests and
+ * a publish is two — and far below anything useful as a flood. Fixed-window overshoot (up to 2x
+ * across a boundary) is the trade [AttemptLimiter] already documents.
+ *
+ * `internal` so the test can assert against the real production number instead of restating it.
+ */
+internal const val THERAPIST_MAX_PER_WINDOW = 120
+internal const val THERAPIST_WINDOW_MS = 60_000L
 
 /** Who is presenting a request, resolved from the presented credential. */
 enum class Role { OWNER, THERAPIST }
@@ -76,18 +98,25 @@ fun Route.relationRoutes(
     auditSourceIp: Boolean = false,
     /** Injectable so tests can drive expiry without sleeping. */
     clock: () -> Long = { System.currentTimeMillis() },
+    /**
+     * The cookie-caller budget, built once here because `Application.module` has no knob for it —
+     * `DAYMARK_RATE_LIMIT_RPS` sizes AuthGuard's bearer bucket, which is a different resource with
+     * different traffic. Defaulted rather than required so this stays one file's change; wiring an
+     * operator-visible knob through Config is a follow-up, not part of closing the bypass.
+     */
+    therapistLimiter: AttemptLimiter = AttemptLimiter(THERAPIST_MAX_PER_WINDOW, THERAPIST_WINDOW_MS),
 ) {
     route("/v1/rel/{relRef}/{channel}") {
 
         // List lineages in a channel (either counterparty may read).
         get {
-            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds, auditStore, auditSourceIp) ?: return@get
+            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds, auditStore, auditSourceIp, therapistLimiter) ?: return@get
             call.respond(RelLineageList(store.listLineages(ctx.relRef, ctx.channel)))
         }
 
         // List versions of a lineage (metadata only).
         get("/{lineage}") {
-            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds, auditStore, auditSourceIp) ?: return@get
+            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds, auditStore, auditSourceIp, therapistLimiter) ?: return@get
             val lineage = call.parameters["lineage"] ?: return@get call.respond(HttpStatusCode.BadRequest, ErrorDto("missing lineage"))
             if (lineage == "current") return@get call.respond(HttpStatusCode.BadRequest, ErrorDto("missing lineage"))
             try {
@@ -107,7 +136,7 @@ fun Route.relationRoutes(
          * remedy. This feature exists to constrain the therapist; it must not arm them.
          */
         post("/{lineage}/revoke") {
-            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds, auditStore, auditSourceIp, requireCsrf = true) ?: return@post
+            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds, auditStore, auditSourceIp, therapistLimiter, requireCsrf = true) ?: return@post
             if (ctx.channel != Channel.SHARES) {
                 call.respond(HttpStatusCode.NotFound, ErrorDto("not found"))
                 return@post
@@ -136,7 +165,7 @@ fun Route.relationRoutes(
 
         // Fetch the highest version of a lineage (the counterparty read path).
         get("/{lineage}/current") {
-            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds, auditStore, auditSourceIp) ?: return@get
+            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds, auditStore, auditSourceIp, therapistLimiter) ?: return@get
             val lineage = call.parameters["lineage"] ?: return@get call.respond(HttpStatusCode.BadRequest, ErrorDto("missing lineage"))
             try {
                 val (version, bytes) = store.fetchCurrent(ctx.relRef, ctx.channel, lineage)
@@ -155,7 +184,7 @@ fun Route.relationRoutes(
 
         // Fetch one blob.
         get("/{lineage}/{version}") {
-            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds, auditStore, auditSourceIp) ?: return@get
+            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds, auditStore, auditSourceIp, therapistLimiter) ?: return@get
             val lineage = call.parameters["lineage"] ?: return@get call.respond(HttpStatusCode.BadRequest, ErrorDto("missing lineage"))
             val version = call.parameters["version"]?.toLongOrNull()
                 ?: return@get call.respond(HttpStatusCode.BadRequest, ErrorDto("version must be an integer"))
@@ -174,7 +203,7 @@ fun Route.relationRoutes(
         // writer MUST also present a matching X-CSRF-Token — a session cookie alone is not enough
         // (defends assignments/gameplans PUTs against cross-site forgery, matching /session/logout).
         put("/{lineage}/{version}") {
-            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds, auditStore, auditSourceIp, requireCsrf = true) ?: return@put
+            val ctx = resolve(store, ownerGuard, authStore, sessionIdleSeconds, auditStore, auditSourceIp, therapistLimiter, requireCsrf = true) ?: return@put
             val requiredRole = writerRole(ctx.channel)
             if (ctx.role != requiredRole) {
                 call.respond(HttpStatusCode.Forbidden, ErrorDto("wrong direction for this channel"))
@@ -183,8 +212,37 @@ fun Route.relationRoutes(
             val lineage = call.parameters["lineage"] ?: return@put call.respond(HttpStatusCode.BadRequest, ErrorDto("missing lineage"))
             val version = call.parameters["version"]?.toLongOrNull()
                 ?: return@put call.respond(HttpStatusCode.BadRequest, ErrorDto("version must be an integer"))
-            // Non-secret routing tag; only meaningful for setting-type assignments. Validated
-            // structurally by the store BEFORE the (opaque) body is read/stored.
+            /*
+             * OPTIONAL non-secret routing tag. Read the next paragraph before citing the allowlist
+             * as a guarantee anywhere.
+             *
+             * What `RelationStore.SETTING_ALLOWLIST` actually constrains is THIS HEADER: the
+             * cleartext string the server stores in `rel_blobs.setting_key` and echoes back in the
+             * version list. That is worth doing — it keeps an arbitrary therapist-chosen string out
+             * of the server's own index and out of the owner's UI — but it is the whole of it.
+             *
+             * It does NOT constrain which setting the assignment changes. That key lives inside the
+             * sealed body, which the server cannot read, and the header is not derived from the body
+             * — it is a second, independent claim by the same author. A therapist who wanted to push
+             * a `pin` assignment would send `X-Setting-Key: theme`, or (like the real client, which
+             * has never sent this header at all — see companion/web/src/lib/therapist/assignClient.ts
+             * `publishAssignment`) send nothing and skip the check outright. Making the header
+             * MANDATORY on this channel would close the skip and change nothing else: the same party
+             * still picks both halves, so no header rule can bind the ciphertext. The server has no
+             * leverage here and should not be documented as if it does.
+             *
+             * The check that does bind is the OWNER's, on the plaintext, after decrypting:
+             * companion/web/src/lib/assignments/inbox.ts calls `validateAssignment`, which enforces
+             * the mirrored SETTING_ALLOWLIST in validate.ts. That one is run by the party being
+             * protected, which is the property this header lacks and X-Share-Meta below has.
+             *
+             * Why the wording matters concretely: RelationStore's KDoc says this gate "guarantees no
+             * PIN/lock/encryption/network/backup key can ever transit the setting channel". An owner
+             * reading that would believe the server checks every setting assignment. It checks none
+             * of the ones the shipping client sends. If anyone ever deleted the owner-side check as
+             * "redundant with the server allowlist", a `pin` assignment would have sailed through
+             * with nothing anywhere to stop it.
+             */
             val settingKey = call.request.headers["X-Setting-Key"]?.trim()?.ifBlank { null }
             /*
              * The owner already sends the share deadline in X-Share-Meta; until now the server
@@ -192,11 +250,12 @@ fun Route.relationRoutes(
              *
              * Trusting this header is defensible precisely because the sender is not the restricted
              * party: the OWNER writes it and the THERAPIST is bound by it. (Contrast X-Setting-Key,
-             * where the sender IS the restricted party — that one is a separate open finding.) The
-             * role check above has already established this caller is the owner before the header is
-             * read at all. And it is not load-bearing on its own: the authoritative expiry is bound
-             * into the signed AAD transcript the client verifies, so a forged header can only make
-             * an honest server refuse EARLIER, never serve later than the signed deadline.
+             * where the sender IS the restricted party — see the block above for why no server-side
+             * rule on that header can be worth anything.) The role check above has already
+             * established this caller is the owner before the header is read at all. And it is not
+             * load-bearing on its own: the authoritative expiry is bound into the signed AAD
+             * transcript the client verifies, so a forged header can only make an honest server
+             * refuse EARLIER, never serve later than the signed deadline.
              *
              * Only `expiry` is read. shareId/version/ownerSigningFp are deliberately ignored —
              * reading more of the envelope's metadata is a step toward reading the envelope.
@@ -222,7 +281,19 @@ fun Route.relationRoutes(
                 auditPublish(auditStore, ctx, lineage, putMeta.version, auditSourceIp, call)
                 // Best-effort "new item to review" notice — only for the therapist-writes-owner-reads
                 // direction (writerRole already enforced this is THERAPIST for these two channels).
-                reviewKindFor(ctx.channel)?.let { kind -> notifier.notify(kind, portalUrl(call, publicBaseUrl)) }
+                //
+                // On Dispatchers.IO because notify() bottoms out in a blocking SMTP round-trip to
+                // whatever host the operator configured. That ran on the request coroutine's own
+                // thread: not a delay to THIS caller (the 201 is already written above) but a thread
+                // held out of the pool that serves everyone else, for as long as a slow or hanging
+                // mail server felt like taking. Still awaited rather than launched — the send
+                // completes before the handler returns, which is the ordering the notification tests
+                // observe. Fully detaching it, the way RecoveryRoutes does, is the better end state
+                // and a behaviour change, so it is called out in the report rather than smuggled in.
+                reviewKindFor(ctx.channel)?.let { kind ->
+                    val url = portalUrl(call, publicBaseUrl)
+                    withContext(Dispatchers.IO) { notifier.notify(kind, url) }
+                }
             } catch (e: RelationStoreException) {
                 call.failRel(e)
             }
@@ -296,6 +367,7 @@ private suspend fun io.ktor.server.routing.RoutingContext.resolve(
     sessionIdleSeconds: Long,
     auditStore: AuditStore,
     auditSourceIp: Boolean,
+    therapistLimiter: AttemptLimiter,
     requireCsrf: Boolean = false,
 ): RelContext? {
     val channelWire = call.parameters["channel"] ?: run {
@@ -316,6 +388,23 @@ private suspend fun io.ktor.server.routing.RoutingContext.resolve(
     val computed = Secrets.relRefOf(inboxToken)
     if (!Secrets.constantTimeEquals(computed, pathRelRef)) {
         call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized")); return null
+    }
+
+    /*
+     * Meter cookie callers. See THERAPIST_MAX_PER_WINDOW for what went unbounded without this.
+     *
+     * Charged AFTER the inbox-token check, not before, and that ordering is the point: only a caller
+     * who already holds the relationship's inbox token can spend the budget. Metering earlier would
+     * let anyone who can reach the server attach a made-up cookie and burn a real therapist's
+     * allowance from the same address — turning a rate limit into a way to lock a clinician out of
+     * their own caseload. The work in front of the token check is one BLAKE2b hash; the expensive
+     * part (session lookup, blob write, SMTP) is all behind it.
+     *
+     * Keyed on clientAddress() to match every other per-source control here (AuthGuard, the TOTP
+     * limiter, the recovery limiter) and to inherit the same trusted-proxy contract.
+     */
+    if (call.request.cookies["daymark_session"] != null && !therapistLimiter.allow(call.clientAddress())) {
+        call.respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited")); return null
     }
 
     // Determine role. Prefer an owner bearer token; else a therapist session cookie bound here.

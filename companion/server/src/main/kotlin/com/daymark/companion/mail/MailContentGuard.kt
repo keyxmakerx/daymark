@@ -74,8 +74,27 @@ object MailContentGuard {
         }
 
         // Belt-and-braces: even if a sentinel somehow appeared inside an allowed fragment
-        // (e.g. a smuggled display name), reject on the raw rendered text.
-        val hay = (rendered.subject + "\n" + rendered.textBody).lowercase()
+        // (e.g. a smuggled display name), reject on the rendered text.
+        //
+        // The link is cut out before the scan. Nothing in it comes from anyone's record: the
+        // host is the operator's own deployment and the rest is ids and random secrets this
+        // server just minted (see buildInviteLink / buildRecoveryLink). Scanning it made the
+        // guard fail closed on mail that was never a leak:
+        //
+        //  - An operator self-hosting at mood.example.org — an obvious hostname for a mood
+        //    journal — could not send a single message. Every invite, review and recovery mail
+        //    hit "mood" and threw. The recovery route answers 202 regardless, so the owner saw
+        //    a success and no mail ever arrived; they had no way to tell recovery was dead.
+        //  - Tokens are 43 random base64url chars, so lowercased they hit a three-letter
+        //    sentinel like "phq" or "gad" around 1 in 400, and an invite link carries two of
+        //    them. Roughly one invite in two hundred vanished for no reason anyone could see.
+        //
+        // Everything the scan exists for is still in the haystack: the template text, the
+        // expiry, the operator-supplied display name, and anything that survived the strip
+        // above. Replacing rather than deleting the link keeps the text either side of it from
+        // being spliced into a sentinel that was never written.
+        val whole = rendered.subject + "\n" + rendered.textBody
+        val hay = (url?.let { whole.replace(it.toString(), "\n") } ?: whole).lowercase()
         RECORD_SENTINELS.firstOrNull { hay.contains(it.lowercase()) }?.let {
             throw MailContentViolation("rendered message contains a record-like token: $it")
         }
