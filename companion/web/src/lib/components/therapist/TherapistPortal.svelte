@@ -10,7 +10,7 @@
    */
   import type { Grant } from '../../assignments/types'
   import { verifyGrantBlob, hasCapability } from '../../therapist/grant'
-  import { isLive } from '../../therapist/session'
+  import { isLive, touch } from '../../therapist/session'
   import { zeroize } from '../../therapist/keyStore'
   import type { UnlockedContext } from '../../therapist/context'
   import LoginGate from './LoginGate.svelte'
@@ -67,12 +67,65 @@
         hasCapability(grant, 'assign.largeAssessment')),
   )
 
-  // Idle/absolute guard: lock (and zeroize) once the session is no longer live.
-  const live = $derived(ctx ? isLive(ctx.session) : false)
+  /*
+   * IDLE / ABSOLUTE GUARD — lock and zeroize once the session stops being live.
+   *
+   * This was `$derived(ctx ? isLive(ctx.session) : false)` and it never fired. `isLive` reads
+   * `Date.now()` *inside itself*, so the only dependency `$derived` could track was `ctx` — which
+   * is written exactly twice, at unlock and at logout. The guard was therefore evaluated once, at
+   * unlock, when it is true by construction, and never again. The portal never locked, `zeroize`
+   * was never reached on the idle path, and the therapist's unwrapped X25519/Ed25519 reading keys
+   * and the decrypted share sat in memory until the tab was closed — on, say, a clinic machine
+   * someone walked away from.
+   *
+   * Time has to be a value the reactive system can see. Hence the tick.
+   */
+  const TICK_MS = 15_000
+  let clock = $state(Date.now())
+
+  $effect(() => {
+    if (!ctx) return
+    const id = setInterval(() => (clock = Date.now()), TICK_MS)
+    return () => clearInterval(id)
+  })
+
+  const live = $derived(ctx ? isLive(ctx.session, clock) : false)
+
   $effect(() => {
     if (ctx && !live) logout()
   })
+
+  /*
+   * ...AND THE OTHER HALF, without which the fix above is its own bug.
+   *
+   * `touch()` — the function that pushes the idle deadline forward on activity — had no production
+   * caller anywhere in the tree. `idleExpiresAt` was set once at login and never moved. So a
+   * working clock alone would have logged a therapist out fifteen minutes after unlock while they
+   * were actively reading, which is not "the guard now works", it is a different broken behaviour
+   * that would have been blamed on the lock.
+   *
+   * Throttled, because this runs on pointer and key events and reassigning the session on every
+   * keystroke would churn the reactive graph for no benefit. Only the *idle* deadline moves;
+   * `absoluteExpiresAt` is untouched, so activity can never extend a session past the hard cap the
+   * server set.
+   */
+  let lastTouch = 0
+  function noteActivity() {
+    if (!ctx) return
+    const now = Date.now()
+    if (now - lastTouch < TICK_MS) return
+    lastTouch = now
+    ctx = { ...ctx, session: touch(ctx.session, undefined, now) }
+  }
 </script>
+
+<!--
+  Activity is observed at the window, not on the portal section, so it counts wherever focus
+  actually is — inside a text field, a dialog, a child component — rather than only on bubbling
+  paths that happen to reach one element. Top level because `<svelte:window>` may not sit inside a
+  block; `noteActivity` no-ops when there is no session, so this is inert on the login gate.
+-->
+<svelte:window onpointerdown={noteActivity} onkeydown={noteActivity} onfocus={noteActivity} />
 
 {#if !ctx}
   <LoginGate onunlock={onUnlock} />
