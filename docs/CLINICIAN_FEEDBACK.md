@@ -202,6 +202,8 @@ Open. Discussed in the reply to this session rather than decided here.
 5. When you say affirmations, do you mean values work, self-compassion practice, or short positive
    statements? They are different tools and we want to build the one you meant.
 
+**Decisions taken from this session are recorded in [DECISIONS_2026-08.md](./DECISIONS_2026-08.md).**
+
 **For the maintainer:**
 1. ~~Verify whether the low-mood force-navigation is actually fixed.~~ **Done — it is fixed**
    (`stats/SupportOffer.kt`). Tell her; it answers her suggestion directly and she may have more to
