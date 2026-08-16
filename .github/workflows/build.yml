@@ -12,6 +12,25 @@ on:
 permissions:
   contents: read
 
+# One group per branch, spanning both triggers above.
+#
+# `push: ["**"]` and `pull_request:` both fire for a branch that has an open PR, so every push was
+# building the same commit twice, in parallel — two full Android builds, two sets of artifacts, and
+# two failure notifications for one problem. They cannot be collapsed by a group keyed on
+# `github.ref`, which is `refs/heads/<branch>` for a push but `refs/pull/<n>/merge` for a pull
+# request; `head_ref || ref_name` is the branch name under both, so both land here.
+#
+# The `pull_request` trigger is kept rather than deleted because it is the only one that fires for a
+# PR opened from a fork, where the push never reaches this repository.
+#
+# `cancel-in-progress` everywhere except `main`: a run against superseded code can only report a
+# failure that has already been fixed, and two of those completed and raised alarms while the commit
+# fixing them was already building. On `main` every commit keeps its own build, since there is no
+# later run coming to supersede it.
+concurrency:
+  group: build-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ github.head_ref != '' || github.ref_name != 'main' }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
