@@ -91,14 +91,28 @@ push is the last step of that job rather than a separate one, so what ships is t
 that was tested, not a rebuild of the same source.
 
 ```
-ghcr.io/keyxmakerx/daymark-companion:sha-<commit>     # immutable — deploy this
-ghcr.io/keyxmakerx/daymark-companion@sha256:<digest>  # or this; a tag can be force-pushed, a digest cannot
-ghcr.io/keyxmakerx/daymark-companion:main             # moving pointer — do NOT deploy
+ghcr.io/keyxmakerx/daymark-companion@sha256:<digest>  # immutable AND verifiable — the safest pin
+ghcr.io/keyxmakerx/daymark-companion:sha-<commit>     # immutable, but a tag can be force-pushed
+ghcr.io/keyxmakerx/daymark-companion:latest           # moves with main — for auto-updating setups
+ghcr.io/keyxmakerx/daymark-companion:main             # identical to :latest, same image
 ```
 
-**Deploy a digest or a `sha-` tag, never `:main`.** A moving tag plus an auto-updating container
-manager is how a server changes behaviour overnight with no diff to look at. The exact digest for
-any build is printed in that run's summary on the Actions tab.
+**Pick by whether you want the deployment to change without you.**
+
+`:latest` and `:main` are the same image and both follow `main`. Use one of them if your container
+manager auto-updates (Cosmos, Watchtower, a Portainer stack that repulls) and you want that — it is
+what those tools are for, and `:latest` in particular is what everything assumes when no tag is
+given, so its absence is a confusing failure rather than a safe default.
+
+Pin the **digest** when you do not want that. A moving tag plus an auto-updating manager is how a
+server changes behaviour overnight with no diff to look at, and this application carries a
+migrating database: an update can change on-disk state in ways that do not reverse by rolling the
+image back. **Take a backup before an update you did not choose the timing of.** The exact digest
+for any build is printed in that run's summary on the Actions tab.
+
+Only builds from `main` move `:latest` and `:main`. A manually dispatched build of a branch
+publishes its `sha-` tag and nothing else, so a branch can be tested without anything that follows
+a moving tag pulling it.
 
 **One-time setup:** GHCR packages are created private even for a public repo. After the first
 publish, open the package in GitHub → Package settings → change visibility to public. Otherwise
@@ -107,8 +121,24 @@ every pull needs `docker login ghcr.io` with a PAT carrying `read:packages`.
 To run the published image from this compose file rather than building:
 
 ```bash
+# Pinned (recommended for anything you rely on):
 export DAYMARK_IMAGE=ghcr.io/keyxmakerx/daymark-companion@sha256:<digest>
+
+# Or following main:
+export DAYMARK_IMAGE=ghcr.io/keyxmakerx/daymark-companion:latest
+
 docker compose pull && docker compose up -d
+```
+
+**The `/data` volume must be writable by UID 65532.** The image runs as a non-root user, and the
+compose file uses a *named* volume, which Docker seeds from the image with the right ownership. A
+**bind mount** does not do that — it keeps the host directory's ownership — so a bind-mounted
+`/data` owned by root gives `NOT READY: cannot write to /data (Permission denied)`, the app serving
+only the viewer and `/healthz`. Container managers that generate their own compose tend to use bind
+mounts, so if you did not write the mount yourself, check this first:
+
+```bash
+chown -R 65532:65532 /your/host/path/for/data
 ```
 
 Building it yourself stays fully supported and is the default — nothing here requires the registry.
