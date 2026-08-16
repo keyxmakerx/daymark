@@ -7,6 +7,7 @@
   import SyncPanel from './lib/components/SyncPanel.svelte'
   import Assessments from './lib/components/Assessments.svelte'
   import OwnerConsole from './lib/components/owner/OwnerConsole.svelte'
+  import Orientation from './lib/components/onboarding/Orientation.svelte'
   import RecoverAccess from './lib/components/owner/RecoverAccess.svelte'
   import ToolBuilder from './lib/components/ToolBuilder.svelte'
   import type { InstrumentDefinition } from './lib/instruments/types'
@@ -85,14 +86,23 @@
 
     {#if !data}
       <section class="intro">
-        <nav class="tabs source" aria-label="Data source">
-          <button class:active={source === 'file'} aria-pressed={source === 'file'} onclick={() => (source = 'file')}>Open a backup file</button>
-          <button class:active={source === 'sync'} aria-pressed={source === 'sync'} onclick={() => (source = 'sync')}>Connect to sync</button>
-          <button class:active={source === 'assess'} aria-pressed={source === 'assess'} onclick={() => (source = 'assess')}>Self-checks</button>
-          <button class:active={source === 'build'} aria-pressed={source === 'build'} onclick={() => (source = 'build')}>Build a tool</button>
-          <button class:active={source === 'owner'} aria-pressed={source === 'owner'} onclick={() => (source = 'owner')}>Owner console</button>
-          <button class:active={source === 'recover'} aria-pressed={source === 'recover'} onclick={() => (source = 'recover')}>Recover access</button>
-        </nav>
+        <!--
+          THE ORIENTATION IS THE NAVIGATION, not a banner above it.
+
+          This was six flat buttons — "Open a backup file / Connect to sync / Self-checks / Build a
+          tool / Owner console / Recover access" — with no statement of who any of them were for
+          and no hint that a clinician belongs on a different page entirely. The maintainer's own
+          words on landing here: "i am so confused as to what i'm looking at".
+
+          Orientation renders the same six destinations grouped and explained, plus the two other
+          surfaces that exist. `onchoose` gives it the same job the buttons had, so nothing is
+          added between a returning person and the thing they came to do — after the first visit it
+          collapses to a compact header with the routes still in place.
+
+          `adminLink` is left at its default of false: admin.html holds no credential on this
+          build, and a deployment should have to choose to advertise it from a public page.
+        -->
+        <Orientation selected={source} onchoose={(id) => (source = id)} />
 
         {#if source === 'file'}
           <Dropzone onload={load} onerror={(m) => (error = m)} />
@@ -155,14 +165,10 @@
      awful day" — interface state wearing a person's data. */
   .error { color: var(--clay); background: var(--clay-wash); border: 1px solid var(--clay); border-radius: var(--radius-sm); padding: var(--space-3) var(--space-4); margin: 0; }
   .filemeta { margin: 0; }
-  .tabs { display: flex; gap: var(--space-2); }
-  /* The selected source is STRUCTURE — "where am I" — so it takes the structural accent, the
-     same as every other tab bar in the product (OwnerConsole, TherapistPortal, AssignSurface,
-     PinnedTherapistPicker, CapabilityRow, Dashboard's range control). This one site was still
-     on --ink-accent, which is content ink and reads as emphasis on a person's material; solid
-     ink stays reserved for the primary ACTION on a screen. aria-pressed already carries the
-     selection, so the fill is never the only signal. */
-  .tabs button.active { background: var(--indigo); color: var(--on-accent); border-color: var(--indigo); }
+  /* The `.tabs` rules that lived here went with the six flat buttons Orientation replaced. The
+     reasoning they carried — that a selected surface is STRUCTURE, so it takes the structural
+     accent rather than content ink, and that aria-pressed carries the selection so a fill is
+     never the only signal — moved with the markup and is restated in Orientation.svelte. */
   .foot { border-top: 1px solid var(--hairline); padding-top: var(--space-4); font-size: 0.85rem; }
   .status { font-style: italic; }
   code { font-family: var(--font-mono); background: var(--paper-bg); padding: 0 0.25rem; border-radius: 4px; }
