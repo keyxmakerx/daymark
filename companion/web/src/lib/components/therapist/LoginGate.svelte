@@ -15,7 +15,23 @@
   import LowerAssuranceBanner from './LowerAssuranceBanner.svelte'
   import { Callout } from '../ui'
 
-  let { onunlock }: { onunlock: (ctx: UnlockedContext) => void } = $props()
+  let {
+    onunlock,
+    standalone = true,
+  }: {
+    onunlock: (ctx: UnlockedContext) => void
+    /**
+     * Whether this gate is mounted on its own rather than inside a screen that already frames it.
+     *
+     * One prop rather than two, because the banner and the heading exist for the same reason: a
+     * gate mounted alone has to introduce itself and state the assurance level, and a gate mounted
+     * inside SignInScreen must do neither — that screen already renders the fixed notice as part of
+     * the contract, and its own headings. Two copies of a fixed honesty notice on one page is how
+     * the notice stops being read, and a third "sign in" heading is noise to anyone navigating by
+     * headings. Defaults true, so mounting this alone stays safe.
+     */
+    standalone?: boolean
+  } = $props()
 
   // Connection + relationship provisioning (from OOB pairing / invite).
   let serverUrl = $state('')
@@ -73,8 +89,8 @@
 </script>
 
 <section class="gate">
-  <LowerAssuranceBanner />
-  <h2>Therapist portal — sign in</h2>
+  {#if standalone}<LowerAssuranceBanner />{/if}
+  {#if standalone}<h2>Therapist portal — sign in</h2>{/if}
 
   <details class="prov" open>
     <summary>Relationship &amp; connection <em>(from your pairing invite)</em></summary>

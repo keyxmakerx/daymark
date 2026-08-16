@@ -361,7 +361,7 @@ export const SCREEN_COPY = {
   contractLede:
     'This is the whole of what signing in here means. It is the same on every visit, and it is ' +
     'not a summary of a longer document held somewhere else.',
-  credentialTitle: 'Sign in',
+  credentialTitle: 'Your credentials',
   digestTitle: 'Pinned image digest',
   digestNote:
     'This is what the deployment says it is running. It is a claim made by the same page you are ' +

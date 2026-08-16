@@ -13,7 +13,21 @@
   import Dashboard from '../Dashboard.svelte'
   import NonDiagnosticBanner from './NonDiagnosticBanner.svelte'
 
-  let { ctx }: { ctx: UnlockedContext } = $props()
+  let {
+    ctx,
+    onopen,
+  }: {
+    ctx: UnlockedContext
+    /**
+     * Called with the bundle each time this view opens or refuses one, so the sibling surfaces
+     * (Today, Calendar, Client record) can draw the same data without decrypting it again.
+     *
+     * Called with `null` on every failure path too. That matters: a refusal here must CLEAR what
+     * the other tabs are showing, or a share that has just been rejected as unverifiable would go
+     * on being rendered somewhere else in the portal.
+     */
+    onopen?: (data: BackupData | null) => void
+  } = $props()
 
   let data = $state<BackupData | null>(null)
   let error = $state('')
@@ -31,9 +45,11 @@
       } else {
         data = bundleToBackupData(bundle)
       }
+      onopen?.(data)
     } catch (e) {
       // Refuse to render: never expose a possibly-forged bundle.
       data = null
+      onopen?.(null)
       error =
         e instanceof ShareExpiredError
           ? 'This share has expired. Ask for a fresh one.'
