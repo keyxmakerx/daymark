@@ -394,7 +394,16 @@ and left to that document's owner rather than changed here — but it is the one
 
 ## Phase 3 — the missing screens
 
-In dependency order. Each is new; none exists in any form today.
+In dependency order.
+
+> **Correction (checked against the tree, not remembered).** This section used to open "Each is new;
+> none exists in any form today." That is true of the first four and **false of the fifth**:
+> `components/therapist/AssignSurface.svelte` is 194 lines of capability-scoped composer that already
+> draws from `catalog.ts`, runs `preflight` live so the therapist sees the same rejection the owner
+> will apply, and publishes behind a step-up confirm. Item 5 is therefore an **enhancement** — add
+> the lifecycle to a composer that exists — and building it as a new screen would duplicate working,
+> security-relevant code. Items 1–4 are genuinely absent: no component in `src/lib/components`
+> mentions Today, Calendar, a client record, or a sign-in surface.
 
 1. **Today** — attention strip (exceptions only) over a quiet roster. Needs an `EmptyState` for the
    first-week case.
@@ -405,7 +414,8 @@ In dependency order. Each is new; none exists in any form today.
    reading a cut-off that does not exist), provenance per row, and the "edge of this screen" margin.
 4. **Sign-in** — the two-column contract, with the pinned image digest promoted from footnote to
    control. The fixed `LowerAssuranceBanner` copy is not editable.
-5. **Assign** — lifecycle in the composer rather than discovered later.
+5. **Assign** — lifecycle in the composer rather than discovered later. *Not a new screen:* extend
+   `AssignSurface.svelte`, which already handles capability scoping, preflight and step-up publish.
 
 ## Phase 4 — the admin console
 
