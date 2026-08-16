@@ -11,13 +11,14 @@ name: Companion
 # Path-filtered so it only runs when companion code (or this workflow) changes; the
 # Android app build lives in build.yml.
 
+# PUSH ONLY, for the same reason as build.yml: `push` and `pull_request` both fire for a branch
+# with an open PR, and a check run attaches to the head commit either way, so the pair produced two
+# identical runs of every job here — including the Docker build and both compose boots, which are
+# the most expensive jobs in the repository. A PR from a fork would get no checks; that is the
+# accepted trade, recorded in build.yml.
 on:
   push:
     branches: ["**"]
-    paths:
-      - "companion/**"
-      - ".github/workflows/companion.yml"
-  pull_request:
     paths:
       - "companion/**"
       - ".github/workflows/companion.yml"
@@ -26,9 +27,15 @@ on:
 permissions:
   contents: read
 
+# Keyed on the branch NAME, not `github.ref`. With both triggers enabled this group could never
+# collapse a duplicate anyway — `github.ref` is `refs/heads/<branch>` for a push but
+# `refs/pull/<n>/merge` for a pull request — so the two runs simply sat in different groups and both
+# ran to completion. With one trigger the distinction is moot, and `ref_name` is the clearer key.
+#
+# `main` is exempt from cancellation: every commit on the default branch keeps its own verdict.
 concurrency:
-  group: companion-${{ github.ref }}
-  cancel-in-progress: true
+  group: companion-${{ github.ref_name }}
+  cancel-in-progress: ${{ github.ref_name != 'main' }}
 
 jobs:
   web:
