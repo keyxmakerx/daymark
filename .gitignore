@@ -17,6 +17,12 @@ keystore.properties
 *.keystore
 *.jks
 
+# Node. The web portal has its own ignore file, but a tool run from the repo root instead of from
+# companion/web creates these here, where nothing was ignoring them — that is how a vitest cache
+# very nearly landed in a commit.
+node_modules/
+.vite/
+
 # OS
 .DS_Store
 

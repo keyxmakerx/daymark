@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <!--
+      No <meta http-equiv="Content-Security-Policy"> here: the CSP is sent by the server as a
+      response header (see companion/server Application.kt) so it also covers error pages and cannot
+      be stripped by editing the document.
+
+      A THIRD, SEPARATE SURFACE. index.html is the owner's report viewer and therapist.html is the
+      clinician portal; this is neither. It is for whoever operates the server, who is not the owner
+      and not a clinician, and it deliberately shows only operational health, authentication
+      pressure and audit-chain structure. The relationship audit log — who shared what with whom —
+      is owner-readable and is not served here.
+    -->
+    <title>Daymark Companion — Server admin</title>
+    <meta name="description" content="Operational health, authentication posture and audit-chain structure for a self-hosted Daymark Companion. No client data is served on this surface." />
+  </head>
+  <body>
+    <div id="admin-app"></div>
+    <noscript>
+      <p>
+        The Daymark Companion admin console needs JavaScript. It runs entirely in your browser and
+        talks only to the self-hosted server it is served from.
+      </p>
+    </noscript>
+    <script type="module" src="/src/admin.ts"></script>
+  </body>
+</html>

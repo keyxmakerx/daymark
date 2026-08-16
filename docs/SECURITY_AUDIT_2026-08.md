@@ -16,7 +16,7 @@ This matters more than the severities, so it goes first.
 | **refuted-pass** | A skeptic attacked it and it survived. Not independently re-checked by me. |
 | **unverified** | **The skeptic returned no verdict for this row.** My workflow counted a missing verdict as survival, which is the wrong default — absence of refutation is not evidence. Treat these as *reported, not established*. |
 
-Of the eleven still open, several are `unverified` in exactly that sense. That is a flaw in how I ran the
+Of the few still open, several are `unverified` in exactly that sense. That is a flaw in how I ran the
 audit, not a property of the findings, and it is written down here rather than quietly smoothed
 over. **A finding below being listed is not a claim that it is real.**
 
@@ -44,49 +44,66 @@ is worth more than the findings themselves:
   unlock while they were actively reading: not "the guard works now" but a different broken
   behaviour, and one that would have been blamed on the lock.
 
-## Open — ranked by what it costs a real person
+| **Critical** | **Share expiry and `read.share` revocation were enforced only in the therapist's own browser** — an `{#if}` and a `Date.now()` on the machine of the party being restricted. The owner's client sent the deadline in `X-Share-Meta`; the server dropped it. | `RelationRoutes.kt`, `RelationStore.kt` | **confirmed** — the server now records the expiry, gates both read paths under the store lock, and has an owner-only revoke route. 410 Gone, with expired and revoked collapsed to one exception kind so the route cannot leak which. |
 
-### 1. Share expiry and revocation are enforced only in the therapist's browser — **critical**, still open
+**What that fix does NOT do**, since the opposite is easy to assume: a therapist who already
+fetched the ciphertext keeps it forever, and no server change alters that. What is closed is the
+case that should always have worked — a therapist who has not yet fetched, after expiry or
+withdrawal, can no longer fetch.
 
-`companion/server/.../routes/RelationRoutes.kt:89`. Verified: **unverified by the skeptic, but I
-checked the load-bearing parts myself and they hold.**
+## Fixed in the follow-up pass
 
-The `shares` read path authorizes on two things: you hold the relationship's inbox token, and a live
-session bound to it. It never checks expiry, never checks a revocation flag, never reads the
-owner-signed grant. I confirmed directly that:
-
-- no `revoked`/`expiry` column or route exists for shares anywhere in `companion/server/src/main`
-  (every hit is invites and sessions in `AuthStore.kt`);
-- `ShareBuilder.svelte:78` **sends** the expiry to the server in `X-Share-Meta`, and `grep` for
-  `Share-Meta` across the whole server returns **nothing** — it is handed over and dropped.
-
-So the only expiry check runs on a clock supplied by the party being restricted, and the only
-`read.share` check is an `{#if}` in a bundle that party is serving to themselves.
-
-**The honest scope.** This is E2EE: a therapist who already fetched the ciphertext keeps it, and no
-server change can revoke that. What is broken is the case that *should* work — a therapist who has
-not yet fetched, after the owner revoked or the share expired, can still fetch and decrypt. The
-audit log records `SHARE_OPEN`: it records the access it failed to prevent.
-
-**Smallest correct fix.** Persist `expiry` from the `X-Share-Meta` the client already sends, add a
-`revoked` column and an owner-authenticated revoke route, and have the `shares` GET consult both
-before serving. Not a one-liner — it touches the trust model, so it should be designed, not
-patched.
-
-### 2. The rest
-
-| Sev | Finding | Where | Verified |
+| Sev | Finding | Where | Note |
 |---|---|---|---|
-| Med | `SETTING_ALLOWLIST` applies only when the caller *chooses* to send `X-Setting-Key`; the header is optional and the real client never sends it on the assignments channel. The gate documented as guaranteeing no PIN/lock/encryption key can transit is opt-in by the party it restricts. | `RelationRoutes.kt:134` | unverified |
-| Med | Cookie-authenticated therapists bypass every rate limit (`resolveRole` consults `AuthGuard` only when an `Authorization` header is present), and each assignments/gameplans PUT then does a synchronous network-bound `mailer.send` on the request coroutine. | `RelationRoutes.kt:146` | unverified |
-| Med | `MailContentGuard` scans the *rendered* body — which contains the server's own link — for record sentinels, so an operator hosting at e.g. `mood.example.org`, or a random token containing `phq`/`gad`, makes every mail throw. Recovery mail has no fallback and the route still answers 202. | `MailContentGuard.kt:78` | refuted-pass |
-| Med | PIN lockout is an absolute wall-clock deadline, so moving the device clock forward clears it. | `PinManager.kt:56` | unverified |
-| Med | The picker auto-lock skip has no expiry on the return leg — `onBackgrounded()` sets `backgroundedAtMs = -1L` and `shouldLockOnForeground()` returns false whenever `bg < 0`, so after a photo pick the app may never re-lock regardless of elapsed time. | `AutoLockController.kt:41,46` | refuted-pass (found twice) |
-| Med | "Replace all current data" wipes twelve tables but not `offer_records` (`BackupManager` does not inject `OfferRecordDao`). A `kind="support"` row is written only when `moodLevel <= 2`, so a timestamped partial mood history survives the wipe — in the one table whose own schema doc says it must never carry anything about the person. | `BackupManager.kt:262` | refuted-pass |
-| Low | `zeroize()` misses the concatenated 160-byte secret plaintext and the Argon2id master key; it wipes only the four returned copies. | `keyStore.ts:88` | refuted-pass |
-| Low | `ShareBuilder.seal()` builds the `PinStore` from the very keys it is about to seal to, so all three pin assertions are tautologies; `PinStore.serialize()`/`load()` have no production call sites. | `ShareBuilder.svelte:63` | refuted-pass |
-| Low | No `dataExtractionRules` while `targetSdk = 35`, so Android 12+ device-to-device transfer is governed by a default rather than an explicit exclude, against what `PRIVACY.md` claims. | `AndroidManifest.xml:12` | unverified |
-| Low | `connect-src 'self'` blocks the operator-editable absolute "Server URL" that four connection surfaces expose, and those paths report the failure as something else. | `SecurityHeaders.kt:30` | unverified |
+| Med | Cookie-authenticated therapists bypassed every rate limit, and each assignments/gameplans PUT then did a blocking SMTP send on the request coroutine. | `RelationRoutes.kt` | Per-source budget charged **after** the inbox-token check, so a stranger cannot burn a real therapist's allowance from a shared address. Send moved off the request thread. |
+| Med | `MailContentGuard` scanned the server's own link for record sentinels, so an operator at e.g. `mood.example.org` could send **no** mail at all, and ~1 invite in 200 died on a random token spelling `phq`/`gad`. Recovery mail still answered 202. | `MailContentGuard.kt` | Scan scoped away from server-generated URLs. The half that matters — actual record content still throws — is tested in both directions. |
+| Med | PIN lockout was an absolute wall-clock deadline, so stepping the device clock forward cleared it. | `PinManager.kt` | Now takes the **stricter** of wall-clock and monotonic `elapsedRealtime`, so a reboot cannot clear a lockout either. |
+| Med | After a photo pick the app could stop re-locking entirely — the skip had no expiry on the return leg. | `AutoLockController.kt` | Skip now covers a genuine round-trip and nothing longer. |
+| Med | "Replace all current data" left `offer_records` intact — a timestamped partial mood history, in the one table whose own schema doc says it must never carry anything about the person. | `BackupManager.kt` | Ledger is cleared on REPLACE, and is neither exported nor restored. |
+| Low | `zeroize()` wiped only the four returned copies, leaving the Argon2id master and the 160-byte key concatenation live for the life of the tab. | `keyStore.ts` | Both source buffers wiped, including on the wrong-passphrase path, which used to throw straight past cleanup. |
+| Low | The "refuses to seal to an unpinned therapist" gate built its evidence out of the thing it was checking — all three assertions compared a value with itself. | `ShareBuilder.svelte`, `pinStore.ts` | Pins now persist across sessions, so a later key substitution is refused. See the two follow-ups below. |
+| Low | No `dataExtractionRules` while `targetSdk = 35`. | `AndroidManifest.xml` | Explicit device-transfer exclude added. |
+
+**Not fixed, and deliberately: the setting-key allowlist.** The claim was the defect, not the code.
+`X-Setting-Key` is optional, the shipping therapist client never sends it, and the real key is
+inside the sealed body the server cannot read — so making the header mandatory would close the skip
+and buy nothing, since the therapist writes both halves. The check that actually binds is the
+owner's, on plaintext, after decrypting. The route's comment now says that instead of claiming a
+guarantee it never provided. A structural gate that can be skipped is worse than an absent one,
+because someone eventually deletes the real check as "redundant with the server allowlist".
+
+**Not fixed, and deliberately: the CSP `connect-src 'self'`.** Relaxing it would not make the
+absolute "Server URL" field work — the server installs no CORS plugin and registers no OPTIONS
+handler, so every authenticated cross-origin call is preflighted into a response with no CORS
+headers and fails identically. Meanwhile `connect-src 'self'` is the exfiltration boundary for a
+page holding a decrypted journal and unwrapped keys. The honest fix is in the UI: stop offering a
+field that cannot work, and stop reporting a browser refusal as an unreachable host.
+
+## Owed follow-ups from the pin fix
+
+Both are user-visible and neither is built:
+
+1. **No way to forget a pin.** `pinStore.ts` is the first persistent client-side storage in the web
+   app. It leaves a durable record saying *this browser is an owner console with N therapist
+   relationships, first pinned on these dates* — no keys, no writing, but on a shared device that is
+   information about someone's care, and there is no in-app way to clear it.
+2. **No way to rotate a pin.** If a therapist legitimately re-keys, every seal now fails closed and
+   the owner's only recourse is clearing site data. It needs a deliberate "this therapist's key
+   changed, here are the old and new fingerprint words" affordance costing an explicit out-of-band
+   confirmation.
+
+## Still open
+
+Nothing from the original fourteen. All were either fixed above, or deliberately not fixed with the
+reasoning recorded (the setting-key allowlist and the CSP `connect-src`, both of which turned out to
+be claims that needed correcting rather than code that needed changing).
+
+What remains is the two **owed follow-ups** from the pin fix, listed above: no way to forget a pin,
+and no way to rotate one. Both are user-visible, neither is built.
+
+The nine `unverified` rows are now moot as findings — each was read and acted on directly — but the
+methodological point stands and is left in place at the top of this document, because the next audit
+will be run the same way unless someone remembers not to.
 
 ## What came up clean
 

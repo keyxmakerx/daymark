@@ -38,6 +38,7 @@ import com.daymark.app.ui.components.PaperSurface
 @Composable
 fun MoreHubScreen(
     onGoals: () -> Unit,
+    onSky: () -> Unit,
     onActivities: () -> Unit,
     onYearPixels: () -> Unit,
     onSleep: () -> Unit,
@@ -59,7 +60,24 @@ fun MoreHubScreen(
             .padding(16.dp),
     ) {
         SectionLabel("Track")
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+        // Full width and first, because it is a place rather than a tool — and one card rather than
+        // a tab, which is `docs/SKY.md` §11's open question answered cautiously: the Sky is the most
+        // identifying thing this app can draw, so it stays behind the app's lock and one deliberate
+        // tap away instead of sitting on the bar under a stranger's thumb.
+        //
+        // The subtitle names the surface and promises nothing. Not "see how far you've come", which
+        // is a verdict, and not a count of anything, which is a scoreboard.
+        HubCard(
+            icon = R.drawable.ic_act_star,
+            title = "Your sky",
+            subtitle = "Everything you did, as stars",
+            onClick = onSky,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+        ) {
             HubCard(
                 icon = R.drawable.ic_act_star,
                 title = "Activities",

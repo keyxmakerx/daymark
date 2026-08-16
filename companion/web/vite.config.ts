@@ -28,6 +28,9 @@ export default defineConfig({
       input: {
         index: fileURLToPath(new NodeURL('index.html', import.meta.url)),
         therapist: fileURLToPath(new NodeURL('therapist.html', import.meta.url)),
+        // The server admin console: a third surface, for whoever operates the server rather than
+        // the owner or a clinician. It serves no client data at all.
+        admin: fileURLToPath(new NodeURL('admin.html', import.meta.url)),
       },
       output: {
         entryFileNames: 'assets/[name]-[hash].js',

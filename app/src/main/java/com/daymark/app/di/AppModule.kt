@@ -41,6 +41,14 @@ object AppModule {
                 AppDatabase.MIGRATION_11_12,
                 AppDatabase.MIGRATION_12_13,
                 AppDatabase.MIGRATION_13_14,
+                AppDatabase.MIGRATION_14_15,
+                // Every migration declared on AppDatabase must appear in this list. A migration
+                // written and not registered here is invisible until an upgrade: Room finds no path
+                // from the installed version to the new one and throws IllegalStateException on the
+                // first database access, on the phone of someone who already had data. New installs
+                // are unaffected, which is why it survives testing.
+                AppDatabase.MIGRATION_15_16,
+                AppDatabase.MIGRATION_16_17,
             )
             .build()
 
@@ -55,6 +63,15 @@ object AppModule {
 
     @Provides
     fun provideGoalDao(db: AppDatabase): GoalDao = db.goalDao()
+
+    /**
+     * Added when `SkyRepository` became the first class to take a [GoalStepDao] as a **constructor**
+     * parameter. `GoalRepository` had reached the same DAO through `database.goalStepDao()` in its
+     * class body, which needs no binding — so the graph had been complete by accident, and the
+     * omission only surfaced as a Dagger `MissingBinding` at annotation-processing time.
+     */
+    @Provides
+    fun provideGoalStepDao(db: AppDatabase): com.daymark.app.data.dao.GoalStepDao = db.goalStepDao()
 
     @Provides
     fun provideSleepLogDao(db: AppDatabase): com.daymark.app.data.dao.SleepLogDao = db.sleepLogDao()
@@ -82,6 +99,9 @@ object AppModule {
 
     @Provides
     fun provideOfferRecordDao(db: AppDatabase): com.daymark.app.data.dao.OfferRecordDao = db.offerRecordDao()
+
+    @Provides
+    fun provideLifeEventDao(db: AppDatabase): com.daymark.app.data.dao.LifeEventDao = db.lifeEventDao()
 
     @Provides
     @Singleton

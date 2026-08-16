@@ -8,13 +8,17 @@
   import AuditList from './AuditList.svelte'
   import PinnedTherapistPicker from './PinnedTherapistPicker.svelte'
   import NotificationSettings from './NotificationSettings.svelte'
+  import PinRecord from './PinRecord.svelte'
   import { withGrant, type OwnerSession } from './session'
   import { PortalClient } from '../../sync/portal'
   import type { Grant } from '../../assignments/types'
 
   let { data }: { data: BackupData | null } = $props()
 
-  type Sub = 'review' | 'grants' | 'inbox' | 'share' | 'access-log' | 'notify'
+  // 'pins' is whole-browser rather than per-therapist — it shows the record of every key this
+  // browser has written down, including therapists whose keys are not entered in this session —
+  // so it renders beside 'notify' rather than under the therapist picker.
+  type Sub = 'review' | 'grants' | 'inbox' | 'share' | 'access-log' | 'notify' | 'pins'
 
   let session = $state<OwnerSession | null>(null)
   let sub = $state<Sub>('grants')
@@ -73,6 +77,7 @@
         <button class:active={sub === 'share'} aria-pressed={sub === 'share'} onclick={() => (sub = 'share')}>Share</button>
         <button class:active={sub === 'access-log'} aria-pressed={sub === 'access-log'} onclick={() => (sub = 'access-log')}>Access log</button>
         <button class:active={sub === 'notify'} aria-pressed={sub === 'notify'} onclick={() => (sub = 'notify')}>Notifications</button>
+        <button class:active={sub === 'pins'} aria-pressed={sub === 'pins'} onclick={() => (sub = 'pins')}>Pinned keys</button>
       </nav>
       <button class="lock" onclick={lock}>Lock console</button>
     </div>
@@ -95,6 +100,8 @@
       {/if}
     {:else if sub === 'notify'}
       <NotificationSettings {client} />
+    {:else if sub === 'pins'}
+      <PinRecord {session} />
     {:else}
       <div class="who">
         <PinnedTherapistPicker therapists={session.pinned} {selectedId} onselect={(id) => (selectedId = id)} />

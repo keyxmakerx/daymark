@@ -50,8 +50,16 @@ data class PdfExportOptions(
      * loud.
      *
      * It is still the person's own explicit choice — it is what the "Include journal entries"
-     * switch has always meant — so it is not the software selecting on their behalf. When the
-     * per-entry picker lands, that flow sets [includedJournalEntryIds] and leaves this false.
+     * switch has always meant — so it is not the software selecting on their behalf.
+     *
+     * **This and [includedJournalEntryIds] are two different consents, and nothing may convert one
+     * into the other.** The per-entry picker
+     * (`ui/export/JournalPickerScreen.kt`) sets one or the other and never both: ticking every
+     * entry in the range leaves this false, because the report prints a different sentence for each
+     * and promoting a per-entry deliberation into a blanket switch would overstate what was agreed
+     * to. `JournalSelection.resolve` is the only thing that decides between them, and
+     * `PdfExportOptions.withJournalChoice` is the only thing that writes all three journal fields —
+     * set two of them by hand and the report's pages and its opt-in line will disagree.
      */
     val includeAllJournalInRange: Boolean = false,
     /**

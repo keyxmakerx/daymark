@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.daymark.app.R
+import com.daymark.app.goals.GoalKind
+import com.daymark.app.goals.GoalReached
 import com.daymark.app.ui.components.PaperSurface
 import com.daymark.app.ui.theme.HairlineWidth
 import com.daymark.app.ui.theme.moodColors
@@ -54,7 +56,7 @@ fun GoalsScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("No goals yet", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Tap + to set a weekly habit goal.",
+                    "Tap + for a weekly habit, or a project with steps.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -100,12 +102,40 @@ private fun GoalCard(ui: GoalProgressUi, onClick: () -> Unit, modifier: Modifier
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(ui.goal.title, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "${ui.goal.targetPerWeek}× per week · ${ui.completed} of ${ui.target} done",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                ProgressBar(fraction = ui.fraction, met = ui.isMet)
+                if (ui.reached) {
+                    // Instead of the progress line, not beside it. Once someone has said a goal is
+                    // reached, "0 of 3 done" with a near-empty bar under it is a running report on
+                    // how little they did this week towards a thing they have finished with — which
+                    // is the shape docs/DECISIONS_2026-08.md §D6 rules out, arrived at sideways.
+                    // Neither number is lost: the target and the board are both still in the editor,
+                    // one tap away, and unmarking brings the line straight back.
+                    //
+                    // Same type, same colour, same place as the line it replaces. A reached goal is
+                    // not styled as a prize — see GoalReached on why the copy names the act instead
+                    // of praising it.
+                    Text(
+                        GoalReached.REACHED_NOTE,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else if (ui.kind == GoalKind.PROJECT) {
+                    // A project gets the sentence and no bar. A bar is a fraction, and
+                    // docs/DECISIONS_2026-08.md §D6 rules out percentage rings and burndown on this
+                    // surface — "3 of 7 steps done" is the whole of what a project claims about
+                    // itself. See GoalBoard.Progress.
+                    Text(
+                        ui.project.summary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Text(
+                        "${ui.goal.targetPerWeek}× per week · ${ui.completed} of ${ui.target} done",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    ProgressBar(fraction = ui.fraction, met = ui.isMet)
+                }
             }
         }
     }

@@ -1,5 +1,7 @@
 package com.daymark.app
 
+import androidx.room.Database
+import androidx.room.migration.Migration
 import androidx.room.testing.MigrationTestHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -13,9 +15,18 @@ import org.junit.runner.RunWith
 
 /**
  * Verifies the Room migrations preserve user data and produce the expected schema. Covers every
- * hop for which an exported start schema exists (3 → 14). The 1.json / 2.json start schemas predate
- * `exportSchema`, so MIGRATION_1_2 and MIGRATION_2_3 can't be validated here — they are retained
- * for correctness and must never be deleted (see docs/ARCHITECTURE.md).
+ * hop for which an exported start schema exists (3 → the current version). The 1.json / 2.json start
+ * schemas predate `exportSchema`, so MIGRATION_1_2 and MIGRATION_2_3 can't be validated here — they
+ * are retained for correctness and must never be deleted (see docs/ARCHITECTURE.md).
+ *
+ * **The version and the migration list are read off `AppDatabase` by reflection, not typed here.**
+ * This file previously hardcoded both and had drifted three versions behind: `allMigrations` ended
+ * at `MIGRATION_13_14` and the end-to-end test ran to 14, so the three newest migrations — the ones
+ * most likely to be wrong, being the newest — were the only ones it did not exercise. A comment
+ * saying "keep this in step with `@Database(version = …)`" was the entire mechanism, and it did not
+ * work. Reading the real values means the next schema bump is covered the moment it is written.
+ * [allMigrationsIsNotEmptyAndCoversTheWholeChain] exists so that reflection finding nothing fails
+ * loudly rather than turning [migrateAll_from3_toLatest] into a test of a zero-length array.
  *
  * **Instrumented test — and nothing in CI runs it today.** It needs a device or emulator, and no
  * workflow invokes `connectedAndroidTest`; `build.yml` runs `test` + `assembleDebug` only. So a
@@ -39,13 +50,39 @@ class MigrationTest {
         FrameworkSQLiteOpenHelperFactory(),
     )
 
-    private val allMigrations = arrayOf(
-        AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4,
-        AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7,
-        AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_8_9, AppDatabase.MIGRATION_9_10,
-        AppDatabase.MIGRATION_10_11, AppDatabase.MIGRATION_11_12, AppDatabase.MIGRATION_12_13,
-        AppDatabase.MIGRATION_13_14,
-    )
+    /** The version `AppDatabase` actually declares, so this file cannot fall behind a bump. */
+    private val latestVersion: Int =
+        AppDatabase::class.java.getAnnotation(Database::class.java)!!.version
+
+    /**
+     * Every `Migration` declared on `AppDatabase`, in `from` order.
+     *
+     * The companion object's `val`s compile to private static fields on the outer class, which is
+     * why this reads `AppDatabase::class.java.declaredFields` rather than the companion's.
+     */
+    private val allMigrations: Array<Migration> =
+        AppDatabase::class.java.declaredFields
+            .filter { Migration::class.java.isAssignableFrom(it.type) }
+            .map { it.isAccessible = true; it.get(null) as Migration }
+            .sortedBy { it.startVersion }
+            .toTypedArray()
+
+    /**
+     * The reflection above found the whole chain.
+     *
+     * Without this, a rename or a change in how Kotlin emits companion `val`s would leave
+     * `allMigrations` empty, and [migrateAll_from3_toLatest] would pass by migrating nothing — the
+     * precise shape of inert green check this repo has shipped before.
+     */
+    @Test
+    fun allMigrationsIsNotEmptyAndCoversTheWholeChain() {
+        assertTrue("reflection found no migrations on AppDatabase", allMigrations.isNotEmpty())
+        assertEquals(
+            "the reflected chain does not run 1 → $latestVersion",
+            (1 until latestVersion).map { it to it + 1 },
+            allMigrations.map { it.startVersion to it.endVersion },
+        )
+    }
 
     @Test
     fun migrate7To8_preservesEntries_andAddsPhotoColumn() {
@@ -173,15 +210,95 @@ class MigrationTest {
     }
 
     @Test
+    fun migrate14To15_createsGoalStepsTable_andCascadesOnGoalDelete() {
+        helper.createDatabase(TEST_DB, 14).use { db ->
+            // No `kind` column here: 14→15 is the migration that adds it, alongside goal_steps.
+            db.execSQL(
+                "INSERT INTO goals (id, title, activityId, targetPerWeek, createdAt, archived, " +
+                    "cue, routine) VALUES (1, 'Move house', NULL, 0, 100, 0, '', '')",
+            )
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 15, true, AppDatabase.MIGRATION_14_15).use { db ->
+            db.execSQL("PRAGMA foreign_keys = ON")
+            db.execSQL(
+                "INSERT INTO goal_steps (id, goalId, title, position, state, createdAt, completedAt) " +
+                    "VALUES (1, 1, 'Pack the kitchen', 0, 'done', 100, 500)",
+            )
+            db.query("SELECT title, state, completedAt FROM goal_steps WHERE id = 1").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("Pack the kitchen", c.getString(0))
+                assertEquals("done", c.getString(1))
+                assertEquals(500L, c.getLong(2))
+            }
+            // The cascade is the reason this table is worth a test of its own: steps must go when
+            // their project goes, and must not survive as orphans pointing at a deleted id.
+            db.execSQL("DELETE FROM goals WHERE id = 1")
+            db.query("SELECT COUNT(*) FROM goal_steps").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals(0, c.getInt(0))
+            }
+        }
+    }
+
+    @Test
+    fun migrate15To16_createsLifeEventsTable_withItsDayIndex() {
+        helper.createDatabase(TEST_DB, 15).close()
+        helper.runMigrationsAndValidate(TEST_DB, 16, true, AppDatabase.MIGRATION_15_16).use { db ->
+            db.execSQL(
+                "INSERT INTO life_events (id, epochDay, label, createdAt) " +
+                    "VALUES (1, 20000, 'Moved house', 1000)",
+            )
+            db.query("SELECT epochDay, label FROM life_events WHERE id = 1").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals(20000L, c.getLong(0))
+                assertEquals("Moved house", c.getString(1))
+            }
+            db.query(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'life_events'",
+            ).use { c ->
+                assertTrue("life_events has no index on epochDay", c.moveToFirst())
+                assertEquals("index_life_events_epochDay", c.getString(0))
+            }
+        }
+    }
+
+    @Test
+    fun migrate16To17_addsReachedAt_asNullOnEveryExistingGoal() {
+        helper.createDatabase(TEST_DB, 16).use { db ->
+            db.execSQL(
+                "INSERT INTO goals (id, title, activityId, targetPerWeek, createdAt, archived, " +
+                    "cue, routine, kind) VALUES (1, 'Walk daily', NULL, 7, 100, 0, '', '', 'habit')",
+            )
+            db.execSQL(
+                "INSERT INTO goals (id, title, activityId, targetPerWeek, createdAt, archived, " +
+                    "cue, routine, kind) VALUES (2, 'Old goal', NULL, 0, 50, 1, '', '', 'project')",
+            )
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 17, true, AppDatabase.MIGRATION_16_17).use { db ->
+            // The whole point of the column being nullable with no DEFAULT. A NOT NULL DEFAULT 0
+            // would have both of these rows claim they were reached at the epoch, and the Sky would
+            // draw two stars on 1 January 1970 on the phone of everyone who upgraded.
+            db.query("SELECT id, title, reachedAt FROM goals ORDER BY id").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("Walk daily", c.getString(1))
+                assertTrue("an existing goal came back marked reached", c.isNull(2))
+                assertTrue(c.moveToNext())
+                // Archived, and still not reached — the two are unrelated, and reading `archived`
+                // as "reached" would draw a star for giving up.
+                assertEquals("Old goal", c.getString(1))
+                assertTrue("an archived goal came back marked reached", c.isNull(2))
+            }
+        }
+    }
+
+    @Test
     fun migrateAll_from3_toLatest() {
         helper.createDatabase(TEST_DB, 3).use { db ->
             db.execSQL(
                 "INSERT INTO mood_entries (id, dateTime, moodLevel, note) VALUES (7, 5000, 5, 'kept')",
             )
         }
-        // Keep this target in step with AppDatabase's @Database(version = …) on every schema bump —
-        // running to a stale version silently stops exercising the newest migrations.
-        helper.runMigrationsAndValidate(TEST_DB, 14, true, *allMigrations).use { db ->
+        helper.runMigrationsAndValidate(TEST_DB, latestVersion, true, *allMigrations).use { db ->
             db.query("SELECT note FROM mood_entries WHERE id = 7").use { c ->
                 assertTrue(c.moveToFirst())
                 assertEquals("kept", c.getString(0))

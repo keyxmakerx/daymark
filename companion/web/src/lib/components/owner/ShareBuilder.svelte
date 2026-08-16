@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { BackupData } from '../../backup'
-  import { buildShareBundle, previewCounts, emptySelection, buildShare, type ShareSelection, type ShareBundleMeta } from '../../assignments/share'
+  import { buildShareBundle, previewCounts, emptySelection, buildShare, ShareUnpinnedError, type ShareSelection, type ShareBundleMeta } from '../../assignments/share'
   import { fingerprint } from '../../assignments/crypto'
-  import { PinStore } from '../../share/pairing'
+  import { loadPins, savePins, pinOnFirstUse } from '../../therapist/pinStore'
   import type { ShareMeta, SealedShare } from '../../share/sharecrypto'
   import { toBase64 } from '../../share/sharecrypto'
   import NonDiagnosticBanner from './NonDiagnosticBanner.svelte'
@@ -59,9 +59,13 @@
       const meta: ShareBundleMeta = { shareId, version: 0, createdAt, ownerFp, expiry }
       const finalBundle = buildShareBundle(data, sel, meta)
 
-      // Pin gate: the console refuses to seal to an unpinned therapist.
-      const pins = new PinStore()
-      pins.pin({ x25519Pub: therapist.boxPub, ed25519Pub: therapist.signPub })
+      // Pin gate. The pins come from storage, NOT from `therapist`: this block used to build an
+      // empty PinStore and pin the same keys it was about to seal to, so buildShare compared each
+      // value against itself and could not refuse anything. See ../../therapist/pinStore.ts.
+      const pins = loadPins()
+      if (pinOnFirstUse(pins, { x25519Pub: therapist.boxPub, ed25519Pub: therapist.signPub }) === 'pinned-now') {
+        savePins(pins)
+      }
       const ed25519Fp = fingerprint(therapist.signPub)
 
       const shareMeta: ShareMeta = {
@@ -82,7 +86,15 @@
         status = 'Share sealed locally (no server configured).'
       }
     } catch (e) {
-      error = e instanceof Error ? e.message : 'Could not build the share.'
+      if (e instanceof ShareUnpinnedError) {
+        // This one must not read like a glitch the owner should retry through: it means the keys
+        // on file for this therapist are not the keys we were about to seal their journal to.
+        // The pointer at the end matters: without it the only way out of a legitimate re-key was
+        // clearing site data, which un-pins everyone at once and is not something to discover.
+        error = `${e.message}. Nothing was sealed or sent. Check the fingerprint words with ${therapist.displayName} out of band before trying again. If they changed their keys, the Pinned keys tab shows the old and new fingerprints side by side.`
+      } else {
+        error = e instanceof Error ? e.message : 'Could not build the share.'
+      }
     } finally {
       busy = false
     }

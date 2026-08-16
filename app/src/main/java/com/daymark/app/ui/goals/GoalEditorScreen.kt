@@ -23,16 +23,27 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.daymark.app.goals.GoalKind
+import com.daymark.app.goals.GoalReached
 import com.daymark.app.ui.icon.ActivityIcons
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -83,39 +94,62 @@ fun GoalEditorScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            Text("Track this activity", style = MaterialTheme.typography.titleMedium)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                state.activities.forEach { activity ->
-                    FilterChip(
-                        selected = state.activityId == activity.id,
-                        onClick = {
-                            viewModel.setActivity(if (state.activityId == activity.id) null else activity.id)
-                        },
-                        label = { Text(activity.name) },
-                        leadingIcon = {
-                            Icon(
-                                painter = painterResource(ActivityIcons.forKey(activity.iconKey)),
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        },
-                    )
+            // Which shape this goal is. Switching does not clear the other shape's fields — see
+            // GoalEditorViewModel.setKind — so a person can look at both without losing either.
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                GoalKind.entries.forEachIndexed { index, kind ->
+                    SegmentedButton(
+                        selected = state.kind == kind,
+                        onClick = { viewModel.setKind(kind) },
+                        shape = SegmentedButtonDefaults.itemShape(index, GoalKind.entries.size),
+                    ) { Text(if (kind == GoalKind.PROJECT) "Project" else "Weekly habit") }
                 }
             }
 
-            Text("Target per week", style = MaterialTheme.typography.titleMedium)
-            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                OutlinedButton(onClick = { viewModel.setTarget(state.targetPerWeek - 1) }) { Text("–") }
-                Text(
-                    "${state.targetPerWeek}× / week",
-                    style = MaterialTheme.typography.titleLarge,
-                )
-                OutlinedButton(onClick = { viewModel.setTarget(state.targetPerWeek + 1) }) { Text("+") }
+            if (state.kind == GoalKind.PROJECT) {
+                ProjectSteps(state = state, viewModel = viewModel)
+            } else {
+                Text("Track this activity", style = MaterialTheme.typography.titleMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    state.activities.forEach { activity ->
+                        FilterChip(
+                            selected = state.activityId == activity.id,
+                            onClick = {
+                                viewModel.setActivity(if (state.activityId == activity.id) null else activity.id)
+                            },
+                            label = { Text(activity.name) },
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(ActivityIcons.forKey(activity.iconKey)),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            },
+                        )
+                    }
+                }
+
+                Text("Target per week", style = MaterialTheme.typography.titleMedium)
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    OutlinedButton(onClick = { viewModel.setTarget(state.targetPerWeek - 1) }) { Text("–") }
+                    Text(
+                        "${state.targetPerWeek}× / week",
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                    OutlinedButton(onClick = { viewModel.setTarget(state.targetPerWeek + 1) }) { Text("+") }
+                }
             }
 
             Text("If-then plan (optional)", style = MaterialTheme.typography.titleMedium)
             Text(
-                "A simple, well-evidenced nudge: link a cue to the action.",
+                if (state.kind == GoalKind.PROJECT) {
+                    // docs/DECISIONS_2026-08.md §D5: the evidenced unit is the next concrete action,
+                    // not the project. "When I want to learn statistics, I will learn statistics" is
+                    // the shape this line exists to steer away from.
+                    "A simple, well-evidenced nudge — aim it at the next step, not the whole project."
+                } else {
+                    "A simple, well-evidenced nudge: link a cue to the action."
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -138,13 +172,106 @@ fun GoalEditorScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            if (state.isEditing) {
+                // Only on a goal that already exists. On the create screen a "reached" switch would
+                // be a control for something that has not happened yet, sat next to the fields that
+                // describe what the person means to do.
+                //
+                // A switch and not a one-way "Done" button: the requirement is that a mis-tap costs
+                // nothing, and a switch is the control whose reversibility a person can see before
+                // they touch it. Nothing here is coloured, and there is no icon — a tick or a medal
+                // would turn the state into a reward, which is what §D6 rules out under badges.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(GoalReached.LABEL, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            GoalReached.HINT,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    // The switch's own description says which way a tap goes, because "Reached, on"
+                    // read aloud does not tell someone what happens if they touch it — and the
+                    // undo is the half of this control that has to be findable.
+                    Switch(
+                        checked = state.reached,
+                        onCheckedChange = viewModel::setReached,
+                        modifier = Modifier.semantics {
+                            contentDescription = GoalReached.actionLabel(state.reachedAt)
+                        },
+                    )
+                }
+            }
+
             Button(
                 onClick = viewModel::save,
-                enabled = state.title.isNotBlank(),
+                enabled = state.canSave,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Save goal")
             }
+            if (state.kind == GoalKind.PROJECT && state.steps.isEmpty()) {
+                // The one refusal in this screen, stated as what is missing rather than as a
+                // correction. GoalBoard.canSave carries the reasoning (§D5).
+                Text(
+                    "A project needs at least one step.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
+}
+
+/**
+ * The board, its progress line, and the field that adds to it.
+ *
+ * Split out only to keep [GoalEditorScreen]'s single column readable; it holds no state of its own
+ * beyond the text being typed into the "add a step" field.
+ */
+@Composable
+private fun ProjectSteps(state: GoalEditorUiState, viewModel: GoalEditorViewModel) {
+    var draft by rememberSaveable { mutableStateOf("") }
+
+    Text("Steps", style = MaterialTheme.typography.titleMedium)
+    Text(
+        state.progress.summary,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        OutlinedTextField(
+            value = draft,
+            onValueChange = { draft = it },
+            keyboardOptions = SentenceCaps,
+            label = { Text("Add a step") },
+            placeholder = { Text("e.g. read chapter 1") },
+            singleLine = true,
+            modifier = Modifier.weight(1f),
+        )
+        OutlinedButton(
+            onClick = {
+                viewModel.addStep(draft)
+                draft = ""
+            },
+            enabled = draft.isNotBlank(),
+        ) { Text("Add") }
+    }
+
+    GoalStepsBoard(
+        steps = state.steps,
+        onMove = viewModel::moveStep,
+        onReorder = viewModel::reorderStep,
+        onRemove = viewModel::removeStep,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }

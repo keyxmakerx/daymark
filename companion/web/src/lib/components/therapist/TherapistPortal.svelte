@@ -18,15 +18,46 @@
   import AssignSurface from './AssignSurface.svelte'
   import GamePlanAuthor from './GamePlanAuthor.svelte'
   import SharedDataView from './SharedDataView.svelte'
+  import SignInScreen from './SignInScreen.svelte'
+  import TodayScreen from './TodayScreen.svelte'
+  import CalendarScreen from './CalendarScreen.svelte'
+  import ClientRecordScreen from './ClientRecordScreen.svelte'
+  import type { BackupData } from '../../backup'
   import LowerAssuranceBanner from './LowerAssuranceBanner.svelte'
   import { Callout } from '../ui'
 
-  type Tab = 'allowed' | 'assign' | 'gameplan' | 'shared'
+  type Tab = 'allowed' | 'today' | 'calendar' | 'record' | 'assign' | 'gameplan' | 'shared'
 
   let ctx = $state<UnlockedContext | null>(null)
   let grant = $state<Grant | null>(null)
   let grantError = $state('')
   let tab = $state<Tab>('allowed')
+
+  /*
+   * The opened share, held HERE rather than fetched per tab.
+   *
+   * Four surfaces read the same bundle — Today, Calendar, Client record and Shared data — and a
+   * fetch inside each would decrypt the same payload four times and, worse, make "open the share"
+   * an ambient side effect of navigating. It stays one deliberate act: the person clicks Open in
+   * Shared data, and the other surfaces then have something to draw. Until then they say so.
+   *
+   * Not a module-level store, deliberately. This is decrypted personal data; scoping it to the
+   * component that owns the session means logout below is the only lifetime it can have.
+   */
+  let shared = $state<BackupData | null>(null)
+
+  /*
+   * The clock the dated screens read. `$derived` tracks only what it reads, and a Date.now() inside
+   * a callee is invisible to it — the bug that shipped in this very file's idle guard. So the
+   * screens take `now` as a value and this ticks it.
+   */
+  const CLOCK_MS = 60_000
+  let now = $state(Date.now())
+  $effect(() => {
+    if (!ctx) return
+    const id = setInterval(() => (now = Date.now()), CLOCK_MS)
+    return () => clearInterval(id)
+  })
 
   async function onUnlock(c: UnlockedContext) {
     ctx = c
@@ -56,6 +87,9 @@
     grant = null
     grantError = ''
     tab = 'allowed'
+    // The decrypted bundle goes with the session. Leaving it behind would keep a person's records
+    // in memory on a machine whose therapist has just said they were finished with it.
+    shared = null
   }
 
   const canAssign = $derived(
@@ -128,7 +162,18 @@
 <svelte:window onpointerdown={noteActivity} onkeydown={noteActivity} onfocus={noteActivity} />
 
 {#if !ctx}
-  <LoginGate onunlock={onUnlock} />
+  <!--
+    The contract wraps the gate; it does not replace it. LoginGate owns the only authentication
+    path in this product, and a sign-in screen that reimplemented it would be a second path to
+    audit. `standalone={false}` because SignInScreen already renders the fixed lower-assurance notice as
+    part of the contract, and its own headings — the gate should add neither a second copy of the
+    notice nor a third "sign in" heading.
+  -->
+  <SignInScreen>
+    {#snippet credentials()}
+      <LoginGate onunlock={onUnlock} standalone={false} />
+    {/snippet}
+  </SignInScreen>
 {:else}
   <section class="portal">
     <LowerAssuranceBanner />
@@ -142,6 +187,14 @@
           <button class:active={tab === 'gameplan'} aria-pressed={tab === 'gameplan'} onclick={() => (tab = 'gameplan')}>Game plan</button>
         {/if}
         {#if grant && hasCapability(grant, 'read.share')}
+          <!--
+            All four read the same bundle, so all four sit behind the same capability. Showing a
+            Calendar tab to someone with no read.share would advertise a surface that can only ever
+            be empty for them.
+          -->
+          <button class:active={tab === 'today'} aria-pressed={tab === 'today'} onclick={() => (tab = 'today')}>Today</button>
+          <button class:active={tab === 'calendar'} aria-pressed={tab === 'calendar'} onclick={() => (tab = 'calendar')}>Calendar</button>
+          <button class:active={tab === 'record'} aria-pressed={tab === 'record'} onclick={() => (tab = 'record')}>Record</button>
           <button class:active={tab === 'shared'} aria-pressed={tab === 'shared'} onclick={() => (tab = 'shared')}>Shared data</button>
         {/if}
       </nav>
@@ -159,12 +212,32 @@
         <AssignSurface {ctx} {grant} ownerBoxPub={ctx.ownerBoxPub} />
       {:else if tab === 'gameplan'}
         <GamePlanAuthor {ctx} ownerBoxPub={ctx.ownerBoxPub} />
+      {:else if tab === 'today'}
+        {#if shared}<TodayScreen data={shared} {now} />{:else}{@render needShare()}{/if}
+      {:else if tab === 'calendar'}
+        {#if shared}<CalendarScreen data={shared} {now} />{:else}{@render needShare()}{/if}
+      {:else if tab === 'record'}
+        {#if shared}<ClientRecordScreen data={shared} {now} />{:else}{@render needShare()}{/if}
       {:else if tab === 'shared'}
-        <SharedDataView {ctx} />
+        <SharedDataView {ctx} onopen={(d) => (shared = d)} />
       {/if}
     {/if}
   </section>
 {/if}
+
+{#snippet needShare()}
+  <!--
+    Not an error and not styled as one. Nothing has gone wrong: the share simply has not been
+    opened in this session yet, and opening it is a deliberate act rather than something navigating
+    to a tab should do behind the person's back.
+  -->
+  <Callout title="No shared data open yet">
+    <p>
+      Open the share on the <strong>Shared data</strong> tab and this surface will have something to
+      draw. Nothing is fetched by moving between tabs.
+    </p>
+  </Callout>
+{/snippet}
 
 <style>
   .portal { display: flex; flex-direction: column; gap: var(--space-4); }

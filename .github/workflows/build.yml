@@ -1,9 +1,17 @@
 name: Build
 
+# PUSH ONLY, deliberately — the concurrency note below explains what went wrong with the pair.
+#
+# A check run attaches to the HEAD COMMIT, and a pull request shows the checks on its head commit
+# whatever triggered them. So a push-triggered run's results already appear on the PR, and adding
+# `pull_request:` bought a second identical run of the same commit and nothing else.
+#
+# What this gives up: a PR opened from a FORK pushes to the fork, not here, so it would get no
+# checks until `pull_request:` is added back. That is a deliberate trade for a single-maintainer
+# repository, and it should be revisited the first time an outside contribution arrives.
 on:
   push:
     branches: ["**"]
-  pull_request:
   workflow_dispatch:
 
 # Least privilege, matching companion.yml and release.yml. Without this the workflow inherits the
@@ -11,6 +19,27 @@ on:
 # artifacts ever needs.
 permissions:
   contents: read
+
+# One run per branch at a time.
+#
+# THE HISTORY, BECAUSE THE FIRST ATTEMPT MADE THINGS WORSE. `push` and `pull_request` were both
+# enabled, so every commit on a branch with an open PR built twice in parallel. Grouping both
+# events together did collapse them — but collapsing means CANCELLING one, and a cancelled check
+# run still attaches to the head commit, so the pull request reported "some checks were not
+# successful" while every real job had passed. Trading a visibly broken PR for saved compute is the
+# wrong way round: those checks are read by a person deciding whether to merge.
+#
+# So the duplicate is now removed at its source — one trigger, above — rather than raced and killed
+# here. What remains is the part that was always worth having: a NEW commit supersedes an in-flight
+# run of an older one. A run against superseded code can only report a failure that has already
+# been fixed, and two of those completed and raised alarms while the commit fixing them was still
+# building.
+#
+# `main` is exempt: nothing later is coming to supersede it, and every commit that lands on the
+# default branch deserves its own verdict.
+concurrency:
+  group: build-${{ github.ref_name }}
+  cancel-in-progress: ${{ github.ref_name != 'main' }}
 
 jobs:
   build:
@@ -136,7 +165,13 @@ jobs:
           COUNT=$(python3 -c "import json;print(len(json.load(open('$SCHEMA'))['database']['entities']))")
           echo "Regenerated $SCHEMA — $COUNT entities, identityHash $(python3 -c "import json;print(json.load(open('$SCHEMA'))['database']['identityHash'])")"
 
-          if ! git diff --quiet -- app/schemas; then
+          # `git status --porcelain`, NOT `git diff` -- and that distinction is the whole point.
+          # A schema for a NEWLY ADDED version is untracked, and `git diff` does not show untracked
+          # files at all, so the first build after a version bump would regenerate the correct
+          # 15.json, find no diff, and report green while the file it just created went uncommitted.
+          # That is the same shape as the bug this step was rebuilt to catch: a check that passes
+          # because it is looking somewhere the change cannot appear.
+          if [ -n "$(git status --porcelain -- app/schemas)" ]; then
             echo "::error::The committed Room schema does not match what Room generates."
             echo "::error::Take the room-schemas artifact and commit it as-is — never hand-edit a"
             echo "::error::schema, the identityHash must be Room's own."
@@ -146,6 +181,16 @@ jobs:
             # failure message nobody can read is barely better than no failure message.
             git --no-pager diff --stat -- app/schemas
             git --no-pager diff --unified=1 -- app/schemas
+            # A NEW version's schema is untracked, so the diff above is empty for it -- the very
+            # case that needs the content most. Print any untracked schema in full; it is the only
+            # way to get it without downloading the artifact, and a failure message you cannot act
+            # on is most of the way to no failure message.
+            git ls-files --others --exclude-standard -- app/schemas | while read -r f; do
+              echo "=====NEW SCHEMA $f START====="
+              cat "$f"
+              echo ""
+              echo "=====NEW SCHEMA $f END====="
+            done
             exit 1
           fi
 

@@ -32,8 +32,10 @@ import com.daymark.app.data.entity.Treatment
         com.daymark.app.data.entity.ThoughtRecord::class,
         com.daymark.app.data.entity.SafetyPlanItem::class,
         com.daymark.app.data.entity.OfferRecord::class,
+        com.daymark.app.data.entity.GoalStep::class,
+        com.daymark.app.data.entity.LifeEvent::class,
     ],
-    version = 14,
+    version = 17,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -50,6 +52,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun thoughtRecordDao(): com.daymark.app.data.dao.ThoughtRecordDao
     abstract fun safetyPlanDao(): com.daymark.app.data.dao.SafetyPlanDao
     abstract fun offerRecordDao(): com.daymark.app.data.dao.OfferRecordDao
+    abstract fun goalStepDao(): com.daymark.app.data.dao.GoalStepDao
+    abstract fun lifeEventDao(): com.daymark.app.data.dao.LifeEventDao
 
     /** Seeds a sensible set of starter activities on first install. */
     class SeedCallback : Callback() {
@@ -285,6 +289,105 @@ abstract class AppDatabase : RoomDatabase() {
                     "CREATE INDEX IF NOT EXISTS `index_offer_records_offeredAt` " +
                         "ON `offer_records` (`offeredAt`)",
                 )
+            }
+        }
+
+        /**
+         * v15 makes a goal one of two shapes and gives the project shape its steps. Existing data is
+         * preserved, and existing rows keep their existing meaning — that is what the `DEFAULT
+         * 'habit'` is for, and why the column is added rather than the table rewritten.
+         *
+         * The `kind` column is `TEXT NOT NULL DEFAULT 'habit'`, matching `Goal.kind`'s
+         * `@ColumnInfo(defaultValue = "habit")`, exactly as the v11 cue/routine columns did.
+         *
+         * `goal_steps` carries **the schema's first foreign key**. The `ON UPDATE NO ACTION ON DELETE
+         * CASCADE` clause and its ordering are Room's own generated form, because Room compares this
+         * table's SQL against what it would have written and a difference in wording — not just in
+         * meaning — fails the migration test. `index_goal_steps_goalId` is the index `GoalStep`
+         * declares; it is also what stops Room warning that a foreign key's child column is
+         * unindexed, so it is not optional.
+         *
+         * Foreign keys are enforced only while `PRAGMA foreign_keys` is on. Room sets it; a raw
+         * `SupportSQLiteDatabase` does not have to. The cascade is therefore not the only thing
+         * standing between a deleted goal and orphaned steps — see [com.daymark.app.data.entity.GoalStep].
+         */
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE goals ADD COLUMN kind TEXT NOT NULL DEFAULT 'habit'")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `goal_steps` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`goalId` INTEGER NOT NULL, " +
+                        "`title` TEXT NOT NULL, " +
+                        "`state` TEXT NOT NULL, " +
+                        "`position` INTEGER NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL, " +
+                        "`completedAt` INTEGER, " +
+                        "FOREIGN KEY(`goalId`) REFERENCES `goals`(`id`) " +
+                        "ON UPDATE NO ACTION ON DELETE CASCADE )",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_goal_steps_goalId` " +
+                        "ON `goal_steps` (`goalId`)",
+                )
+            }
+        }
+
+        /**
+         * v16 adds `life_events` — the person's own marks on their history. Existing data is
+         * preserved; nothing else in the schema is touched.
+         *
+         * The SQL is Room's own generated form for
+         * [com.daymark.app.data.entity.LifeEvent], column for column and in declaration order,
+         * because `runMigrationsAndValidate` compares this table against what Room would have
+         * written and a difference in wording fails the comparison even when the meaning matches.
+         * `epochDay` is `INTEGER NOT NULL` — a *day number*, not a timestamp, following
+         * `sleep_logs.night`.
+         *
+         * `index_life_events_epochDay` is the index the entity declares, and it is not decoration:
+         * every read of this table is by date. An index present on the entity and missing from the
+         * migration is the drift this file has shipped before — it does not fail at runtime, it
+         * fails the schema comparison on someone else's change.
+         *
+         * No foreign key and no cascade. A life event belongs to nothing else; it is not a child of
+         * a goal, an entry or a journal page, and it must survive the deletion of everything around
+         * it.
+         */
+        val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `life_events` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`epochDay` INTEGER NOT NULL, " +
+                        "`label` TEXT NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_life_events_epochDay` " +
+                        "ON `life_events` (`epochDay`)",
+                )
+            }
+        }
+
+        /**
+         * v17 gives a goal a way to be reached: `goals.reachedAt`, epoch millis, NULL until the
+         * person says so. Existing data is preserved and no existing column is touched.
+         *
+         * One `ALTER TABLE ... ADD COLUMN`, nullable, with no `DEFAULT` — the form
+         * [com.daymark.app.data.entity.Goal] declares (`val reachedAt: Long?`, no `@ColumnInfo`) and
+         * the same shape [MIGRATION_7_8] used for `mood_entries.photoPath`. A `NOT NULL DEFAULT 0`
+         * column would have been the cue/routine shape from v11 and would have been wrong here:
+         * every goal on every phone would have come out of this migration claiming it was reached at
+         * the epoch, and the Sky would have drawn a star on 1 January 1970 for each one.
+         *
+         * **It does not backfill from `archived`, and it never may.** Archiving is giving up on a
+         * goal or setting it aside; a migration that read those rows as reached would hand the
+         * person a wall of stars for the things they let go of. `Goal.reachedAt` and
+         * `com.daymark.app.goals.GoalReached` both carry the longer version of this.
+         */
+        val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE goals ADD COLUMN reachedAt INTEGER")
             }
         }
 

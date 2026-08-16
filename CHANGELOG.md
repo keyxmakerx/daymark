@@ -7,6 +7,48 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **The Sky.** Everything you have ever logged, drawn as one field of stars — a check-in, a journal
+  entry, a practice you worked through, a step you finished, a goal you reached, a life event you
+  marked. One star per act, placed by date. It is reachable from **More** and deliberately **not a
+  tab**: it is the surface that says the most about you to anyone holding your phone, so getting
+  there is something you choose rather than something you walk past.
+  - **It never counts, ranks, compares, or congratulates.** There is no streak, no "best month", no
+    total, and no comparison between one stretch of your life and another. A gap draws nothing —
+    not a grey placeholder, not a dotted line, not an apology. A period of not coping is not a
+    thing the software gets to draw a shape around, and an empty stretch of sky simply reads as
+    sky. Deleting something leaves no mark that it was ever there.
+  - **The Sky never loads a word you wrote.** Not the journal title, not the body, not a goal's
+    name, not a life event's label. Every one of the six kinds is read through its own query that
+    selects an id and a date and *cannot return text* — the property lives in the database
+    signature rather than in anyone remembering to be careful at the other end, so someone
+    standing behind you learns *that* you wrote something and never *what*. A test asserts all six,
+    and it fails the build if a seventh kind is added without one.
+  - The background starfield is **seeded once, from your first record, and never re-derived** — a
+    place whose walls move is not a place, and it would otherwise shift every time you deleted
+    something, which is a shape that deletion left behind.
+  - Your own mood palette is used, passed through a contrast equalisation so a custom palette
+    cannot produce a star that is unreadable against the night. The Sky hardcodes no colour.
+- **Life events**: a short title and a date, for the things that happened *to* you rather than the
+  things you did — a bereavement, a move, a diagnosis, a beginning. **Never inferred, never
+  suggested, never prompted for.** The app does not notice that your entries changed and ask
+  whether something happened, because detecting a discontinuity and asking you to explain it is
+  inference with a question mark on the end, and the thing it would most reliably detect is a
+  period of not coping. There are no categories to pick from — a taxonomy is software deciding
+  what counts as a life — and no mood or valence, because a life event is not good or bad and the
+  app never asks how it felt.
+- **Goals can be marked reached**, by you and only ever by you. It is a switch you set and can
+  unset, never something derived from progress: a habit that hit its weekly target is not "reached"
+  and a project with every step done is not "reached", because a threshold that flips this field is
+  the software deciding something about your life and then acting on it. Archiving a goal you
+  reached keeps the star — tidying your list is not un-doing the thing — and abandoning one is
+  never recorded as a failure.
+- **A pinned clinician key can now be forgotten or rotated individually**, instead of the previous
+  all-or-nothing wipe. Rotation is gated on typing the short verification words that match the new
+  key, and the check that lets the button light up is the *same* predicate that performs the
+  rotation — a button that brightened on a phrase the rotation would then reject would teach an
+  owner that the words are decoration. Neither action is one click away: forgetting sits behind a
+  closed disclosure and a second confirmation, because a key you forget by accident is a key you
+  re-trust blind the next time it appears.
 - **The PDF report is now four sides, and you decide what's on each.** *The glance* (the shape of
   the range), *the detail* (per-instrument series), *in their own words* (your journal writing), and
   *for the conversation* (questions to bring). Side three **only exists if you switched it on** and
