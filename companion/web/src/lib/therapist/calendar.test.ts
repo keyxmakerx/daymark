@@ -326,8 +326,13 @@ describe('building events out of a backup bundle', () => {
     journal: [{ id: 7, dateTime: at(AUG_16_2026, 21), title: 'A long Sunday', body: 'text' }],
     sleepLogs: [
       {
+        // `night` is an EPOCH DAY, not millis — `LocalDate.toEpochDay()` on the app side. This
+        // fixture used to build it with `at(...)`, i.e. millis, which is a value the app cannot
+        // produce; that single wrong fixture was what let a bug putting every real sleep log on
+        // 1 January 1970 pass a 38-test suite. A fixture that cannot express the shape the
+        // production data actually has protects the code from its own tests.
         id: 3,
-        night: at(AUG_16_2026 - 1, 0),
+        night: AUG_16_2026 - 1,
         bedTime: at(AUG_16_2026 - 1, 23),
         wakeTime: at(AUG_16_2026, 6) + 20 * 60_000,
         sleepLatencyMin: 25,

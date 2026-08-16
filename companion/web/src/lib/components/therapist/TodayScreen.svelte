@@ -35,7 +35,7 @@
   import type { Column } from '../ui'
   import NonDiagnosticBanner from './NonDiagnosticBanner.svelte'
   import type { BackupData } from '../../backup'
-  import { buildToday, FIRST_WEEK_DAYS } from '../../therapist/today'
+  import { buildToday } from '../../therapist/today'
   import type { Exception, RosterRow, TrackedAssignment } from '../../therapist/today'
 
   let {
@@ -122,26 +122,39 @@
   {/if}
 
   <Card title="Tracked">
-    {#if view.coverage.recordCount === 0}
+    <!--
+      Gated on the ROSTER being empty, not on `coverage.recordCount`.
+
+      The two disagree by design: `assessCoverage` excludes goals from `recordCount` because a goal
+      is a declaration rather than a record, while `buildRoster` does emit a goal row. Gating on the
+      count meant a bundle carrying goals and nothing else rendered "This bundle holds no records …
+      no part of it describes the person whose bundle this is" over a roster that had a row in it.
+      That sentence was false, and the screen was the only thing that knew.
+    -->
+    {#if view.roster.length === 0}
       <EmptyState title="This bundle holds no records">
         <p>
           There is nothing here to list. That is a statement about the file and about nothing
           else — no part of it describes the person whose bundle this is.
         </p>
       </EmptyState>
-    {:else if view.coverage.sparse}
-      <EmptyState title="Too little here to describe">
-        <p>
-          The records in this bundle span {view.coverage.spanDays}
-          {view.coverage.spanDays === 1 ? 'day' : 'days'}. This roster describes a stream once at
-          least {FIRST_WEEK_DAYS} days separate its first and last record.
-        </p>
-        <p>
-          That is a fact about the bundle, not about the person, and nothing is read into a short
-          record.
-        </p>
-      </EmptyState>
     {:else}
+      <!--
+        A short record is NOTED, never used to withhold the roster.
+
+        This used to swap the whole table for "Too little here to describe" whenever the bundle's
+        span was under a week. But the module's own rule is that span, not volume, decides — and
+        the roster carries no trend: it is counts and dates, which are exactly as true on day two
+        as on day two hundred. Someone who checked in sixty times in two days was shown nothing.
+        The note says what the span is; the reader still gets the rows.
+      -->
+      {#if view.coverage.sparse}
+        <p class="span-note">
+          These records span {view.coverage.spanDays}
+          {view.coverage.spanDays === 1 ? 'day' : 'days'}. Counts and dates are listed; no trend is
+          drawn from a stretch this short. That is a fact about the bundle, not about the person.
+        </p>
+      {/if}
       <DataTable columns={COLUMNS} rows={view.roster} caption="What this bundle tracks">
         {#snippet cell(key, row)}
           {@const r = row as RosterRow}
@@ -216,6 +229,13 @@
    * and carries no icon: an absence is not a severity, and the moment it is painted it starts
    * reading as a person's failure rather than as a fact about a stream.
    */
+  /* The short-span note: quieter than body text, because it is a caveat and not a finding. */
+  .span-note {
+    margin: 0 0 var(--space-3);
+    color: var(--ink-soft);
+    font-size: 0.9em;
+  }
+
   .absent {
     color: var(--text-subtle);
   }

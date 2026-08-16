@@ -388,9 +388,20 @@ export function buildEvents(data: BackupData, toDay: DayResolver = epochDayLocal
     const inBed = s.wakeTime - s.bedTime
     out.push({
       kind: 'sleep',
-      day: toDay(s.night),
+      // `night` is ALREADY an epoch day and must not go through the resolver.
+      //
+      // `SleepLog.night` is `LocalDate.toEpochDay()` — "epoch-day of the morning you woke", the
+      // column the app groups one record per night by (app/.../entity/SleepLog.kt). It arrives
+      // here unchanged on both ingestion paths. Passing it to `toDay`, which expects millis, read
+      // 20681 as 20.681 seconds after the epoch and put every sleep log a person has ever
+      // recorded on 1 January 1970 — the bar shape and its legend row dead, "Time in bed" never
+      // rendered, sleep absent from the ribbon, and every sleep event sorted to the head of the
+      // list because 20681 is smaller than any real timestamp.
+      day: s.night,
       // Ordered by the night's own marker, not by wake time, so a night sorts with its date.
-      at: s.night,
+      // Multiplied to millis so it is comparable with every other kind's `at`; unscaled, an epoch
+      // day sorts below all of them.
+      at: s.night * MS_PER_DAY,
       key: `sleep:${s.id}`,
       title: 'Sleep log',
       detail: s.note?.trim() ?? '',

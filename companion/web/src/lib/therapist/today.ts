@@ -275,7 +275,12 @@ export function deriveExceptions(input: TodayInput): Exception[] {
       id: 'bundle:stale',
       kind: 'bundleOlderThanRange',
       tone: 'warn',
-      headline: 'This bundle was exported before the range on screen',
+      // Worded to what the field can actually support. On the only live path the therapist has,
+      // `bundleToBackupData` sets `exportedAt` from `bundle.scope.to` — the END OF THE SHARED
+      // WINDOW, not the instant anything was exported. Calling that an export date is an
+      // inference, on the one screen whose whole argument is that it states facts and infers
+      // nothing. The consequence for the reader is identical and true either way.
+      headline: 'This bundle’s data ends before the range on screen',
       detail: `Nothing recorded in the last ${rangeDays} days can be in this file. This is a fact about the file, not about the person.`,
       at: data.exportedAt,
     })
@@ -345,7 +350,10 @@ export function buildRoster(input: TodayInput): RosterRow[] {
   const { data, now } = input
   const rangeDays = input.rangeDays ?? DEFAULT_RANGE_DAYS
   const rangeStart = now - rangeDays * DAY_MS
-  const inRange = (t: number) => t >= rangeStart
+  // Bounded at both ends. Without the upper bound a record dated in the future — clock skew on
+  // the phone that wrote the backup is the ordinary cause — counted toward "In range" and became
+  // "Last recorded", printing a date in a year that has not happened.
+  const inRange = (t: number) => t >= rangeStart && t <= now
   const rows: RosterRow[] = []
 
   /* Mood check-ins. The measure is the scale's own word for the level — the bundle's own
@@ -362,7 +370,10 @@ export function buildRoster(input: TodayInput): RosterRow[] {
       count: entries.filter((e) => inRange(e.dateTime)).length,
       lastAt: latest.dateTime,
       measure: moodLabel(data, latest.moodLevel),
-      provenance: { kind: 'selfReport' },
+      // Same biconditional as the assessment row below: no measure, no badge. `moodLabel` returns
+      // null for a level outside the scale, and a Source badge over a blank cell is the decoration
+      // the RowProvenance doc rules out.
+      provenance: moodLabel(data, latest.moodLevel) === null ? null : { kind: 'selfReport' },
     })
   }
 
@@ -379,7 +390,16 @@ export function buildRoster(input: TodayInput): RosterRow[] {
       count: runs.filter((r) => inRange(r.dateTime)).length,
       lastAt: latest.dateTime,
       measure: band || null,
-      provenance: known ? { kind: 'instrument', tier: known.provenance.tier } : { kind: 'unknown' },
+      // Null when there is no measure. The RowProvenance doc states this as a biconditional — "a
+      // badge on a row that measures nothing would be decoration, and provenance stops being read
+      // the moment it becomes decoration" — but the code set it unconditionally, so an assessment
+      // whose bandLabel was empty rendered a Source badge beside a blank "Most recent" cell.
+      provenance:
+        (band || null) === null
+          ? null
+          : known
+            ? { kind: 'instrument', tier: known.provenance.tier }
+            : { kind: 'unknown' },
     })
   }
 

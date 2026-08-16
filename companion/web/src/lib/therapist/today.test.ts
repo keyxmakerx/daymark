@@ -172,7 +172,18 @@ describe('the attention strip carries exceptions only', () => {
     // Named by its instrument, not by a raw key, when this build knows the instrument.
     expect(e.headline).toContain('Daily wellbeing self-check')
     // Direction is exactly what is missing: no arrow, no rank, no ordering claim.
-    expect(e.detail).not.toMatch(/[↑↓]|higher|lower|up |down /i)
+    //
+    // Word boundaries, not trailing spaces. This read `up |down ` and so could not see "went up."
+    // or "moved down." — the two most natural ways anyone would reword this — which made it a
+    // detector that would have stayed green through the exact regression it exists to catch.
+    const DIRECTION = /[↑↓]|\b(higher|lower|up|down|rose|fell|improved|worsened|better|worse)\b/i
+    // The control: the detector fires on prose that does claim a direction. Without this, the
+    // assertion below is only evidence that the regex matched nothing, which a broken regex also
+    // achieves.
+    expect(DIRECTION.test('Band went up.')).toBe(true)
+    expect(DIRECTION.test('Band moved down.')).toBe(true)
+    expect(DIRECTION.test('Moved from Moderate to Severe.')).toBe(false)
+    expect(e.detail).not.toMatch(DIRECTION)
   })
 
   it('a band change is never rendered at alarm severity', () => {
@@ -583,10 +594,68 @@ describe('buildToday assembles the whole screen', () => {
   })
 
   it('still reports the strip when the bundle is too short to describe', () => {
-    // Sparseness suppresses the ROSTER (the screen says so plainly instead); it must not
+    // Sparseness is NOTED beside the roster (the screen says the span plainly); it must not
     // suppress a fact about the file, which is exactly when a reader most needs it.
     const view = buildToday({ data: bundle({ exportedAt: 0, entries: [entry(1, 1)] }), now: NOW })
     expect(view.coverage.sparse).toBe(true)
     expect(view.exceptions.map((e) => e.kind)).toEqual(['exportDateUnknown'])
+  })
+})
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Regressions. Each of these passed review as a defect; each is pinned here so
+   it cannot come back quietly.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+describe('regressions', () => {
+  it('a bundle carrying only goals still produces a roster row', () => {
+    // `assessCoverage` excludes goals from recordCount on purpose — a goal is a declaration, not a
+    // record — but `buildRoster` does emit a goal row. The screen gated its "this bundle holds no
+    // records" empty state on the count, so this bundle rendered a sentence that was false about
+    // the file in front of it. The two must be allowed to disagree; the SCREEN must gate on the
+    // roster. Asserted here because the disagreement is what makes the bug possible.
+    const view = buildToday({
+      data: bundle({ goals: [{ id: 1, title: 'Walk most days', archived: false }] as never }),
+      now: NOW,
+    })
+    expect(view.coverage.recordCount).toBe(0)
+    expect(view.roster.length).toBeGreaterThan(0)
+  })
+
+  it('never puts a Source badge on a row with nothing to measure', () => {
+    // The RowProvenance doc states this in both directions; the code only held one of them, so an
+    // assessment with an empty band label rendered a badge beside a blank cell.
+    const view = buildToday({
+      data: bundle({
+        assessments: [{ id: 1, key: 'phq9', dateTime: ago(1), score: 4, bandLabel: '' } as never],
+      }),
+      now: NOW,
+    })
+    for (const r of view.roster) {
+      if (r.measure === null) expect(r.provenance).toBeNull()
+    }
+    // The control: a row that DOES measure something still carries its badge, so the assertion
+    // above is not passing because every provenance happens to be null.
+    const ok = buildToday({ data: bundle({ entries: [entry(1, 2)] }), now: NOW })
+    expect(ok.roster.some((r) => r.measure !== null && r.provenance !== null)).toBe(true)
+  })
+
+  it('does not count a future-dated record as being in range', () => {
+    // Clock skew on the phone that wrote the backup is the ordinary cause. Unbounded, `inRange`
+    // counted it and it became "Last recorded", printing a date in a year that has not happened.
+    const future = NOW + 400 * 86_400_000
+    const view = buildToday({
+      data: bundle({ entries: [{ id: 1, dateTime: future, moodLevel: 3, note: '' } as never] }),
+      now: NOW,
+    })
+    const row = view.roster.find((r) => r.kind === 'checkins')
+    if (row) expect(row.count).toBe(0)
+    // The control: the same record dated in the past IS counted, so the zero above is the bound
+    // doing its job rather than the roster being empty for some other reason.
+    const past = buildToday({
+      data: bundle({ entries: [{ id: 1, dateTime: ago(2), moodLevel: 3, note: '' } as never] }),
+      now: NOW,
+    })
+    expect(past.roster.find((r) => r.kind === 'checkins')!.count).toBe(1)
   })
 })
