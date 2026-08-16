@@ -28,7 +28,7 @@ dependencies {
     implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
     implementation("io.ktor:ktor-server-status-pages:$ktorVersion")
     implementation("ch.qos.logback:logback-classic:$logbackVersion")
-    implementation("org.xerial:sqlite-jdbc:3.47.1.0")
+    implementation("org.xerial:sqlite-jdbc:3.53.2.1")
     // The ONE deliberate outbound exception: owner-configured SMTP for therapist invite /
     // notification links (OFF by default). Jakarta Mail 2.1 reference impl (angus-mail),
     // EPL-2.0 / EDL-1.0 — license-clean, JVM-only, no effect on the web CSP. Pulls
