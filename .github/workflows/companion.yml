@@ -486,15 +486,35 @@ jobs:
           sha="${{ github.sha }}"
           short="sha-${sha:0:12}"
 
-          # Two tags with different jobs. `sha-<commit>` is immutable and is what a deployment
-          # should reference: it can never become a different build under you. `main` is a
-          # convenience pointer for "whatever is current" and is exactly the moving-tag pattern
-          # that makes an auto-updating container change behaviour overnight — so it exists, and
-          # the docs tell you not to deploy it.
+          # THE IMMUTABLE TAG, ALWAYS. `sha-<commit>` can never become a different build under
+          # anyone, so it is safe to publish from any ref a maintainer chooses to dispatch.
           docker tag daymark-companion:ci "$image:$short"
-          docker tag daymark-companion:ci "$image:main"
           docker push "$image:$short"
-          docker push "$image:main"
+
+          # THE MOVING TAGS, FROM main ONLY.
+          #
+          # `main` and `latest` both mean "whatever is current", which is what an auto-updating
+          # deployment (Cosmos, Watchtower, a Portainer stack with a pull policy) needs to watch.
+          # They are the same image; `latest` exists because it is what every tool assumes when no
+          # tag is given, and its absence is a confusing failure rather than a safe default.
+          #
+          # The ref guard is separate from the step's `if:` on purpose. That condition allows a
+          # `workflow_dispatch` from ANY branch, which is right for the immutable tag above and
+          # wrong here: dispatching from a feature branch would have moved `main` — and would now
+          # move `latest` — onto code that never merged, and anything auto-updating would have
+          # pulled it within the hour. The immutable tag is still published in that case, so a
+          # maintainer can still test a branch build; only the pointers everyone else follows are
+          # withheld.
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            docker tag daymark-companion:ci "$image:main"
+            docker tag daymark-companion:ci "$image:latest"
+            docker push "$image:main"
+            docker push "$image:latest"
+            moving="yes"
+          else
+            echo "ref is ${{ github.ref }}, not main — publishing the immutable tag only"
+            moving="no"
+          fi
 
           # The digest is the only reference that is both immutable AND verifiable — a tag can be
           # force-pushed, a digest cannot. It also closes a real gap: this repo pins its base
@@ -514,6 +534,14 @@ jobs:
             echo "$digest"
             echo '```'
             echo
-            echo "Deploy the digest, or the \`$short\` tag. Not \`:main\`."
+            if [ "$moving" = "yes" ]; then
+              echo "Also tagged \`:main\` and \`:latest\`, which move with every push to main."
+              echo
+              echo "Pin the digest for a deployment you do not want changing under you — that is"
+              echo "the only reference that is both immutable and verifiable. Use \`:latest\` when"
+              echo "you WANT the deployment to follow main automatically, and know that it will."
+            else
+              echo "Moving tags withheld: this build is not from \`main\`."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
           echo "published $digest"
