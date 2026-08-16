@@ -64,6 +64,15 @@ object AppModule {
     @Provides
     fun provideGoalDao(db: AppDatabase): GoalDao = db.goalDao()
 
+    /**
+     * Added when `SkyRepository` became the first class to take a [GoalStepDao] as a **constructor**
+     * parameter. `GoalRepository` had reached the same DAO through `database.goalStepDao()` in its
+     * class body, which needs no binding — so the graph had been complete by accident, and the
+     * omission only surfaced as a Dagger `MissingBinding` at annotation-processing time.
+     */
+    @Provides
+    fun provideGoalStepDao(db: AppDatabase): com.daymark.app.data.dao.GoalStepDao = db.goalStepDao()
+
     @Provides
     fun provideSleepLogDao(db: AppDatabase): com.daymark.app.data.dao.SleepLogDao = db.sleepLogDao()
 
