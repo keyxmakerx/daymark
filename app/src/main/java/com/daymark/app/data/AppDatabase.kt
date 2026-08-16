@@ -35,7 +35,7 @@ import com.daymark.app.data.entity.Treatment
         com.daymark.app.data.entity.GoalStep::class,
         com.daymark.app.data.entity.LifeEvent::class,
     ],
-    version = 16,
+    version = 17,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -366,6 +366,28 @@ abstract class AppDatabase : RoomDatabase() {
                     "CREATE INDEX IF NOT EXISTS `index_life_events_epochDay` " +
                         "ON `life_events` (`epochDay`)",
                 )
+            }
+        }
+
+        /**
+         * v17 gives a goal a way to be reached: `goals.reachedAt`, epoch millis, NULL until the
+         * person says so. Existing data is preserved and no existing column is touched.
+         *
+         * One `ALTER TABLE ... ADD COLUMN`, nullable, with no `DEFAULT` — the form
+         * [com.daymark.app.data.entity.Goal] declares (`val reachedAt: Long?`, no `@ColumnInfo`) and
+         * the same shape [MIGRATION_7_8] used for `mood_entries.photoPath`. A `NOT NULL DEFAULT 0`
+         * column would have been the cue/routine shape from v11 and would have been wrong here:
+         * every goal on every phone would have come out of this migration claiming it was reached at
+         * the epoch, and the Sky would have drawn a star on 1 January 1970 for each one.
+         *
+         * **It does not backfill from `archived`, and it never may.** Archiving is giving up on a
+         * goal or setting it aside; a migration that read those rows as reached would hand the
+         * person a wall of stars for the things they let go of. `Goal.reachedAt` and
+         * `com.daymark.app.goals.GoalReached` both carry the longer version of this.
+         */
+        val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE goals ADD COLUMN reachedAt INTEGER")
             }
         }
 

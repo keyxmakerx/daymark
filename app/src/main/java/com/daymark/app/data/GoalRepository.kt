@@ -28,6 +28,13 @@ class GoalRepository @Inject constructor(
 
     fun observeActive(): Flow<List<Goal>> = goalDao.observeActive()
 
+    // There is deliberately no `observeReached()` here. A reached goal stays on the goals list until
+    // the person archives it — [observeActive] returns it and `GoalsScreen` reads `reachedAt` off
+    // the row — because disappearing a goal the moment they tick the box would take the undo out of
+    // reach on the one surface they would look for it. A second query would have to reproduce that
+    // rule and could drift from it. The Sky's read is a narrow projection on the DAO instead, and it
+    // is the only other thing that asks this question.
+
     suspend fun getById(id: Long): Goal? = goalDao.getById(id)
 
     suspend fun save(goal: Goal): Long =

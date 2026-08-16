@@ -10,6 +10,7 @@ import com.daymark.app.data.entity.Goal
 import com.daymark.app.data.entity.toStep
 import com.daymark.app.goals.GoalBoard
 import com.daymark.app.goals.GoalKind
+import com.daymark.app.goals.GoalReached
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,11 +36,20 @@ data class GoalEditorUiState(
      * things for different halves of the same form.
      */
     val steps: List<GoalBoard.Step> = emptyList(),
+    /**
+     * The person's own mark that this goal is reached, held until Save like everything else here.
+     *
+     * The timestamp and not a boolean: it is the moment the Sky draws a star on, so it has to
+     * survive the trip through this screen intact rather than being re-derived on write.
+     */
+    val reachedAt: Long? = null,
     val activities: List<ActivityEntity> = emptyList(),
     val isEditing: Boolean = false,
     val saved: Boolean = false,
 ) {
     val progress: GoalBoard.Progress get() = GoalBoard.progressOf(steps)
+
+    val reached: Boolean get() = GoalReached.isReached(reachedAt)
 
     val canSave: Boolean get() = GoalBoard.canSave(kind, title, steps.size)
 }
@@ -80,6 +90,7 @@ class GoalEditorViewModel @Inject constructor(
                             targetPerWeek = g.targetPerWeek, createdAt = g.createdAt,
                             cue = g.cue, routine = g.routine,
                             kind = GoalKind.fromKey(g.kind), steps = steps,
+                            reachedAt = g.reachedAt,
                             isEditing = true,
                         )
                     }
@@ -103,6 +114,24 @@ class GoalEditorViewModel @Inject constructor(
      * a mis-tap destroy writing, and there is no undo on this screen.
      */
     fun setKind(kind: GoalKind) = _uiState.update { it.copy(kind = kind) }
+
+    /**
+     * The person marking this goal reached, or taking that back.
+     *
+     * The only writer of [GoalEditorUiState.reachedAt] other than the load. Nothing on this screen
+     * sets it from the weekly count or from the step board — see [GoalReached] for why a threshold
+     * here would be the app deciding something about someone and then acting on it.
+     *
+     * The clock is read before the update, not inside it, for the reason [addStep] gives:
+     * `MutableStateFlow.update` re-runs its lambda on contention, and a lambda that re-read the
+     * clock each attempt would be doing work the retry cannot undo. [GoalReached.stamp] then keeps
+     * an existing timestamp when the value is already `true`, so a recomposition that delivers the
+     * switch's state a second time cannot move a star the person placed weeks ago to today.
+     */
+    fun setReached(reached: Boolean) {
+        val markedAt = System.currentTimeMillis()
+        _uiState.update { it.copy(reachedAt = GoalReached.stamp(it.reachedAt, reached, markedAt)) }
+    }
 
     fun addStep(title: String) {
         val trimmed = title.trim()
@@ -153,6 +182,9 @@ class GoalEditorViewModel @Inject constructor(
                     cue = s.cue.trim(),
                     routine = s.routine.trim(),
                     kind = s.kind.key,
+                    // Written through from state, never recomputed here: an already-reached goal
+                    // saved again for an edited title keeps the date the person marked it on.
+                    reachedAt = s.reachedAt,
                 ),
             )
             goalRepository.replaceSteps(savedId, s.steps)

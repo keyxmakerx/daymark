@@ -80,6 +80,30 @@ object Routes {
     const val REVIEW_YEAR_PATTERN = "$REVIEW_YEAR/{year}"
     const val GOALS = "goals"
 
+    /**
+     * "Your sky" — the whole history as a night sky.
+     *
+     * A drill-down reached from More, **not** a tab. `docs/SKY.md` §11 leaves this open and gives
+     * the argument on both sides: the Sky is a place, which argues for a top-level destination, and
+     * it is also the most identifying surface in the product (§6.5), which argues for keeping it
+     * behind whatever lock the app has rather than one tap from a cold screen. This picks the
+     * cautious half and does not claim to have resolved the question — a route can be promoted to a
+     * tab later, and a surface that has been on the tab bar cannot be quietly demoted.
+     */
+    const val SKY = "sky"
+
+    /**
+     * The life-events list, where a person places their own marks.
+     *
+     * The screen was built before anything could reach it. §2.2 says the affordance belongs on the
+     * Sky, so that is where the entry point is; this route exists so the Sky has somewhere to send
+     * people. There is deliberately no second entry point in the More hub: "the affordance is a
+     * plain 'add a life event' control on the Sky and nowhere else" is the design's own sentence,
+     * and a second door would make this feel like a thing the app collects rather than a thing the
+     * person marks.
+     */
+    const val LIFE_EVENTS = "life_events"
+
     /** A single day's entries, keyed by epoch-day. */
     fun day(epochDay: Long) = "day/$epochDay"
     const val DAY_PATTERN = "day/{epochDay}"

@@ -48,6 +48,7 @@ object AppModule {
                 // first database access, on the phone of someone who already had data. New installs
                 // are unaffected, which is why it survives testing.
                 AppDatabase.MIGRATION_15_16,
+                AppDatabase.MIGRATION_16_17,
             )
             .build()
 

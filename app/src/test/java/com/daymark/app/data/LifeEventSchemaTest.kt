@@ -200,7 +200,12 @@ class LifeEventSchemaTest {
         }
 
         val version = Regex("""version = (\d+),""").find(databaseSource)!!.groupValues[1].toInt()
-        assertEquals("the schema version does not match the newest migration", 16, version)
+        // Against the newest migration, not against a literal. This assertion used to read `16` and
+        // went red the moment an unrelated feature added a column — the failure was the test's, not
+        // the code's, and a guard that cries wolf on every bump is a guard someone edits without
+        // reading. What it is actually for is the case where a column is added and the version is
+        // not bumped, and that is exactly what this catches.
+        assertEquals("the schema version does not match the newest migration", hops.maxOf { it.second }, version)
         assertEquals(
             "the chain does not run 1 → $version",
             (1 until version).map { it to it + 1 },

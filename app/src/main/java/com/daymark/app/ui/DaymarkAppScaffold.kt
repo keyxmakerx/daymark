@@ -71,7 +71,10 @@ import com.daymark.app.stats.Signals
 import com.daymark.app.ui.assessments.Assessments
 import com.daymark.app.ui.navigation.Routes
 import com.daymark.app.ui.navigation.TopLevelDestination
+import com.daymark.app.ui.lifeevents.LifeEventsScreen
 import com.daymark.app.ui.search.SearchScreen
+import com.daymark.app.ui.sky.SkyScreen
+import com.daymark.app.sky.SkyKind
 import com.daymark.app.ui.sleep.BreathingCaptureScreen
 import com.daymark.app.ui.sleep.ScreenerScreen
 import com.daymark.app.ui.sleep.SleepLogScreen
@@ -360,6 +363,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
             composable(Routes.MORE) {
                 MoreHubScreen(
                     onGoals = { navController.navigate(Routes.GOALS) },
+                    onSky = { navController.navigate(Routes.SKY) },
                     onActivities = { navController.navigate(Routes.ACTIVITIES) },
                     onYearPixels = { navController.navigate(Routes.YEAR_PIXELS) },
                     onSleep = { navController.navigate(Routes.SLEEP) },
@@ -374,6 +378,21 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                     onSettings = { navController.navigate(Routes.SETTINGS) },
                     modifier = Modifier.padding(padding),
                 )
+            }
+            composable(Routes.SKY, enterTransition = zEnter, popExitTransition = zPopExit) {
+                SkyScreen(
+                    onBack = { navController.popBackStack() },
+                    // The Sky names an act and hands off to whatever owns the content — §4.1's rule
+                    // that it shows *that* you wrote and never *what*. A kind with nowhere to hand
+                    // off to is not routed here; the screen does not offer the action at all.
+                    onOpenRecord = { kind, id ->
+                        skyRecordRoute(kind, id)?.let { navController.navigate(it) }
+                    },
+                    onOpenLifeEvents = { navController.navigate(Routes.LIFE_EVENTS) },
+                )
+            }
+            composable(Routes.LIFE_EVENTS, enterTransition = zEnter, popExitTransition = zPopExit) {
+                LifeEventsScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.SLEEP, enterTransition = zEnter, popExitTransition = zPopExit) {
                 SleepScreen(
@@ -571,6 +590,22 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
             }
         }
     }
+}
+
+/**
+ * Where a star hands off to, or null when there is nowhere for it to go.
+ *
+ * A project step is identified by its own row id and its screen is the goal editor, which is keyed
+ * by `goalId` — the Sky's layout carries no goal id and must not start carrying one just for this.
+ * A life event has a list rather than a per-row screen, and the Sky reaches it by its own control.
+ * Both cases return null and the Sky shows no action, rather than a control that refuses.
+ */
+private fun skyRecordRoute(kind: SkyKind, id: Long): String? = when (kind) {
+    SkyKind.CHECK_IN -> Routes.entry(id)
+    SkyKind.JOURNAL -> Routes.journalEntry(id)
+    SkyKind.PRACTICE -> Routes.thoughtRecord(id)
+    SkyKind.GOAL_REACHED -> Routes.goal(id)
+    SkyKind.PROJECT_STEP, SkyKind.LIFE_EVENT -> null
 }
 
 /** Maps a [Signals.Action] (from a "For you" card) to a navigation route. */

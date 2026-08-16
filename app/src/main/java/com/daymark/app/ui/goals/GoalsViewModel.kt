@@ -9,6 +9,7 @@ import com.daymark.app.data.entity.Goal
 import com.daymark.app.data.entity.toStep
 import com.daymark.app.goals.GoalBoard
 import com.daymark.app.goals.GoalKind
+import com.daymark.app.goals.GoalReached
 import com.daymark.app.stats.GoalProgress
 import com.daymark.app.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -40,6 +41,16 @@ data class GoalProgressUi(
 ) {
     val fraction: Float get() = if (target <= 0) 0f else (completed.toFloat() / target).coerceIn(0f, 1f)
     val isMet: Boolean get() = completed >= target
+
+    /**
+     * Read off the stored mark, and off nothing else.
+     *
+     * Note what it is *not* derived from, with both of them in scope one line above: [isMet] is a
+     * habit hitting its weekly target and [project] is a board with every step in *Done*. Neither
+     * makes a goal reached — see [GoalReached]. The two live in the same class precisely so the
+     * temptation is visible.
+     */
+    val reached: Boolean get() = GoalReached.isReached(goal.reachedAt)
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

@@ -124,49 +124,67 @@ both sides, which is also the real case — a backup restore and a late sync bot
 
 ### 0.4 What the Sky needs that is outside `sky/`
 
-None of this was written; all of it is in files this work did not own.
+All of this is now built. It is kept here rather than deleted because the *decisions* below were the
+hard part, and a reader who finds a projection strange should be able to see what it was weighed
+against.
 
 **A projection per kind.** One narrow query each, returning `(id, epochMillis, moodLevel?)` and
 **no text column** — §8.2 rule 7 and §4.1's privacy property, enforced at the DAO signature rather
 than by discipline at the call site.
 
-| Kind | Source | Query needed | State |
+| Kind | Source | Query | Where |
 |---|---|---|---|
-| Check-in | `mood_entries` | `SELECT id, dateTime, moodLevel FROM mood_entries` | new projection on `EntryDao` |
-| Journal | `journal_entries` | `SELECT id, dateTime FROM journal_entries` | new projection on `JournalDao` — **must not select `title` or `body`** |
-| Project step | `goal_steps` | `SELECT id, completedAt FROM goal_steps WHERE state = 'done' AND completedAt IS NOT NULL` | new projection on `GoalStepDao` |
-| Practice | — | — | **unresolved, see below** |
-| Goal reached | — | — | **blocked, see below** |
-| Life event | `life_events` | `SELECT id, epochDay FROM life_events` — **must not select `label`** | table built; projection and `SkyRepository` still to write |
+| Check-in | `mood_entries` | `SELECT id, dateTime AS epochMillis, moodLevel FROM mood_entries` | `EntryDao.observeSkyPoints` |
+| Journal | `journal_entries` | `SELECT id, dateTime AS epochMillis FROM journal_entries` — **never `title` or `body`** | `JournalDao.observeSkyPoints` |
+| Practice | `thought_records` | `SELECT id, dateTime AS epochMillis FROM thought_records` | `ThoughtRecordDao.observeSkyPoints` |
+| Goal reached | `goals` | `SELECT id, reachedAt AS epochMillis FROM goals WHERE reachedAt IS NOT NULL` — **never `archived`, in either direction** | `GoalDao.observeSkyPoints` |
+| Project step | `goal_steps` | `SELECT id, completedAt AS epochMillis FROM goal_steps WHERE state = 'done' AND completedAt IS NOT NULL` | `GoalStepDao.observeSkyPoints` |
+| Life event | `life_events` | `SELECT id, epochDay FROM life_events` — **never `label`** | `LifeEventDao.observeSkyPoints` |
 
-**Two gaps left in the data model, each a decision rather than a task, and one now closed:**
+**Six of six, with no exception.** Not one of these is an existing `SELECT *` with the extra columns
+ignored at the call site. That uniformity is the property, not a tidiness preference: a single kind
+left reading a wide row would be the one place where "add a column to the `SELECT`" is the cheap way
+to get a label onto this surface, and a rule with one exception is a rule nobody can apply without
+first working out which case they are in. `SkyProjectionSourceTest` asserts the count against
+`SkyKind.entries.size`, so a seventh kind fails the build until it has a projection of its own.
 
-- **"Goal reached" has nothing to read.** `data/entity/Goal.kt` has `archived` and no completion
-  field at all, and a habit goal has no notion of being reached in the first place. Either a
-  `reachedAt: Long?` column is added, or kind 4 is dropped and a project's completion is expressed
-  by its steps. §D5 says abandoning must never be counted as failure, so `archived` **must not** be
-  read as "reached" — that would draw a star for giving up and call it an achievement.
-- **"Practice" has no obvious source.** The nearest existing record is `thought_records` (a CBT
-  practice the person worked through and dated). `assessment_results` is the other candidate and is
+**Two gaps in the data model, each a decision rather than a task. Both now closed:**
+
+- **"Goal reached" had nothing to read.** `data/entity/Goal.kt` had `archived` and no completion
+  field at all, and a habit goal has no notion of being reached in the first place. **Resolved by
+  adding `reachedAt: Long?`** (schema v17), nullable and with no `DEFAULT` — a `NOT NULL DEFAULT 0`
+  would have every goal already on every phone claim it was reached at the epoch and draw a star on
+  1 January 1970. §D5 says abandoning must never be counted as failure, so `archived` **is not** read
+  as "reached" — that would draw a star for giving up and call it an achievement — and it is not
+  read as `archived = 0` either, since tidying a reached goal off the list must not delete the star.
+  The mark is the person's own, set by a reversible switch in the goal editor and never derived from
+  progress; `GoalReachedSchemaTest` asserts that no statement touching `reachedAt` also touches a
+  progress term.
+- **"Practice" had no obvious source.** The nearest existing record is `thought_records` (a CBT
+  practice the person worked through and dated). `assessment_results` was the other candidate and is
   a worse fit: a questionnaire run carries a score and a band, and a star for it sits close to the
-  scoring the Sky refuses to do. Recommendation: `ThoughtRecord` → `PRACTICE`, and leave assessment
-  runs off until the prescribed-module work in §D3 gives them a proper "assignment run" record.
+  scoring the Sky refuses to do. **Resolved as `ThoughtRecord` → `PRACTICE`**, with assessment runs
+  left off until the prescribed-module work in §D3 gives them a proper "assignment run" record.
   (The kind was called `EXERCISE`; it was renamed because it was read as *physical* exercise, which
   is a goal and not a kind. See §2.)
-- **Life events are a new table — now built.** `life_events` is `(id, epochDay, label, createdAt)`
-  with `epochDay` indexed, added in schema v16; entity, DAO, migration, Hilt binding, backup
-  round-trip and a `ui/lifeevents/` screen exist. What is still missing is the Sky's own side: the
-  no-text projection above, the `SkyRepository` that merges it in, and a navigation entry (§11
-  open question 1).
+- **Life events were a new table.** `life_events` is `(id, epochDay, label, createdAt)` with
+  `epochDay` indexed, added in schema v16; entity, DAO, migration, Hilt binding, backup round-trip
+  and a `ui/lifeevents/` screen all exist, as does the projection above.
 
-**Wiring:** a `SkyRepository` merging the projections into `List<SkyRecord>` and converting
-`epochMillis → LocalDate.toEpochDay()` **at that boundary**, with the zone (`sky/` deliberately has
-no `java.time` and no zone); a Hilt binding in `di/AppModule.kt`; a persisted field seed
-(`SettingsRepository` is the natural home) initialised once via `SkySeed.forFirstRecord` and
-**never re-derived**, since a background that changes on deletion is a shape deletion left behind;
-and a navigation entry, which is §11 open question 1 and is not resolved here.
+**Wiring, as built:** `data/SkyRepository.kt` merges the six projections into `List<SkyRecord>` and
+converts `epochMillis → LocalDate.toEpochDay()` **at that boundary**, with the zone (`sky/`
+deliberately has no `java.time` and no zone); `life_events` skips the conversion because it already
+stores a day the person chose. `di/AppModule.kt` binds it. The field seed is persisted in
+`SharedPreferences` under `sky_field_seed`, initialised once via `SkySeed.forFirstRecord` and
+**never re-derived**, since a background that changes on deletion is a shape deletion left behind —
+a derived seed of exactly `0` is stored as `1` so it stays distinguishable from "not yet set".
+Navigation is §11 open question 1, answered by an entry in the More hub.
 
-### 0.5 What the renderer must do, when someone writes it
+### 0.5 What the renderer must do
+
+Written, in `ui/sky/`: `SkyViewModel` (state), `SkyPresentation` (the pure formatting and label
+layer, unit-tested on the JVM), `SkySurface` (the draw pass) and `SkyScreen` (the scaffold). The
+list below is the contract it is held to, not a plan.
 
 `ui/sky/` is a renderer and makes no decisions. Every number it needs is in `sky/`:
 
@@ -877,9 +895,13 @@ before the test is run.
 
 ## 11. Open questions
 
-1. **Where does the Sky live in navigation?** It is a place, which argues for a top-level destination;
-   it is also the most identifying surface in the product (§6.5), which argues for it being behind the
-   lock and not on the tab bar. Not resolved here.
+1. ~~**Where does the Sky live in navigation?** It is a place, which argues for a top-level
+   destination; it is also the most identifying surface in the product (§6.5), which argues for it
+   being behind the lock and not on the tab bar.~~
+   **Resolved: an entry in the More hub, not a tab.** The cautious half of the trade-off won. A tab
+   is a thing the person walks past whether or not they meant to go there, and §6.5's point is that
+   this is the surface that says the most about someone to anyone holding the phone. Reaching it is
+   a deliberate act; it stays behind the app lock like everything else in More.
 2. **Does the export exist at all?** §6.4 specifies how it must behave *if* it exists. The safer
    product may be no export. The shipped `ReviewYearScreen` already has "Save keepsake", so this is a
    live question rather than a hypothetical.

@@ -7,6 +7,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import com.daymark.app.data.SkyMoodPoint
 import com.daymark.app.data.entity.EntryActivityCrossRef
 import com.daymark.app.data.entity.EntryWithActivities
 import com.daymark.app.data.entity.MoodEntry
@@ -14,6 +15,21 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface EntryDao {
+
+    /**
+     * The Sky's check-in projection: three columns, and `note` is not one of them.
+     *
+     * A separate query rather than a reuse of [observeAll] with the extra fields ignored by the
+     * caller. The distinction is the one `docs/SKY.md` §8.2 rule 7 asks for: a query that cannot
+     * return the person's note is a query that cannot leak it into a star field, whatever a later
+     * edit to `data/SkyRepository.kt` does. It also loads three columns instead of a row and its
+     * activity joins, for every entry the person has ever written.
+     *
+     * Unordered on purpose — `Sky.layout` sorts, and a second ordering rule here would be a second
+     * place for it to drift.
+     */
+    @Query("SELECT id, dateTime AS epochMillis, moodLevel FROM mood_entries")
+    fun observeSkyPoints(): Flow<List<SkyMoodPoint>>
 
     @Transaction
     @Query("SELECT * FROM mood_entries ORDER BY dateTime DESC")

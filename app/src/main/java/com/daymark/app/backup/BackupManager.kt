@@ -83,6 +83,19 @@ data class BackupGoal(
      * coercing here would turn "a kind this build does not know" into a permanent rewrite to habit.
      */
     val kind: String = "habit",
+    /**
+     * When the person marked this goal reached, or null. Added in v16.
+     *
+     * Defaulted like every field added since v1, so a v15 file — one taken before this column
+     * existed — still reads, and its goals come back unmarked, which is the truth about them.
+     *
+     * Carried as the timestamp and never as a boolean. A `reached: Boolean` would round-trip the
+     * fact and drop the date, and the date is what the Sky places the star on: restoring a backup
+     * would move every star a person had placed to whenever the restore happened. It is also the
+     * field nothing on the goals list displays, which is the kind that goes missing without anything
+     * looking wrong — the same way `BackupLifeEvent.createdAt` could have.
+     */
+    val reachedAt: Long? = null,
 )
 
 /**
@@ -325,7 +338,7 @@ class BackupManager @Inject constructor(
             refs = entryDao.getAllCrossRefs().map { BackupRef(it.entryId, it.activityId) },
             journal = journalDao.getAll().map { BackupJournal(it.id, it.dateTime, it.title, it.body) },
             goals = goalDao.getAll().map {
-                BackupGoal(it.id, it.title, it.activityId, it.targetPerWeek, it.createdAt, it.archived, it.cue, it.routine, it.kind)
+                BackupGoal(it.id, it.title, it.activityId, it.targetPerWeek, it.createdAt, it.archived, it.cue, it.routine, it.kind, it.reachedAt)
             },
             goalSteps = goalStepDao.getAll().map {
                 BackupGoalStep(it.id, it.goalId, it.title, it.state, it.position, it.createdAt, it.completedAt)
@@ -438,7 +451,7 @@ class BackupManager @Inject constructor(
         entryDao.insertCrossRefs(data.refs.map { EntryActivityCrossRef(it.entryId, it.activityId) })
         data.journal.forEach { journalDao.insert(JournalEntry(it.id, it.dateTime, it.title, it.body)) }
         data.goals.forEach {
-            goalDao.insert(Goal(it.id, it.title, it.activityId, it.targetPerWeek, it.createdAt, it.archived, it.cue, it.routine, it.kind))
+            goalDao.insert(Goal(it.id, it.title, it.activityId, it.targetPerWeek, it.createdAt, it.archived, it.cue, it.routine, it.kind, it.reachedAt))
         }
         // After the goals, never before: `goal_steps.goalId` references `goals(id)` and the pragma
         // is on, so a step written ahead of its goal throws and aborts the restore.
@@ -549,9 +562,12 @@ class BackupManager @Inject constructor(
 
         data.journal.forEach { j -> journalDao.insert(JournalEntry(0, j.dateTime, j.title, j.body)) }
         val goalIdMap = HashMap<Long, Long>()
+        // `reachedAt` is carried across verbatim, like `createdAt` beside it. It is a moment the
+        // person named, not a link to anything, so there is nothing to remap — and re-stamping it
+        // with the import time would silently move every star on the Sky to the day of the merge.
         data.goals.forEach { g ->
             val newId = goalDao.insert(
-                Goal(0, g.title, g.activityId?.let { activityIdMap[it] }, g.targetPerWeek, g.createdAt, g.archived, g.cue, g.routine, g.kind),
+                Goal(0, g.title, g.activityId?.let { activityIdMap[it] }, g.targetPerWeek, g.createdAt, g.archived, g.cue, g.routine, g.kind, g.reachedAt),
             )
             goalIdMap[g.id] = newId
         }
@@ -626,9 +642,10 @@ class BackupManager @Inject constructor(
         android.util.Base64.decode(text, android.util.Base64.NO_WRAP)
 
     companion object {
-        // v15 adds `lifeEvents`, defaulted, so a v14 file still reads. The bump is what stops a
-        // file written by this build from claiming to be v14: a v14 reader would accept it and
-        // drop the life events without saying so.
-        const val CURRENT_VERSION = 15
+        // v16 adds `BackupGoal.reachedAt`, defaulted, so a v15 file still reads. The bump is what
+        // stops a file written by this build from claiming to be v15: a v15 reader would accept it
+        // and drop the mark — and the date under it — without saying so. Same reason v15 was bumped
+        // for `lifeEvents`, which a v14 reader would have dropped the same way.
+        const val CURRENT_VERSION = 16
     }
 }

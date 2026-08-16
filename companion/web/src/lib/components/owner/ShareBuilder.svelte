@@ -89,7 +89,9 @@
       if (e instanceof ShareUnpinnedError) {
         // This one must not read like a glitch the owner should retry through: it means the keys
         // on file for this therapist are not the keys we were about to seal their journal to.
-        error = `${e.message}. Nothing was sealed or sent. Check the fingerprint words with ${therapist.displayName} out of band before trying again.`
+        // The pointer at the end matters: without it the only way out of a legitimate re-key was
+        // clearing site data, which un-pins everyone at once and is not something to discover.
+        error = `${e.message}. Nothing was sealed or sent. Check the fingerprint words with ${therapist.displayName} out of band before trying again. If they changed their keys, the Pinned keys tab shows the old and new fingerprints side by side.`
       } else {
         error = e instanceof Error ? e.message : 'Could not build the share.'
       }
