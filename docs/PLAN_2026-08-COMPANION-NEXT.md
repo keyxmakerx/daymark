@@ -471,7 +471,11 @@ Needed: invite state visible in the owner console as **waiting / in progress / f
 plus an explicit owner **Cancel** available at any moment before confirmation. An invite that can
 only be killed by waiting out its TTL is a window an attacker is free to sit in.
 
-**(c) Refusing the confirmation must burn the invite.** If the two sides read different words, that
+**(c) Refusing the confirmation must burn the invite.** *(**WRONG — corrected in §3.9.1.** As
+written this is a denial-of-service primitive: with a PAKE, a wrong code and an attacker's guess are
+indistinguishable by construction, so burn-on-failure lets anyone holding the link destroy every
+invite the owner mints. Only an explicit human report may burn. Kept here, struck, because the
+reasoning that produced it is the reasoning to watch for.)* If the two sides read different words, that
 is not a UX hiccup — it *is* the attack, live. The invite must be marked dead, the owner told
 loudly, and a fresh one required. Anything softer means the attacker simply retries until someone
 clicks through.
@@ -568,7 +572,9 @@ But it now ships in two honest stages rather than one:
 
 - **4.0a** — the page exists, redeems the invite, generates keys, takes one passphrase, enrols the
   authenticator, and shows the SAS with an out-of-band comparison instruction and a **refuse** path
-  that burns the invite. Owner-side invite state and Cancel land here too (§3.6.3b).
+  that burns the invite *(both amended: the code replaces the compared phrase per §3.7, and only an
+  explicit human report burns anything per §3.9.1)*. Owner-side invite state and Cancel land here
+  too (§3.6.3b).
 - **4.0b** — the phone becomes the approving device (§3.6.4, condition 2), which requires the sync
   client from §3.6.5 layer 1.
 
@@ -801,16 +807,321 @@ bounded by the invite TTL.
 
 ---
 
+## 3.9 A wider look: what we walked past while focused on the pairing
+
+Requested directly:
+
+> "you said you overreached, please verify, look for any potential security principles and avenues
+> we maybe missing by being too focused please"
+
+Fair challenge. §§3.5–3.8 spent their entire length on one threat — a machine in the middle of one
+ceremony that happens once per relationship. Below is what that focus cost. Everything here was
+checked in the source, and the first finding is a mistake in this document rather than in the code.
+
+### 3.9.1 FINDING (self-inflicted): "burn the invite on refusal" is a denial-of-service primitive
+
+§3.6.3(c) says a refused confirmation must kill the invite. With §3.7's PAKE in place that is
+**wrong, and dangerously so.**
+
+A wrong PAKE code and an attacker's guess are *the same event*. They are indistinguishable by
+construction — that is what a PAKE is. So "burn on a failed confirmation" means **anyone holding the
+invite link can permanently destroy every invitation the owner ever mints, by typing one wrong
+code.** The owner re-mints; the attacker burns it again; the therapist never gets in. An
+"incredibly secure" framing produced a control that hands an attacker a reliable, cheap, repeatable
+veto over the product's core flow.
+
+It is also hostile to the honest case: the legitimate therapist mistypes a code read to them over a
+phone line, and their invitation dies.
+
+**The existing code already gets this right, and §3.6.3(c) would have regressed it.** `redeemInvite`
+applies capped backoff and carries the comment *"Wrong secret: bump fail count, apply capped
+backoff. Never consume the invite."* That decision was correct and is hereby restated rather than
+overturned.
+
+The fix is to separate a *guess* from a *report*:
+
+| Event | Meaning | Response |
+|---|---|---|
+| Wrong code | Could be a typo, could be an attacker. **Unknowable.** | Capped backoff, per-source *and* per-invite. Audit. Alert the owner past a threshold. **Never burn.** |
+| Human says "this wasn't me" / "I didn't expect this" | Unambiguous. A person is reporting. | Burn immediately, alert loudly, require a fresh invite. |
+
+Only the second is a signal. §3.6.3(c) conflated them, and the correction is that **only an explicit
+human report may destroy an invitation.**
+
+### 3.9.2 FINDING: the rate limiter forgets, and §3.7's security now rests on it
+
+`AttemptLimiter` holds a `HashMap<String, Window>` in process memory. Verified — there is no
+persistence.
+
+That was acceptable when rate limiting was hardening. **§3.7 changes its status.** A PAKE's entire
+security argument is *one online guess per attempt, and no offline attack* — which is only as strong
+as the thing counting attempts. Today:
+
+- A server restart — a crash, a deploy, an OOM, a `docker compose up -d` — **resets every lockout.**
+  An attacker who can provoke or simply wait for a restart gets a fresh budget.
+- Two instances behind a load balancer silently grant **twice** the budget, with no signal that the
+  limit has been halved in effectiveness.
+
+Pairing attempt counters must be **persisted** (the same SQLite the invite lives in) before the PAKE
+can be claimed to do what §3.7 says it does. This is a prerequisite, not a follow-up.
+
+### 3.9.3 FINDING: the journal database is not encrypted at rest
+
+This is the one that most deserved the wider look, because it affects **every user**, including
+everyone who never has a therapist.
+
+Verified: `Room.databaseBuilder` in the DI module sets no `openHelperFactory`. There is no SQLCipher
+dependency anywhere in the build. The journal, the assessments, the safety plan and the thought
+records sit in a plaintext SQLite file.
+
+`PinManager` is genuinely well built — PBKDF2-SHA256 with a per-PIN random salt in an AES-256
+`EncryptedSharedPreferences`, constant-time compare, and a migration off a legacy static-salt
+SHA-256. But it **verifies** a PIN; it does not **derive a key**. The app lock is a door in front of
+the UI, not a lock on the data.
+
+What genuinely mitigates it, and should be said rather than assumed: `android:allowBackup="false"`
+is set, which closes the classic ADB/cloud-backup exfiltration route, and Android's file-based
+encryption plus app sandboxing protect app-private storage on a healthy device with a locked
+bootloader.
+
+What does not: root, an unlocked bootloader, a forensic extraction, or a malicious app running with
+elevated privilege. Against any of those the app lock is decorative.
+
+**The copy currently claims nothing false** — "App lock (PIN)" and "Daymark is locked" promise
+exactly what they deliver. But a person reading "App lock" on a mental-health journal will infer
+more than is true, and the gap between the inference and the reality is the product's largest
+undisclosed weakness. Two honest resolutions, and they are not exclusive: key the database from the
+PIN or the sync passphrase (SQLCipher), and/or state the limit plainly where the lock is enabled.
+
+**Priority tension, stated rather than silently resolved:** this affects every user of the app, and
+the therapist channel affects those who have a therapist. On reach alone this outranks everything in
+§§3.5–3.8. The maintainer's stated priority is the therapist connection, so it is not being
+reordered unilaterally — but it should be a deliberate choice, not an oversight. See §4 step 1.
+
+### 3.9.4 FINDING: email is now load-bearing in two places
+
+`RecoveryRoutes.kt` recovers the owner's access token by email. §3.7 sends the invite link by email.
+A compromised mailbox therefore yields **owner takeover** by the first route and **invite
+interception** by the second.
+
+§3.7 already fixes the second — the code never travels by email, so an intercepted link is worthless.
+The first is untouched and is now the softest door in the system: it is easier to compromise a
+mailbox than to break a PAKE. §4.2's owner-identity work must treat recovery as a **second front
+door with equal standing**, not as an edge case bolted on at the end.
+
+### 3.9.5 FINDING: metadata survives the encryption, and the heartbeat adds to it
+
+The payload is genuinely E2EE (§1.1). The *shape* of it is not. A server that decrypts nothing still
+observes upload cadence, blob sizes, and timing — and "this person journalled daily for eight months
+and then stopped for nine days" is a clinically meaningful inference drawn without touching a
+ciphertext. §3.8's heartbeat adds a second, more regular signal.
+
+This interacts directly with §3.9.6: a person can disengage invisibly from their *therapist* while
+remaining perfectly visible to the *server*.
+
+Mitigations are known — pad blobs to size buckets, jitter upload timing, decouple writes from
+capture — and are probably out of scope for this slice. **The requirement here is disclosure, not
+implementation:** §1.2's list of what a compromised server can still do must carry this line, so it
+is a stated limit rather than something discovered later by someone who trusted the word
+"end-to-end" to mean more than it does.
+
+### 3.9.6 PRINCIPLE: disengagement must not require a declaration
+
+The maintainer, on the ambiguity of a missing heartbeat:
+
+> "especially for the 'are they just offline, or are they no longer with us.' because it makes a
+> soft 'i don't want to see this therapist' that much easier"
+
+This is a better reading than §3.8.3's, which treated the ambiguity as a hazard to be rendered
+carefully. It is not a hazard. **It is the feature**, and it should be designed for deliberately.
+
+Ending a clinical relationship by announcement is not always safe or possible. A person may not be
+able to say it, may not want a conversation about it, may fear a reaction. In a mental-health
+product, the ability to simply stop — without a declaration, a form, or a notification firing on the
+other end — is a **safety property**, not a UX convenience.
+
+Two design consequences, both binding:
+
+1. **The surfaces are asymmetric.** The owner sees the therapist's activity in useful detail. The
+   therapist sees far less of the owner's — coarse at most, and never a live "last seen". A screen
+   telling a clinician *"last opened 3 minutes ago"* converts a quiet exit into a confrontation, and
+   hands a pushy one a tool.
+2. **Absence is never rendered as a fault, an alert, or a prompt.** No "your client hasn't checked in
+   — send a reminder?". That is the standing constraint *a gap in someone's data is never drawn as a
+   failure*, applied to a person rather than a chart, and it should be enforceable by the invariant
+   suite in the same way.
+
+Note the tension this creates with §3.9.5 and resolve it honestly: soft disengagement is invisible
+to the therapist by design, but **not** invisible to the server. Do not imply otherwise.
+
+### 3.9.7 FINDING: the audit log is written by the party it would incriminate
+
+`AuditStore` records `AUTH_FAIL`, `SHARE_OPEN`, `LOCKOUT` and the rest — and the server writes all of
+it. A compromised server can forge entries, drop them, or rewrite the sequence end to end. Task #16
+("give the admin chain check a real digest") is open on exactly this, and a hash chain alone does not
+fix it: whoever can rewrite the entries can recompute the chain over them.
+
+A chain is only evidence if its head is **anchored somewhere the server cannot reach.**
+
+Which points at the same conclusion §3.7.5 reached by a different road: **the phone is the only
+component in this system whose code and storage the server does not control.** That makes it the
+natural anchor for three separate problems — running the owner's half of the pairing, holding key
+custody, and periodically recording the audit head. Three arguments converging on one piece of work
+is a strong signal about what to build.
+
+### 3.9.8 SMALLER: `credential_id` collides across relationships
+
+`enrollTotp` is insert-only on `credential_id OR rel_ref`. A clinician who legitimately sees two
+people on the same self-hosted server, and who reuses a credential id, gets `ALREADY_ENROLLED` with
+no explanation of why. Fail-closed is right; the opacity is not. Either scope the id per relationship
+or return an error that says what to do.
+
+### 3.9.9 SMALLER: the therapist's browser is where the plaintext lands
+
+Today `localStorage` holds only key pins and onboarding state — no key material — which is
+defensible. §3.7 changes that: something has to persist across sessions or the therapist re-does the
+ceremony every visit. Decide deliberately rather than by default:
+
+- Persist the key **wrapped**, never unwrapped. Passphrase-derived, as now.
+- Drop the unwrapped key from memory on an idle timeout.
+- Browser extensions can read the DOM, and screenshots exist. Neither is preventable. **Say so** —
+  a clinician on a shared workstation is a realistic reader of this product, and nothing in the
+  system addresses that today.
+
+---
+
 ## 4. The work, in order
+
+**Read §4.A first.** The steps below are unchanged in content but are now sequenced by §4.A, which
+folds in the §3.9 findings and puts two cheap gates ahead of everything.
+
+### 4.A The implementation plan
+
+Requested: *"then we need a plan to start implementing all this in proper."*
+
+Six steps. The ordering rule throughout is **answer the cheap questions that can invalidate the
+expensive work before doing the expensive work** — the same rule that would have caught the
+`identityHash` and sleep-log failures earlier than it did.
+
+---
+
+#### Step 0 — Two gates. Days, not weeks. Nothing else starts until both are answered.
+
+| Gate | Question | If the answer is no |
+|---|---|---|
+| **0.1** | Can `crypto_core_ristretto255_from_hash` be bound through lazysodium at acceptable cost? (§3.7.6 — verified missing) | The phone cannot run CPace. 4.0b becomes a fallback, and §3.7.5's bottom row stays unaddressed. Say so rather than quietly shipping the weaker thing. |
+| **0.2** | Can a CPace exchange be driven **JVM ↔ browser** in an automated test, on the host, with no device? | The crypto has no oracle. Everything downstream is unverifiable and the design needs rethinking before it is built, not after. |
+
+0.2 is the more important of the two and the easier to skip. `sync-crypto` already proves the
+pattern works — Android-free logic, real libsodium, host JVM tests — so this is an extension of an
+established approach rather than a new one.
+
+**Deliverable:** a written answer to both, in this document, with the test committed if 0.2 passes.
+
+---
+
+#### Step 1 — The decision §3.9.3 forces
+
+The journal database is unencrypted at rest, and that affects **every user**. The therapist channel
+affects those who have a therapist. On reach, §3.9.3 outranks all of §§3.5–3.8.
+
+This is not being reordered unilaterally — the maintainer's stated priority is the therapist
+connection, and priorities are theirs. But it must be a **choice**, and there are only three honest
+ones:
+
+| Option | What it costs | What it buys |
+|---|---|---|
+| **A.** Key the database (SQLCipher, from the PIN or sync passphrase) before the therapist work | Delays goal B. Migration for existing installs. Lost-PIN becomes lost-data — a real product decision, not just an engineering one. | The largest undisclosed weakness closed, for everyone |
+| **B.** Disclose it now, encrypt later | Hours | Honesty immediately; the gap stays open |
+| **C.** Do the therapist work first, revisit after | Nothing now | The gap stays open *and* undisclosed — the only option that is hard to defend |
+
+**Recommendation: B now, A scheduled.** A sentence where the app lock is enabled, saying what it does
+and does not protect, costs almost nothing and removes the false inference today. Option A is real
+work with a genuine product decision inside it (what happens when someone forgets the PIN) and
+deserves its own design pass rather than being wedged in here.
+
+---
+
+#### Step 2 — Prerequisites that §3.9 turned into blockers
+
+Both are small, both are server-side, and **§3.7 cannot honestly ship without them.**
+
+1. **Persist the attempt limiter** (§3.9.2). Pairing counters move into the SQLite that already holds
+   the invite. A PAKE's whole claim is "one online guess per attempt"; an in-memory `HashMap` that a
+   restart clears is not a limiter, and today a `docker compose up -d` resets every lockout.
+   *Acceptance:* a test restarts the store and shows the count survived.
+2. **Correct the burn rule** (§3.9.1). Wrong code → capped backoff, per-source *and* per-invite,
+   audited, owner alerted past a threshold. Only an explicit human report burns an invite.
+   *Acceptance:* a test proves repeated wrong codes never consume the invite, and that a reported
+   invite dies at once.
+
+Also here, because it is a documentation fix with no dependencies: **add the metadata line to §1.2**
+(§3.9.5). Cadence, size and timing survive the encryption, and the heartbeat adds to them.
+
+---
+
+#### Step 3 — 4.0a: the therapist path, browser-side
+
+The bulk of the work, and shippable on its own (§3.7.5).
+
+*Server:* pairing relay as an opaque-blob mailbox; invite state machine with the four visible states
+and Cancel; new audit actions (`PAIR_CONFIRMED`, `PAIR_REFUSED`, `PAIR_GUESS_FAILED`,
+`CONNECTION_ENDED`); Leave and Revoke endpoints per §3.6.1, with the therapist's Leave structurally
+unable to touch owner data; **route `/portal/invite`**, which is a 404 today.
+
+*Web:* the acceptance page — one code, one passphrase; CPace via `libsodium-wrappers-sumo`; the
+encrypted negotiation of keys and capabilities; TOTP enrolment moved inside that channel; the owner's
+pairing screen with live state; the connections surface with the honest revoke copy and the
+asymmetry §3.9.6 requires.
+
+*Then:* delete most of `LoginGate`.
+
+**Acceptance.** A therapist sent a link reaches a working portal without reading source, opening a
+database, pasting base64, or scheduling a phone call. The pairing code appears in no request body,
+header, query string or log line, and a test asserts it. Wrong codes are limited and audited and
+never destroy the invite. An abandoned redeem is visible and cancellable. A therapist can leave; it
+cannot delete the owner's data.
+
+---
+
+#### Step 4 — The phone learns to talk
+
+§3.6.5 layer 1 — the sync client. The single largest piece in this plan and a hard prerequisite for
+everything phone-side. Nothing about connections can be true on the phone before it exists, and no
+Companion screen may claim otherwise until it does (§3.6.5).
+
+---
+
+#### Step 5 — The phone as root of trust
+
+Three problems, one answer, which is why this is one step (§3.9.7):
+
+1. **Pairing** — the owner's half moves to the APK (§3.7.5), closing the malicious-JS row.
+2. **Audit anchoring** — the phone periodically records the audit head, so the chain is evidence
+   rather than a story the server tells about itself. Closes task #16 properly.
+3. **Connections screen** — §3.6.5 layer 3, with the §3.9.6 asymmetry.
+
+Gated on Step 0.1 and Step 4.
+
+---
+
+#### Step 6 — The heartbeat
+
+§3.8, last on purpose. It is an operational improvement once §3.7 provides prevention, and building
+it earlier would be building visibility into a system that cannot yet stop the thing being watched
+for. Signed per §4.3 when that lands. Carries the three limits of §3.8.3 and the §3.9.6 principle in
+its copy.
+
+---
+
+**Unchanged and still ahead of QR pairing:** §4.3 request signing, for the reason §3.4 gives.
+§4.2 owner identity now also carries §3.9.4 — recovery is a second front door with equal standing.
+
+---
 
 ### 4.0 — The invite acceptance page *(now first: without it, goal B does not work at all)*
 
-Per §3.5.1–3.5.3, split into two stages by §3.6.6.
-
-**Step 0 — verify the blocker before anything else.** §3.7.6: does
-`crypto_core_ristretto255_from_hash` reach lazysodium with a bindable amount of work? The answer
-decides whether 4.0b is a stage or a fallback, so it comes before the design is committed to. Cheap
-to answer, expensive to discover late.
+Per §3.5.1–3.5.3, split into two stages by §3.6.6. Sequenced by §4.A steps 3 and 5.
 
 **4.0a — the therapist path exists.** A page at `/portal/invite` that redeems the link the owner
 already sends, and replaces the nine-field sign-in with **one code and one passphrase**. The code is
