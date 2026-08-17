@@ -16,7 +16,7 @@ confusing decision in the current UI comes from a screen trying to serve both at
 | Who | One person, their own data | An owner and a clinician they invited |
 | Wants | Encrypted backup and a desktop view of their own records | To share a bounded slice with a professional |
 | Threat | **The server itself.** "Even if the server is compromised, my info is secure" | A hostile server, and a clinician seeing more than was shared |
-| Status | Crypto is built; the setup experience is not | Designed and largely built |
+| Status | Crypto is built; the setup experience is not | **Server and owner half built; the therapist's own path does not exist — see §3.5.1** |
 
 Goal A is the one that is under-served today, and it is the one the maintainer arrived for.
 
@@ -249,9 +249,151 @@ carries anything reusable — so the gate may become unnecessary rather than mer
 
 ---
 
+## 3.5 The therapist connection is not built, and the boot screen is still wrong
+
+Added 2026-08-17 after the maintainer tried to use it. Two findings, one of which invalidates a
+claim made earlier in this very document.
+
+### 3.5.1 CORRECTION: the therapist channel is NOT "designed and largely built"
+
+§0 says that. It is wrong, and I wrote it without tracing the flow end to end. The server and the
+owner half are built; **the therapist's own path does not exist.** Three breaks, verified:
+
+1. `buildInviteLink` (`TherapistAuthRoutes.kt:278`) points at `{base}/portal/invite#id=…&s=…`.
+   **Nothing routes `/portal/invite`.** The only occurrence of that path in the repository is the
+   line that constructs it. The link a therapist receives is a 404.
+2. `PortalClient.redeemInvite()` and `enrollTotp()` exist in `therapist/session.ts`, fully written.
+   **No component calls either.** There is no UI anywhere that redeems an invite.
+3. Nothing generates the therapist's keypairs or produces the wrapped reading key.
+
+So `LoginGate` asks for **nine values that no flow in the product produces**. They can only be
+assembled by hand, from the database and the source, by someone who wrote it. The maintainer's
+question — *"where am I supposed to get that data about inbox token relationship id and such???"* —
+has no answer today.
+
+**Consequence for §0's table: goal B is not "largely built". It is unusable.**
+
+### 3.5.2 The nine-field form should not be improved. It should cease to exist.
+
+The maintainer, having been shown the form with the field help added:
+
+> "having all that text is WILD ... this isn't it chief i'm sorry"
+
+Correct. Adding explanations to nine cryptographic fields makes a wrong screen more legible; it does
+not make it right. **A therapist should type one short code, or scan one QR, and choose a
+passphrase. Nothing else.** Every other value is exchanged or derived.
+
+Target shape:
+
+| Today | Proposed |
+|---|---|
+| 9 fields, 7 of them base64/JSON | 1 code (scanned or typed) + 1 passphrase they choose |
+| Values obtained: nowhere | Values obtained: from redeeming the invite |
+
+### 3.5.3 The connection flow
+
+**Owner, in the Companion:** "Connect a therapist" → the server mints a single-use, short-lived
+invite → the screen shows a **QR code and the same code in short typed form**. Both encode the
+pairing code, never a long-lived secret (§3.2).
+
+**Therapist:** scans, or opens the link, or types the code at a known URL — three ways in, one flow
+behind them. The page redeems the invite, generates their keypairs in the browser, asks them to
+choose a reading passphrase, and enrols their authenticator. Nothing is pasted.
+
+**Both, before anything is trusted:** the two screens display the **same short word phrase** and
+each side confirms it matches. `share/pairing.ts` already computes exactly this — an
+order-independent BLAKE2b SAS over both parties' four public keys — for owner↔therapist. It is
+built and unused by any screen. This is the "required confirmation" the maintainer asked for, and
+it is what makes a machine-in-the-middle visible rather than silent.
+
+**The manual fallback is the same flow, not a different one.** No camera → type the short code. The
+answer to "what would a manual one look like" is: identical, minus the scan. It is emphatically not
+a form of base64 fields.
+
+### 3.5.4 A connections surface, on both the Companion and the phone
+
+The maintainer asked for "a page in the app that reflects that connection and security (with the
+ability to disconnect)".
+
+**On the phone this is entirely new.** Verified: the only occurrence of the word "therapist" in the
+whole Android app is the label `"Export PDF for therapist"` on the settings screen. The app has no
+model of a relationship, no knowledge that a clinician exists, and no way to see or end one. That
+is a bigger piece of work than it sounds and needs the app to read the relationship API.
+
+What the surface must show, on either platform:
+
+- who is connected, and since when
+- their key fingerprint, so it can be compared out of band
+- exactly what they can see — the capabilities, in plain words, not a scope string
+- when they last opened anything
+- **disconnect**
+
+**Disconnect has to be honest about what it does, and this is the sharp part.** The existing note
+in `GrantManager.svelte` is already correct and must survive into any new UI: revoking stops
+*future* delivery; it does not claw back what has already been delivered. There are four distinct
+actions and they should not be collapsed into one button labelled "Disconnect":
+
+| Action | Effect | Reversible |
+|---|---|---|
+| Turn a capability off | They stop being able to do that thing | yes |
+| Revoke a share lineage | Future fetches of that share refuse (`RelationStore.revokeLineage`, built) | no |
+| Remove the credential | They cannot sign in at all | no — needs a fresh invite |
+| Re-key | A true cutoff going forward | no |
+
+None of these un-sends what a clinician has already read. A UI implying otherwise would be lying
+about something that matters, and the copy must say so at the point of the click, not in a footnote.
+
+### 3.5.5 The boot screen: two doors, and about 26 words
+
+> "the like two options at boot (which still has so much text it's wild, we need to remove like 80%
+> of it i think...) 1 is for personal use, syncing, etc, and the 2 is for setting up a therapists
+> portal. Maybe we could have a warning that this isn't for an everyday user and would not provide
+> a user with any benefits"
+
+Measured: 130 words visible today, after the cut from ~398. An 80% reduction is **~26 words**.
+
+That is achievable only by removing a *door*, not by shortening sentences. The insight that allows
+it: **a therapist never arrives at this screen.** They arrive by invite link, and after enrolling
+they have a bookmark. Three audiences was one too many; the third was never going to read it.
+
+Proposed:
+
+- **Door 1 — "Use Daymark myself."** Backup, sync, self-checks, tools. The default, visually
+  dominant.
+- **Door 2 — "Connect a therapist."** Marked plainly as *not something most people need, and of no
+  benefit on its own* — that warning is the maintainer's, and it is right: it costs nothing to
+  ignore and prevents someone wandering into a clinical-sharing setup they have no use for.
+- A small text link for a clinician already enrolled and returning. A link, not a door.
+
+Everything else — what runs where, the security explanation, the probe readings — stays behind the
+disclosures built in `fb23023`, or moves off this screen entirely.
+
+### 3.5.6 Sequencing consequence
+
+§4 is reordered by this. The invite-acceptance page is now the **first** piece of product work,
+because until it exists the therapist half of the product cannot be used at all, and every hour
+spent on the sign-in form's legibility is spent on a screen that should mostly disappear.
+
+Request signing (§3.4) still precedes QR pairing, for the reason given there: pairing should
+establish a signing key rather than hand over a token.
+
+---
+
 ## 4. The work, in order
 
-### 4.1 — Cut the text; make the fields explicable *(smallest, do first)*
+### 4.0 — The invite acceptance page *(now first: without it, goal B does not work at all)*
+
+Per §3.5.1–3.5.3. A page at `/portal/invite` that redeems the link the owner already sends, and
+replaces the nine-field sign-in with one code and one passphrase.
+
+**Acceptance.** A therapist who is sent an invite link can reach a working portal without anyone
+reading source, opening a database, or pasting base64. The SAS confirmation is shown on both sides
+and refusing it aborts the pairing.
+
+**Note on §4.1, which is done:** cutting the sign-in form's text was worth doing and is not wasted,
+but most of that form should disappear in this step. Do not extend it further.
+
+### 4.1 — ~~Cut the text; make the fields explicable~~ *(DONE — fb23023, cf63455)*
 
 **Problem.** PR #72's orientation is correct and far too long. The therapist sign-in asks for nine
 values (`serverUrl`, `inboxToken`, `relRef`, `credentialId`, `pinnedOwnerSignPubB64`,
