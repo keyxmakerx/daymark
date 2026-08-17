@@ -167,9 +167,85 @@ For LAN-only deployments, which are legitimate and probably common:
 - Even then, prefer §3.2's short-lived code: on a LAN the exposure window becomes ~2 minutes rather
   than forever.
 
-**Open question for the maintainer:** is requiring HTTPS-or-explicit-opt-in acceptable, or should
-LAN pairing be available by default with a clear warning? This decides whether a Pi on a home
-network can pair without editing env vars.
+### 3.4 Resolved: LAN pairing is supported, and made safe rather than warned about
+
+The maintainer's decision, and the reasoning that follows from it:
+
+> "a user may only have it setup at LAN which would work, but we should notify them of that fact...
+> But how could we make this more secure? i want this to be easy, most users do not understand and
+> i don't want them to have to learn networking and system administration to be able to use this
+> app"
+
+So: **LAN is a first-class mode, not a degraded one, and the fix is technical rather than
+educational.** Making the user learn nginx is not an acceptable answer.
+
+#### What is actually exposed on a plaintext LAN — state it precisely
+
+Because the payload is already end-to-end encrypted (§1.1), a passive eavesdropper on the wire does
+**not** obtain anyone's journal. What they obtain is:
+
+| | Exposed on plaintext LAN? |
+|---|---|
+| Journal / entry content | **No** — ciphertext, key never leaves the client |
+| The bearer token | **Yes**, and it is reusable forever |
+| Metadata (sizes, timing, lineage ids) | Yes |
+
+With the token, an attacker can read and write **ciphertext they still cannot decrypt** — so this
+is an integrity and availability problem plus metadata leakage, not a confidentiality breach of
+content. That is a much narrower hole than "your data is exposed", and naming it correctly is what
+makes the fix obvious: **the problem is the reusable secret on the wire, not the plaintext
+transport.**
+
+#### The fix: sign requests instead of presenting a token
+
+Pairing (§3.2) establishes a **shared key** rather than handing over a bearer token. Every request
+then carries a signature over `method | path | BLAKE2b(body) | timestamp | nonce`, keyed with that
+shared secret.
+
+- A passive observer sees signatures. Nothing reusable — they cannot mint a request for a path they
+  did not observe.
+- Replay is refused: the server rejects a stale timestamp (suggest ±5 min) or a nonce it has seen.
+- **The user does nothing.** No certificate, no port, no DNS, no trust decision.
+- **No new dependency.** The server already does HMAC for TOTP (`auth/Totp.kt`) and carries
+  BouncyCastle; the phone already has lazysodium.
+- Additive: the server can accept both a bearer token and a signature during migration, preferring
+  the signature, so the existing phone build is not broken by the change.
+
+This is the AWS SigV4 model and it is the single highest-value change for goal A, because it makes
+the ordinary home deployment safe **by default** instead of safe **if configured**.
+
+#### Optional second layer: encrypt the envelope
+
+Signing protects authenticity, not metadata. Wrapping request and response bodies in a session key
+(libsodium `crypto_kx` → XChaCha20-Poly1305, both already present on both sides, and consistent
+with §5.1's "one primitive set everywhere") also hides sizes and shapes from the wire. Worth doing
+after signing, not instead of it.
+
+#### Remote access without sysadmin: recommend a mesh VPN, not a reverse proxy
+
+For someone who wants sync away from home, the documented recommendation should be **Tailscale (or
+plain WireGuard)**, not nginx:
+
+- no port forwarding, no firewall rules, no domain, no DNS, no certificates, no renewals
+- the server gets a stable address that works from anywhere, encrypted at the network layer
+- installable by a non-technical person in minutes
+
+A reverse proxy with TLS stays documented for those who already run one, but it should stop being
+presented as *the* way to leave the LAN. Requiring certbot to back up a diary is the wrong bar.
+
+#### What the UI must say
+
+LAN-only is **not** an error state and must not be styled as one:
+
+> "This syncs while you're on your home wifi. Away from home it will catch up when you get back."
+
+And, separately, so nobody assumes remote access works when it does not: pairing on a LAN address
+must say plainly that the address only resolves at home, with a pointer to the mesh-VPN option for
+people who want more. The failure to avoid is someone leaving the house believing sync is running.
+
+**Still open:** whether to keep the QR gated on a configured HTTPS origin once request signing
+exists. With signing, the original reason for the gate largely dissolves — the wire no longer
+carries anything reusable — so the gate may become unnecessary rather than merely relaxed.
 
 ---
 
@@ -225,12 +301,27 @@ the corpus that now reads component markup.
 specification, not the running system, and building the org model by drawing its screens is the
 mistake that doc already warns against.
 
-### 4.3 — QR pairing *(after 4.2, because it mints a credential)*
+### 4.3 — Signed requests *(the highest-value change for goal A)*
 
-Per §3. Reuses `QrEncoder.kt` and `pairing.ts`. Needs a phone-side scanner (a camera permission the
-foss flavour must be able to decline — check the flavour's permission set before designing).
+Per §3.4. Replaces the reusable bearer token on the wire with a per-request signature, which makes
+the ordinary home LAN deployment safe by default rather than safe-if-configured. Additive, so the
+existing phone build keeps working during migration. No new dependency on either side.
 
-### 4.4 — Desktop-strength features
+Do this **before** QR pairing: pairing should establish a signing key, not hand over a token, and
+building the QR first would mean building the wrong thing and then changing it.
+
+**Acceptance.** A captured request cannot be replayed or modified. A wire observer holding a full
+capture cannot mint a request for an unobserved path. Bearer-token auth still works until the
+phone-side change ships.
+
+### 4.4 — QR pairing *(after 4.2 and 4.3)*
+
+Per §3.2. Reuses `QrEncoder.kt` and `pairing.ts`. Needs a phone-side scanner — a camera permission
+the foss flavour must be able to decline, so check that flavour's permission set before designing
+it, since "no INTERNET in foss" is already a CI-enforced property and camera should get the same
+scrutiny.
+
+### 4.5 — Desktop-strength features
 
 The maintainer: *"things that make sense for the user to use on the computer"* — not parity.
 
@@ -272,7 +363,9 @@ Unchanged and still open:
 
 ## 7. Open questions for the maintainer
 
-1. **§3.3** — HTTPS required for QR pairing, or LAN-with-warning by default?
+1. ~~**§3.3** — HTTPS required for QR pairing, or LAN-with-warning by default?~~ **Resolved:** LAN
+   is first-class; §3.4 makes it safe with request signing rather than warning about it. The
+   remaining sub-question is whether the HTTPS gate is still needed at all once signing exists.
 2. **§4.2** — does the owner account *replace* the bearer token (breaking change for the phone) or
    sit above it?
 3. **§4.4** — is browser PDF printing the right first desktop feature, or is there something you
