@@ -58,6 +58,7 @@
     REACH_WORD,
     STORAGE_REFUSED,
     WHAT_IS_STORED,
+    SERVED_BY_THE_SERVER,
     WHAT_THIS_PAGE_IS,
     WHY_SO_FEW_CHECKS,
     defaultOrientationStorage,
@@ -260,8 +261,16 @@
           {#if audience.id !== 'operator' || adminLink}
             <li class="audience" class:here={audience.href === null}>
               <p class="question">{audience.question}</p>
-              <p class="who">{audience.who}</p>
-              <p class="condition">{audience.entryCondition}</p>
+              <!--
+                `who` and `entryCondition` are the honest detail and they are not what someone
+                needs in order to choose. Folded, so the three questions read as three questions
+                rather than as three paragraphs.
+              -->
+              <details class="more">
+                <summary>{LABELS.whatThisMeans}</summary>
+                <p class="who">{audience.who}</p>
+                <p class="condition">{audience.entryCondition}</p>
+              </details>
               <p class="destination">
                 {#if audience.href === null}
                   <Chip tone="accent">{LABELS.youAreHere}</Chip>
@@ -302,7 +311,7 @@
     {#each groups as group (group.group)}
       <div class="group">
         <h3 class="group-title">{group.heading}</h3>
-        {#if view === 'full'}<p class="group-note">{group.note}</p>{/if}
+        <!-- The group heading already says what the group is; the note is elaboration. -->
         <ul class="routes">
           {#each group.routes as route (route.id)}
             {@const note = routeNoteFor(route, reach)}
@@ -344,7 +353,10 @@
         </Callout>
 
         {#if view === 'full'}
-          <p class="para why">{WHY_SO_FEW_CHECKS}</p>
+          <details class="why-details">
+            <summary>{LABELS.whySoFew}</summary>
+            <p class="para why">{WHY_SO_FEW_CHECKS}</p>
+          </details>
         {/if}
 
         <div class="controls">
@@ -354,7 +366,12 @@
         </div>
 
         {#snippet footer()}
-          {PROBES_ARE_PUBLIC}
+          <!-- Folded with the rest of the explanation: it says why the two readings are safe to
+               show, which is worth having and is not worth reading first. -->
+          <details class="why-details">
+            <summary>{LABELS.whyPublic}</summary>
+            <p class="para">{PROBES_ARE_PUBLIC}</p>
+          </details>
         {/snippet}
       </Card>
     </section>
@@ -367,12 +384,36 @@
   {/if}
 
   {#if view === 'full'}
+    <!--
+      COLLAPSED BY DEFAULT, and that is the point rather than a detail.
+
+      This was two paragraphs of prose sitting open on the first screen. The maintainer's reaction
+      to the result was "SOOO much text it's just so hard to get it all", followed by the fix:
+      "more of like a self check, that you can expand ... but this should be like tucked away not
+      front and center". None of it was wrong; all of it was in the way.
+
+      A native <details> rather than a scripted disclosure: it is keyboard-reachable, exposed to
+      screen readers as a real expandable, findable by in-page search even while closed, and works
+      before any JavaScript runs. A hand-rolled version would have to earn all four back.
+    -->
     <section class="block">
-      <Card title={LABELS.runsHere} tone="quiet">
-        <p class="para">{WHAT_THIS_PAGE_IS}</p>
-        <h3 class="group-title">{LABELS.stored}</h3>
-        <p class="para">{WHAT_IS_STORED}</p>
-      </Card>
+      <details class="selfcheck">
+        <summary>{LABELS.runsHere}</summary>
+        <div class="selfcheck-body">
+          <p class="para">{WHAT_THIS_PAGE_IS}</p>
+
+          <!--
+            The limitation that was nowhere on this page and belongs here more than anything else
+            on it: this viewer is delivered BY the server it protects you from. See
+            docs/PLAN_2026-08-COMPANION-NEXT.md §1.2.
+          -->
+          <h3 class="group-title">{LABELS.servedBy}</h3>
+          <p class="para">{SERVED_BY_THE_SERVER}</p>
+
+          <h3 class="group-title">{LABELS.stored}</h3>
+          <p class="para">{WHAT_IS_STORED}</p>
+        </div>
+      </details>
     </section>
   {/if}
 </section>
@@ -446,12 +487,34 @@
     margin: 0 0 var(--space-2);
   }
 
-  .group-note {
-    margin: 0 0 var(--space-3);
-    max-width: 44rem;
-    color: var(--ink-soft);
-    font-size: 0.88rem;
-    line-height: 1.55;
+  /*
+   * Disclosures. Deliberately quiet: a summary that looked like a button would pull the eye back
+   * to the thing being tucked away, which is the opposite of the point. The marker is the only
+   * affordance, and it is native.
+   */
+  details {
+    margin: var(--space-2) 0 0;
+  }
+
+  summary {
+    cursor: pointer;
+    color: var(--link);
+    font-size: 0.9em;
+    /* A summary is focusable, so it needs a visible focus ring like any other control. */
+    border-radius: var(--radius-sm);
+  }
+
+  summary:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  details[open] > summary {
+    margin-bottom: var(--space-2);
+  }
+
+  .selfcheck-body > .para:first-child {
+    margin-top: 0;
   }
 
   .group + .group {

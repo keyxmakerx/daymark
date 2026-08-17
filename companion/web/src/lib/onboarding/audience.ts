@@ -199,8 +199,7 @@ export const OWNER_ROUTES: readonly OwnerRoute[] = [
     id: 'file',
     label: 'Open a backup file',
     blurb:
-      'Export a backup from the Daymark app under Settings → Export backup, then drop the .json ' +
-      'file here. It is read in this browser and is not uploaded.',
+      'A file you exported from the app. Read here, never uploaded.',
     group: 'arrive',
     order: 1,
     needs: 'this-browser',
@@ -209,8 +208,7 @@ export const OWNER_ROUTES: readonly OwnerRoute[] = [
     id: 'sync',
     label: 'Connect to your sync server',
     blurb:
-      'Pull your latest encrypted snapshot from the server you host, and open it here with your ' +
-      'passphrase. The server stores the snapshot and cannot read it.',
+      'Your latest snapshot from your own server, opened with your passphrase.',
     group: 'arrive',
     order: 2,
     needs: 'the-server',
@@ -219,8 +217,7 @@ export const OWNER_ROUTES: readonly OwnerRoute[] = [
     id: 'assess',
     label: 'Self-checks, on this device',
     blurb:
-      'The questionnaires and exercises, run here. They need no backup and no server. ' +
-      'Self-tracking tools rather than medical assessments; scores and bands are descriptive.',
+      'Questionnaires and exercises. No backup or server needed.',
     group: 'arrive',
     order: 3,
     needs: 'this-browser',
@@ -229,8 +226,7 @@ export const OWNER_ROUTES: readonly OwnerRoute[] = [
     id: 'owner',
     label: 'Owner console — clinicians and shares',
     blurb:
-      'Invite a clinician, see what you granted them, build a curated share of scores and bands, ' +
-      'and read the metadata log of what was opened. Holds your keys in this browser while open.',
+      'Invite a clinician, and see exactly what you have shared.',
     group: 'occasional',
     order: 1,
     needs: 'the-server',
@@ -239,8 +235,7 @@ export const OWNER_ROUTES: readonly OwnerRoute[] = [
     id: 'recover',
     label: 'Recover access to your server',
     blurb:
-      'If the access token for your sync server is lost, this is where recovery starts. A ' +
-      'recovery link opened from a message also lands here.',
+      'Start here if the access token for your server is lost.',
     group: 'occasional',
     order: 2,
     needs: 'the-server',
@@ -249,8 +244,7 @@ export const OWNER_ROUTES: readonly OwnerRoute[] = [
     id: 'build',
     label: 'Build a self-check of your own',
     blurb:
-      'Write a questionnaire yourself and export it as a file. It is labelled custom-made ' +
-      'wherever it is later used, and never presented as a validated instrument.',
+      'Write your own questionnaire and export it as a file.',
     group: 'occasional',
     order: 3,
     needs: 'this-browser',
@@ -657,9 +651,8 @@ export const ORIENTATION_TITLE = 'Daymark Companion'
  * right place" and the answer has to arrive before they start reading features.
  */
 export const ORIENTATION_LEDE =
-  'Three different people can open this software, and they belong on three different pages. This ' +
-  'one is for a person looking at their own Daymark data. A clinician who was invited has a ' +
-  'separate portal, and whoever runs the server has a separate console.'
+  'Three people can open this software, and they belong on three different pages. This one is ' +
+  'yours.'
 
 /** What runs where. Written to be true of the version that stores a dismissal flag. */
 /*
@@ -683,6 +676,24 @@ export const WHAT_THIS_PAGE_IS =
   'is an address you type, so check it before you paste a token or an email into a page you did ' +
   'not open yourself. The single thing it writes to your browser is a note that you have read ' +
   'this orientation.'
+
+/**
+ * The limitation that matters most for the "even if the server is compromised" promise, and that
+ * was written down nowhere on this page.
+ *
+ * The snapshots really are end-to-end encrypted: the key is derived from a passphrase on the
+ * client and the server never sees it. But THIS PAGE is delivered by that same server, so a
+ * compromised one can serve modified code. The phone app cannot be attacked that way — it is
+ * installed rather than fetched — which is why it is the trustworthy client and this is a
+ * convenience. Anything claiming to explain how the page is secure and omitting this is selling
+ * a guarantee it does not have.
+ */
+export const SERVED_BY_THE_SERVER =
+  'Your entries are encrypted before they leave your phone, with a key made from your passphrase ' +
+  'that the server never receives — so a stolen disk is unreadable. One limit worth knowing: this ' +
+  'web page is sent to you BY that server, so a server someone had tampered with could send ' +
+  'altered code. The phone app is installed rather than fetched, so it cannot be changed that ' +
+  'way. Treat the app as the trustworthy one and this page as the convenient one.'
 
 /** Named exactly, so the sentence and the code cannot drift apart. audience.test.ts checks that. */
 export const WHAT_IS_STORED =
@@ -746,7 +757,16 @@ export const LABELS = {
   routes: 'Where to start',
   reach: 'What answered at this address',
   reachLimits: 'What that does not establish',
-  runsHere: 'What runs where',
+  /*
+   * Disclosure summaries. Each says what is behind it, so someone can decide whether to open it —
+   * "Details" or "More info" would make that decision impossible and is why those words are not
+   * used here.
+   */
+  runsHere: 'How this page keeps your data safe',
+  whatThisMeans: 'What this means',
+  whySoFew: 'Why so few checks',
+  whyPublic: 'Where these readings come from',
+  servedBy: 'One limit worth knowing',
   stored: 'What this page keeps in your browser',
   storageRefused: 'That note was not kept',
   youAreHere: 'You are here',

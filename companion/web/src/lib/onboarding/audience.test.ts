@@ -192,11 +192,30 @@ describe('the owner routes', () => {
   })
 
   it('every route says what it is in a phrase, not a bare verb', () => {
+    /*
+     * A MINIMUM WORD COUNT, NOT A MINIMUM LENGTH — and an upper bound as well.
+     *
+     * This asserted `blurb.length > 80`, which is a proxy for "is a sentence" that stops being
+     * one the moment the goal changes. It did: the maintainer's reaction to the finished screen
+     * was "SOOO much text it's just so hard to get it all", and the fix was to cut every blurb to
+     * a single line. The floor then failed six perfectly good one-liners for the crime of being
+     * short, so the rule was actively defending the problem.
+     *
+     * What the rule is FOR is that a blurb adds meaning the label does not already carry — the
+     * original sin was "Build a tool", which told a reader nothing. So: several words, a real
+     * sentence, and not a restatement of the label. Plus a ceiling, because on this screen too
+     * long is now the likelier failure and nothing was watching for it.
+     */
     for (const r of OWNER_ROUTES) {
       expect(r.label.length, r.id).toBeGreaterThan(12)
-      // "Build a tool" told a reader nothing. Each blurb has to be a sentence about what the
-      // thing actually is.
-      expect(r.blurb.length, r.id).toBeGreaterThan(80)
+      const words = r.blurb.trim().split(/\s+/).length
+      expect(words, `${r.id}: blurb is too terse to add anything`).toBeGreaterThanOrEqual(6)
+      expect(words, `${r.id}: blurb is a paragraph; this screen is a menu`).toBeLessThanOrEqual(14)
+      expect(r.blurb.trim().endsWith('.'), `${r.id}: blurb is not a sentence`).toBe(true)
+      expect(
+        r.blurb.toLowerCase().includes(r.label.toLowerCase()),
+        `${r.id}: blurb only repeats the label`,
+      ).toBe(false)
       expect(NEEDS_LABEL[r.needs], r.id).toBeTruthy()
     }
   })
