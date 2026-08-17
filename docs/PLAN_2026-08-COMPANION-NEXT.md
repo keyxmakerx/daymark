@@ -343,6 +343,9 @@ actions and they should not be collapsed into one button labelled "Disconnect":
 None of these un-sends what a clinician has already read. A UI implying otherwise would be lying
 about something that matters, and the copy must say so at the point of the click, not in a footnote.
 
+**This table answers "what can be switched off". It does not answer "who is allowed to end this",
+which is the harder question — see §3.6.1, which supersedes this table for the *who*.**
+
 ### 3.5.5 The boot screen: two doors, and about 26 words
 
 > "the like two options at boot (which still has so much text it's wild, we need to remove like 80%
@@ -379,16 +382,212 @@ establish a signing key rather than hand over a token.
 
 ---
 
+## 3.6 Ending a connection, and making the pairing genuinely one-time
+
+The maintainer, after reading §3.5:
+
+> "So what would be the correct way to handle that disconnect? like it should be doable from their
+> side, say a patient doesn't show up or something? but also a person doesn't want to work with a
+> therapist anymore? but at the same time that pairing shouldn't be reusable, this should be
+> incredibly as secure as possible, even if a bit annoying to do so, so it like is a one time thing.
+> We don't want a man in the middle attempt to even be possible basically. Also also, we definitly
+> need the android app to be aware of all this.... that's scary we don't today"
+
+Four questions. §3.5.4 gave a four-row table for disconnect and it is not wrong, but it answered
+"what can be turned off" rather than "who is allowed to end this, and what happens to the other
+person". Those are different questions and the second is the one asked.
+
+### 3.6.1 Two verbs, not one, and they are deliberately asymmetric
+
+**Leave** — either party ends their *own* participation. **Revoke** — the owner ends the *other
+party's* access. Collapsing these into a single "Disconnect" is the mistake, because the therapist
+must be able to do the first and must never be able to do the second.
+
+The asymmetry is not politeness, it is a threat model. A therapist credential can be stolen. If
+"disconnect" from the therapist's side deleted the owner's shares, then stealing a therapist
+credential would buy an attacker a **data-destruction primitive** over someone else's records. It
+must not. `RelationRoutes.kt:133` already reasons through exactly this shape for revoke-on-write
+and reaches the same conclusion; this is the same rule applied to the connection itself.
+
+| | Leave (therapist) | Leave (owner) | Revoke (owner) |
+|---|---|---|---|
+| Deletes the therapist credential | yes | — | yes |
+| Kills live sessions immediately | yes | — | yes — **now**, not at next expiry |
+| Destroys the therapist's local key material | yes (their browser) | — | cannot reach it |
+| Touches the owner's blobs or lineages | **never** | owner's explicit choice | yes |
+| Other side is told | yes — `OwnerNotifier` | yes | no channel; they learn at next request |
+
+Two things the UI must not misrepresent.
+
+**Revoking does not un-send what was already read.** The note already in `GrantManager.svelte` is
+correct and must survive verbatim into any new surface. It belongs at the point of the click, not
+in a footnote.
+
+**A revoke is not a message.** The therapist has no push channel — email is optional and
+best-effort. So the owner's screen must say *they will find out the next time they open it*, and
+must not imply the other person has been notified. Overstating this is the kind of quiet false
+promise §1.2 exists to prevent.
+
+### 3.6.2 There is no "reconnect", and that is the point
+
+Reconnecting after a disconnect is **a fresh invite and a fresh SAS ceremony from the top**. There
+is no button that resumes a prior relationship.
+
+This follows directly from "the pairing shouldn't be reusable". A reconnect button is a reusable
+pairing wearing a different hat: it means some artefact survived the disconnect and can be replayed
+to re-establish trust. If nothing survives, there is nothing to replay, and "one-time" is a property
+of the system rather than a claim about it.
+
+The cost is real and should be stated in the UI: **disconnecting is not reversible, and re-pairing
+requires both people again.** That is the annoyance the maintainer explicitly budgeted for.
+
+### 3.6.3 Single-use: what is already true, and the one gap that matters
+
+Verified in the source rather than assumed — this half is genuinely built:
+
+- `AuthStore.redeemInvite` returns `GONE` for any `status != "PENDING"` and sets `REDEEMING` on
+  success, so a second redeem of the same secret cannot succeed.
+- `AuthStore.enrollTotp` deletes the enrolment ticket, is **insert-only** on
+  `credential_id OR rel_ref` (a second enrolment against the same relationship is refused with
+  `ALREADY_ENROLLED`), and drives the invite to `CONSUMED` in the same synchronized block.
+- The enrolment ticket lives `ENROLL_TICKET_TTL_MS` = 10 minutes.
+- Wrong secrets never consume the invite; they take capped backoff.
+
+Three gaps remain, and only the first is about cryptography.
+
+**(a) Single-*redeem* is not single-*party*.** Whoever presents the secret first wins. Nothing binds
+the invite to the intended human. Anyone who sees the link — a mail relay, a screenshot in a chat, a
+shoulder — can redeem it, enrol their own authenticator, and *become* the therapist. The genuine
+therapist then gets `GONE`. Today that confused phone call is the only detector. §3.6.4 is what
+closes this.
+
+**(b) `REDEEMING` is a silent dead end.** Redeem the invite and close the tab, or let the 10-minute
+ticket expire, and the invite is stuck at `REDEEMING` forever: not `PENDING`, so it can never be
+used; not `CONSUMED`, so nothing records why. No screen anywhere shows invite state. The owner has
+no way to see it and no way to answer "the link says it's gone" — the only remedy is minting
+another, which nobody knows to do.
+
+Needed: invite state visible in the owner console as **waiting / in progress / finished / dead**,
+plus an explicit owner **Cancel** available at any moment before confirmation. An invite that can
+only be killed by waiting out its TTL is a window an attacker is free to sit in.
+
+**(c) Refusing the confirmation must burn the invite.** If the two sides read different words, that
+is not a UX hiccup — it *is* the attack, live. The invite must be marked dead, the owner told
+loudly, and a fresh one required. Anything softer means the attacker simply retries until someone
+clicks through.
+
+### 3.6.4 Machine-in-the-middle: the mechanism exists; the part that gets missed is *which screen*
+
+`share/pairing.ts` computes an order-independent BLAKE2b SAS over both parties' four public keys,
+and `PinStore.assertPinned` refuses unpinned peers. That machinery is correct and complete. Wiring
+it to a screen is necessary but not sufficient — two further conditions decide whether it actually
+prevents anything.
+
+**Condition 1: the comparison must not travel over the server.**
+
+This is the one that is easy to get wrong while looking right. §1.2 already concedes that *the web
+viewer is served by the server it is protecting you from*. So if the owner's browser and the
+therapist's browser each render the phrase, a compromised server computed **both** — it can sit in
+the middle, hold a separate session with each party, and render each of them a phrase that matches
+the other. Two matching screens prove nothing when one machine drew them both.
+
+The words therefore have to be compared **human to human, out of band**: spoken on a call, or read
+out in the room. The copy must say *"read these words aloud to each other"* and must never say
+*"check that they match on screen"*. Those two sentences describe the same gesture and only one of
+them is a security control.
+
+**Condition 2: the owner's confirming device should be the phone, not the browser.**
+
+The Companion page is delivered by the server on every load, so a compromised server can change what
+it renders — including the phrase. The Android app is installed from an APK, already holds the
+passphrase, and derives its keys locally; the server cannot change its code. A SAS rendered by the
+phone cannot be forged by a compromised server. A SAS rendered by the browser can.
+
+This is the strongest available answer to "we don't want a man in the middle attempt to even be
+possible", and its cost should be stated plainly rather than buried: **pairing then requires the
+phone in hand, so it cannot be completed from a desktop alone.** That is precisely the "even if a
+bit annoying" the maintainer authorised, and it is where that budget is best spent.
+
+It also converts §3.6.5 from a nice-to-have into a dependency: the app is not *shown* the
+connection afterwards, it is the thing that **approves** it.
+
+**Audit consequence.** `AuditAction` has eleven kinds and none of them covers this. Pairing needs
+its own, at minimum `PAIR_CONFIRMED`, `PAIR_REFUSED` and `CONNECTION_ENDED` (carrying which side
+ended it). A refused pairing that leaves no trace is an attack that leaves no trace.
+
+### 3.6.5 The Android app: worse than "not aware", and it reorders the work
+
+§3.5.4 said the phone has no relationship model. On tracing it, that understates it. Verified:
+
+- There is **no `sync` package under `app/src/main/`** at all.
+- The entire `sync` flavour source tree is one 19-line file, `SyncCryptoFactory.kt`, and **nothing
+  references it.** Its own comment says so: *"Nothing calls this yet (no networking/UI has
+  landed)."*
+- `BackupManager.kt` is local JSON/CSV export and import. It opens no socket.
+
+So it is not that the app is unaware of therapists. **The app does not know the Companion server
+exists.** The `:sync-crypto` module is built and genuinely JVM-tested, and that is the whole of the
+phone side.
+
+Two consequences.
+
+**A connections screen is not a screen — it is three layers, and they have an order:**
+
+1. **Talk.** A sync client: the app can reach its own server, authenticate, and read the relationship
+   API. Prerequisite for everything below; nothing about connections can be true before it.
+2. **Approve.** The phone renders the SAS and is the confirming party (§3.6.4, condition 2).
+3. **Observe and end.** The connections screen proper: who is connected, since when, their key
+   fingerprint, what they can actually see in plain words, when they last opened anything, and
+   Leave / Revoke.
+
+**Layer 2 before layer 3, deliberately.** A screen that only *observes* is the exact false comfort
+the maintainer is worried about — it looks like oversight, reads like control, and changes nothing
+about who can see what. Approval is the half that carries weight, and building it first means the
+app cannot quietly become unaware again, because nothing pairs without it.
+
+**Until layer 1 lands, no Companion screen may claim the phone will show or approve anything.**
+That is a copy rule, and it is checkable: the corpus test in `fieldHelp.test.ts` already reads
+component markup rather than module exports, so a promise about the phone can be caught the same way
+a fake "all clear" line was.
+
+### 3.6.6 What this changes about the order of work
+
+§4.0 (the invite acceptance page) still comes first — without it there is no therapist path at all.
+But it now ships in two honest stages rather than one:
+
+- **4.0a** — the page exists, redeems the invite, generates keys, takes one passphrase, enrols the
+  authenticator, and shows the SAS with an out-of-band comparison instruction and a **refuse** path
+  that burns the invite. Owner-side invite state and Cancel land here too (§3.6.3b).
+- **4.0b** — the phone becomes the approving device (§3.6.4, condition 2), which requires the sync
+  client from §3.6.5 layer 1.
+
+4.0a is genuinely useful on its own and is not throwaway: the SAS, the refusal path, the invite
+lifecycle and the Leave/Revoke verbs are all identical in both stages. Only the device that renders
+the owner's half of the phrase changes.
+
+---
+
 ## 4. The work, in order
 
 ### 4.0 — The invite acceptance page *(now first: without it, goal B does not work at all)*
 
-Per §3.5.1–3.5.3. A page at `/portal/invite` that redeems the link the owner already sends, and
-replaces the nine-field sign-in with one code and one passphrase.
+Per §3.5.1–3.5.3, split into two stages by §3.6.6.
 
-**Acceptance.** A therapist who is sent an invite link can reach a working portal without anyone
-reading source, opening a database, or pasting base64. The SAS confirmation is shown on both sides
-and refusing it aborts the pairing.
+**4.0a — the therapist path exists.** A page at `/portal/invite` that redeems the link the owner
+already sends, and replaces the nine-field sign-in with one code and one passphrase. Plus, from
+§3.6: the SAS with an *out-of-band* comparison instruction, a **refuse** path that burns the invite,
+owner-visible invite state (waiting / in progress / finished / dead), an owner **Cancel**, the
+Leave / Revoke verbs of §3.6.1, and the three new `AuditAction` kinds.
+
+**4.0b — the phone becomes the approving device.** §3.6.4 condition 2. Blocked on the sync client
+(§3.6.5 layer 1), so it is a separate stage, not a separate design.
+
+**Acceptance (4.0a).** A therapist who is sent an invite link can reach a working portal without
+anyone reading source, opening a database, or pasting base64. The SAS is shown on both sides with
+copy that says to read it aloud — never "check it matches on screen" (§3.6.4). Refusing it aborts
+the pairing *and* kills the invite. An abandoned redeem is visible to the owner and cancellable
+rather than a silent dead end. A therapist can end their own participation; doing so cannot delete
+any of the owner's data.
 
 **Note on §4.1, which is done:** cutting the sign-in form's text was worth doing and is not wasted,
 but most of that form should disappear in this step. Do not extend it further.
@@ -514,3 +713,11 @@ Unchanged and still open:
    reach for more often?
 4. Should the personal (A) and clinician (B) products eventually be **separate deployments**, not
    just separate pages? A person who never has a therapist currently runs all of B's code.
+5. **§3.6.4** — making the phone the approving device means pairing cannot be completed from a
+   desktop alone. Accepted as the price of a SAS a compromised server cannot forge? The alternative
+   is a browser-rendered phrase, which is materially weaker and should be labelled as such rather
+   than presented as equivalent.
+6. **§3.6.1** — when a therapist Leaves, should their previously delivered shares be revoked
+   automatically, or left alone until the owner decides? Auto-revoking is tidier; it also lets a
+   stolen therapist credential trigger revocation of the owner's own material, which is why the
+   table currently says *never*. Leaving them is the safer default and the messier one.
