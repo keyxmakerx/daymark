@@ -478,6 +478,13 @@ clicks through.
 
 ### 3.6.4 Machine-in-the-middle: the mechanism exists; the part that gets missed is *which screen*
 
+> **SUPERSEDED IN PART BY §3.7.** This section's analysis of *why* two matching browser screens
+> prove nothing is still correct and still load-bearing. Its prescription — compare the phrase
+> aloud, human to human — is **not** the design any more: it requires a synchronous call, which
+> fails the "even if they are not in the office" case, and it leans on a human comparing carefully.
+> §3.7 replaces the ritual with a PAKE, which gets the same property structurally. Read this for the
+> threat model; read §3.7 for the mechanism.
+
 `share/pairing.ts` computes an order-independent BLAKE2b SAS over both parties' four public keys,
 and `PinStore.assertPinned` refuses unpinned peers. That machinery is correct and complete. Wiring
 it to a screen is necessary but not sufficient — two further conditions decide whether it actually
@@ -552,6 +559,10 @@ a fake "all clear" line was.
 
 ### 3.6.6 What this changes about the order of work
 
+> **Amended by §3.7.** The two-stage split below is still right, but the thing 4.0b unlocks is no
+> longer "the phone renders the phrase" — it is "the phone can run the PAKE", which is gated on the
+> lazysodium binding in §3.7.6. And 4.0a's confirmation step is a typed code, not a compared phrase.
+
 §4.0 (the invite acceptance page) still comes first — without it there is no therapist path at all.
 But it now ships in two honest stages rather than one:
 
@@ -567,27 +578,258 @@ the owner's half of the phrase changes.
 
 ---
 
+## 3.7 Remote pairing: a link plus a code, and a PAKE behind it
+
+The maintainer, on reading §3.6:
+
+> "I mean there should be a way a user to connect to the therapist, even if they are not in the
+> office. IF it's a string they can copy and paste from an email, or something, maybe a URL + soft
+> password, that follows up into a 2factor, which then has an encrypted negotiation for the rest of
+> the details?"
+
+**This is a better design than §3.6.4's and it should replace it.** What is described there is, almost
+exactly, a **balanced password-authenticated key exchange**. It is worth naming that, because it
+means the hard part is a solved problem with a specification and reference code rather than
+something to invent here.
+
+### 3.7.1 Why the §3.6.4 prescription was the weaker answer
+
+§3.6.4 was right that a compromised server can draw two matching phrases, and right that the
+comparison therefore cannot travel over the server. Its conclusion — read the words aloud on a call
+— is the weakest available fix for three reasons:
+
+1. **It requires simultaneity.** Both people, on a call, at once. That is precisely the case the
+   maintainer says has to work without: *"even if they are not in the office."*
+2. **It depends on a human comparing carefully.** People confirm dialogs. A control whose failure
+   mode is "the user clicked yes" is a control that degrades to nothing under exactly the pressure
+   it exists for.
+3. **It is a ritual, not a mechanism.** Nothing enforces it. There is no test that can assert people
+   read the words to each other.
+
+A PAKE has none of those properties. It is asynchronous, it needs no human comparison, and the
+exclusion of the server is structural.
+
+### 3.7.2 The recommendation: CPace
+
+Checked against the current state of the CFRG process rather than recalled — see §3.7.6 for
+citations.
+
+- The CFRG PAKE selection produced **CPace** (balanced) and **OPAQUE** (augmented).
+- **OPAQUE is RFC 9807.** It is the wrong shape here: augmented PAKEs are for a *server* that stores
+  a password verifier. Our server is the adversary being excluded, and it stores nothing.
+- **CPace is the balanced one and the right one**, because both humans genuinely share the same short
+  code. It is still an Informational-track draft (`draft-irtf-cfrg-cpace`, rev 21 as of April 2026),
+  which is worth stating plainly rather than implying RFC status.
+- There is a **CPace implementation over ristretto255 + SHA-512 built directly on libsodium**
+  (`jedisct1/cpace`, BSD-2-Clause, by libsodium's own author). Its stated purpose is *"pairing IoT
+  and mobile applications using ephemeral pin codes, QR-codes, serial numbers"* — this exact use
+  case. Single round trip; `crypto_cpace_step1/2/3`.
+
+The defining property, and the reason a six-character code suffices where it would be absurd as a
+password: **a man-in-the-middle gets one online guess per attempt and no offline dictionary attack.**
+Rate-limit attempts to a handful and a short code is genuinely enough.
+
+### 3.7.3 The flow
+
+1. **Owner creates the invitation.** The server mints the invite id and link as it does today. The
+   owner's *device* — not the server — generates a short, human-typable code.
+2. **Two channels, and this is the mechanism, not the friction.** The link goes by email. The code
+   goes by anything else: read over the phone, an SMS, a message in whatever the two people already
+   use. They must never travel together. This is what kills §3.6.3(a) — "bearer of the link wins" —
+   because the link alone is now worthless.
+3. **Therapist opens the link, types the code.**
+4. **CPace runs between the therapist's browser and the owner's device**, relayed through the server
+   as opaque blobs. The server cannot participate: it does not have the code.
+5. **The derived key encrypts the rest of the negotiation** — the therapist's public keys, the
+   wrapped reading key, the capability set. This is the maintainer's "encrypted negotiation for the
+   rest of the details", and it is the right instinct: today every one of those values is either
+   pasted by hand or sent in the clear.
+6. **TOTP enrolment happens inside that encrypted channel.** Also the maintainer's ordering, also
+   right. Today `POST /totp/enroll` carries the client-chosen secret over plain TLS to a server that
+   is explicitly not trusted with content.
+7. Invite → `CONSUMED`, exactly as now.
+
+**It is store-and-forward, not a phone call.** CPace is one round trip, so through a relay it is:
+owner posts, therapist fetches and responds, owner finishes next time they open the app. Three
+touches, none simultaneous. That is the whole of the maintainer's requirement, met.
+
+### 3.7.4 The hard invariant: the server never learns the code
+
+If the server had the code it could run the exchange itself and sit in the middle. So:
+
+**The pairing code is generated on the owner's device, displayed there, typed by the therapist, and
+never transmitted to the server in any form.**
+
+Two consequences worth stating because they are the point:
+
+- The Companion **must not offer to email the code**. It emails the link only. A "send both by
+  email" convenience would silently collapse the whole design back to bearer-wins, and it is exactly
+  the sort of helpful affordance that gets added later by someone who does not know why it is
+  absent. Write the reason at the call site.
+- The server cannot be compelled to produce what it never received.
+
+This is testable in the same style as the existing "logging must never carry content" invariant: the
+code must not appear in any request body, header, query string, or log line the server can observe.
+
+### 3.7.5 The limit of a browser-side PAKE, and why §3.6.4 condition 2 still stands
+
+**Correction to an overreach in the first draft of this section**, which claimed a PAKE excludes the
+server "structurally" and therefore dissolves the phone question. It does not, and the distinction
+matters enough to spell out.
+
+A PAKE excludes the server from the **protocol**. It does not exclude the server from the **code
+that runs the protocol**, when the server is the thing serving that code. A fully compromised
+Companion can ship JavaScript to the owner's browser that simply reads the code out of the input box
+and phones home. No amount of protocol design survives an attacker who controls the client.
+
+So the honest scoreboard:
+
+| Threat | SAS in browser | PAKE in browser | PAKE with owner's half on the phone |
+|---|---|---|---|
+| Someone intercepts the invite email | no help | **prevented** | prevented |
+| Network attacker between the parties | prevented *if* read aloud | **prevented** | prevented |
+| Wrong person redeems the link first | no help | **prevented** | prevented |
+| Honest-but-curious server (logs, relays, does not tamper) | prevented *if* read aloud | **prevented** | prevented |
+| Server actively serves malicious JS | **no help** | **no help** | **prevented** |
+
+The PAKE wins every realistic row and wins them without a scheduled phone call — which is why it is
+still the right mechanism. But the bottom row is untouched by the choice of mechanism, because a
+server drawing both browsers can forge a compared phrase just as easily as it can steal a typed
+code. **§3.6.4 condition 2 is therefore unaffected by §3.7 and remains the answer to the strongest
+threat: the owner's half belongs on the phone, whose code the server cannot rewrite.**
+
+What §3.7 changes is the *reason* the phone helps — not "so the phrase cannot be forged" but "so the
+code cannot be exfiltrated by served JavaScript" — and its *urgency*: the phone is now a
+strengthening against the worst case rather than a precondition for any safety at all. That is what
+makes 4.0a shippable on its own.
+
+### 3.7.5.1 What survives from §3.6.4
+
+The SAS is **demoted, not deleted**. With a PAKE it is no longer the control that prevents a
+machine-in-the-middle — the PAKE is. But a key fingerprint remains genuinely useful on the
+connections surface (§3.6.5 layer 3) for anyone who wants to verify out of band later. So:
+
+- `share/pairing.ts` stays, shown as a fingerprint on the connections screen.
+- It stops being a blocking confirmation step in the pairing flow.
+- The "read these aloud" copy requirement goes with it.
+
+The §3.6.4 **audit** consequence stands unchanged: `PAIR_CONFIRMED`, `PAIR_REFUSED`,
+`CONNECTION_ENDED`. A failed PAKE attempt is now a much more interesting event than a refused SAS
+ever was — it is someone guessing — and it needs a distinct action and a threshold that alerts.
+
+### 3.7.6 A verified blocker on the Android side
+
+The browser half is unblocked: `libsodium-wrappers-sumo` is already a dependency of
+`companion/web` and the sumo build carries the ristretto255 operations CPace needs.
+
+**The phone half is blocked on one missing binding.** CPace derives its generator with
+`crypto_core_ristretto255_from_hash`, and **lazysodium-java does not bind that function.** The app
+reaches libsodium exclusively through lazysodium (`sync-crypto` compiles against lazysodium-java and
+runs on lazysodium-android — see `SyncCrypto`'s KDoc), so CPace cannot run on the phone until that
+binding exists.
+
+It is bounded work — lazysodium is JNA-based and declaring one additional native function is its
+documented extension path — but it is a gate on §3.6.5 layer 2, not a detail to discover during
+implementation. **Verify this first, before any of §3.7 is committed to.** If it turns out worse
+than it looks, the fallback is to run the PAKE browser-to-browser and accept the weaker property
+from §3.6.4 condition 2, which should be labelled as weaker rather than presented as equivalent.
+
+Sources:
+- <https://datatracker.ietf.org/doc/draft-irtf-cfrg-cpace/>
+- <https://datatracker.ietf.org/doc/rfc9807/>
+- <https://github.com/cfrg/pake-selection/blob/master/README.md>
+- <https://github.com/jedisct1/cpace>
+
+---
+
+## 3.8 The handshake: what a heartbeat fixes, and the three things it does not
+
+The maintainer, on §3.6.3:
+
+> "is there not like a ping out to each other, like occasional hand shake?"
+
+Yes, and it should exist. It is worth being exact about which problem it solves, because it is not
+quite the one it appears to solve.
+
+### 3.8.1 Prevention and visibility are different jobs
+
+§3.6.3(a) said the genuine therapist gets `GONE` and telephones the owner, and that call is the only
+detector. A handshake improves that — but the PAKE removes the need for it.
+
+| | Fixed by |
+|---|---|
+| An attacker with the link cannot complete the pairing | **§3.7 — the PAKE.** Prevention. |
+| The owner can *see* pairing state as it happens | **The heartbeat.** Visibility. |
+
+Both are wanted, and the order matters: visibility without prevention is a faster way to learn you
+have been had. With §3.7 in place, the heartbeat stops being a security control and becomes what it
+should be — an operational one.
+
+### 3.8.2 What it actually buys
+
+**Live pairing state, which is the direct fix for §3.6.3(b).** The silent `REDEEMING` dead end
+becomes a visible sequence on the owner's screen: *link opened · waiting for the code · abandoned 12
+minutes ago*. That converts "the link says it's gone" from a mystery into something the owner can
+see and cancel.
+
+**Revocation propagates in one interval rather than at next request.** This is the §3.6.1 point that
+"a revoke is not a message". With a heartbeat it becomes closer to one.
+
+**A real "last seen" on the connections surface** (§3.6.5 layer 3), which is otherwise guesswork.
+
+### 3.8.3 Three limits that must reach the copy
+
+1. **It is not a remote wipe, and must never be described as one.** A revocation ping tells an
+   *honest* client to stop and discard. A modified client ignores it and keeps whatever plaintext it
+   has already cached. The heartbeat makes revocation fast for honest clients; it makes it
+   enforceable against nobody. This is the same honesty §3.6.1 demands of revoke, and the same
+   caveat `GrantManager.svelte` already carries.
+2. **It is metadata the server can see** — when a clinician is active, and how often. Small, real,
+   and §1.2's list of "what a compromised server can still do" needs a line for it rather than
+   letting it arrive unannounced. On the phone it is also battery and radio.
+3. **A missing heartbeat is ambiguous.** Offline, asleep, on a plane, or removed — indistinguishable.
+   It must never be rendered as an accusation or a fault. This is the standing constraint that *a
+   gap in someone's data is never drawn as a failure*, applied to a person instead of a chart, and
+   the invariant suite should be able to catch a regression here.
+
+### 3.8.4 Shape
+
+An interval measured in minutes, not seconds; jittered so every client does not wake together;
+carried on a **signed** request once §4.3 lands, so a heartbeat cannot be forged or replayed to fake
+liveness. During an active pairing the owner's screen may poll faster — that window is short and
+bounded by the invite TTL.
+
+---
+
 ## 4. The work, in order
 
 ### 4.0 — The invite acceptance page *(now first: without it, goal B does not work at all)*
 
 Per §3.5.1–3.5.3, split into two stages by §3.6.6.
 
-**4.0a — the therapist path exists.** A page at `/portal/invite` that redeems the link the owner
-already sends, and replaces the nine-field sign-in with one code and one passphrase. Plus, from
-§3.6: the SAS with an *out-of-band* comparison instruction, a **refuse** path that burns the invite,
-owner-visible invite state (waiting / in progress / finished / dead), an owner **Cancel**, the
-Leave / Revoke verbs of §3.6.1, and the three new `AuditAction` kinds.
+**Step 0 — verify the blocker before anything else.** §3.7.6: does
+`crypto_core_ristretto255_from_hash` reach lazysodium with a bindable amount of work? The answer
+decides whether 4.0b is a stage or a fallback, so it comes before the design is committed to. Cheap
+to answer, expensive to discover late.
 
-**4.0b — the phone becomes the approving device.** §3.6.4 condition 2. Blocked on the sync client
-(§3.6.5 layer 1), so it is a separate stage, not a separate design.
+**4.0a — the therapist path exists.** A page at `/portal/invite` that redeems the link the owner
+already sends, and replaces the nine-field sign-in with **one code and one passphrase**. The code is
+the PAKE password (§3.7.3), so this stage carries: the CPace exchange relayed as opaque blobs, the
+encrypted negotiation of keys and capabilities behind it, TOTP enrolment moved *inside* that channel,
+owner-visible invite state (waiting / in progress / finished / dead), an owner **Cancel**, the
+Leave / Revoke verbs of §3.6.1, and the new `AuditAction` kinds — including one for a failed PAKE
+attempt, with a threshold that alerts (§3.7.5).
+
+**4.0b — the phone becomes the owner's pairing device.** §3.7.6 + §3.6.5 layer 1. A separate stage,
+not a separate design: the protocol is identical, only the device running the owner's half changes.
 
 **Acceptance (4.0a).** A therapist who is sent an invite link can reach a working portal without
-anyone reading source, opening a database, or pasting base64. The SAS is shown on both sides with
-copy that says to read it aloud — never "check it matches on screen" (§3.6.4). Refusing it aborts
-the pairing *and* kills the invite. An abandoned redeem is visible to the owner and cancellable
-rather than a silent dead end. A therapist can end their own participation; doing so cannot delete
-any of the owner's data.
+anyone reading source, opening a database, or pasting base64 — and **without a scheduled phone
+call**. The pairing code never appears in any request body, header, query string, or log line
+(§3.7.4), and there is a test that says so. Wrong codes are rate-limited to a handful of attempts and
+raise an audit event. An abandoned redeem is visible to the owner and cancellable rather than a
+silent dead end. A therapist can end their own participation; doing so cannot delete any of the
+owner's data.
 
 **Note on §4.1, which is done:** cutting the sign-in form's text was worth doing and is not wasted,
 but most of that form should disappear in this step. Do not extend it further.
@@ -713,11 +955,22 @@ Unchanged and still open:
    reach for more often?
 4. Should the personal (A) and clinician (B) products eventually be **separate deployments**, not
    just separate pages? A person who never has a therapist currently runs all of B's code.
-5. **§3.6.4** — making the phone the approving device means pairing cannot be completed from a
-   desktop alone. Accepted as the price of a SAS a compromised server cannot forge? The alternative
-   is a browser-rendered phrase, which is materially weaker and should be labelled as such rather
-   than presented as equivalent.
+5. **§3.6.4 / §3.7.5** — the phone question narrows but does not go away. A PAKE beats the
+   read-aloud SAS on every realistic threat, but neither survives a server that serves malicious
+   JavaScript to the owner's browser, and only moving the owner's half to the APK does. So 4.0a is
+   shippable without the phone, and 4.0b is the answer to the worst case. Is that split accepted, or
+   should the phone gate pairing from the start? The gating question underneath is §3.7.6 — whether
+   the missing lazysodium binding is cheap.
 6. **§3.6.1** — when a therapist Leaves, should their previously delivered shares be revoked
    automatically, or left alone until the owner decides? Auto-revoking is tidier; it also lets a
    stolen therapist credential trigger revocation of the owner's own material, which is why the
    table currently says *never*. Leaving them is the safer default and the messier one.
+7. **§3.7.3** — what shape is the pairing code? It has to be read over a phone line without
+   ambiguity and typed without a keyboard fight. Candidates: four words from a short list (longest
+   to say, easiest to get right, no case or digit confusion), or 8–10 characters from a
+   confusable-free alphabet like Crockford base32. The PAKE makes either strong enough; this is
+   purely a question about the human moment, and the maintainer is better placed to answer it than
+   the threat model is.
+8. **Post-quantum** is explicitly *not now.* There is early CFRG work on hybrid PQ PAKEs
+   (`draft-vos-cfrg-pqpake`), but it is a long way from settled and nothing in this threat model
+   justifies tracking a moving draft. Noted so the omission is a decision rather than an oversight.
