@@ -40,9 +40,19 @@ someone who has stolen the disk, holds ciphertext. Goal A's core promise is real
 
 ### 1.2 What a compromised server can still do — state this plainly, never imply otherwise
 
-1. **See metadata.** Snapshot sizes, timing, source IPs, how often someone syncs, how many
-   relationships exist. Not content — but "they logged nothing for three weeks" is inferable from
-   timing alone, and on this product that is sensitive.
+1. **See metadata, which the encryption does not cover.** Snapshot sizes, timing, source IPs, how
+   often someone syncs, how many relationships exist. The payload is ciphertext; the *shape* of it
+   is not, and none of this requires decrypting anything. "They logged nothing for three weeks" is
+   inferable from timing alone, and "journalled daily for eight months and then stopped for nine
+   days" is a clinically meaningful inference drawn without touching a single ciphertext. On this
+   product that is sensitive.
+   - **§3.8's heartbeat adds a second signal, and a more regular one** — when a client is awake and
+     when a clinician is active, on a fixed interval rather than following anyone's own writing. It
+     is listed here rather than arriving unannounced, which is what §3.8.3 asks for.
+   - The known mitigations — pad blobs to size buckets, jitter upload timing, decouple writes from
+     capture — are out of scope for this slice. **The requirement is disclosure, not
+     implementation** (§3.9.5): a stated limit, rather than something discovered later by someone
+     who trusted the words "end-to-end" to mean more than they do.
 2. **Deny service.** Refuse writes, truncate the audit chain, serve a stale snapshot. The admin
    console's chain check states internal consistency and explicitly *not* completeness for exactly
    this reason.
@@ -723,7 +733,43 @@ The §3.6.4 **audit** consequence stands unchanged: `PAIR_CONFIRMED`, `PAIR_REFU
 `CONNECTION_ENDED`. A failed PAKE attempt is now a much more interesting event than a refused SAS
 ever was — it is someone guessing — and it needs a distinct action and a threshold that alerts.
 
-### 3.7.6 A verified blocker on the Android side
+### 3.7.6 A verified blocker on the Android side — **RESOLVED, and it was not where this said**
+
+> **ANSWERED 2026-08-17 (gate 0.1). This section's diagnosis was right about the symptom and wrong
+> about the patient, and the correction is good news.**
+>
+> - `lazysodium-java` **5.1.0** — the pinned version — has no Ristretto255 binding at all. Not a
+>   missing method; the class is absent. Verified by downloading the Maven Central jar: **0**
+>   `Ristretto255` entries.
+> - `lazysodium-**android**` **5.1.0** — the artifact **already shipping on the phone** — has the
+>   **full** Ristretto surface. Verified the same way from the published `.aar`: **5** entries.
+> - So **the phone was never blocked.** What is blocked is the *host-JVM compile and test* path,
+>   because `:sync-crypto` compiles against `lazysodium-java`. That is a much better problem: it
+>   stops us testing, not shipping.
+> - `lazysodium-java` **5.1.4** has the full binding and stays on Java 8 bytecode (major 52).
+>   **5.2.0 must be avoided** — class major 65, `org.gradle.jvm.version=21` — as the existing comment
+>   in `libs.versions.toml` already warns.
+>
+> **The fix is roughly four lines in `gradle/libs.versions.toml`:** split the shared `lazysodium`
+> version into `lazysodiumJava = "5.1.4"` and `lazysodiumAndroid = "5.1.0"`. No change to
+> `SyncCrypto.kt`, `SyncCryptoFactory.kt`, or any existing test.
+>
+> **A side-finding worth more than the fix.** The repo pins both artifacts to one version string and
+> a comment asserts that this guarantees cross-artifact API parity. That invariant is **false today**:
+> at 5.1.0 the android `LazySodium` exposes 328 public methods and the java one 259, and the
+> 69-method gap *is* the Ristretto surface. The split pin above does not break the invariant — it
+> **restores** it. Replace the comment with a reflection test that actually compares the two method
+> sets; a comment cannot enforce a property, and this one silently stopped being true.
+>
+> **Residual risk, stated rather than waved away:** nobody has executed the ristretto path on a real
+> device. The symbols are present in all five ABIs, but "symbol present" is not "test passed" —
+> budget one instrumentation test before depending on it. This joins §6's list of things only a
+> device can settle.
+>
+> The original analysis follows, kept because the reasoning about *why* the phone matters is
+> unaffected — only the cost of getting there changed.
+
+### 3.7.6a The original (superseded) analysis
 
 The browser half is unblocked: `libsodium-wrappers-sumo` is already a dependency of
 `companion/web` and the sumo build carries the ristretto255 operations CPace needs.
@@ -1055,8 +1101,10 @@ Both are small, both are server-side, and **§3.7 cannot honestly ship without t
    *Acceptance:* a test proves repeated wrong codes never consume the invite, and that a reported
    invite dies at once.
 
-Also here, because it is a documentation fix with no dependencies: **add the metadata line to §1.2**
-(§3.9.5). Cadence, size and timing survive the encryption, and the heartbeat adds to them.
+Also here, because it is a documentation fix with no dependencies: ~~**add the metadata line to
+§1.2** (§3.9.5). Cadence, size and timing survive the encryption, and the heartbeat adds to them.~~
+*(DONE — §1.2 item 1 now says the encryption does not cover the shape of the traffic, and carries
+the heartbeat §3.8.3 asked to have listed rather than arriving unannounced.)*
 
 ---
 

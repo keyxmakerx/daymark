@@ -12,9 +12,15 @@ import java.sql.DriverManager
  * (the sole exception being the TOTP seed, which any TOTP verifier must hold to compute codes;
  * this is the honestly-weaker server-stored-authenticator path per COMPANION_SECURITY.md §5.2).
  *
- * Status machine for invites: PENDING -> REDEEMING -> CONSUMED, or -> EXPIRED. Redemption uses
- * capped exponential backoff (NOT burn-after-N — that is a denial-of-enrollment vector,
- * COMPANION_THERAPIST.md §5.1): a wrong secret never permanently kills the invite.
+ * Status machine for invites: PENDING -> REDEEMING -> CONSUMED, or -> EXPIRED, or -> REPORTED.
+ * Redemption uses capped exponential backoff (NOT burn-after-N — that is a denial-of-enrollment
+ * vector, COMPANION_THERAPIST.md §5.1): a wrong secret never permanently kills the invite.
+ *
+ * REPORTED is the one terminal state a *person* can reach on purpose, and it is deliberately not
+ * reachable by any automatic rule. See [reportInviteByOwner] for the whole argument; the short form
+ * is that a wrong code and an attacker's guess are indistinguishable by construction, so any rule
+ * that kills an invite on a failed attempt is a denial-of-service primitive handed to whoever holds
+ * the link. Only an explicit human report may destroy an invitation.
  */
 class AuthStore(
     dataDir: String,
@@ -89,6 +95,20 @@ class AuthStore(
                 )
                 """.trimIndent(),
             )
+            // Per-source attempt windows for the surfaces whose security claim is stated in
+            // attempts. See AttemptBudget for which budgets land here and which stay in memory;
+            // see `allowAttempt` for why the source is stored as a digest rather than an address.
+            st.execute(
+                """
+                CREATE TABLE IF NOT EXISTS attempt_windows (
+                    scope      TEXT    NOT NULL,
+                    source_key TEXT    NOT NULL,
+                    started_at INTEGER NOT NULL,
+                    count      INTEGER NOT NULL,
+                    PRIMARY KEY (scope, source_key)
+                )
+                """.trimIndent(),
+            )
             st.execute(
                 """
                 CREATE TABLE IF NOT EXISTS sessions (
@@ -113,11 +133,24 @@ class AuthStore(
     enum class RedeemStatus { OK, WRONG_SECRET, LOCKED, GONE }
     data class RedeemResult(
         val status: RedeemStatus,
+        /**
+         * The relationship this invite belongs to.
+         *
+         * Populated on the FAILURE statuses as well as on OK, and that is not an oversight: the
+         * owner's audit log is keyed by relRef, so without it a failed pairing guess could not be
+         * recorded against anything and would leave no trace at all. It is for the server-side
+         * audit append ONLY — the route must never put it in a response body on a failure path,
+         * because that would turn a wrong guess into a confirmation that the invite is real.
+         */
         val relRef: String? = null,
         val scope: List<String> = emptyList(),
         /** Single-use enrollment ticket (plaintext, returned once) that /totp/enroll must consume. */
         val enrollTicket: String? = null,
     )
+
+    /** Outcome of an explicit human report. Mirrors [RedeemStatus] so the routes read alike. */
+    enum class ReportStatus { OK, WRONG_SECRET, LOCKED, GONE }
+    data class ReportResult(val status: ReportStatus, val relRef: String? = null)
 
     /** Mint a single-use invite. The plaintext [MintedInvite.secret] is returned once (for the link) and never stored. */
     fun mintInvite(relRef: String, scope: List<String>, ttlSeconds: Long): MintedInvite = synchronized(lock) {
@@ -147,62 +180,192 @@ class AuthStore(
      */
     fun redeemInvite(inviteId: String, secret: String, lockoutFails: Int, lockoutBaseMs: Long): RedeemResult = synchronized(lock) {
         val now = clock()
+        val row = readInviteLocked(inviteId) ?: return RedeemResult(RedeemStatus.GONE)
+
+        if (row.status != "PENDING") return RedeemResult(RedeemStatus.GONE)
+        if (now >= row.expiry) {
+            setInviteStatus(inviteId, "EXPIRED")
+            return RedeemResult(RedeemStatus.GONE)
+        }
+        if (row.lockedUntil > now) return RedeemResult(RedeemStatus.LOCKED, row.relRef)
+
+        if (Secrets.verifySecret(secret, row.secretArgon2)) {
+            setInviteStatus(inviteId, "REDEEMING")
+            // Mint a short-lived, single-use enrollment ticket pinning this invite's relRef.
+            val ticket = Secrets.newToken()
+            conn.prepareStatement(
+                "INSERT INTO enroll_tickets(ticket_hash, invite_id, rel_ref, scope, expiry) VALUES (?,?,?,?,?)",
+            ).use { ins ->
+                ins.setString(1, Secrets.tokenHash(ticket))
+                ins.setString(2, inviteId)
+                ins.setString(3, row.relRef)
+                ins.setString(4, row.scope.joinToString(","))
+                ins.setLong(5, now + ENROLL_TICKET_TTL_MS)
+                ins.executeUpdate()
+            }
+            return RedeemResult(RedeemStatus.OK, row.relRef, row.scope, ticket)
+        }
+        // Wrong secret: bump fail count, apply capped backoff. Never consume the invite.
+        applyWrongSecretBackoffLocked(inviteId, row, now, lockoutFails, lockoutBaseMs)
+        return RedeemResult(RedeemStatus.WRONG_SECRET, row.relRef)
+    }
+
+    /**
+     * The owner says "this wasn't me": drive the invite to the REPORTED terminal state at once.
+     *
+     * ## Why this is a separate verb, and why nothing automatic may call it
+     *
+     * An earlier draft of the pairing design said a refused confirmation should kill the invite.
+     * That is backwards, and expensively so. With a PAKE, a wrong code and an attacker's guess are
+     * **the same event** — being indistinguishable is the entire point of the construction — so
+     * "burn on a failed attempt" hands anyone who has seen the invite link a cheap, repeatable veto
+     * over the product's core flow: the owner mints, the attacker types one wrong character, the
+     * invitation dies, and round again forever. The therapist never gets in and nobody can tell
+     * why. It is equally hostile to the honest case, where a therapist mistypes a code read to them
+     * down a phone line and loses their invitation for it.
+     *
+     * So a guess and a report are split, and only the second is a signal:
+     *
+     *  - Wrong code — could be a typo, could be an attacker, unknowable. Capped backoff, audited,
+     *    never burned. That is [redeemInvite], and it has behaved this way since it was written.
+     *  - A person says "this wasn't me" / "I didn't expect this" — unambiguous, because a human is
+     *    reporting rather than a counter tripping. Burn immediately and require a fresh invite.
+     *
+     * REPORTED is deliberately distinct from CONSUMED and EXPIRED: those two say the invite did its
+     * job or ran out of time, and this one says a person judged it hostile. Collapsing them would
+     * throw away the only part of an invite's history the owner would actually want to read back.
+     *
+     * The invite's enrollment ticket dies with it. If an attacker has already redeemed and is
+     * sitting on a valid ticket, the ticket — not the invite row — is what still enrols a
+     * credential, so a report that left it alive would be theatre.
+     *
+     * Authority comes from the caller being the owner, proven by the owner bearer token at the
+     * route. No secret is required or accepted here, because the owner is not the party who was
+     * handed one.
+     */
+    fun reportInviteByOwner(inviteId: String): ReportResult = synchronized(lock) {
+        val now = clock()
+        val row = readInviteLocked(inviteId) ?: return ReportResult(ReportStatus.GONE)
+        if (!row.isReportable) return ReportResult(ReportStatus.GONE)
+        if (now >= row.expiry) {
+            setInviteStatus(inviteId, "EXPIRED")
+            return ReportResult(ReportStatus.GONE)
+        }
+        killInviteLocked(inviteId)
+        return ReportResult(ReportStatus.OK, row.relRef)
+    }
+
+    /**
+     * The invited party says "this wasn't me": the same terminal state as [reportInviteByOwner],
+     * gated on presenting the CORRECT invite secret.
+     *
+     * ## Why requiring the right secret is not the denial of service this exists to avoid
+     *
+     * The distinction that makes burning safe here is not "a report is more serious than a guess" —
+     * an attacker would happily click a serious-looking button. It is that **whoever can pass this
+     * gate could already have consumed the invite instead.** Someone holding the correct secret can
+     * redeem it, enrol their own authenticator and become the therapist; letting them close it
+     * takes nothing away from them that they did not already have, and takes nothing away from the
+     * owner that was not already lost. A wrong secret, by contrast, proves nothing at all about who
+     * is asking, which is exactly why it must never burn anything.
+     *
+     * Wrong secrets on this route therefore take the SAME capped backoff, against the same counter,
+     * as a wrong secret on redeem. Without that, this route would be a free oracle for guessing the
+     * invite secret — unmetered attempts on a surface with no lockout of its own — and closing the
+     * burn hole would have opened a guessing hole one route over.
+     */
+    fun reportInvite(inviteId: String, secret: String, lockoutFails: Int, lockoutBaseMs: Long): ReportResult = synchronized(lock) {
+        val now = clock()
+        val row = readInviteLocked(inviteId) ?: return ReportResult(ReportStatus.GONE)
+        if (!row.isReportable) return ReportResult(ReportStatus.GONE)
+        if (now >= row.expiry) {
+            setInviteStatus(inviteId, "EXPIRED")
+            return ReportResult(ReportStatus.GONE)
+        }
+        if (row.lockedUntil > now) return ReportResult(ReportStatus.LOCKED, row.relRef)
+
+        if (Secrets.verifySecret(secret, row.secretArgon2)) {
+            killInviteLocked(inviteId)
+            return ReportResult(ReportStatus.OK, row.relRef)
+        }
+        applyWrongSecretBackoffLocked(inviteId, row, now, lockoutFails, lockoutBaseMs)
+        return ReportResult(ReportStatus.WRONG_SECRET, row.relRef)
+    }
+
+    /** One invite row, read whole so the several checks that follow share a single snapshot. */
+    private data class InviteRow(
+        val relRef: String,
+        val scope: List<String>,
+        val secretArgon2: String,
+        val expiry: Long,
+        val status: String,
+        val failCount: Int,
+        val lockedUntil: Long,
+    ) {
+        /**
+         * REDEEMING is reportable as well as PENDING, and that is the case a report is FOR: the
+         * therapist rings to say the page told them the link was already used, which means somebody
+         * else redeemed it and is mid-enrolment. CONSUMED, EXPIRED and REPORTED are terminal — a
+         * consumed invite's remedy is revoking the credential it produced, not re-killing the row.
+         */
+        val isReportable: Boolean get() = status == "PENDING" || status == "REDEEMING"
+    }
+
+    private fun readInviteLocked(inviteId: String): InviteRow? =
         conn.prepareStatement(
             "SELECT rel_ref, scope, secret_argon2, ttl_expiry, status, fail_count, locked_until FROM invites WHERE invite_id=?",
         ).use { ps ->
             ps.setString(1, inviteId)
             ps.executeQuery().use { rs ->
-                if (!rs.next()) return RedeemResult(RedeemStatus.GONE)
-                val relRef = rs.getString(1)
-                val scope = rs.getString(2).split(',').filter { it.isNotEmpty() }
-                val secretArgon2 = rs.getString(3)
-                val expiry = rs.getLong(4)
-                val status = rs.getString(5)
-                val failCount = rs.getInt(6)
-                val lockedUntil = rs.getLong(7)
-
-                if (status != "PENDING") return RedeemResult(RedeemStatus.GONE)
-                if (now >= expiry) {
-                    setInviteStatus(inviteId, "EXPIRED")
-                    return RedeemResult(RedeemStatus.GONE)
+                if (!rs.next()) {
+                    null
+                } else {
+                    InviteRow(
+                        relRef = rs.getString(1),
+                        scope = rs.getString(2).split(',').filter { it.isNotEmpty() },
+                        secretArgon2 = rs.getString(3),
+                        expiry = rs.getLong(4),
+                        status = rs.getString(5),
+                        failCount = rs.getInt(6),
+                        lockedUntil = rs.getLong(7),
+                    )
                 }
-                if (lockedUntil > now) return RedeemResult(RedeemStatus.LOCKED)
-
-                if (Secrets.verifySecret(secret, secretArgon2)) {
-                    setInviteStatus(inviteId, "REDEEMING")
-                    // Mint a short-lived, single-use enrollment ticket pinning this invite's relRef.
-                    val ticket = Secrets.newToken()
-                    conn.prepareStatement(
-                        "INSERT INTO enroll_tickets(ticket_hash, invite_id, rel_ref, scope, expiry) VALUES (?,?,?,?,?)",
-                    ).use { ins ->
-                        ins.setString(1, Secrets.tokenHash(ticket))
-                        ins.setString(2, inviteId)
-                        ins.setString(3, relRef)
-                        ins.setString(4, scope.joinToString(","))
-                        ins.setLong(5, now + ENROLL_TICKET_TTL_MS)
-                        ins.executeUpdate()
-                    }
-                    return RedeemResult(RedeemStatus.OK, relRef, scope, ticket)
-                }
-                // Wrong secret: bump fail count, apply capped backoff. Never consume the invite.
-                //
-                // Serving a lockout clears the debt that caused it — the same reset
-                // `recordTotpFailure` does, and for the same reason. Without it `fail_count` only
-                // ever climbs, so the FIRST failure after any expired lockout immediately re-armed
-                // another one, and the backoff shift grew with it: one mistyped character past the
-                // threshold escalated to the 1-hour cap and stayed there. The therapist could not
-                // enrol at all, and the only remedy was the owner minting a fresh invite.
-                val priorFails = if (lockedUntil in 1..now) 0 else failCount
-                val newFails = priorFails + 1
-                val locked = if (newFails >= lockoutFails) {
-                    val backoff = lockoutBaseMs shl (newFails - lockoutFails).coerceAtMost(6) // cap the shift
-                    now + backoff.coerceAtMost(3_600_000L) // cap at 1h
-                } else 0L
-                conn.prepareStatement("UPDATE invites SET fail_count=?, locked_until=? WHERE invite_id=?").use { up ->
-                    up.setInt(1, newFails); up.setLong(2, locked); up.setString(3, inviteId); up.executeUpdate()
-                }
-                return RedeemResult(RedeemStatus.WRONG_SECRET)
             }
+        }
+
+    /**
+     * Bump the fail count and arm the capped backoff. Shared by redeem and report so that the two
+     * surfaces spend one counter between them rather than one each.
+     *
+     * Serving a lockout clears the debt that caused it — the same reset `recordTotpFailure` does,
+     * and for the same reason. Without it `fail_count` only ever climbs, so the FIRST failure after
+     * any expired lockout immediately re-armed another one, and the backoff shift grew with it: one
+     * mistyped character past the threshold escalated to the 1-hour cap and stayed there. The
+     * therapist could not enrol at all, and the only remedy was the owner minting a fresh invite.
+     */
+    private fun applyWrongSecretBackoffLocked(
+        inviteId: String,
+        row: InviteRow,
+        now: Long,
+        lockoutFails: Int,
+        lockoutBaseMs: Long,
+    ) {
+        val priorFails = if (row.lockedUntil in 1..now) 0 else row.failCount
+        val newFails = priorFails + 1
+        val locked = if (newFails >= lockoutFails) {
+            val backoff = lockoutBaseMs shl (newFails - lockoutFails).coerceAtMost(6) // cap the shift
+            now + backoff.coerceAtMost(3_600_000L) // cap at 1h
+        } else 0L
+        conn.prepareStatement("UPDATE invites SET fail_count=?, locked_until=? WHERE invite_id=?").use { up ->
+            up.setInt(1, newFails); up.setLong(2, locked); up.setString(3, inviteId); up.executeUpdate()
+        }
+    }
+
+    /** Drive an invite to REPORTED and take its outstanding enrollment ticket with it. */
+    private fun killInviteLocked(inviteId: String) {
+        setInviteStatus(inviteId, "REPORTED")
+        conn.prepareStatement("DELETE FROM enroll_tickets WHERE invite_id=?").use { ps ->
+            ps.setString(1, inviteId); ps.executeUpdate()
         }
     }
 
@@ -219,6 +382,123 @@ class AuthStore(
             ps.executeQuery().use { rs -> if (rs.next()) rs.getString(1) else null }
         }
     }
+
+    /**
+     * Test/inspection helper: the raw status word of an invite, or null if there is no such row.
+     *
+     * Deliberately NOT exposed on any unauthenticated route. The state machine is owner-facing
+     * information (the owner console is to render waiting / in progress / finished / dead), and
+     * handing the same distinction to an anonymous caller would turn a guessed invite id into an
+     * oracle for whether an invitation exists and how far along it is.
+     */
+    fun inviteStatusFor(inviteId: String): String? = synchronized(lock) {
+        conn.prepareStatement("SELECT status FROM invites WHERE invite_id=?").use { ps ->
+            ps.setString(1, inviteId)
+            ps.executeQuery().use { rs -> if (rs.next()) rs.getString(1) else null }
+        }
+    }
+
+    /** Test/inspection helper: how many enrollment tickets an invite still has outstanding. */
+    fun enrollTicketCountFor(inviteId: String): Int = synchronized(lock) {
+        conn.prepareStatement("SELECT COUNT(*) FROM enroll_tickets WHERE invite_id=?").use { ps ->
+            ps.setString(1, inviteId)
+            ps.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else 0 }
+        }
+    }
+
+    // ---- Durable per-source attempt windows ---------------------------------------
+
+    /**
+     * The persistent half of [PersistentAttemptLimiter]. Fixed-window, per-source, and deliberately
+     * the same arithmetic as [AttemptLimiter] down to the edge cases — a refused attempt neither
+     * increments the count nor extends the window — so the two implementations are interchangeable
+     * at a call site and only durability differs. See [AttemptBudget] for which budgets belong here
+     * and which are honestly fine in memory.
+     *
+     * ## The source is stored as a digest, and what that does and does not buy
+     *
+     * [source] is a client address. This table is on disk and outlives the process, so writing it
+     * raw would create a durable record of who connected and when — precisely the record an
+     * operator opts OUT of by leaving `DAYMARK_ACCESS_LOG_SOURCE_IP` off, which is the default
+     * (COMPANION_SECURITY.md §9). A limiter only ever needs equality, never the address itself, so
+     * what is stored is BLAKE2b-256 of it.
+     *
+     * Stated honestly, because the opposite claim is easy to drift into: this is **not**
+     * anonymisation. IPv4 is 32 bits wide, so anyone holding this file can brute-force the
+     * preimages in seconds. What it buys is that the column is not readable by eye, not grep-able
+     * out of a backup, and not something a support dump quietly leaks — and rows age out with their
+     * window, so the retention is minutes rather than forever. If the requirement ever becomes "an
+     * attacker with the database learns nothing", this needs a keyed digest whose key lives outside
+     * SQLite, and that is a different change than this one.
+     */
+    fun allowAttempt(scope: String, source: String, maxPerWindow: Int, windowMs: Long): Boolean = synchronized(lock) {
+        val now = clock()
+        val key = Secrets.tokenHash(source)
+        pruneAttemptWindowsLocked(scope, now, windowMs)
+
+        val existing = conn.prepareStatement(
+            "SELECT started_at, count FROM attempt_windows WHERE scope=? AND source_key=?",
+        ).use { ps ->
+            ps.setString(1, scope); ps.setString(2, key)
+            ps.executeQuery().use { rs -> if (rs.next()) rs.getLong(1) to rs.getInt(2) else null }
+        }
+        val startedAt = existing?.first ?: now
+        val count = existing?.second ?: 0
+
+        if (now - startedAt >= windowMs) {
+            writeAttemptWindowLocked(scope, key, now, 1)
+            return true
+        }
+        if (count < maxPerWindow) {
+            writeAttemptWindowLocked(scope, key, startedAt, count + 1)
+            return true
+        }
+        // Refused. The row is written back only when it did not exist yet, so a source that is
+        // already over budget still gets a window on record to age out; an existing row is left
+        // exactly as it was, which is what stops a refused attempt from extending its own lockout.
+        if (existing == null) writeAttemptWindowLocked(scope, key, startedAt, count)
+        return false
+    }
+
+    /** Clears a source's window — called on success, so legitimate use is never penalised. */
+    fun resetAttempts(scope: String, source: String) = synchronized(lock) {
+        conn.prepareStatement("DELETE FROM attempt_windows WHERE scope=? AND source_key=?").use { ps ->
+            ps.setString(1, scope); ps.setString(2, Secrets.tokenHash(source)); ps.executeUpdate()
+        }
+        Unit
+    }
+
+    private fun writeAttemptWindowLocked(scope: String, key: String, startedAt: Long, count: Int) {
+        conn.prepareStatement(
+            "INSERT INTO attempt_windows(scope, source_key, started_at, count) VALUES (?,?,?,?) " +
+                "ON CONFLICT(scope, source_key) DO UPDATE SET started_at=excluded.started_at, count=excluded.count",
+        ).use { ps ->
+            ps.setString(1, scope); ps.setString(2, key); ps.setLong(3, startedAt); ps.setInt(4, count)
+            ps.executeUpdate()
+        }
+    }
+
+    /**
+     * Drop windows that have aged out, so the table cannot grow without bound under a flood of
+     * distinct sources.
+     *
+     * Amortised rather than checked on every call. The in-memory limiter can ask `windows.size` for
+     * free and only walks the map once it is big enough to be worth walking; the equivalent here is
+     * a COUNT query, which is not free and would run on every single unauthenticated request — the
+     * exact shape of self-inflicted amplification a limiter exists to prevent. One DELETE per
+     * [ATTEMPT_PRUNE_EVERY] attempts costs nothing by comparison, and what accumulates in between
+     * is bounded by how many distinct sources can reach the server inside one window.
+     */
+    private fun pruneAttemptWindowsLocked(scope: String, now: Long, windowMs: Long) {
+        if (++attemptsSincePrune < ATTEMPT_PRUNE_EVERY) return
+        attemptsSincePrune = 0
+        conn.prepareStatement("DELETE FROM attempt_windows WHERE scope=? AND started_at <= ?").use { ps ->
+            ps.setString(1, scope); ps.setLong(2, now - windowMs); ps.executeUpdate()
+        }
+    }
+
+    /** Guarded by [lock] like every other mutation here; see [pruneAttemptWindowsLocked]. */
+    private var attemptsSincePrune = 0
 
     // ---- TOTP --------------------------------------------------------------------
 
@@ -254,6 +534,35 @@ class AuthStore(
                 }
                 inv to rel
             }
+        }
+        /*
+         * 1b. THE TICKET IS NOT ENOUGH — the invite it came from must still be live.
+         *
+         * Found by the adversarial review of the report/burn change, and it is the reason the report
+         * route was not the control it claimed to be. A ticket carries its own 10-minute expiry and
+         * NOTHING here used to consult the invite, so a ticket outlived every way an invite can die:
+         *
+         *   attacker redeems (invite -> REDEEMING, ticket minted) -> owner reports it -> the report
+         *   answers GONE and the owner believes the invitation is dead -> the attacker enrols anyway,
+         *   for up to ten more minutes, and becomes the therapist.
+         *
+         * `killInviteLocked` does delete tickets, so the reported path was covered. The path that was
+         * NOT is the one where the invite's own TTL had already lapsed when the report arrived: both
+         * report functions flip the row to EXPIRED and return GONE *without* killing tickets, which
+         * is precisely the window an attacker mid-enrolment is sitting in.
+         *
+         * Checking here rather than patching each kill path is deliberate: this is the single place
+         * a ticket is spent, so a future third way to retire an invite cannot reopen the hole by
+         * forgetting to sweep. Fail closed, and consume the ticket on the way out so a dead invite's
+         * ticket cannot be retried.
+         */
+        val inviteLive = conn.prepareStatement("SELECT status FROM invites WHERE invite_id=?").use { ps ->
+            ps.setString(1, inviteId)
+            ps.executeQuery().use { rs -> rs.next() && rs.getString(1) == "REDEEMING" }
+        }
+        if (!inviteLive) {
+            deleteEnrollTicket(ticketHash)
+            return EnrollResult(EnrollStatus.NO_TICKET)
         }
         // 2. Insert-only: reject if a credential already exists for this credentialId or relRef.
         val exists = conn.prepareStatement(
@@ -415,5 +724,8 @@ class AuthStore(
     companion object {
         /** Enrollment tickets are short-lived — a therapist enrolls TOTP immediately after redeeming. */
         const val ENROLL_TICKET_TTL_MS = 10 * 60 * 1000L
+
+        /** How many attempts pass between sweeps of the attempt-window table. */
+        private const val ATTEMPT_PRUNE_EVERY = 256
     }
 }
