@@ -33,6 +33,33 @@ enum class AuditAction(val wire: String) {
      * asymmetry is the point — the owner is entitled to know what their own access control did.
      */
     SHARE_DENIED("share.denied"),
+
+    /**
+     * A pairing attempt presented the wrong invite secret.
+     *
+     * This is the event that is deliberately NOT allowed to destroy the invitation. A wrong code
+     * and an attacker's guess are indistinguishable by construction, so the server cannot tell a
+     * mistyped character from a hostile probe and must not act as though it can — it takes the
+     * capped backoff and writes this line. The line matters precisely because the automatic
+     * response is so restrained: a burst of these against one relationship is the only thing that
+     * tells the owner somebody is working on their invite, and it is the evidence a person needs
+     * before deciding to report it. A failed pairing attempt that left no trace would be an attack
+     * that left no trace.
+     *
+     * Carries no code, no guess and no fragment of either — the event, not its content.
+     */
+    PAIR_GUESS_FAILED("pair.guess_failed"),
+
+    /**
+     * A person explicitly reported an invitation as unexpected, and it was killed on the spot.
+     *
+     * The counterpart to [PAIR_GUESS_FAILED], and the reason the two must never be one action: a
+     * failed guess is unknowable and gets patience, while a human saying "this wasn't me" is
+     * unambiguous and gets the terminal state. [AuditActor] records which side reported — the owner
+     * seeing an invitation they did not expect, or the invited party who was handed a link they
+     * never asked for — because the two say quite different things about what went wrong.
+     */
+    INVITE_REPORTED("invite.reported"),
 }
 
 data class AuditEvent(

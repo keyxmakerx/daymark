@@ -115,9 +115,58 @@ fun SettingsScreen(
 
         Divider()
         SectionHeader("Privacy")
+        /*
+         * WHY THIS ROW SAYS MORE THAN "On".
+         *
+         * The lock is real, and the one word underneath it was never false. A PIN set here is
+         * verified against a PBKDF2-SHA256 hash with a per-PIN random salt, held in an AES-256
+         * EncryptedSharedPreferences store and compared in constant time (PinManager). What it is
+         * not is a key. PinManager VERIFIES a PIN; it does not DERIVE anything from one. The Room
+         * database holding the journal, the assessments, the safety plan and the thought records
+         * is opened in AppModule with no openHelperFactory and no SQLCipher behind it, so those
+         * entries sit in a plaintext SQLite file in app-private storage. The lock is a door in
+         * front of the UI, not a lock on the data.
+         *
+         * "App lock (PIN)" over "On" states that accurately and still misleads, because a person
+         * reading the words "app lock" on a mental-health journal infers a stronger claim than the
+         * one being made. Nobody decided to hide the difference — it was simply never written
+         * down anywhere a user would look, which is how the gap between the inference and the
+         * truth became this app's largest undisclosed weakness. So it is said here, at the moment
+         * the setting is switched on and the inference is being formed, rather than in a document
+         * nobody opens.
+         *
+         * WHY THE SECOND SENTENCE MATTERS AS MUCH AS THE FIRST. Disclosure that names only the
+         * hole is its own kind of dishonesty: it invites someone to conclude their journal is
+         * lying around in the open, and it is not. The manifest sets android:allowBackup="false",
+         * which closes the ADB and cloud-backup route off the device, and Android's file-based
+         * encryption plus app sandboxing protect app-private storage on a healthy device with a
+         * locked bootloader. Root, an unlocked bootloader, a forensic extraction or a privileged
+         * malicious app defeat all of it, and against those the app lock is decorative. Both
+         * halves therefore have to be present, and in the register the rest of this app uses:
+         * flat, factual, no warning banner and no alarm. Someone reading their own settings late
+         * at night should come away better informed and no more frightened than when they
+         * started.
+         *
+         * This is the disclosure, not the fix. The fix is keying the database from the PIN or the
+         * sync passphrase, and it carries a real product decision inside it — a forgotten PIN
+         * would become lost data — so it wants its own design pass rather than being wedged in
+         * behind a settings toggle. Until that lands, this sentence is what stands between a
+         * reasonable inference and the truth, so do not quietly shorten it back to "On".
+         */
         ListItem(
             headlineContent = { Text("App lock (PIN)") },
-            supportingContent = { Text(if (state.lockEnabled) "On" else "Off") },
+            supportingContent = {
+                Text(
+                    if (state.lockEnabled) {
+                        "On. Keeps someone who picks up your unlocked phone out of the app. " +
+                            "It does not encrypt your entries on this device, so it is not " +
+                            "protection against someone with full access to the phone itself; " +
+                            "Android's own storage encryption still applies."
+                    } else {
+                        "Off"
+                    },
+                )
+            },
             trailingContent = {
                 Switch(
                     checked = state.lockEnabled,
