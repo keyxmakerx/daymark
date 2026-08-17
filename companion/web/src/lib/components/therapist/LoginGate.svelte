@@ -13,7 +13,8 @@
   import type { UnlockedContext } from '../../therapist/context'
   import { initAssignmentCrypto, fingerprint } from '../../assignments/crypto'
   import LowerAssuranceBanner from './LowerAssuranceBanner.svelte'
-  import { Callout } from '../ui'
+  import { Callout, FieldHelp } from '../ui'
+  import { FIELD_HELP } from '../../onboarding/fieldHelp'
 
   let {
     onunlock,
@@ -95,19 +96,46 @@
   <details class="prov" open>
     <summary>Relationship &amp; connection <em>(from your pairing invite)</em></summary>
     <div class="fields">
-      <label><span>Server URL</span><input type="url" bind:value={serverUrl} placeholder="https://daymark.example.com" autocomplete="off" /></label>
-      <label><span>Inbox token</span><input type="password" bind:value={inboxToken} autocomplete="off" /></label>
-      <label><span>Relationship id (relRef)</span><input type="text" bind:value={relRef} autocomplete="off" /></label>
-      <label><span>Credential id</span><input type="text" bind:value={credentialId} autocomplete="off" /></label>
-      <label><span>Pinned owner signing key (base64url)</span><input type="text" bind:value={pinnedOwnerSignPubB64} autocomplete="off" /></label>
-      <label><span>Owner box key (base64url)</span><input type="text" bind:value={ownerBoxPubB64} autocomplete="off" /></label>
-      <label class="wide"><span>Wrapped reading-key blob (JSON)</span><textarea bind:value={wrappedKeyJson} rows="3" autocomplete="off"></textarea></label>
+      <div class="field">
+        <label for="f-serverUrl"><span>{FIELD_HELP.serverUrl.label}</span></label><FieldHelp field="serverUrl" />
+        <input id="f-serverUrl" type="url" bind:value={serverUrl} placeholder={FIELD_HELP.serverUrl.placeholder} autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="f-inboxToken"><span>{FIELD_HELP.inboxToken.label}</span></label><FieldHelp field="inboxToken" />
+        <input id="f-inboxToken" type="password" bind:value={inboxToken} placeholder={FIELD_HELP.inboxToken.placeholder} autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="f-relRef"><span>{FIELD_HELP.relRef.label}</span></label><FieldHelp field="relRef" />
+        <input id="f-relRef" type="text" bind:value={relRef} placeholder={FIELD_HELP.relRef.placeholder} autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="f-credentialId"><span>{FIELD_HELP.credentialId.label}</span></label><FieldHelp field="credentialId" />
+        <input id="f-credentialId" type="text" bind:value={credentialId} placeholder={FIELD_HELP.credentialId.placeholder} autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="f-pinnedOwnerSignPub"><span>{FIELD_HELP.pinnedOwnerSignPub.label}</span></label><FieldHelp field="pinnedOwnerSignPub" />
+        <input id="f-pinnedOwnerSignPub" type="text" bind:value={pinnedOwnerSignPubB64} placeholder={FIELD_HELP.pinnedOwnerSignPub.placeholder} autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="f-ownerBoxPub"><span>{FIELD_HELP.ownerBoxPub.label}</span></label><FieldHelp field="ownerBoxPub" />
+        <input id="f-ownerBoxPub" type="text" bind:value={ownerBoxPubB64} placeholder={FIELD_HELP.ownerBoxPub.placeholder} autocomplete="off" />
+      </div>
+      <div class="field wide">
+        <label for="f-wrappedKey"><span>{FIELD_HELP.wrappedKey.label}</span></label><FieldHelp field="wrappedKey" />
+        <textarea id="f-wrappedKey" bind:value={wrappedKeyJson} rows="3" placeholder={FIELD_HELP.wrappedKey.placeholder} autocomplete="off"></textarea>
+      </div>
     </div>
   </details>
 
   <div class="secrets">
-    <label><span>Authenticator code (TOTP)</span><input type="text" inputmode="numeric" bind:value={totpCode} autocomplete="one-time-code" /></label>
-    <label><span>Reading passphrase</span><input type="password" bind:value={readingPassphrase} autocomplete="off" /></label>
+    <div class="field">
+        <label for="f-totpCode"><span>{FIELD_HELP.totpCode.label}</span></label><FieldHelp field="totpCode" />
+        <input id="f-totpCode" type="text" inputmode="numeric" bind:value={totpCode} placeholder={FIELD_HELP.totpCode.placeholder} autocomplete="one-time-code" />
+      </div>
+    <div class="field">
+        <label for="f-readingPassphrase"><span>{FIELD_HELP.readingPassphrase.label}</span></label><FieldHelp field="readingPassphrase" />
+        <input id="f-readingPassphrase" type="password" bind:value={readingPassphrase} placeholder={FIELD_HELP.readingPassphrase.placeholder} autocomplete="off" />
+      </div>
   </div>
 
   <button class="primary" onclick={unlockNow} disabled={busy}>{busy ? 'Unlocking…' : 'Unlock portal'}</button>
@@ -126,8 +154,19 @@
   .prov em { font-style: normal; color: var(--text-subtle); }
   .fields, .secrets { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); }
   .secrets { margin-top: 0; }
+  /*
+   * The label and its help trigger sit on one line; the input goes underneath. The label is no
+   * longer the input's ancestor — an explicit `for`/`id` pairing instead — because a <button>
+   * nested inside a <label> is activated by clicks meant for the label, so the two would fight
+   * over the same tap.
+   */
+  .field { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); font-size: 0.85rem; }
+  .field > label { display: inline-flex; align-items: center; margin: 0; }
+  .field > input, .field > textarea { flex-basis: 100%; }
   label { display: flex; flex-direction: column; gap: var(--space-1); font-size: 0.85rem; }
   label span { color: var(--ink-soft); }
+  /* A placeholder is an EXAMPLE, not a label — it must never read as strongly as real input. */
+  input::placeholder, textarea::placeholder { color: var(--ink-faint); }
   input, textarea { font: inherit; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-bg); color: var(--ink-text); }
   textarea { font-family: var(--font-mono); resize: vertical; }
   .primary { align-self: flex-start; background: var(--ink-accent); color: var(--on-accent); border-color: var(--ink-accent); }
