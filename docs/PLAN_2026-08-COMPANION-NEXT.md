@@ -1036,6 +1036,96 @@ ceremony every visit. Decide deliberately rather than by default:
 
 ---
 
+## 3.10 The clinician starts it, the patient authorises it
+
+The maintainer, after §3.7:
+
+> "a clinican will have to be able to initiate it, the average person won't know how to, or really
+> even care" — and, on their own provider: "my current provider just needed the last four of my
+> social and bday and bam i have my own doctor portal... lol."
+
+Both are right, and the second names the industry baseline this has to beat.
+
+### 3.10.1 Separate who STARTS it from who AUTHORISES it
+
+These are different questions and they get different answers. The clinician starting the pairing is a
+**workflow** fact — patients will not do it, and a design that requires them to is a design nobody
+uses. The patient's device completing it is a **security** fact.
+
+**§3.7 already supports this and no new cryptography is needed.** CPace is a *balanced* PAKE: both
+parties are peers holding the same low-entropy secret, with no privileged role. Direction of
+initiation is invisible to the protocol. Clinician-initiated and owner-initiated differ only in who
+clicks first and who reads the code out.
+
+### 3.10.2 The one swap that beats last-four-and-birthday
+
+Identity facts are **identifiers, not secrets**. A last-four and a date of birth are on insurance
+cards, in breach dumps, and often on social media. Any scheme authenticating with them proves only
+that the asker knew public facts about the patient.
+
+Replace them with a **freshly generated random code for this one pairing**. The counterintuitive
+part, and the reason this satisfies "not too much but not too little": it is simultaneously *more
+secure and less work*. The patient types six random characters instead of recalling and entering
+sensitive personal data — nothing to remember, nothing sensitive rendered on screen.
+
+| | Typical patient portal | This |
+|---|---|---|
+| Secret | SSN4 + DOB — public, permanent, breached | Random, single-use, ~10 minutes |
+| Guessing | ~10,000 options, often unmetered | One online guess per attempt, rate-limited |
+| Channel | Same form as everything else | Spoken in the room, or on the call |
+| What success grants | The whole record | An empty connection (§3.10.4) |
+
+**Do not add an identity check as a second factor.** It costs a step, proves nothing, and actively
+teaches people that seeing their correct details means safe — the exact reflex phishing relies on.
+
+### 3.10.3 The flow
+
+1. Clinician clicks "connect a patient"; the server mints a pairing.
+2. Their screen shows a QR **and** a short code.
+3. Patient scans with the app, or types the address and code by hand (§3.10.5).
+4. The app names who is asking before anything is agreed to.
+5. Patient enters the code the clinician **says aloud or hands over on paper**.
+6. CPace runs. Connected.
+
+The QR carries **address and pairing id only** — public routing information. The rule from §3.7.4
+holds unchanged and is what keeps the QR safe: *nothing goes in it that you would not be willing to
+read aloud.* The code travels by a channel the internet cannot reach.
+
+### 3.10.4 Connecting and sharing are separate acts
+
+Connecting establishes **who someone is**. It grants access to **nothing**.
+
+This is the cheapest defence in the design. A perfectly executed attack — forged QR, patient scans,
+attacker somehow obtains the code — yields an empty connection. Sharing is a later, separate,
+deliberate act on a screen that states exactly what becomes visible. It costs nothing in the common
+case, because connecting happens in the room and sharing happens at leisure, and it means the
+low-deliberation step (scanning) is not the dangerous one.
+
+Stated as a layering, since each layer catches what the one below cannot:
+
+| Layer | Answers |
+|---|---|
+| QR | where to go — public, forgeable, trusted for nothing |
+| PAKE | both ends hold the same code, one guess for a middleman |
+| Human tap | do I *want* this person |
+| Sharing, later | what may they actually see |
+
+A PAKE proves identity, never entitlement. That distinction is why the last row exists.
+
+### 3.10.5 Concerns
+
+- **Rate limiting is load-bearing.** A six-character code with unmetered attempts is weak. The
+  persisted limiter from PR #75 is the prerequisite — that work was not a side quest.
+- **The patient may not have the app.** A clinician-initiated QR must lead somewhere sensible when
+  nothing is installed, rather than dead-ending. Easy to overlook, and it is the modal first contact.
+- **Coercion has no technical fix.** A clinician can apply pressure in the room. What helps is that
+  leaving is unilateral and needs no cooperation from them (§3.6.1).
+- **The typed path is the specification, not the fallback.** Address plus code must do everything the
+  scan does. If it does, the QR is pure convenience and carries no extra risk; if it ever does more,
+  the QR has become a bearer token in a picture.
+
+---
+
 ## 4. The work, in order
 
 **Read §4.A first.** The steps below are unchanged in content but are now sequenced by §4.A, which
