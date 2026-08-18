@@ -1126,6 +1126,131 @@ A PAKE proves identity, never entitlement. That distinction is why the last row 
 
 ---
 
+## 3.11 Three deployment shapes, and what the server is actually for
+
+### 3.11.1 The server's real job, restated by the maintainer
+
+> "it's a 'what if my phone is lost or stolen, how am i getting the past years of my lifes history
+> back'" — and, on pairing: "this sounds more like it should be a config file not a backup, and that
+> the config file then securely binds to your phone somehow. Its like how i handle vpn connections?"
+
+Both are better framings than the ones in this document. The server's primary purpose is **disaster
+recovery**, not a bigger screen; reading on a laptop is a pleasant side effect. And pairing really is
+closer to installing a VPN profile than to running a backup wizard. The first-run copy should say the
+first thing, because it is the reason someone stands up a machine at all.
+
+**Recovery works, and the mechanism was checked rather than assumed** (`SyncCrypto.kt`):
+
+```
+passphrase --Argon2id(salt, mem>=256MiB, ops>=3)--> master --crypto_kdf--> SYNC_KEY --> XChaCha20-Poly1305
+```
+
+The key derives from the passphrase alone. **No device key, nothing bound to the handset.** A new
+phone, the app installed, the same passphrase, pointed at the server, decrypts everything. That is
+exactly the property the disaster-recovery framing needs, and it is already true.
+
+The cost is the other half of the same fact and must be stated where the passphrase is chosen, not
+in a footnote: **forget it and the data is gone.** Not recoverable by the owner, the maintainer, or
+the server, which holds ciphertext and has never had the key. This is what makes it safe and what
+makes it unforgiving.
+
+### 3.11.2 Solo, Paired, Practice
+
+Naming, because A/B/C was used for two different things in one conversation and immediately confused
+everybody:
+
+| Shape | Who owns the machine | Whose data is on it |
+|---|---|---|
+| **Solo** | the person | theirs |
+| **Paired** | the person | theirs, some of it shown to one clinician |
+| **Practice** | the clinic | many people's, as tenants |
+
+**Solo and Paired are one product with a flag.** Same trust model, same threat model, clinician
+features switched on. Cheap, and the clinician-facing documentation the maintainer wants — notes,
+history, results, calendar, the things a therapist cannot be expected to remember per person —
+belongs here.
+
+### 3.11.3 Practice is a different product, not a bigger one
+
+**It inverts the arrangement this product exists to offer.** In Solo and Paired the person owns the
+machine and the journal sits on their own hardware. In Practice the clinic owns the machine, the
+person is a tenant, and their journal lives on their clinic's server administered by clinic staff.
+
+That is not a scaling problem, it is the opposite posture, and it makes one question load-bearing
+that Solo and Paired never have to answer:
+
+**Who can reset a forgotten passphrase?**
+
+Today the honest answer is nobody (§3.11.1), and that is what keeps the server ignorant. Every
+convenient Practice answer — an administrator resets it, a recovery key is escrowed, staff can
+re-issue access — means **the practice can read the journals.** It may still be the right trade for
+a clinic that needs it, but it has to be a decision made in the open, with the copy changed to match,
+rather than a consequence discovered after the screens are drawn.
+
+Recommendation: **build Solo and Paired first; treat Practice as a separate decision whose gate is
+that question**, answered before any of its screens exist.
+
+### 3.11.4 Roles are capabilities with presets, and only Practice needs them
+
+Neither hardcoded roles nor group permissions. **Capabilities**, with roles as named presets over
+them. The repository already has the shape — `scope` on invites and grants, `CapabilityRow.svelte`,
+`GrantManager.svelte` — so this extends what exists rather than introducing a parallel system.
+
+Roles are meaningless in Solo and Paired: there is exactly one clinician. The receptionist case is
+the one that proves the model — they need scheduling and nothing clinical, which a capability set
+expresses exactly and a role enum fudges.
+
+The distinctions the maintainer raised (psychologist, psychiatrist, general therapist, reception)
+are **presets**, not types. Whether a prescriber sees something different from a talking therapist is
+a capability question, answered per relationship by the person whose data it is.
+
+### 3.11.5 Local by default, and why a port is not a control
+
+Deliberate friction before a machine is reachable from the wider internet is right: a setting that
+must be acknowledged, plus a configuration value, so nobody arrives there by accident.
+
+Two corrections. **A non-standard port is not a security control** — everything gets scanned; it
+reduces drive-by noise and nothing else. And the friction is a *deliberateness* gate, not a boundary;
+it should be described that way rather than implying it protects anything by itself.
+
+The real answer for remote access without sysadmin work is §3.4's: a mesh VPN. And the server **can**
+know honestly which case it is in — the interface and address it is bound to are facts it can read,
+so "reachable only from your own network" can be a statement rather than a guess. Putting a port in
+the QR is fine; it is public routing, same rule as the address (§3.10.3).
+
+### 3.11.6 CORRECTION: the access-control model is specified, not built
+
+The maintainer believed the Practice features were "mostly built". Checked:
+`docs/COMPANION_ACCESS_CONTROL.md` is **307 lines** of organizations, roles and permissions, and
+there is **no corresponding code** — no org, no tenant, no role, no account provisioning anywhere in
+the server, web or app source.
+
+Worth recording *why* the mistake was reasonable: a thorough specification reads exactly like a
+description of a working system. That document should carry a header saying it is a design, not a
+description, because this will otherwise recur.
+
+### 3.11.7 The demonstration deadline
+
+> "i'm hoping to show my therapist the power of this tool by the week after next"
+
+**That demonstration needs Paired, not Practice**, and the distinction is what makes the deadline
+plausible. A demonstration is one clinician looking at one person's shared slice — which is Paired
+exactly, and none of Practice's multi-tenancy, account provisioning or roles appears in it.
+
+What already exists for it: the relationship and share routes, `ShareBuilder`, `GrantManager`, and
+the therapist screens from Phase 3. What is missing is the acceptance page (§4.0a) — `/portal/invite`
+is still a 404, and it is the single break between a therapist receiving a link and seeing anything.
+
+Note also that the demonstration does **not** require the phone sync client (§3.6.5 layer 1): the
+Companion already opens an exported backup file, so a slice can be shared from a file-loaded session.
+That removes the largest piece of work from the critical path.
+
+**Practice cannot responsibly be built to this deadline**, and the reason is §3.11.3 rather than
+effort: it turns on a question about passphrase reset that decides whether clinics can read their
+patients' journals. A demonstration deadline is the worst possible reason to answer that quickly.
+
+---
+
 ## 4. The work, in order
 
 **Read §4.A first.** The steps below are unchanged in content but are now sequenced by §4.A, which
