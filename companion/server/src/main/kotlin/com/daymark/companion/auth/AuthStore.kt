@@ -109,6 +109,50 @@ class AuthStore(
                 )
                 """.trimIndent(),
             )
+            /*
+             * The therapist's PUBLIC keys, on their way to the owner.
+             *
+             * This is the one link the relationship never had. The owner's console already seals
+             * every share to a therapist's X25519 key and already refuses to seal to a key it has
+             * not pinned, and the therapist's browser already generates and wraps the keypair —
+             * but there was no path by which the public halves could travel from one to the other,
+             * so the pin had nothing to be taken against and the seal had nothing to aim at.
+             * These four columns are that path.
+             *
+             * `rel_ref` is the PRIMARY KEY, and that is the entire enforcement of insert-only.
+             * The alternative — a SELECT before the INSERT, in the route or here — is a rule that
+             * lives in a line of code somebody can later delete, reorder, or forget on a second
+             * write path; this one lives in the schema, so every future caller inherits it whether
+             * or not they know it exists. It matters more here than in most places because the
+             * failure mode of a silent overwrite is not a lost row: it is the owner's next journal
+             * share sealed to whatever key was written last, which is exactly the substitution the
+             * pinning was built to catch.
+             *
+             * Note what is NOT hashed. Every other secret in this file is stored as an Argon2id or
+             * BLAKE2b digest because the server has no business being able to read it back. These
+             * are public keys — the point of storing them is to hand them back verbatim — so they
+             * sit here in the clear, and that is correct rather than an oversight. They are also
+             * not sensitive to this server in the way the rest of this table set is: knowing a
+             * therapist's public key lets you seal something TO them, never open anything OF
+             * theirs.
+             *
+             * And the server does not vouch for them. It took delivery of two strings from
+             * whoever held a valid session for this relationship and it will hand the same two
+             * strings back; it cannot tell the therapist's real key from a substituted one, and it
+             * is not trying to. The check that catches a substitution is the owner reading the
+             * fingerprint words back to their therapist on another channel before pinning. See the
+             * route file for the full statement of that division of labour.
+             */
+            st.execute(
+                """
+                CREATE TABLE IF NOT EXISTS therapist_keys (
+                    rel_ref       TEXT    NOT NULL PRIMARY KEY,
+                    box_pub_b64   TEXT    NOT NULL,
+                    sign_pub_b64  TEXT    NOT NULL,
+                    registered_at INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
             st.execute(
                 """
                 CREATE TABLE IF NOT EXISTS sessions (
@@ -708,6 +752,64 @@ class AuthStore(
                     up.setLong(1, now); up.setString(2, hash); up.executeUpdate()
                 }
                 return SessionValidation(SessionCheck.OK, SessionRecord(credentialId, relRef, csrf))
+            }
+        }
+    }
+
+    // ---- Therapist public keys ---------------------------------------------------
+
+    /**
+     * The therapist's two public halves, exactly as their browser published them: the X25519 key
+     * the owner seals shares to, and the Ed25519 key the owner verifies signatures with.
+     *
+     * [registeredAt] is epoch MILLISECONDS, because [clock] is. (The audit log next door counts in
+     * seconds; the two have always disagreed, and this follows the store it lives in rather than
+     * quietly introducing a third convention.)
+     */
+    data class TherapistKeys(val boxPubB64: String, val signPubB64: String, val registeredAt: Long)
+
+    enum class KeyRegistration { OK, ALREADY_REGISTERED }
+
+    /**
+     * Record the therapist's public keys for a relationship. INSERT-ONLY: a relationship that
+     * already has keys keeps the ones it has, and this returns [KeyRegistration.ALREADY_REGISTERED]
+     * without touching the stored row.
+     *
+     * `INSERT OR IGNORE` rather than SELECT-then-INSERT so the refusal is SQLite's, not this
+     * function's. The distinction is not stylistic: a read followed by a write is only atomic for
+     * as long as every writer happens to take the same in-process [lock], and this store is one
+     * connection today by accident of deployment rather than by any guarantee. Under OR IGNORE the
+     * primary key does the refusing inside the statement, so a second process, a second connection
+     * or a future concurrent caller cannot slip between the check and the write.
+     *
+     * A zero row count therefore means precisely one thing here — a row for this rel_ref already
+     * exists. It cannot mean a NOT NULL violation: every column is NOT NULL and every value comes
+     * from a non-null Kotlin parameter, so there is no other constraint left to fire. If a nullable
+     * column is ever added to this table, that reasoning stops holding and this needs to become an
+     * explicit conflict check.
+     */
+    fun registerTherapistKeys(relRef: String, boxPubB64: String, signPubB64: String): KeyRegistration = synchronized(lock) {
+        val now = clock()
+        conn.prepareStatement(
+            "INSERT OR IGNORE INTO therapist_keys(rel_ref, box_pub_b64, sign_pub_b64, registered_at) VALUES (?,?,?,?)",
+        ).use { ps ->
+            ps.setString(1, relRef)
+            ps.setString(2, boxPubB64)
+            ps.setString(3, signPubB64)
+            ps.setLong(4, now)
+            return if (ps.executeUpdate() > 0) KeyRegistration.OK else KeyRegistration.ALREADY_REGISTERED
+        }
+    }
+
+    /** The registered keys for a relationship, or null if the therapist has not published any. */
+    fun therapistKeys(relRef: String): TherapistKeys? = synchronized(lock) {
+        conn.prepareStatement(
+            "SELECT box_pub_b64, sign_pub_b64, registered_at FROM therapist_keys WHERE rel_ref=?",
+        ).use { ps ->
+            ps.setString(1, relRef)
+            ps.executeQuery().use { rs ->
+                if (!rs.next()) return null
+                TherapistKeys(rs.getString(1), rs.getString(2), rs.getLong(3))
             }
         }
     }

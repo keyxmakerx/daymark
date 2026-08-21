@@ -60,6 +60,51 @@ enum class AuditAction(val wire: String) {
      * never asked for — because the two say quite different things about what went wrong.
      */
     INVITE_REPORTED("invite.reported"),
+
+    /**
+     * The therapist published their public keys for this relationship, and the server took them.
+     *
+     * Read the wording carefully, because the natural reading of an audit line is that the server
+     * checked something and approved it, and here it did not. All this records is that two 32-byte
+     * public keys arrived from a caller holding a valid session and were stored insert-only. The
+     * server cannot tell the therapist's real key from one a hostile operator or a stolen session
+     * substituted — it relays, it does not attest — so this line is a receipt for a delivery, not a
+     * statement that the right keys arrived. What decides that is the owner comparing fingerprint
+     * words with their therapist on another channel before pinning.
+     *
+     * The line still earns its place: this is the moment the owner can start sealing shares to a
+     * particular key, so it is the timestamp they will want if that key is ever in question.
+     *
+     * Carries no key material, no fingerprint and no fragment of either — the event, not its
+     * content, like every other value here.
+     */
+    THERAPIST_KEY_REGISTERED("therapist_key.registered"),
+
+    /**
+     * A second registration arrived for a relationship that already had keys, and was refused.
+     *
+     * The counterpart to [THERAPIST_KEY_REGISTERED], recorded separately for the same reason
+     * [SHARE_DENIED] is not folded into [SHARE_REVOKE]: the refusal is the interesting half. A
+     * successful registration is routine and happens once. A refused one means something tried to
+     * replace the key the owner may already have pinned and sealed to — a therapist who re-keyed
+     * and does not yet know they need the owner's rotate-pin path, a client retrying a request it
+     * thinks failed, or a session in the wrong hands attempting exactly the substitution the
+     * insert-only rule exists to stop. The server cannot tell those apart and must not pretend to;
+     * it refuses all three identically and writes this line so the owner can ask.
+     *
+     * The 409 the caller sees says nothing about which of those it was, and neither does this.
+     */
+    THERAPIST_KEY_REFUSED("therapist_key.refused"),
+
+    /**
+     * The owner collected the therapist's registered public keys.
+     *
+     * The read half, logged for the same reason [GAMEPLAN_OPEN] is: the log is a record of what
+     * moved between the two parties, and a half of it that only ever recorded writes would show
+     * the owner things arriving and never being picked up. It is also the entry that dates the
+     * owner's opportunity to pin, which is the fact that matters if a key is later disputed.
+     */
+    THERAPIST_KEY_FETCHED("therapist_key.fetched"),
 }
 
 data class AuditEvent(

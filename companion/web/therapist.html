@@ -10,6 +10,21 @@
       be stripped by editing the document. The therapist portal is a SEPARATE surface from the owner
       report viewer (index.html); it is served at its own route and never loads any remote origin.
     -->
+    <!--
+      TWO SURFACES, ONE DOCUMENT. This entry serves both the therapist portal and the invite
+      acceptance page; src/therapist.ts decides which to mount, from the URL fragment and path. So
+      the emailed invitation — {base}/portal/invite#id=…&s=… (TherapistAuthRoutes.kt,
+      buildInviteLink) — has to arrive at this document with its fragment intact.
+
+      A NOTE FOR WHOEVER WIRES THAT ROUTE. Vite builds this page with RELATIVE asset URLs
+      (`./assets/therapist-<hash>.js`, because the owner viewer is also opened from disk). Served
+      verbatim at a two-segment path, those resolve to /portal/assets/… and 404 — the page would
+      load and then fail to boot, which is a worse failure than the 404 it replaced because it looks
+      like a broken app rather than a missing route. A redirect from /portal/invite to /therapist is
+      the simplest correct answer: browsers carry the fragment across a redirect on their own, and
+      the fragment is what the invitation actually lives in. Serving the file directly at that path
+      works too, but only if the assets are reachable from it.
+    -->
     <title>Daymark Companion — Therapist portal</title>
     <meta name="description" content="Capability-scoped therapist portal for a self-hosted Daymark Companion. Owner-granted access only; nothing is a diagnosis." />
   </head>

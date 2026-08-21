@@ -11,6 +11,7 @@ import com.daymark.companion.routes.recoveryRoutes
 import com.daymark.companion.routes.relationRoutes
 import com.daymark.companion.routes.syncRoutes
 import com.daymark.companion.routes.therapistAuthRoutes
+import com.daymark.companion.routes.therapistKeyRoutes
 import com.daymark.companion.storage.AuditStore
 import com.daymark.companion.storage.BlobStore
 import com.daymark.companion.storage.RelationStore
@@ -243,6 +244,16 @@ fun Application.module(
                 auditStore = audit,
                 auditSourceIp = config.auditSourceIpEnabled,
             )
+            // The therapist's public keys, on their way to the owner. Registered under the same
+            // feature gate as the rest of the portal because it has no meaning without one: the
+            // keys belong to a relationship, and relationships only exist when the portal is on.
+            therapistKeyRoutes(
+                authStore = auth,
+                ownerGuard = guard,
+                sessionIdleSeconds = config.sessionIdleSeconds,
+                auditStore = audit,
+                auditSourceIp = config.auditSourceIpEnabled,
+            )
             auditRoutes(audit, guard)
         } else {
             get("/v1/rel/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
@@ -252,6 +263,10 @@ fun Application.module(
             post("/v1/totp/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
             post("/v1/session/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
             post("/v1/webauthn/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
+            // Both halves of the therapist-key exchange, so a probe cannot tell "configured but
+            // nobody has registered yet" (404) from "this deployment has no portal at all" (503).
+            get("/v1/relations/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
+            post("/v1/relations/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
         }
 
         // Track T2 (email Option A): owner notification-email registration + the unauthenticated
@@ -283,12 +298,32 @@ fun Application.module(
             else call.respond(HttpStatusCode.NotFound, ErrorDto("therapist portal not built"))
         }
 
+        /*
+         * The invitation link's own path, and the reason this route exists at all.
+         *
+         * `buildInviteLink` has always addressed invitations to `{base}/portal/invite#id=...&s=...`,
+         * and until now NOTHING served that path — the only occurrence of it in the repository was
+         * the line constructing it. Every invitation this server has ever sent was a 404, which is
+         * why the therapist half of the product could not be used and why the sign-in form ended up
+         * asking a clinician to paste nine values by hand.
+         *
+         * It serves the therapist entry, not the owner's: `staticFiles`' `default` applies to
+         * DIRECTORY requests, so an unmatched path like this one would not fall through to a SPA
+         * shell, and if it ever did it would land on index.html — the owner's viewer, the wrong
+         * surface entirely. The fragment carrying the invitation is never sent to the server
+         * (deliberately — see buildInviteLink), so this route sees only the path and hands back the
+         * page that knows how to read the rest client-side.
+         */
+        val invitePaths = listOf("/portal/invite", "/portal/invite/")
+
         if (config.basePath == "/") {
             get("/therapist") { serveTherapist() }
+            invitePaths.forEach { p -> get(p) { serveTherapist() } }
             staticFiles("/", webRoot) { default("index.html") }
         } else {
             route(config.basePath) {
                 get("/therapist") { serveTherapist() }
+                invitePaths.forEach { p -> get(p) { serveTherapist() } }
                 staticFiles("/", webRoot) { default("index.html") }
             }
         }
