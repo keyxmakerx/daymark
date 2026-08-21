@@ -50,3 +50,63 @@ export {
   capabilitiesOutsideDeclaredPlanes,
   rolesWith,
 } from './roles'
+
+/*
+ * ── The practice console's own modules ──────────────────────────────────────────────────────────
+ *
+ * Added beside the vocabulary rather than in a second barrel, because they are the same subject
+ * seen from the wire: orgRoles.ts is the join between the catalog above and the six role values a
+ * server membership row can hold, client.ts is the `/v1/orgs` surface, audit.ts reads that
+ * surface's log, and copy.ts holds the sentences the console is obliged to say. The vocabulary
+ * exports stay first because everything below depends on them and nothing above depends on any of
+ * it — the layering is visible in the order.
+ */
+export type { OrgRoleWire, RoleAction, RoleFacts } from './orgRoles'
+export {
+  READ_POSTURE_CHIP,
+  SEATABLE_ROLES,
+  SEATABLE_ROLE_WIRES,
+  UNSEATABLE,
+  roleFacts,
+  roleForWire,
+  roleLabel,
+  rolesThatMintReads,
+  seatableRoleFacts,
+  seatableRolesThatReadClinical,
+  wireForRole,
+} from './orgRoles'
+
+export type {
+  Member,
+  OrgAuditEvent,
+  OrgAuditPage,
+  Practice,
+  PracticeFailure,
+  PracticeResult,
+  Removal,
+  WriteAuth,
+} from './client'
+export {
+  FAILURE_SENTENCE,
+  ID_CHARSET,
+  MAX_PRACTICE_NAME,
+  PracticeClient,
+  failureSentence,
+  formatInstant,
+  isMemberId,
+  isPracticeId,
+  isPracticeName,
+  memberIdProblem,
+  nothingChanged,
+  practiceNameProblem,
+  readFailure,
+} from './client'
+
+export {
+  ORG_ACTION_LABEL,
+  ORG_ACTOR_LABEL,
+  orgAuditActionLabel,
+  orgAuditActorLabel,
+  orgAuditAnnotations,
+  orgAuditSubjectLabel,
+} from './audit'

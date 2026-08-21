@@ -70,18 +70,57 @@ describe('trust strip — honesty gate', () => {
     expect(trustBarCode).not.toMatch(/\bonline\b/)
   })
 
-  it('states a different posture for each of the three surfaces', () => {
+  it('states a different posture for each of the four surfaces', () => {
     expect(trustBarCode).toContain("surface === 'local'")
+    expect(trustBarCode).toContain("surface === 'setup'")
     expect(trustBarCode).toContain("surface === 'sync'")
-    // The two server-touching postures must say so out loud.
+    // The three server-touching postures must say so out loud.
     expect(trustBarCode).toMatch(/talks to your server/i)
     expect(trustBarCode).toMatch(/sends data to your server/i)
+    expect(trustBarCode).toMatch(/reads your server’s configuration/i)
   })
 
-  it('App.svelte derives the surface from the active tab, not a constant', () => {
+  it('the setup posture says what the one request carries, and when it stops', () => {
+    /*
+     * THE SURFACE THIS STRIP GOT WRONG MOST RECENTLY. A configuration probe was added to
+     * App.svelte on load, and the first-run screen said in its own copy that it was reading
+     * /v1/config — while this strip, one element above it, went on printing the `local` sentence
+     * "sends nothing". Both were on screen at once.
+     *
+     * The posture that fixes it has to earn its place: a vaguer "this page may contact the
+     * server" would be honest and useless. It states what is asked, that nothing about the person
+     * goes with it, and that it stops — because the reader's actual question is whether the
+     * offline viewer they are about to use phones home.
+     */
+    const setupBranch = trustBarCode.slice(
+      trustBarCode.indexOf("surface === 'setup'"),
+      trustBarCode.indexOf("surface === 'sync'"),
+    )
+    expect(setupBranch.length).toBeGreaterThan(100) // the branch was really found
+    expect(setupBranch).toMatch(/sends nothing about\s+you or your journal/i)
+    expect(setupBranch).toMatch(/stops asking on\s+load/i)
+    // And it does not borrow the promise it exists to stop overstating.
+    expect(setupBranch).not.toMatch(/reads your backup in the browser/i)
+  })
+
+  it('App.svelte derives the surface from the active tab AND from whether it is reading', () => {
     expect(app).toMatch(/<TrustBar surface=\{trustSurface\} \/>/)
-    // The three tabs that reach the network must not resolve to the "nothing leaves" copy.
-    expect(app).toMatch(/source === 'sync' \? 'sync'/)
-    expect(app).toMatch(/source === 'owner' \|\| source === 'recover' \? 'account'/)
+    /*
+     * The mapping itself now lives in lib/trust/posture.ts, where posture.test.ts asserts the
+     * rule over every surface: a load that reaches the network is never described as sending
+     * nothing. It was a ternary here that named three tabs and let everything else fall through
+     * to `local`, which is how a request belonging to no tab at all became invisible to it.
+     */
+    expect(app).toContain('trustPostureFor(source, readingConfiguration)')
+    expect(app, 'the posture is hand-rolled in App.svelte again').not.toMatch(
+      /source === 'sync' \? 'sync'/,
+    )
+    // The second argument must be the real predicate the configuration read is gated on, not a
+    // flag of App.svelte's own that could drift away from it.
+    expect(app).toContain('shouldReadConfiguration({ session: sessionShape, stored })')
+    expect(app).toContain('startConfigurationRead({ session: sessionShape, stored }')
+    // The local promise is only true if this file makes no request of its own. It held the one
+    // unguarded fetch in the tree, which is the defect above.
+    expect(app, 'App.svelte fetches directly again').not.toMatch(/(?<![\w.])fetch\s*\(/)
   })
 })

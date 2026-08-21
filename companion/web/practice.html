@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <!--
+      No <meta http-equiv="Content-Security-Policy"> here: the CSP is sent by the server as a
+      response header (see companion/server Application.kt) so it also covers error pages and cannot
+      be stripped by editing the document.
+
+      A FOURTH, SEPARATE SURFACE. index.html is the owner's report viewer, therapist.html is the
+      clinician portal, and admin.html is for whoever operates the server. This one is for whoever
+      administers a PRACTICE: membership, roles, removal, and the practice's own control-plane log.
+
+      It needs no server change to be reachable. Application.kt serves the built web root with
+      `staticFiles("/", webRoot)`, so this page is served at /practice.html once it is bundled. A
+      clean /practice path would need a route like the ones that map /therapist and /portal/invite,
+      and there deliberately is not one yet.
+
+      NOTHING CLINICAL IS SERVED HERE, and not by this page's restraint: every request it makes is
+      to /v1/orgs, and no route under that prefix returns key material, ciphertext or a grant. What
+      an administrator sees here is membership metadata — who is in the practice and what they may
+      do — never what anybody wrote.
+    -->
+    <title>Daymark Companion — Practice console</title>
+    <meta
+      name="description"
+      content="Administer one practice on a self-hosted Daymark Companion: membership, roles, removal and the practice's own audit log. No clinical content is served on this surface."
+    />
+  </head>
+  <body>
+    <div id="practice-app"></div>
+    <noscript>
+      <p>
+        The Daymark Companion practice console needs JavaScript. It runs in your browser and talks
+        only to the server it is served from.
+      </p>
+    </noscript>
+    <script type="module" src="/src/practice.ts"></script>
+  </body>
+</html>
