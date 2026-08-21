@@ -237,6 +237,30 @@ export class PortalClient {
     throw new PortalError('key registration failed', res.status)
   }
 
+  /**
+   * The owner's published public keys for this relationship.
+   *
+   * This is what replaces two of the sign-in form's nine fields. The clinician used to paste the
+   * owner's signing and encryption keys out of an email on every visit, because the product had no
+   * route to carry them — the mirror of the gap that made them paste their own.
+   *
+   * THE SERVER DOES NOT VOUCH FOR THESE. It relays them, and a compromised one can hand back keys
+   * it controls, which would make every forged share verify and every genuine one fail. What
+   * catches that is the clinician comparing the fingerprint against what the owner reads aloud, so
+   * the caller must pin on first use and refuse a change — never treat this as trusted input.
+   *
+   * `null` for a relationship whose owner has not published yet, which is a real state rather than
+   * an error: it means the sign-in cannot complete automatically and the person has to be told
+   * why, rather than shown a failure that looks like their own mistake.
+   */
+  async ownerKeys(session: SessionInfo): Promise<{ signPubB64: string; boxPubB64: string; registeredAt: number } | null> {
+    const res = await this.req(`/v1/relations/${encodeURIComponent(session.relRef)}/owner-keys`)
+    if (res.status === 404) return null
+    if (res.status === 401 || res.status === 403) throw new PortalError('not authorized to read owner keys', res.status)
+    if (!res.ok) throw new PortalError('could not read owner keys', res.status)
+    return (await res.json()) as { signPubB64: string; boxPubB64: string; registeredAt: number }
+  }
+
   // --- opaque relationship-blob channels (THERAPIST role via the session cookie) ---
 
   private relPath(relRef: string, channel: string, rest = ''): string {

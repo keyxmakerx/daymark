@@ -116,6 +116,19 @@ export interface KeyRecord {
   wrapped: WrappedKeyBlob
   createdAt: number
   /**
+   * The relationship's inbox token, remembered after the first sign-in that supplied one.
+   *
+   * OPTIONAL, and it is the one value the acceptance ceremony cannot produce. The token is a second
+   * factor on the relationship channels and its digest IS the relRef, so the server cannot hand it
+   * back without giving away the thing it authenticates. It arrives with the invitation, out of
+   * band, like the invitation secret itself.
+   *
+   * Kept here so a clinician types it once rather than every visit. Absent on records written
+   * before this existed and on any that have never been signed in with — both read as "ask for it",
+   * which is the harmless direction.
+   */
+  inboxToken?: string
+  /**
    * When this browser last saw the server confirm it holds THESE public keys for the relationship,
    * in epoch milliseconds. ABSENT means the ceremony never got that far.
    *
