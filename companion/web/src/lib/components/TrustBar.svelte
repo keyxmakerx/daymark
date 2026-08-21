@@ -45,13 +45,20 @@
    * meaning the sentence did not already carry; a mark whose only job was to be mood-3 has no
    * job once it is not mood-3.
    */
-  // Kept inline rather than exported: a type exported from a Svelte 5 instance script is not
-  // importable by consumers (that needs `<script module>`), and one shared union is not worth
-  // a module for. App.svelte declares the same three values where it derives them.
-  //   local   — nothing leaves: open-a-file, self-checks, tool builder
-  //   sync    — ciphertext leaves and returns; the passphrase does not
-  //   account — identifiers, and on recovery an email address, leave
-  let { surface = 'local' }: { surface?: 'local' | 'sync' | 'account' } = $props()
+  /*
+   * THE FOURTH POSTURE, AND WHY THE UNION MOVED OUT OF THIS FILE.
+   *
+   * There were three, declared inline here and again in App.svelte, with a note that a type
+   * exported from a Svelte 5 instance script is not importable and one shared union was not worth
+   * a module for. Then a fourth arrived and the two copies became two places to forget it, so the
+   * union and the mapping both live in lib/trust/posture.ts now — where trustPostureFor() is a
+   * plain function, and posture.test.ts can assert over every surface that a page reaching the
+   * network is never handed 'local'. That assertion is the whole reason this file no longer owns
+   * the type: the guarantee below is only as good as what decides which branch prints.
+   */
+  import type { TrustPosture } from '../trust/posture'
+
+  let { surface = 'local' }: { surface?: TrustPosture } = $props()
 </script>
 
 <aside class="trust" aria-label="Privacy and trust">
@@ -60,6 +67,20 @@
       <strong>Meant to run offline.</strong> This tab reads your backup in the browser and
       sends nothing — but a page cannot prove that about itself. Verify this build's integrity
       before you unlock an encrypted backup.
+    {:else if surface === 'setup'}
+      <!--
+        THE FIRST-RUN SCREEN, WHICH IS THE ONE LOCAL-LOOKING SURFACE THAT DOES REACH THE SERVER.
+        It asks the deployment whether it already names what this machine is for, and a page that
+        asks a server anything may not, one element above the asking, promise that it sends
+        nothing. The sentence is scoped in both directions on purpose — what the request carries,
+        and that it stops once the question has an answer — because the reader's real question is
+        whether the offline viewer they are about to use phones home, and the answer is that it
+        does not.
+      -->
+      <strong>This screen reads your server’s configuration.</strong> It asks one thing —
+      whether this deployment already names what this machine is for — and sends nothing about
+      you or your journal. Once that question has an answer here, this page stops asking on
+      load.
     {:else if surface === 'sync'}
       <strong>This tab talks to your server.</strong> Your passphrase and the decrypted
       entries stay in this browser; what crosses the network is ciphertext your server cannot

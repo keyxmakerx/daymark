@@ -109,6 +109,80 @@ class AuthStore(
                 )
                 """.trimIndent(),
             )
+            /*
+             * The therapist's PUBLIC keys, on their way to the owner.
+             *
+             * This is the one link the relationship never had. The owner's console already seals
+             * every share to a therapist's X25519 key and already refuses to seal to a key it has
+             * not pinned, and the therapist's browser already generates and wraps the keypair —
+             * but there was no path by which the public halves could travel from one to the other,
+             * so the pin had nothing to be taken against and the seal had nothing to aim at.
+             * These four columns are that path.
+             *
+             * `rel_ref` is the PRIMARY KEY, and that is the entire enforcement of insert-only.
+             * The alternative — a SELECT before the INSERT, in the route or here — is a rule that
+             * lives in a line of code somebody can later delete, reorder, or forget on a second
+             * write path; this one lives in the schema, so every future caller inherits it whether
+             * or not they know it exists. It matters more here than in most places because the
+             * failure mode of a silent overwrite is not a lost row: it is the owner's next journal
+             * share sealed to whatever key was written last, which is exactly the substitution the
+             * pinning was built to catch.
+             *
+             * Note what is NOT hashed. Every other secret in this file is stored as an Argon2id or
+             * BLAKE2b digest because the server has no business being able to read it back. These
+             * are public keys — the point of storing them is to hand them back verbatim — so they
+             * sit here in the clear, and that is correct rather than an oversight. They are also
+             * not sensitive to this server in the way the rest of this table set is: knowing a
+             * therapist's public key lets you seal something TO them, never open anything OF
+             * theirs.
+             *
+             * And the server does not vouch for them. It took delivery of two strings from
+             * whoever held a valid session for this relationship and it will hand the same two
+             * strings back; it cannot tell the therapist's real key from a substituted one, and it
+             * is not trying to. The check that catches a substitution is the owner reading the
+             * fingerprint words back to their therapist on another channel before pinning. See the
+             * route file for the full statement of that division of labour.
+             */
+            st.execute(
+                """
+                CREATE TABLE IF NOT EXISTS therapist_keys (
+                    rel_ref       TEXT    NOT NULL PRIMARY KEY,
+                    box_pub_b64   TEXT    NOT NULL,
+                    sign_pub_b64  TEXT    NOT NULL,
+                    registered_at INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            /*
+             * The OWNER's public keys, on their way to the therapist.
+             *
+             * The mirror of `therapist_keys`, and it was missing for the same reason that one was:
+             * each side had a use for the other's public halves and no path to carry them. The
+             * consequence was visible on the sign-in form, which asked a clinician to paste the
+             * owner's signing and encryption keys by hand on every visit — two of the nine fields
+             * that made that screen unusable.
+             *
+             * Same rules as its counterpart. `rel_ref` is the PRIMARY KEY, so insert-only is the
+             * schema's job rather than a check a later edit can drop; a silent overwrite here would
+             * repoint the key a clinician verifies shares against, which is exactly the substitution
+             * the pinning exists to catch. Stored in the clear because these are public keys and
+             * handing them back verbatim is the entire point.
+             *
+             * The server does not vouch for these either. It relays them, and what catches a
+             * substituted key is the clinician comparing the fingerprint against what the owner
+             * reads aloud — the same out-of-band step, pointing the other way.
+             */
+
+            st.execute(
+                """
+                CREATE TABLE IF NOT EXISTS owner_keys (
+                    rel_ref       TEXT    NOT NULL PRIMARY KEY,
+                    box_pub_b64   TEXT    NOT NULL,
+                    sign_pub_b64  TEXT    NOT NULL,
+                    registered_at INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
             st.execute(
                 """
                 CREATE TABLE IF NOT EXISTS sessions (
@@ -712,10 +786,145 @@ class AuthStore(
         }
     }
 
+    // ---- Therapist public keys ---------------------------------------------------
+
+    /**
+     * The therapist's two public halves, exactly as their browser published them: the X25519 key
+     * the owner seals shares to, and the Ed25519 key the owner verifies signatures with.
+     *
+     * [registeredAt] is epoch MILLISECONDS, because [clock] is. (The audit log next door counts in
+     * seconds; the two have always disagreed, and this follows the store it lives in rather than
+     * quietly introducing a third convention.)
+     */
+    data class TherapistKeys(val boxPubB64: String, val signPubB64: String, val registeredAt: Long)
+
+    enum class KeyRegistration { OK, ALREADY_REGISTERED }
+
+    /**
+     * Record the therapist's public keys for a relationship. INSERT-ONLY: a relationship that
+     * already has keys keeps the ones it has, and this returns [KeyRegistration.ALREADY_REGISTERED]
+     * without touching the stored row.
+     *
+     * `INSERT OR IGNORE` rather than SELECT-then-INSERT so the refusal is SQLite's, not this
+     * function's. The distinction is not stylistic: a read followed by a write is only atomic for
+     * as long as every writer happens to take the same in-process [lock], and this store is one
+     * connection today by accident of deployment rather than by any guarantee. Under OR IGNORE the
+     * primary key does the refusing inside the statement, so a second process, a second connection
+     * or a future concurrent caller cannot slip between the check and the write.
+     *
+     * A zero row count therefore means precisely one thing here — a row for this rel_ref already
+     * exists. It cannot mean a NOT NULL violation: every column is NOT NULL and every value comes
+     * from a non-null Kotlin parameter, so there is no other constraint left to fire. If a nullable
+     * column is ever added to this table, that reasoning stops holding and this needs to become an
+     * explicit conflict check.
+     */
+    fun registerTherapistKeys(relRef: String, boxPubB64: String, signPubB64: String): KeyRegistration = synchronized(lock) {
+        val now = clock()
+        conn.prepareStatement(
+            "INSERT OR IGNORE INTO therapist_keys(rel_ref, box_pub_b64, sign_pub_b64, registered_at) VALUES (?,?,?,?)",
+        ).use { ps ->
+            ps.setString(1, relRef)
+            ps.setString(2, boxPubB64)
+            ps.setString(3, signPubB64)
+            ps.setLong(4, now)
+            return if (ps.executeUpdate() > 0) KeyRegistration.OK else KeyRegistration.ALREADY_REGISTERED
+        }
+    }
+
+    /** The registered keys for a relationship, or null if the therapist has not published any. */
+    fun therapistKeys(relRef: String): TherapistKeys? = synchronized(lock) {
+        conn.prepareStatement(
+            "SELECT box_pub_b64, sign_pub_b64, registered_at FROM therapist_keys WHERE rel_ref=?",
+        ).use { ps ->
+            ps.setString(1, relRef)
+            ps.executeQuery().use { rs ->
+                if (!rs.next()) return null
+                TherapistKeys(rs.getString(1), rs.getString(2), rs.getLong(3))
+            }
+        }
+    }
+
+    data class OwnerKeys(val signPubB64: String, val boxPubB64: String, val registeredAt: Long)
+
+    /**
+     * Record the owner's public keys for a relationship. INSERT-ONLY, for the reasons set out on
+     * [registerTherapistKeys] — the same reasoning applies unchanged, and deliberately so: two
+     * tables enforcing one rule differently is how one of them quietly stops enforcing it.
+     */
+    fun registerOwnerKeys(relRef: String, signPubB64: String, boxPubB64: String): KeyRegistration = synchronized(lock) {
+        val now = clock()
+        conn.prepareStatement(
+            "INSERT OR IGNORE INTO owner_keys(rel_ref, box_pub_b64, sign_pub_b64, registered_at) VALUES (?,?,?,?)",
+        ).use { ps ->
+            ps.setString(1, relRef)
+            ps.setString(2, boxPubB64)
+            ps.setString(3, signPubB64)
+            ps.setLong(4, now)
+            return if (ps.executeUpdate() > 0) KeyRegistration.OK else KeyRegistration.ALREADY_REGISTERED
+        }
+    }
+
+    /** The owner's registered keys for a relationship, or null if they have not published any. */
+    fun ownerKeys(relRef: String): OwnerKeys? = synchronized(lock) {
+        conn.prepareStatement(
+            "SELECT box_pub_b64, sign_pub_b64, registered_at FROM owner_keys WHERE rel_ref=?",
+        ).use { ps ->
+            ps.setString(1, relRef)
+            ps.executeQuery().use { rs ->
+                if (!rs.next()) return null
+                OwnerKeys(signPubB64 = rs.getString(2), boxPubB64 = rs.getString(1), registeredAt = rs.getLong(3))
+            }
+        }
+    }
+
     /** Hard-delete a session (logout / instant revoke). */
     fun revokeSession(sessionId: String) = synchronized(lock) {
         conn.prepareStatement("DELETE FROM sessions WHERE session_id_hash=?").use { ps ->
             ps.setString(1, Secrets.tokenHash(sessionId)); ps.executeUpdate()
+        }
+    }
+
+    /**
+     * Hard-delete EVERY session held by one credential. Returns how many were cut.
+     *
+     * The counterpart to [revokeSession], which needs the raw session id and is therefore only
+     * usable by the person holding it — fine for logging yourself out, useless for the case this
+     * exists for. When a practice removes a member, the removal has to land on sessions the
+     * removing admin has never seen and could not name.
+     *
+     * It is a DELETE rather than a flag for the reason [validateSession] would otherwise make
+     * awkward: a `revoked` column already exists there and is honoured, but a revoked row is a row
+     * every future query has to remember to exclude, and the cost of forgetting once is a session
+     * that outlives the decision to end it. Deleting removes the question.
+     *
+     * WHY IMMEDIACY IS THE WHOLE POINT. Without this, "removed from the practice" would mean
+     * "removed at some point in the next eight hours, depending when they last clicked" — the
+     * absolute session lifetime — and every minute of that is a person the practice believes it has
+     * cut off who is still signed in. The spec is unambiguous that server-side cutoff is immediate,
+     * and the annoyance budget insists the safe direction never be the expensive one, which has to
+     * include *waiting*. A revocation you have to wait out is one people stop reaching for.
+     *
+     * WHAT IT DOES NOT DO, and the list is longer than it looks. It cuts sessions, never keys: a
+     * clinician's own copies of whatever a patient already let them decrypt are on their machine
+     * and beyond the reach of any statement in this file, and cryptographic cutoff is the patient's
+     * device rotating a key and re-wrapping it, which this server has never held the material to
+     * do. Less obviously, and more likely to be misread: IT DOES NOT END THE CREDENTIAL. The row in
+     * `totp` is untouched, so the holder of that authenticator can sign in again immediately and be
+     * issued a fresh session by the ordinary verify path. Ending the credential is not something
+     * this server offers at all today, and a practice would not be the party to do it if it did —
+     * the credential was enrolled against a patient's relationship, on the patient's invitation.
+     * So this is a *sign-out*, and calling it a revocation anywhere a person can read would be a
+     * promise the function does not keep. The caller in the org control plane says the same thing
+     * at more length, because that is where somebody will look for it.
+     *
+     * The one threat it genuinely answers, stated so its value is not talked down either: a session
+     * taken from a member — a stolen cookie, a machine left open — is not accompanied by the
+     * authenticator, so cutting it ends that access and there is no way back in without the code.
+     */
+    fun revokeSessionsForCredential(credentialId: String): Int = synchronized(lock) {
+        conn.prepareStatement("DELETE FROM sessions WHERE credential_id=?").use { ps ->
+            ps.setString(1, credentialId)
+            return ps.executeUpdate()
         }
     }
 

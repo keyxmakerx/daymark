@@ -5,12 +5,16 @@ import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.mail.Mailer
 import com.daymark.companion.mail.OwnerAccountStore
 import com.daymark.companion.mail.OwnerNotifier
+import com.daymark.companion.org.OrgStore
 import com.daymark.companion.routes.ErrorDto
 import com.daymark.companion.routes.auditRoutes
+import com.daymark.companion.routes.orgRoutes
 import com.daymark.companion.routes.recoveryRoutes
 import com.daymark.companion.routes.relationRoutes
 import com.daymark.companion.routes.syncRoutes
 import com.daymark.companion.routes.therapistAuthRoutes
+import com.daymark.companion.routes.ownerKeyRoutes
+import com.daymark.companion.routes.therapistKeyRoutes
 import com.daymark.companion.storage.AuditStore
 import com.daymark.companion.storage.BlobStore
 import com.daymark.companion.storage.RelationStore
@@ -27,7 +31,9 @@ import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondFile
+import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
@@ -104,6 +110,11 @@ fun Application.module(
     authStore: AuthStore? = null,
     auditStore: AuditStore? = null,
     accountStore: OwnerAccountStore? = null,
+    // Appended rather than slotted in beside the stores they sit next to, because every existing
+    // caller passes the ones above POSITIONALLY. A new parameter in the middle compiles for none of
+    // them; a new parameter at the end compiles for all of them and changes nothing.
+    orgStore: OrgStore? = null,
+    orgAuditStore: AuditStore? = null,
 ) {
     // Publish the trusted-proxy allowlist before any route runs: every per-client lockout and rate
     // limit reads it via ApplicationCall.clientAddress(). Empty (the default) means forwarded
@@ -172,6 +183,17 @@ fun Application.module(
     val audit = if (config.therapistAuthEnabled) {
         auditStore ?: AuditStore(config.dataDir, config.auditRetentionDays * 86_400L)
     } else null
+    // The org / practice control plane, under the same feature gate as the rest of the portal: it
+    // authorises on portal sessions, so it has no meaning in a deployment that has none.
+    val orgs = if (config.therapistAuthEnabled) {
+        orgStore ?: OrgStore(config.dataDir)
+    } else null
+    // A SECOND audit chain, in its own database file. Same class, same hash chain, same
+    // metadata-only contract — and a separate file so that a practice's membership history and a
+    // patient's access history can never be keyed into the same table. See AuditStore's `dbName`.
+    val orgAudit = if (config.therapistAuthEnabled) {
+        orgAuditStore ?: AuditStore(config.dataDir, config.auditRetentionDays * 86_400L, dbName = "org-audit.db")
+    } else null
 
     routing {
         // Unauthenticated, content-free LIVENESS probe — never under the base path.
@@ -222,7 +244,9 @@ fun Application.module(
 
         // Therapist portal. Fail-closed: 503 on every portal path when the feature is off, so a
         // probe cannot tell configured-but-empty from not-configured.
-        if (relStore != null && auth != null && guard != null && audit != null && notifier != null) {
+        if (relStore != null && auth != null && guard != null && audit != null && notifier != null &&
+            orgs != null && orgAudit != null
+        ) {
             relationRoutes(
                 relStore, guard, auth, config.sessionIdleSeconds, config.maxRequestBytes,
                 auditStore = audit, auditSourceIp = config.auditSourceIpEnabled,
@@ -243,7 +267,35 @@ fun Application.module(
                 auditStore = audit,
                 auditSourceIp = config.auditSourceIpEnabled,
             )
+            // The therapist's public keys, on their way to the owner. Registered under the same
+            // feature gate as the rest of the portal because it has no meaning without one: the
+            // keys belong to a relationship, and relationships only exist when the portal is on.
+            therapistKeyRoutes(
+                authStore = auth,
+                ownerGuard = guard,
+                sessionIdleSeconds = config.sessionIdleSeconds,
+                auditStore = audit,
+                auditSourceIp = config.auditSourceIpEnabled,
+            )
+
+            ownerKeyRoutes(
+                authStore = auth,
+                ownerGuard = guard,
+                sessionIdleSeconds = config.sessionIdleSeconds,
+                auditStore = audit,
+                auditSourceIp = config.auditSourceIpEnabled,
+            )
             auditRoutes(audit, guard)
+            // The org / practice control plane. Membership and roles only — it holds no key, serves
+            // no ciphertext, and cannot mint a grant. See routes/OrgRoutes.kt for the whole argument.
+            orgRoutes(
+                orgStore = orgs,
+                authStore = auth,
+                ownerGuard = guard,
+                sessionIdleSeconds = config.sessionIdleSeconds,
+                orgAudit = orgAudit,
+                auditSourceIp = config.auditSourceIpEnabled,
+            )
         } else {
             get("/v1/rel/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
             put("/v1/rel/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
@@ -252,6 +304,17 @@ fun Application.module(
             post("/v1/totp/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
             post("/v1/session/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
             post("/v1/webauthn/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
+            // Both halves of the therapist-key exchange, so a probe cannot tell "configured but
+            // nobody has registered yet" (404) from "this deployment has no portal at all" (503).
+            get("/v1/relations/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
+            post("/v1/relations/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
+            // Every method the org control plane answers, so a probe cannot tell "this practice has
+            // no such member" (404) from "this deployment has no practices at all" (503).
+            get("/v1/orgs") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
+            post("/v1/orgs") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
+            get("/v1/orgs/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
+            post("/v1/orgs/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
+            delete("/v1/orgs/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
         }
 
         // Track T2 (email Option A): owner notification-email registration + the unauthenticated
@@ -283,12 +346,60 @@ fun Application.module(
             else call.respond(HttpStatusCode.NotFound, ErrorDto("therapist portal not built"))
         }
 
+        /*
+         * The invitation link's own path, and the reason this route exists at all.
+         *
+         * `buildInviteLink` has always addressed invitations to `{base}/portal/invite#id=...&s=...`,
+         * and until now NOTHING served that path — the only occurrence of it in the repository was
+         * the line constructing it. Every invitation this server has ever sent was a 404, which is
+         * why the therapist half of the product could not be used and why the sign-in form ended up
+         * asking a clinician to paste nine values by hand.
+         *
+         * It serves the therapist entry, not the owner's: `staticFiles`' `default` applies to
+         * DIRECTORY requests, so an unmatched path like this one would not fall through to a SPA
+         * shell, and if it ever did it would land on index.html — the owner's viewer, the wrong
+         * surface entirely. The fragment carrying the invitation is never sent to the server
+         * (deliberately — see buildInviteLink), so this route sees only the path and hands back the
+         * page that knows how to read the rest client-side.
+         */
+        val invitePaths = listOf("/portal/invite", "/portal/invite/")
+
+        /*
+         * IT REDIRECTS RATHER THAN SERVING, and that distinction is the entire bug.
+         *
+         * Serving therapist.html here returned 200 with the right markup and a completely BLANK
+         * page. The bundle is built with `base: './'` (vite.config.ts), so every asset reference is
+         * relative — and a browser resolves those against the DIRECTORY of the current URL. From
+         * `/therapist` that is `/`, so `./assets/x.js` is `/assets/x.js` and everything loads. From
+         * `/portal/invite` it is `/portal/`, so the browser asks for `/portal/assets/x.js`, the
+         * static handler answers with index.html, and Chromium refuses every script and stylesheet
+         * for having a `text/html` MIME type. Nothing renders. No error page — white.
+         *
+         * Worth recording how far this got: the route existed, the response was 200, the body
+         * contained the therapist entry's own marker, a server test asserted exactly that and
+         * passed, and both suites were green. The page still could not load a single byte of its
+         * own JavaScript. It took rendering it in a real browser to see, which is the argument for
+         * doing that at all.
+         *
+         * A 302 to `/therapist` fixes it because the browser CARRIES THE FRAGMENT across a redirect
+         * whose target has none of its own — so `#id=...&s=...` survives, arrives at a URL whose
+         * relative assets resolve, and therapist.ts reads it there exactly as before. The secret
+         * still never reaches the server: a fragment is not sent with the request, and it is not in
+         * the Location header either, because the browser reattaches it client-side.
+         */
+        val therapistPath = if (config.basePath == "/") "/therapist" else "${config.basePath.trimEnd('/')}/therapist"
+        val redirectToTherapist: suspend io.ktor.server.routing.RoutingContext.() -> Unit = {
+            call.respondRedirect(therapistPath, permanent = false)
+        }
+
         if (config.basePath == "/") {
             get("/therapist") { serveTherapist() }
+            invitePaths.forEach { p -> get(p) { redirectToTherapist() } }
             staticFiles("/", webRoot) { default("index.html") }
         } else {
             route(config.basePath) {
                 get("/therapist") { serveTherapist() }
+                invitePaths.forEach { p -> get(p) { redirectToTherapist() } }
                 staticFiles("/", webRoot) { default("index.html") }
             }
         }

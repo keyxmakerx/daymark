@@ -9,8 +9,10 @@
   import PinnedTherapistPicker from './PinnedTherapistPicker.svelte'
   import NotificationSettings from './NotificationSettings.svelte'
   import PinRecord from './PinRecord.svelte'
+  import TherapistKeyIntake from './TherapistKeyIntake.svelte'
   import { withGrant, type OwnerSession } from './session'
   import { PortalClient } from '../../sync/portal'
+  import type { OwnerEndpoint } from '../../owner/therapistKeys'
   import type { Grant } from '../../assignments/types'
 
   let { data }: { data: BackupData | null } = $props()
@@ -18,7 +20,13 @@
   // 'pins' is whole-browser rather than per-therapist — it shows the record of every key this
   // browser has written down, including therapists whose keys are not entered in this session —
   // so it renders beside 'notify' rather than under the therapist picker.
-  type Sub = 'review' | 'grants' | 'inbox' | 'share' | 'access-log' | 'notify' | 'pins'
+  //
+  // 'published-keys' is the other half of that pair and is per-therapist, which is why it sits
+  // inside the picker's scope: it reads what ONE therapist published for ONE relationship and
+  // offers it for pinning. Two tabs about keys is deliberate rather than a split that wants
+  // merging — "what they published" comes from the server and is not trusted yet, "pinned keys" is
+  // what this browser decided to remember and is what every seal is checked against.
+  type Sub = 'review' | 'grants' | 'inbox' | 'published-keys' | 'share' | 'access-log' | 'notify' | 'pins'
 
   let session = $state<OwnerSession | null>(null)
   let sub = $state<Sub>('grants')
@@ -29,6 +37,13 @@
   let token = $state('')
   let smtpEnabled = $state(false)
   let client = $state<PortalClient | null>(null)
+  /*
+   * The same base URL and token as `client`, captured at connect time for the owner calls that are
+   * plain module functions rather than PortalClient methods. Captured rather than read live from
+   * the two fields above, so editing the connection form without reconnecting cannot leave one
+   * surface talking to a different server than the rest of the console.
+   */
+  let endpoint = $state<OwnerEndpoint | null>(null)
   let connectStatus = $state('')
 
   const selected = $derived(session?.pinned.find((t) => t.id === selectedId) ?? null)
@@ -41,6 +56,7 @@
   function lock() {
     session = null
     client = null
+    endpoint = null
     selectedId = null
   }
 
@@ -48,13 +64,16 @@
     connectStatus = ''
     if (!token) { connectStatus = 'Enter your owner access token.'; return }
     const c = new PortalClient(serverUrl, token)
+    const e: OwnerEndpoint = { baseUrl: serverUrl, token }
     try {
       const cfg = await c.getConfig()
       smtpEnabled = cfg.smtpEnabled
       client = c
+      endpoint = e
       connectStatus = 'Connected.'
     } catch {
       client = c // still usable for blob calls; config probe is best-effort
+      endpoint = e
       connectStatus = 'Connected (config probe failed; email invites hidden).'
     }
   }
@@ -74,6 +93,7 @@
         <button class:active={sub === 'review'} aria-pressed={sub === 'review'} onclick={() => (sub = 'review')}>Review</button>
         <button class:active={sub === 'grants'} aria-pressed={sub === 'grants'} onclick={() => (sub = 'grants')}>Grants</button>
         <button class:active={sub === 'inbox'} aria-pressed={sub === 'inbox'} onclick={() => (sub = 'inbox')}>Inbox</button>
+        <button class:active={sub === 'published-keys'} aria-pressed={sub === 'published-keys'} onclick={() => (sub = 'published-keys')}>Published keys</button>
         <button class:active={sub === 'share'} aria-pressed={sub === 'share'} onclick={() => (sub = 'share')}>Share</button>
         <button class:active={sub === 'access-log'} aria-pressed={sub === 'access-log'} onclick={() => (sub = 'access-log')}>Access log</button>
         <button class:active={sub === 'notify'} aria-pressed={sub === 'notify'} onclick={() => (sub = 'notify')}>Notifications</button>
@@ -113,6 +133,8 @@
         <GrantManager {session} therapist={selected} {client} {onGrantChange} />
       {:else if sub === 'inbox'}
         <AssignmentInbox {session} {client} />
+      {:else if sub === 'published-keys'}
+        <TherapistKeyIntake therapist={selected} {endpoint} />
       {:else if sub === 'share'}
         <ShareBuilder {session} therapist={selected} {data} {client} {smtpEnabled} />
       {:else if sub === 'access-log'}

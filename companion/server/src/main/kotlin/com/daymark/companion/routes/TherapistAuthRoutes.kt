@@ -436,8 +436,15 @@ fun Route.therapistAuthRoutes(
     }
 }
 
-/** Owner-token gate for the mint route. Non-enumerating errors, source-keyed lockout. */
-private suspend fun ApplicationCall.ownerAuthorized(guard: AuthGuard): Boolean {
+/**
+ * Owner-token gate for the mint route. Non-enumerating errors, source-keyed lockout.
+ *
+ * `internal` rather than private because the therapist public-key read (TherapistKeyRoutes.kt) is
+ * specified as being gated "exactly as POST /v1/invite is", and the only way to keep that promise
+ * literally true is to call the same function rather than write a third copy of it that can drift.
+ * Nothing about the gate changed in making it visible.
+ */
+internal suspend fun ApplicationCall.ownerAuthorized(guard: AuthGuard): Boolean {
     val sourceId = clientAddress()
     val presented = request.headers[HttpHeaders.Authorization]?.removePrefix("Bearer ")?.trim()
     return when (guard.authorize(sourceId, presented)) {

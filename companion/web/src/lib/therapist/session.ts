@@ -46,6 +46,46 @@ export interface RedeemResult {
   error?: string
 }
 
+/**
+ * What happened when this therapist's public keys were offered to the relationship.
+ *
+ * `already-registered` is not an error and is not success either — it is the server refusing to
+ * overwrite keys that were already on file. Returned as a value rather than thrown so a caller
+ * cannot handle it as a transient failure and retry into a loop, and so the screen showing it has
+ * to say which of the two things it means (see registerTherapistKeys).
+ */
+export type KeyRegistration = 'registered' | 'already-registered'
+
+/**
+ * What happened when an enrolment was offered — three answers, because a boolean lied about one.
+ *
+ * WHAT WAS WRONG WITH THE BOOLEAN. `enrollTotp` used to answer `res.status === 204`, and every
+ * caller read `false` as "the server did not enrol you". That is true for the answers the enrol
+ * handler itself composes and false for everything else, and the difference is the whole
+ * relationship. `POST /v1/totp/enroll` is IRREVERSIBLE on the server: it inserts the credential,
+ * consumes the enrolment ticket and drives the invite to CONSUMED, in one transaction, and there is
+ * no route anywhere that un-enrols one — enrolment is insert-only per rel_ref (AuthStore.enrollTotp)
+ * and a second attempt for the same relationship answers ALREADY_ENROLLED forever. So a client that
+ * treats "I did not hear back" as "it did not happen" will roll back the only copy of the
+ * clinician's secret keys, discard the authenticator secret it never showed them, and leave a live
+ * credential nobody holds the secret for — a relationship that cannot be repaired by a fresh invite,
+ * by this product, or by anything short of deleting the row by hand.
+ *
+ * A reverse proxy answering 502, a gateway timing out at 504, a VPN dropping mid-flight, a mobile
+ * tab backgrounded between the request and the response: every one of those produces a non-204 or
+ * no response at all while the transaction may already have committed. None of them is evidence
+ * about the server's state, and the client's job is to say so rather than to guess.
+ *
+ *  - `enrolled`  — 204. The credential exists and the secret this browser generated is its secret.
+ *  - `refused`   — the enrol handler decided not to insert and said so: 400 (the secret was not a
+ *                  plausible key), 401 (no live ticket — spent, expired, or its invite is dead),
+ *                  409 (a credential already exists for this relationship). These are the three
+ *                  statuses this route's own code produces on a path that writes nothing, so they
+ *                  are the only ones safe to read as "nothing happened".
+ *  - `unknown`   — anything else. Not an error to retry into; a state the caller must carry.
+ */
+export type EnrolOutcome = 'enrolled' | 'refused' | 'unknown'
+
 type FetchLike = typeof fetch
 
 export class PortalError extends Error {
@@ -101,14 +141,27 @@ export class PortalClient {
    * single-use `enrollTicket` returned by redeemInvite; the relRef is derived server-side from the
    * ticket, so it is NOT sent (and cannot be spoofed) here. Insert-only: a 409 means a credential
    * already exists for this relationship.
+   *
+   * WHY THE STATUS MAPPING IS A SHORT ALLOWLIST RATHER THAN "not 204 means no". See [EnrolOutcome]
+   * for the whole argument; the shape of it is that this call commits something the product cannot
+   * undo, so the only statuses read as "nothing was written" are the ones this route's own handler
+   * emits from a branch that writes nothing. Everything else — a 5xx from the app or from anything
+   * between here and it, a 429 from a proxy, a status this client has never heard of — is reported
+   * as `unknown` and left for the caller to carry honestly.
+   *
+   * A REJECTED FETCH IS ALSO UNKNOWN, and it is the caller's to catch: DNS, TLS, a dropped socket
+   * and a request that was answered but whose answer never arrived are indistinguishable to
+   * `fetch`, and the last of those is precisely the case that must not be read as a refusal.
    */
-  async enrollTotp(enrollTicket: string, credentialId: string, secret: string): Promise<boolean> {
+  async enrollTotp(enrollTicket: string, credentialId: string, secret: string): Promise<EnrolOutcome> {
     const res = await this.req('/v1/totp/enroll', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enrollTicket, credentialId, secret }),
     })
-    return res.status === 204
+    if (res.status === 204) return 'enrolled'
+    if (res.status === 400 || res.status === 401 || res.status === 409) return 'refused'
+    return 'unknown'
   }
 
   /**
@@ -143,6 +196,69 @@ export class PortalClient {
   /** Hard-delete the server session (needs the cookie + the anti-CSRF token). */
   async logout(csrf: string): Promise<void> {
     await this.req('/v1/session/logout', { method: 'POST', headers: { 'X-CSRF-Token': csrf } }).catch(() => {})
+  }
+
+  /**
+   * Publish this therapist's two PUBLIC keys for the relationship — X25519 (what the owner seals
+   * shares to) and Ed25519 (what the owner verifies assignments and game plans against).
+   *
+   * WHY THE SERVER HOLDS THESE AT ALL, GIVEN IT HOLDS NOTHING ELSE. It is a relay: the owner has to
+   * learn which key to seal to, and until this route existed the only way for that to happen was
+   * the owner typing base64 a clinician had read to them. Public keys are the one kind of key
+   * material a zero-knowledge relay can carry without contradicting itself — they decrypt nothing,
+   * and the owner console still refuses to trust one that changes (see pinStore.ts, and the
+   * fingerprint the acceptance page asks the therapist to read aloud, which is what catches a
+   * server that substituted one).
+   *
+   * INSERT-ONLY, and the 409 is the interesting answer rather than the error. A relationship that
+   * already has keys registered means one of two things: this clinician has been through the
+   * ceremony before on another device, or somebody else's keys are on file for their relationship.
+   * The client cannot tell those apart, so it returns the outcome as a value and leaves the caller
+   * to say so honestly — never to retry, and never to overwrite, because an overwrite is precisely
+   * the key substitution the pin exists to catch.
+   *
+   * THE relRef IN THE PATH COMES FROM THE SESSION. `session.relRef` is bound from the redeem, and
+   * the server independently derives the relRef from the session cookie; a path that disagrees with
+   * the session is a 403 rather than a hint. So this method has no relRef parameter of its own —
+   * there is no caller-supplied value here for a bug or a tampered page to point somewhere else.
+   *
+   * Cookie plus `X-CSRF-Token`, exactly as `POST /v1/session/logout` is gated: the session cookie is
+   * HttpOnly and rides automatically, so on its own it would authorize a cross-site form post.
+   */
+  async registerTherapistKeys(session: SessionInfo, boxPubB64: string, signPubB64: string): Promise<KeyRegistration> {
+    const res = await this.req(`/v1/relations/${encodeURIComponent(session.relRef)}/therapist-keys`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': session.csrf },
+      body: JSON.stringify({ boxPubB64, signPubB64 }),
+    })
+    if (res.status === 204) return 'registered'
+    if (res.status === 409) return 'already-registered'
+    if (res.status === 401 || res.status === 403) throw new PortalError('not authorized to register keys for this relationship', res.status)
+    throw new PortalError('key registration failed', res.status)
+  }
+
+  /**
+   * The owner's published public keys for this relationship.
+   *
+   * This is what replaces two of the sign-in form's nine fields. The clinician used to paste the
+   * owner's signing and encryption keys out of an email on every visit, because the product had no
+   * route to carry them — the mirror of the gap that made them paste their own.
+   *
+   * THE SERVER DOES NOT VOUCH FOR THESE. It relays them, and a compromised one can hand back keys
+   * it controls, which would make every forged share verify and every genuine one fail. What
+   * catches that is the clinician comparing the fingerprint against what the owner reads aloud, so
+   * the caller must pin on first use and refuse a change — never treat this as trusted input.
+   *
+   * `null` for a relationship whose owner has not published yet, which is a real state rather than
+   * an error: it means the sign-in cannot complete automatically and the person has to be told
+   * why, rather than shown a failure that looks like their own mistake.
+   */
+  async ownerKeys(session: SessionInfo): Promise<{ signPubB64: string; boxPubB64: string; registeredAt: number } | null> {
+    const res = await this.req(`/v1/relations/${encodeURIComponent(session.relRef)}/owner-keys`)
+    if (res.status === 404) return null
+    if (res.status === 401 || res.status === 403) throw new PortalError('not authorized to read owner keys', res.status)
+    if (!res.ok) throw new PortalError('could not read owner keys', res.status)
+    return (await res.json()) as { signPubB64: string; boxPubB64: string; registeredAt: number }
   }
 
   // --- opaque relationship-blob channels (THERAPIST role via the session cookie) ---

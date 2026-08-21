@@ -31,6 +31,10 @@ export default defineConfig({
         // The server admin console: a third surface, for whoever operates the server rather than
         // the owner or a clinician. It serves no client data at all.
         admin: fileURLToPath(new NodeURL('admin.html', import.meta.url)),
+        // The practice console: a fourth surface, for whoever administers a practice — membership,
+        // roles, removal and the practice's own control-plane log. Served by the existing static
+        // handler at /practice.html; no server route was added for it.
+        practice: fileURLToPath(new NodeURL('practice.html', import.meta.url)),
       },
       output: {
         entryFileNames: 'assets/[name]-[hash].js',
