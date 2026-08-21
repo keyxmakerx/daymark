@@ -140,6 +140,23 @@ enum class AuditAction(val wire: String) {
     THERAPIST_KEY_FETCHED("therapist_key.fetched"),
 
     /**
+     * The owner published their own public keys for a relationship, so the clinician's browser can
+     * stop asking a human to paste them.
+     *
+     * The mirror of [THERAPIST_KEY_REGISTERED] and, like it, a receipt for a DELIVERY rather than a
+     * statement that the right keys arrived. The server does not vouch for either side's keys; what
+     * catches a substitution is the fingerprint compared out of band, and an audit line is exactly
+     * the sort of thing that reads like approval if it is not said plainly.
+     */
+    OWNER_KEY_REGISTERED("owner_key.registered"),
+
+    /** A second publish for a relationship that already has owner keys. Refused, never overwritten. */
+    OWNER_KEY_REFUSED("owner_key.refused"),
+
+    /** A clinician read the owner's published keys. */
+    OWNER_KEY_FETCHED("owner_key.fetched"),
+
+    /**
      * A practice was created and its first admin was seated.
      *
      * The genesis entry of a practice's chain, and the only one the operator's provisioning

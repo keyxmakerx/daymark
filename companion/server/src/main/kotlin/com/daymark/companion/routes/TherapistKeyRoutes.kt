@@ -32,6 +32,8 @@ private fun auditSafely(block: () -> Unit) {
 
 @Serializable data class TherapistKeyRegistration(val boxPubB64: String, val signPubB64: String)
 @Serializable data class TherapistKeyRecord(val boxPubB64: String, val signPubB64: String, val registeredAt: Long)
+@Serializable data class OwnerKeyRegistration(val signPubB64: String, val boxPubB64: String)
+@Serializable data class OwnerKeyRecord(val signPubB64: String, val boxPubB64: String, val registeredAt: Long)
 
 /**
  * Both keys are raw 32-byte public keys: X25519 for sealing, Ed25519 for signing. Not "at least"
@@ -253,6 +255,99 @@ fun Route.therapistKeyRoutes(
  * for it, matching how `parseShareExpiry` treats an oversized header. 64 characters is generous
  * room over the 43 an unpadded 32-byte key takes.
  */
+/**
+ * The OWNER's public keys, travelling the other way.
+ *
+ * The mirror of [therapistKeyRoutes], and it exists because the sign-in form asked a clinician to
+ * paste the owner's signing and encryption keys on every single visit. Those two fields were not a
+ * usability wart; they were a human being carrying bytes across a gap the product had never built a
+ * bridge over, in exactly the way the therapist's own keys were before the route above existed.
+ *
+ * AUTH IS REVERSED HERE, and that reversal is the whole design. The owner WRITES with their bearer
+ * token, exactly as they mint an invite. The clinician READS with their session cookie. So each
+ * side publishes what it owns and reads what it needs, and neither can write the other's half —
+ * which is what keeps a compromised clinician session from repointing the key their shares are
+ * verified against.
+ *
+ * The GET takes its relRef from the SESSION, never the path, for the same reason the POST above
+ * does. A clinician's session reaches exactly one relationship; a request naming a different one is
+ * not a confused client, and it is refused rather than quietly served the session's own value.
+ */
+fun Route.ownerKeyRoutes(
+    authStore: AuthStore,
+    ownerGuard: AuthGuard,
+    sessionIdleSeconds: Long,
+    auditStore: AuditStore,
+    auditSourceIp: Boolean = false,
+    therapistLimiter: AttemptLimiter = AttemptLimiter(THERAPIST_MAX_PER_WINDOW, THERAPIST_WINDOW_MS),
+) {
+    route("/v1/relations/{relRef}/owner-keys") {
+
+        /** The owner publishes their two public keys. Bearer token, as for minting an invite. */
+        post {
+            if (!call.ownerAuthorized(ownerGuard)) return@post
+            val relRef = call.parameters["relRef"]
+                ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("missing relRef"))
+            val req = call.receiveCappedJson<OwnerKeyRegistration>() ?: return@post
+
+            val signPub = decodePublicKey(req.signPubB64)
+            val boxPub = decodePublicKey(req.boxPubB64)
+            if (signPub == null || boxPub == null || signPub.size != 32 || boxPub.size != 32) {
+                // One answer for every malformed shape, echoing nothing back. A wrong-length key is
+                // a bug or an attack; neither is served by telling the caller which it looked like.
+                return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("invalid key"))
+            }
+
+            // Re-encoded from the validated bytes for the reason given on the therapist route: it
+            // cannot change the key, and it guarantees the reader receives one fixed spelling.
+            val outcome = authStore.registerOwnerKeys(
+                relRef,
+                signPubB64 = Secrets.b64url(signPub),
+                boxPubB64 = Secrets.b64url(boxPub),
+            )
+            when (outcome) {
+                AuthStore.KeyRegistration.OK -> {
+                    call.respond(HttpStatusCode.NoContent)
+                    auditSafely {
+                        auditStore.append(relRef, AuditActor.OWNER, AuditAction.OWNER_KEY_REGISTERED, meta = sourceIpMeta(auditSourceIp, call))
+                    }
+                }
+                AuthStore.KeyRegistration.ALREADY_REGISTERED -> {
+                    call.respond(HttpStatusCode.Conflict, ErrorDto("keys already registered"))
+                    auditSafely {
+                        auditStore.append(relRef, AuditActor.OWNER, AuditAction.OWNER_KEY_REFUSED, meta = sourceIpMeta(auditSourceIp, call))
+                    }
+                }
+            }
+        }
+
+        /** The clinician reads them. Session cookie; no CSRF token, because this changes nothing. */
+        get {
+            val sessionId = call.request.cookies["daymark_session"]
+                ?: return@get call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized"))
+            val validation = authStore.validateSession(sessionId, sessionIdleSeconds, requireCsrf = null)
+            if (validation.check != AuthStore.SessionCheck.OK || validation.record == null) {
+                return@get call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized"))
+            }
+            if (!therapistLimiter.allow(call.clientAddress())) {
+                return@get call.respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited"))
+            }
+            val sessionRel = validation.record.relRef
+            val pathRel = call.parameters["relRef"]
+                ?: return@get call.respond(HttpStatusCode.BadRequest, ErrorDto("missing relRef"))
+            if (pathRel != sessionRel) {
+                return@get call.respond(HttpStatusCode.Forbidden, ErrorDto("session does not cover this relationship"))
+            }
+            val keys = authStore.ownerKeys(sessionRel)
+                ?: return@get call.respond(HttpStatusCode.NotFound, ErrorDto("no keys registered"))
+            call.respond(OwnerKeyRecord(keys.signPubB64, keys.boxPubB64, keys.registeredAt))
+            auditSafely {
+                auditStore.append(sessionRel, AuditActor.THERAPIST, AuditAction.OWNER_KEY_FETCHED, meta = sourceIpMeta(auditSourceIp, call))
+            }
+        }
+    }
+}
+
 private fun decodePublicKey(b64url: String): ByteArray? {
     if (b64url.isEmpty() || b64url.length > 64) return null
     val bytes = runCatching { Base64.getUrlDecoder().decode(b64url) }.getOrNull() ?: return null

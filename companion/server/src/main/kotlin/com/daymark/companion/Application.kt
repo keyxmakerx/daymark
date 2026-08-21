@@ -13,6 +13,7 @@ import com.daymark.companion.routes.recoveryRoutes
 import com.daymark.companion.routes.relationRoutes
 import com.daymark.companion.routes.syncRoutes
 import com.daymark.companion.routes.therapistAuthRoutes
+import com.daymark.companion.routes.ownerKeyRoutes
 import com.daymark.companion.routes.therapistKeyRoutes
 import com.daymark.companion.storage.AuditStore
 import com.daymark.companion.storage.BlobStore
@@ -270,6 +271,14 @@ fun Application.module(
             // feature gate as the rest of the portal because it has no meaning without one: the
             // keys belong to a relationship, and relationships only exist when the portal is on.
             therapistKeyRoutes(
+                authStore = auth,
+                ownerGuard = guard,
+                sessionIdleSeconds = config.sessionIdleSeconds,
+                auditStore = audit,
+                auditSourceIp = config.auditSourceIpEnabled,
+            )
+
+            ownerKeyRoutes(
                 authStore = auth,
                 ownerGuard = guard,
                 sessionIdleSeconds = config.sessionIdleSeconds,

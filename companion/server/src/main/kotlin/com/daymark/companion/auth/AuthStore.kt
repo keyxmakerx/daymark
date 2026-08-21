@@ -153,6 +153,36 @@ class AuthStore(
                 )
                 """.trimIndent(),
             )
+            /*
+             * The OWNER's public keys, on their way to the therapist.
+             *
+             * The mirror of `therapist_keys`, and it was missing for the same reason that one was:
+             * each side had a use for the other's public halves and no path to carry them. The
+             * consequence was visible on the sign-in form, which asked a clinician to paste the
+             * owner's signing and encryption keys by hand on every visit — two of the nine fields
+             * that made that screen unusable.
+             *
+             * Same rules as its counterpart. `rel_ref` is the PRIMARY KEY, so insert-only is the
+             * schema's job rather than a check a later edit can drop; a silent overwrite here would
+             * repoint the key a clinician verifies shares against, which is exactly the substitution
+             * the pinning exists to catch. Stored in the clear because these are public keys and
+             * handing them back verbatim is the entire point.
+             *
+             * The server does not vouch for these either. It relays them, and what catches a
+             * substituted key is the clinician comparing the fingerprint against what the owner
+             * reads aloud — the same out-of-band step, pointing the other way.
+             */
+
+            st.execute(
+                """
+                CREATE TABLE IF NOT EXISTS owner_keys (
+                    rel_ref       TEXT    NOT NULL PRIMARY KEY,
+                    box_pub_b64   TEXT    NOT NULL,
+                    sign_pub_b64  TEXT    NOT NULL,
+                    registered_at INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
             st.execute(
                 """
                 CREATE TABLE IF NOT EXISTS sessions (
@@ -810,6 +840,39 @@ class AuthStore(
             ps.executeQuery().use { rs ->
                 if (!rs.next()) return null
                 TherapistKeys(rs.getString(1), rs.getString(2), rs.getLong(3))
+            }
+        }
+    }
+
+    data class OwnerKeys(val signPubB64: String, val boxPubB64: String, val registeredAt: Long)
+
+    /**
+     * Record the owner's public keys for a relationship. INSERT-ONLY, for the reasons set out on
+     * [registerTherapistKeys] — the same reasoning applies unchanged, and deliberately so: two
+     * tables enforcing one rule differently is how one of them quietly stops enforcing it.
+     */
+    fun registerOwnerKeys(relRef: String, signPubB64: String, boxPubB64: String): KeyRegistration = synchronized(lock) {
+        val now = clock()
+        conn.prepareStatement(
+            "INSERT OR IGNORE INTO owner_keys(rel_ref, box_pub_b64, sign_pub_b64, registered_at) VALUES (?,?,?,?)",
+        ).use { ps ->
+            ps.setString(1, relRef)
+            ps.setString(2, boxPubB64)
+            ps.setString(3, signPubB64)
+            ps.setLong(4, now)
+            return if (ps.executeUpdate() > 0) KeyRegistration.OK else KeyRegistration.ALREADY_REGISTERED
+        }
+    }
+
+    /** The owner's registered keys for a relationship, or null if they have not published any. */
+    fun ownerKeys(relRef: String): OwnerKeys? = synchronized(lock) {
+        conn.prepareStatement(
+            "SELECT box_pub_b64, sign_pub_b64, registered_at FROM owner_keys WHERE rel_ref=?",
+        ).use { ps ->
+            ps.setString(1, relRef)
+            ps.executeQuery().use { rs ->
+                if (!rs.next()) return null
+                OwnerKeys(signPubB64 = rs.getString(2), boxPubB64 = rs.getString(1), registeredAt = rs.getLong(3))
             }
         }
     }
