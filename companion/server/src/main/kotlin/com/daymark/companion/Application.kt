@@ -5,8 +5,10 @@ import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.mail.Mailer
 import com.daymark.companion.mail.OwnerAccountStore
 import com.daymark.companion.mail.OwnerNotifier
+import com.daymark.companion.org.OrgStore
 import com.daymark.companion.routes.ErrorDto
 import com.daymark.companion.routes.auditRoutes
+import com.daymark.companion.routes.orgRoutes
 import com.daymark.companion.routes.recoveryRoutes
 import com.daymark.companion.routes.relationRoutes
 import com.daymark.companion.routes.syncRoutes
@@ -29,6 +31,7 @@ import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondFile
 import io.ktor.server.response.respondText
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
@@ -105,6 +108,11 @@ fun Application.module(
     authStore: AuthStore? = null,
     auditStore: AuditStore? = null,
     accountStore: OwnerAccountStore? = null,
+    // Appended rather than slotted in beside the stores they sit next to, because every existing
+    // caller passes the ones above POSITIONALLY. A new parameter in the middle compiles for none of
+    // them; a new parameter at the end compiles for all of them and changes nothing.
+    orgStore: OrgStore? = null,
+    orgAuditStore: AuditStore? = null,
 ) {
     // Publish the trusted-proxy allowlist before any route runs: every per-client lockout and rate
     // limit reads it via ApplicationCall.clientAddress(). Empty (the default) means forwarded
@@ -173,6 +181,17 @@ fun Application.module(
     val audit = if (config.therapistAuthEnabled) {
         auditStore ?: AuditStore(config.dataDir, config.auditRetentionDays * 86_400L)
     } else null
+    // The org / practice control plane, under the same feature gate as the rest of the portal: it
+    // authorises on portal sessions, so it has no meaning in a deployment that has none.
+    val orgs = if (config.therapistAuthEnabled) {
+        orgStore ?: OrgStore(config.dataDir)
+    } else null
+    // A SECOND audit chain, in its own database file. Same class, same hash chain, same
+    // metadata-only contract — and a separate file so that a practice's membership history and a
+    // patient's access history can never be keyed into the same table. See AuditStore's `dbName`.
+    val orgAudit = if (config.therapistAuthEnabled) {
+        orgAuditStore ?: AuditStore(config.dataDir, config.auditRetentionDays * 86_400L, dbName = "org-audit.db")
+    } else null
 
     routing {
         // Unauthenticated, content-free LIVENESS probe — never under the base path.
@@ -223,7 +242,9 @@ fun Application.module(
 
         // Therapist portal. Fail-closed: 503 on every portal path when the feature is off, so a
         // probe cannot tell configured-but-empty from not-configured.
-        if (relStore != null && auth != null && guard != null && audit != null && notifier != null) {
+        if (relStore != null && auth != null && guard != null && audit != null && notifier != null &&
+            orgs != null && orgAudit != null
+        ) {
             relationRoutes(
                 relStore, guard, auth, config.sessionIdleSeconds, config.maxRequestBytes,
                 auditStore = audit, auditSourceIp = config.auditSourceIpEnabled,
@@ -255,6 +276,16 @@ fun Application.module(
                 auditSourceIp = config.auditSourceIpEnabled,
             )
             auditRoutes(audit, guard)
+            // The org / practice control plane. Membership and roles only — it holds no key, serves
+            // no ciphertext, and cannot mint a grant. See routes/OrgRoutes.kt for the whole argument.
+            orgRoutes(
+                orgStore = orgs,
+                authStore = auth,
+                ownerGuard = guard,
+                sessionIdleSeconds = config.sessionIdleSeconds,
+                orgAudit = orgAudit,
+                auditSourceIp = config.auditSourceIpEnabled,
+            )
         } else {
             get("/v1/rel/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
             put("/v1/rel/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
@@ -267,6 +298,13 @@ fun Application.module(
             // nobody has registered yet" (404) from "this deployment has no portal at all" (503).
             get("/v1/relations/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
             post("/v1/relations/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
+            // Every method the org control plane answers, so a probe cannot tell "this practice has
+            // no such member" (404) from "this deployment has no practices at all" (503).
+            get("/v1/orgs") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
+            post("/v1/orgs") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
+            get("/v1/orgs/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
+            post("/v1/orgs/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
+            delete("/v1/orgs/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
         }
 
         // Track T2 (email Option A): owner notification-email registration + the unauthenticated

@@ -821,6 +821,50 @@ class AuthStore(
         }
     }
 
+    /**
+     * Hard-delete EVERY session held by one credential. Returns how many were cut.
+     *
+     * The counterpart to [revokeSession], which needs the raw session id and is therefore only
+     * usable by the person holding it — fine for logging yourself out, useless for the case this
+     * exists for. When a practice removes a member, the removal has to land on sessions the
+     * removing admin has never seen and could not name.
+     *
+     * It is a DELETE rather than a flag for the reason [validateSession] would otherwise make
+     * awkward: a `revoked` column already exists there and is honoured, but a revoked row is a row
+     * every future query has to remember to exclude, and the cost of forgetting once is a session
+     * that outlives the decision to end it. Deleting removes the question.
+     *
+     * WHY IMMEDIACY IS THE WHOLE POINT. Without this, "removed from the practice" would mean
+     * "removed at some point in the next eight hours, depending when they last clicked" — the
+     * absolute session lifetime — and every minute of that is a person the practice believes it has
+     * cut off who is still signed in. The spec is unambiguous that server-side cutoff is immediate,
+     * and the annoyance budget insists the safe direction never be the expensive one, which has to
+     * include *waiting*. A revocation you have to wait out is one people stop reaching for.
+     *
+     * WHAT IT DOES NOT DO, and the list is longer than it looks. It cuts sessions, never keys: a
+     * clinician's own copies of whatever a patient already let them decrypt are on their machine
+     * and beyond the reach of any statement in this file, and cryptographic cutoff is the patient's
+     * device rotating a key and re-wrapping it, which this server has never held the material to
+     * do. Less obviously, and more likely to be misread: IT DOES NOT END THE CREDENTIAL. The row in
+     * `totp` is untouched, so the holder of that authenticator can sign in again immediately and be
+     * issued a fresh session by the ordinary verify path. Ending the credential is not something
+     * this server offers at all today, and a practice would not be the party to do it if it did —
+     * the credential was enrolled against a patient's relationship, on the patient's invitation.
+     * So this is a *sign-out*, and calling it a revocation anywhere a person can read would be a
+     * promise the function does not keep. The caller in the org control plane says the same thing
+     * at more length, because that is where somebody will look for it.
+     *
+     * The one threat it genuinely answers, stated so its value is not talked down either: a session
+     * taken from a member — a stolen cookie, a machine left open — is not accompanied by the
+     * authenticator, so cutting it ends that access and there is no way back in without the code.
+     */
+    fun revokeSessionsForCredential(credentialId: String): Int = synchronized(lock) {
+        conn.prepareStatement("DELETE FROM sessions WHERE credential_id=?").use { ps ->
+            ps.setString(1, credentialId)
+            return ps.executeUpdate()
+        }
+    }
+
     override fun close() = synchronized(lock) { conn.close() }
 
     companion object {

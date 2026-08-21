@@ -5,8 +5,41 @@ import java.nio.file.Path
 import java.sql.Connection
 import java.sql.DriverManager
 
-/** Who performed the logged action. */
-enum class AuditActor(val wire: String) { OWNER("owner"), THERAPIST("therapist") }
+/**
+ * Who performed the logged action.
+ *
+ * The first two are the two ends of a patient/clinician relationship and key entries in the
+ * relationship log. The last three act in the ORG control plane and key entries in the practice log
+ * — a physically separate database (see [AuditStore]'s `dbName`), so a practice's history and a
+ * patient's history cannot be interleaved by any choice of identifier.
+ */
+enum class AuditActor(val wire: String) {
+    OWNER("owner"),
+    THERAPIST("therapist"),
+
+    /** A practice member exercising membership authority, inside the one practice they hold it in. */
+    ORG_ADMIN("org_admin"),
+
+    /**
+     * A practice member without the authority for the act they attempted.
+     *
+     * Distinct from [ORG_ADMIN] so that a refusal is legible as a refusal at a glance. A front-desk
+     * account trying to change roles is either a broken client or somebody testing where the wall
+     * is, and both are things the practice's admin should be able to see without decoding the
+     * action name.
+     */
+    ORG_MEMBER("org_member"),
+
+    /**
+     * The operator's provisioning identity, which creates practices and seats their first admin.
+     *
+     * The platform plane: runs the server, holds no grant, appears in exactly one action. It is
+     * listed here rather than folded into [OWNER] because conflating "the person who runs the
+     * infrastructure" with "the person whose data it is" is the exact confusion the three-plane
+     * rule exists to prevent, and an audit log that made them the same word would be arguing for it.
+     */
+    PLATFORM("platform"),
+}
 
 /**
  * The audit action taxonomy (COMPANION_SECURITY.md §9 / COMPANION_THERAPIST.md §10),
@@ -105,6 +138,79 @@ enum class AuditAction(val wire: String) {
      * owner's opportunity to pin, which is the fact that matters if a key is later disputed.
      */
     THERAPIST_KEY_FETCHED("therapist_key.fetched"),
+
+    /**
+     * A practice was created and its first admin was seated.
+     *
+     * The genesis entry of a practice's chain, and the only one the operator's provisioning
+     * identity ever writes. Carries the practice id, never the practice's name: the id is what the
+     * rest of the chain is keyed on and therefore has to be here, while the name is a human-
+     * readable label that would sit in a log forever for no operational gain. "Minimize and don't
+     * over-log" applies to metadata too, and a practice name is exactly the kind of metadata that
+     * identifies a real clinic in a leaked file.
+     */
+    ORG_CREATED("org.created"),
+
+    /**
+     * Somebody was seated in a practice with a role.
+     *
+     * Read this for what it is not. It records a change to who *may be offered* read capability; it
+     * does not record read capability being created, because adding a member creates none. The
+     * grant that would is minted on a patient's device, authorised by that patient, and recorded in
+     * that patient's own log — a different chain in a different database, which is the arrangement
+     * that keeps "the practice added a clinician" and "I let someone read my notes" from ever
+     * looking like the same event.
+     */
+    ORG_MEMBER_ADDED("org.member_added"),
+
+    /** A member's role changed within one practice. Carries the roles, which are membership metadata. */
+    ORG_MEMBER_ROLE_CHANGED("org.member_role_changed"),
+
+    /**
+     * The seated person accepted their own seat.
+     *
+     * The only entry in the practice's chain written by the member about themselves, and the reason
+     * it is worth a line rather than a silent column flip: acceptance is what gives the practice
+     * standing to end that person's portal sessions when they leave, so the moment they granted it
+     * is exactly the moment a later dispute turns on. Recorded as a membership event and nothing
+     * more — an id, a role, a timestamp — because that is all acceptance is.
+     */
+    ORG_MEMBER_ACCEPTED("org.member_accepted"),
+
+    /**
+     * A member was removed from a practice.
+     *
+     * The entry an admin goes looking for when they need to prove *when* somebody stopped being a
+     * member of the practice, so it is written on the removal itself rather than inferred from an
+     * absence later. Its `sessionsCut` annotation says how many live portal sessions went with it,
+     * which is zero for a seat the person never accepted — the practice has no standing over a
+     * credential nobody agreed to bring.
+     *
+     * Read the entry for what it is: the end of a membership, not the end of an access. No key was
+     * rotated, because none was ever here to rotate; no credential was disabled, because this
+     * practice never issued one; and a removed clinician who still holds their authenticator can
+     * sign in again and read whatever a patient still grants them. Only that patient can change
+     * that, and when they do it is recorded in their chain rather than in this one.
+     */
+    ORG_MEMBER_REMOVED("org.member_removed"),
+
+    /**
+     * A member of the practice attempted a control-plane act their role does not carry, and was
+     * refused.
+     *
+     * Written for the same reason [SHARE_DENIED] and [THERAPIST_KEY_REFUSED] are, and it is the
+     * more informative half of this group: successful membership changes are routine, while a
+     * front-desk account repeatedly trying to add members is either a client bug or someone
+     * probing, and the server cannot tell those apart and should not pretend to. It refuses both
+     * identically and writes this line so a person can ask.
+     *
+     * Only ever written against a practice the caller is genuinely a member of. A stranger's
+     * attempt is not recorded, because the practice id on that request is an unverified path
+     * parameter and auditing it would let anyone holding any session seed another practice's chain
+     * with entries of their own choosing — the same reasoning that keeps a missed public-key read
+     * out of the relationship log.
+     */
+    ORG_ACTION_DENIED("org.action_denied"),
 }
 
 data class AuditEvent(
@@ -139,6 +245,23 @@ class AuditStore(
     dataDir: String,
     private val retentionSeconds: Long = DEFAULT_RETENTION_SECONDS,
     private val clock: () -> Long = { System.currentTimeMillis() / 1000 },
+    /**
+     * Which database file this chain lives in. Defaults to the relationship log.
+     *
+     * The org control plane opens a SECOND instance on its own file, and the separation is
+     * structural rather than tidy-minded. Both logs key their chains on an opaque identifier out of
+     * the same charset — a relationship's `relRef` is a 43-character base64url digest, a practice
+     * id is a minted token of the same alphabet — so a single shared table would be one unlucky
+     * collision away from a practice's membership history being chained into a patient's access
+     * history, or an org admin's audit read paging into rows that were never theirs. Two files
+     * makes that unreachable rather than unlikely: the identifier spaces never meet, because the
+     * tables never meet.
+     *
+     * Everything else is identical by construction — same chain, same escaping, same retention, same
+     * metadata-only contract — because they are the same class. That is the point of the parameter
+     * rather than a second copy of this file.
+     */
+    dbName: String = "audit.db",
 ) : AutoCloseable {
 
     private val root: Path = Path.of(dataDir).toAbsolutePath().normalize()
@@ -148,7 +271,7 @@ class AuditStore(
     init {
         Files.createDirectories(root)
         Class.forName("org.sqlite.JDBC")
-        conn = DriverManager.getConnection("jdbc:sqlite:${root.resolve("audit.db")}")
+        conn = DriverManager.getConnection("jdbc:sqlite:${root.resolve(dbName)}")
         conn.createStatement().use { st ->
             st.execute("PRAGMA journal_mode=WAL")
             st.execute("PRAGMA synchronous=NORMAL")
