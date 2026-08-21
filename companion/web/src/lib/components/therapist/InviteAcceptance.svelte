@@ -647,11 +647,22 @@
 </section>
 
 <style>
+  /*
+   * CENTRED, AND WITH ITS OWN PADDING, because this component IS the page.
+   *
+   * TherapistPortal renders its own chrome around itself; this one mounts straight into
+   * #therapist-app, which has no shell of its own. A bare `max-width` therefore left the whole
+   * acceptance flow flush against the left edge of the window with no gutter at all — the first
+   * thing a clinician ever sees, sitting in the corner of an otherwise empty screen. Found by
+   * rendering the page in a real browser, which is the only way this class of thing is found.
+   */
   .accept {
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
     max-width: 44rem;
+    margin-inline: auto;
+    padding: var(--space-6) var(--space-4) var(--space-8);
   }
   .intro h1 {
     margin: 0 0 var(--space-2);

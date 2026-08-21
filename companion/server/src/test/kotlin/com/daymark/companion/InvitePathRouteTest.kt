@@ -5,6 +5,7 @@ import com.daymark.companion.storage.AuditStore
 import com.daymark.companion.storage.RelationStore
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.testApplication
 import java.io.File
@@ -72,12 +73,18 @@ class InvitePathRouteTest {
         val s = stores(data, cfg)
         application { module(cfg, null, null, s.rel, s.auth, s.audit) }
 
-        val res = client.get("/portal/invite")
-        assertEquals(HttpStatusCode.OK, res.status, "the link the server itself emails must not 404")
-        assertTrue(
-            res.bodyAsText().contains(therapistMarker),
-            "/portal/invite must serve the THERAPIST entry — serving the owner's viewer here would " +
-                "hand a clinician the wrong surface, which is worse than a 404 because it looks like it worked",
+        // followRedirects is OFF so the redirect itself is the assertion. This test previously
+        // asserted a 200 carrying the therapist marker — which was TRUE and which shipped a page
+        // that rendered nothing at all, because relative asset URLs resolve against /portal/ from
+        // this path. Asserting the destination is the only version of this check that means
+        // anything; see the reasoning beside the route in Application.kt.
+        val res = client.config { followRedirects = false }.get("/portal/invite")
+        assertEquals(HttpStatusCode.Found, res.status, "the link the server itself emails must not 404")
+        assertEquals(
+            "/therapist",
+            res.headers[HttpHeaders.Location],
+            "it must land on a path whose RELATIVE asset URLs resolve — serving the markup here " +
+                "returns 200 and a blank page, which is worse than a 404 because it looks like it worked",
         )
     }
 
@@ -94,7 +101,9 @@ class InvitePathRouteTest {
         val root = client.get("/")
         assertTrue(root.bodyAsText().contains(ownerMarker), "the root should still be the owner viewer")
 
+        // Following the redirect must arrive at the therapist entry, not the owner's viewer.
         val invite = client.get("/portal/invite")
+        assertTrue(invite.bodyAsText().contains(therapistMarker), "the invite path must reach the therapist entry")
         assertTrue(!invite.bodyAsText().contains(ownerMarker), "the invite path must not fall through to index.html")
     }
 
@@ -107,6 +116,12 @@ class InvitePathRouteTest {
         val cfg = config(data, webRoot(), basePath = "/daymark")
         val s = stores(data, cfg)
         application { module(cfg, null, null, s.rel, s.auth, s.audit) }
+
+        // The redirect has to carry the base path with it, or a proxied deployment lands on a
+        // /therapist that does not exist there.
+        val hop = client.config { followRedirects = false }.get("/daymark/portal/invite")
+        assertEquals(HttpStatusCode.Found, hop.status)
+        assertEquals("/daymark/therapist", hop.headers[HttpHeaders.Location])
 
         val res = client.get("/daymark/portal/invite")
         assertEquals(HttpStatusCode.OK, res.status)

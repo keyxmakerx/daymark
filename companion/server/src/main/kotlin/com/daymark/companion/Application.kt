@@ -30,6 +30,7 @@ import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondFile
+import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
@@ -354,14 +355,42 @@ fun Application.module(
          */
         val invitePaths = listOf("/portal/invite", "/portal/invite/")
 
+        /*
+         * IT REDIRECTS RATHER THAN SERVING, and that distinction is the entire bug.
+         *
+         * Serving therapist.html here returned 200 with the right markup and a completely BLANK
+         * page. The bundle is built with `base: './'` (vite.config.ts), so every asset reference is
+         * relative — and a browser resolves those against the DIRECTORY of the current URL. From
+         * `/therapist` that is `/`, so `./assets/x.js` is `/assets/x.js` and everything loads. From
+         * `/portal/invite` it is `/portal/`, so the browser asks for `/portal/assets/x.js`, the
+         * static handler answers with index.html, and Chromium refuses every script and stylesheet
+         * for having a `text/html` MIME type. Nothing renders. No error page — white.
+         *
+         * Worth recording how far this got: the route existed, the response was 200, the body
+         * contained the therapist entry's own marker, a server test asserted exactly that and
+         * passed, and both suites were green. The page still could not load a single byte of its
+         * own JavaScript. It took rendering it in a real browser to see, which is the argument for
+         * doing that at all.
+         *
+         * A 302 to `/therapist` fixes it because the browser CARRIES THE FRAGMENT across a redirect
+         * whose target has none of its own — so `#id=...&s=...` survives, arrives at a URL whose
+         * relative assets resolve, and therapist.ts reads it there exactly as before. The secret
+         * still never reaches the server: a fragment is not sent with the request, and it is not in
+         * the Location header either, because the browser reattaches it client-side.
+         */
+        val therapistPath = if (config.basePath == "/") "/therapist" else "${config.basePath.trimEnd('/')}/therapist"
+        val redirectToTherapist: suspend io.ktor.server.routing.RoutingContext.() -> Unit = {
+            call.respondRedirect(therapistPath, permanent = false)
+        }
+
         if (config.basePath == "/") {
             get("/therapist") { serveTherapist() }
-            invitePaths.forEach { p -> get(p) { serveTherapist() } }
+            invitePaths.forEach { p -> get(p) { redirectToTherapist() } }
             staticFiles("/", webRoot) { default("index.html") }
         } else {
             route(config.basePath) {
                 get("/therapist") { serveTherapist() }
-                invitePaths.forEach { p -> get(p) { serveTherapist() } }
+                invitePaths.forEach { p -> get(p) { redirectToTherapist() } }
                 staticFiles("/", webRoot) { default("index.html") }
             }
         }
