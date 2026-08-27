@@ -34,16 +34,22 @@ coroutines = "1.9.0"
 androidxTestExt = "1.2.1"
 androidxTestCore = "1.6.1"
 androidxTestRunner = "1.6.2"
-# lazysodium-android and lazysodium-java MUST stay pinned to the same version: sync-crypto's
-# SyncCrypto is compiled against lazysodium-java's copy of the shared com.goterl.lazysodium.*
-# types but runs on lazysodium-android's copy in the real app (see SyncCrypto's class KDoc) —
-# a version drift between the two would silently invalidate that cross-artifact API parity.
-# Pinned to 5.1.0 (not 5.2.0): lazysodium-java 5.2.0's Gradle metadata marks it JVM-21-only,
-# but :sync-crypto (and the whole app) targets JVM 17, so 5.2.0 fails variant resolution
-# (":sync-crypto:compileKotlin" — "compatible with JVM 21 or newer"). 5.1.0 is the newest
-# release whose java artifact is JVM-8+ and whose android artifact also exists, keeping the
-# same-version invariant; the crypto conformance vectors are byte-identical across the two.
-lazysodium = "5.1.0"
+# THE 5.2.0 EXPERIMENT — one CI run answers what cannot be answered on the dev machine.
+#
+# Why bother: lazysodium-android 5.1.0 bundles libsodium 1.0.18 (2019); 5.2.0 bundles 1.0.20
+# (2024). That is the actual C cryptography on the phone, two releases behind, and the ONLY
+# blocker recorded for moving is that 5.2.0's Gradle metadata marks it JVM-21-only while
+# :sync-crypto sat on toolchain 17 next to :app. jvmToolchain is per-module, so :sync-crypto is
+# raised to 21 alongside this bump; the open question — can AGP 8.13 / D8 consume a Java 21
+# dependency for compileSdk 36, and can :app (target 17) compile against 21 classfiles — is
+# exactly what this branch's CI run decides. dl.google.com does not resolve on the dev machine,
+# so CI is the only oracle; do not merge this on a green feeling, merge it on a green run.
+#
+# The old comment here asserted that pinning both artifacts to one version guarantees API
+# parity. That invariant was MEASURED FALSE at 5.1.0 (android exposes 328 public methods, java
+# 259 — the gap is the whole Ristretto255 surface), so it is not restated. At 5.2.0 both carry
+# ristretto; a reflection test should replace the prose either way (task #28).
+lazysodium = "5.2.0"
 jna = "5.17.0"
 
 [libraries]

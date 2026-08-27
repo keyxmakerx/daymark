@@ -11,7 +11,10 @@ plugins {
 }
 
 kotlin {
-    jvmToolchain(17)
+    // 21, not 17, and only in THIS module: lazysodium 5.2.0's metadata demands a JVM-21 consumer,
+    // and the whole point of per-module toolchains is that :app does not have to follow. Whether
+    // :app can CONSUME this module at 21 is the question the CI run this commit exists for answers.
+    jvmToolchain(21)
 }
 
 dependencies {
