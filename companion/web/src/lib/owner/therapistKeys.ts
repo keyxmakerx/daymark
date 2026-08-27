@@ -123,7 +123,7 @@ export function keyFingerprints(record: TherapistKeyRecord): { boxFp: string; si
 export async function fetchTherapistKeys(
   endpoint: OwnerEndpoint,
   relRef: string,
-  doFetch: FetchLike = fetch,
+  doFetch: FetchLike = fetch.bind(globalThis),
 ): Promise<TherapistKeyRecord | null> {
   await initShareCrypto()
   const base = endpoint.baseUrl.replace(/\/+$/, '')

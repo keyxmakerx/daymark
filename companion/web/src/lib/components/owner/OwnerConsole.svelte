@@ -11,6 +11,12 @@
   import PinRecord from './PinRecord.svelte'
   import TherapistKeyIntake from './TherapistKeyIntake.svelte'
   import { withGrant, type OwnerSession } from './session'
+  import type { PinnedTherapist } from './session'
+  import InvitePanel from './InvitePanel.svelte'
+  import { emptyGrant } from '../../assignments/grant'
+  import { fingerprint } from '../../assignments/crypto'
+  import { sasWords } from '../../share/pairing'
+  import type { TherapistKeyRecord } from '../../owner/therapistKeys' 
   import { PortalClient } from '../../sync/portal'
   import type { OwnerEndpoint } from '../../owner/therapistKeys'
   import type { Grant } from '../../assignments/types'
@@ -78,6 +84,37 @@
     }
   }
 
+  /*
+   * A pending clinician's keys arrived — confirmed against the read-aloud check, never merely
+   * fetched. The entry is REBUILT rather than mutated: its id is the signing-key fingerprint and
+   * its grant is bound to that id, so a pending entry (whose id was a placeholder) cannot keep
+   * either. Name, inbox token and pinnedAt survive; the SAS words are computed now that there are
+   * finally two identities to compute them over.
+   */
+  function keysArrived(record: TherapistKeyRecord) {
+    if (!session || !selectedId) return
+    const cur = session.pinned.find((t) => t.id === selectedId)
+    if (!cur) return
+    const signPub = record.signPub
+    const boxPub = record.boxPub
+    const id = fingerprint(signPub)
+    const words = sasWords(
+      { x25519Pub: session.ownerBox.publicKey, ed25519Pub: session.ownerSign.publicKey },
+      { x25519Pub: boxPub, ed25519Pub: signPub },
+    ).join(' ')
+    const filled: PinnedTherapist = {
+      ...cur,
+      id,
+      signPub,
+      boxPub,
+      grant: cur.keysPending ? emptyGrant(id) : cur.grant,
+      fingerprintWords: words,
+      keysPending: false,
+    }
+    session = { ...session, pinned: session.pinned.map((t) => (t.id === cur.id ? filled : t)) }
+    selectedId = id
+  }
+
   function onGrantChange(grant: Grant) {
     if (!session || !selectedId) return
     session = withGrant(session, selectedId, grant)
@@ -128,15 +165,31 @@
       </div>
 
       {#if !selected}
-        <p class="empty faint">Pin a therapist in the unlock step to grant, review, or share.</p>
+        <p class="empty faint">Add a clinician in the unlock step to grant, review, or share.</p>
+      {:else if selected.keysPending && (sub === 'grants' || sub === 'inbox' || sub === 'access-log')}
+        <!--
+          Everything that grants, opens or verifies needs the clinician's keys, and a pending entry
+          has none yet — by design, not by omission. Saying which step is missing beats disabling
+          three tabs into grey mysteries.
+        -->
+        <p class="empty faint">
+          {selected.displayName} has not published keys yet. Send the invitation from the Share tab;
+          once they accept, their keys appear under Published keys for you to check and record.
+        </p>
       {:else if sub === 'grants'}
         <GrantManager {session} therapist={selected} {client} {onGrantChange} />
       {:else if sub === 'inbox'}
         <AssignmentInbox {session} {client} />
       {:else if sub === 'published-keys'}
-        <TherapistKeyIntake therapist={selected} {endpoint} />
+        <TherapistKeyIntake therapist={selected} {endpoint} onkeys={keysArrived} />
       {:else if sub === 'share'}
-        <ShareBuilder {session} therapist={selected} {data} {client} {smtpEnabled} />
+        {#if selected.keysPending}
+          <!-- The invitation is mintable the moment a relationship has a token; sealing is not.
+               ShareBuilder would offer both, so a pending clinician gets the half that exists. -->
+          <InvitePanel therapist={selected} client={client} {smtpEnabled} scope={['read.share']} />
+        {:else}
+          <ShareBuilder {session} therapist={selected} {data} {client} {smtpEnabled} />
+        {/if}
       {:else if sub === 'access-log'}
         <AuditList therapist={selected} {client} />
       {/if}

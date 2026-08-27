@@ -18,6 +18,20 @@ export interface PinnedTherapist extends InboxTherapist {
   /** SAS words the owner confirms out-of-band before sealing/granting. Display only. */
   fingerprintWords: string
   pinnedAt: number
+  /**
+   * True while this entry has a name and an inbox token but NO keys — the state every relationship
+   * now starts in, because the clinician's keys do not exist until they accept the invitation.
+   *
+   * This flag is what finally connects the two halves of the pairing. Without it the console
+   * demanded both public keys at pin time, which meant the owner could only reach the screen that
+   * FETCHES the clinician's published keys by first pasting those same keys by hand — a circle the
+   * intake screen's own header documented ("this screen pins; it does not change which keys this
+   * console seals to") without being able to break. While true, `signPub`/`boxPub` are empty and
+   * nothing may seal to or verify against this entry; the seal paths already refuse independently
+   * (libsodium rejects an empty key, and buildShare checks the pin store), so the flag gates the
+   * INTERFACE and the crypto gates the crypto.
+   */
+  keysPending?: boolean
 }
 
 export interface OwnerSession {

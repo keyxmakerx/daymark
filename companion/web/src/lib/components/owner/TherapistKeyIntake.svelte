@@ -71,10 +71,18 @@
   let {
     therapist,
     endpoint,
+    onkeys = undefined,
   }: {
     therapist: PinnedTherapist
     /** Null until the console has been connected to a server; the read needs the owner token. */
     endpoint: OwnerEndpoint | null
+    /**
+     * Called with the record the owner just CONFIRMED — never with a merely fetched one — so the
+     * console can fill a pending entry's keys in. This is the one place the session's sealing keys
+     * may come from besides the unlock form, and it sits behind the same read-aloud gate: nothing
+     * reaches it that a person did not check against the clinician's own voice.
+     */
+    onkeys?: (record: TherapistKeyRecord) => void
   } = $props()
 
   let busy = $state(false)
@@ -158,10 +166,15 @@
       const outcome = acceptTherapistKeys(pins, record, typed)
       if (outcome === 'pinned-now') {
         savePins(pins)
+        onkeys?.(record)
         status = `Recorded in this browser: both fingerprints, and today's date. Shares you seal to ${therapist.displayName} from here on are checked against that encryption key, and one that changes without you hearing about it is refused rather than sealed to.`
         typedBox = ''
         typedSign = ''
       } else if (outcome === 'already-pinned') {
+        // The pin store already knew these keys, but the SESSION entry may still be waiting on
+        // them (a pending clinician re-confirmed in a later sitting), so the callback fires here
+        // too — it is idempotent on a filled entry and completes a pending one.
+        onkeys?.(record)
         status = `These are the keys already on file for ${therapist.displayName}. Nothing changed, and nothing needed to.`
         typedBox = ''
         typedSign = ''

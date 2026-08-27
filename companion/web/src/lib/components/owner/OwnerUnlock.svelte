@@ -45,8 +45,38 @@
   function addTherapist() {
     error = ''
     if (!ownerIdentity) { error = 'Generate your owner keys first.'; return }
-    if (!tName.trim() || !tSignPubB64.trim() || !tBoxPubB64.trim() || !tInboxToken.trim()) {
-      error = 'Fill in the name, both public keys, and the inbox token.'
+    if (!tName.trim() || !tInboxToken.trim()) {
+      error = 'Fill in at least the name and the inbox token.'
+      return
+    }
+    /*
+     * The keys are OPTIONAL now, because at the moment the owner sets a relationship up the
+     * clinician's keys DO NOT EXIST — they are generated in the clinician's browser during
+     * acceptance, after the invitation this console is about to mint. Requiring them here was the
+     * circle that made the whole pairing undrivable: paste keys to reach the screen that fetches
+     * keys. An entry added without them is marked pending, can mint the invitation, and receives
+     * its keys through the Published-keys tab once the clinician has accepted — checked against
+     * what they read aloud, exactly as a hand-pasted pair would have been.
+     */
+    if (!tSignPubB64.trim() && !tBoxPubB64.trim()) {
+      const t: PinnedTherapist = {
+        id: `pending:${tInboxToken.trim().slice(0, 8)}:${pinned.length}`,
+        displayName: tName.trim(),
+        signPub: new Uint8Array(0),
+        boxPub: new Uint8Array(0),
+        grant: emptyGrant(`pending:${tInboxToken.trim().slice(0, 8)}:${pinned.length}`),
+        inboxToken: tInboxToken.trim(),
+        fingerprintWords: '',
+        pinnedAt: Date.now(),
+        keysPending: true,
+      }
+      pinned.push(t)
+      pinnedView = [...pinned]
+      tName = ''; tSignPubB64 = ''; tBoxPubB64 = ''; tInboxToken = ''
+      return
+    }
+    if (!tSignPubB64.trim() || !tBoxPubB64.trim()) {
+      error = 'Enter both keys, or neither — half a keypair cannot be checked against anything.'
       return
     }
     try {
@@ -97,12 +127,17 @@
         </p>
 
         <fieldset class="add">
-          <legend>Pin a therapist (after verifying out-of-band)</legend>
+          <legend>Add a clinician</legend>
+          <p class="hint">
+            Only the name and the inbox token are needed to start — their keys are created in their
+            browser when they accept your invitation, and arrive on the Published keys tab. Paste
+            keys here only if you already hold them from an earlier exchange.
+          </p>
           <label><span>Display name</span><input type="text" bind:value={tName} autocomplete="off" /></label>
-          <label><span>Ed25519 public key (base64url)</span><input type="text" bind:value={tSignPubB64} autocomplete="off" /></label>
-          <label><span>X25519 public key (base64url)</span><input type="text" bind:value={tBoxPubB64} autocomplete="off" /></label>
+          <label><span>Ed25519 public key <em>(optional — arrives when they accept)</em></span><input type="text" bind:value={tSignPubB64} autocomplete="off" /></label>
+          <label><span>X25519 public key <em>(optional — arrives when they accept)</em></span><input type="text" bind:value={tBoxPubB64} autocomplete="off" /></label>
           <label><span>Inbox token (OOB)</span><input type="password" bind:value={tInboxToken} autocomplete="off" /></label>
-          <button onclick={addTherapist}>Pin therapist</button>
+          <button onclick={addTherapist}>Add clinician</button>
         </fieldset>
 
         {#if pinnedView.length > 0}

@@ -47,7 +47,7 @@ export class SyncClient {
   constructor(
     baseUrl: string,
     private readonly token: string,
-    private readonly doFetch: FetchLike = fetch,
+    private readonly doFetch: FetchLike = fetch.bind(globalThis),
   ) {
     this.base = baseUrl.replace(/\/+$/, '')
   }

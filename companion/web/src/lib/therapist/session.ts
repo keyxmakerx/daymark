@@ -105,7 +105,7 @@ export class PortalClient {
 
   constructor(
     baseUrl: string,
-    private readonly doFetch: FetchLike = fetch,
+    private readonly doFetch: FetchLike = fetch.bind(globalThis),
     private readonly idleMs: number = DEFAULT_IDLE_MS,
   ) {
     this.base = baseUrl.replace(/\/+$/, '')
