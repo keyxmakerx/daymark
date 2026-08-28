@@ -58,6 +58,13 @@ class PairingStore(
                     sid          TEXT    NOT NULL,
                     msg_a        TEXT    NOT NULL,
                     msg_b        TEXT,
+                    -- The sealed negotiation halves (plan §3.7.3 step 5). Each side can only
+                    -- seal AFTER it holds the CPace key, so payload_b rides with the response
+                    -- and payload_a arrives when the owner closes. Opaque here in the strongest
+                    -- sense: they are ciphertext under a key derived from a code this server
+                    -- has never seen and cannot obtain.
+                    payload_a    TEXT,
+                    payload_b    TEXT,
                     state        TEXT    NOT NULL,
                     created_at   INTEGER NOT NULL,
                     responded_at INTEGER,
@@ -78,6 +85,10 @@ class PairingStore(
         val sidB64: String,
         val msgAB64: String,
         val msgBB64: String?,
+        /** The owner's sealed negotiation half, present once they have closed. */
+        val payloadAB64: String?,
+        /** The clinician's sealed negotiation half, present once they have responded. */
+        val payloadBB64: String?,
         val state: State,
         val createdAt: Long,
         val expiry: Long,
@@ -122,7 +133,7 @@ class PairingStore(
      */
     fun openExchangeFor(inviteId: String): Exchange? = synchronized(lock) {
         conn.prepareStatement(
-            "SELECT exchange_id, invite_id, rel_ref, sid, msg_a, msg_b, state, created_at, expiry " +
+            "SELECT exchange_id, invite_id, rel_ref, sid, msg_a, msg_b, payload_a, payload_b, state, created_at, expiry " +
                 "FROM pairing_exchanges WHERE invite_id=? AND state=? AND expiry>? ORDER BY created_at DESC, exchange_id DESC LIMIT 1",
         ).use { ps ->
             ps.setString(1, inviteId)
@@ -138,20 +149,26 @@ class PairingStore(
      * The therapist answers ONE exchange, once. [inviteId] must be the invite the exchange
      * belongs to — a mismatch is GONE, not an error detail, because the caller only ever proves
      * possession of one invite and must learn nothing about any other's exchanges.
+     *
+     * [payloadBB64] is their sealed negotiation half, written in the SAME statement as the
+     * message that makes the key derivable. One UPDATE, not two: a reply that landed without
+     * its payload would leave the owner holding a key and an empty envelope, in a state no
+     * later request could distinguish from "the clinician has not finished typing".
      */
-    fun respond(exchangeId: String, inviteId: String, msgBB64: String): RespondStatus = synchronized(lock) {
+    fun respond(exchangeId: String, inviteId: String, msgBB64: String, payloadBB64: String?): RespondStatus = synchronized(lock) {
         val now = clock()
         val updated = conn.prepareStatement(
-            "UPDATE pairing_exchanges SET state=?, msg_b=?, responded_at=? " +
+            "UPDATE pairing_exchanges SET state=?, msg_b=?, payload_b=?, responded_at=? " +
                 "WHERE exchange_id=? AND invite_id=? AND state=? AND expiry>?",
         ).use { ps ->
             ps.setString(1, State.RESPONDED.name)
             ps.setString(2, msgBB64)
-            ps.setLong(3, now)
-            ps.setString(4, exchangeId)
-            ps.setString(5, inviteId)
-            ps.setString(6, State.OPEN.name)
-            ps.setLong(7, now)
+            if (payloadBB64 != null) ps.setString(3, payloadBB64) else ps.setNull(3, java.sql.Types.VARCHAR)
+            ps.setLong(4, now)
+            ps.setString(5, exchangeId)
+            ps.setString(6, inviteId)
+            ps.setString(7, State.OPEN.name)
+            ps.setLong(8, now)
             ps.executeUpdate()
         }
         if (updated == 1) RespondStatus.OK else RespondStatus.GONE
@@ -160,7 +177,7 @@ class PairingStore(
     /** Owner-side read of one exchange. relRef must match — a miss is null, non-enumerating. */
     fun exchangeFor(exchangeId: String, relRef: String): Exchange? = synchronized(lock) {
         conn.prepareStatement(
-            "SELECT exchange_id, invite_id, rel_ref, sid, msg_a, msg_b, state, created_at, expiry " +
+            "SELECT exchange_id, invite_id, rel_ref, sid, msg_a, msg_b, payload_a, payload_b, state, created_at, expiry " +
                 "FROM pairing_exchanges WHERE exchange_id=? AND rel_ref=?",
         ).use { ps ->
             ps.setString(1, exchangeId)
@@ -171,9 +188,46 @@ class PairingStore(
 
     enum class TransitionStatus { OK, GONE }
 
-    /** Owner acknowledges the reply; RESPONDED → CLOSED. Anything else is GONE. */
-    fun close(exchangeId: String, relRef: String): TransitionStatus =
-        transition(exchangeId, relRef, from = listOf(State.RESPONDED), to = State.CLOSED)
+    /**
+     * Owner acknowledges the reply and publishes their own sealed half; RESPONDED → CLOSED.
+     * Anything else is GONE.
+     *
+     * Closing IS publishing, in one statement, for the reason [respond] gives about its own
+     * payload: a CLOSED exchange with no payload_a is a state the clinician's collect could not
+     * tell apart from "the owner has not looked yet", and the difference matters — one is a
+     * ceremony still in progress and the other is one that silently lost a step.
+     */
+    fun close(exchangeId: String, relRef: String, payloadAB64: String?): TransitionStatus = synchronized(lock) {
+        val updated = conn.prepareStatement(
+            "UPDATE pairing_exchanges SET state=?, payload_a=? WHERE exchange_id=? AND rel_ref=? AND state=?",
+        ).use { ps ->
+            ps.setString(1, State.CLOSED.name)
+            if (payloadAB64 != null) ps.setString(2, payloadAB64) else ps.setNull(2, java.sql.Types.VARCHAR)
+            ps.setString(3, exchangeId)
+            ps.setString(4, relRef)
+            ps.setString(5, State.RESPONDED.name)
+            ps.executeUpdate()
+        }
+        if (updated == 1) TransitionStatus.OK else TransitionStatus.GONE
+    }
+
+    /**
+     * The clinician collects the owner's sealed half — the fourth and last touch of the
+     * ceremony. Gated on the invite, like their other touches, and deliberately answering the
+     * same way for "not closed yet" as for "no such exchange": until the owner has closed there
+     * is nothing to hand over, and which of those two it is, is not this route's to disclose.
+     */
+    fun ownerPayloadFor(exchangeId: String, inviteId: String): String? = synchronized(lock) {
+        conn.prepareStatement(
+            "SELECT payload_a FROM pairing_exchanges WHERE exchange_id=? AND invite_id=? AND state=? AND expiry>?",
+        ).use { ps ->
+            ps.setString(1, exchangeId)
+            ps.setString(2, inviteId)
+            ps.setString(3, State.CLOSED.name)
+            ps.setLong(4, clock())
+            ps.executeQuery().use { rs -> if (rs.next()) rs.getString(1) else null }
+        }
+    }
 
     /** Owner cancels; OPEN or RESPONDED → CANCELLED. The 4.0a owner Cancel. */
     fun cancel(exchangeId: String, relRef: String): TransitionStatus =
@@ -201,6 +255,7 @@ class PairingStore(
         }
     }
 
+    /** Column order matches the two SELECTs above, which are the only callers. */
     private fun rowFrom(rs: java.sql.ResultSet) = Exchange(
         exchangeId = rs.getString(1),
         inviteId = rs.getString(2),
@@ -208,9 +263,11 @@ class PairingStore(
         sidB64 = rs.getString(4),
         msgAB64 = rs.getString(5),
         msgBB64 = rs.getString(6),
-        state = State.valueOf(rs.getString(7)),
-        createdAt = rs.getLong(8),
-        expiry = rs.getLong(9),
+        payloadAB64 = rs.getString(7),
+        payloadBB64 = rs.getString(8),
+        state = State.valueOf(rs.getString(9)),
+        createdAt = rs.getLong(10),
+        expiry = rs.getLong(11),
     )
 
     override fun close() {

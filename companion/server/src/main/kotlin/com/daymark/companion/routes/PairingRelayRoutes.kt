@@ -32,7 +32,16 @@ private fun auditSafely(block: () -> Unit) {
 
 @Serializable data class PairingOpenRequest(val inviteId: String, val sidB64: String, val msgAB64: String)
 @Serializable data class PairingOpenResponse(val exchangeId: String)
-@Serializable data class PairingExchangeView(val exchangeId: String, val state: String, val msgBB64: String? = null)
+@Serializable data class PairingExchangeView(
+    val exchangeId: String,
+    val state: String,
+    val msgBB64: String? = null,
+    /** The clinician's sealed negotiation half, once they have answered. */
+    val payloadBB64: String? = null,
+)
+@Serializable data class PairingCloseRequest(val payloadB64: String? = null)
+@Serializable data class PairingCollectRequest(val secret: String)
+@Serializable data class PairingCollectResponse(val payloadB64: String)
 @Serializable data class PairingFetchRequest(val secret: String)
 
 /**
@@ -42,7 +51,7 @@ private fun auditSafely(block: () -> Unit) {
  * and this response requires exactly the same proof.
  */
 @Serializable data class PairingFetchResponse(val exchangeId: String, val relRef: String, val sidB64: String, val msgAB64: String)
-@Serializable data class PairingRespondRequest(val secret: String, val msgBB64: String)
+@Serializable data class PairingRespondRequest(val secret: String, val msgBB64: String, val payloadB64: String? = null)
 
 /** A CPace sid is 16 bytes, always (draft suite constant; both client impls refuse anything else). */
 private const val SID_BYTES = 16
@@ -53,6 +62,15 @@ private const val SID_BYTES = 16
  * message, it is somebody using the relay as storage.
  */
 private const val MAX_MSG_BYTES = 200
+
+/**
+ * A sealed negotiation half: two 32-byte public keys, a capability list and a little framing,
+ * inside an AEAD envelope. 4 KiB is many times what either side produces and still refuses a
+ * caller using the relay as a filing cabinet. Not a security boundary — the envelope's key is —
+ * but the relay stores what it is handed, and what it stores should be bounded by what the
+ * ceremony can plausibly need.
+ */
+private const val MAX_PAYLOAD_BYTES = 4096
 
 /**
  * The store-and-forward relay for the CPace pairing exchange (plan §3.7.3 — "owner posts,
@@ -159,16 +177,28 @@ fun Route.pairingRelayRoutes(
             val exchangeId = call.parameters["exchangeId"] ?: return@get call.respond(HttpStatusCode.BadRequest, ErrorDto("missing exchangeId"))
             val exchange = pairingStore.exchangeFor(exchangeId, relRef)
                 ?: return@get call.respond(HttpStatusCode.NotFound, ErrorDto("no such exchange"))
-            call.respond(PairingExchangeView(exchange.exchangeId, exchange.state.name, exchange.msgBB64))
+            call.respond(
+                PairingExchangeView(
+                    exchange.exchangeId,
+                    exchange.state.name,
+                    exchange.msgBB64,
+                    exchange.payloadBB64,
+                ),
+            )
         }
 
-        // The owner acknowledges the reply (RESPONDED -> CLOSED). Bookkeeping for the console's
-        // waiting / in progress / finished rendering; the crypto outcome lives client-side.
+        // The owner acknowledges the reply and publishes their own sealed half
+        // (RESPONDED -> CLOSED). Closing IS publishing — see PairingStore.close for why the two
+        // are one statement rather than two calls the ceremony could land between.
         post("/{exchangeId}/close") {
             if (!call.ownerAuthorized(ownerGuard)) return@post
             val relRef = call.parameters["relRef"] ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("missing relRef"))
             val exchangeId = call.parameters["exchangeId"] ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("missing exchangeId"))
-            when (pairingStore.close(exchangeId, relRef)) {
+            val req = call.receiveCappedJson<PairingCloseRequest>() ?: return@post
+            if (req.payloadB64 != null && !decodedSize(req.payloadB64, 1, MAX_PAYLOAD_BYTES)) {
+                return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("implausible payload size"))
+            }
+            when (pairingStore.close(exchangeId, relRef, req.payloadB64)) {
                 PairingStore.TransitionStatus.OK -> call.respond(HttpStatusCode.NoContent)
                 PairingStore.TransitionStatus.GONE -> call.respond(HttpStatusCode.Gone, ErrorDto("exchange unavailable"))
             }
@@ -260,10 +290,13 @@ fun Route.pairingRelayRoutes(
             if (!decodedSize(req.msgBB64, 34, MAX_MSG_BYTES)) {
                 return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("implausible message size"))
             }
+            if (req.payloadB64 != null && !decodedSize(req.payloadB64, 1, MAX_PAYLOAD_BYTES)) {
+                return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("implausible payload size"))
+            }
             val relRef = call.relayAuthorized(req.secret) ?: return@post
             val inviteId = call.parameters["inviteId"]!!
             val exchangeId = call.parameters["exchangeId"] ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("missing exchangeId"))
-            when (pairingStore.respond(exchangeId, inviteId, req.msgBB64)) {
+            when (pairingStore.respond(exchangeId, inviteId, req.msgBB64, req.payloadB64)) {
                 PairingStore.RespondStatus.OK -> {
                     call.respond(HttpStatusCode.NoContent)
                     auditSafely {
@@ -272,6 +305,29 @@ fun Route.pairingRelayRoutes(
                 }
                 PairingStore.RespondStatus.GONE -> call.respond(HttpStatusCode.Gone, ErrorDto("exchange unavailable"))
             }
+        }
+
+        /*
+         * The clinician collects the owner's sealed half — the fourth and final touch.
+         *
+         * It is a POST rather than a GET because it carries the invite secret in a body, and a
+         * secret in a URL is a secret in a proxy log, a browser history and a Referer header.
+         * Same source budget and the same flat GONE as every other therapist touch: "the owner
+         * has not closed yet" and "there is no such exchange" answer identically, because the
+         * difference between them is the state of somebody else's ceremony.
+         */
+        post("/{exchangeId}/collect") {
+            call.response.header("Referrer-Policy", "no-referrer")
+            if (!pairSourceLimiter.allow(call.clientAddress())) {
+                return@post call.respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited"))
+            }
+            val req = call.receiveCappedJson<PairingCollectRequest>() ?: return@post
+            call.relayAuthorized(req.secret) ?: return@post
+            val inviteId = call.parameters["inviteId"]!!
+            val exchangeId = call.parameters["exchangeId"] ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("missing exchangeId"))
+            val payload = pairingStore.ownerPayloadFor(exchangeId, inviteId)
+                ?: return@post call.respond(HttpStatusCode.Gone, ErrorDto("exchange unavailable"))
+            call.respond(PairingCollectResponse(payload))
         }
     }
 }

@@ -43,6 +43,8 @@ function relayServer() {
     sidB64?: string
     msgAB64?: string
     msgBB64?: string
+    payloadA?: string
+    payloadB?: string
     state: 'NONE' | 'OPEN' | 'RESPONDED' | 'CLOSED' | 'CANCELLED'
   } = { id: 'exchange-1', state: 'NONE' }
 
@@ -78,20 +80,36 @@ function relayServer() {
       })
     }
     if (url === `/v1/invite/${INVITE_ID}/pairing/${exchange.id}/respond` && init?.method === 'POST') {
-      const req = JSON.parse(body) as { secret: string; msgBB64: string }
+      const req = JSON.parse(body) as { secret: string; msgBB64: string; payloadB64?: string }
       if (req.secret !== INVITE_SECRET) return respond(401, { error: 'unauthorized' })
       if (exchange.state !== 'OPEN') return respond(410, { error: 'exchange unavailable' })
       exchange.msgBB64 = req.msgBB64
+      exchange.payloadB = req.payloadB64
       exchange.state = 'RESPONDED'
       return respond(204)
     }
     if (url === `/v1/relations/${REL_REF}/pairing/${exchange.id}` && (init?.method ?? 'GET') === 'GET') {
       if (exchange.state === 'NONE') return respond(404, { error: 'no such exchange' })
-      return respond(200, { exchangeId: exchange.id, state: exchange.state, msgBB64: exchange.msgBB64 })
+      return respond(200, {
+        exchangeId: exchange.id,
+        state: exchange.state,
+        msgBB64: exchange.msgBB64,
+        payloadBB64: exchange.payloadB,
+      })
     }
     if (url === `/v1/relations/${REL_REF}/pairing/${exchange.id}/close` && init?.method === 'POST') {
+      const req = JSON.parse(body || '{}') as { payloadB64?: string }
+      exchange.payloadA = req.payloadB64
       exchange.state = 'CLOSED'
       return respond(204)
+    }
+    if (url === `/v1/invite/${INVITE_ID}/pairing/${exchange.id}/collect` && init?.method === 'POST') {
+      const req = JSON.parse(body) as { secret: string }
+      if (req.secret !== INVITE_SECRET) return respond(401, { error: 'unauthorized' })
+      if (exchange.state !== 'CLOSED' || !exchange.payloadA) {
+        return respond(410, { error: 'exchange unavailable' })
+      }
+      return respond(200, { payloadB64: exchange.payloadA })
     }
     throw new Error(`unexpected request: ${init?.method} ${url}`)
   }) as typeof fetch

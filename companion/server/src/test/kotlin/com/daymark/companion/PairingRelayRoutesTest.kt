@@ -140,13 +140,96 @@ class PairingRelayRoutesTest {
         assertTrue(readBody.contains("\"state\":\"RESPONDED\""))
         assertTrue(readBody.contains("\"msgBB64\":\"$msgB\""), "MSGb must come back byte-identical")
 
-        val close = client.post("/v1/relations/$relRef/pairing/$exchangeId/close") { bearerAuth(ownerToken) }
+        val close = client.post("/v1/relations/$relRef/pairing/$exchangeId/close") {
+            bearerAuth(ownerToken)
+            contentType(ContentType.Application.Json)
+            setBody("""{"payloadB64":"${fakeMsg(7)}"}""")
+        }
         assertEquals(HttpStatusCode.NoContent, close.status)
         val after = client.get("/v1/relations/$relRef/pairing/$exchangeId") { bearerAuth(ownerToken) }
         assertTrue(after.bodyAsText().contains("\"state\":\"CLOSED\""))
 
         // The relay consumed nothing: the invite is still PENDING, ready for enrolment.
         assertEquals("PENDING", s.auth.inviteStatusFor(minted.inviteId))
+    }
+
+    @Test
+    fun `the sealed negotiation halves cross in both directions, byte for byte`() = testApplication {
+        // The ceremony's fourth touch. Each side can only seal AFTER it holds the key, so the
+        // clinician's half rides with their reply and the owner's with their close — and this
+        // asserts both arrive unaltered, because the two ends are independent implementations
+        // agreeing on exact ciphertext and a relay that "helpfully" re-encoded would break a
+        // pairing in a way no error message would explain.
+        var now = 1_000_000L
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val s = stores(dir, cfg) { now }
+        application { module(cfg, null, null, s.rel, s.auth, s.audit, pairingStore = s.pairing) }
+        val minted = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
+        val therapistHalf = fakeMsg(11)
+        val ownerHalf = fakeMsg(12)
+
+        val exchangeId = exchangeIdOf(ownerOpen(minted.inviteId, sid(1), fakeMsg(1)).bodyAsText())
+
+        // Nothing to collect before the owner has closed — and it reads exactly like an
+        // exchange that never existed.
+        val early = client.post("/v1/invite/${minted.inviteId}/pairing/$exchangeId/collect") {
+            contentType(ContentType.Application.Json); setBody("""{"secret":"${minted.secret}"}""")
+        }
+        assertEquals(HttpStatusCode.Gone, early.status)
+        assertEquals("""{"error":"exchange unavailable"}""", early.bodyAsText())
+
+        val respond = client.post("/v1/invite/${minted.inviteId}/pairing/$exchangeId/respond") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"secret":"${minted.secret}","msgBB64":"${fakeMsg(2)}","payloadB64":"$therapistHalf"}""")
+        }
+        assertEquals(HttpStatusCode.NoContent, respond.status)
+
+        // The owner sees the clinician's sealed half beside the reply, unchanged.
+        val read = client.get("/v1/relations/$relRef/pairing/$exchangeId") { bearerAuth(ownerToken) }
+        assertTrue(read.bodyAsText().contains("\"payloadBB64\":\"$therapistHalf\""))
+
+        val close = client.post("/v1/relations/$relRef/pairing/$exchangeId/close") {
+            bearerAuth(ownerToken)
+            contentType(ContentType.Application.Json)
+            setBody("""{"payloadB64":"$ownerHalf"}""")
+        }
+        assertEquals(HttpStatusCode.NoContent, close.status)
+
+        // And now the clinician collects the owner's half, unchanged.
+        val collect = client.post("/v1/invite/${minted.inviteId}/pairing/$exchangeId/collect") {
+            contentType(ContentType.Application.Json); setBody("""{"secret":"${minted.secret}"}""")
+        }
+        assertEquals(HttpStatusCode.OK, collect.status)
+        assertTrue(collect.bodyAsText().contains("\"payloadB64\":\"$ownerHalf\""))
+
+        // A wrong secret gets nothing, and the relay does not become a payload oracle.
+        val wrong = client.post("/v1/invite/${minted.inviteId}/pairing/$exchangeId/collect") {
+            contentType(ContentType.Application.Json); setBody("""{"secret":"not-the-secret"}""")
+        }
+        assertEquals(HttpStatusCode.Unauthorized, wrong.status)
+        assertFalse(wrong.bodyAsText().contains(ownerHalf))
+    }
+
+    @Test
+    fun `an implausible payload is refused on both surfaces and nothing is stored`() = testApplication {
+        var now = 1_000_000L
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val s = stores(dir, cfg) { now }
+        application { module(cfg, null, null, s.rel, s.auth, s.audit, pairingStore = s.pairing) }
+        val minted = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
+        val exchangeId = exchangeIdOf(ownerOpen(minted.inviteId, sid(1), fakeMsg(1)).bodyAsText())
+        val oversized = b64(ByteArray(4097))
+
+        val respond = client.post("/v1/invite/${minted.inviteId}/pairing/$exchangeId/respond") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"secret":"${minted.secret}","msgBB64":"${fakeMsg(2)}","payloadB64":"$oversized"}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, respond.status)
+        // Refused means refused: the exchange is untouched, so an honest retry still works.
+        assertEquals(PairingStore.State.OPEN, s.pairing.exchangeFor(exchangeId, relRef)!!.state)
+        assertNull(s.pairing.exchangeFor(exchangeId, relRef)!!.payloadBB64)
     }
 
     @Test
