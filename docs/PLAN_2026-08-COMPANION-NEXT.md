@@ -1420,6 +1420,21 @@ owner-visible invite state (waiting / in progress / finished / dead), an owner *
 Leave / Revoke verbs of §3.6.1, and the new `AuditAction` kinds — including one for a failed PAKE
 attempt, with a threshold that alerts (§3.7.5).
 
+> **PROGRESS 2026-08-28 — the transport and the channel now exist; the ceremony is not yet moved
+> onto them.** Landed, additive, beside the working ceremony: (1) the relay —
+> `PairingStore` + `/v1/relations/{relRef}/pairing` (owner: open/read/close/**Cancel**) and
+> `/v1/invite/{id}/pairing` (therapist: fetch/respond, invite-secret proof that consumes
+> nothing, shared fail counter and source budget with redeem), blobs opaque and byte-identical,
+> `pairing.opened/responded/cancelled` audit actions; (2) the client (`pairing/relay.ts`)
+> driving the real CPace over those routes, with the **§3.7.4 test**: a full pairing through a
+> recording transport, every request grepped for the code in five encodings, planted-example
+> guard; (3) the envelope layer (`pairing/envelope.ts`) — directional keys off the ISK, AEAD
+> bound to sid+direction+version, and the point where a wrong code is finally observable: as a
+> null, one bit, no diagnosis, so a typo can never be rendered as an attack. Still to move:
+> the negotiation PAYLOADS (keys, capabilities, TOTP enrolment inside the channel), the UI
+> surfaces, and the failed-PAKE audit action with its alert threshold — those change the
+> ceremony people currently use, so they land as a deliberate stage, not a side effect.
+
 **4.0b — the phone becomes the owner's pairing device.** §3.7.6 + §3.6.5 layer 1. A separate stage,
 not a separate design: the protocol is identical, only the device running the owner's half changes.
 

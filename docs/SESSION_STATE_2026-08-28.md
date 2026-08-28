@@ -33,9 +33,17 @@ companion.yml or a merge to main.
    `companion/web/e2e/cpace-live.mts` (vitest-driven; sumo's ESM dist is broken, use the alias)
    + `CpaceLiveCli.kt`. Plan doc gate table updated in place.
 
-Suite counts at `0d76024`: web 1300/1300, svelte-check 519 files clean; server 365/365 local.
-CI on `0d76024` was in flight at write time — it is the oracle for `:sync-crypto` (root Gradle
-cannot run on this machine; dl.google.com is proxy-blocked).
+4. **The CPace relay + envelope layer** (`c985e78` and after): PairingStore + owner/therapist
+   relay routes (opaque blobs, invite-secret proof that consumes nothing, shared counter with
+   redeem — proven by test), `pairing/relay.ts` with the §3.7.4 code-never-on-the-wire test,
+   and `pairing/envelope.ts` — directional AEAD over the ISK, where a wrong code surfaces as a
+   null and nothing more. All additive; the demoable ceremony is untouched. See the PROGRESS
+   banner under 4.0a in the plan doc for what deliberately remains.
+
+CI: `0d76024` green on BOTH workflows (confirms :sync-crypto with lazysodium 5.2.0, the parity
+test's AAR wiring, and the Kotlin CPace vectors in the root build). Root Gradle still cannot
+run on this machine; CI stays the oracle. Suite counts at the last local run: server 373/373,
+web 1313/1313, svelte-check 523 files clean.
 
 ## Standing constraints (verbatim rules that keep recurring)
 
