@@ -84,6 +84,27 @@ enum class AuditAction(val wire: String) {
     PAIR_GUESS_FAILED("pair.guess_failed"),
 
     /**
+     * The owner posted the opening message of a CPace pairing exchange for one of their invites.
+     * Lifecycle receipt only: the message is an opaque blob to the server (it does not hold the
+     * pairing code and cannot read the exchange), so this line says an exchange began, not that
+     * anything about it was verified.
+     */
+    PAIRING_OPENED("pairing.opened"),
+
+    /**
+     * A holder of the invite link answered the newest open exchange. Same contract as
+     * [PAIRING_OPENED]: a receipt that a reply was relayed, never a statement about who replied
+     * or whether their code was right — the server cannot know either, by design (§3.7.4). If
+     * the codes did not match, the owner's side simply fails to open what follows and the owner
+     * decides what that means; that decision is [INVITE_REPORTED] when it is hostile.
+     */
+    PAIRING_RESPONDED("pairing.responded"),
+
+    /** The owner cancelled a pairing exchange — the 4.0a Cancel, recorded because withdrawal of
+     *  an in-flight ceremony is exactly the kind of event a person wants to find again later. */
+    PAIRING_CANCELLED("pairing.cancelled"),
+
+    /**
      * A person explicitly reported an invitation as unexpected, and it was killed on the spot.
      *
      * The counterpart to [PAIR_GUESS_FAILED], and the reason the two must never be one action: a

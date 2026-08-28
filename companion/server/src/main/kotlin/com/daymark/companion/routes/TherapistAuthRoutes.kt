@@ -502,8 +502,9 @@ internal suspend fun ApplicationCall.ownerAuthorized(guard: AuthGuard): Boolean 
 }
 
 /** Small fixed non-content annotations for an audit entry: the acting credential id, plus the
- *  source IP only when the operator opted in (COMPANION_SECURITY.md §9 — IP off by default). */
-private fun auditMeta(sourceIpEnabled: Boolean, call: ApplicationCall, vararg extra: Pair<String, String>): Map<String, String> {
+ *  source IP only when the operator opted in (COMPANION_SECURITY.md §9 — IP off by default).
+ *  Internal so the pairing relay's audit lines carry the same shape from the same code. */
+internal fun auditMeta(sourceIpEnabled: Boolean, call: ApplicationCall, vararg extra: Pair<String, String>): Map<String, String> {
     val meta = extra.toMap().toMutableMap()
     if (sourceIpEnabled) meta["sourceIp"] = call.clientAddress()
     return meta

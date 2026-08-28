@@ -2,6 +2,7 @@ package com.daymark.companion
 
 import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.auth.AuthStore
+import com.daymark.companion.auth.PairingStore
 import com.daymark.companion.mail.Mailer
 import com.daymark.companion.mail.OwnerAccountStore
 import com.daymark.companion.mail.OwnerNotifier
@@ -10,6 +11,7 @@ import com.daymark.companion.routes.ErrorDto
 import com.daymark.companion.routes.auditChainRoutes
 import com.daymark.companion.routes.auditRoutes
 import com.daymark.companion.routes.orgRoutes
+import com.daymark.companion.routes.pairingRelayRoutes
 import com.daymark.companion.routes.recoveryRoutes
 import com.daymark.companion.routes.relationRoutes
 import com.daymark.companion.routes.syncRoutes
@@ -116,6 +118,7 @@ fun Application.module(
     // them; a new parameter at the end compiles for all of them and changes nothing.
     orgStore: OrgStore? = null,
     orgAuditStore: AuditStore? = null,
+    pairingStore: PairingStore? = null,
 ) {
     // Publish the trusted-proxy allowlist before any route runs: every per-client lockout and rate
     // limit reads it via ApplicationCall.clientAddress(). Empty (the default) means forwarded
@@ -194,6 +197,11 @@ fun Application.module(
     // patient's access history can never be keyed into the same table. See AuditStore's `dbName`.
     val orgAudit = if (config.therapistAuthEnabled) {
         orgAuditStore ?: AuditStore(config.dataDir, config.auditRetentionDays * 86_400L, dbName = "org-audit.db")
+    } else null
+    // Store-and-forward state for the CPace pairing exchange (plan §3.7.3). Same feature gate:
+    // an exchange belongs to an invite, and invites only exist when the portal is on.
+    val pairing = if (config.therapistAuthEnabled) {
+        pairingStore ?: PairingStore(config.dataDir)
     } else null
 
     routing {
@@ -286,6 +294,19 @@ fun Application.module(
                 auditStore = audit,
                 auditSourceIp = config.auditSourceIpEnabled,
             )
+            // The CPace relay: opaque pairing blobs between the owner and a holder of the invite
+            // link. The server never has the code and never parses a message — see the routes file.
+            if (pairing != null) {
+                pairingRelayRoutes(
+                    authStore = auth,
+                    pairingStore = pairing,
+                    ownerGuard = guard,
+                    auditStore = audit,
+                    totpLockoutFails = config.totpLockoutFails,
+                    totpLockoutSeconds = config.totpLockoutSeconds,
+                    auditSourceIp = config.auditSourceIpEnabled,
+                )
+            }
             auditRoutes(audit, guard)
             // The chain's own check: recompute the stored audit chain for one relationship and
             // report its head. Owner bearer token, same gate as the therapist-keys read — a head

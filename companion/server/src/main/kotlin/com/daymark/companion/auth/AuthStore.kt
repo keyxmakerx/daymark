@@ -304,6 +304,48 @@ class AuthStore(
     }
 
     /**
+     * Verify an invite secret WITHOUT consuming the invite — the gate for the pairing-relay
+     * touches (fetch / respond), which have to prove possession of the link on every request
+     * while leaving the invite PENDING for however many protocol runs the pairing takes.
+     *
+     * Everything about failure is [redeemInvite]'s, not a parallel copy: the same
+     * [applyWrongSecretBackoffLocked], the same shared fail counter, the same statuses. That is
+     * the point — a relay touch, a redeem and a report all verify the SAME secret, so if any of
+     * them kept its own counter an attacker would alternate surfaces and multiply their guess
+     * budget by the number of routes. One secret, one counter, however many doors.
+     *
+     * What it deliberately does NOT do: move the status, mint a ticket, or write anything on
+     * success. Proof of possession is a question, and questions leave no marks.
+     */
+    fun checkInviteSecret(inviteId: String, secret: String, lockoutFails: Int, lockoutBaseMs: Long): RedeemResult = synchronized(lock) {
+        val now = clock()
+        val row = readInviteLocked(inviteId) ?: return RedeemResult(RedeemStatus.GONE)
+        if (row.status != "PENDING") return RedeemResult(RedeemStatus.GONE)
+        if (now >= row.expiry) {
+            setInviteStatus(inviteId, "EXPIRED")
+            return RedeemResult(RedeemStatus.GONE)
+        }
+        if (row.lockedUntil > now) return RedeemResult(RedeemStatus.LOCKED, row.relRef)
+        if (Secrets.verifySecret(secret, row.secretArgon2)) {
+            return RedeemResult(RedeemStatus.OK, row.relRef, row.scope)
+        }
+        val armed = applyWrongSecretBackoffLocked(inviteId, row, now, lockoutFails, lockoutBaseMs)
+        return RedeemResult(RedeemStatus.WRONG_SECRET, row.relRef, lockoutArmed = armed)
+    }
+
+    data class InviteMeta(val relRef: String, val status: String, val expiry: Long)
+
+    /**
+     * The owner-facing view of one invite row: whose it is, where it stands, when it dies.
+     * For route code that must check an invite BELONGS to the caller's relationship before
+     * acting on it (the pairing relay's open). Carries no secret material and never will.
+     */
+    fun inviteMetaFor(inviteId: String): InviteMeta? = synchronized(lock) {
+        val row = readInviteLocked(inviteId) ?: return null
+        InviteMeta(row.relRef, row.status, row.expiry)
+    }
+
+    /**
      * The owner says "this wasn't me": drive the invite to the REPORTED terminal state at once.
      *
      * ## Why this is a separate verb, and why nothing automatic may call it
