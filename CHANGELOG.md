@@ -7,6 +7,49 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Companion — the pairing ceremony is complete, end to end.** A clinician can now be invited,
+  accept, and end up with keys the owner has actually confirmed — no step of it hand-carried:
+  the invitation link opens an acceptance page (one code, one passphrase); the therapist's public
+  keys travel to the owner over a new route, and the owner's travel back over its mirror (the
+  auth deliberately reversed on each); and both fingerprints are read aloud between two humans,
+  because the server relays keys and vouches for none of them. The whole ceremony has been driven
+  in a real browser, both sides, with real TOTP codes computed from the enrolment screen.
+- **Companion — sign-in asks for two things instead of nine.** Seven of the nine fields were
+  bytes the product had no way to move, so a person carried them. Now the browser that accepted
+  the invitation keeps a record, the owner publishes their keys, and the origin answers the
+  server-address question. A returning clinician types the code from their authenticator and
+  their reading passphrase. The nine survive as a folded-away fallback for a browser with no
+  record, running the same unlock so it cannot drift into a second, less careful sign-in.
+- **Companion — recovery codes (crypto complete; storage honest about not existing yet).** The
+  data key is now random and wrapped once per secret: the passphrase or a written-down recovery
+  code opens the same key, and a server holding both wrapped slots and neither secret recovers
+  nothing — that sentence is an adversary test, not a hope. The code is 29 symbols over a
+  31-symbol alphabet with both halves of every handwriting collision removed and a check symbol
+  that provably catches every substitution and transposition. The panel says plainly that no
+  transport or storage for the wrapped key exists yet, on screen, not in a comment.
+- **Companion — a practice gets a console, and the three-plane rule gets teeth.** Orgs, members,
+  roles, and an org admin scoped to their own practice — plus the invariant that makes the shape
+  safe to offer at all, as a test: an admin can revoke anyone and see who accessed what, and
+  cannot read a single clinical note. The test parses the role table out of the specification at
+  run time and iterates the whole catalog, so code and document cannot drift apart silently.
+- **Companion — first-run finally asks what this machine is for.** Solo (one person, one
+  machine), Paired (you and a clinician), or Practice — sixty-nine words before the choices,
+  storage that fails open to a repeated question rather than a wrong screen, and no sentence
+  anywhere claiming the copy is safe or survives a lost phone, enforced by a copy test.
+- **Companion — the audit chain can now check itself, and hands you the value worth keeping.**
+  The server recomputes a relationship's hash chain oldest-to-newest and reports the extent, the
+  first internal break if any, and the head hash as stored — behind the owner's token, appending
+  nothing (a check that extended the chain it was checking would move the head on every look).
+  The admin console renders the head with a real SHA-256 and says, on every view, what a clean
+  verdict is not: a server that quietly declines to append, or truncates its tail, verifies
+  perfectly. The head's real value is being written down where the server cannot reach.
+- **CPace, on both sides of the pair.** The password-authenticated key exchange the remote
+  pairing design rests on now exists twice — once for the browser, once for the JVM the phone
+  will run — each written directly against the IETF draft and pinned byte-for-byte to the CFRG
+  working group's published test vectors, so the two agree through the standard rather than
+  through each other. A live exchange was run between them in both directions with fresh
+  randomness: equal keys on a matching code, silently diverging keys on a wrong one — the
+  property the invite burn rule leans on.
 - **The Sky.** Everything you have ever logged, drawn as one field of stars — a check-in, a journal
   entry, a practice you worked through, a step you finished, a goal you reached, a life event you
   marked. One star per act, placed by date. It is reachable from **More** and deliberately **not a
@@ -197,6 +240,17 @@ All notable changes to this project are documented here. The format is based on
 - **First-run onboarding wizard** (skippable): daily-reminder setup, optional PIN lock.
 
 ### Changed
+- **"Update" is now a real word — 0.2.0.** Every CI build used to sign with a throwaway key, so
+  every install was an uninstall-and-reinstall on an app where uninstalling deletes the data. A
+  committed testing keystore (its password beside it in the clear, because this key is a channel,
+  not an identity) makes every artifact from here on update in place. One last migration is
+  required and stated honestly: export a backup, uninstall, install 0.2.0, import. Real releases
+  keep signing with the secrets-based key that never enters the repo.
+- **`DAYMARK_THERAPIST_AUTH` is now in the deployment files it always needed to be in.** It gates
+  the entire relationship surface and defaulted off — right for Solo, fatal for the other two
+  shapes — while existing only in `Config.kt`, so operators met it as a 503 at the last step of a
+  ceremony that had appeared to work. It is in `docker-compose.yml` and `.env.example` with the
+  reasoning at the call site.
 - **One place now decides whether the app may interrupt you.** Each feature used to ration its own
   interruptions, which meant nothing could see the total: three features each politely limiting
   themselves to "twice a week" is six. The interruption budget is asked a single question —
@@ -261,7 +315,33 @@ All notable changes to this project are documented here. The format is based on
 - **No new permission** was added for any of these features — the app still has no `INTERNET`
   permission and makes no network connections.
 
+### Fixed
+- **Every invitation link this server ever sent rendered a blank page.** `/portal/invite`
+  returned 200, served the right markup, had a passing test — and displayed nothing, because the
+  bundle's relative asset URLs resolved against the URL's directory and every script came back as
+  HTML. It is now a redirect that carries the fragment (the secret never reaches the server
+  either way), and the test asserts the redirect, since the old 200-assertion was itself the bug.
+- **Every server call from a real browser threw "Illegal invocation".** Six call sites stored a
+  bare `fetch` as a default parameter, which arrives with the wrong `this` in Chromium. Every
+  test passed throughout, because tests inject their own fetch and a default nobody evaluates is
+  a default nobody notices. Found the only way it could be: driving the built pages in a real
+  browser, which is now part of how this repository verifies itself.
+
 ### Security
+- **The phone's actual cryptography moves from 2019 to 2024.** The C library doing the encrypting
+  on the phone was libsodium 1.0.18, bundled inside a wrapper whose version number said nothing
+  about it; 1.0.20 brings five years of hardening (AEAD MAC memory fences, optimizer blockers,
+  ed25519 small-order point rejection). The comment that had justified staying put asserted a
+  cross-artifact parity invariant that measurement disproved — it is replaced by a test that
+  parses both artifacts' bytecode on every run and was itself proven against four deliberately
+  broken artifacts before it was allowed to guard anything.
+- **A lockout is recorded once, when it is armed — locked doors stop writing on behalf of
+  whoever knocks.** Both the invite routes and the TOTP sign-in used to append an audit row for
+  every request that bounced off an already-armed lockout: a free-to-the-caller path writing
+  attacker-paced volume, permanently, into the one log the owner reads. Each lockout episode is
+  now one row, written by the request that paid to arm it, on whichever surface armed it — and a
+  second episode still writes a second row, pinned by tests on both surfaces so "once per
+  lockout" can never decay into "once ever".
 - **Photos keep the picture and nothing else.** A JPEG straight off a phone camera carries GPS
   latitude and longitude to five decimal places, the exact capture time, and the device's make,
   model and serial. Daymark has no location feature, and it would be a strange promise to make on
