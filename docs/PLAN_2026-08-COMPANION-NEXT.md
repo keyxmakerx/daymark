@@ -1435,6 +1435,29 @@ attempt, with a threshold that alerts (§3.7.5).
 > surfaces, and the failed-PAKE audit action with its alert threshold — those change the
 > ceremony people currently use, so they land as a deliberate stage, not a side effect.
 
+> **PROGRESS 2026-08-28 (later) — the protocol half is finished; only the screens are left.**
+> Landed on `claude/cpace-ceremony`: the **pairing code** (`pairing/pairingCode.ts`) — five
+> payload symbols plus a check symbol over the recovery alphabet, generated on the owner's
+> device, with every single-character error and every transposition proven caught
+> *exhaustively* (that check keeps honest typos out of the invite's guess budget, which is a
+> security property rather than a nicety); and the **negotiation**
+> (`pairing/negotiation.ts` + payload columns and a `collect` route on the relay) — each side's
+> two public keys and the scope, sealed in a directional envelope, carried in four touches.
+>
+> **That is the piece that retires the read-aloud fingerprint.** Keys now arrive authenticated
+> by the envelope having opened at all, which required the code: six characters spoken once,
+> replacing four character-groups compared twice in both directions. §3.7.5.1's demotion of the
+> SAS is therefore now implemented rather than planned — the fingerprint stays on the
+> connections surface for out-of-band verification later, and stops being a blocking step.
+>
+> Still to build, and it is now only interface work: the owner console showing the code and the
+> exchange's waiting / in-progress / finished state with its Cancel; the acceptance page asking
+> for the code; TOTP enrolment moved inside the channel; and the failed-PAKE audit action with
+> a threshold that alerts. **The product decision that gates it:** whether the code ceremony
+> REPLACES the fingerprint ceremony on those screens or ships beside it first. Replacing is the
+> design's intent and the better end state; shipping beside it costs a second path to maintain
+> but leaves a working flow untouched while the new one is exercised by real people.
+
 **4.0b — the phone becomes the owner's pairing device.** §3.7.6 + §3.6.5 layer 1. A separate stage,
 not a separate design: the protocol is identical, only the device running the owner's half changes.
 
