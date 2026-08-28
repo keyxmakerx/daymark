@@ -189,16 +189,38 @@ fun Route.therapistAuthRoutes(
                         auditSafely {
                             auditStore.append(rel, AuditActor.THERAPIST, AuditAction.PAIR_GUESS_FAILED, meta = auditMeta(auditSourceIp, call))
                         }
-                    }
-                }
-                AuthStore.RedeemStatus.LOCKED -> {
-                    call.respond(HttpStatusCode.TooManyRequests, ErrorDto("temporarily locked"))
-                    result.relRef?.let { rel ->
-                        auditSafely {
-                            auditStore.append(rel, AuditActor.THERAPIST, AuditAction.LOCKOUT, meta = auditMeta(auditSourceIp, call))
+                        // The LOCKOUT row is written HERE, on the one failure that armed the
+                        // lockout, and nowhere else. The LOCKED branch below explains why the
+                        // rows that used to be written there were the attacker's to mint. It gets
+                        // its OWN auditSafely block: this row is the episode's only record, and a
+                        // throw in the routine guess append above must not take it down with it.
+                        // A crash between the store's durable lockout write and this append can
+                        // still lose the row — accepted; audit is additive, never load-bearing.
+                        if (result.lockoutArmed) {
+                            auditSafely {
+                                auditStore.append(rel, AuditActor.THERAPIST, AuditAction.LOCKOUT, meta = auditMeta(auditSourceIp, call))
+                            }
                         }
                     }
                 }
+                // Deliberately NO audit append on the already-locked path, and the absence is the
+                // control rather than an economy. Reaching this branch takes no secret and no
+                // crypto work — the lockout check is the first thing the store consults, before
+                // any Argon2 verification — so anyone who has merely SEEN the invite link used to
+                // be able to append a row to the owner's audit chain per request, at a pace they
+                // chose, for free. The audit chain is the one place the owner reads what their
+                // access control did, and an attacker who can pump arbitrary volume into it buries
+                // the signal it exists to carry: the row that says a lockout happened is findable
+                // among ten rows and lost among a hundred thousand, and every extra row was also a
+                // permanent write into a chain that never forgets. So the lockout is recorded
+                // exactly once, at the moment it is armed — the WRONG_SECRET branch above, on a
+                // request that did pay for a hash — and probes bouncing off an armed lockout write
+                // nothing. The trade, stated plainly so nobody "fixes" it back: the owner learns
+                // THAT a lockout happened and when, not how many times somebody knocked on it
+                // afterwards. The per-probe count was never evidence anyway — its magnitude was
+                // the attacker's choice, not a measurement.
+                AuthStore.RedeemStatus.LOCKED ->
+                    call.respond(HttpStatusCode.TooManyRequests, ErrorDto("temporarily locked"))
                 AuthStore.RedeemStatus.GONE -> call.respond(HttpStatusCode.Gone, ErrorDto("invite unavailable"))
             }
         }
@@ -294,6 +316,19 @@ fun Route.therapistAuthRoutes(
                         auditSafely {
                             auditStore.append(rel, AuditActor.THERAPIST, AuditAction.PAIR_GUESS_FAILED, meta = auditMeta(auditSourceIp, call))
                         }
+                        // Redeem and report spend ONE shared fail counter (see the store), so
+                        // the guess that arms a lockout can land on either surface — and the
+                        // owner's single LOCKOUT row has to be written wherever that happens,
+                        // or a lockout armed through this route would leave no record at all.
+                        // The redeem route's LOCKED branch states why it is one row per armed
+                        // lockout rather than one per request refused by it; its own auditSafely
+                        // block for the same reason as there — the episode's only record must not
+                        // die with a throw in the routine append above.
+                        if (result.lockoutArmed) {
+                            auditSafely {
+                                auditStore.append(rel, AuditActor.THERAPIST, AuditAction.LOCKOUT, meta = auditMeta(auditSourceIp, call))
+                            }
+                        }
                     }
                 }
                 AuthStore.ReportStatus.LOCKED -> call.respond(HttpStatusCode.TooManyRequests, ErrorDto("temporarily locked"))
@@ -350,12 +385,23 @@ fun Route.therapistAuthRoutes(
                 call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized"))
                 return@post
             }
-            val now = System.currentTimeMillis()
+            // The store's clock, not System.currentTimeMillis(): rec.lockedUntil was WRITTEN by
+            // recordTotpFailure off the store's clock, so the question "is it still in force?"
+            // must be asked of the same clock. Under the default they are both the wall clock;
+            // when a test injects a clock, a route on a different one silently disagrees with
+            // the store about now — which made this path untestable and was a real divergence
+            // waiting for any deployment where the two opinions of time drift apart.
+            val now = authStore.nowMs()
             if (rec.lockedUntil > now) {
+                // Deliberately NO audit append here — the same control as the redeem route's
+                // LOCKED branch, for the same reason. credentialId is a therapist-typed username,
+                // so anyone who knows or observed it used to be able to append a LOCKOUT row to
+                // the owner's chain per request while the credential was locked, metered only by
+                // the in-memory source limiter above (which a restart clears and source rotation
+                // sidesteps). The chain never forgets a row; attacker-paced volume in it buries
+                // the one row that matters. The lockout is recorded once, at the moment it is
+                // armed — the failure path below — and probes bouncing off it write nothing.
                 call.respond(HttpStatusCode.TooManyRequests, ErrorDto("temporarily locked"))
-                auditSafely {
-                    auditStore.append(rec.relRef, AuditActor.THERAPIST, AuditAction.LOCKOUT, meta = auditMeta(auditSourceIp, call, "credentialId" to req.credentialId))
-                }
                 return@post
             }
             val secretBytes = decodeSecret(rec.secretB64)

@@ -18,8 +18,11 @@
  *
  *   GET /v1/rel/{relRef}/audit   AuditRoutes.kt — the relationship audit log.
  *
- * That is the entire surface. There is no /metrics. There is no counters route. There is no
- * chain-verification route: AuditStore appends a hash chain and never checks one. There is no
+ * That is the entire credential-free surface. There is no /metrics. There is no counters route.
+ * The chain-verification route that now exists — GET /v1/relations/{relRef}/audit-chain, which
+ * recomputes the stored chain server-side and reports its head (AuditStore.verifyChain) — is
+ * gated on the OWNER bearer token, so it is not part of this console's own surface; the module
+ * that reads it, and says whose token that is, is lib/admin/chainHead.ts. There is no
  * administrator identity anywhere in Config.kt — no DAYMARK_ADMIN_* setting exists, so this
  * console has no credential of its own to present and nothing to present one to.
  *
@@ -751,9 +754,10 @@ export const CHAIN_NOT_ADMIN_READABLE =
   'This build serves audit entries from one route, and that route requires the relationship ' +
   'inbox token and the owner bearer token together. A server administrator holds neither, and ' +
   'should not: the log records a private relationship, and it is owner-readable by design. ' +
-  'There is also no route anywhere in this build that verifies a chain — the server appends ' +
-  'entries and never checks them. To examine a run here, take it from the audit database on the ' +
-  'host you administer and paste it below; it stays in this browser tab.'
+  'The server-side chain check in the panel below is gated the same way — it demands the owner ' +
+  'bearer token — so no route an administrator can call verifies a chain on their behalf. To ' +
+  'examine a run here, take it from the audit database on the host you administer and paste it ' +
+  'below; it stays in this browser tab.'
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
    3b. Reading a run the operator supplies.

@@ -7,6 +7,7 @@ import com.daymark.companion.mail.OwnerAccountStore
 import com.daymark.companion.mail.OwnerNotifier
 import com.daymark.companion.org.OrgStore
 import com.daymark.companion.routes.ErrorDto
+import com.daymark.companion.routes.auditChainRoutes
 import com.daymark.companion.routes.auditRoutes
 import com.daymark.companion.routes.orgRoutes
 import com.daymark.companion.routes.recoveryRoutes
@@ -286,6 +287,11 @@ fun Application.module(
                 auditSourceIp = config.auditSourceIpEnabled,
             )
             auditRoutes(audit, guard)
+            // The chain's own check: recompute the stored audit chain for one relationship and
+            // report its head. Owner bearer token, same gate as the therapist-keys read — a head
+            // plus a count per relRef is exactly the relationship metadata this server does not
+            // hand to anonymous callers. See routes/AuditChainRoutes.kt for the whole argument.
+            auditChainRoutes(audit, guard)
             // The org / practice control plane. Membership and roles only — it holds no key, serves
             // no ciphertext, and cannot mint a grant. See routes/OrgRoutes.kt for the whole argument.
             orgRoutes(

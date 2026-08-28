@@ -242,6 +242,35 @@ data class AuditEvent(
 )
 
 /**
+ * What [AuditStore.verifyChain] found when it recomputed one relationship's chain.
+ *
+ * Three facts and a location, and nothing shaped like a grade:
+ *
+ *  - [entryCount], [oldestSeq] and [headSeq] describe the extent of what the store still holds.
+ *    An [oldestSeq] above 1 is the ordinary consequence of retention pruning, not a finding.
+ *  - [headHash] is the newest entry's hash exactly as stored. This is the value the whole check
+ *    exists to surface: a chain head is only evidence if it is anchored somewhere this server
+ *    cannot reach (the finding in docs/PLAN_2026-08-COMPANION-NEXT.md 3.9.7), and the first such
+ *    anchor is a person writing it down. It is reported even when the chain is broken, because
+ *    "what the server serves today" is itself worth recording in that case — as evidence, not as
+ *    a baseline.
+ *  - [firstBreakSeq] is the sequence number of the first entry that contradicts the chain it
+ *    sits in, or null when every recomputable entry agreed with what is stored. Null is NOT a
+ *    verdict of completeness — see [AuditStore.verifyChain] for what this deliberately cannot
+ *    establish.
+ *
+ * All-null extents with a zero count mean the store holds nothing under that reference, which is
+ * deliberately the same answer for a quiet relationship and for one that never existed.
+ */
+data class ChainVerification(
+    val entryCount: Long,
+    val oldestSeq: Long?,
+    val headSeq: Long?,
+    val headHash: String?,
+    val firstBreakSeq: Long?,
+)
+
+/**
  * Owner-readable, append-only, metadata-only audit log of relationship access
  * (COMPANION_SECURITY.md §9 / COMPANION_THERAPIST.md §10). Callers must NEVER pass
  * plaintext, decrypted content, keys, TOTP codes, or which individual record was viewed —
@@ -319,6 +348,20 @@ class AuditStore(
         meta: Map<String, String>? = null,
     ): AuditEvent = synchronized(lock) {
         requireName(relRef)
+        // The chain hash joins its fields with '|' (see chainHash), and canonicalMeta's escaping
+        // protects the ','/'=' boundaries INSIDE the meta encoding, not the field boundary AROUND
+        // it. A '|' in objectRef or in any meta key or value would let a tamper move the field
+        // boundary while preserving the concatenation — verifyChain, faithfully rehashing the
+        // same bytes, would certify the edit. No current writer can produce one (lineages are
+        // requireName-validated, meta values are enum wires, credential ids and IPs), so this
+        // guards against the FUTURE call site that does not know the invariant. It rejects rather
+        // than escapes on purpose: escaping would change the encoding of previously ambiguous
+        // inputs and silently fork the hash recipe, whereas refusing keeps every stored hash
+        // valid. Same lesson as canonicalMeta's own docstring, applied to the outer encoding.
+        require(objectRef == null || '|' !in objectRef) { "objectRef must not contain '|'" }
+        meta?.forEach { (k, v) ->
+            require('|' !in k && '|' !in v) { "meta keys and values must not contain '|'" }
+        }
         val now = clock()
         val prevHash = lastHashLocked(relRef)
         val seq = lastSeqLocked(relRef) + 1
@@ -372,6 +415,106 @@ class AuditStore(
                     )
                 }
                 out
+            }
+        }
+    }
+
+    /**
+     * Recompute this relationship's chain from the oldest surviving entry to the head, exactly as
+     * [append] computed it, and report what was found. Read-only: this takes the same lock every
+     * other operation takes — the JDBC connection is single-threaded by construction and must stay
+     * that way — but it runs one SELECT and writes nothing, because a check that extended the
+     * chain it was checking would move the head on every look and make the one thing the head is
+     * good for (writing it down today, comparing it tomorrow) impossible.
+     *
+     * HOW THE RECOMPUTATION WORKS, and the one subtlety in it. Each stored hash is
+     * SHA-256 over `prevHash ‖ seq ‖ ts ‖ relRef ‖ actor ‖ action ‖ objectRef ‖ metaEncoded` —
+     * the recipe documented on this class — and the `metaEncoded` in that recipe is the ALREADY
+     * ENCODED string exactly as the `meta` column stores it. The verifier therefore hashes the
+     * raw column text and never parses and re-canonicalises the map. That is not laziness; it is
+     * the lesson [canonicalMeta] records: hashing a re-encoding of a parse means a verifier and a
+     * forger can agree with each other while both disagreeing with what was written. The stored
+     * bytes are what was hashed, so the stored bytes are what gets rehashed.
+     *
+     * WHERE THE CHAIN IS ANCHORED. An entry whose predecessor survives is recomputed off that
+     * predecessor's stored hash. The first entry of the walk is recomputed off [GENESIS_HASH] when
+     * its seq is 1; when the walk starts above 1 — the ordinary result of retention pruning, which
+     * deletes oldest-first and takes the pruned hashes with it — the oldest survivor has nothing
+     * left to be recomputed against, so its stored hash is taken as the walk's starting point
+     * rather than checked. That is inherent to verifying a pruned log, not a shortcut: guessing
+     * the missing predecessor would turn every honestly pruned chain into a reported break.
+     *
+     * WHAT COUNTS AS A BREAK. The first entry, walking oldest to newest, that the chain cannot
+     * account for: a recomputed hash that differs from the stored one, or a hole in the sequence
+     * mid-run (the entry's predecessor-by-number is missing, so there is nothing honest to chain
+     * it to — recomputing across the hole would mismatch anyway, but naming the hole is more
+     * useful than naming its echo). Only the FIRST break is reported: everything downstream of a
+     * break is chained to damaged history, so per-entry findings past that point would be noise
+     * wearing the shape of detail. The walk still continues to the end, because the count and the
+     * head describe what the server is serving today and are worth having even over a broken run.
+     *
+     * WHAT THIS DELIBERATELY CANNOT ESTABLISH, stated here because a null [ChainVerification
+     * .firstBreakSeq] will be read as more than it is by anyone who has not read this far. The
+     * chain is server-computed, so this check proves internal consistency of what remains and
+     * nothing else: a server that quietly declines to append an event leaves a chain this method
+     * reports no break in, and a server that truncates the tail leaves a shorter chain it also
+     * reports no break in — both are asserted on purpose in this class's tests, because they are
+     * the documented limit (docs/COMPANION_SECURITY.md §9, R12), not an oversight. What a break
+     * report IS good against is the honest-but-damaged cases — a bad disk, a botched restore, a
+     * hand-edited row — and what survives even a lying server is not this verdict but the head
+     * hash, once it is anchored somewhere the server cannot reach (a person's note today; the
+     * phone anchor of docs/PLAN_2026-08-COMPANION-NEXT.md 3.9.7 eventually).
+     */
+    fun verifyChain(relRef: String): ChainVerification = synchronized(lock) {
+        requireName(relRef)
+        conn.prepareStatement(
+            "SELECT seq, ts, actor, action, object_ref, meta, entry_hash FROM audit_events " +
+                "WHERE rel_ref=? ORDER BY seq ASC",
+        ).use { ps ->
+            ps.setString(1, relRef)
+            ps.executeQuery().use { rs ->
+                // Streamed, not materialised: the walk needs the previous row's hash and nothing
+                // older, so memory stays flat however long a 90-day retention window let this
+                // chain grow.
+                var count = 0L
+                var oldestSeq = 0L
+                var prevSeq = 0L
+                var prevHash = ""
+                var firstBreak: Long? = null
+                while (rs.next()) {
+                    val seq = rs.getLong(1)
+                    val ts = rs.getLong(2)
+                    val actor = rs.getString(3)
+                    val action = rs.getString(4)
+                    val objectRef: String? = rs.getString(5)
+                    val metaEncoded: String? = rs.getString(6)
+                    val storedHash = rs.getString(7)
+
+                    if (count == 0L) {
+                        oldestSeq = seq
+                        // Anchored at the genesis only when this really is the first entry ever
+                        // written; a pruned chain's oldest survivor is taken as given (see above).
+                        if (seq == 1L &&
+                            chainHash(GENESIS_HASH, seq, ts, relRef, actor, action, objectRef, metaEncoded) != storedHash
+                        ) {
+                            firstBreak = seq
+                        }
+                    } else if (firstBreak == null) {
+                        if (seq != prevSeq + 1) {
+                            firstBreak = seq
+                        } else if (chainHash(prevHash, seq, ts, relRef, actor, action, objectRef, metaEncoded) != storedHash) {
+                            firstBreak = seq
+                        }
+                    }
+                    count++
+                    prevSeq = seq
+                    prevHash = storedHash
+                }
+                if (count == 0L) {
+                    ChainVerification(0L, null, null, null, null)
+                } else {
+                    ChainVerification(count, oldestSeq, prevSeq, prevHash, firstBreak)
+                }
             }
         }
     }

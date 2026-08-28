@@ -220,11 +220,30 @@ class AuthStore(
         val scope: List<String> = emptyList(),
         /** Single-use enrollment ticket (plaintext, returned once) that /totp/enroll must consume. */
         val enrollTicket: String? = null,
+        /**
+         * True exactly when THIS wrong secret is the one that armed a lockout — the failure that
+         * crossed the threshold, not any failure inside an episode and not a request that bounced
+         * off a lockout already in force.
+         *
+         * It exists so the route can write the owner's one LOCKOUT audit row at the moment the
+         * lockout begins, which is the only moment the server does any work to reach. Requests that
+         * arrive while the invite is already locked answer [RedeemStatus.LOCKED] before the secret
+         * is even hashed, so they are free to whoever holds the link; auditing each of them would
+         * hand a link-holder unmetered, attacker-paced writes into the owner's audit chain. See the
+         * LOCKED branch in TherapistAuthRoutes for the full statement of that trade.
+         */
+        val lockoutArmed: Boolean = false,
     )
 
     /** Outcome of an explicit human report. Mirrors [RedeemStatus] so the routes read alike. */
     enum class ReportStatus { OK, WRONG_SECRET, LOCKED, GONE }
-    data class ReportResult(val status: ReportStatus, val relRef: String? = null)
+    data class ReportResult(
+        val status: ReportStatus,
+        val relRef: String? = null,
+        /** Same meaning as [RedeemResult.lockoutArmed]: redeem and report spend one shared fail
+         *  counter, so either surface can be the one whose failure arms the lockout. */
+        val lockoutArmed: Boolean = false,
+    )
 
     /** Mint a single-use invite. The plaintext [MintedInvite.secret] is returned once (for the link) and never stored. */
     fun mintInvite(relRef: String, scope: List<String>, ttlSeconds: Long): MintedInvite = synchronized(lock) {
@@ -280,8 +299,8 @@ class AuthStore(
             return RedeemResult(RedeemStatus.OK, row.relRef, row.scope, ticket)
         }
         // Wrong secret: bump fail count, apply capped backoff. Never consume the invite.
-        applyWrongSecretBackoffLocked(inviteId, row, now, lockoutFails, lockoutBaseMs)
-        return RedeemResult(RedeemStatus.WRONG_SECRET, row.relRef)
+        val armed = applyWrongSecretBackoffLocked(inviteId, row, now, lockoutFails, lockoutBaseMs)
+        return RedeemResult(RedeemStatus.WRONG_SECRET, row.relRef, lockoutArmed = armed)
     }
 
     /**
@@ -362,8 +381,8 @@ class AuthStore(
             killInviteLocked(inviteId)
             return ReportResult(ReportStatus.OK, row.relRef)
         }
-        applyWrongSecretBackoffLocked(inviteId, row, now, lockoutFails, lockoutBaseMs)
-        return ReportResult(ReportStatus.WRONG_SECRET, row.relRef)
+        val armed = applyWrongSecretBackoffLocked(inviteId, row, now, lockoutFails, lockoutBaseMs)
+        return ReportResult(ReportStatus.WRONG_SECRET, row.relRef, lockoutArmed = armed)
     }
 
     /** One invite row, read whole so the several checks that follow share a single snapshot. */
@@ -416,6 +435,13 @@ class AuthStore(
      * any expired lockout immediately re-armed another one, and the backoff shift grew with it: one
      * mistyped character past the threshold escalated to the 1-hour cap and stayed there. The
      * therapist could not enrol at all, and the only remedy was the owner minting a fresh invite.
+     *
+     * @return true when this failure ARMED a lockout — crossed the threshold and set a future
+     *   `locked_until`. That is a single event per lockout episode by construction: once armed,
+     *   every later request answers LOCKED before reaching this function, and once the lockout has
+     *   been served the counter resets, so it takes a full threshold of fresh failures to arm the
+     *   next one. The routes use this to write exactly one LOCKOUT audit row per episode instead of
+     *   one per request that bounces off it.
      */
     private fun applyWrongSecretBackoffLocked(
         inviteId: String,
@@ -423,7 +449,7 @@ class AuthStore(
         now: Long,
         lockoutFails: Int,
         lockoutBaseMs: Long,
-    ) {
+    ): Boolean {
         val priorFails = if (row.lockedUntil in 1..now) 0 else row.failCount
         val newFails = priorFails + 1
         val locked = if (newFails >= lockoutFails) {
@@ -433,6 +459,7 @@ class AuthStore(
         conn.prepareStatement("UPDATE invites SET fail_count=?, locked_until=? WHERE invite_id=?").use { up ->
             up.setInt(1, newFails); up.setLong(2, locked); up.setString(3, inviteId); up.executeUpdate()
         }
+        return locked > now
     }
 
     /** Drive an invite to REPORTED and take its outstanding enrollment ticket with it. */
@@ -519,6 +546,11 @@ class AuthStore(
         val startedAt = existing?.first ?: now
         val count = existing?.second ?: 0
 
+        // A source with no row yet is about to be given one, whichever branch below runs. That is
+        // the moment the hard row cap is enforced — see [evictForAttemptCapLocked] for why a cap
+        // exists at all and why the oldest window is the one that pays for it.
+        if (existing == null) evictForAttemptCapLocked(scope)
+
         if (now - startedAt >= windowMs) {
             writeAttemptWindowLocked(scope, key, now, 1)
             return true
@@ -560,8 +592,14 @@ class AuthStore(
      * free and only walks the map once it is big enough to be worth walking; the equivalent here is
      * a COUNT query, which is not free and would run on every single unauthenticated request — the
      * exact shape of self-inflicted amplification a limiter exists to prevent. One DELETE per
-     * [ATTEMPT_PRUNE_EVERY] attempts costs nothing by comparison, and what accumulates in between
-     * is bounded by how many distinct sources can reach the server inside one window.
+     * [ATTEMPT_PRUNE_EVERY] attempts costs nothing by comparison.
+     *
+     * An earlier version of this comment claimed what accumulates between sweeps was "bounded by
+     * how many distinct sources can reach the server inside one window" — which is no bound at
+     * all, because distinct sources are the one thing an attacker mints for free. The actual bound
+     * is [ATTEMPT_WINDOWS_MAX_PER_SCOPE], enforced at insert time by [evictForAttemptCapLocked];
+     * this sweep's job is only to keep the table small in the HONEST case, so aged-out windows do
+     * not sit around until the cap has to care about them.
      */
     private fun pruneAttemptWindowsLocked(scope: String, now: Long, windowMs: Long) {
         if (++attemptsSincePrune < ATTEMPT_PRUNE_EVERY) return
@@ -573,6 +611,61 @@ class AuthStore(
 
     /** Guarded by [lock] like every other mutation here; see [pruneAttemptWindowsLocked]. */
     private var attemptsSincePrune = 0
+
+    /*
+     * Hard ceiling on live rows per scope, enforced at insert time — the guarantee the amortised
+     * prune above cannot give.
+     *
+     * WHY THE PRUNE IS NOT ENOUGH. The prune only ever removes windows that have AGED OUT, so
+     * between sweeps the table holds every distinct source seen inside one window — and "distinct
+     * source" is the attacker's cheapest thing to vary. A request flood that rotates addresses
+     * turns each request into a fresh row, and SQLite's DELETE returns pages to the freelist
+     * without ever shrinking the file, so a weekend of rotation converts into PERMANENT growth of
+     * auth.db — the same file that holds the invites and the TOTP seeds. A limiter whose
+     * bookkeeping is an unbounded write amplifier, in the credential store of all places, is the
+     * self-inflicted wound it exists to prevent. The cap turns "how big can auth.db get" from a
+     * function of attacker patience into a constant.
+     *
+     * WHY EVICTING THE OLDEST-STARTED WINDOW IS THE SAFE DIRECTION. Eviction forgets a window
+     * early, which relaxes the budget for exactly one source — the one whose window started
+     * longest ago, i.e. the source that has been quiet longest (an expired window sorts first of
+     * all, and evicting one of those relaxes nothing). The cost is bounded and small: at worst
+     * that source gets one fresh window, maxPerWindow attempts, sooner than it should have.
+     * Against that, the attacker funding the evictions is paying one INSERT — one HTTP request
+     * from one more distinct address — per row evicted. An attacker who commands N addresses
+     * always had N * maxPerWindow attempts available by simply spending each address's own
+     * budget, so churning the table to buy back an old source's window gains them nothing they
+     * did not already hold; and the durable per-invite backoff, which is the counter that
+     * actually guards the secret, is untouched by any of this. Evicting the NEWEST rows instead
+     * would be the unsafe direction: it would forget the very sources currently spending, i.e.
+     * the ones mid-attack.
+     */
+    private fun evictForAttemptCapLocked(scope: String) {
+        // Counting per new-source insert is affordable precisely BECAUSE the cap holds: the
+        // (scope, source_key) primary key serves the scan and the invariant keeps it to at most
+        // ATTEMPT_WINDOWS_MAX_PER_SCOPE entries, so the cost is a small constant — unlike the
+        // per-request COUNT the prune's comment rules out, it cannot grow with attack volume.
+        val live = conn.prepareStatement("SELECT COUNT(*) FROM attempt_windows WHERE scope=?").use { ps ->
+            ps.setString(1, scope)
+            ps.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else 0 }
+        }
+        if (live < ATTEMPT_WINDOWS_MAX_PER_SCOPE) return
+        val over = live - ATTEMPT_WINDOWS_MAX_PER_SCOPE + 1
+        conn.prepareStatement(
+            "DELETE FROM attempt_windows WHERE rowid IN (" +
+                "SELECT rowid FROM attempt_windows WHERE scope=? ORDER BY started_at ASC LIMIT ?)",
+        ).use { ps ->
+            ps.setString(1, scope); ps.setInt(2, over); ps.executeUpdate()
+        }
+    }
+
+    /** Test/inspection helper: how many live rows one scope holds in the attempt-window table. */
+    fun attemptWindowCountFor(scope: String): Int = synchronized(lock) {
+        conn.prepareStatement("SELECT COUNT(*) FROM attempt_windows WHERE scope=?").use { ps ->
+            ps.setString(1, scope)
+            ps.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else 0 }
+        }
+    }
 
     // ---- TOTP --------------------------------------------------------------------
 
@@ -703,6 +796,15 @@ class AuthStore(
     }
 
     /** Bump the fail count and apply capped backoff lockout. Returns the new locked_until. */
+    /**
+     * The store's opinion of now, for route code whose decisions must agree with what the store
+     * wrote. The totp lockout is armed off this clock ([recordTotpFailure]), so the route asking
+     * "is it still in force?" has to ask the same clock — under the default both are the wall
+     * clock, but a route on System.currentTimeMillis() while a test injects a clock here means
+     * two silently divergent opinions of the time, and an untestable locked path.
+     */
+    fun nowMs(): Long = clock()
+
     fun recordTotpFailure(credentialId: String, lockoutFails: Int, lockoutMs: Long): Long = synchronized(lock) {
         val now = clock()
         val rec = getTotp(credentialId) ?: return 0L
@@ -936,5 +1038,32 @@ class AuthStore(
 
         /** How many attempts pass between sweeps of the attempt-window table. */
         private const val ATTEMPT_PRUNE_EVERY = 256
+
+        /**
+         * The most live rows one scope may hold in `attempt_windows` — the number behind
+         * [evictForAttemptCapLocked], sized the same way `PAIR_MAX_PER_WINDOW` is: against what
+         * honest use can possibly look like, then with headroom that costs nothing.
+         *
+         * An honest source occupies exactly ONE row per window regardless of how many attempts it
+         * spends, so reaching this cap requires 4096 DISTINCT client addresses touching the pairing
+         * surface inside one five-minute window. This server fronts one household or one practice;
+         * its honest pairing traffic is a therapist following a link they were sent, which is a
+         * single source per invitation. `PAIR_MAX_PER_WINDOW`'s comment reasons that twelve
+         * attempts is "nobody's honest afternoon" — by the same reasoning, four thousand
+         * simultaneous distinct sources is nobody's honest anything, and a clinic's worth of NAT'd
+         * therapists is a handful of rows. The gap between "a handful" and 4096 is deliberate
+         * slack: it means eviction, with its documented budget-relaxing side effect, can only ever
+         * fire while a rotation flood is actually in progress.
+         *
+         * The other side of the sizing is what the cap costs when full: a row is one scope word,
+         * one 64-hex source digest and two integers — order of 100 bytes — so the table's
+         * permanent worst case is a few hundred kilobytes per scope. Bounded, and small against
+         * the database it shares a file with, which is the point: the number needs only to be
+         * simultaneously far above honest use and far below "meaningful growth of auth.db", and
+         * the whole range between satisfies both.
+         *
+         * `internal` so the tests assert against the production number instead of restating it.
+         */
+        internal const val ATTEMPT_WINDOWS_MAX_PER_SCOPE = 4096
     }
 }

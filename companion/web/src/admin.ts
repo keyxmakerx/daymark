@@ -6,13 +6,14 @@
  * under DAYMARK_BASE_PATH (Application.kt), so a relative fetch reaches them from wherever this
  * page is served.
  *
- * NO DIGEST IS SUPPLIED, and that is a stated limitation rather than an oversight. The chain check
- * therefore examines a pasted run for shape, ordering and uniqueness only; it treats entry hashes
- * as opaque strings and says nothing about whether a stored entry was rewritten. The console
- * reports this itself, in the run's own "not checked" list, so an operator cannot read the verdict
- * as more than it is. Supplying a real digest means hashing in the browser, where SubtleCrypto is
- * asynchronous while ChainInput.digest is synchronous — reshaping that contract is its own change,
- * not something to bolt on here.
+ * THE DIGEST IS REAL NOW (task #16). AdminConsole defaults its `digest` prop to
+ * lib/admin/sha256.ts — a synchronous, dependency-free SHA-256 proven against the published
+ * vectors and node's own implementation in its suite — so a pasted run has its entry hashes
+ * actually recomputed instead of being treated as opaque strings. The default lives on the
+ * component rather than being passed here, so any mount of the console gets the real check
+ * without this file having to remember to hand it over. What has NOT changed: recomputation
+ * still establishes internal consistency only, and the run's own "not checked" list still says
+ * so — a server that declines to append, or truncates, produces a run that recomputes perfectly.
  */
 import { mount } from 'svelte'
 import './app.css'
