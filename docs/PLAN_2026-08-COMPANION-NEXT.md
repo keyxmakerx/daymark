@@ -735,6 +735,15 @@ ever was — it is someone guessing — and it needs a distinct action and a thr
 
 ### 3.7.6 A verified blocker on the Android side — **RESOLVED, and it was not where this said**
 
+> **SUPERSEDED AGAIN 2026-08-28 — the split pin below was never needed.** The "5.2.0 must be
+> avoided" warning treated the JVM-21 metadata as a wall; it was a per-module toolchain setting.
+> CI run 33128182690 (branch `claude/lazysodium-520-experiment`) proved `:app` at 17 consumes a
+> `:sync-crypto` at 21, so BOTH artifacts now sit at 5.2.0 — full Ristretto on both sides AND
+> libsodium 1.0.20 (2024) on the phone in place of 1.0.18 (2019), which the split pin would not
+> have delivered. The reflection test this section asked for exists: `LazySodiumParityTest` in
+> `sync-crypto`, mutation-proven against doctored AARs. The residual-risk paragraph below stands
+> unchanged: the ristretto path has still never executed on a physical device.
+
 > **ANSWERED 2026-08-17 (gate 0.1). This section's diagnosis was right about the symptom and wrong
 > about the patient, and the correction is good news.**
 >

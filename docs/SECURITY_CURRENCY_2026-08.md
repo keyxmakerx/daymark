@@ -144,7 +144,17 @@ exists, and every day it stays open is a day the deployed runtime is missing pat
 
 *Acceptance:* the companion image rebuilds and the health probe passes.
 
-### Step B — Answer the one question that decides item 1. One CI run.
+### Step B — Answer the one question that decides item 1. One CI run. — **DONE, GREEN**
+
+> **Outcome (2026-08-28).** The experiment branch (`claude/lazysodium-520-experiment`) raised
+> `:sync-crypto` to `jvmToolchain(21)` and both lazysodium artifacts to 5.2.0; CI run
+> 33128182690 came back green — AGP 8.13 / D8 does consume a Java-21 `:sync-crypto` for
+> `compileSdk 36`, and the existing conformance vectors passed unchanged against libsodium
+> 1.0.20. The change is folded into the working branch, both comment defects are fixed, and the
+> parity prose is replaced by `LazySodiumParityTest` (Step C's test, landed early), which was
+> mutation-proven against four doctored AARs before it shipped. Residual, stated loudly: the
+> ristretto path has still never *executed* on a physical device — one instrumentation test on
+> hardware stays on the plan's only-a-device-can-settle-this list.
 
 Raise `:sync-crypto` to `jvmToolchain(21)`, move both lazysodium artifacts to 5.2.0, push, and read
 CI. That is the whole experiment. It cannot be run locally — the Android plugin does not resolve

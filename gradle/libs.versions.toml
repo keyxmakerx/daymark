@@ -34,16 +34,23 @@ coroutines = "1.9.0"
 androidxTestExt = "1.2.1"
 androidxTestCore = "1.6.1"
 androidxTestRunner = "1.6.2"
-# lazysodium-android and lazysodium-java MUST stay pinned to the same version: sync-crypto's
-# SyncCrypto is compiled against lazysodium-java's copy of the shared com.goterl.lazysodium.*
-# types but runs on lazysodium-android's copy in the real app (see SyncCrypto's class KDoc) —
-# a version drift between the two would silently invalidate that cross-artifact API parity.
-# Pinned to 5.1.0 (not 5.2.0): lazysodium-java 5.2.0's Gradle metadata marks it JVM-21-only,
-# but :sync-crypto (and the whole app) targets JVM 17, so 5.2.0 fails variant resolution
-# (":sync-crypto:compileKotlin" — "compatible with JVM 21 or newer"). 5.1.0 is the newest
-# release whose java artifact is JVM-8+ and whose android artifact also exists, keeping the
-# same-version invariant; the crypto conformance vectors are byte-identical across the two.
-lazysodium = "5.1.0"
+# 5.2.0 bundles libsodium 1.0.20 (2024) into the phone in place of 5.1.0's 1.0.18 (2019) —
+# that .so is the actual C cryptography encrypting the journal, and it was five years behind
+# while the comment here talked only about the Java API surface. The recorded blocker was
+# 5.2.0's JVM-21-only Gradle metadata against :sync-crypto's toolchain 17; jvmToolchain is
+# per-module, so :sync-crypto now runs at 21 while :app stays at 17. Whether AGP 8.13 / D8
+# accepts a Java-21 dependency for compileSdk 36 could not be answered on a machine without
+# the Android SDK; CI answered it — run 33128182690, green, 2026-08-28.
+#
+# An earlier comment here asserted that pinning lazysodium-android and lazysodium-java to one
+# version guarantees cross-artifact API parity. That invariant was MEASURED FALSE at 5.1.0:
+# the android artifact exposed 328 public methods on LazySodium and the java artifact 259 —
+# the gap being the entire Ristretto255 surface. The invariant is now enforced by
+# sync-crypto's LazySodiumParityTest, which parses both artifacts' bytecode on every test run
+# and resolves this module's own references against the android copy; prose makes no promises
+# here any more. Still unproven anywhere: the ristretto path EXECUTING on a physical device —
+# that stays on the plan doc's only-a-device-can-settle-this list.
+lazysodium = "5.2.0"
 jna = "5.17.0"
 
 [libraries]
