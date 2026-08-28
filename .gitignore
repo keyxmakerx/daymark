@@ -16,6 +16,10 @@ local.properties
 keystore.properties
 *.keystore
 *.jks
+# The ONE keystore that belongs in the repo: the CI debug-channel key. The rule above exists so a
+# real release key can never land here by accident; this exception is deliberate and documented at
+# its signingConfig in app/build.gradle.kts — the key is update-continuity for testers, not identity.
+!app/ci-signing/ci-debug.keystore
 
 # Node. The web portal has its own ignore file, but a tool run from the repo root instead of from
 # companion/web creates these here, where nothing was ignoring them — that is how a vitest cache

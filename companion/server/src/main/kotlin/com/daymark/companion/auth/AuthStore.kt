@@ -109,6 +109,80 @@ class AuthStore(
                 )
                 """.trimIndent(),
             )
+            /*
+             * The therapist's PUBLIC keys, on their way to the owner.
+             *
+             * This is the one link the relationship never had. The owner's console already seals
+             * every share to a therapist's X25519 key and already refuses to seal to a key it has
+             * not pinned, and the therapist's browser already generates and wraps the keypair —
+             * but there was no path by which the public halves could travel from one to the other,
+             * so the pin had nothing to be taken against and the seal had nothing to aim at.
+             * These four columns are that path.
+             *
+             * `rel_ref` is the PRIMARY KEY, and that is the entire enforcement of insert-only.
+             * The alternative — a SELECT before the INSERT, in the route or here — is a rule that
+             * lives in a line of code somebody can later delete, reorder, or forget on a second
+             * write path; this one lives in the schema, so every future caller inherits it whether
+             * or not they know it exists. It matters more here than in most places because the
+             * failure mode of a silent overwrite is not a lost row: it is the owner's next journal
+             * share sealed to whatever key was written last, which is exactly the substitution the
+             * pinning was built to catch.
+             *
+             * Note what is NOT hashed. Every other secret in this file is stored as an Argon2id or
+             * BLAKE2b digest because the server has no business being able to read it back. These
+             * are public keys — the point of storing them is to hand them back verbatim — so they
+             * sit here in the clear, and that is correct rather than an oversight. They are also
+             * not sensitive to this server in the way the rest of this table set is: knowing a
+             * therapist's public key lets you seal something TO them, never open anything OF
+             * theirs.
+             *
+             * And the server does not vouch for them. It took delivery of two strings from
+             * whoever held a valid session for this relationship and it will hand the same two
+             * strings back; it cannot tell the therapist's real key from a substituted one, and it
+             * is not trying to. The check that catches a substitution is the owner reading the
+             * fingerprint words back to their therapist on another channel before pinning. See the
+             * route file for the full statement of that division of labour.
+             */
+            st.execute(
+                """
+                CREATE TABLE IF NOT EXISTS therapist_keys (
+                    rel_ref       TEXT    NOT NULL PRIMARY KEY,
+                    box_pub_b64   TEXT    NOT NULL,
+                    sign_pub_b64  TEXT    NOT NULL,
+                    registered_at INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            /*
+             * The OWNER's public keys, on their way to the therapist.
+             *
+             * The mirror of `therapist_keys`, and it was missing for the same reason that one was:
+             * each side had a use for the other's public halves and no path to carry them. The
+             * consequence was visible on the sign-in form, which asked a clinician to paste the
+             * owner's signing and encryption keys by hand on every visit — two of the nine fields
+             * that made that screen unusable.
+             *
+             * Same rules as its counterpart. `rel_ref` is the PRIMARY KEY, so insert-only is the
+             * schema's job rather than a check a later edit can drop; a silent overwrite here would
+             * repoint the key a clinician verifies shares against, which is exactly the substitution
+             * the pinning exists to catch. Stored in the clear because these are public keys and
+             * handing them back verbatim is the entire point.
+             *
+             * The server does not vouch for these either. It relays them, and what catches a
+             * substituted key is the clinician comparing the fingerprint against what the owner
+             * reads aloud — the same out-of-band step, pointing the other way.
+             */
+
+            st.execute(
+                """
+                CREATE TABLE IF NOT EXISTS owner_keys (
+                    rel_ref       TEXT    NOT NULL PRIMARY KEY,
+                    box_pub_b64   TEXT    NOT NULL,
+                    sign_pub_b64  TEXT    NOT NULL,
+                    registered_at INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
             st.execute(
                 """
                 CREATE TABLE IF NOT EXISTS sessions (
@@ -146,11 +220,30 @@ class AuthStore(
         val scope: List<String> = emptyList(),
         /** Single-use enrollment ticket (plaintext, returned once) that /totp/enroll must consume. */
         val enrollTicket: String? = null,
+        /**
+         * True exactly when THIS wrong secret is the one that armed a lockout — the failure that
+         * crossed the threshold, not any failure inside an episode and not a request that bounced
+         * off a lockout already in force.
+         *
+         * It exists so the route can write the owner's one LOCKOUT audit row at the moment the
+         * lockout begins, which is the only moment the server does any work to reach. Requests that
+         * arrive while the invite is already locked answer [RedeemStatus.LOCKED] before the secret
+         * is even hashed, so they are free to whoever holds the link; auditing each of them would
+         * hand a link-holder unmetered, attacker-paced writes into the owner's audit chain. See the
+         * LOCKED branch in TherapistAuthRoutes for the full statement of that trade.
+         */
+        val lockoutArmed: Boolean = false,
     )
 
     /** Outcome of an explicit human report. Mirrors [RedeemStatus] so the routes read alike. */
     enum class ReportStatus { OK, WRONG_SECRET, LOCKED, GONE }
-    data class ReportResult(val status: ReportStatus, val relRef: String? = null)
+    data class ReportResult(
+        val status: ReportStatus,
+        val relRef: String? = null,
+        /** Same meaning as [RedeemResult.lockoutArmed]: redeem and report spend one shared fail
+         *  counter, so either surface can be the one whose failure arms the lockout. */
+        val lockoutArmed: Boolean = false,
+    )
 
     /** Mint a single-use invite. The plaintext [MintedInvite.secret] is returned once (for the link) and never stored. */
     fun mintInvite(relRef: String, scope: List<String>, ttlSeconds: Long): MintedInvite = synchronized(lock) {
@@ -206,8 +299,50 @@ class AuthStore(
             return RedeemResult(RedeemStatus.OK, row.relRef, row.scope, ticket)
         }
         // Wrong secret: bump fail count, apply capped backoff. Never consume the invite.
-        applyWrongSecretBackoffLocked(inviteId, row, now, lockoutFails, lockoutBaseMs)
-        return RedeemResult(RedeemStatus.WRONG_SECRET, row.relRef)
+        val armed = applyWrongSecretBackoffLocked(inviteId, row, now, lockoutFails, lockoutBaseMs)
+        return RedeemResult(RedeemStatus.WRONG_SECRET, row.relRef, lockoutArmed = armed)
+    }
+
+    /**
+     * Verify an invite secret WITHOUT consuming the invite — the gate for the pairing-relay
+     * touches (fetch / respond), which have to prove possession of the link on every request
+     * while leaving the invite PENDING for however many protocol runs the pairing takes.
+     *
+     * Everything about failure is [redeemInvite]'s, not a parallel copy: the same
+     * [applyWrongSecretBackoffLocked], the same shared fail counter, the same statuses. That is
+     * the point — a relay touch, a redeem and a report all verify the SAME secret, so if any of
+     * them kept its own counter an attacker would alternate surfaces and multiply their guess
+     * budget by the number of routes. One secret, one counter, however many doors.
+     *
+     * What it deliberately does NOT do: move the status, mint a ticket, or write anything on
+     * success. Proof of possession is a question, and questions leave no marks.
+     */
+    fun checkInviteSecret(inviteId: String, secret: String, lockoutFails: Int, lockoutBaseMs: Long): RedeemResult = synchronized(lock) {
+        val now = clock()
+        val row = readInviteLocked(inviteId) ?: return RedeemResult(RedeemStatus.GONE)
+        if (row.status != "PENDING") return RedeemResult(RedeemStatus.GONE)
+        if (now >= row.expiry) {
+            setInviteStatus(inviteId, "EXPIRED")
+            return RedeemResult(RedeemStatus.GONE)
+        }
+        if (row.lockedUntil > now) return RedeemResult(RedeemStatus.LOCKED, row.relRef)
+        if (Secrets.verifySecret(secret, row.secretArgon2)) {
+            return RedeemResult(RedeemStatus.OK, row.relRef, row.scope)
+        }
+        val armed = applyWrongSecretBackoffLocked(inviteId, row, now, lockoutFails, lockoutBaseMs)
+        return RedeemResult(RedeemStatus.WRONG_SECRET, row.relRef, lockoutArmed = armed)
+    }
+
+    data class InviteMeta(val relRef: String, val status: String, val expiry: Long)
+
+    /**
+     * The owner-facing view of one invite row: whose it is, where it stands, when it dies.
+     * For route code that must check an invite BELONGS to the caller's relationship before
+     * acting on it (the pairing relay's open). Carries no secret material and never will.
+     */
+    fun inviteMetaFor(inviteId: String): InviteMeta? = synchronized(lock) {
+        val row = readInviteLocked(inviteId) ?: return null
+        InviteMeta(row.relRef, row.status, row.expiry)
     }
 
     /**
@@ -288,8 +423,8 @@ class AuthStore(
             killInviteLocked(inviteId)
             return ReportResult(ReportStatus.OK, row.relRef)
         }
-        applyWrongSecretBackoffLocked(inviteId, row, now, lockoutFails, lockoutBaseMs)
-        return ReportResult(ReportStatus.WRONG_SECRET, row.relRef)
+        val armed = applyWrongSecretBackoffLocked(inviteId, row, now, lockoutFails, lockoutBaseMs)
+        return ReportResult(ReportStatus.WRONG_SECRET, row.relRef, lockoutArmed = armed)
     }
 
     /** One invite row, read whole so the several checks that follow share a single snapshot. */
@@ -342,6 +477,13 @@ class AuthStore(
      * any expired lockout immediately re-armed another one, and the backoff shift grew with it: one
      * mistyped character past the threshold escalated to the 1-hour cap and stayed there. The
      * therapist could not enrol at all, and the only remedy was the owner minting a fresh invite.
+     *
+     * @return true when this failure ARMED a lockout — crossed the threshold and set a future
+     *   `locked_until`. That is a single event per lockout episode by construction: once armed,
+     *   every later request answers LOCKED before reaching this function, and once the lockout has
+     *   been served the counter resets, so it takes a full threshold of fresh failures to arm the
+     *   next one. The routes use this to write exactly one LOCKOUT audit row per episode instead of
+     *   one per request that bounces off it.
      */
     private fun applyWrongSecretBackoffLocked(
         inviteId: String,
@@ -349,7 +491,7 @@ class AuthStore(
         now: Long,
         lockoutFails: Int,
         lockoutBaseMs: Long,
-    ) {
+    ): Boolean {
         val priorFails = if (row.lockedUntil in 1..now) 0 else row.failCount
         val newFails = priorFails + 1
         val locked = if (newFails >= lockoutFails) {
@@ -359,6 +501,7 @@ class AuthStore(
         conn.prepareStatement("UPDATE invites SET fail_count=?, locked_until=? WHERE invite_id=?").use { up ->
             up.setInt(1, newFails); up.setLong(2, locked); up.setString(3, inviteId); up.executeUpdate()
         }
+        return locked > now
     }
 
     /** Drive an invite to REPORTED and take its outstanding enrollment ticket with it. */
@@ -445,6 +588,11 @@ class AuthStore(
         val startedAt = existing?.first ?: now
         val count = existing?.second ?: 0
 
+        // A source with no row yet is about to be given one, whichever branch below runs. That is
+        // the moment the hard row cap is enforced — see [evictForAttemptCapLocked] for why a cap
+        // exists at all and why the oldest window is the one that pays for it.
+        if (existing == null) evictForAttemptCapLocked(scope)
+
         if (now - startedAt >= windowMs) {
             writeAttemptWindowLocked(scope, key, now, 1)
             return true
@@ -486,8 +634,14 @@ class AuthStore(
      * free and only walks the map once it is big enough to be worth walking; the equivalent here is
      * a COUNT query, which is not free and would run on every single unauthenticated request — the
      * exact shape of self-inflicted amplification a limiter exists to prevent. One DELETE per
-     * [ATTEMPT_PRUNE_EVERY] attempts costs nothing by comparison, and what accumulates in between
-     * is bounded by how many distinct sources can reach the server inside one window.
+     * [ATTEMPT_PRUNE_EVERY] attempts costs nothing by comparison.
+     *
+     * An earlier version of this comment claimed what accumulates between sweeps was "bounded by
+     * how many distinct sources can reach the server inside one window" — which is no bound at
+     * all, because distinct sources are the one thing an attacker mints for free. The actual bound
+     * is [ATTEMPT_WINDOWS_MAX_PER_SCOPE], enforced at insert time by [evictForAttemptCapLocked];
+     * this sweep's job is only to keep the table small in the HONEST case, so aged-out windows do
+     * not sit around until the cap has to care about them.
      */
     private fun pruneAttemptWindowsLocked(scope: String, now: Long, windowMs: Long) {
         if (++attemptsSincePrune < ATTEMPT_PRUNE_EVERY) return
@@ -499,6 +653,61 @@ class AuthStore(
 
     /** Guarded by [lock] like every other mutation here; see [pruneAttemptWindowsLocked]. */
     private var attemptsSincePrune = 0
+
+    /*
+     * Hard ceiling on live rows per scope, enforced at insert time — the guarantee the amortised
+     * prune above cannot give.
+     *
+     * WHY THE PRUNE IS NOT ENOUGH. The prune only ever removes windows that have AGED OUT, so
+     * between sweeps the table holds every distinct source seen inside one window — and "distinct
+     * source" is the attacker's cheapest thing to vary. A request flood that rotates addresses
+     * turns each request into a fresh row, and SQLite's DELETE returns pages to the freelist
+     * without ever shrinking the file, so a weekend of rotation converts into PERMANENT growth of
+     * auth.db — the same file that holds the invites and the TOTP seeds. A limiter whose
+     * bookkeeping is an unbounded write amplifier, in the credential store of all places, is the
+     * self-inflicted wound it exists to prevent. The cap turns "how big can auth.db get" from a
+     * function of attacker patience into a constant.
+     *
+     * WHY EVICTING THE OLDEST-STARTED WINDOW IS THE SAFE DIRECTION. Eviction forgets a window
+     * early, which relaxes the budget for exactly one source — the one whose window started
+     * longest ago, i.e. the source that has been quiet longest (an expired window sorts first of
+     * all, and evicting one of those relaxes nothing). The cost is bounded and small: at worst
+     * that source gets one fresh window, maxPerWindow attempts, sooner than it should have.
+     * Against that, the attacker funding the evictions is paying one INSERT — one HTTP request
+     * from one more distinct address — per row evicted. An attacker who commands N addresses
+     * always had N * maxPerWindow attempts available by simply spending each address's own
+     * budget, so churning the table to buy back an old source's window gains them nothing they
+     * did not already hold; and the durable per-invite backoff, which is the counter that
+     * actually guards the secret, is untouched by any of this. Evicting the NEWEST rows instead
+     * would be the unsafe direction: it would forget the very sources currently spending, i.e.
+     * the ones mid-attack.
+     */
+    private fun evictForAttemptCapLocked(scope: String) {
+        // Counting per new-source insert is affordable precisely BECAUSE the cap holds: the
+        // (scope, source_key) primary key serves the scan and the invariant keeps it to at most
+        // ATTEMPT_WINDOWS_MAX_PER_SCOPE entries, so the cost is a small constant — unlike the
+        // per-request COUNT the prune's comment rules out, it cannot grow with attack volume.
+        val live = conn.prepareStatement("SELECT COUNT(*) FROM attempt_windows WHERE scope=?").use { ps ->
+            ps.setString(1, scope)
+            ps.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else 0 }
+        }
+        if (live < ATTEMPT_WINDOWS_MAX_PER_SCOPE) return
+        val over = live - ATTEMPT_WINDOWS_MAX_PER_SCOPE + 1
+        conn.prepareStatement(
+            "DELETE FROM attempt_windows WHERE rowid IN (" +
+                "SELECT rowid FROM attempt_windows WHERE scope=? ORDER BY started_at ASC LIMIT ?)",
+        ).use { ps ->
+            ps.setString(1, scope); ps.setInt(2, over); ps.executeUpdate()
+        }
+    }
+
+    /** Test/inspection helper: how many live rows one scope holds in the attempt-window table. */
+    fun attemptWindowCountFor(scope: String): Int = synchronized(lock) {
+        conn.prepareStatement("SELECT COUNT(*) FROM attempt_windows WHERE scope=?").use { ps ->
+            ps.setString(1, scope)
+            ps.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else 0 }
+        }
+    }
 
     // ---- TOTP --------------------------------------------------------------------
 
@@ -629,6 +838,15 @@ class AuthStore(
     }
 
     /** Bump the fail count and apply capped backoff lockout. Returns the new locked_until. */
+    /**
+     * The store's opinion of now, for route code whose decisions must agree with what the store
+     * wrote. The totp lockout is armed off this clock ([recordTotpFailure]), so the route asking
+     * "is it still in force?" has to ask the same clock — under the default both are the wall
+     * clock, but a route on System.currentTimeMillis() while a test injects a clock here means
+     * two silently divergent opinions of the time, and an untestable locked path.
+     */
+    fun nowMs(): Long = clock()
+
     fun recordTotpFailure(credentialId: String, lockoutFails: Int, lockoutMs: Long): Long = synchronized(lock) {
         val now = clock()
         val rec = getTotp(credentialId) ?: return 0L
@@ -712,10 +930,145 @@ class AuthStore(
         }
     }
 
+    // ---- Therapist public keys ---------------------------------------------------
+
+    /**
+     * The therapist's two public halves, exactly as their browser published them: the X25519 key
+     * the owner seals shares to, and the Ed25519 key the owner verifies signatures with.
+     *
+     * [registeredAt] is epoch MILLISECONDS, because [clock] is. (The audit log next door counts in
+     * seconds; the two have always disagreed, and this follows the store it lives in rather than
+     * quietly introducing a third convention.)
+     */
+    data class TherapistKeys(val boxPubB64: String, val signPubB64: String, val registeredAt: Long)
+
+    enum class KeyRegistration { OK, ALREADY_REGISTERED }
+
+    /**
+     * Record the therapist's public keys for a relationship. INSERT-ONLY: a relationship that
+     * already has keys keeps the ones it has, and this returns [KeyRegistration.ALREADY_REGISTERED]
+     * without touching the stored row.
+     *
+     * `INSERT OR IGNORE` rather than SELECT-then-INSERT so the refusal is SQLite's, not this
+     * function's. The distinction is not stylistic: a read followed by a write is only atomic for
+     * as long as every writer happens to take the same in-process [lock], and this store is one
+     * connection today by accident of deployment rather than by any guarantee. Under OR IGNORE the
+     * primary key does the refusing inside the statement, so a second process, a second connection
+     * or a future concurrent caller cannot slip between the check and the write.
+     *
+     * A zero row count therefore means precisely one thing here — a row for this rel_ref already
+     * exists. It cannot mean a NOT NULL violation: every column is NOT NULL and every value comes
+     * from a non-null Kotlin parameter, so there is no other constraint left to fire. If a nullable
+     * column is ever added to this table, that reasoning stops holding and this needs to become an
+     * explicit conflict check.
+     */
+    fun registerTherapistKeys(relRef: String, boxPubB64: String, signPubB64: String): KeyRegistration = synchronized(lock) {
+        val now = clock()
+        conn.prepareStatement(
+            "INSERT OR IGNORE INTO therapist_keys(rel_ref, box_pub_b64, sign_pub_b64, registered_at) VALUES (?,?,?,?)",
+        ).use { ps ->
+            ps.setString(1, relRef)
+            ps.setString(2, boxPubB64)
+            ps.setString(3, signPubB64)
+            ps.setLong(4, now)
+            return if (ps.executeUpdate() > 0) KeyRegistration.OK else KeyRegistration.ALREADY_REGISTERED
+        }
+    }
+
+    /** The registered keys for a relationship, or null if the therapist has not published any. */
+    fun therapistKeys(relRef: String): TherapistKeys? = synchronized(lock) {
+        conn.prepareStatement(
+            "SELECT box_pub_b64, sign_pub_b64, registered_at FROM therapist_keys WHERE rel_ref=?",
+        ).use { ps ->
+            ps.setString(1, relRef)
+            ps.executeQuery().use { rs ->
+                if (!rs.next()) return null
+                TherapistKeys(rs.getString(1), rs.getString(2), rs.getLong(3))
+            }
+        }
+    }
+
+    data class OwnerKeys(val signPubB64: String, val boxPubB64: String, val registeredAt: Long)
+
+    /**
+     * Record the owner's public keys for a relationship. INSERT-ONLY, for the reasons set out on
+     * [registerTherapistKeys] — the same reasoning applies unchanged, and deliberately so: two
+     * tables enforcing one rule differently is how one of them quietly stops enforcing it.
+     */
+    fun registerOwnerKeys(relRef: String, signPubB64: String, boxPubB64: String): KeyRegistration = synchronized(lock) {
+        val now = clock()
+        conn.prepareStatement(
+            "INSERT OR IGNORE INTO owner_keys(rel_ref, box_pub_b64, sign_pub_b64, registered_at) VALUES (?,?,?,?)",
+        ).use { ps ->
+            ps.setString(1, relRef)
+            ps.setString(2, boxPubB64)
+            ps.setString(3, signPubB64)
+            ps.setLong(4, now)
+            return if (ps.executeUpdate() > 0) KeyRegistration.OK else KeyRegistration.ALREADY_REGISTERED
+        }
+    }
+
+    /** The owner's registered keys for a relationship, or null if they have not published any. */
+    fun ownerKeys(relRef: String): OwnerKeys? = synchronized(lock) {
+        conn.prepareStatement(
+            "SELECT box_pub_b64, sign_pub_b64, registered_at FROM owner_keys WHERE rel_ref=?",
+        ).use { ps ->
+            ps.setString(1, relRef)
+            ps.executeQuery().use { rs ->
+                if (!rs.next()) return null
+                OwnerKeys(signPubB64 = rs.getString(2), boxPubB64 = rs.getString(1), registeredAt = rs.getLong(3))
+            }
+        }
+    }
+
     /** Hard-delete a session (logout / instant revoke). */
     fun revokeSession(sessionId: String) = synchronized(lock) {
         conn.prepareStatement("DELETE FROM sessions WHERE session_id_hash=?").use { ps ->
             ps.setString(1, Secrets.tokenHash(sessionId)); ps.executeUpdate()
+        }
+    }
+
+    /**
+     * Hard-delete EVERY session held by one credential. Returns how many were cut.
+     *
+     * The counterpart to [revokeSession], which needs the raw session id and is therefore only
+     * usable by the person holding it — fine for logging yourself out, useless for the case this
+     * exists for. When a practice removes a member, the removal has to land on sessions the
+     * removing admin has never seen and could not name.
+     *
+     * It is a DELETE rather than a flag for the reason [validateSession] would otherwise make
+     * awkward: a `revoked` column already exists there and is honoured, but a revoked row is a row
+     * every future query has to remember to exclude, and the cost of forgetting once is a session
+     * that outlives the decision to end it. Deleting removes the question.
+     *
+     * WHY IMMEDIACY IS THE WHOLE POINT. Without this, "removed from the practice" would mean
+     * "removed at some point in the next eight hours, depending when they last clicked" — the
+     * absolute session lifetime — and every minute of that is a person the practice believes it has
+     * cut off who is still signed in. The spec is unambiguous that server-side cutoff is immediate,
+     * and the annoyance budget insists the safe direction never be the expensive one, which has to
+     * include *waiting*. A revocation you have to wait out is one people stop reaching for.
+     *
+     * WHAT IT DOES NOT DO, and the list is longer than it looks. It cuts sessions, never keys: a
+     * clinician's own copies of whatever a patient already let them decrypt are on their machine
+     * and beyond the reach of any statement in this file, and cryptographic cutoff is the patient's
+     * device rotating a key and re-wrapping it, which this server has never held the material to
+     * do. Less obviously, and more likely to be misread: IT DOES NOT END THE CREDENTIAL. The row in
+     * `totp` is untouched, so the holder of that authenticator can sign in again immediately and be
+     * issued a fresh session by the ordinary verify path. Ending the credential is not something
+     * this server offers at all today, and a practice would not be the party to do it if it did —
+     * the credential was enrolled against a patient's relationship, on the patient's invitation.
+     * So this is a *sign-out*, and calling it a revocation anywhere a person can read would be a
+     * promise the function does not keep. The caller in the org control plane says the same thing
+     * at more length, because that is where somebody will look for it.
+     *
+     * The one threat it genuinely answers, stated so its value is not talked down either: a session
+     * taken from a member — a stolen cookie, a machine left open — is not accompanied by the
+     * authenticator, so cutting it ends that access and there is no way back in without the code.
+     */
+    fun revokeSessionsForCredential(credentialId: String): Int = synchronized(lock) {
+        conn.prepareStatement("DELETE FROM sessions WHERE credential_id=?").use { ps ->
+            ps.setString(1, credentialId)
+            return ps.executeUpdate()
         }
     }
 
@@ -727,5 +1080,32 @@ class AuthStore(
 
         /** How many attempts pass between sweeps of the attempt-window table. */
         private const val ATTEMPT_PRUNE_EVERY = 256
+
+        /**
+         * The most live rows one scope may hold in `attempt_windows` — the number behind
+         * [evictForAttemptCapLocked], sized the same way `PAIR_MAX_PER_WINDOW` is: against what
+         * honest use can possibly look like, then with headroom that costs nothing.
+         *
+         * An honest source occupies exactly ONE row per window regardless of how many attempts it
+         * spends, so reaching this cap requires 4096 DISTINCT client addresses touching the pairing
+         * surface inside one five-minute window. This server fronts one household or one practice;
+         * its honest pairing traffic is a therapist following a link they were sent, which is a
+         * single source per invitation. `PAIR_MAX_PER_WINDOW`'s comment reasons that twelve
+         * attempts is "nobody's honest afternoon" — by the same reasoning, four thousand
+         * simultaneous distinct sources is nobody's honest anything, and a clinic's worth of NAT'd
+         * therapists is a handful of rows. The gap between "a handful" and 4096 is deliberate
+         * slack: it means eviction, with its documented budget-relaxing side effect, can only ever
+         * fire while a rotation flood is actually in progress.
+         *
+         * The other side of the sizing is what the cap costs when full: a row is one scope word,
+         * one 64-hex source digest and two integers — order of 100 bytes — so the table's
+         * permanent worst case is a few hundred kilobytes per scope. Bounded, and small against
+         * the database it shares a file with, which is the point: the number needs only to be
+         * simultaneously far above honest use and far below "meaningful growth of auth.db", and
+         * the whole range between satisfies both.
+         *
+         * `internal` so the tests assert against the production number instead of restating it.
+         */
+        internal const val ATTEMPT_WINDOWS_MAX_PER_SCOPE = 4096
     }
 }

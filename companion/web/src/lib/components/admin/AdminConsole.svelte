@@ -9,6 +9,14 @@
    * holds. That is a boundary worth keeping rather than a gap worth routing around, so this
    * screen names it and stops there. Nothing here renders who shared what with whom.
    *
+   * THE ONE PANEL THAT ASKS FOR A CREDENTIAL is the server-side chain check, and the credential
+   * is the OWNER's bearer token, typed by the person who holds it and kept only in its field.
+   * The console still presents nothing of its own; the panel exists because on a self-hosted box
+   * the operator and the owner are usually the same person, and the head digest that check
+   * returns is the value worth writing down (lib/admin/chainHead.ts says why, at length). The
+   * response carries counts, sequence extents and one hash — never an entry — so this screen
+   * still renders nothing of what the log records.
+   *
    * WHY THERE IS NO NUMBER AT THE TOP. No overall figure, no percentage, no shield. The reasoning
    * is rendered on the page (NO_SINGLE_FIGURE) rather than hidden in this comment, because an
    * operator who expects a dashboard number and does not find one will go looking for it.
@@ -33,9 +41,9 @@
    * silently stopped ticking. The staleness line reads a $state clock that an interval advances,
    * and describeLastChecked takes it as an argument.
    *
-   * THIN BY CONSTRUCTION. Every sentence on this page comes from lib/admin/health.ts, which is
-   * pure and tested. This file fetches three URLs, holds five pieces of state and renders. If a
-   * word needs changing, it changes there, where a test is watching it.
+   * THIN BY CONSTRUCTION. Every sentence on this page comes from lib/admin/health.ts or
+   * lib/admin/chainHead.ts, both pure and tested. This file fetches four URLs, holds state and
+   * renders. If a word needs changing, it changes there, where a test is watching it.
    */
   import { Callout, Card, Chip, EmptyState, PageHeader } from '../ui'
   import {
@@ -59,6 +67,13 @@
     type ChainReport,
     type ProbeReading,
   } from '../../admin/health'
+  import {
+    CHAIN_HEAD_GATE,
+    fetchChainHead,
+    readChainHead,
+    type ChainHeadView,
+  } from '../../admin/chainHead'
+  import { sha256Hex } from '../../admin/sha256'
 
   let {
     /**
@@ -70,13 +85,13 @@
     pollMs = 30_000,
     fetchImpl = typeof fetch === 'function' ? fetch.bind(globalThis) : undefined,
     /**
-     * Synchronous lowercase-hex SHA-256, if the route has one to give.
-     *
-     * Absent by default, and the consequence is stated on the page rather than papered over: with
-     * no digest the pasted run is examined for shape, ordering and uniqueness only, and the report
-     * says in as many words that it therefore establishes nothing about tampering.
+     * Synchronous lowercase-hex SHA-256 for the chain examiner. The default is the real thing
+     * (task #16): lib/admin/sha256.ts, proven against the published vectors and node:crypto in
+     * its own suite, so a pasted run has its entry hashes actually recomputed. The prop remains
+     * injectable for harnesses; whatever is supplied, the report still lists what was and was
+     * not established, so the words track the check rather than assuming it.
      */
-    digest = undefined,
+    digest = sha256Hex,
   }: {
     baseUrl?: string
     pollMs?: number
@@ -92,6 +107,16 @@
   let relRef = $state('')
   let parseProblem = $state('')
   let chain = $state<ChainReport>(chainUnavailable(CHAIN_NOT_ADMIN_READABLE))
+
+  /*
+   * The server-side chain check. The token lives in this state for exactly as long as the page
+   * is open and goes exactly one place: the Authorization header of the one request
+   * fetchChainHead makes. It is never persisted, never logged, and never rendered back.
+   */
+  let ownerToken = $state('')
+  let headRelRef = $state('')
+  let head = $state<ChainHeadView | null>(null)
+  let fetchingHead = $state(false)
 
   /* Pin the surface dark, and put back whatever was there when this unmounts. */
   $effect(() => {
@@ -159,6 +184,24 @@
     chain = chainUnavailable(CHAIN_NOT_ADMIN_READABLE)
   }
 
+  /* One request, one view. fetchChainHead never throws — a transport failure is a value the
+     reader renders like any other answer — so there is no error path here to forget. */
+  async function fetchHead() {
+    if (!fetchImpl || fetchingHead) return
+    fetchingHead = true
+    try {
+      head = readChainHead(await fetchChainHead({ baseUrl, token: ownerToken }, headRelRef.trim(), fetchImpl))
+    } finally {
+      fetchingHead = false
+    }
+  }
+
+  function clearHead() {
+    ownerToken = ''
+    headRelRef = ''
+    head = null
+  }
+
   /*
    * State to chip tone. No tone means "fine" here — `responding` is neutral, because the absence
    * of something to say is the only reassurance this system offers.
@@ -176,6 +219,19 @@
     contradicted: 'critical',
     'nothing-returned': 'neutral',
     unavailable: 'neutral',
+  }
+
+  /* Same rule as the two maps above: a break and a dead transport alarm, a refusal warns, and
+     everything the server answered as documented — the no-break report included — stays neutral,
+     because the absence of something to say is the only reassurance on this screen. */
+  const HEAD_TONE: Record<ChainHeadView['verdict'], 'neutral' | 'warn' | 'critical'> = {
+    'reported-consistent': 'neutral',
+    'break-reported': 'critical',
+    'nothing-recorded': 'neutral',
+    'not-configured': 'neutral',
+    refused: 'warn',
+    unreachable: 'critical',
+    unexpected: 'warn',
   }
 
 
@@ -295,15 +351,15 @@
             ></textarea>
           </label>
 
-          {#if digest}
-            <label class="field" for="admin-chain-relref">
-              <span class="field-label">
-                Relationship reference — part of the hashed content, so entry hashes cannot be
-                recomputed without it
-              </span>
-              <input id="admin-chain-relref" class="text-input" type="text" bind:value={relRef} />
-            </label>
-          {/if}
+          <!-- No longer conditional on a digest being supplied: the console carries a real one
+               by default now (lib/admin/sha256.ts), so the reference field always has a job. -->
+          <label class="field" for="admin-chain-relref">
+            <span class="field-label">
+              Relationship reference — part of the hashed content, so entry hashes cannot be
+              recomputed without it
+            </span>
+            <input id="admin-chain-relref" class="text-input" type="text" bind:value={relRef} />
+          </label>
 
           <div class="controls">
             <button class="action" type="button" onclick={examine}>Examine run</button>
@@ -364,6 +420,98 @@
 
         {#snippet footer()}
           A run pasted here is examined in this browser tab and is not sent anywhere.
+        {/snippet}
+      </Card>
+    </section>
+
+    <section class="block" aria-label="Server chain check">
+      <Card title="The server’s own chain check">
+        <!-- Whose token this is and what the gate protects, said BEFORE the fields that ask. -->
+        <p class="para">{CHAIN_HEAD_GATE}</p>
+
+        <div class="examiner">
+          <label class="field" for="admin-head-relref">
+            <span class="field-label">Relationship reference</span>
+            <input
+              id="admin-head-relref"
+              class="text-input"
+              type="text"
+              spellcheck="false"
+              autocomplete="off"
+              bind:value={headRelRef}
+            />
+          </label>
+
+          <label class="field" for="admin-head-token">
+            <span class="field-label">
+              Owner bearer token — sent once, to this server’s own route, and kept only in
+              this field while the page is open
+            </span>
+            <input
+              id="admin-head-token"
+              class="text-input"
+              type="password"
+              autocomplete="off"
+              bind:value={ownerToken}
+            />
+          </label>
+
+          <div class="controls">
+            <button
+              class="action"
+              type="button"
+              onclick={() => void fetchHead()}
+              disabled={!fetchImpl || fetchingHead || headRelRef.trim() === '' || ownerToken === ''}
+            >
+              Read the head
+            </button>
+            <button class="action" type="button" onclick={clearHead}>Clear</button>
+          </div>
+        </div>
+
+        {#if head}
+          <div class="verdict">
+            <div class="verdict-head">
+              <Chip tone={HEAD_TONE[head.verdict]}>{head.word}</Chip>
+              {#if head.entryCount !== null && head.entryCount > 0}
+                <span class="verdict-count">
+                  {head.entryCount} entries, sequence {head.oldestSeq} to {head.headSeq}
+                </span>
+              {/if}
+            </div>
+            <p class="verdict-headline">{head.headline}</p>
+
+            {#if head.headGroups.length > 0}
+              <!-- The digest in reading groups, for copying down by hand — the same
+                   four-character chunks the key-fingerprint ceremonies read aloud. -->
+              <div class="digest" aria-label="Chain head digest, in reading groups">
+                {#each head.headGroups as group, i (i)}<span class="digest-group">{group}</span>{/each}
+              </div>
+            {/if}
+            {#if head.headNote}
+              <p class="para">{head.headNote}</p>
+            {/if}
+
+            {#if head.machineDetail}
+              <pre class="machine">{head.machineDetail}</pre>
+            {/if}
+
+            <!-- Body text under the verdict, exactly as on the examiner above: the
+                 qualification has to be as legible as the claim it qualifies. -->
+            <Callout tone="info" title="What this verdict does not say">
+              {head.caveat}
+            </Callout>
+
+            {#if head.notes.length > 0}
+              <ul class="notes">
+                {#each head.notes as note, i (i)}<li>{note}</li>{/each}
+              </ul>
+            {/if}
+          </div>
+        {/if}
+
+        {#snippet footer()}
+          The response carries counts, sequence extents and one hash — never an audit entry.
         {/snippet}
       </Card>
     </section>
@@ -696,6 +844,28 @@
     color: var(--ink-text);
     font-size: 1rem;
     line-height: 1.55;
+  }
+
+  /* The head digest, four characters to a group. Mono and boxed per group so a person copying
+     it down by hand has the same chunks to check off that the fingerprint ceremonies read
+     aloud; the gaps are layout, not content — the value is the groups joined back together. */
+  .digest {
+    margin: var(--space-3) 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-2);
+  }
+
+  .digest-group {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    letter-spacing: 0.08em;
+    padding: 0.125rem var(--space-2);
+    background: var(--chrome-2);
+    border: 1px solid var(--chrome-hair);
+    border-radius: var(--radius-sm);
+    color: var(--chrome-ink);
+    white-space: nowrap;
   }
 
   .list-title {

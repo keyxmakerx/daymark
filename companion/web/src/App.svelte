@@ -10,9 +10,38 @@
   import Orientation from './lib/components/onboarding/Orientation.svelte'
   import RecoverAccess from './lib/components/owner/RecoverAccess.svelte'
   import ToolBuilder from './lib/components/ToolBuilder.svelte'
+  import SetupEntry from './lib/components/setup/SetupEntry.svelte'
+  import ShapeStrip from './lib/components/setup/ShapeStrip.svelte'
+  import PracticePlaceholder from './lib/components/setup/PracticePlaceholder.svelte'
+  import {
+    decidedShape,
+    defaultSetupStorage,
+    forgetShape,
+    readStoredChoice,
+    rememberShape,
+    resolveSetup,
+    shapeById,
+    shouldReadConfiguration,
+    type ConfigState,
+    type ShapeId,
+    type StoredChoice,
+  } from './lib/setup/shape'
+  import { startConfigurationRead } from './lib/setup/configProbe'
+  import { trustPostureFor } from './lib/trust/posture'
   import type { InstrumentDefinition } from './lib/instruments/types'
 
   type Source = 'file' | 'sync' | 'assess' | 'build' | 'owner' | 'recover'
+
+  /*
+   * The seventh destination, and why it is not in `Source`.
+   *
+   * `Source` is the OWNER's six entry points, modelled in lib/onboarding/audience.ts as
+   * OWNER_ROUTES and cross-checked against this very declaration by audience.test.ts. The
+   * practice surface is not one of them — it belongs to a different deployment shape and appears
+   * only when this machine is set up as a clinic's — so it is a separate member of the surface
+   * union rather than a seventh tab nobody in Solo or Paired can ever reach.
+   */
+  type Surface = Source | 'practice'
 
   let data = $state<BackupData | null>(null)
   let fileName = $state('')
@@ -20,16 +49,163 @@
   // An emailed access-token recovery link lands here as `#t=<token>` (see RecoverAccess.svelte);
   // land the owner straight on the recovery tab instead of the default "open a backup" tab.
   const startedOnRecoveryLink = typeof window !== 'undefined' && /(?:^|[#&])t=/.test(window.location.hash)
-  let source = $state<Source>(startedOnRecoveryLink ? 'recover' : 'file')
+  let source = $state<Surface>(startedOnRecoveryLink ? 'recover' : 'file')
 
-  // Which posture the trust strip should state. Derived from the tab, NOT from
-  // navigator.onLine — being offline this instant says nothing about whether the surface
-  // would call out, and the strip used to go green on exactly that reasoning. Once a
-  // backup is loaded the strip describes the tab that loaded it, which is why `data`
-  // does not reset this.
-  const trustSurface: 'local' | 'sync' | 'account' = $derived(
-    source === 'sync' ? 'sync' : source === 'owner' || source === 'recover' ? 'account' : 'local',
+  /*
+   * ═══════════════════════════════════════════════════════════════════════════════════════════
+   * FIRST RUN: WHICH OF THE THREE DEPLOYMENT SHAPES THIS MACHINE IS.
+   * ═══════════════════════════════════════════════════════════════════════════════════════════
+   *
+   * docs/PLAN_2026-08-COMPANION-NEXT.md §3.11 names three, and they are not sizes of one product:
+   * Solo and Paired put the journal on its owner's own hardware, while Practice inverts that and
+   * makes the person a tenant on their clinic's machine. Nothing in this app used to ask, so the
+   * answer was whatever screen somebody clicked first.
+   *
+   * The state below is the whole gate, and it is deliberately small:
+   *
+   *   config   what GET /v1/config said. Starts as `reading` — which suppresses the question
+   *            rather than asking one that configuration may be about to answer — and STAYS
+   *            there on the loads that make no request at all, because "nothing has been read"
+   *            and "the read is in flight" are the same thing to this screen.
+   *   session  a choice made this visit, which stands whether or not the browser kept it.
+   *   stored   what this browser had recorded.
+   *
+   * `resolveSetup` puts them in precedence order — configuration over this visit over this
+   * browser — and returns either "ask" or the shape. FAIL OPEN is the rule throughout: every
+   * failure of storage or of the probe lands on asking a question again, and none of them can
+   * leave somebody unable to reach their own machine. That is why the recovery link below is
+   * checked before the gate at all.
+   */
+  const setupStorage = defaultSetupStorage()
+
+  let config = $state<ConfigState>({ kind: 'reading' })
+  let sessionShape = $state<ShapeId | null>(null)
+  let stored = $state<StoredChoice | null>(readStoredChoice(setupStorage))
+  let storageRefused = $state(false)
+  let forgetRefused = $state(false)
+
+  const decision = $derived(resolveSetup({ config, session: sessionShape, stored }))
+
+  /*
+   * ═══════════════════════════════════════════════════════════════════════════════════════════
+   * THE CONFIGURATION READ, AND THE LOADS THAT DO NOT MAKE ONE.
+   * ═══════════════════════════════════════════════════════════════════════════════════════════
+   *
+   * This was an unconditional probe: an `$effect` reading no reactive state, so it fired once per
+   * page load, forever, on every visit. That made index.html reach the server every time it
+   * opened — and the strip rendered a few lines below promises, on the "Open a backup file" tab,
+   * that this tab sends nothing. It cannot both be true. A server contacted on every load learns
+   * the address and the hour of every time somebody opened the offline viewer, which is precisely
+   * the metadata the sync posture treats as worth disclosing out loud.
+   *
+   * So the read is now scoped to the question it answers. `shouldReadConfiguration` is the rule
+   * (lib/setup/shape.ts, beside the precedence it mirrors) and `startConfigurationRead` is the
+   * request (lib/setup/configProbe.ts, which owns the timeout and the abort). Reading
+   * `sessionShape` and `stored` here is deliberate: it makes this effect re-run when the answer
+   * changes, so choosing a shape CANCELS an in-flight probe through the cleanup below, and
+   * reopening the question starts a fresh one. `config` is written and never read here, so the
+   * write cannot feed back into the effect that made it.
+   *
+   * WHAT THIS COSTS, stated because it is a real trade and not a free win: a browser that has
+   * already answered no longer notices a deployment that pins the shape afterwards, until the
+   * question is reopened. That is CONFIGURATION_IS_NOT_RE_READ, which the strip shows next to the
+   * answer it qualifies rather than leaving an operator to discover a setting that appeared not
+   * to work.
+   */
+  $effect(() =>
+    startConfigurationRead({ session: sessionShape, stored }, (state) => {
+      config = state
+    }),
   )
+
+  /*
+   * Land on the shape's own surface, ONCE PER SHAPE.
+   *
+   * A plain `let` rather than `$state`: this is a latch, nothing renders from it, and making it
+   * reactive would have the effect that sets it re-run on its own write. The latch is what keeps
+   * this from being a routing rule — a person who chose Paired and then walked over to the
+   * self-checks tab stays there, and the next re-render does not drag them back.
+   *
+   * KEYED BY SHAPE RATHER THAN A BOOLEAN, because the latch has to survive the shape changing
+   * under a settled page — a boolean would leave that person looking at the surface for a shape
+   * the strip above them says this machine is not.
+   *
+   * The route that used to produce exactly that is now closed, and saying so is the point of
+   * keeping this paragraph rather than deleting it: a stored answer would resolve first and a
+   * configured deployment's answer could outrank it a moment later, because configuration was
+   * read on every load. It is read only while the question is open now, so a browser that has an
+   * answer no longer has one arrive on top of it. The keying stays because it is what makes this
+   * latch correct without depending on that, and because `reopenSetupQuestion` clearing it is
+   * then a statement about re-landing rather than the only thing holding the latch together.
+   */
+  let landedShape: ShapeId | null = null
+
+  $effect(() => {
+    const shape = decidedShape(decision)
+    if (shape === null || shape === landedShape || startedOnRecoveryLink) return
+    landedShape = shape
+    source = shapeById(shape).primary
+  })
+
+  function chooseShape(id: ShapeId) {
+    // The choice stands for this visit either way; the return value only decides whether the
+    // person is told the browser would not keep it (lib/setup/shape.ts, STORAGE_REFUSED).
+    storageRefused = !rememberShape(setupStorage, id)
+    forgetRefused = false
+    sessionShape = id
+    stored = readStoredChoice(setupStorage)
+  }
+
+  function reopenSetupQuestion() {
+    // `forgetShape` returns false when the browser refused the removal, and discarding that would
+    // be claiming a deletion that did not happen — the same failure Orientation.svelte had to
+    // grow a message for. Either way the question comes back on screen now.
+    forgetRefused = !forgetShape(setupStorage)
+    storageRefused = false
+    sessionShape = null
+    stored = null
+    // Cleared so answering the question again re-lands on that shape's surface, even when the
+    // same shape is chosen: the latch above would otherwise treat it as already landed.
+    landedShape = null
+  }
+
+  /*
+   * The gate. Open only when there is no answer yet AND this visit is not a recovery link.
+   *
+   * The recovery bypass is not a convenience. An emailed access-token link is followed by someone
+   * who has already lost something, and a first-run question standing between them and their own
+   * access would be the one failure this screen must never cause. The question is deferred rather
+   * than answered, and ShapeStrip says which of those it is instead of leaving the machine
+   * looking set up.
+   */
+  const setupGateOpen = $derived(
+    !startedOnRecoveryLink && (decision.state === 'reading' || decision.state === 'ask'),
+  )
+  const shapeUndecided = $derived(decidedShape(decision) === null)
+
+  /*
+   * WHICH POSTURE THE TRUST STRIP STATES.
+   *
+   * Derived from the tab AND from whether this load is reading configuration — never from
+   * navigator.onLine, because being offline this instant says nothing about whether the surface
+   * would call out, and the strip used to go green on exactly that reasoning. Once a backup is
+   * loaded the strip describes the tab that loaded it, which is why `data` does not reset this.
+   *
+   * The mapping itself is `trustPostureFor` in lib/trust/posture.ts rather than a ternary here.
+   * It was a ternary here, and that is how it came to promise "sends nothing" over a page that
+   * had just made a request: three tabs were named and everything else fell through to `local`,
+   * so a request belonging to none of the three named tabs was invisible to it. As a function it
+   * is a rule with a test over every surface — a page that is reaching the network is never
+   * described as sending nothing.
+   *
+   * The second argument is the same predicate the effect above uses, so the strip cannot say one
+   * thing while the probe does another: they are not two readings of the same intent, they are
+   * one expression evaluated twice.
+   */
+  const readingConfiguration = $derived(
+    shouldReadConfiguration({ session: sessionShape, stored }),
+  )
+  const trustSurface = $derived(trustPostureFor(source, readingConfiguration))
 
   function load(text: string, name: string) {
     error = ''
@@ -84,8 +260,31 @@
   <main>
     <TrustBar surface={trustSurface} />
 
-    {#if !data}
+    {#if setupGateOpen}
+      <!--
+        NOT YET SET UP. The one screen in this product allowed to explain itself, and it is shown
+        exactly until the question has an answer — from this browser or from configuration. Note
+        that it replaces the destination menu rather than sitting above it: six equal-weight verbs
+        under a question about what the machine is for would be the maintainer's original
+        complaint ("there's like 10 different buttons.. why") with one more thing on top.
+      -->
+      <SetupEntry {decision} {config} onchoose={chooseShape} {storageRefused} />
+    {:else if !data}
       <section class="intro">
+        <!--
+          ALREADY SET UP: the strip states the answer and gets out of the way. Everything below it
+          is the surface that existed before this slice, unchanged — a returning person meets
+          their own destinations, not a setup screen wearing a smaller font.
+        -->
+        <ShapeStrip
+          {decision}
+          onchange={reopenSetupQuestion}
+          onopenpractice={() => (source = 'practice')}
+          {storageRefused}
+          {forgetRefused}
+          bypassed={startedOnRecoveryLink && shapeUndecided}
+        />
+
         <!--
           THE ORIENTATION IS THE NAVIGATION, not a banner above it.
 
@@ -102,7 +301,14 @@
           `adminLink` is left at its default of false: admin.html holds no credential on this
           build, and a deployment should have to choose to advertise it from a public page.
         -->
-        <Orientation selected={source} onchoose={(id) => (source = id)} />
+        <!--
+          `selected` is one of the owner's six; the practice surface is not among them and passes
+          `undefined` rather than a route id Orientation has no button for.
+        -->
+        <Orientation
+          selected={source === 'practice' ? undefined : source}
+          onchoose={(id) => (source = id)}
+        />
 
         {#if source === 'file'}
           <Dropzone onload={load} onerror={(m) => (error = m)} />
@@ -114,6 +320,13 @@
           <ToolBuilder onPublish={publishTool} />
         {:else if source === 'recover'}
           <RecoverAccess />
+        {:else if source === 'practice'}
+          <!--
+            The marked placeholder standing where the practice console will be. It is reached only
+            from the practice shape, and it says in the interface that it holds no data — see the
+            header note in PracticePlaceholder.svelte for why an empty roster was the wrong answer.
+          -->
+          <PracticePlaceholder />
         {:else}
           <OwnerConsole data={null} />
         {/if}
@@ -121,7 +334,9 @@
         {#if error}
           <p class="error" role="alert">{error}</p>
         {/if}
-        {#if source !== 'assess' && source !== 'build' && source !== 'owner' && source !== 'recover'}
+        <!-- 'practice' joins the exclusions: that panel is about a clinic's machine, and the note
+             below is instructions for dropping your own backup file on the two tabs that take one. -->
+        {#if source !== 'assess' && source !== 'build' && source !== 'owner' && source !== 'recover' && source !== 'practice'}
           <p class="faint note">
             Non-diagnostic: Daymark is a self-tracking and journaling tool. Nothing here
             is a medical assessment. Export a backup from the app via

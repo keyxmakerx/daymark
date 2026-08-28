@@ -9,8 +9,16 @@
   import PinnedTherapistPicker from './PinnedTherapistPicker.svelte'
   import NotificationSettings from './NotificationSettings.svelte'
   import PinRecord from './PinRecord.svelte'
+  import TherapistKeyIntake from './TherapistKeyIntake.svelte'
   import { withGrant, type OwnerSession } from './session'
+  import type { PinnedTherapist } from './session'
+  import InvitePanel from './InvitePanel.svelte'
+  import { emptyGrant } from '../../assignments/grant'
+  import { fingerprint } from '../../assignments/crypto'
+  import { sasWords } from '../../share/pairing'
+  import type { TherapistKeyRecord } from '../../owner/therapistKeys' 
   import { PortalClient } from '../../sync/portal'
+  import type { OwnerEndpoint } from '../../owner/therapistKeys'
   import type { Grant } from '../../assignments/types'
 
   let { data }: { data: BackupData | null } = $props()
@@ -18,7 +26,13 @@
   // 'pins' is whole-browser rather than per-therapist — it shows the record of every key this
   // browser has written down, including therapists whose keys are not entered in this session —
   // so it renders beside 'notify' rather than under the therapist picker.
-  type Sub = 'review' | 'grants' | 'inbox' | 'share' | 'access-log' | 'notify' | 'pins'
+  //
+  // 'published-keys' is the other half of that pair and is per-therapist, which is why it sits
+  // inside the picker's scope: it reads what ONE therapist published for ONE relationship and
+  // offers it for pinning. Two tabs about keys is deliberate rather than a split that wants
+  // merging — "what they published" comes from the server and is not trusted yet, "pinned keys" is
+  // what this browser decided to remember and is what every seal is checked against.
+  type Sub = 'review' | 'grants' | 'inbox' | 'published-keys' | 'share' | 'access-log' | 'notify' | 'pins'
 
   let session = $state<OwnerSession | null>(null)
   let sub = $state<Sub>('grants')
@@ -29,6 +43,13 @@
   let token = $state('')
   let smtpEnabled = $state(false)
   let client = $state<PortalClient | null>(null)
+  /*
+   * The same base URL and token as `client`, captured at connect time for the owner calls that are
+   * plain module functions rather than PortalClient methods. Captured rather than read live from
+   * the two fields above, so editing the connection form without reconnecting cannot leave one
+   * surface talking to a different server than the rest of the console.
+   */
+  let endpoint = $state<OwnerEndpoint | null>(null)
   let connectStatus = $state('')
 
   const selected = $derived(session?.pinned.find((t) => t.id === selectedId) ?? null)
@@ -41,6 +62,7 @@
   function lock() {
     session = null
     client = null
+    endpoint = null
     selectedId = null
   }
 
@@ -48,15 +70,49 @@
     connectStatus = ''
     if (!token) { connectStatus = 'Enter your owner access token.'; return }
     const c = new PortalClient(serverUrl, token)
+    const e: OwnerEndpoint = { baseUrl: serverUrl, token }
     try {
       const cfg = await c.getConfig()
       smtpEnabled = cfg.smtpEnabled
       client = c
+      endpoint = e
       connectStatus = 'Connected.'
     } catch {
       client = c // still usable for blob calls; config probe is best-effort
+      endpoint = e
       connectStatus = 'Connected (config probe failed; email invites hidden).'
     }
+  }
+
+  /*
+   * A pending clinician's keys arrived — confirmed against the read-aloud check, never merely
+   * fetched. The entry is REBUILT rather than mutated: its id is the signing-key fingerprint and
+   * its grant is bound to that id, so a pending entry (whose id was a placeholder) cannot keep
+   * either. Name, inbox token and pinnedAt survive; the SAS words are computed now that there are
+   * finally two identities to compute them over.
+   */
+  function keysArrived(record: TherapistKeyRecord) {
+    if (!session || !selectedId) return
+    const cur = session.pinned.find((t) => t.id === selectedId)
+    if (!cur) return
+    const signPub = record.signPub
+    const boxPub = record.boxPub
+    const id = fingerprint(signPub)
+    const words = sasWords(
+      { x25519Pub: session.ownerBox.publicKey, ed25519Pub: session.ownerSign.publicKey },
+      { x25519Pub: boxPub, ed25519Pub: signPub },
+    ).join(' ')
+    const filled: PinnedTherapist = {
+      ...cur,
+      id,
+      signPub,
+      boxPub,
+      grant: cur.keysPending ? emptyGrant(id) : cur.grant,
+      fingerprintWords: words,
+      keysPending: false,
+    }
+    session = { ...session, pinned: session.pinned.map((t) => (t.id === cur.id ? filled : t)) }
+    selectedId = id
   }
 
   function onGrantChange(grant: Grant) {
@@ -74,6 +130,7 @@
         <button class:active={sub === 'review'} aria-pressed={sub === 'review'} onclick={() => (sub = 'review')}>Review</button>
         <button class:active={sub === 'grants'} aria-pressed={sub === 'grants'} onclick={() => (sub = 'grants')}>Grants</button>
         <button class:active={sub === 'inbox'} aria-pressed={sub === 'inbox'} onclick={() => (sub = 'inbox')}>Inbox</button>
+        <button class:active={sub === 'published-keys'} aria-pressed={sub === 'published-keys'} onclick={() => (sub = 'published-keys')}>Published keys</button>
         <button class:active={sub === 'share'} aria-pressed={sub === 'share'} onclick={() => (sub = 'share')}>Share</button>
         <button class:active={sub === 'access-log'} aria-pressed={sub === 'access-log'} onclick={() => (sub = 'access-log')}>Access log</button>
         <button class:active={sub === 'notify'} aria-pressed={sub === 'notify'} onclick={() => (sub = 'notify')}>Notifications</button>
@@ -108,13 +165,31 @@
       </div>
 
       {#if !selected}
-        <p class="empty faint">Pin a therapist in the unlock step to grant, review, or share.</p>
+        <p class="empty faint">Add a clinician in the unlock step to grant, review, or share.</p>
+      {:else if selected.keysPending && (sub === 'grants' || sub === 'inbox' || sub === 'access-log')}
+        <!--
+          Everything that grants, opens or verifies needs the clinician's keys, and a pending entry
+          has none yet — by design, not by omission. Saying which step is missing beats disabling
+          three tabs into grey mysteries.
+        -->
+        <p class="empty faint">
+          {selected.displayName} has not published keys yet. Send the invitation from the Share tab;
+          once they accept, their keys appear under Published keys for you to check and record.
+        </p>
       {:else if sub === 'grants'}
         <GrantManager {session} therapist={selected} {client} {onGrantChange} />
       {:else if sub === 'inbox'}
         <AssignmentInbox {session} {client} />
+      {:else if sub === 'published-keys'}
+        <TherapistKeyIntake therapist={selected} {endpoint} onkeys={keysArrived} />
       {:else if sub === 'share'}
-        <ShareBuilder {session} therapist={selected} {data} {client} {smtpEnabled} />
+        {#if selected.keysPending}
+          <!-- The invitation is mintable the moment a relationship has a token; sealing is not.
+               ShareBuilder would offer both, so a pending clinician gets the half that exists. -->
+          <InvitePanel therapist={selected} client={client} {smtpEnabled} scope={['read.share']} />
+        {:else}
+          <ShareBuilder {session} therapist={selected} {data} {client} {smtpEnabled} />
+        {/if}
       {:else if sub === 'access-log'}
         <AuditList therapist={selected} {client} />
       {/if}

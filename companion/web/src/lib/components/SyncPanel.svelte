@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Component } from 'svelte'
   import { parseBackup, type BackupData } from '../backup'
 
   let { onload }: { onload: (data: BackupData, source: string) => void } = $props()
@@ -29,6 +30,49 @@
       error = e instanceof Error ? e.message : 'Could not fetch and decrypt.'
     } finally {
       busy = false
+    }
+  }
+
+  /*
+   * THE RECOVERY-CODE SCREEN, REACHED FROM HERE AND LOADED ON DEMAND.
+   *
+   * WHY IT HANGS OFF THIS PANEL. This is the screen about the sync server, and the sync server is
+   * the answer to "my phone is gone, how do I get the past years of my life back"
+   * (PLAN_2026-08-COMPANION-NEXT.md §3.11.1). A recovery code is the second half of that same
+   * question — the half that applies when what was lost is the passphrase rather than the handset —
+   * so it belongs beside the passphrase field rather than behind a separate route nobody visits
+   * until it is too late to be useful.
+   *
+   * WHY IT IS DYNAMICALLY IMPORTED. Same reason the sync client above is: the recovery screen
+   * reaches libsodium (the code generator draws from the CSPRNG, and the wrapping is Argon2id plus
+   * XChaCha20-Poly1305), and a static import would put the whole panel plus a WASM crypto library
+   * in the entry chunk for a screen most visitors never open.
+   *
+   * Worth being exact about what that does and does not buy, since the sentence above this one is
+   * the kind that gets believed later: the entry chunk ALREADY reaches libsodium today, statically,
+   * through OwnerConsole -> sync/portal.ts. So this keeps the recovery panel's own weight out of it
+   * and does not on its own restore the "the offline viewer never pays for libsodium" property that
+   * the lazy import below the passphrase field was written for. That property is somebody else's
+   * file to repair; this one is careful not to make it worse.
+   *
+   * Held as a component value rather than behind an `{#await}` so that opening it is one decision
+   * with one loading state, and so it stays mounted once it is there.
+   */
+  let RecoveryPanel = $state<Component | null>(null)
+  let loadingRecovery = $state(false)
+  let recoveryError = $state('')
+
+  async function openRecovery() {
+    recoveryError = ''
+    loadingRecovery = true
+    try {
+      RecoveryPanel = (await import('./recovery/RecoveryPanel.svelte')).default
+    } catch {
+      // The chunk is served by this same origin, so the realistic causes are a stale page against a
+      // redeployed server or an offline tab. Neither is worth a technical sentence.
+      recoveryError = 'That screen could not be loaded. Reload the page and try again.'
+    } finally {
+      loadingRecovery = false
     }
   }
 </script>
@@ -68,6 +112,30 @@
   {/if}
 </div>
 
+<!--
+  Deliberately outside the card above, and deliberately below it. The card is the task somebody came
+  here for; this is the thing they will need on the day that task stops working, and it is only
+  useful if it is set up long before then.
+-->
+<section class="recovery">
+  {#if RecoveryPanel}
+    <RecoveryPanel />
+  {:else}
+    <h2 class="recovery-title">Recovery code</h2>
+    <p class="recovery-lede">
+      The passphrase above is the only way into your snapshots. A recovery code is a second one,
+      held by you and by nobody else — not this server, which holds ciphertext and has never held
+      the key.
+    </p>
+    <button type="button" onclick={openRecovery} disabled={loadingRecovery}>
+      {loadingRecovery ? 'Loading' : 'Open the recovery code screen'}
+    </button>
+    {#if recoveryError}
+      <p class="error" role="alert">{recoveryError}</p>
+    {/if}
+  {/if}
+</section>
+
 <style>
   .sync { display: flex; flex-direction: column; gap: var(--space-3); max-width: 34rem; }
   .warn-banner {
@@ -97,4 +165,19 @@
   button { align-self: flex-start; }
   /* Failure takes the single alarm hue; it was --mood-1, a person's worst reported day. */
   .error { color: var(--clay); background: var(--clay-wash); border: 1px solid var(--clay); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); margin: 0; }
+
+  /* The recovery entry point. Wider than the sync card once the panel is open, because the code
+     sheet needs the room to draw thirty characters large enough to copy accurately. Until then it
+     is two sentences and a button, and stays within the same reading measure as everything above. */
+  .recovery {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin-top: var(--space-6);
+    padding-top: var(--space-5);
+    border-top: 1px solid var(--hairline);
+  }
+  .recovery-title { font-size: 1.3rem; margin: 0; }
+  .recovery-lede { margin: 0; max-width: 34rem; font-size: 0.9rem; color: var(--ink-soft); }
 </style>

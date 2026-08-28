@@ -80,7 +80,14 @@ export class PortalClient {
   constructor(
     baseUrl: string,
     private readonly token: string,
-    private readonly doFetch: FetchLike = fetch,
+    /*
+     * BOUND, and the binding is load-bearing. A bare `fetch` stored as a default and later invoked
+     * as `this.doFetch(...)` arrives with `this` set to this class instance, and Chromium refuses
+     * that with "Illegal invocation" — so every server call this client makes fails in a real
+     * browser while every test passes, because tests inject their own fetch and never evaluate
+     * this default. Found by driving the built page in Chromium; a node suite cannot see it.
+     */
+    private readonly doFetch: FetchLike = fetch.bind(globalThis),
   ) {
     this.base = baseUrl.replace(/\/+$/, '')
   }
@@ -218,7 +225,7 @@ export class PortalClient {
  * Request access-token recovery. Always resolves — the server responds identically whether the
  * email matches the registered one or not (non-enumerating), so this never throws on mismatch.
  */
-export async function requestAccessRecovery(baseUrl: string, email: string, doFetch: FetchLike = fetch): Promise<void> {
+export async function requestAccessRecovery(baseUrl: string, email: string, doFetch: FetchLike = fetch.bind(globalThis)): Promise<void> {
   const base = baseUrl.replace(/\/+$/, '')
   await doFetch(base + '/v1/recovery/request', {
     method: 'POST',
@@ -228,7 +235,7 @@ export async function requestAccessRecovery(baseUrl: string, email: string, doFe
 }
 
 /** Confirm a recovery link (the link's `t=` fragment value) and receive the new owner access token once. */
-export async function confirmAccessRecovery(baseUrl: string, confirmToken: string, doFetch: FetchLike = fetch): Promise<RecoveryConfirmResult> {
+export async function confirmAccessRecovery(baseUrl: string, confirmToken: string, doFetch: FetchLike = fetch.bind(globalThis)): Promise<RecoveryConfirmResult> {
   const base = baseUrl.replace(/\/+$/, '')
   const res = await doFetch(base + '/v1/recovery/confirm', {
     method: 'POST',

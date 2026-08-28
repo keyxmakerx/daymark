@@ -35,8 +35,8 @@ android {
         // Stays 35, and stays EXPLICIT. AGP 9 defaults targetSdk to compileSdk when unset, so an
         // implicit value would silently become 36 and opt the app into new runtime behaviour.
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -67,6 +67,29 @@ android {
     }
 
     signingConfigs {
+        /*
+         * A COMMITTED keystore, and that is the point, not an accident.
+         *
+         * Every CI runner used to generate its own throwaway debug keystore, so every artifact
+         * carried a DIFFERENT signature — and Android refuses to update an app whose signature
+         * changed. The maintainer, who installs these artifacts on their real phone, could never
+         * update in place: each new build meant uninstall-and-reinstall, on a local-first journal
+         * where uninstalling deletes the data. A stable key is what makes "update" a real word.
+         *
+         * Its password sits beside it in the clear because SECRECY IS EXPLICITLY NOT THE GOAL.
+         * This key is a debug/testing channel, not an identity: anyone can clone this repo and
+         * sign an APK that updates an install of this channel, which is exactly as true of every
+         * open-source nightly channel and is why real releases sign with the OTHER config below,
+         * whose keystore lives only in repository secrets. Do not ship this key to a store, and do
+         * not treat its signature as provenance — the release key is the identity, this one is
+         * update-continuity for testers.
+         */
+        getByName("debug") {
+            storeFile = file("ci-signing/ci-debug.keystore")
+            storePassword = "daymark-ci-public"
+            keyAlias = "daymark-ci"
+            keyPassword = "daymark-ci-public"
+        }
         create("release") {
             if (releaseStorePath != null) {
                 storeFile = file(releaseStorePath)

@@ -735,6 +735,15 @@ ever was — it is someone guessing — and it needs a distinct action and a thr
 
 ### 3.7.6 A verified blocker on the Android side — **RESOLVED, and it was not where this said**
 
+> **SUPERSEDED AGAIN 2026-08-28 — the split pin below was never needed.** The "5.2.0 must be
+> avoided" warning treated the JVM-21 metadata as a wall; it was a per-module toolchain setting.
+> CI run 33128182690 (branch `claude/lazysodium-520-experiment`) proved `:app` at 17 consumes a
+> `:sync-crypto` at 21, so BOTH artifacts now sit at 5.2.0 — full Ristretto on both sides AND
+> libsodium 1.0.20 (2024) on the phone in place of 1.0.18 (2019), which the split pin would not
+> have delivered. The reflection test this section asked for exists: `LazySodiumParityTest` in
+> `sync-crypto`, mutation-proven against doctored AARs. The residual-risk paragraph below stands
+> unchanged: the ristretto path has still never executed on a physical device.
+
 > **ANSWERED 2026-08-17 (gate 0.1). This section's diagnosis was right about the symptom and wrong
 > about the patient, and the correction is good news.**
 >
@@ -1279,6 +1288,23 @@ established approach rather than a new one.
 
 **Deliverable:** a written answer to both, in this document, with the test committed if 0.2 passes.
 
+> **0.2 ANSWERED YES, 2026-08-28 — and stronger than the gate asked.** Two independent
+> implementations of CPACE-RISTRETTO255-SHA512, written against the draft itself:
+> `companion/web/src/lib/pairing/cpace.ts` (libsodium-wrappers-sumo) and
+> `sync-crypto/.../CpaceCrypto.kt` (lazysodium-java 5.2.0 — possible only because the 5.2.0
+> move landed; 5.1.0's java artifact had no ristretto at all). Both are pinned byte-for-byte
+> to the CFRG working group's published test vectors — generator string, generator point,
+> MSGa, MSGb, K, ISK — in their own unit suites, so they agree with each other transitively
+> and neither is the reference for the other; the standard is the reference for both. On top
+> of the vectors, a live fresh-randomness exchange was executed on this host in BOTH
+> directions (browser starts / JVM responds / browser finishes, and the reverse) with equal
+> ISKs, plus the negative case: a wrong code diverges silently, which is the property the
+> burn rule leans on. Harness: `companion/web/e2e/cpace-live.mts` + `CpaceLiveCli.kt`, both
+> compiled by their own CI so they cannot rot. The crypto has its oracle; everything
+> downstream of §3.7 is now buildable against tests. (0.1 was answered earlier — see §3.7.6's
+> banners; both artifacts now carry the full surface at 5.2.0, `LazySodiumParityTest` holds
+> it.)
+
 ---
 
 #### Step 1 — The decision §3.9.3 forces
@@ -1393,6 +1419,21 @@ encrypted negotiation of keys and capabilities behind it, TOTP enrolment moved *
 owner-visible invite state (waiting / in progress / finished / dead), an owner **Cancel**, the
 Leave / Revoke verbs of §3.6.1, and the new `AuditAction` kinds — including one for a failed PAKE
 attempt, with a threshold that alerts (§3.7.5).
+
+> **PROGRESS 2026-08-28 — the transport and the channel now exist; the ceremony is not yet moved
+> onto them.** Landed, additive, beside the working ceremony: (1) the relay —
+> `PairingStore` + `/v1/relations/{relRef}/pairing` (owner: open/read/close/**Cancel**) and
+> `/v1/invite/{id}/pairing` (therapist: fetch/respond, invite-secret proof that consumes
+> nothing, shared fail counter and source budget with redeem), blobs opaque and byte-identical,
+> `pairing.opened/responded/cancelled` audit actions; (2) the client (`pairing/relay.ts`)
+> driving the real CPace over those routes, with the **§3.7.4 test**: a full pairing through a
+> recording transport, every request grepped for the code in five encodings, planted-example
+> guard; (3) the envelope layer (`pairing/envelope.ts`) — directional keys off the ISK, AEAD
+> bound to sid+direction+version, and the point where a wrong code is finally observable: as a
+> null, one bit, no diagnosis, so a typo can never be rendered as an attack. Still to move:
+> the negotiation PAYLOADS (keys, capabilities, TOTP enrolment inside the channel), the UI
+> surfaces, and the failed-PAKE audit action with its alert threshold — those change the
+> ceremony people currently use, so they land as a deliberate stage, not a side effect.
 
 **4.0b — the phone becomes the owner's pairing device.** §3.7.6 + §3.6.5 layer 1. A separate stage,
 not a separate design: the protocol is identical, only the device running the owner's half changes.

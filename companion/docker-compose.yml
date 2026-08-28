@@ -118,6 +118,21 @@ services:
       DAYMARK_WEBAUTHN_RP_ID:   "${DAYMARK_DOMAIN:?set in .env, e.g. daymark.example.com}"
       DAYMARK_WEBAUTHN_ORIGINS: "${DAYMARK_PUBLIC_SCHEME:-https}://${DAYMARK_DOMAIN:?set in .env, e.g. daymark.example.com}"
 
+      # The therapist portal and the practice console. OFF unless this says 1, and off is
+      # the right default — a Solo deployment has no clinician and no practice, so the
+      # whole relationship surface is dead code it should not be running.
+      #
+      # It was absent from this file entirely until the shapes it gates had interfaces, and
+      # the failure mode was miserable rather than obvious: every /v1 relationship route
+      # answers 503 "therapist portal not configured", so an operator who invited a
+      # clinician got a working-looking console, a real invite link, and a portal that
+      # refused at the last step with a message about configuration they never set.
+      # Fail-closed is correct; failing closed on a setting nobody knew existed is not.
+      #
+      # Set it to 1 for Paired (one clinician) or Practice (a clinic runs this machine).
+      # Leave it 0 for Solo. Changing it needs a restart; nothing is migrated either way.
+      DAYMARK_THERAPIST_AUTH: "${DAYMARK_THERAPIST_AUTH:-0}"
+
       DAYMARK_AUTH_TOKEN_FILE: "/run/secrets/companion_auth_token"
 
       # App-layer limits (Config.kt defaults, stated explicitly so they are auditable).
