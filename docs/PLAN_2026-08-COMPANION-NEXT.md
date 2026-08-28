@@ -1288,6 +1288,23 @@ established approach rather than a new one.
 
 **Deliverable:** a written answer to both, in this document, with the test committed if 0.2 passes.
 
+> **0.2 ANSWERED YES, 2026-08-28 — and stronger than the gate asked.** Two independent
+> implementations of CPACE-RISTRETTO255-SHA512, written against the draft itself:
+> `companion/web/src/lib/pairing/cpace.ts` (libsodium-wrappers-sumo) and
+> `sync-crypto/.../CpaceCrypto.kt` (lazysodium-java 5.2.0 — possible only because the 5.2.0
+> move landed; 5.1.0's java artifact had no ristretto at all). Both are pinned byte-for-byte
+> to the CFRG working group's published test vectors — generator string, generator point,
+> MSGa, MSGb, K, ISK — in their own unit suites, so they agree with each other transitively
+> and neither is the reference for the other; the standard is the reference for both. On top
+> of the vectors, a live fresh-randomness exchange was executed on this host in BOTH
+> directions (browser starts / JVM responds / browser finishes, and the reverse) with equal
+> ISKs, plus the negative case: a wrong code diverges silently, which is the property the
+> burn rule leans on. Harness: `companion/web/e2e/cpace-live.mts` + `CpaceLiveCli.kt`, both
+> compiled by their own CI so they cannot rot. The crypto has its oracle; everything
+> downstream of §3.7 is now buildable against tests. (0.1 was answered earlier — see §3.7.6's
+> banners; both artifacts now carry the full surface at 5.2.0, `LazySodiumParityTest` holds
+> it.)
+
 ---
 
 #### Step 1 — The decision §3.9.3 forces
