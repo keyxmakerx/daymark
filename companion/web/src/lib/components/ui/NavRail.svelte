@@ -334,11 +334,13 @@
   }
 
   /*
-   * Narrow: the rail gives up its column and becomes a band above the content rather than
-   * squeezing to a width where the labels truncate. A truncated destination list is worse than
-   * no list — it is a list that lies about what it contains. The items flow as a wrapping row
-   * so the band costs a couple of lines instead of a screenful; the 2px selection rule still
-   * marks the active one, and disabled items are still visible, which is the whole point.
+   * Narrow: the rail gives up its column and becomes a single strip above the content that
+   * scrolls sideways, rather than squeezing to a width where labels truncate or wrapping into a
+   * ragged block that costs a line per group and leaves the last item alone. Nothing is hidden:
+   * every group and item is in the strip, in the wide rail's order, and a label is either whole
+   * or scrolled to, never broken. The group label sits inline before its items. No scroll
+   * affordance is drawn; the strip's overflow is the ordinary kind. A truncated destination list
+   * is worse than no list — it is a list that lies about what it contains.
    */
   @media (max-width: 52rem) {
     .rail {
@@ -349,24 +351,37 @@
     }
 
     .groups {
-      gap: var(--space-3);
-      padding-bottom: var(--space-3);
+      flex-direction: row;
+      align-items: center;
+      gap: var(--space-4);
+      padding: var(--space-1) var(--space-4) var(--space-3);
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+    }
+
+    .group {
+      display: flex;
+      align-items: center;
+      flex: none;
+      gap: var(--space-2);
     }
 
     .group-label {
-      padding-left: var(--space-4);
+      padding: 0;
+      white-space: nowrap;
     }
 
     .items {
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       gap: var(--space-1);
-      padding: 0 var(--space-4);
+      padding: 0;
     }
 
     .item {
       width: auto;
       padding: var(--space-1) var(--space-2);
+      white-space: nowrap;
     }
 
     .footer {

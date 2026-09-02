@@ -503,6 +503,10 @@ button {
   transition: background 120ms ease, border-color 120ms ease;
 }
 button:hover { border-color: var(--ink-soft); }
+/* A control that refuses must look like it refuses: the same button, dimmed, with the cursor
+   saying so. Both spellings, because a control can be refused for the DOM (disabled) or for
+   the accessibility tree alone (aria-disabled) and the eye should not be able to tell. */
+button:disabled, button[aria-disabled='true'] { opacity: 0.55; cursor: not-allowed; }
 button.primary { background: var(--ink-accent); color: var(--on-accent); border-color: var(--ink-accent); }
 
 .card {

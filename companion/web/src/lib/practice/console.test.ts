@@ -229,6 +229,38 @@ describe('(b) nothing unbuilt is drawn as though it were built', () => {
     expect(codeOf('RosterPanel.svelte')).toContain('members === null')
     expect(codeOf('AuditPanel.svelte')).toContain('events === null')
   })
+
+  it('refuses the roster read until a practice is named, in the DOM and in the accessibility tree', () => {
+    // With no practice id there is nothing to request, so the control says so before it is pressed
+    // rather than answering the press with an error. `disabled` keeps the DOM from firing it;
+    // `aria-disabled` keeps assistive tech told the same thing, on the same predicate, so the two
+    // cannot drift apart.
+    const roster = codeOf('RosterPanel.svelte')
+    expect(roster).toContain("let noPractice = $derived(orgId === '')")
+    const button = roster.match(/<button[^>]*onclick=\{\(\) => void read\(\)\}[^>]*>/)?.[0]
+    expect(button).toBeDefined()
+    expect(button).toContain('disabled={working || noPractice}')
+    expect(button).toContain("aria-disabled={working || noPractice ? 'true' : undefined}")
+  })
+
+  it('renders one empty state for an unread roster, worded by what is missing', () => {
+    // Before anything has been read, exactly one statement of absence: "no practice named" or "not
+    // read yet", never both stacked. Two messages for one gap read as two problems.
+    const roster = codeOf('RosterPanel.svelte')
+    const start = roster.indexOf('{#if members === null}')
+    const end = roster.indexOf('{:else if members.length === 0}')
+    expect(start).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(start)
+    const unread = roster.slice(start, end)
+    expect(unread.match(/<EmptyState/g)).toHaveLength(1)
+    expect(unread).toContain("title={noPractice ? 'No practice named' : EMPTY_ROSTER_TITLE}")
+    expect(unread).toContain(': EMPTY_ROSTER_BODY}')
+    // The separate paragraph that used to sit above the empty state is gone, and no bare
+    // paragraph is keyed on the practice being unnamed anywhere in the panel.
+    expect(roster).not.toContain('Name a practice above')
+    expect(roster).not.toMatch(/\{#if orgId === ''\}\s*<p/)
+    expect(roster).not.toMatch(/\{#if noPractice\}\s*<p/)
+  })
 })
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
