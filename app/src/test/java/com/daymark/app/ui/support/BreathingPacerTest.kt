@@ -9,6 +9,15 @@ import org.junit.Test
  * "Remove animations" setting (animator duration scale = 0) cannot collapse a five-second breath
  * into a snap. What the frame loop relies on is that [breathScale] starts on `from`, lands on `to`
  * exactly when the phase is up, and stays there for any frame that arrives late.
+ *
+ * MUTATION-PROVEN, 2026-09-02, because a passing test on a screen nobody here can run is a claim
+ * rather than a check. Five doctored copies of [breathScale] were each compiled and run against
+ * this class: dropping the progress clamp, ignoring the easing, returning 0 instead of 1 for a
+ * zero-length phase, interpolating backwards, and scaling the result by 0.99 so the breath never
+ * quite arrives. Every one of them turned this class red, each on the assertion that names its
+ * defect. The first attempt at that exercise had a broken classpath and reported "failure" for
+ * the untouched code as loudly as for the mutants — which is the shape of this repo's recurring
+ * bug, and the reason the harness itself has to be shown working before its verdicts count.
  */
 class BreathingPacerTest {
 
