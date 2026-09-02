@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -53,6 +55,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -144,6 +148,8 @@ fun EntryEditorScreen(
         Column(
             modifier = Modifier
                 .padding(padding)
+                .consumeWindowInsets(padding)
+                .imePadding()
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -161,6 +167,10 @@ fun EntryEditorScreen(
                     val selected = state.moodLevel == mood.level
                     Column(
                         modifier = Modifier
+                            // Bounded to a fifth of the row (without claiming it), so a long
+                            // custom label ellipsises inside its own cell instead of pushing
+                            // into the neighbour's.
+                            .weight(1f, fill = false)
                             .clip(RoundedCornerShape(16.dp))
                             .clickable {
                                 view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
@@ -176,6 +186,9 @@ fun EntryEditorScreen(
                             style = MaterialTheme.typography.labelSmall,
                             color = if (selected) MaterialTheme.colorScheme.onSurface
                             else MaterialTheme.colorScheme.tertiary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
                         )
                     }
                 }
@@ -240,7 +253,8 @@ fun EntryEditorScreen(
                     )
                 }) {
                     Icon(Icons.Filled.AddAPhoto, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text("  Add photo")
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add photo")
                 }
             }
             /*
