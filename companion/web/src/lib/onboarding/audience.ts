@@ -644,7 +644,6 @@ export function forgetDismissal(
    5. The fixed copy.
    ═══════════════════════════════════════════════════════════════════════════════════════════ */
 
-export const ORIENTATION_TITLE = 'Daymark Companion'
 
 /**
  * The lede. Three surfaces named in one sentence, because the reader's question is "am I in the
