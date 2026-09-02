@@ -19,11 +19,25 @@
    * signing in from a browser that never accepted the invitation, which has no record to read. That
    * path is honest about what it is rather than being the default everybody meets.
    *
+   * WHY THE TWO SECRETS ARE DRAWN FIRST, EVEN WITH NO RECORD. The fallback used to open itself
+   * whenever this browser had nothing stored, and the two fields a clinician was actually looking
+   * for landed beneath nine they had never seen. Now the form always starts with the code and the
+   * passphrase, and the fallback is a closed disclosure whose summary reads as an offer. A person
+   * who needs it opens it; a person who does not is never asked to read it.
+   *
+   * WHY NOTHING IS SENT UNTIL THE FORM IS WHOLE. An empty submit used to report the last thing the
+   * unlock path happened to parse — the wrapped-key blob, the most obscure field on the page. What
+   * is missing is now judged first, top to bottom in reading order, by therapist/loginGate.ts, and
+   * the first gap is named by its label. If that gap is behind the fold, the sentence says so and
+   * the fold opens. The alert sits above the button, and the field it is about is marked and
+   * focused.
+   *
    * ON TRUSTING WHAT COMES BACK: the owner's keys arrive from a server that does not vouch for
    * them. A compromised one can hand back keys it controls, and every forged share would then
    * verify. What catches that is the clinician comparing the fingerprint against what the owner
    * reads aloud, so the fingerprint is SHOWN on unlock rather than quietly accepted.
    */
+  import { tick } from 'svelte'
   import { PortalClient, type SessionInfo } from '../../therapist/session'
   import { unwrap, type WrappedKeyBlob } from '../../therapist/keyStore'
   import type { UnlockedContext } from '../../therapist/context'
@@ -32,6 +46,7 @@
   import { Callout, FieldHelp } from '../ui'
   import { FIELD_HELP } from '../../onboarding/fieldHelp'
   import { loadKeyRecords, saveKeyRecord, groupForReading, type KeyRecord } from '../../therapist/inviteAccept'
+  import { firstProblem, WRAPPED_KEY_UNREADABLE, type UnlockFieldId } from '../../therapist/loginGate'
 
   let {
     onunlock,
@@ -62,11 +77,14 @@
   let chosen = $state<KeyRecord | null>(records[0] ?? null)
 
   /**
-   * Whether to show the nine-field path. Defaults to whether there is anything to show instead, so
-   * a browser that HAS a record never meets it and a browser that does not is not left staring at
-   * a two-field form it cannot possibly complete.
+   * Whether the nine-field path is the one in use. Defaults to whether there is anything to use
+   * instead, so a browser that HAS a record never meets it. A browser that does not still starts
+   * on the two fields that are always its own; the fallback is offered beneath them, closed.
    */
   let manual = $state(records.length === 0)
+
+  /** Whether the fallback disclosure is open. Closed until a person opens it or a check needs it. */
+  let provOpen = $state(false)
 
   /*
    * The server is the one that served this page. It was a typed field, which is a question with
@@ -94,10 +112,52 @@
   let busy = $state(false)
   let error = $state('')
 
+  /** The field the current alert is about, so it can be marked and described by the alert. */
+  let invalidField = $state<UnlockFieldId | null>(null)
+  const errorId = $props.id()
+
+  /** The stored path is missing its inbox token, so that one field is asked for. */
+  const askInboxToken = $derived(!manual && !!chosen && !chosen.inboxToken)
+
+  function describedBy(field: UnlockFieldId): string | undefined {
+    return invalidField === field ? errorId : undefined
+  }
+
+  function useManual(on: boolean) {
+    manual = on
+    // A person who asked for the fallback should not then have to find and open it.
+    if (on) provOpen = true
+  }
+
+  function onSubmit(event: SubmitEvent) {
+    event.preventDefault()
+    void unlockNow()
+  }
+
   async function unlockNow() {
     error = ''
-    busy = true
+    invalidField = null
     ownerFpGroups = null
+
+    /*
+     * The form is judged before anything is unwrapped or sent. The first gap in reading order is
+     * the one reported; nothing further down is looked at until it is filled.
+     */
+    const problem = firstProblem(
+      { totpCode, readingPassphrase, serverUrl, inboxToken, relRef, credentialId, wrappedKeyJson },
+      { manual, askInboxToken, fallbackOpen: provOpen },
+    )
+    if (problem) {
+      error = problem.message
+      invalidField = problem.field
+      if (problem.opensFallback) provOpen = true
+      // The field is rendered (and, if it was folded away, revealed) before focus moves to it.
+      await tick()
+      if (typeof document !== 'undefined') document.getElementById(`f-${problem.field}`)?.focus()
+      return
+    }
+
+    busy = true
     try {
       const so = await initAssignmentCrypto()
       const b = so.base64_variants.URLSAFE_NO_PADDING
@@ -121,7 +181,7 @@
         try {
           blob = JSON.parse(wrappedKeyJson) as WrappedKeyBlob
         } catch {
-          throw new Error('Wrapped-key blob is not valid JSON.')
+          throw new Error(WRAPPED_KEY_UNREADABLE)
         }
       }
       const keys = await unwrap(blob, readingPassphrase)
@@ -183,20 +243,21 @@
       error = e instanceof Error ? e.message : 'Could not unlock.'
     } finally {
       busy = false
-    }  }
+    }
+  }
 </script>
 
 <section class="gate">
   {#if standalone}<LowerAssuranceBanner />{/if}
   {#if standalone}<h2>Therapist portal — sign in</h2>{/if}
 
-  {#if !manual}
-    <!--
-      THE TWO FIELDS THAT ARE ACTUALLY YOURS. Everything else this form used to ask for is either
-      remembered from the acceptance ceremony, published by the owner, or the address of the server
-      that served this page.
-    -->
-    <div class="known">
+  <!--
+    A real form, so the Go key on a phone and Enter in the last field submit it. `novalidate`
+    because the browser's own bubbles would speak before the reading-order check below does, and
+    would name the url field first regardless of where it sits.
+  -->
+  <form class="form" novalidate onsubmit={onSubmit}>
+    {#if !manual}
       {#if records.length > 1}
         <div class="field">
           <label for="f-relationship"><span>Which relationship</span></label>
@@ -209,75 +270,96 @@
       {:else if chosen}
         <p class="faint note">Signing in to the relationship this browser accepted.</p>
       {/if}
+    {/if}
 
-      {#if chosen && !chosen.inboxToken}
-        <!--
-          The one value nothing can supply. Its digest IS the relationship id, so a server that
-          could hand it back would be giving away the thing it authenticates. Asked once, then
-          remembered.
-        -->
-        <div class="field">
-          <label for="f-inboxToken"><span>{FIELD_HELP.inboxToken.label}</span></label><FieldHelp field="inboxToken" />
-          <input id="f-inboxToken" type="password" bind:value={inboxToken} placeholder={FIELD_HELP.inboxToken.placeholder} autocomplete="off" />
-        </div>
-      {/if}
-    </div>
-  {:else}
-    <details class="prov" open>
-      <summary>Relationship &amp; connection <em>(from your pairing invite)</em></summary>
-      <p class="faint note">
-        This browser has no record of accepting an invitation, so these have to be entered by hand.
-        Accepting the invitation in the browser you sign in from is the shorter path.
-      </p>
-      <div class="fields">
-        <div class="field">
-          <label for="f-serverUrl"><span>{FIELD_HELP.serverUrl.label}</span></label><FieldHelp field="serverUrl" />
-          <input id="f-serverUrl" type="url" bind:value={serverUrl} placeholder={FIELD_HELP.serverUrl.placeholder} autocomplete="off" />
-        </div>
-        <div class="field">
-          <label for="f-inboxToken"><span>{FIELD_HELP.inboxToken.label}</span></label><FieldHelp field="inboxToken" />
-          <input id="f-inboxToken" type="password" bind:value={inboxToken} placeholder={FIELD_HELP.inboxToken.placeholder} autocomplete="off" />
-        </div>
-        <div class="field">
-          <label for="f-relRef"><span>{FIELD_HELP.relRef.label}</span></label><FieldHelp field="relRef" />
-          <input id="f-relRef" type="text" bind:value={relRef} placeholder={FIELD_HELP.relRef.placeholder} autocomplete="off" />
-        </div>
-        <div class="field">
-          <label for="f-credentialId"><span>{FIELD_HELP.credentialId.label}</span></label><FieldHelp field="credentialId" />
-          <input id="f-credentialId" type="text" bind:value={credentialId} placeholder={FIELD_HELP.credentialId.placeholder} autocomplete="off" />
-        </div>
-        <div class="field">
-          <label for="f-pinnedOwnerSignPub"><span>{FIELD_HELP.pinnedOwnerSignPub.label}</span></label><FieldHelp field="pinnedOwnerSignPub" />
-          <input id="f-pinnedOwnerSignPub" type="text" bind:value={pinnedOwnerSignPubB64} placeholder={FIELD_HELP.pinnedOwnerSignPub.placeholder} autocomplete="off" />
-        </div>
-        <div class="field">
-          <label for="f-ownerBoxPub"><span>{FIELD_HELP.ownerBoxPub.label}</span></label><FieldHelp field="ownerBoxPub" />
-          <input id="f-ownerBoxPub" type="text" bind:value={ownerBoxPubB64} placeholder={FIELD_HELP.ownerBoxPub.placeholder} autocomplete="off" />
-        </div>
-        <div class="field wide">
-          <label for="f-wrappedKey"><span>{FIELD_HELP.wrappedKey.label}</span></label><FieldHelp field="wrappedKey" />
-          <textarea id="f-wrappedKey" bind:value={wrappedKeyJson} rows="3" placeholder={FIELD_HELP.wrappedKey.placeholder} autocomplete="off"></textarea>
-        </div>
-      </div>
-    </details>
-  {/if}
-
-  <div class="secrets">
-    <div class="field">
+    <!--
+      THE TWO FIELDS THAT ARE ACTUALLY YOURS, and always first. Everything else this form used to
+      ask for is either remembered from the acceptance ceremony, published by the owner, or the
+      address of the server that served this page.
+    -->
+    <div class="secrets">
+      <div class="field">
         <label for="f-totpCode"><span>{FIELD_HELP.totpCode.label}</span></label><FieldHelp field="totpCode" />
-        <input id="f-totpCode" type="text" inputmode="numeric" bind:value={totpCode} placeholder={FIELD_HELP.totpCode.placeholder} autocomplete="one-time-code" />
+        <input id="f-totpCode" type="text" inputmode="numeric" bind:value={totpCode} placeholder={FIELD_HELP.totpCode.placeholder} autocomplete="one-time-code" aria-invalid={invalidField === 'totpCode' || undefined} aria-describedby={describedBy('totpCode')} />
       </div>
-    <div class="field">
+      <div class="field">
         <label for="f-readingPassphrase"><span>{FIELD_HELP.readingPassphrase.label}</span></label><FieldHelp field="readingPassphrase" />
-        <input id="f-readingPassphrase" type="password" bind:value={readingPassphrase} placeholder={FIELD_HELP.readingPassphrase.placeholder} autocomplete="off" />
+        <input id="f-readingPassphrase" type="password" bind:value={readingPassphrase} placeholder={FIELD_HELP.readingPassphrase.placeholder} autocomplete="off" aria-invalid={invalidField === 'readingPassphrase' || undefined} aria-describedby={describedBy('readingPassphrase')} />
       </div>
-  </div>
+    </div>
 
-  <button class="primary" onclick={unlockNow} disabled={busy}>{busy ? 'Unlocking…' : 'Unlock portal'}</button>
-  {#if error}<Callout tone="critical">{error}</Callout>{/if}
+    {#if askInboxToken}
+      <!--
+        The one value nothing can supply. Its digest IS the relationship id, so a server that
+        could hand it back would be giving away the thing it authenticates. Asked once, then
+        remembered.
+      -->
+      <div class="known">
+        <div class="field">
+          <label for="f-inboxToken"><span>{FIELD_HELP.inboxToken.label}</span></label><FieldHelp field="inboxToken" />
+          <input id="f-inboxToken" type="password" bind:value={inboxToken} placeholder={FIELD_HELP.inboxToken.placeholder} autocomplete="off" aria-invalid={invalidField === 'inboxToken' || undefined} aria-describedby={describedBy('inboxToken')} />
+        </div>
+      </div>
+    {/if}
+
+    {#if manual}
+      <!--
+        The fallback, closed by default and offered rather than imposed. Bound to state rather
+        than written `open`, so the reading-order check can reveal it when the gap it found is
+        inside. The field order here is the order therapist/loginGate.ts checks in; the test
+        reads this markup and holds the two together.
+      -->
+      <details class="prov" bind:open={provOpen}>
+        <summary>This browser has no record of your invitation? Enter the connection by hand <em>(from your pairing invite)</em></summary>
+        <p class="faint note">
+          This browser has no record of accepting an invitation, so these have to be entered by hand.
+          Accepting the invitation in the browser you sign in from is the shorter path.
+        </p>
+        <div class="fields">
+          <div class="field">
+            <label for="f-serverUrl"><span>{FIELD_HELP.serverUrl.label}</span></label><FieldHelp field="serverUrl" />
+            <input id="f-serverUrl" type="url" bind:value={serverUrl} placeholder={FIELD_HELP.serverUrl.placeholder} autocomplete="off" aria-invalid={invalidField === 'serverUrl' || undefined} aria-describedby={describedBy('serverUrl')} />
+          </div>
+          <div class="field">
+            <label for="f-inboxToken"><span>{FIELD_HELP.inboxToken.label}</span></label><FieldHelp field="inboxToken" />
+            <input id="f-inboxToken" type="password" bind:value={inboxToken} placeholder={FIELD_HELP.inboxToken.placeholder} autocomplete="off" aria-invalid={invalidField === 'inboxToken' || undefined} aria-describedby={describedBy('inboxToken')} />
+          </div>
+          <div class="field">
+            <label for="f-relRef"><span>{FIELD_HELP.relRef.label}</span></label><FieldHelp field="relRef" />
+            <input id="f-relRef" type="text" bind:value={relRef} placeholder={FIELD_HELP.relRef.placeholder} autocomplete="off" aria-invalid={invalidField === 'relRef' || undefined} aria-describedby={describedBy('relRef')} />
+          </div>
+          <div class="field">
+            <label for="f-credentialId"><span>{FIELD_HELP.credentialId.label}</span></label><FieldHelp field="credentialId" />
+            <input id="f-credentialId" type="text" bind:value={credentialId} placeholder={FIELD_HELP.credentialId.placeholder} autocomplete="off" aria-invalid={invalidField === 'credentialId' || undefined} aria-describedby={describedBy('credentialId')} />
+          </div>
+          <div class="field">
+            <label for="f-pinnedOwnerSignPub"><span>{FIELD_HELP.pinnedOwnerSignPub.label}</span></label><FieldHelp field="pinnedOwnerSignPub" />
+            <input id="f-pinnedOwnerSignPub" type="text" bind:value={pinnedOwnerSignPubB64} placeholder={FIELD_HELP.pinnedOwnerSignPub.placeholder} autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="f-ownerBoxPub"><span>{FIELD_HELP.ownerBoxPub.label}</span></label><FieldHelp field="ownerBoxPub" />
+            <input id="f-ownerBoxPub" type="text" bind:value={ownerBoxPubB64} placeholder={FIELD_HELP.ownerBoxPub.placeholder} autocomplete="off" />
+          </div>
+          <div class="field wide">
+            <label for="f-wrappedKey"><span>{FIELD_HELP.wrappedKey.label}</span></label><FieldHelp field="wrappedKey" />
+            <textarea id="f-wrappedKey" bind:value={wrappedKeyJson} rows="3" placeholder={FIELD_HELP.wrappedKey.placeholder} autocomplete="off" aria-invalid={invalidField === 'wrappedKey' || undefined} aria-describedby={describedBy('wrappedKey')}></textarea>
+          </div>
+        </div>
+      </details>
+    {/if}
+
+    <!--
+      Above the button, not beneath it: the sentence a person needs before they press again
+      should not be the thing they have to scroll past the button to find. The wrapper carries
+      the id the failing field points at, so the alert is also read as that field's description.
+    -->
+    {#if error}<div id={errorId}><Callout tone="critical">{error}</Callout></div>{/if}
+    <button class="primary" type="submit" disabled={busy}>{busy ? 'Unlocking…' : 'Unlock portal'}</button>
+  </form>
+
   {#if records.length > 0}
     <p class="faint note">
-      <button class="linkish" type="button" onclick={() => (manual = !manual)}>
+      <button class="linkish" type="button" onclick={() => useManual(!manual)}>
         {manual ? 'Use what this browser remembers' : 'Sign in with details from the invitation instead'}
       </button>
     </p>
@@ -309,6 +391,7 @@
 
   .gate { display: flex; flex-direction: column; gap: var(--space-4); max-width: 40rem; }
   .gate h2 { margin: 0; }
+  .form { display: flex; flex-direction: column; gap: var(--space-4); }
   .prov { border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); }
   .prov summary { cursor: pointer; color: var(--ink-soft); font-size: 0.9rem; }
   .prov em { font-style: normal; color: var(--text-subtle); }
@@ -329,6 +412,9 @@
   input::placeholder, textarea::placeholder { color: var(--ink-faint); }
   input, textarea { font: inherit; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-bg); color: var(--ink-text); }
   textarea { font-family: var(--font-mono); resize: vertical; }
+  /* The field the alert is about. The outline is a second signal beside the sentence that names
+     it and the aria-invalid a reader hears; it is never the only one. */
+  input[aria-invalid='true'], textarea[aria-invalid='true'] { border-color: var(--clay); }
   .primary { align-self: flex-start; background: var(--ink-accent); color: var(--on-accent); border-color: var(--ink-accent); }
 
   /*

@@ -17,10 +17,27 @@
    * first proved on LoginGate that its detectors can see an auth path when there is one.
    *
    * WHY THE CONTRACT COMES FIRST IN THE DOCUMENT. Signing in here opens another person's record.
-   * The contract is therefore the first thing in reading order and the first thing on a narrow
-   * window, above the fields rather than beside them — and it is rendered whole, with no
-   * "show more" and no collapsed section, because a contract you have to expand is one the
+   * The contract is therefore the first thing in reading order, and it is rendered whole, with
+   * no "show more" and no collapsed section, because a contract you have to expand is one the
    * reader is entitled to assume did not matter.
+   *
+   * WHY, ON A PHONE, THE FIELDS ARE DRAWN ABOVE IT ANYWAY. A clinician opening this on a phone
+   * between sessions has to be able to see the form on the first screen; with the contract
+   * stacked above it the first screen was the wordmark, the notice and a page of clauses, and
+   * the fields were three swipes down. So on a narrow window the credential column is drawn
+   * first — by CSS order, not by moving it in the document — which keeps the contract first for
+   * anyone reading by heading, keeps it whole and unfolded, and leaves focus order intact: the
+   * contract has nothing focusable in it, so the first thing the Tab key reaches is the same
+   * thing the eye lands on. The columns sit side by side on a desk monitor regardless.
+   *
+   * WHY THERE IS A MASTHEAD, AND WHY IT IS NOT AN <h1>. The owner viewer, the admin console and
+   * the practice console each open with the wordmark and a tagline saying which surface this is;
+   * this one did not, so a clinician with two Daymark tabs open had nothing above "Sign in" to
+   * tell them apart. The line above the title uses the same brand markup as App.svelte's topbar.
+   * The wordmark is a paragraph rather than a heading because PageHeader already owns this
+   * document's <h1> ("Sign in"), and a product name promoted to a second h1 would displace the
+   * page's own subject in the outline that heading-navigation users rely on — the same reason
+   * the NavRail's brand block is not a heading.
    *
    * WHY THE DIGEST SITS ABOVE THE FIELDS AND NOT UNDER THEM. "Promoted from footnote to
    * control" (COMPANION_WEB_REDESIGN_PLAN.md, Phase 3 item 4) is a claim about placement as much
@@ -115,6 +132,17 @@
 </script>
 
 <section class="signin">
+  <!-- The product masthead, in the brand markup App.svelte's topbar uses. Not a heading; see above. -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"></span>
+      <div>
+        <p class="wordmark">Daymark Companion</p>
+        <p class="muted tagline">Therapist portal</p>
+      </div>
+    </div>
+  </header>
+
   <PageHeader title={SCREEN_COPY.pageTitle}>
     {#snippet trailing()}
       {#if reference !== null}
@@ -130,8 +158,9 @@
   <LowerAssuranceBanner />
 
   <div class="grid">
-    <!-- Column one: what this is. First in the document, and first on a narrow window. -->
-    <div class="col">
+    <!-- Column one: what this is. First in the document; on a narrow window it is drawn after
+         the credential column, by order alone — see the note above. -->
+    <div class="col contract">
       <Card title={SCREEN_COPY.contractTitle}>
         <p class="lede">{SCREEN_COPY.contractLede}</p>
 
@@ -149,7 +178,7 @@
     </div>
 
     <!-- Column two: which page you are on, then the credential. In that order, deliberately. -->
-    <div class="col">
+    <div class="col credentials">
       <Card title={SCREEN_COPY.digestTitle}>
         {#snippet header()}
           {#if digest.kind === 'digest'}<Chip>{digest.algorithmLabel}</Chip>{/if}
@@ -221,12 +250,25 @@
 </section>
 
 <style>
+  /* Centred at the same measure as the owner viewer's shell (App.svelte), with its padding, so
+     a wide monitor gets a page in the middle rather than a page pinned to the left edge. */
   .signin {
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
     max-width: var(--maxw);
+    margin: 0 auto;
+    padding: var(--space-5) var(--space-4) var(--space-8);
   }
+
+  /* The masthead. Same brand block as App.svelte's topbar, at a smaller size, because it sits
+     one line above a page title in the same display face. */
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+  .brand { display: flex; align-items: center; gap: var(--space-3); }
+  /* Structural accent, as in App.svelte: the mark says "Daymark", never anything about a day. */
+  .mark { width: 1.5rem; height: 1.5rem; border-radius: 0.375rem; background: linear-gradient(135deg, var(--indigo), var(--indigo-deep)); box-shadow: var(--elevation); flex: none; }
+  .wordmark { margin: 0; font-family: var(--font-display); font-weight: 560; font-size: 1.1rem; line-height: 1.2; color: var(--ink-text); }
+  .tagline { margin: 0; font-size: 0.9rem; }
 
   /* The build marker beside the title: chrome talking about itself, subordinate to everything
      else in the header. The whole digest lives in the control below. */
@@ -265,6 +307,21 @@
     .grid {
       grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
       align-items: start;
+    }
+  }
+
+  /* A phone: the credential column is drawn first so the form is on the first screen, and
+     within it the image-digest card steps behind the form for the same reason — it is a
+     check to make, not a gate to pass, and a phone-width screen has room for one of the two
+     above the fold. Document order is untouched — the contract stays first for a reader, and
+     whole, and the digest still precedes the form for anyone reading in order. */
+  @media (max-width: 45rem) {
+    .credentials {
+      order: -1;
+    }
+    /* :global because the card is a child component's root, which scoped CSS cannot reach. */
+    .credentials > :global(:first-child) {
+      order: 1;
     }
   }
 
