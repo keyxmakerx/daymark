@@ -1435,6 +1435,34 @@ attempt, with a threshold that alerts (§3.7.5).
 > surfaces, and the failed-PAKE audit action with its alert threshold — those change the
 > ceremony people currently use, so they land as a deliberate stage, not a side effect.
 
+> **AUDIT 2026-09-01 — the transport and the channel were attacked before anything was built
+> on them.** Three fixes, each with a test that was red on the code before it. (1) A re-open
+> now RETIRES the run it replaces (`SUPERSEDED`): before, the abandoned row stayed answerable
+> and, once the newer run was answered or cancelled, resurfaced as "newest" to the next fetch,
+> so a holder of the link could answer it into a key nobody would ever hold — the silent dead
+> end of §3.6.3(b) in a new coat. (2) The channel identifier carries the INVITE ID, the one
+> value each side holds without the server's help; the therapist only ever learns relRef from
+> the server, so the old CI bound nothing on their side despite the comment saying it did.
+> (3) The owner's run pins the reply that produced its key and refuses a different one on a
+> later read, so "one guess per run" is a property of the code, not of how often a console
+> polls. WHAT SURVIVED, with its assumptions stated: a holder of the link but not the code gets
+> at most ONE online code test per exchange the owner opens and acts on; at most eight
+> exchanges exist per invite; nobody opens one without the owner's bearer token; the
+> transcript gives zero offline tests (CDH on ristretto255, points validated on both ends).
+> WHAT THE UI STAGE MUST HOLD for that bound to mean anything: the owner's retry after a
+> failed envelope is a HUMAN action, never automatic; a fresh code per invitation, from a
+> CSPRNG at a stated alphabet and length (nothing in the audited surface generates the code);
+> the owner's half of an open run is persisted on the device across the §3.7.3 gap (relay.ts
+> holds it in memory only, on purpose); and the PAKE runs BEFORE redeem, since both relay
+> sides require PENDING and redeem moves the invite off it. ACCEPTED, not fixed: a link-holder
+> can answer every exchange first — a denial of the ceremony, never of the code; eight replies
+> force a fresh invitation, which rotates the link, and the console should render "answered,
+> but your therapist says it was unavailable" as the question it is. And until enrolment moves
+> inside the channel, the bare invite secret still enrols a therapist through redeem — the
+> transitional state this banner already names, which is why that move is the next stage.
+> REFUTED and left alone: the envelope is a stateless AEAD and says so; ordering and replay
+> are the payload stage's to design, not a property missing here.
+
 **4.0b — the phone becomes the owner's pairing device.** §3.7.6 + §3.6.5 layer 1. A separate stage,
 not a separate design: the protocol is identical, only the device running the owner's half changes.
 

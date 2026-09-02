@@ -11,6 +11,10 @@
  *
  * The non-vacuity guard plants the code into a copy of a request and asserts the detector
  * FINDS it — a corpus scan that cannot see a planted example proves only that it is blind.
+ *
+ * Two more properties live here since the 2026-09-01 audit, each with a test that was red on
+ * the code before it: the run is bound to the invitation whose LINK the therapist holds (not
+ * to what the server says), and one run derives one key however often the owner polls.
  */
 import { beforeAll, describe, expect, it } from 'vitest'
 import {
@@ -19,12 +23,13 @@ import {
   therapistAnswerPairing,
   channelIdentifier,
 } from './relay'
-import { initCpace } from './cpace'
+import { initCpace, parseLv } from './cpace'
 
 const CODE = 'SEKRIT-7Q4X9Z'
 const WRONG_CODE = 'SEKRIT-7Q4X9A'
 const REL_REF = 'rel-ref-abc123'
 const INVITE_ID = 'invite-xyz789'
+const OTHER_INVITE_ID = 'invite-other456'
 const INVITE_SECRET = 'invite-secret-value-42'
 const BEARER = 'owner-bearer-token'
 
@@ -35,15 +40,20 @@ interface RecordedRequest {
   body: string
 }
 
-/** The server's part of the relay, plus a wire recorder — one instance per test. */
-function relayServer() {
+/**
+ * The server's part of the relay, plus a wire recorder — one instance per test. `servesTo`
+ * is the list of invite ids whose link-holder this server answers fetch/respond for; an honest
+ * server serves one exchange to one invitation, and a splicing server is the same code with
+ * two ids in the list.
+ */
+function relayServer(servesTo: string[] = [INVITE_ID]) {
   const recorded: RecordedRequest[] = []
   const exchange: {
     id: string
     sidB64?: string
     msgAB64?: string
     msgBB64?: string
-    state: 'NONE' | 'OPEN' | 'RESPONDED' | 'CLOSED' | 'CANCELLED'
+    state: 'NONE' | 'OPEN' | 'RESPONDED' | 'CLOSED' | 'CANCELLED' | 'SUPERSEDED'
   } = { id: 'exchange-1', state: 'NONE' }
 
   const doFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -66,7 +76,8 @@ function relayServer() {
       exchange.state = 'OPEN'
       return respond(201, { exchangeId: exchange.id })
     }
-    if (url === `/v1/invite/${INVITE_ID}/pairing/fetch` && init?.method === 'POST') {
+    const therapistInvite = servesTo.find((id) => url.startsWith(`/v1/invite/${id}/pairing/`))
+    if (therapistInvite && url === `/v1/invite/${therapistInvite}/pairing/fetch` && init?.method === 'POST') {
       const req = JSON.parse(body) as { secret: string }
       if (req.secret !== INVITE_SECRET) return respond(401, { error: 'unauthorized' })
       if (exchange.state !== 'OPEN') return respond(410, { error: 'invite unavailable' })
@@ -77,7 +88,11 @@ function relayServer() {
         msgAB64: exchange.msgAB64,
       })
     }
-    if (url === `/v1/invite/${INVITE_ID}/pairing/${exchange.id}/respond` && init?.method === 'POST') {
+    if (
+      therapistInvite &&
+      url === `/v1/invite/${therapistInvite}/pairing/${exchange.id}/respond` &&
+      init?.method === 'POST'
+    ) {
       const req = JSON.parse(body) as { secret: string; msgBB64: string }
       if (req.secret !== INVITE_SECRET) return respond(401, { error: 'unauthorized' })
       if (exchange.state !== 'OPEN') return respond(410, { error: 'exchange unavailable' })
@@ -122,6 +137,8 @@ function wireTextOf(requests: RecordedRequest[]): string {
     .join('\n')
 }
 
+const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex')
+
 beforeAll(async () => {
   await initCpace()
 })
@@ -143,7 +160,7 @@ describe('the relay carries a pairing end to end', () => {
     )
     expect(collected.state).toBe('complete')
     if (collected.state !== 'complete') return
-    expect(Buffer.from(collected.isk).toString('hex')).toBe(Buffer.from(therapist.isk).toString('hex'))
+    expect(hex(collected.isk)).toBe(hex(therapist.isk))
     expect(collected.isk.length).toBe(64)
   })
 
@@ -163,12 +180,10 @@ describe('the relay carries a pairing end to end', () => {
     )
     expect(collected.state).toBe('complete')
     if (collected.state !== 'complete') return
-    expect(Buffer.from(collected.isk).toString('hex')).not.toBe(
-      Buffer.from(therapist.isk).toString('hex'),
-    )
+    expect(hex(collected.isk)).not.toBe(hex(therapist.isk))
   })
 
-  it('the owner sees waiting before the reply and cancelled after a cancel', async () => {
+  it('the owner sees waiting before the reply, cancelled after a cancel, superseded after a re-open', async () => {
     const { doFetch, exchange } = relayServer()
     const opened = await ownerOpenPairing(
       { relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER },
@@ -185,6 +200,86 @@ describe('the relay carries a pairing end to end', () => {
       doFetch,
     )
     expect(cancelled.state).toBe('cancelled')
+    // The server retires a run when the owner opens a fresh one; the client must name that
+    // state rather than throw at it, because a console polling an old run will meet it.
+    exchange.state = 'SUPERSEDED'
+    const superseded = await ownerCollectPairing(
+      { relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened },
+      doFetch,
+    )
+    expect(superseded.state).toBe('superseded')
+  })
+})
+
+describe('what binds a run, and to what', () => {
+  it('the run is bound to the invitation whose LINK the therapist holds, not to what the server says', async () => {
+    // A splicing server: it serves the exchange the owner opened for INVITE_ID to whoever
+    // holds OTHER_INVITE_ID's link, reporting the true relRef, and both people typed the same
+    // code (reuse happens). The therapist's channel identifier takes the invite id from the
+    // link, so the keys must diverge — the server cannot marry two invitations into one run.
+    const { doFetch } = relayServer([INVITE_ID, OTHER_INVITE_ID])
+    const opened = await ownerOpenPairing(
+      { relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER },
+      doFetch,
+    )
+    const spliced = await therapistAnswerPairing(
+      { inviteId: OTHER_INVITE_ID, secret: INVITE_SECRET, code: CODE },
+      doFetch,
+    )
+    const collected = await ownerCollectPairing(
+      { relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened },
+      doFetch,
+    )
+    expect(collected.state).toBe('complete')
+    if (collected.state !== 'complete') return
+    expect(hex(collected.isk)).not.toBe(hex(spliced.isk))
+  })
+
+  it('the channel identifier is versioned, length-prefixed, and differs per invitation and per relationship', () => {
+    const ci = channelIdentifier('rel-a', 'inv-1')
+    const parts = parseLv(ci, 3).map((p) => new TextDecoder().decode(p))
+    expect(parts).toEqual(['daymark/cpace/v2', 'rel-a', 'inv-1'])
+    expect(hex(ci)).not.toBe(hex(channelIdentifier('rel-a', 'inv-2')))
+    expect(hex(ci)).not.toBe(hex(channelIdentifier('rel-b', 'inv-1')))
+    // Length-prefixing means a boundary shift is not the same bytes: 'rel-a' + 'inv-1' is
+    // not 'rel-' + 'ainv-1', which a joined string could confuse.
+    expect(hex(ci)).not.toBe(hex(channelIdentifier('rel-', 'ainv-1')))
+  })
+
+  it('one run derives one key: a changed reply on a later read is refused, never re-derived', async () => {
+    const { doFetch, exchange } = relayServer()
+    const opened = await ownerOpenPairing(
+      { relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER },
+      doFetch,
+    )
+    await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, code: CODE }, doFetch)
+    const first = await ownerCollectPairing(
+      { relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened },
+      doFetch,
+    )
+    expect(first.state).toBe('complete')
+    if (first.state !== 'complete') return
+
+    // Polling again with the same reply is the same key, byte for byte.
+    const again = await ownerCollectPairing(
+      { relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened },
+      doFetch,
+    )
+    expect(again.state).toBe('complete')
+    if (again.state !== 'complete') return
+    expect(hex(again.isk)).toBe(hex(first.isk))
+
+    // A server that swaps in a different — perfectly well-formed — reply is trying for a
+    // second guess against the owner's scalar. It gets a refusal, not a second key.
+    const other = relayServer()
+    await ownerOpenPairing({ relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER }, other.doFetch)
+    await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, code: CODE }, other.doFetch)
+    expect(other.exchange.msgBB64).toBeTypeOf('string')
+    expect(other.exchange.msgBB64).not.toBe(exchange.msgBB64)
+    exchange.msgBB64 = other.exchange.msgBB64
+    await expect(
+      ownerCollectPairing({ relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened }, doFetch),
+    ).rejects.toThrow(/reply changed/)
   })
 })
 
@@ -213,15 +308,5 @@ describe('§3.7.4 — the code never reaches the wire', () => {
     for (const encoding of encodingsOf(CODE)) {
       expect(wire.includes(encoding), `code leaked to the wire as: ${encoding}`).toBe(false)
     }
-  })
-
-  it('the channel identifier binds relationship and version, and is public by design', () => {
-    // Sanity on what IS allowed on the wire-adjacent surface: the CI is derived, not secret,
-    // and changing the relationship changes it — the property that turns a spliced relay into
-    // key divergence instead of a session.
-    const a = channelIdentifier('rel-a')
-    const b = channelIdentifier('rel-b')
-    expect(new TextDecoder().decode(a)).toContain('daymark/cpace/v1')
-    expect(new TextDecoder().decode(a)).not.toBe(new TextDecoder().decode(b))
   })
 })

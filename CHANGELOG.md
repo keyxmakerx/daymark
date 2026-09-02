@@ -316,6 +316,17 @@ All notable changes to this project are documented here. The format is based on
   permission and makes no network connections.
 
 ### Fixed
+- **Companion — the pairing relay was audited before anything was built on it, and three things
+  moved.** A re-open now retires the run it replaces: before, the abandoned exchange stayed
+  answerable and, once the newer one was answered or cancelled, came back as "newest" to the next
+  fetch — a reply into it would have made a key nobody could ever hold, with no signal on either
+  side. The channel identifier now carries the invitation id, the one value each party has without
+  asking the server (the relationship reference the therapist used before arrived from the server
+  itself, so it bound nothing on their side despite the comment). And the owner's side pins the
+  reply that produced its key and refuses a different one on a later read, so "one guess per run"
+  is enforced by the code rather than by how often a console polls. Each fix has a test that was
+  red on the code before it; the bound that survived attack, and what the screens must hold for
+  it to mean anything, are written where the screens will be built (plan §4.0a).
 - **Every invitation link this server ever sent rendered a blank page.** `/portal/invite`
   returned 200, served the right markup, had a passing test — and displayed nothing, because the
   bundle's relative asset URLs resolved against the URL's directory and every script came back as

@@ -69,3 +69,17 @@ Not yet built: recovery transport/storage/wire format; QR pairing; the CPace-ove
 transport (§3.7.3's store-and-forward shape — the crypto now has its oracle, the routes do not
 exist). Dependabot: ~23 open PRs. The scratch JDK-21 project used for local :sync-crypto work
 lives in this session's scratchpad only — rebuild it from companion/server's wrapper if needed.
+
+## Addendum 2026-09-01 — the pairing stack was audited before screens were built on it
+
+Branch `claude/pairing-stack-audit-suak0v`. The relay + envelope layer (item 4 above) went
+through an adversarial pass — own findings refuted by independent skeptics, two fresh lenses
+(guess budget, authz/state machine), every fresh finding verified — after a mutation check
+showed the existing tests are load-bearing (code-in-a-header, one-key-both-directions, swapped
+ISK transcript, dropped once-only guard: each turns exactly the right test red). Three fixes
+landed, each red-first: re-open retires the replaced run (`SUPERSEDED`, and the resurfacing of
+stale rows after the newer one leaves OPEN is closed); the CI carries the invite id (v2,
+lv_cat); the owner's run pins its reply and refuses a swapped one. The guess bound stated in
+the plan's 4.0a AUDIT banner is the verified one; the banner also lists what the UI stage must
+hold and what was accepted. Noted for that stage: companion/server's own Gradle wrapper DOES
+run on this machine (the root build still does not), so server tests have a local oracle now.

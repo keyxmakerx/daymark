@@ -20,11 +20,17 @@ import java.sql.DriverManager
  *    its parcels would learn nothing and become a thing worth compromising.
  *
  *  - ROWS ARE INSERT-ONLY; only `state` and `responded_at` ever change, along the one path
- *    OPEN → RESPONDED → CLOSED (or → CANCELLED from either pre-terminal state). A wrong-code
- *    protocol run is retried by the owner opening a FRESH exchange — CPace gives one guess per
- *    run by construction, and a fresh run needs fresh randomness on both sides, so reuse is not
- *    an optimisation, it is a vulnerability. The newest OPEN exchange is the one a therapist
- *    fetch sees; superseded rows keep their history.
+ *    OPEN → RESPONDED → CLOSED (or → CANCELLED from either pre-terminal state, or OPEN →
+ *    SUPERSEDED when the owner opens a fresh run). A wrong-code protocol run is retried by the
+ *    owner opening a FRESH exchange — CPace gives one guess per run by construction, and a
+ *    fresh run needs fresh randomness on both sides, so reuse is not an optimisation, it is a
+ *    vulnerability. AT MOST ONE OPEN EXCHANGE PER INVITE, as an invariant kept by [open]: the
+ *    run it replaces is retired in the same block that inserts the new one, so nothing stale is
+ *    ever served to a fetch or answerable by a respond. (Before the 2026-09-01 audit this held
+ *    only while the newest row stayed OPEN — the moment it was answered or cancelled, the
+ *    abandoned older row, whose scalar the owner's device had already discarded, resurfaced as
+ *    "newest", and a holder of the link could answer it into a key nobody would ever hold.)
+ *    Retired rows keep their history.
  *
  *  - EXCHANGES ARE CAPPED PER INVITE ([MAX_EXCHANGES_PER_INVITE]) because each open is a free
  *    insert to the bearer token that mints it, and unbounded server-side growth from a bounded
@@ -69,7 +75,7 @@ class PairingStore(
         }
     }
 
-    enum class State { OPEN, RESPONDED, CLOSED, CANCELLED }
+    enum class State { OPEN, RESPONDED, CLOSED, CANCELLED, SUPERSEDED }
 
     data class Exchange(
         val exchangeId: String,
@@ -99,6 +105,16 @@ class PairingStore(
             ps.executeQuery().use { rs -> rs.next(); rs.getLong(1) }
         }
         if (count >= MAX_EXCHANGES_PER_INVITE) return OpenResult(OpenStatus.TOO_MANY)
+        // Retire the run this one replaces — after the cap check, so a refused open retires
+        // nothing, and inside the same lock as the insert, so "at most one OPEN per invite" is
+        // never observably false. Not the owner's Cancel (no audit line): the owner did not
+        // withdraw, they started over, and the audit already records the new opening.
+        conn.prepareStatement("UPDATE pairing_exchanges SET state=? WHERE invite_id=? AND state=?").use { ps ->
+            ps.setString(1, State.SUPERSEDED.name)
+            ps.setString(2, inviteId)
+            ps.setString(3, State.OPEN.name)
+            ps.executeUpdate()
+        }
         val exchangeId = Secrets.newToken()
         conn.prepareStatement(
             "INSERT INTO pairing_exchanges(exchange_id, invite_id, rel_ref, sid, msg_a, state, created_at, expiry) VALUES (?,?,?,?,?,?,?,?)",
@@ -117,8 +133,9 @@ class PairingStore(
     }
 
     /**
-     * The newest live OPEN exchange for an invite — what a therapist fetch sees. Rows an owner
-     * has superseded by re-opening, and rows past their invite's expiry, are simply not it.
+     * The live OPEN exchange for an invite — what a therapist fetch sees. There is at most one
+     * ([open] retires the run it replaces), and a row past its invite's expiry is not it. The
+     * ordering stays as belt-and-braces for a database written before the invariant existed.
      */
     fun openExchangeFor(inviteId: String): Exchange? = synchronized(lock) {
         conn.prepareStatement(

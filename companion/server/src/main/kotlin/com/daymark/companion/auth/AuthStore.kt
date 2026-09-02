@@ -315,7 +315,9 @@ class AuthStore(
      * budget by the number of routes. One secret, one counter, however many doors.
      *
      * What it deliberately does NOT do: move the status, mint a ticket, or write anything on
-     * success. Proof of possession is a question, and questions leave no marks.
+     * success. Proof of possession is a question, and questions leave no marks. (The one write
+     * it shares with redeem is lazy expiry — an invite found past its time is marked EXPIRED —
+     * which finalises a fact the clock already settled rather than answering the question.)
      */
     fun checkInviteSecret(inviteId: String, secret: String, lockoutFails: Int, lockoutBaseMs: Long): RedeemResult = synchronized(lock) {
         val now = clock()
