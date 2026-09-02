@@ -197,12 +197,17 @@ export async function ownerCollectPairing(
   })
   if (res.status !== 200) throw new Error(`pairing read refused (${res.status})`)
   const body = (await res.json()) as { state?: unknown; msgBB64?: unknown }
+  const answered = body.state === 'RESPONDED' || body.state === 'CLOSED'
+  if (args.pairing.finished && !answered) {
+    // The store only ever moves an answered run forward (RESPONDED → CLOSED, or → CANCELLED);
+    // a read that shows it waiting or retired again is a server contradicting its own record,
+    // and the honest answer is a refusal, not a calm 'waiting' over a key already in hand.
+    throw new Error('pairing read: state regressed after the key was derived')
+  }
   if (body.state === 'OPEN') return { state: 'waiting' }
   if (body.state === 'CANCELLED') return { state: 'cancelled' }
   if (body.state === 'SUPERSEDED') return { state: 'superseded' }
-  if (body.state !== 'RESPONDED' && body.state !== 'CLOSED') {
-    throw new Error('pairing read: malformed response')
-  }
+  if (!answered) throw new Error('pairing read: malformed response')
   if (typeof body.msgBB64 !== 'string') throw new Error('pairing read: reply missing')
   let isk: Uint8Array
   if (args.pairing.finished) {

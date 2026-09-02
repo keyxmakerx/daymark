@@ -46,8 +46,9 @@ interface RecordedRequest {
  * server serves one exchange to one invitation, and a splicing server is the same code with
  * two ids in the list.
  */
-function relayServer(servesTo: string[] = [INVITE_ID]) {
+function relayServer(servesTo: string[] = [INVITE_ID], opts: { failFirstClose?: boolean } = {}) {
   const recorded: RecordedRequest[] = []
+  let closeAttempts = 0
   const exchange: {
     id: string
     sidB64?: string
@@ -105,13 +106,15 @@ function relayServer(servesTo: string[] = [INVITE_ID]) {
       return respond(200, { exchangeId: exchange.id, state: exchange.state, msgBB64: exchange.msgBB64 })
     }
     if (url === `/v1/relations/${REL_REF}/pairing/${exchange.id}/close` && init?.method === 'POST') {
+      closeAttempts++
+      if (opts.failFirstClose && closeAttempts === 1) return respond(500, { error: 'not now' })
       exchange.state = 'CLOSED'
       return respond(204)
     }
     throw new Error(`unexpected request: ${init?.method} ${url}`)
   }) as typeof fetch
 
-  return { doFetch, recorded, exchange }
+  return { doFetch, recorded, exchange, closeAttempts: () => closeAttempts }
 }
 
 /** Every encoding the code could wear on the wire. */
@@ -269,6 +272,14 @@ describe('what binds a run, and to what', () => {
     if (again.state !== 'complete') return
     expect(hex(again.isk)).toBe(hex(first.isk))
 
+    // A run that has produced a key cannot read as waiting or retired again: the store only
+    // moves an answered run forward, so a server saying otherwise is contradicting itself.
+    exchange.state = 'OPEN'
+    await expect(
+      ownerCollectPairing({ relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened }, doFetch),
+    ).rejects.toThrow(/regressed/)
+    exchange.state = 'CLOSED'
+
     // A server that swaps in a different — perfectly well-formed — reply is trying for a
     // second guess against the owner's scalar. It gets a refusal, not a second key.
     const other = relayServer()
@@ -280,6 +291,33 @@ describe('what binds a run, and to what', () => {
     await expect(
       ownerCollectPairing({ relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened }, doFetch),
     ).rejects.toThrow(/reply changed/)
+  })
+})
+
+describe('the close is bookkeeping, and is retried', () => {
+  it('a failed close never costs the key, and the next read retries it', async () => {
+    const { doFetch, exchange, closeAttempts } = relayServer([INVITE_ID], { failFirstClose: true })
+    const opened = await ownerOpenPairing(
+      { relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER },
+      doFetch,
+    )
+    await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, code: CODE }, doFetch)
+    const first = await ownerCollectPairing(
+      { relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened },
+      doFetch,
+    )
+    expect(first.state).toBe('complete')
+    expect(exchange.state).toBe('RESPONDED')
+    expect(closeAttempts()).toBe(1)
+    const second = await ownerCollectPairing(
+      { relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened },
+      doFetch,
+    )
+    expect(second.state).toBe('complete')
+    if (first.state !== 'complete' || second.state !== 'complete') return
+    expect(hex(second.isk)).toBe(hex(first.isk))
+    expect(exchange.state).toBe('CLOSED')
+    expect(closeAttempts()).toBe(2)
   })
 })
 
