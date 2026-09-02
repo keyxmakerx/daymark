@@ -1461,7 +1461,16 @@ attempt, with a threshold that alerts (§3.7.5).
 > inside the channel, the bare invite secret still enrols a therapist through redeem — the
 > transitional state this banner already names, which is why that move is the next stage.
 > REFUTED and left alone: the envelope is a stateless AEAD and says so; ordering and replay
-> are the payload stage's to design, not a property missing here.
+> are the payload stage's to design, not a property missing here. FOR 4.0b, the bytes the phone
+> must reproduce, stated here so they are not only in a source comment: the channel identifier
+> is `lv_cat("daymark/cpace/v2", relRef, inviteId)` (the draft's length-prefixed concatenation,
+> inviteId taken from the invitation the device holds, never from a response); the associated
+> data is the ASCII role, `owner` or `therapist`; the sid is 16 random bytes chosen by the owner;
+> every blob travels as unpadded base64url. `CpaceCrypto.kt` has `lvCat` and no CI builder yet —
+> the builder and a vector test pinned to `relay.test.ts` are the first 4.0b commit. One more
+> thing the owner console must render honestly: the owner's read of an exchange applies no
+> expiry filter, so a run nobody answered reads as waiting after its invitation has died; the
+> console shows invite state alongside, or the read learns the expiry.
 
 **4.0b — the phone becomes the owner's pairing device.** §3.7.6 + §3.6.5 layer 1. A separate stage,
 not a separate design: the protocol is identical, only the device running the owner's half changes.

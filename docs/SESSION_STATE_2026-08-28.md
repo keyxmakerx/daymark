@@ -81,5 +81,9 @@ landed, each red-first: re-open retires the replaced run (`SUPERSEDED`, and the 
 stale rows after the newer one leaves OPEN is closed); the CI carries the invite id (v2,
 lv_cat); the owner's run pins its reply and refuses a swapped one. The guess bound stated in
 the plan's 4.0a AUDIT banner is the verified one; the banner also lists what the UI stage must
-hold and what was accepted. Noted for that stage: companion/server's own Gradle wrapper DOES
+hold and what was accepted. Two independent low-effort validation passes followed (five agents,
+then three told to disagree): the first closed two nits (a pinned run refuses a swapped or
+regressed read; the close retry is tested), the second caught that the new guard over-refused
+the owner's own Cancel after a failed close — fixed with the honest sequence as a test — and
+wrote the phone-side CI bytes into the 4.0a banner so 4.0b does not start from a comment. Noted for that stage: companion/server's own Gradle wrapper DOES
 run on this machine (the root build still does not), so server tests have a local oracle now.

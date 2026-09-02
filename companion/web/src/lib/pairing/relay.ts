@@ -198,10 +198,13 @@ export async function ownerCollectPairing(
   if (res.status !== 200) throw new Error(`pairing read refused (${res.status})`)
   const body = (await res.json()) as { state?: unknown; msgBB64?: unknown }
   const answered = body.state === 'RESPONDED' || body.state === 'CLOSED'
-  if (args.pairing.finished && !answered) {
-    // The store only ever moves an answered run forward (RESPONDED → CLOSED, or → CANCELLED);
-    // a read that shows it waiting or retired again is a server contradicting its own record,
-    // and the honest answer is a refusal, not a calm 'waiting' over a key already in hand.
+  if (args.pairing.finished && (body.state === 'OPEN' || body.state === 'SUPERSEDED')) {
+    // The store only ever moves an answered run forward: RESPONDED → CLOSED, or → CANCELLED by
+    // the owner's own Cancel, which is a legal step and reported below as one. A read that
+    // shows the run waiting or retired AGAIN is a server contradicting its own record, and the
+    // honest answer is a refusal, not a calm 'waiting' over a key already in hand. (The first
+    // version of this guard refused CANCELLED too; the independent re-check caught that an
+    // owner who cancels after a failed close would have been told the server lied.)
     throw new Error('pairing read: state regressed after the key was derived')
   }
   if (body.state === 'OPEN') return { state: 'waiting' }

@@ -319,6 +319,29 @@ describe('the close is bookkeeping, and is retried', () => {
     expect(exchange.state).toBe('CLOSED')
     expect(closeAttempts()).toBe(2)
   })
+
+  it("the owner's own cancel after a failed close is reported as cancelled, not as a lie", async () => {
+    // RESPONDED → CANCELLED is a legal forward move the store allows and the console offers;
+    // a run that already holds its key must not mistake it for the server going backwards.
+    const { doFetch, exchange } = relayServer([INVITE_ID], { failFirstClose: true })
+    const opened = await ownerOpenPairing(
+      { relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER },
+      doFetch,
+    )
+    await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, code: CODE }, doFetch)
+    const first = await ownerCollectPairing(
+      { relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened },
+      doFetch,
+    )
+    expect(first.state).toBe('complete')
+    expect(exchange.state).toBe('RESPONDED')
+    exchange.state = 'CANCELLED'
+    const after = await ownerCollectPairing(
+      { relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened },
+      doFetch,
+    )
+    expect(after.state).toBe('cancelled')
+  })
 })
 
 describe('§3.7.4 — the code never reaches the wire', () => {

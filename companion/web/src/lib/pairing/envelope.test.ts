@@ -30,7 +30,7 @@ beforeAll(async () => {
   await initEnvelope()
   const sodium = await initCpace()
   const sid = sodium.randombytes_buf(16)
-  const inputs = { prs: utf8('MATCH-CODE'), ci: utf8('daymark/cpace/v1|rel'), sid }
+  const inputs = { prs: utf8('MATCH-CODE'), ci: utf8('envelope-test-channel'), sid }
   const a = cpaceStart(inputs, utf8('owner'))
   const b = cpaceRespond(inputs, a.msgA, utf8('therapist'))
   iskA = cpaceFinish(inputs, a, b.msgB)
