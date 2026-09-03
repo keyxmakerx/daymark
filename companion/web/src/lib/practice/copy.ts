@@ -243,8 +243,8 @@ export const PLACEHOLDERS: readonly PlaceholderNote[] = [
  */
 export const EMPTY_ROSTER_TITLE = 'No roster read yet'
 export const EMPTY_ROSTER_BODY =
-  'Sign in and name a practice, and its members appear here. This list is read fresh from the ' +
-  'server every time; nothing is remembered by this page.'
+  'Read the roster and its members appear here. This list is read fresh from the server every ' +
+  'time; nothing is remembered by this page.'
 
 export const EMPTY_AUDIT_TITLE = 'No entries read yet'
 export const EMPTY_AUDIT_BODY =

@@ -14,6 +14,7 @@
   import ShapeStrip from './lib/components/setup/ShapeStrip.svelte'
   import PracticePlaceholder from './lib/components/setup/PracticePlaceholder.svelte'
   import {
+    LABELS as SHAPE_LABELS,
     decidedShape,
     defaultSetupStorage,
     forgetShape,
@@ -184,6 +185,25 @@
   const shapeUndecided = $derived(decidedShape(decision) === null)
 
   /*
+   * THE MASTHEAD FOLLOWS THE SHAPE.
+   *
+   * "Offline report viewer" was a constant, and it stayed up over a Paired page whose trust strip,
+   * one element below, said "This tab sends data to your server." Both were on screen at once.
+   * The tagline is a few words about what this page is FOR on this machine, so it has to change
+   * when the answer does: Solo is the offline viewer; Paired is the journal and the one clinician
+   * it is shown to; Practice reuses the placeholder panel's own title, because that is the same
+   * sentence and one spelling of it is enough. Undecided — the question still open, or a recovery
+   * link that skipped it — keeps the viewer's wording, which is what the page is until told
+   * otherwise.
+   */
+  const TAGLINE: Record<ShapeId, string> = {
+    solo: 'Offline report viewer',
+    paired: 'Your journal, and one clinician you invited',
+    practice: SHAPE_LABELS.practiceTitle,
+  }
+  const tagline = $derived(TAGLINE[decidedShape(decision) ?? 'solo'])
+
+  /*
    * WHICH POSTURE THE TRUST STRIP STATES.
    *
    * Derived from the tab AND from whether this load is reading configuration — never from
@@ -249,7 +269,7 @@
       <span class="mark" aria-hidden="true"></span>
       <div>
         <h1>Daymark Companion</h1>
-        <p class="muted tagline">Offline report viewer</p>
+        <p class="muted tagline">{tagline}</p>
       </div>
     </div>
     {#if data}
@@ -304,46 +324,59 @@
         <!--
           `selected` is one of the owner's six; the practice surface is not among them and passes
           `undefined` rather than a route id Orientation has no button for.
+
+          THE SURFACE GOES IN, NOT AFTER. The chosen route's panel used to render below the whole
+          of Orientation — under the reach reading and the self-check disclosure — which put the
+          drop zone, the one thing a Solo page is for, some fifteen hundred pixels down; and in
+          Paired it put the owner console, keys and lower-assurance callout included, last on the
+          page. The `surface` snippet renders directly under the route cards instead, whichever
+          route is selected: the drop zone in Solo, the owner console in Paired, and any other
+          route's panel when someone walks over to it. The reach panel and the disclosure are not
+          removed; they follow it.
         -->
         <Orientation
           selected={source === 'practice' ? undefined : source}
           onchoose={(id) => (source = id)}
-        />
+        >
+          {#snippet surface()}
+            {#if source === 'file'}
+              <Dropzone onload={load} onerror={(m) => (error = m)} />
+            {:else if source === 'sync'}
+              <SyncPanel onload={loadData} />
+            {:else if source === 'assess'}
+              <Assessments />
+            {:else if source === 'build'}
+              <ToolBuilder onPublish={publishTool} />
+            {:else if source === 'recover'}
+              <RecoverAccess />
+            {:else if source === 'practice'}
+              <!--
+                The marked placeholder standing where the practice console will be. It is reached
+                only from the practice shape, and it says in the interface that it holds no data —
+                see the header note in PracticePlaceholder.svelte for why an empty roster was the
+                wrong answer.
+              -->
+              <PracticePlaceholder />
+            {:else}
+              <OwnerConsole data={null} />
+            {/if}
 
-        {#if source === 'file'}
-          <Dropzone onload={load} onerror={(m) => (error = m)} />
-        {:else if source === 'sync'}
-          <SyncPanel onload={loadData} />
-        {:else if source === 'assess'}
-          <Assessments />
-        {:else if source === 'build'}
-          <ToolBuilder onPublish={publishTool} />
-        {:else if source === 'recover'}
-          <RecoverAccess />
-        {:else if source === 'practice'}
-          <!--
-            The marked placeholder standing where the practice console will be. It is reached only
-            from the practice shape, and it says in the interface that it holds no data — see the
-            header note in PracticePlaceholder.svelte for why an empty roster was the wrong answer.
-          -->
-          <PracticePlaceholder />
-        {:else}
-          <OwnerConsole data={null} />
-        {/if}
-
-        {#if error}
-          <p class="error" role="alert">{error}</p>
-        {/if}
-        <!-- 'practice' joins the exclusions: that panel is about a clinic's machine, and the note
-             below is instructions for dropping your own backup file on the two tabs that take one. -->
-        {#if source !== 'assess' && source !== 'build' && source !== 'owner' && source !== 'recover' && source !== 'practice'}
-          <p class="faint note">
-            Non-diagnostic: Daymark is a self-tracking and journaling tool. Nothing here
-            is a medical assessment. Export a backup from the app via
-            <em>Settings → Export backup</em>, then drop the <code>.json</code> file above —
-            or pull your latest encrypted snapshot from your own sync server.
-          </p>
-        {/if}
+            {#if error}
+              <p class="error" role="alert">{error}</p>
+            {/if}
+            <!-- 'practice' joins the exclusions: that panel is about a clinic's machine, and the
+                 note below is instructions for dropping your own backup file on the two tabs that
+                 take one. It stays with the drop zone, because "above" has to stay true. -->
+            {#if source !== 'assess' && source !== 'build' && source !== 'owner' && source !== 'recover' && source !== 'practice'}
+              <p class="faint note">
+                Non-diagnostic: Daymark is a self-tracking and journaling tool. Nothing here
+                is a medical assessment. Export a backup from the app via
+                <em>Settings → Export backup</em>, then drop the <code>.json</code> file above —
+                or pull your latest encrypted snapshot from your own sync server.
+              </p>
+            {/if}
+          {/snippet}
+        </Orientation>
       </section>
     {:else}
       <section class="loaded">

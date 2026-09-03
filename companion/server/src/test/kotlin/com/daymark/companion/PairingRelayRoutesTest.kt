@@ -344,6 +344,60 @@ class PairingRelayRoutesTest {
     }
 
     @Test
+    fun `a re-open retires the run it replaces, so nothing stale is served or answerable even later`() = testApplication {
+        var now = 1_000_000L
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val s = stores(dir, cfg) { now }
+        application { module(cfg, null, null, s.rel, s.auth, s.audit, pairingStore = s.pairing) }
+        val minted = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
+        suspend fun fetch(): HttpResponse = client.post("/v1/invite/${minted.inviteId}/pairing/fetch") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"secret":"${minted.secret}"}""")
+        }
+        suspend fun respond(exchangeId: String, msgB: String): HttpResponse =
+            client.post("/v1/invite/${minted.inviteId}/pairing/$exchangeId/respond") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"secret":"${minted.secret}","msgBB64":"$msgB"}""")
+            }
+
+        val first = exchangeIdOf(ownerOpen(minted.inviteId, sid(1), fakeMsg(1)).bodyAsText())
+        now += 1_000
+        val second = exchangeIdOf(ownerOpen(minted.inviteId, sid(2), fakeMsg(2)).bodyAsText())
+
+        // The replaced run is retired the moment the new one opens: a reply to it — from a
+        // therapist who fetched it before the re-open, or from anyone holding the link — is
+        // refused, writes nothing, and reads as retired on the owner's side.
+        assertEquals(HttpStatusCode.Gone, respond(first, fakeMsg(3)).status)
+        val retired = s.pairing.exchangeFor(first, relRef)!!
+        assertEquals(PairingStore.State.SUPERSEDED, retired.state)
+        assertNull(retired.msgBB64)
+
+        // The live run is untouched by the retirement.
+        assertEquals(HttpStatusCode.NoContent, respond(second, fakeMsg(4)).status)
+
+        // Once the live run has left OPEN, the retired one must not resurface as "newest": the
+        // shelf reads empty, in exactly the words a dead invite gets.
+        val afterAnswer = fetch()
+        assertEquals(HttpStatusCode.Gone, afterAnswer.status)
+        assertEquals("""{"error":"invite unavailable"}""", afterAnswer.bodyAsText())
+
+        // Same after a cancel — the path the single-run cancel test above cannot see.
+        now += 1_000
+        val third = exchangeIdOf(ownerOpen(minted.inviteId, sid(5), fakeMsg(5)).bodyAsText())
+        val cancel = client.post("/v1/relations/$relRef/pairing/$third/cancel") { bearerAuth(ownerToken) }
+        assertEquals(HttpStatusCode.NoContent, cancel.status)
+        assertEquals(HttpStatusCode.Gone, fetch().status)
+        assertEquals(HttpStatusCode.Gone, respond(first, fakeMsg(6)).status)
+
+        // Retiring is bookkeeping, not the owner's Cancel: one cancelled line, for the explicit
+        // cancel only. The rows themselves all stay — the cap counts them.
+        val actions = s.audit.list(relRef, limit = 50).map { it.action }
+        assertEquals(1, actions.count { it == "pairing.cancelled" })
+        assertEquals(3L, s.pairing.exchangeCountFor(minted.inviteId))
+    }
+
+    @Test
     fun `shape checks refuse what no honest client sends`() = testApplication {
         var now = 1_000_000L
         val dir = tmpDir()

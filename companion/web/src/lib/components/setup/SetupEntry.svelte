@@ -81,6 +81,13 @@
   const BUILD_WORD = { built: LABELS.builtToday, 'separate-page': LABELS.separatePage } as const
 
   const askNote = $derived(decision.state === 'ask' ? ASK_REASON_NOTE[decision.reason] : null)
+
+  /*
+   * Prefix for the ids the three cards hand to aria-labelledby and aria-describedby. Generated
+   * rather than typed, the way Callout.svelte does it, so the ids stay unique even if this
+   * screen is ever mounted twice on one page.
+   */
+  const uid = $props.id()
 </script>
 
 <!--
@@ -135,32 +142,51 @@
 
       <ul class="shapes">
         {#each SHAPES as shape (shape.id)}
-          <li>
-            <!--
-              The whole card is the control, as in Orientation's route list: a small "choose"
-              button beside a block of text makes the text look like reading and the button look
-              like the decision, when the text IS the decision. No aria-label — the content is the
-              accessible name, so a screen reader gets the ranking and the build state that a
-              sighted reader gets from the same block.
-            -->
-            <button class="shape" type="button" onclick={() => onchoose(shape.id)}>
-              <span class="shape-head">
-                <span class="shape-label">{shape.label}</span>
-                <Chip tone={BUILD_TONE[shape.buildState]}>{BUILD_WORD[shape.buildState]}</Chip>
-              </span>
-              <span class="shape-summary">{shape.summary}</span>
-              <span class="shape-arrangement">{shape.arrangement}</span>
+          <!--
+            The whole card is the target, as in Orientation's route list: a small "choose" button
+            beside a block of text makes the text look like reading and the button look like the
+            decision, when the text IS the decision.
+
+            HOW THE CARD IS NAMED. This was one <button> wrapping every sentence, so its accessible
+            name was the entire card — some eighty words read out before a screen reader user
+            could tell one option from the next, and the same eighty words again on the second
+            card. The name is now the card's heading, via aria-labelledby, and everything else
+            hangs off aria-describedby: a description is announced after the name and can be cut
+            short, a name cannot. The heading is a real <h4> under the question's <h3>, so heading
+            navigation lands on each option by name.
+
+            WHY THE BUTTON IS AN OVERLAY. A heading is not allowed inside a <button> (phrasing
+            content only, and a button's descendants are presentational to assistive technology
+            regardless), so the card is the <li> and the control is a transparent button laid over
+            it. Same border, same hover, same focus ring, same click target: nothing visible
+            changed, only what is announced.
+          -->
+          <li class="shape">
+            <div class="shape-head">
+              <h4 class="shape-label" id="{uid}-{shape.id}-name">{shape.label}</h4>
+              <Chip tone={BUILD_TONE[shape.buildState]}>{BUILD_WORD[shape.buildState]}</Chip>
+            </div>
+            <div class="shape-about" id="{uid}-{shape.id}-about">
+              <p class="shape-summary">{shape.summary}</p>
+              <p class="shape-arrangement">{shape.arrangement}</p>
               <!--
                 The ranking is the sentence that stops someone standing up a clinic server for
                 themselves, so it is emphasised rather than folded in with the rest.
               -->
-              <span class="shape-ranking">{shape.ranking}</span>
+              <p class="shape-ranking">{shape.ranking}</p>
               <!--
                 And the honesty line: what is actually built for this shape, at the point of
                 choosing it rather than after arriving somewhere empty.
               -->
-              <span class="shape-built">{shape.buildNote}</span>
-            </button>
+              <p class="shape-built">{shape.buildNote}</p>
+            </div>
+            <button
+              class="choose"
+              type="button"
+              aria-labelledby="{uid}-{shape.id}-name"
+              aria-describedby="{uid}-{shape.id}-about"
+              onclick={() => onchoose(shape.id)}
+            ></button>
           </li>
         {/each}
       </ul>
@@ -272,8 +298,12 @@
    * pointer is over is interface state, and the ramp encodes a person's reported experience. The
    * border is --border-strong rather than --hairline because this element's identity as a control
    * depends on it (design system §2.3.1).
+   *
+   * The card is the <li>; the control is `.choose`, laid over it (see the markup note). `:hover`
+   * on the card still fires while the pointer is on the overlay, because the overlay is inside it.
    */
   .shape {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
@@ -285,7 +315,6 @@
     border-radius: var(--radius);
     color: var(--ink-text);
     cursor: pointer;
-    font: inherit;
   }
 
   .shape:hover {
@@ -293,7 +322,21 @@
     background: var(--indigo-wash);
   }
 
-  .shape:focus-visible {
+  /* The overlay. `inset: -1px` reaches over the card's own border so the focus ring is drawn
+     where it always was — two pixels outside the card — rather than a pixel inside it. No
+     background, no border, no padding: the card underneath supplies all of that. */
+  .choose {
+    position: absolute;
+    inset: -1px;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+
+  .choose:focus-visible {
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
@@ -305,11 +348,26 @@
     gap: var(--space-2);
   }
 
+  /* An h4 now, so the browser's heading margins and weight are reset to what the span had. */
   .shape-label {
+    margin: 0;
     font-family: var(--font-display);
     font-size: 1.05rem;
     font-weight: 560;
     line-height: 1.3;
+    color: var(--ink-text);
+  }
+
+  /* The description: one element, so aria-describedby can point at it. Same column and gap as
+     the card itself, so the four lines sit exactly where they did as direct children. */
+  .shape-about {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .shape-about p {
+    margin: 0;
   }
 
   .shape-summary {

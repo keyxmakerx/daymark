@@ -46,5 +46,19 @@ Tinted at the Compose layer from `colorScheme`/`moodColors`, so one asset serves
 
 ## Motion
 
-Navigation uses purposeful **directional slide** (shared-axis style, ~240ms, FastOutSlowIn)
-rather than a plain crossfade.
+Motion follows what a move means (`ui/DaymarkAppScaffold.kt`), so there are three transitions,
+not one blanket slide:
+
+- **Between the five tabs** — siblings, not a hierarchy — a non-directional **fade-through**: the
+  outgoing screen fades out (~110ms), then the incoming one fades in while scaling up from 92%
+  (~220ms after a ~90ms gap).
+- **Drilling into a list or detail screen** (History, Settings, Trackers, the Sky, …) — a
+  **shared-axis Z** move: the new screen scales up from 85% on a spring with a short fade (150ms),
+  and scales back down the same way on back.
+- **Creating or editing something** (an entry, a journal page, a goal, a check-in, a sleep log, a
+  thought record, a year review) and the in-the-moment support flows — a **sheet rising** from the
+  bottom: the screen slides up a third of its height on a spring and fades in; dismissing it slides
+  and fades it back down.
+
+The spatial moves use springs (damping 0.9, medium-low stiffness) rather than fixed tweens so a
+transition interrupted mid-way reverses smoothly instead of snapping.

@@ -15,7 +15,6 @@ import {
   ORIENTATION_LEDE,
   ORIENTATION_PROBES,
   ORIENTATION_STORAGE_KEY,
-  ORIENTATION_TITLE,
   ORIENTATION_VERSION,
   OWNER_ROUTES,
   REACH_SILENT_ON,
@@ -802,7 +801,6 @@ describe('the copy', () => {
   it('the standing statements are present and say what they are for', () => {
     // These four are the screen's own promises, so their absence is a regression rather than a
     // style change.
-    expect(ORIENTATION_TITLE.length).toBeGreaterThan(4)
     expect(ORIENTATION_LEDE).toContain('three different pages')
     // "State what runs where" — and it must stay true of a build that writes a dismissal note.
     expect(WHAT_THIS_PAGE_IS).toContain('runs in your browser')

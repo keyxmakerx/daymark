@@ -20,6 +20,25 @@ const read = (rel: string) => readFileSync(resolve(process.cwd(), rel), 'utf8')
 const PORTAL = read('src/lib/components/therapist/TherapistPortal.svelte')
 const GATE = read('src/lib/components/therapist/LoginGate.svelte')
 const SHARED_VIEW = read('src/lib/components/therapist/SharedDataView.svelte')
+const SCREEN = read('src/lib/components/therapist/SignInScreen.svelte')
+const OWNER_APP = read('src/App.svelte')
+
+/** Source with commentary removed: what actually ships. Same shape as the tree-wide suite's. */
+const codeOnly = (src: string) =>
+  src
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(?<!:)\/\/[^\n]*/g, '')
+
+/** The markup a person actually gets: script and style gone, comments gone. */
+const markupOf = (src: string) =>
+  src
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<script[\s\S]*?<\/script>/g, '')
+    .replace(/<style[\s\S]*?<\/style>/g, '')
+
+const GATE_MARKUP = markupOf(GATE)
+const SCREEN_MARKUP = markupOf(SCREEN)
 
 describe('the portal composes the sign-in contract around the one auth path', () => {
   it('renders LoginGate inside SignInScreen rather than beside or instead of it', () => {
@@ -103,5 +122,114 @@ describe('the data surfaces sit behind the capability that feeds them', () => {
     // The control: a tab that is NOT behind this capability is outside the block, so the four
     // above are inside it because of the gate rather than because the block is the whole file.
     expect(block).not.toContain("tab = 'allowed'")
+  })
+})
+
+describe('the gate asks for what is yours first, and offers the rest', () => {
+  it('draws the authenticator code and the reading passphrase before the fallback disclosure', () => {
+    const totp = GATE_MARKUP.indexOf('id="f-totpCode"')
+    const passphrase = GATE_MARKUP.indexOf('id="f-readingPassphrase"')
+    const details = GATE_MARKUP.indexOf('<details')
+    expect(totp).toBeGreaterThan(-1)
+    expect(passphrase).toBeGreaterThan(totp)
+    expect(details).toBeGreaterThan(passphrase)
+    // The control: the disclosure really does hold the fallback fields, so "before it" means
+    // before nine fields rather than before an empty element.
+    const inside = GATE_MARKUP.slice(details, GATE_MARKUP.indexOf('</details>', details))
+    expect(inside).toContain('id="f-serverUrl"')
+    expect(inside).toContain('id="f-wrappedKey"')
+  })
+
+  it('folds the fallback by default and binds it to state, so a check can open it', () => {
+    expect(GATE_MARKUP).toContain('<details class="prov" bind:open={provOpen}>')
+    expect(GATE_MARKUP).not.toContain('<details class="prov" open>')
+    expect(codeOnly(GATE)).toContain('let provOpen = $state(false)')
+  })
+
+  it('the summary reads as an offer, and the explanation stays inside', () => {
+    const details = GATE_MARKUP.indexOf('<details')
+    const inside = GATE_MARKUP.slice(details, GATE_MARKUP.indexOf('</details>', details))
+    const summary = inside.slice(inside.indexOf('<summary>'), inside.indexOf('</summary>'))
+    expect(summary).toContain('This browser has no record of your invitation?')
+    expect(summary).toContain('Enter the connection by hand')
+    expect(inside).toContain('so these have to be entered by hand')
+    expect(inside).toContain('Accepting the invitation in the browser you sign in from is the shorter path.')
+  })
+
+  it('judges the form before it unwraps or sends anything', () => {
+    const code = codeOnly(GATE)
+    const unlock = code.slice(code.indexOf('async function unlockNow()'))
+    const check = unlock.indexOf('firstProblem(')
+    const crypto = unlock.indexOf('initAssignmentCrypto()')
+    const network = unlock.indexOf('loginTotp(')
+    expect(check).toBeGreaterThan(-1)
+    expect(crypto).toBeGreaterThan(check)
+    expect(network).toBeGreaterThan(crypto)
+    // A found problem returns before `busy` is set, so the button never shows "Unlocking…" for a
+    // form that was never sent.
+    const found = unlock.slice(unlock.indexOf('if (problem)'), unlock.indexOf('busy = true'))
+    expect(found).toContain('return')
+    expect(found).toContain('provOpen = true')
+    expect(found).toContain('.focus()')
+  })
+
+  it('renders the alert above the button, inside the form, and points the failing field at it', () => {
+    const form = GATE_MARKUP.slice(GATE_MARKUP.indexOf('<form'), GATE_MARKUP.indexOf('</form>'))
+    const alert = form.indexOf('<Callout tone="critical">')
+    const button = form.indexOf('type="submit"')
+    expect(alert).toBeGreaterThan(-1)
+    expect(button).toBeGreaterThan(alert)
+    // The failing field is marked and described by the alert, so the sentence is also heard
+    // where the cursor is.
+    expect(form).toMatch(/id="f-totpCode"[^>]*aria-invalid=/)
+    expect(form).toMatch(/id="f-totpCode"[^>]*aria-describedby=\{describedBy\('totpCode'\)\}/)
+    expect(form).toContain('<div id={errorId}><Callout tone="critical">')
+  })
+})
+
+describe('the sign-in screen sits where the other surfaces sit', () => {
+  it('centres at the owner viewer’s measure', () => {
+    const rule = SCREEN.slice(SCREEN.indexOf('.signin {'), SCREEN.indexOf('}', SCREEN.indexOf('.signin {')))
+    expect(rule).toContain('max-width: var(--maxw)')
+    expect(rule).toContain('margin: 0 auto')
+    // The control: the same two declarations are what centre the owner viewer's shell.
+    const shell = OWNER_APP.slice(OWNER_APP.indexOf('.shell {'), OWNER_APP.indexOf('}', OWNER_APP.indexOf('.shell {')))
+    expect(shell).toContain('max-width: var(--maxw)')
+    expect(shell).toContain('margin: 0 auto')
+  })
+
+  it('opens with the wordmark and its tagline, in the owner viewer’s brand markup, above the title', () => {
+    const brand = SCREEN_MARKUP.indexOf('<div class="brand">')
+    const title = SCREEN_MARKUP.indexOf('<PageHeader')
+    expect(brand).toBeGreaterThan(-1)
+    expect(title).toBeGreaterThan(brand)
+    const block = SCREEN_MARKUP.slice(brand, title)
+    expect(block).toContain('<span class="mark" aria-hidden="true"></span>')
+    expect(block).toContain('Daymark Companion')
+    expect(block).toContain('<p class="muted tagline">Therapist portal</p>')
+    // The pattern is the owner viewer's, read from its source rather than retyped.
+    expect(OWNER_APP).toContain('<div class="brand">')
+    expect(OWNER_APP).toContain('<span class="mark" aria-hidden="true"></span>')
+    expect(OWNER_APP).toContain('class="muted tagline"')
+    // Not a second <h1>: PageHeader owns this document's top heading.
+    expect(block).not.toContain('<h1')
+  })
+
+  it('on a narrow window draws the credential column first, without moving it in the document', () => {
+    const contract = SCREEN_MARKUP.indexOf('class="col contract"')
+    const credentials = SCREEN_MARKUP.indexOf('class="col credentials"')
+    expect(contract).toBeGreaterThan(-1)
+    expect(credentials).toBeGreaterThan(contract)
+    const narrow = SCREEN.indexOf('@media (max-width: 45rem)')
+    expect(narrow).toBeGreaterThan(-1)
+    const rule = SCREEN.slice(narrow, SCREEN.indexOf('}\n  }', narrow))
+    expect(rule).toContain('.credentials')
+    expect(rule).toContain('order: -1')
+  })
+
+  it('does not fold the contract to do it', () => {
+    expect(SCREEN_MARKUP).not.toContain('<details')
+    // The control: the same search finds the disclosure the gate does have.
+    expect(GATE_MARKUP).toContain('<details')
   })
 })

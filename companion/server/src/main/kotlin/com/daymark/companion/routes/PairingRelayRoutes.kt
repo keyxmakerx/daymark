@@ -36,10 +36,13 @@ private fun auditSafely(block: () -> Unit) {
 @Serializable data class PairingFetchRequest(val secret: String)
 
 /**
- * relRef rides along because both CPace parties must derive the same channel identifier, and
- * the CI binds the relationship (see the web client). Disclosure-wise this is nothing new: the
- * redeem route's success body has always returned relRef to a caller who proved the secret,
- * and this response requires exactly the same proof.
+ * relRef rides along because the web client folds it into the CPace channel identifier and the
+ * owner's side derives the same CI from its own record. It is NOT what binds the run to an
+ * invitation: the therapist only ever learns relRef from this response, so a server can make it
+ * say whatever the owner used. The binding both sides hold independently is the invite id — the
+ * owner chose it, the link carries it — and the client puts that in the CI too (audit,
+ * 2026-09-01). Disclosure-wise this is nothing new: the redeem route's success body has always
+ * returned relRef to a caller who proved the secret, and this response requires the same proof.
  */
 @Serializable data class PairingFetchResponse(val exchangeId: String, val relRef: String, val sidB64: String, val msgAB64: String)
 @Serializable data class PairingRespondRequest(val secret: String, val msgBB64: String)

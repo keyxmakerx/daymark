@@ -84,6 +84,12 @@
   let outcomeWasRemoval = $state(false)
   let working = $state(false)
 
+  /**
+   * Whether there is a practice to read. The read control and the empty state both key on this,
+   * so the absence is stated once, in one place, rather than as a refusal beside an explanation.
+   */
+  let noPractice = $derived(orgId === '')
+
   /** The member whose role is being changed, and the role chosen for them. */
   let editing = $state<string | null>(null)
   let chosenRole = $state<OrgRoleWire>('clinician')
@@ -224,7 +230,16 @@
   {/snippet}
 
   <div class="controls">
-    <button type="button" onclick={() => void read()} disabled={working || orgId === ''}>
+    <!--
+      Refused both ways while there is nothing to read: `disabled` for the DOM and `aria-disabled`
+      for assistive tech, on the same predicate so the two never disagree.
+    -->
+    <button
+      type="button"
+      onclick={() => void read()}
+      disabled={working || noPractice}
+      aria-disabled={working || noPractice ? 'true' : undefined}
+    >
       {working ? 'Reading' : 'Read the roster'}
     </button>
     {#if myUnacceptedSeat}
@@ -233,10 +248,6 @@
       </button>
     {/if}
   </div>
-
-  {#if orgId === ''}
-    <p class="para">Name a practice above, and its roster can be read here.</p>
-  {/if}
 
   {#if failure}
     <Callout tone="critical" title="The server refused, or could not be reached">
@@ -260,8 +271,17 @@
   {/if}
 
   {#if members === null}
-    <EmptyState title={EMPTY_ROSTER_TITLE}>
-      <p class="para">{EMPTY_ROSTER_BODY}</p>
+    <!--
+      One empty state, its words chosen by what is missing. With no practice named there is nothing
+      to read; with one named, nothing has been read yet. Two messages for the same absence read
+      as two problems, and a reader would go looking for the second.
+    -->
+    <EmptyState title={noPractice ? 'No practice named' : EMPTY_ROSTER_TITLE}>
+      <p class="para">
+        {noPractice
+          ? 'Name a practice on the Practice screen, and its roster can be read here.'
+          : EMPTY_ROSTER_BODY}
+      </p>
     </EmptyState>
   {:else if members.length === 0}
     <EmptyState title="The server returned an empty roster">

@@ -5,6 +5,8 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -63,7 +66,8 @@ fun OnboardingScreen(
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+        // imePadding so the PIN step's fields and buttons rise above the keyboard.
+        Column(modifier = Modifier.fillMaxSize().imePadding().padding(24.dp)) {
             // Skip-everything affordance + simple progress dots.
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -72,11 +76,16 @@ fun OnboardingScreen(
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     repeat(lastStep + 1) { i ->
+                        val dotWidth by animateDpAsState(
+                            targetValue = if (i == step) 18.dp else 6.dp,
+                            animationSpec = tween(durationMillis = 200),
+                            label = "onboardingDot",
+                        )
                         Box(
                             modifier = Modifier
                                 .padding(2.dp)
                                 .height(6.dp)
-                                .width(if (i == step) 18.dp else 6.dp)
+                                .width(dotWidth)
                                 .clip(RoundedCornerShape(3.dp))
                                 .background(
                                     if (i == step) MaterialTheme.colorScheme.primary

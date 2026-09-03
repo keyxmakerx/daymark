@@ -44,7 +44,7 @@
    * lib/therapist/pinStore.ts, and why this one fails OPEN where that one fails closed are in
    * audience.ts; WHAT_IS_STORED says the same thing to the person, on the page.
    */
-  import { untrack } from 'svelte'
+  import { untrack, type Snippet } from 'svelte'
   import { Callout, Card, Chip } from '../ui'
   import { describeLastChecked, readProbe, type ProbeReading } from '../../admin/health'
   import {
@@ -53,7 +53,6 @@
     LABELS,
     NEEDS_LABEL,
     ORIENTATION_LEDE,
-    ORIENTATION_TITLE,
     PROBES_ARE_PUBLIC,
     REACH_WORD,
     STORAGE_REFUSED,
@@ -99,6 +98,12 @@
      * without the screen going quiet about the console's existence.
      */
     adminLink = false,
+    /**
+     * The surface the chosen route opens — the drop zone, the owner console, whichever the host
+     * has selected. Rendered directly under the route cards, between them and the reach panel,
+     * so the thing a person just chose appears where they chose it. See the markup note.
+     */
+    surface = undefined,
   }: {
     baseUrl?: string
     fetchImpl?: typeof fetch
@@ -107,6 +112,7 @@
     selected?: OwnerRouteId
     onchoose?: (id: OwnerRouteId) => void
     adminLink?: boolean
+    surface?: Snippet
   } = $props()
 
   let readings = $state<ProbeReading[]>([])
@@ -217,14 +223,25 @@
   outline two top-level headings with identical text — so the landmark meant to orient someone was
   the thing making the page ambiguous to navigate.
 
-  The rest of this file already reasons about not skipping h2 → h3; it just assumed it owned the
-  h1. It does not, so it starts at h2 and the nesting below stays correct.
+  AND NOT THE PRODUCT NAME EITHER. Demoting it to an h2 left the same words one level down: h1
+  "Daymark Companion", then h2 "Daymark Companion", which is the same repetition with a smaller
+  font. A heading names what follows, and what follows is the routes — so this is LABELS.routes,
+  the title the route list used to carry for itself, and the route list no longer repeats it
+  beneath. The outline is h1 (the page) > h2 (this panel) > h3 (each group of routes), and the
+  audience cards, which only the full view shows, sit under it as an h3 of their own.
+
+  THE PANEL IS TWO ROOTS, NOT ONE. Everything a person navigates by is in the first section:
+  heading, lede, who each page is for, the routes. The `surface` snippet renders between the two,
+  so the drop zone — the one thing the Solo page is actually for — is directly under the card that
+  opened it, rather than fifteen hundred pixels down past a diagnostic panel and a disclosure.
+  The second block holds what qualifies the page rather than navigates it: the reach reading, the
+  storage note, and the self-check disclosure. It is a plain div, because it is not a landmark
+  and naming it "Where to start" would be false.
 -->
 <section class="orientation" aria-labelledby="orientation-heading">
   <div class="head">
-    <h2 id="orientation-heading">{ORIENTATION_TITLE}</h2>
+    <h2 id="orientation-heading">{LABELS.routes}</h2>
     <div class="head-side">
-      {#if lastCheckedAt !== null}<Chip tone="neutral">{staleness}</Chip>{/if}
       {#if view === 'full'}
         <button class="action" type="button" onclick={dismiss}>{LABELS.dismiss}</button>
       {:else}
@@ -241,7 +258,7 @@
       it would have a screen reader announce the same words twice before the content.
     -->
     <section class="block">
-      <h2 class="section-title">{LABELS.audiences}</h2>
+      <h3 class="section-title">{LABELS.audiences}</h3>
       <ul class="audiences">
         {#each AUDIENCES as audience (audience.id)}
           <!--
@@ -301,13 +318,12 @@
   {/if}
 
   <!--
-    The heading stays in BOTH views. Dropping it in compact saved four words and skipped a heading
-    level — h1 straight to the group's h3 — which is a hole in the outline that heading navigation
-    relies on. What compact actually saves is the audience cards, the group notes and the closing
-    panels; the navigation itself is what a returning person came for.
+    No section title of its own: the panel heading above IS this list's title, in both views, so
+    the outline runs h2 "Where to start" straight to each group's h3 with no level skipped and no
+    heading repeated. What compact saves is the audience cards and the closing panels; the
+    navigation itself is what a returning person came for.
   -->
   <section class="block">
-    <h2 class="section-title">{LABELS.routes}</h2>
     {#each groups as group (group.group)}
       <div class="group">
         <h3 class="group-title">{group.heading}</h3>
@@ -337,12 +353,21 @@
       </div>
     {/each}
   </section>
+</section>
 
+<!-- The chosen route's own surface, directly under the card that opened it. -->
+{#if surface}{@render surface()}{/if}
+
+{#if showReach || storageRefused || view === 'full'}
+<div class="orientation">
   {#if showReach}
     <section class="block">
       <Card title={LABELS.reach}>
         {#snippet header()}
           <Chip tone={REACH_TONE[reach.state]}>{REACH_WORD[reach.state]}</Chip>
+          <!-- "Checked just now" qualifies THIS reading, so it sits beside it rather than up in
+               the panel header next to a heading it has nothing to do with. -->
+          {#if lastCheckedAt !== null}<Chip tone="neutral">{staleness}</Chip>{/if}
         {/snippet}
 
         <p class="para">{reach.statement}</p>
@@ -416,7 +441,8 @@
       </details>
     </section>
   {/if}
-</section>
+</div>
+{/if}
 
 <style>
   /* The panel's own header row. Mirrors PageHeader's arrangement without claiming its <h1>. */
@@ -468,6 +494,8 @@
     min-width: 0;
   }
 
+  /* On the audience heading, now an h3 one level under the panel's title: the class sets every
+     metric the browser's h3 default would otherwise change, so the screen reads exactly as before. */
   .section-title {
     font-family: var(--font-display);
     font-size: 1.1rem;

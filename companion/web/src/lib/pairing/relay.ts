@@ -21,24 +21,43 @@
  * negotiation built ON the key fails to open, and a person decides what that means (the burn
  * rule: only a human report kills an invite).
  *
- * What binds the exchange to THIS relationship and THESE roles rather than to any relay the
- * server might splice together: the channel identifier (CI) carries the relRef, and the
- * associated data carries each side's role. Both parties derive them independently — the owner
- * from their own relationship record, the therapist from the fetch response — so a server that
- * relays messages between two DIFFERENT relationships produces key divergence, not a session.
+ * WHAT BINDS THE RUN TO THIS INVITATION, and what does not. The channel identifier carries the
+ * invite id, which is the one value each side holds WITHOUT the server's help — the owner
+ * chose which invitation to open a run for, and the therapist has it from the link itself. The
+ * relationship reference is in the CI too, but on the therapist's side it arrives in the fetch
+ * response, so it binds nothing against the party that sent it (the audit of 2026-09-01 caught
+ * an earlier version of this comment crediting it with exactly that). The associated data
+ * carries each side's role. A server that serves one invitation's opening message to the
+ * holder of another's link therefore produces key divergence, not a session — even if, by
+ * reuse or bad luck, both invitations were given the same code.
+ *
+ * ONE RUN, ONE KEY. The owner's state pins the reply that produced its key; a later read that
+ * shows a different reply is refused, never re-derived. CPace gives an online attacker one
+ * guess per protocol run only if a run derives one key, and that is enforced here rather than
+ * left to how often a caller polls.
  */
-import { initCpace, cpaceStart, cpaceRespond, cpaceFinish, type CpaceStartResult } from './cpace'
+import {
+  initCpace,
+  cpaceStart,
+  cpaceRespond,
+  cpaceFinish,
+  lvCat,
+  type CpaceStartResult,
+} from './cpace'
 
 type FetchLike = typeof fetch
 
 const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s)
 
 /**
- * Version-tagged so a future change to any part of the construction (hash, encoding, roles)
- * changes the CI and cleanly refuses to key against the old one, instead of half-agreeing.
+ * The CPace channel identifier: version tag, relationship reference, invite id — length-
+ * prefixed (the draft's lv_cat) rather than joined, so no separator can ever be mistaken for
+ * structure. Version-tagged so a future change to any part of the construction changes the CI
+ * and cleanly refuses to key against the old one, instead of half-agreeing. The owner's half on
+ * the phone (plan 4.0b) must build these exact bytes.
  */
-export function channelIdentifier(relRef: string): Uint8Array {
-  return utf8(`daymark/cpace/v1|${relRef}`)
+export function channelIdentifier(relRef: string, inviteId: string): Uint8Array {
+  return lvCat(utf8('daymark/cpace/v2'), utf8(relRef), utf8(inviteId))
 }
 
 export const AD_OWNER = utf8('owner')
@@ -61,9 +80,22 @@ const b64 = {
 
 export interface OwnerPairingState {
   exchangeId: string
+  inviteId: string
   sidB64: string
-  /** The CPace scalar + MSGa. Secret; lives in memory until collect, never serialized. */
+  /**
+   * The CPace scalar + MSGa. Secret, and the ONLY copy of the owner's half of the run — the
+   * server holds nothing that can finish it. This module keeps it in memory and never
+   * serializes it; a caller that has to survive a reload, or the store-and-forward gap of
+   * §3.7.3 (the owner finishes "next time they open the app"), must keep it itself, on the
+   * device, under its own protection. Losing it makes the run unfinishable by anyone, and the
+   * remedy is a fresh run, which spends one of the invite's exchanges.
+   */
   start: CpaceStartResult
+  /**
+   * Set by the first successful collect: the reply that produced the key, and the key. A later
+   * read showing a different reply is refused rather than re-derived — see ONE RUN, ONE KEY.
+   */
+  finished?: { msgBB64: string; isk: Uint8Array }
 }
 
 /** Owner touch 1: derive MSGa from the code and post it for the invite. */
@@ -74,7 +106,7 @@ export async function ownerOpenPairing(
   const sodium = await initCpace()
   const sid = sodium.randombytes_buf(16)
   const start = cpaceStart(
-    { prs: utf8(args.code), ci: channelIdentifier(args.relRef), sid },
+    { prs: utf8(args.code), ci: channelIdentifier(args.relRef, args.inviteId), sid },
     AD_OWNER,
   )
   const res = await doFetch(`/v1/relations/${encodeURIComponent(args.relRef)}/pairing`, {
@@ -89,7 +121,7 @@ export async function ownerOpenPairing(
   if (res.status !== 201) throw new Error(`pairing open refused (${res.status})`)
   const body = (await res.json()) as { exchangeId?: unknown }
   if (typeof body.exchangeId !== 'string') throw new Error('pairing open: malformed response')
-  return { exchangeId: body.exchangeId, sidB64: b64.encode(sid), start }
+  return { exchangeId: body.exchangeId, inviteId: args.inviteId, sidB64: b64.encode(sid), start }
 }
 
 export interface TherapistPairingResult {
@@ -126,8 +158,13 @@ export async function therapistAnswerPairing(
   ) {
     throw new Error('pairing fetch: malformed response')
   }
+  // The invite id in the CI is args.inviteId — from the link, never from the response.
   const responded = cpaceRespond(
-    { prs: utf8(args.code), ci: channelIdentifier(body.relRef), sid: b64.decode(body.sidB64) },
+    {
+      prs: utf8(args.code),
+      ci: channelIdentifier(body.relRef, args.inviteId),
+      sid: b64.decode(body.sidB64),
+    },
     b64.decode(body.msgAB64),
     AD_THERAPIST,
   )
@@ -143,6 +180,8 @@ export async function therapistAnswerPairing(
 export type OwnerCollectResult =
   | { state: 'waiting' }
   | { state: 'cancelled' }
+  /** The owner opened a fresh run for this invite; this one was retired by that, unanswered. */
+  | { state: 'superseded' }
   | { state: 'complete'; isk: Uint8Array }
 
 /** Owner touch 3: look for the reply; when it is there, derive the key and close the exchange. */
@@ -158,17 +197,41 @@ export async function ownerCollectPairing(
   })
   if (res.status !== 200) throw new Error(`pairing read refused (${res.status})`)
   const body = (await res.json()) as { state?: unknown; msgBB64?: unknown }
+  const answered = body.state === 'RESPONDED' || body.state === 'CLOSED'
+  if (args.pairing.finished && (body.state === 'OPEN' || body.state === 'SUPERSEDED')) {
+    // The store only ever moves an answered run forward: RESPONDED → CLOSED, or → CANCELLED by
+    // the owner's own Cancel, which is a legal step and reported below as one. A read that
+    // shows the run waiting or retired AGAIN is a server contradicting its own record, and the
+    // honest answer is a refusal, not a calm 'waiting' over a key already in hand. (The first
+    // version of this guard refused CANCELLED too; the independent re-check caught that an
+    // owner who cancels after a failed close would have been told the server lied.)
+    throw new Error('pairing read: state regressed after the key was derived')
+  }
   if (body.state === 'OPEN') return { state: 'waiting' }
   if (body.state === 'CANCELLED') return { state: 'cancelled' }
-  if (body.state !== 'RESPONDED' && body.state !== 'CLOSED') {
-    throw new Error('pairing read: malformed response')
-  }
+  if (body.state === 'SUPERSEDED') return { state: 'superseded' }
+  if (!answered) throw new Error('pairing read: malformed response')
   if (typeof body.msgBB64 !== 'string') throw new Error('pairing read: reply missing')
-  const isk = cpaceFinish(
-    { prs: utf8(args.code), ci: channelIdentifier(args.relRef), sid: b64.decode(args.pairing.sidB64) },
-    args.pairing.start,
-    b64.decode(body.msgBB64),
-  )
+  let isk: Uint8Array
+  if (args.pairing.finished) {
+    // ONE RUN, ONE KEY: the server does not get a second reply into this run by returning a
+    // different one on a later read. Refusing is the honest answer; nothing else is derived.
+    if (args.pairing.finished.msgBB64 !== body.msgBB64) {
+      throw new Error('pairing read: the reply changed after the key was derived')
+    }
+    isk = args.pairing.finished.isk
+  } else {
+    isk = cpaceFinish(
+      {
+        prs: utf8(args.code),
+        ci: channelIdentifier(args.relRef, args.pairing.inviteId),
+        sid: b64.decode(args.pairing.sidB64),
+      },
+      args.pairing.start,
+      b64.decode(body.msgBB64),
+    )
+    args.pairing.finished = { msgBB64: body.msgBB64, isk }
+  }
   if (body.state === 'RESPONDED') {
     // Bookkeeping only; the key is already derived, so a failed close costs a later retry of
     // an idempotent-shaped call, never the ceremony.

@@ -240,7 +240,16 @@
 {/snippet}
 
 <style>
-  .portal { display: flex; flex-direction: column; gap: var(--space-4); }
+  /* The same measure and centring the sign-in screen uses, so unlocking does not snap the page
+     to the left edge. */
+  .portal {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    max-width: var(--maxw);
+    margin: 0 auto;
+    padding: var(--space-5) var(--space-4) var(--space-8);
+  }
   .topline { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
   .tabs { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 
