@@ -105,6 +105,21 @@ enum class AuditAction(val wire: String) {
     PAIRING_CANCELLED("pairing.cancelled"),
 
     /**
+     * The owner approved a pairing run: the reply opened under the code, they saw a name and
+     * two fingerprints, and said yes. The invitation moves to REDEEMING and the therapist's
+     * chosen enrolment ticket becomes live. The moment the SAS read-aloud used to be.
+     */
+    PAIRING_APPROVED("pairing.approved"),
+
+    /**
+     * The owner took back an approval nobody finished (the therapist never enrolled): the
+     * invitation returns to PENDING and its ticket is gone. Distinct from a cancel because the
+     * invitation was mid-redeem, which is the state a report is FOR — so this line is the
+     * owner's record that they chose "start over" rather than "this wasn't them".
+     */
+    PAIRING_ABANDONED("pairing.abandoned"),
+
+    /**
      * A person explicitly reported an invitation as unexpected, and it was killed on the spot.
      *
      * The counterpart to [PAIR_GUESS_FAILED], and the reason the two must never be one action: a

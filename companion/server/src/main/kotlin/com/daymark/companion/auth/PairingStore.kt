@@ -13,16 +13,20 @@ import java.sql.DriverManager
  * link, and the owner collects the reply next time they look. Three touches, none simultaneous.
  * This store is the parcel shelf between them, and a parcel shelf is ALL it is allowed to be:
  *
- *  - THE BLOBS ARE OPAQUE. `msg_a` and `msg_b` are stored and returned byte-for-byte, never
- *    parsed, never validated beyond a size cap. The server cannot participate in the exchange —
- *    it does not have the pairing code, and the code never reaches it in any form (§3.7.4) — so
- *    there is nothing it could legitimately do with the contents. A relay that started reading
- *    its parcels would learn nothing and become a thing worth compromising.
+ *  - THE BLOBS ARE OPAQUE. `msg_a`, `msg_b` and `env_to_owner` are stored and returned
+ *    byte-for-byte, never parsed, never validated beyond a size cap. The server cannot
+ *    participate in the exchange — it does not have the pairing code, and the code never reaches
+ *    it in any form (§3.7.4) — so there is nothing it could legitimately do with the contents.
+ *    A relay that started reading its parcels would learn nothing and become a thing worth
+ *    compromising. The envelope is the therapist's offer (their public keys, a name, the enrol
+ *    ticket they chose), sealed under the key only a right code derives; to this store it is a
+ *    third opaque column that travels with the reply.
  *
- *  - ROWS ARE INSERT-ONLY; only `state` and `responded_at` ever change, along the one path
- *    OPEN → RESPONDED → CLOSED (or → CANCELLED from either pre-terminal state, or OPEN →
- *    SUPERSEDED when the owner opens a fresh run). A wrong-code protocol run is retried by the
- *    owner opening a FRESH exchange — CPace gives one guess per run by construction, and a
+ *  - ROWS ARE INSERT-ONLY; only `state`, `responded_at` and the reply columns ever change, along
+ *    the one path OPEN → RESPONDED → CLOSED (the owner's approve), or → CANCELLED from any of
+ *    those (the owner's cancel; from CLOSED it is an abandon, which also puts the invitation back),
+ *    or OPEN → SUPERSEDED when the owner opens a fresh run. A wrong-code protocol run is retried
+ *    by the owner opening a FRESH exchange — CPace gives one guess per run by construction, and a
  *    fresh run needs fresh randomness on both sides, so reuse is not an optimisation, it is a
  *    vulnerability. AT MOST ONE OPEN EXCHANGE PER INVITE, as an invariant kept by [open]: the
  *    run it replaces is retired in the same block that inserts the new one, so nothing stale is
@@ -67,10 +71,19 @@ class PairingStore(
                     state        TEXT    NOT NULL,
                     created_at   INTEGER NOT NULL,
                     responded_at INTEGER,
-                    expiry       INTEGER NOT NULL
+                    expiry       INTEGER NOT NULL,
+                    env_to_owner TEXT
                 )
                 """.trimIndent(),
             )
+            // Databases created before env_to_owner existed will not gain it from CREATE TABLE IF
+            // NOT EXISTS. SQLite has no ADD COLUMN IF NOT EXISTS and errors on a duplicate column,
+            // so the failure is swallowed deliberately: this is the additive-column idiom (see
+            // AuthStore), not a swallowed bug. A reply stored before the column existed reads back
+            // with no envelope, and the owner's client treats that as a reply without an offer.
+            runCatching {
+                st.execute("ALTER TABLE pairing_exchanges ADD COLUMN env_to_owner TEXT")
+            }
             st.execute("CREATE INDEX IF NOT EXISTS idx_pairing_invite ON pairing_exchanges(invite_id, created_at)")
         }
     }
@@ -84,6 +97,8 @@ class PairingStore(
         val sidB64: String,
         val msgAB64: String,
         val msgBB64: String?,
+        /** The therapist's sealed offer, therapist → owner. Null until answered, and null forever on rows older than the column. */
+        val envToOwnerB64: String?,
         val state: State,
         val createdAt: Long,
         val expiry: Long,
@@ -132,6 +147,8 @@ class PairingStore(
         OpenResult(OpenStatus.OK, exchangeId)
     }
 
+    private val columns = "exchange_id, invite_id, rel_ref, sid, msg_a, msg_b, env_to_owner, state, created_at, expiry"
+
     /**
      * The live OPEN exchange for an invite — what a therapist fetch sees. There is at most one
      * ([open] retires the run it replaces), and a row past its invite's expiry is not it. The
@@ -139,8 +156,7 @@ class PairingStore(
      */
     fun openExchangeFor(inviteId: String): Exchange? = synchronized(lock) {
         conn.prepareStatement(
-            "SELECT exchange_id, invite_id, rel_ref, sid, msg_a, msg_b, state, created_at, expiry " +
-                "FROM pairing_exchanges WHERE invite_id=? AND state=? AND expiry>? ORDER BY created_at DESC, exchange_id DESC LIMIT 1",
+            "SELECT $columns FROM pairing_exchanges WHERE invite_id=? AND state=? AND expiry>? ORDER BY created_at DESC, exchange_id DESC LIMIT 1",
         ).use { ps ->
             ps.setString(1, inviteId)
             ps.setString(2, State.OPEN.name)
@@ -149,26 +165,39 @@ class PairingStore(
         }
     }
 
+    /** The newest exchange for an invite in ANY state — the owner console's "where does this invitation stand". */
+    fun latestExchangeFor(inviteId: String): Exchange? = synchronized(lock) {
+        conn.prepareStatement(
+            "SELECT $columns FROM pairing_exchanges WHERE invite_id=? ORDER BY created_at DESC, exchange_id DESC LIMIT 1",
+        ).use { ps ->
+            ps.setString(1, inviteId)
+            ps.executeQuery().use { rs -> if (rs.next()) rowFrom(rs) else null }
+        }
+    }
+
     enum class RespondStatus { OK, GONE }
 
     /**
-     * The therapist answers ONE exchange, once. [inviteId] must be the invite the exchange
-     * belongs to — a mismatch is GONE, not an error detail, because the caller only ever proves
-     * possession of one invite and must learn nothing about any other's exchanges.
+     * The therapist answers ONE exchange, once: the CPace reply and, sealed beside it, their
+     * offer. [inviteId] must be the invite the exchange belongs to — a mismatch is GONE, not an
+     * error detail, because the caller only ever proves possession of one invite and must learn
+     * nothing about any other's exchanges. The `state = OPEN` predicate is what makes "once"
+     * true: there is no second write into a run, so nothing sealed can ever be replaced.
      */
-    fun respond(exchangeId: String, inviteId: String, msgBB64: String): RespondStatus = synchronized(lock) {
+    fun respond(exchangeId: String, inviteId: String, msgBB64: String, envToOwnerB64: String?): RespondStatus = synchronized(lock) {
         val now = clock()
         val updated = conn.prepareStatement(
-            "UPDATE pairing_exchanges SET state=?, msg_b=?, responded_at=? " +
+            "UPDATE pairing_exchanges SET state=?, msg_b=?, env_to_owner=?, responded_at=? " +
                 "WHERE exchange_id=? AND invite_id=? AND state=? AND expiry>?",
         ).use { ps ->
             ps.setString(1, State.RESPONDED.name)
             ps.setString(2, msgBB64)
-            ps.setLong(3, now)
-            ps.setString(4, exchangeId)
-            ps.setString(5, inviteId)
-            ps.setString(6, State.OPEN.name)
-            ps.setLong(7, now)
+            ps.setString(3, envToOwnerB64)
+            ps.setLong(4, now)
+            ps.setString(5, exchangeId)
+            ps.setString(6, inviteId)
+            ps.setString(7, State.OPEN.name)
+            ps.setLong(8, now)
             ps.executeUpdate()
         }
         if (updated == 1) RespondStatus.OK else RespondStatus.GONE
@@ -176,25 +205,42 @@ class PairingStore(
 
     /** Owner-side read of one exchange. relRef must match — a miss is null, non-enumerating. */
     fun exchangeFor(exchangeId: String, relRef: String): Exchange? = synchronized(lock) {
-        conn.prepareStatement(
-            "SELECT exchange_id, invite_id, rel_ref, sid, msg_a, msg_b, state, created_at, expiry " +
-                "FROM pairing_exchanges WHERE exchange_id=? AND rel_ref=?",
-        ).use { ps ->
+        conn.prepareStatement("SELECT $columns FROM pairing_exchanges WHERE exchange_id=? AND rel_ref=?").use { ps ->
             ps.setString(1, exchangeId)
             ps.setString(2, relRef)
             ps.executeQuery().use { rs -> if (rs.next()) rowFrom(rs) else null }
         }
     }
 
+    /** Therapist-side read of one exchange, keyed by the invite they proved. A miss is null, non-enumerating. */
+    fun exchangeForInvite(exchangeId: String, inviteId: String): Exchange? = synchronized(lock) {
+        conn.prepareStatement("SELECT $columns FROM pairing_exchanges WHERE exchange_id=? AND invite_id=?").use { ps ->
+            ps.setString(1, exchangeId)
+            ps.setString(2, inviteId)
+            ps.executeQuery().use { rs -> if (rs.next()) rowFrom(rs) else null }
+        }
+    }
+
     enum class TransitionStatus { OK, GONE }
 
-    /** Owner acknowledges the reply; RESPONDED → CLOSED. Anything else is GONE. */
-    fun close(exchangeId: String, relRef: String): TransitionStatus =
+    /**
+     * The owner approves the reply; RESPONDED → CLOSED. The invitation side of the same act
+     * (REDEEMING, the ticket) lives in AuthStore and the route sequences the two.
+     */
+    fun approve(exchangeId: String, relRef: String): TransitionStatus =
         transition(exchangeId, relRef, from = listOf(State.RESPONDED), to = State.CLOSED)
 
     /** Owner cancels; OPEN or RESPONDED → CANCELLED. The 4.0a owner Cancel. */
     fun cancel(exchangeId: String, relRef: String): TransitionStatus =
         transition(exchangeId, relRef, from = listOf(State.OPEN, State.RESPONDED), to = State.CANCELLED)
+
+    /**
+     * Owner abandons an approved run nobody finished; CLOSED → CANCELLED. The route only calls
+     * this after AuthStore has put the invitation back to PENDING and taken the ticket, so a row
+     * that reads CANCELLED here never has a live ticket behind it.
+     */
+    fun abandon(exchangeId: String, relRef: String): TransitionStatus =
+        transition(exchangeId, relRef, from = listOf(State.CLOSED), to = State.CANCELLED)
 
     private fun transition(exchangeId: String, relRef: String, from: List<State>, to: State): TransitionStatus = synchronized(lock) {
         val placeholders = from.joinToString(",") { "?" }
@@ -210,7 +256,7 @@ class PairingStore(
         if (updated == 1) TransitionStatus.OK else TransitionStatus.GONE
     }
 
-    /** Test/inspection helper, same family as AuthStore.inviteStatusFor. */
+    /** How many exchanges an invite has used of its [MAX_EXCHANGES_PER_INVITE]; the owner's "6 of 8 left". */
     fun exchangeCountFor(inviteId: String): Long = synchronized(lock) {
         conn.prepareStatement("SELECT COUNT(*) FROM pairing_exchanges WHERE invite_id=?").use { ps ->
             ps.setString(1, inviteId)
@@ -225,9 +271,10 @@ class PairingStore(
         sidB64 = rs.getString(4),
         msgAB64 = rs.getString(5),
         msgBB64 = rs.getString(6),
-        state = State.valueOf(rs.getString(7)),
-        createdAt = rs.getLong(8),
-        expiry = rs.getLong(9),
+        envToOwnerB64 = rs.getString(7),
+        state = State.valueOf(rs.getString(8)),
+        createdAt = rs.getLong(9),
+        expiry = rs.getLong(10),
     )
 
     override fun close() {
