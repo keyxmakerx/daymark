@@ -112,3 +112,23 @@ ciphertext files it could not delete instead of swallowing them. Plan open quest
 answered in place. Decisions the docs did not hold before: the code shape; the owner side
 ships on the web with sessionStorage and a lower-assurance line; ending a connection deletes
 server copies and tells nobody.
+
+The channel followed on the same branch (the second of the three planned changes). Server:
+`pairing_exchanges` gains an opaque `env_to_owner` column written once by respond;
+`POST …/pairing/{id}/approve` (bearer) takes the therapist-chosen 32-byte ticket, moves the
+invitation to REDEEMING with a ticket that expires with the invitation, and closes the run,
+invitation first and compensated with `abandonRedeem` if the run refuses to move; cancel on a
+CLOSED run is the abandon; `POST /v1/invite/{id}/pairing/{ex}/status` is the therapist's poll
+(the one touch allowed against a REDEEMING invite, flat 410 for everything but WAITING and
+APPROVED, 45-second cadence written at the route and mirrored in the client because the shared
+"pair" budget charges every allowed request); `GET /v1/relations/{relRef}/invites` is the owner's
+list with `failCount`; `close` is gone; audit gains `pairing.approved` and `pairing.abandoned`.
+Client: `companion/web/src/lib/pairing/payloads.ts` pins the offer (v1: two 32-byte keys, a name
+of at most 64 code points with no control or bidi characters, a 32-byte ticket; extra fields
+refused); the relay seals it on answer, opens it on collect and returns `offer: null` for any
+failure, and gains approve, cancel and status. Mutation-checked: an approve that skips the
+RESPONDED check, an abandon that keeps the ticket, a ticket that expires in ten minutes, a fetch
+that admits a REDEEMING invite, an offer posted in the clear, a validator that admits an extra
+field — each turns the test that names it red. The §3.7.4 grep now also asserts the ticket is
+in exactly one request (approve) and no response, and that the offer's fields never travel in
+the clear. Server 382/382, web 1400+, svelte-check clean.

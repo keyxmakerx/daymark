@@ -1472,6 +1472,27 @@ attempt, with a threshold that alerts (§3.7.5).
 > expiry filter, so a run nobody answered reads as waiting after its invitation has died; the
 > console shows invite state alongside, or the read learns the expiry.
 
+ADDED 2026-09-04, the channel the phone must also speak (built and tested on the web side; the
+server routes are live): the therapist's reply carries, beside MSGb, an ENVELOPE sealed under
+the ISK (`pairing/envelope.ts`: direction `therapist-to-owner`, AAD
+`daymark/pairing/env/v1|<sidB64>|therapist-to-owner`, XChaCha20-Poly1305, wire
+`version(1)=0x01 | nonce(24) | ciphertext`) whose plaintext is the OFFER, UTF-8 JSON with
+exactly these fields and no others: `v` = 1, `boxPubB64` (X25519, 32 bytes), `signPubB64`
+(Ed25519, 32 bytes), `displayName` (at most 64 code points, no control, format or bidi
+characters), `enrolTicketB64` (32 random bytes the therapist chose). The owner's device opens it
+or gets nothing — that null is the whole signal for a wrong code — and on Approve posts
+`{ "enrolTicketB64" }` to `POST /v1/relations/{relRef}/pairing/{exchangeId}/approve` (bearer; the
+run must be RESPONDED; the invitation goes to REDEEMING and the ticket is honoured until the
+invitation expires). The therapist polls `POST /v1/invite/{inviteId}/pairing/{exchangeId}/status`
+with `{ "secret" }` no more often than every 45 seconds (the shared per-source budget charges
+every allowed request; a 429 means wait) and receives `{ "state": "WAITING" }`,
+`{ "state": "APPROVED", "scope": [...] }`, or a flat 410 for everything else, then enrols with
+the ticket as before. The owner lists invitations at `GET /v1/relations/{relRef}/invites`
+(bearer): status, `failCount`, `exchangeCount`, and the newest run's state. `close` no longer
+exists; cancel on a CLOSED run is the abandon that puts the invitation back to PENDING.
+`companion/web/src/lib/pairing/payloads.ts` and `relay.test.ts` are the reference; the phone
+reproduces those bytes or the owner's device refuses the offer.
+
 **4.0b — the phone becomes the owner's pairing device.** §3.7.6 + §3.6.5 layer 1. A separate stage,
 not a separate design: the protocol is identical, only the device running the owner's half changes.
 

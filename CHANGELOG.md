@@ -7,6 +7,20 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Companion — the pairing key now carries something: the therapist's offer, and the owner's
+  approval of it.** When a therapist answers a pairing code, their reply now travels with their
+  public keys, a name, and an enrolment ticket they chose, sealed under the key that only the
+  right code produces. The owner's side opens it, or cannot, which is the first and only place a
+  wrong code shows itself: as a reply that did not match, never as an error and never as a
+  verdict about who sent it. Approving hands that ticket to the server, which is how enrolment
+  becomes possible at all; a link-holder who answers a run first has produced something the
+  owner cannot open, and gets nothing. The ticket lives as long as the invitation rather than
+  ten minutes, because the clock now starts at the owner's approval and a stranger's wrong
+  guesses can lock the therapist's own status poll for an hour. An approval nobody finished can
+  be taken back, which puts the invitation back where it was. The owner can also list their
+  invitations and see where each stands, including how many wrong secrets have been tried
+  against it, as a count and nothing more. The old secret-only redeem route is still present
+  until the screens move over; the next change removes it.
 - **Companion — the pairing code exists, and the ceremony refuses a code that has not been read
   properly first.** Eight characters in two groups of four, `K7M4-RD96`: seven carry the secret
   and the eighth checks the other seven, so a mistyped or swapped character is caught on the
