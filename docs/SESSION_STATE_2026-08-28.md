@@ -132,3 +132,34 @@ that admits a REDEEMING invite, an offer posted in the clear, a validator that a
 field — each turns the test that names it red. The §3.7.4 grep now also asserts the ticket is
 in exactly one request (approve) and no response, and that the offer's fields never travel in
 the clear. Server 382/382, web 1400+, svelte-check clean.
+
+## Addendum 2026-09-04b — the screens, and the cut-over
+
+The third of the three planned changes. `lib/pairing/ownerCeremony.ts` and
+`lib/therapist/pairingAccept.ts` hold both halves as ports-and-transitions so the ORDER is a node
+test: keys are pinned before a ticket is forwarded, the therapist learns the relationship before
+generating any keys (the insert-only question needs the relRef), and nothing opens a second run on
+its own. `components/owner/PairingPanel.svelte` renders the owner's phases; the code lives in an
+`<output>` with `aria-live`, never a form control and nowhere the email path reaches, with a
+structural test over the source. `InviteAcceptance.svelte` asks for the code, a name and a
+passphrase, then holds a waiting state of its own rather than a spinner. `therapistKeys.ts` gains
+`pinFromPairing`, a second door with the envelope as its stated authority rather than a bypass of
+`acceptTherapistKeys` (passing that gate its own expected fingerprints would be the tautology its
+header forbids).
+
+THE CUT-OVER: `POST /v1/invite/{id}/redeem` is removed, along with `beginAcceptance` and
+`PortalClient.redeemInvite`. A ticket now exists only because an owner approved a run whose reply
+opened under their code. Two tests: the path answers as an unknown route, and no file under
+`routes/` mentions `redeemInvite` (mutation-checked — re-adding a redeem handler turns exactly that
+test red). Six server test files moved from the redeem route to the relay's fetch, which shares the
+secret, the counter and the backoff; a correct secret with no run waiting answers 410 where a wrong
+one is still 401, and that difference is what the burn-rule tests now assert. `AuthStore.redeemInvite`
+survives as a store function for the lockout and burn-rule tests only.
+
+The read-aloud is demoted, not deleted: fingerprints and their labels stay on the therapist's done
+screen, and the copy says the code did the confirming. Its test asserts the ABSENCE of the
+instruction, with a control so the detector is not blind. Suites: server 383/383, web 1438 passing,
+svelte-check 541 files clean, production build clean.
+
+Not done in this change: the Playwright pass driving both screens against a live server, and the
+therapist self-leave (Slice E).

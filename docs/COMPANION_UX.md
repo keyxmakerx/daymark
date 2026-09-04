@@ -289,6 +289,12 @@ Designed for a **non-technical clinician**. Goal: get from a single link to "I c
 
 There is exactly **one** relationship in view (v1 lock: one therapist, one keypair, one device). No patient list, no enumeration, no search across other people — and the UI says so.
 
+> **Status 2026-09-04.** First open is now: open the link, type the short code the owner said out
+> loud, choose a name and a reading passphrase, and wait for them to approve. The out-of-band
+> fingerprint comparison in §6.3 is no longer a blocking step — the code performs that check — and
+> the fingerprints stay on both screens for anyone who wants to compare them anyway. The owner's
+> side is `components/owner/PairingPanel.svelte`; the copy for both is `lib/pairing/copy.ts`.
+
 ### 6.2 First open (one-link invite → passkey → verify)
 
 The clinician receives a **link + a short verification phrase out-of-band** (read aloud in session, on paper, or QR in person — never emailed/SMS'd by the server; the container makes no outbound calls). On open:
