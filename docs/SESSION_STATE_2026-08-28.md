@@ -87,3 +87,28 @@ regressed read; the close retry is tested), the second caught that the new guard
 the owner's own Cancel after a failed close — fixed with the honest sequence as a test — and
 wrote the phone-side CI bytes into the 4.0a banner so 4.0b does not start from a comment. Noted for that stage: companion/server's own Gradle wrapper DOES
 run on this machine (the root build still does not), so server tests have a local oracle now.
+
+## Addendum 2026-09-04 — the pairing UI is planned, and its foundations are in
+
+PR #83 merged; the audit stack is on `main`. A plan for the screens was written and reviewed
+adversarially before any code: the shape that survived is ONE sealed envelope, therapist to
+owner, carrying the therapist's public keys, a display name and a therapist-chosen enrol
+ticket; the owner opens it, sees a name, clicks Approve, and hands that ticket to the server;
+`POST /v1/invite/{id}/redeem` is then removed, so the link alone can no longer mint a ticket.
+The review refuted a two-envelope draft (the owner never needs to send anything sealed back),
+found that the enrol ticket's ten-minute TTL is wrong once the clock starts at approval, that
+the shared "pair" limiter allows the therapist about ten status polls per five minutes, and that
+nine server test files call the route being removed. All of that is in the plan.
+
+This addendum's commit is the foundations only, no visible change: the pairing code module
+(`companion/web/src/lib/pairing/pairingCode.ts`; eight symbols, two groups of four, one check
+symbol, entropy stated), the relay taking a branded canonical code and refusing anything else
+before the first request (the previous version fed the code in as typed, so a stray space made
+a different key), `ownerCollectPairing` no longer taking the code at all (`cpaceFinish` never
+needed it, and its type now says so), the owner's half of a run persisted in sessionStorage
+with a test that greps the record for the code, pairing audit labels, the owner's
+Stop-this-invitation button on the existing report route, and `revokeLineage` counting the
+ciphertext files it could not delete instead of swallowing them. Plan open question 7 is
+answered in place. Decisions the docs did not hold before: the code shape; the owner side
+ships on the web with sessionStorage and a lower-assurance line; ending a connection deletes
+server copies and tells nobody.

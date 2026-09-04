@@ -7,6 +7,16 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Companion — the pairing code exists, and the ceremony refuses a code that has not been read
+  properly first.** Eight characters in two groups of four, `K7M4-RD96`: seven carry the secret
+  and the eighth checks the other seven, so a mistyped or swapped character is caught on the
+  therapist's screen, with its position, before anything is sent. The code is generated on the
+  owner's device and has no field anywhere it could be stored: the owner's half of an open
+  pairing now survives a page reload in the tab's own storage, and a test greps that record for
+  the code in every encoding. The relay takes the canonical form only and checks it again at the
+  door, because a trailing space or a lower-case letter used to make a silently different key.
+  The owner console also gained the one button that ends an invitation, with copy that says what
+  that does and does not do. No screen runs the ceremony yet; that is the next two changes.
 - **Companion — the pairing ceremony is complete, end to end.** A clinician can now be invited,
   accept, and end up with keys the owner has actually confirmed — no step of it hand-carried:
   the invitation link opens an acceptance page (one code, one passphrase); the therapist's public
@@ -316,6 +326,10 @@ All notable changes to this project are documented here. The format is based on
   permission and makes no network connections.
 
 ### Fixed
+- **Companion — withdrawing a share now says when a copy could not be removed.** The store used
+  to mark the rows and swallow every failure to delete the ciphertext files, so "withdrawn" read
+  as complete while the bytes stayed on the volume. The count of copies that would not delete now
+  comes back with the result, and a test makes one refuse.
 - **Companion — the pairing relay was audited before anything was built on it, and three things
   moved.** A re-open now retires the run it replaces: before, the abandoned exchange stayed
   answerable and, once the newer one was answered or cancelled, came back as "newest" to the next
