@@ -12,11 +12,10 @@
   import TherapistKeyIntake from './TherapistKeyIntake.svelte'
   import { withGrant, type OwnerSession } from './session'
   import type { PinnedTherapist } from './session'
-  import InvitePanel from './InvitePanel.svelte'
+  import PairingPanel from './PairingPanel.svelte'
   import { emptyGrant } from '../../assignments/grant'
   import { fingerprint } from '../../assignments/crypto'
   import { sasWords } from '../../share/pairing'
-  import type { TherapistKeyRecord } from '../../owner/therapistKeys' 
   import { PortalClient } from '../../sync/portal'
   import type { OwnerEndpoint } from '../../owner/therapistKeys'
   import type { Grant } from '../../assignments/types'
@@ -37,6 +36,14 @@
   let session = $state<OwnerSession | null>(null)
   let sub = $state<Sub>('grants')
   let selectedId = $state<string | null>(null)
+  /*
+   * The pairing screen outlives the moment it stops being needed. `keysArrived` flips keysPending
+   * the instant the owner approves, which is correct — the keys ARE pinned then — but the therapist
+   * has still to enrol, and the owner's "approved, waiting for them" state (with its take-it-back
+   * button) is the only place that says so. So the share tab keeps showing the pairing screen until
+   * the owner says they are done with it.
+   */
+  let pairingOpen = $state(false)
 
   // Server connection for the portal blob/invite calls (owner bearer token).
   let serverUrl = $state('')
@@ -91,7 +98,7 @@
    * either. Name, inbox token and pinnedAt survive; the SAS words are computed now that there are
    * finally two identities to compute them over.
    */
-  function keysArrived(record: TherapistKeyRecord) {
+  function keysArrived(record: { signPub: Uint8Array; boxPub: Uint8Array }) {
     if (!session || !selectedId) return
     const cur = session.pinned.find((t) => t.id === selectedId)
     if (!cur) return
@@ -183,10 +190,19 @@
       {:else if sub === 'published-keys'}
         <TherapistKeyIntake therapist={selected} {endpoint} onkeys={keysArrived} />
       {:else if sub === 'share'}
-        {#if selected.keysPending}
+        {#if selected.keysPending || pairingOpen}
           <!-- The invitation is mintable the moment a relationship has a token; sealing is not.
                ShareBuilder would offer both, so a pending clinician gets the half that exists. -->
-          <InvitePanel therapist={selected} client={client} {smtpEnabled} scope={['read.share']} />
+          <PairingPanel
+            therapist={selected}
+            {client}
+            baseUrl={serverUrl}
+            {token}
+            {smtpEnabled}
+            scope={['read.share']}
+            onpaired={(keys) => { pairingOpen = true; keysArrived(keys) }}
+            ondone={() => (pairingOpen = false)}
+          />
         {:else}
           <ShareBuilder {session} therapist={selected} {data} {client} {smtpEnabled} />
         {/if}
