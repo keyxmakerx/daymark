@@ -422,8 +422,8 @@
       therapist/signIn.ts, which rejects a contract clause that reaches for the banner's subjects.
     -->
     <p class="lede">
-      Someone has invited you to work with them in Daymark. Setting this up takes one passphrase you
-      choose, one code from your authenticator app, and one thing you read out loud to them at the end.
+      Someone has invited you to work with them in Daymark. Setting this up takes the short code they
+      said out loud, a passphrase you choose, and one code from your authenticator app at the end.
       Your keys are generated here, in this browser, and the released software sends them nowhere —
       which is a statement about the software rather than about the page in front of you, and the
       notice above is what that difference is.
@@ -502,7 +502,7 @@
     {#if gone}
       <Callout tone="warn" title={THERAPIST_COPY.goneTitle}>{THERAPIST_COPY.goneBody}</Callout>
     {/if}
-    <Card title={THERAPIST_COPY.title}>
+    <Card title="The code they gave you">
       <div class="stack">
         <p>{THERAPIST_COPY.lede}</p>
         <div class="field">
