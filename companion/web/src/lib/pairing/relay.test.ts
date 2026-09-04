@@ -20,11 +20,26 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import {
   ownerOpenPairing,
   ownerCollectPairing,
+  ownerApprovePairing,
+  ownerCancelPairing,
   therapistAnswerPairing,
+  therapistPairingStatus,
   channelIdentifier,
   type OwnerPairingState,
 } from './relay'
 import { initCpace, parseLv } from './cpace'
+import { newEnrolTicketB64, type TherapistOffer } from './payloads'
+
+/**
+ * The therapist's offer: two well-formed (if fake) public keys, a name, and a ticket they chose.
+ * What the owner must get back, byte for byte, iff the codes matched.
+ */
+const OFFER: TherapistOffer = {
+  boxPubB64: Buffer.from(new Uint8Array(32).fill(0x11)).toString('base64url'),
+  signPubB64: Buffer.from(new Uint8Array(32).fill(0x22)).toString('base64url'),
+  displayName: 'Dr Example',
+  enrolTicketB64: newEnrolTicketB64(),
+}
 import { checkSymbol } from '../recovery/recoveryCode'
 import {
   PAIRING_ALPHABET,
@@ -70,14 +85,17 @@ interface RecordedRequest {
  * server serves one exchange to one invitation, and a splicing server is the same code with
  * two ids in the list.
  */
-function relayServer(servesTo: string[] = [INVITE_ID], opts: { failFirstClose?: boolean } = {}) {
+function relayServer(servesTo: string[] = [INVITE_ID]) {
   const recorded: RecordedRequest[] = []
-  let closeAttempts = 0
+  /** Every response body the server wrote, so a test can assert what NEVER comes back. */
+  const responses: string[] = []
   const exchange: {
     id: string
     sidB64?: string
     msgAB64?: string
     msgBB64?: string
+    envB64?: string
+    approvedTicket?: string
     state: 'NONE' | 'OPEN' | 'RESPONDED' | 'CLOSED' | 'CANCELLED' | 'SUPERSEDED'
   } = { id: 'exchange-1', state: 'NONE' }
 
@@ -90,8 +108,11 @@ function relayServer(servesTo: string[] = [INVITE_ID], opts: { failFirstClose?: 
     const body = typeof init?.body === 'string' ? init.body : ''
     recorded.push({ url, method: init?.method ?? 'GET', headers, body })
 
-    const respond = (status: number, payload?: unknown) =>
-      new Response(payload === undefined ? null : JSON.stringify(payload), { status })
+    const respond = (status: number, payload?: unknown) => {
+      const text = payload === undefined ? '' : JSON.stringify(payload)
+      responses.push(text)
+      return new Response(text === '' ? null : text, { status })
+    }
 
     if (url === `/v1/relations/${REL_REF}/pairing` && init?.method === 'POST') {
       const req = JSON.parse(body) as { inviteId: string; sidB64: string; msgAB64: string }
@@ -118,27 +139,48 @@ function relayServer(servesTo: string[] = [INVITE_ID], opts: { failFirstClose?: 
       url === `/v1/invite/${therapistInvite}/pairing/${exchange.id}/respond` &&
       init?.method === 'POST'
     ) {
-      const req = JSON.parse(body) as { secret: string; msgBB64: string }
+      const req = JSON.parse(body) as { secret: string; msgBB64: string; envB64?: string }
       if (req.secret !== INVITE_SECRET) return respond(401, { error: 'unauthorized' })
+      if (typeof req.envB64 !== 'string') return respond(400, { error: 'implausible envelope size' })
       if (exchange.state !== 'OPEN') return respond(410, { error: 'exchange unavailable' })
       exchange.msgBB64 = req.msgBB64
+      exchange.envB64 = req.envB64
       exchange.state = 'RESPONDED'
       return respond(204)
     }
+    if (
+      therapistInvite &&
+      url === `/v1/invite/${therapistInvite}/pairing/${exchange.id}/status` &&
+      init?.method === 'POST'
+    ) {
+      const req = JSON.parse(body) as { secret: string }
+      if (req.secret !== INVITE_SECRET) return respond(401, { error: 'unauthorized' })
+      if (exchange.state === 'RESPONDED') return respond(200, { state: 'WAITING' })
+      if (exchange.state === 'CLOSED') return respond(200, { state: 'APPROVED', scope: ['read.share'] })
+      return respond(410, { error: 'exchange unavailable' })
+    }
     if (url === `/v1/relations/${REL_REF}/pairing/${exchange.id}` && (init?.method ?? 'GET') === 'GET') {
       if (exchange.state === 'NONE') return respond(404, { error: 'no such exchange' })
-      return respond(200, { exchangeId: exchange.id, state: exchange.state, msgBB64: exchange.msgBB64 })
+      return respond(200, { exchangeId: exchange.id, state: exchange.state, msgBB64: exchange.msgBB64, envB64: exchange.envB64 })
     }
-    if (url === `/v1/relations/${REL_REF}/pairing/${exchange.id}/close` && init?.method === 'POST') {
-      closeAttempts++
-      if (opts.failFirstClose && closeAttempts === 1) return respond(500, { error: 'not now' })
+    if (url === `/v1/relations/${REL_REF}/pairing/${exchange.id}/approve` && init?.method === 'POST') {
+      if (exchange.state !== 'RESPONDED') return respond(410, { error: 'exchange unavailable' })
+      const req = JSON.parse(body) as { enrolTicketB64: string }
+      exchange.approvedTicket = req.enrolTicketB64
       exchange.state = 'CLOSED'
       return respond(204)
+    }
+    if (url === `/v1/relations/${REL_REF}/pairing/${exchange.id}/cancel` && init?.method === 'POST') {
+      if (exchange.state === 'OPEN' || exchange.state === 'RESPONDED' || exchange.state === 'CLOSED') {
+        exchange.state = 'CANCELLED'
+        return respond(204)
+      }
+      return respond(410, { error: 'exchange unavailable' })
     }
     throw new Error(`unexpected request: ${init?.method} ${url}`)
   }) as typeof fetch
 
-  return { doFetch, recorded, exchange, closeAttempts: () => closeAttempts }
+  return { doFetch, recorded, responses, exchange }
 }
 
 /** Every encoding the code could wear on the wire. */
@@ -180,7 +222,7 @@ describe('the code is canonical before it is bytes', () => {
       ownerOpenPairing({ relRef: REL_REF, inviteId: INVITE_ID, code: typed, bearerToken: BEARER }, doFetch),
     ).rejects.toThrow(/canonical/)
     await expect(
-      therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, code: typed }, doFetch),
+      therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: typed }, doFetch),
     ).rejects.toThrow(/canonical/)
     expect(recorded).toHaveLength(0)
   })
@@ -194,7 +236,7 @@ describe('the code is canonical before it is bytes', () => {
     const typed = parsePairingCode(` ${CODE.slice(0, 4).toLowerCase()} — ${CODE.slice(4)} `)
     expect(typed.ok).toBe(true)
     const therapist = await therapistAnswerPairing(
-      { inviteId: INVITE_ID, secret: INVITE_SECRET, code: typed.ok ? typed.code.canonical : CODE },
+      { inviteId: INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: typed.ok ? typed.code.canonical : CODE },
       doFetch,
     )
     const collected = await ownerCollectPairing({ relRef: REL_REF, bearerToken: BEARER, pairing: opened }, doFetch)
@@ -208,7 +250,7 @@ describe('the code is canonical before it is bytes', () => {
       { relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER },
       doFetch,
     )
-    const therapist = await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, code: CODE }, doFetch)
+    const therapist = await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: CODE }, doFetch)
     // What a reload leaves: the persisted fields, and nothing derived.
     const restored: OwnerPairingState = {
       exchangeId: opened.exchangeId,
@@ -242,7 +284,7 @@ describe('the relay carries a pairing end to end', () => {
       doFetch,
     )
     const therapist = await therapistAnswerPairing(
-      { inviteId: INVITE_ID, secret: INVITE_SECRET, code: CODE },
+      { inviteId: INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: CODE },
       doFetch,
     )
     const collected = await ownerCollectPairing(
@@ -253,6 +295,8 @@ describe('the relay carries a pairing end to end', () => {
     if (collected.state !== 'complete') return
     expect(hex(collected.isk)).toBe(hex(therapist.isk))
     expect(collected.isk.length).toBe(64)
+    // And the offer came through the envelope intact: keys, name, ticket, exactly as sealed.
+    expect(collected.offer).toEqual(OFFER)
   })
 
   it('a wrong code completes the wire protocol and silently diverges — no error, no signal', async () => {
@@ -262,7 +306,7 @@ describe('the relay carries a pairing end to end', () => {
       doFetch,
     )
     const therapist = await therapistAnswerPairing(
-      { inviteId: INVITE_ID, secret: INVITE_SECRET, code: WRONG_CODE },
+      { inviteId: INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: WRONG_CODE },
       doFetch,
     )
     const collected = await ownerCollectPairing(
@@ -272,6 +316,8 @@ describe('the relay carries a pairing end to end', () => {
     expect(collected.state).toBe('complete')
     if (collected.state !== 'complete') return
     expect(hex(collected.isk)).not.toBe(hex(therapist.isk))
+    // The only place the mismatch shows: the offer does not open. One bit, no throw.
+    expect(collected.offer).toBeNull()
   })
 
   it('the owner sees waiting before the reply, cancelled after a cancel, superseded after a re-open', async () => {
@@ -314,7 +360,7 @@ describe('what binds a run, and to what', () => {
       doFetch,
     )
     const spliced = await therapistAnswerPairing(
-      { inviteId: OTHER_INVITE_ID, secret: INVITE_SECRET, code: CODE },
+      { inviteId: OTHER_INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: CODE },
       doFetch,
     )
     const collected = await ownerCollectPairing(
@@ -324,6 +370,8 @@ describe('what binds a run, and to what', () => {
     expect(collected.state).toBe('complete')
     if (collected.state !== 'complete') return
     expect(hex(collected.isk)).not.toBe(hex(spliced.isk))
+    // The spliced party's offer, sealed under the wrong key, is nobody's therapist.
+    expect(collected.offer).toBeNull()
   })
 
   it('the channel identifier is versioned, length-prefixed, and differs per invitation and per relationship', () => {
@@ -343,7 +391,7 @@ describe('what binds a run, and to what', () => {
       { relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER },
       doFetch,
     )
-    await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, code: CODE }, doFetch)
+    await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: CODE }, doFetch)
     const first = await ownerCollectPairing(
       { relRef: REL_REF, bearerToken: BEARER, pairing: opened },
       doFetch,
@@ -372,7 +420,7 @@ describe('what binds a run, and to what', () => {
     // second guess against the owner's scalar. It gets a refusal, not a second key.
     const other = relayServer()
     await ownerOpenPairing({ relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER }, other.doFetch)
-    await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, code: CODE }, other.doFetch)
+    await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: CODE }, other.doFetch)
     expect(other.exchange.msgBB64).toBeTypeOf('string')
     expect(other.exchange.msgBB64).not.toBe(exchange.msgBB64)
     exchange.msgBB64 = other.exchange.msgBB64
@@ -382,72 +430,113 @@ describe('what binds a run, and to what', () => {
   })
 })
 
-describe('the close is bookkeeping, and is retried', () => {
-  it('a failed close never costs the key, and the next read retries it', async () => {
-    const { doFetch, exchange, closeAttempts } = relayServer([INVITE_ID], { failFirstClose: true })
+describe('the offer and the approval', () => {
+  it('approve forwards the ticket the offer carried, and the therapist sees it happen', async () => {
+    const { doFetch, exchange } = relayServer()
     const opened = await ownerOpenPairing(
       { relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER },
       doFetch,
     )
-    await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, code: CODE }, doFetch)
-    const first = await ownerCollectPairing(
-      { relRef: REL_REF, bearerToken: BEARER, pairing: opened },
+    await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: CODE }, doFetch)
+    const status = { inviteId: INVITE_ID, secret: INVITE_SECRET, exchangeId: opened.exchangeId }
+    expect(await therapistPairingStatus(status, doFetch)).toEqual({ state: 'waiting' })
+
+    const collected = await ownerCollectPairing({ relRef: REL_REF, bearerToken: BEARER, pairing: opened }, doFetch)
+    expect(collected.state === 'complete' && collected.offer?.enrolTicketB64).toBe(OFFER.enrolTicketB64)
+    await ownerApprovePairing(
+      { relRef: REL_REF, bearerToken: BEARER, exchangeId: opened.exchangeId, enrolTicketB64: OFFER.enrolTicketB64 },
       doFetch,
     )
-    expect(first.state).toBe('complete')
-    expect(exchange.state).toBe('RESPONDED')
-    expect(closeAttempts()).toBe(1)
-    const second = await ownerCollectPairing(
-      { relRef: REL_REF, bearerToken: BEARER, pairing: opened },
-      doFetch,
-    )
-    expect(second.state).toBe('complete')
-    if (first.state !== 'complete' || second.state !== 'complete') return
-    expect(hex(second.isk)).toBe(hex(first.isk))
     expect(exchange.state).toBe('CLOSED')
-    expect(closeAttempts()).toBe(2)
+    expect(exchange.approvedTicket).toBe(OFFER.enrolTicketB64)
+    expect(await therapistPairingStatus(status, doFetch)).toEqual({ state: 'approved', scope: ['read.share'] })
+
+    // Collecting again after approval is the same key and the same offer, not a new anything.
+    const again = await ownerCollectPairing({ relRef: REL_REF, bearerToken: BEARER, pairing: opened }, doFetch)
+    expect(again.state === 'complete' && again.offer).toEqual(OFFER)
+
+    // Abandon: the run is gone to the therapist, and approving it again is refused.
+    expect(await ownerCancelPairing({ relRef: REL_REF, bearerToken: BEARER, exchangeId: opened.exchangeId }, doFetch)).toBe(true)
+    expect(await therapistPairingStatus(status, doFetch)).toEqual({ state: 'gone' })
+    await expect(
+      ownerApprovePairing(
+        { relRef: REL_REF, bearerToken: BEARER, exchangeId: opened.exchangeId, enrolTicketB64: OFFER.enrolTicketB64 },
+        doFetch,
+      ),
+    ).rejects.toThrow(/refused \(410\)/)
+    expect(await ownerCancelPairing({ relRef: REL_REF, bearerToken: BEARER, exchangeId: opened.exchangeId }, doFetch)).toBe(false)
   })
 
-  it("the owner's own cancel after a failed close is reported as cancelled, not as a lie", async () => {
-    // RESPONDED → CANCELLED is a legal forward move the store allows and the console offers;
-    // a run that already holds its key must not mistake it for the server going backwards.
-    const { doFetch, exchange } = relayServer([INVITE_ID], { failFirstClose: true })
+  it('a swapped envelope, or none, is a null offer over the same key — never a different therapist', async () => {
+    const { doFetch, exchange } = relayServer()
     const opened = await ownerOpenPairing(
       { relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER },
       doFetch,
     )
-    await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, code: CODE }, doFetch)
-    const first = await ownerCollectPairing(
-      { relRef: REL_REF, bearerToken: BEARER, pairing: opened },
-      doFetch,
-    )
-    expect(first.state).toBe('complete')
-    expect(exchange.state).toBe('RESPONDED')
-    exchange.state = 'CANCELLED'
-    const after = await ownerCollectPairing(
-      { relRef: REL_REF, bearerToken: BEARER, pairing: opened },
-      doFetch,
-    )
-    expect(after.state).toBe('cancelled')
+    const therapist = await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: CODE }, doFetch)
+    // One byte of ciphertext turned: the AEAD refuses, and the key is untouched.
+    const sealed = exchange.envB64!
+    exchange.envB64 = sealed.slice(0, -3) + (sealed.endsWith('A') ? 'B' : 'A') + sealed.slice(-2)
+    const tampered = await ownerCollectPairing({ relRef: REL_REF, bearerToken: BEARER, pairing: opened }, doFetch)
+    expect(tampered.state === 'complete' && tampered.offer).toBeNull()
+    expect(tampered.state === 'complete' && hex(tampered.isk)).toBe(hex(therapist.isk))
+    // A reply from before envelopes existed: complete, no offer, no throw.
+    exchange.envB64 = undefined
+    const bare = await ownerCollectPairing({ relRef: REL_REF, bearerToken: BEARER, pairing: opened }, doFetch)
+    expect(bare.state === 'complete' && bare.offer).toBeNull()
+    // Garbage that is not even base64url: the same null.
+    exchange.envB64 = '!!not-base64!!'
+    const garbage = await ownerCollectPairing({ relRef: REL_REF, bearerToken: BEARER, pairing: opened }, doFetch)
+    expect(garbage.state === 'complete' && garbage.offer).toBeNull()
+    // And the real one, restored, still opens under the pinned key.
+    exchange.envB64 = sealed
+    const real = await ownerCollectPairing({ relRef: REL_REF, bearerToken: BEARER, pairing: opened }, doFetch)
+    expect(real.state === 'complete' && real.offer).toEqual(OFFER)
+  })
+
+  it('an invalid offer is refused before the first request', async () => {
+    const { doFetch, recorded } = relayServer()
+    await expect(
+      therapistAnswerPairing(
+        { inviteId: INVITE_ID, secret: INVITE_SECRET, offer: { ...OFFER, enrolTicketB64: 'short' }, code: CODE },
+        doFetch,
+      ),
+    ).rejects.toThrow(/invalid offer/)
+    expect(recorded).toHaveLength(0)
+  })
+
+  it('a 429 on the status poll is waiting, not an error', async () => {
+    const { doFetch } = relayServer()
+    const throttled = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/status')) return new Response(JSON.stringify({ error: 'rate limited' }), { status: 429 })
+      return doFetch(input, init)
+    }) as typeof fetch
+    const opened = await ownerOpenPairing({ relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER }, doFetch)
+    expect(
+      await therapistPairingStatus({ inviteId: INVITE_ID, secret: INVITE_SECRET, exchangeId: opened.exchangeId }, throttled),
+    ).toEqual({ state: 'waiting' })
   })
 })
 
-describe('§3.7.4 — the code never reaches the wire', () => {
+describe('§3.7.4 — the code never reaches the wire, and the ticket reaches it once', () => {
   it('a full pairing, from both codes, leaves no trace of either in any request', async () => {
-    const { doFetch, recorded } = relayServer()
+    const { doFetch, recorded, responses } = relayServer()
     const opened = await ownerOpenPairing(
       { relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER },
       doFetch,
     )
-    await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, code: CODE }, doFetch)
-    await ownerCollectPairing(
-      { relRef: REL_REF, bearerToken: BEARER, pairing: opened },
+    await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: CODE }, doFetch)
+    await therapistPairingStatus({ inviteId: INVITE_ID, secret: INVITE_SECRET, exchangeId: opened.exchangeId }, doFetch)
+    await ownerCollectPairing({ relRef: REL_REF, bearerToken: BEARER, pairing: opened }, doFetch)
+    await ownerApprovePairing(
+      { relRef: REL_REF, bearerToken: BEARER, exchangeId: opened.exchangeId, enrolTicketB64: OFFER.enrolTicketB64 },
       doFetch,
     )
+    await therapistPairingStatus({ inviteId: INVITE_ID, secret: INVITE_SECRET, exchangeId: opened.exchangeId }, doFetch)
 
     // Non-vacuity, both ways: the recorder saw the whole ceremony, and the detector can see
     // a planted code. A wire scan proving neither would prove nothing.
-    expect(recorded.length).toBeGreaterThanOrEqual(5)
+    expect(recorded.length).toBeGreaterThanOrEqual(7)
     const wire = wireTextOf(recorded)
     expect(wire.length).toBeGreaterThan(500)
     for (const planted of encodingsOf(CODE)) {
@@ -457,5 +546,17 @@ describe('§3.7.4 — the code never reaches the wire', () => {
     for (const encoding of encodingsOf(CODE)) {
       expect(wire.includes(encoding), `code leaked to the wire as: ${encoding}`).toBe(false)
     }
+
+    // The offer itself never travels in the clear: keys and name are inside the envelope only.
+    for (const clear of [OFFER.boxPubB64, OFFER.signPubB64, OFFER.displayName]) {
+      expect(wire.includes(clear), `offer field on the wire in the clear: ${clear}`).toBe(false)
+    }
+
+    // The ticket appears in exactly ONE request — the owner's approve — and in no response.
+    const carrying = recorded.filter((r) => r.body.includes(OFFER.enrolTicketB64) || r.url.includes(OFFER.enrolTicketB64))
+    expect(carrying.map((r) => r.url)).toEqual([`/v1/relations/${REL_REF}/pairing/${opened.exchangeId}/approve`])
+    expect(responses.some((r) => r.includes(OFFER.enrolTicketB64))).toBe(false)
+    // Control: the response recorder is not blind.
+    expect(responses.some((r) => r.includes('APPROVED'))).toBe(true)
   })
 })

@@ -1,20 +1,24 @@
 /*
- * The CPace exchange, carried through the Companion as opaque parcels (plan §3.7.3).
+ * The CPace exchange, carried through the Companion as opaque parcels (plan §3.7.3), and the
+ * approval that turns a matched code into an enrolment.
  *
- * Three touches, none simultaneous — this is store-and-forward, not a phone call:
+ * Four touches, none simultaneous — this is store-and-forward, not a phone call:
  *
- *   owner:      ownerOpenPairing()      — derive MSGa from the code, post it, keep the scalar
- *   therapist:  therapistAnswerPairing() — fetch MSGa, derive MSGb + the key, post MSGb
- *   owner:      ownerCollectPairing()    — fetch MSGb, derive the same key, close
+ *   owner:      ownerOpenPairing()       — derive MSGa from the code, post it, keep the scalar
+ *   therapist:  therapistAnswerPairing() — fetch MSGa, derive MSGb + the key, seal their OFFER
+ *                                          under the key, post both
+ *   owner:      ownerCollectPairing()    — fetch MSGb, derive the same key, open the offer
+ *   owner:      ownerApprovePairing()    — hand the server the enrol ticket the offer carried
+ *   therapist:  therapistPairingStatus() — learn that it happened, then enrol with that ticket
  *
  * THE CODE NEVER LEAVES THE DEVICE IT WAS TYPED ON. That is §3.7.4's hard invariant — a server
  * holding the code could run the exchange itself and sit in the middle — and in this module it
  * is structural, not behavioral: the code goes into cpaceStart/cpaceRespond as the PRS and
  * nothing else reads it; every request body is built from the OUTPUTS of those calls, which are
- * uniform group elements the code cannot be recovered from. relay.test.ts drives a whole
- * pairing through a recording transport and then greps every request — URL, headers, body — for
- * the code in every encoding it could wear; that test is the §3.7.4 deliverable and removing
- * this property fails it.
+ * uniform group elements the code cannot be recovered from, or from ciphertext under the key
+ * they produce. relay.test.ts drives a whole pairing through a recording transport and then
+ * greps every request — URL, headers, body — for the code in every encoding it could wear; that
+ * test is the §3.7.4 deliverable and removing this property fails it.
  *
  * THE CODE IS CANONICAL BEFORE IT IS BYTES. Two people typing "the same code" produce the same
  * key only if both sides feed the PAKE the same bytes, and a trailing space, a lower-case letter
@@ -22,14 +26,24 @@
  * indistinguishable from a wrong code, by design. So the code arrives here as a
  * CanonicalPairingCode (pairingCode.ts: eight upper-case symbols, check symbol verified) and is
  * checked AGAIN at runtime before it becomes bytes, because a cast is one keystroke and the bug
- * this repo keeps producing is a check that assumes its input. The finishing touch does not take
+ * this repo keeps producing is a check that assumes its input. The collecting touch does not take
  * the code at all: cpaceFinish needs only the scalar, which is what lets the owner's persisted
  * half of a run (ownerRunStore.ts) omit the code by construction.
  *
  * WRONG CODE ≠ ERROR, here as everywhere in the §3.7 design: mismatched codes produce two
- * different keys and no signal in this module. The mismatch surfaces when the encrypted
- * negotiation built ON the key fails to open, and a person decides what that means (the burn
- * rule: only a human report kills an invite).
+ * different keys and no signal on the wire. The mismatch surfaces here, once, in the only place
+ * it can: the therapist's sealed offer fails to open on the owner's side and comes back as
+ * `offer: null` — one bit, no diagnosis — and a person decides what that means (the burn rule:
+ * only a human report kills an invite).
+ *
+ * WHAT THE OFFER IS, AND WHY IT IS ENOUGH. The therapist seals, under the key only a right code
+ * derives, their two public keys, a name, and an enrol ticket THEY chose (payloads.ts). If the
+ * owner opens it, the keys are the keys of whoever typed the code — pinned on that authority,
+ * no read-aloud — and the ticket is a secret shared by exactly the two people who should hold
+ * it. The owner then hands the ticket to the server on Approve. The server never sees the code
+ * or the key; a link-holder who answered the run first produced an envelope the owner could not
+ * open, so no ticket of theirs is ever forwarded; and the ticket appears on the wire in exactly
+ * one request, the owner's approve, and in no response (relay.test.ts proves that too).
  *
  * WHAT BINDS THE RUN TO THIS INVITATION, and what does not. The channel identifier carries the
  * invite id, which is the one value each side holds WITHOUT the server's help — the owner
@@ -45,7 +59,8 @@
  * shows a different reply is refused, never re-derived. CPace gives an online attacker one
  * guess per protocol run only if a run derives one key, and that is enforced here rather than
  * left to how often a caller polls. The pin survives a reload (ownerRunStore.ts carries it), so
- * the property holds across tabs as well as within one.
+ * the property holds across tabs as well as within one. The envelope needs no pin of its own:
+ * a swapped envelope does not open, and one that opens was sealed under this run's key.
  */
 import {
   initCpace,
@@ -55,11 +70,22 @@ import {
   lvCat,
   type CpaceStartResult,
 } from './cpace'
+import { initEnvelope, openEnvelope, sealEnvelope } from './envelope'
 import { isCanonicalPairingCode, type CanonicalPairingCode } from './pairingCode'
+import { decodeTherapistOffer, encodeTherapistOffer, type TherapistOffer } from './payloads'
 
 type FetchLike = typeof fetch
 
 const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s)
+
+/**
+ * How often the therapist's side asks whether the owner has decided. The server's shared
+ * per-source budget allows twelve touches per five minutes and charges every one; fetch and
+ * respond cost two. Forty-five seconds is six polls a window with room to spare; faster than
+ * thirty locks an honest therapist out of their own ceremony. A 429 is treated as "still
+ * waiting" for the same reason. Mirrors PAIRING_STATUS_POLL_SECONDS on the server.
+ */
+export const PAIRING_STATUS_POLL_MS = 45_000
 
 /**
  * The code as PAKE bytes. Takes the branded type and STILL checks it: the brand keeps a typed
@@ -160,14 +186,22 @@ export interface TherapistPairingResult {
   isk: Uint8Array
 }
 
-/** Therapist touches: fetch the owner's opening message, answer it, keep the key. */
+/**
+ * Therapist touches: fetch the owner's opening message, answer it, and seal the offer under the
+ * key beside the reply. The offer is validated before the first request (an invalid one throws
+ * here, never reaches the wire) and encrypted with the key the reply produces; the server stores
+ * both and can read neither.
+ */
 export async function therapistAnswerPairing(
-  args: { inviteId: string; secret: string; code: CanonicalPairingCode; baseUrl?: string },
+  args: { inviteId: string; secret: string; code: CanonicalPairingCode; offer: TherapistOffer; baseUrl?: string },
   doFetch: FetchLike = fetch.bind(globalThis),
 ): Promise<TherapistPairingResult> {
-  // Before the first request: a code that is not canonical costs nothing on the wire.
+  // Before the first request: a code that is not canonical, or an offer that is not well formed,
+  // costs nothing on the wire.
   const prs = prsBytes(args.code)
+  const offerBytes = encodeTherapistOffer(args.offer)
   await initCpace()
+  await initEnvelope()
   const invitePath = `${baseOf(args.baseUrl)}/v1/invite/${encodeURIComponent(args.inviteId)}/pairing`
   const fetchRes = await doFetch(`${invitePath}/fetch`, {
     method: 'POST',
@@ -195,10 +229,12 @@ export async function therapistAnswerPairing(
     b64.decode(body.msgAB64),
     AD_THERAPIST,
   )
+  // The AAD carries the sid exactly as the owner posted it, which is exactly as it came back.
+  const envelope = sealEnvelope(responded.isk, body.sidB64, 'therapist-to-owner', offerBytes)
   const respondRes = await doFetch(`${invitePath}/${encodeURIComponent(body.exchangeId)}/respond`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ secret: args.secret, msgBB64: b64.encode(responded.msgB) }),
+    body: JSON.stringify({ secret: args.secret, msgBB64: b64.encode(responded.msgB), envB64: b64.encode(envelope) }),
   })
   if (respondRes.status !== 204) throw new Error(`pairing respond refused (${respondRes.status})`)
   return { exchangeId: body.exchangeId, relRef: body.relRef, isk: responded.isk }
@@ -209,27 +245,33 @@ export type OwnerCollectResult =
   | { state: 'cancelled' }
   /** The owner opened a fresh run for this invite; this one was retired by that, unanswered. */
   | { state: 'superseded' }
-  | { state: 'complete'; isk: Uint8Array }
+  /**
+   * The reply is in and the key is derived. `offer` is the therapist's offer if their envelope
+   * opened under this key, and null if it did not — a wrong code, a swapped envelope, a reply
+   * from before envelopes existed: one bit, and the screen renders it as the question it is.
+   */
+  | { state: 'complete'; isk: Uint8Array; offer: TherapistOffer | null }
 
 /**
- * Owner touch 3: look for the reply; when it is there, derive the key and close the exchange.
+ * Owner touch 3: look for the reply; when it is there, derive the key and open the offer.
  *
  * Takes no code. cpaceFinish needs the scalar, the sid and the two messages, and nothing else;
  * a run restored from ownerRunStore.ts after a reload finishes here without the owner having
- * to know the code any more.
+ * to know the code any more. Writes nothing to the server: approval is a separate, human step.
  */
 export async function ownerCollectPairing(
   args: { relRef: string; bearerToken: string; pairing: OwnerPairingState; baseUrl?: string },
   doFetch: FetchLike = fetch.bind(globalThis),
 ): Promise<OwnerCollectResult> {
   await initCpace()
+  await initEnvelope()
   const base = `${baseOf(args.baseUrl)}/v1/relations/${encodeURIComponent(args.relRef)}/pairing/${encodeURIComponent(args.pairing.exchangeId)}`
   const res = await doFetch(base, {
     method: 'GET',
     headers: { authorization: `Bearer ${args.bearerToken}` },
   })
   if (res.status !== 200) throw new Error(`pairing read refused (${res.status})`)
-  const body = (await res.json()) as { state?: unknown; msgBB64?: unknown }
+  const body = (await res.json()) as { state?: unknown; msgBB64?: unknown; envB64?: unknown }
   const answered = body.state === 'RESPONDED' || body.state === 'CLOSED'
   const keyed = args.pairing.finished !== undefined || args.pairing.pinnedMsgBB64 !== undefined
   if (keyed && (body.state === 'OPEN' || body.state === 'SUPERSEDED')) {
@@ -263,13 +305,92 @@ export async function ownerCollectPairing(
     args.pairing.finished = { msgBB64: body.msgBB64, isk }
     args.pairing.pinnedMsgBB64 = body.msgBB64
   }
-  if (body.state === 'RESPONDED') {
-    // Bookkeeping only; the key is already derived, so a failed close costs a later retry of
-    // an idempotent-shaped call, never the ceremony.
-    await doFetch(`${base}/close`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${args.bearerToken}` },
-    }).catch(() => undefined)
+  // The offer: opens under this key or it does not. Every failure is the same null.
+  let offer: TherapistOffer | null = null
+  if (typeof body.envB64 === 'string') {
+    let envelope: Uint8Array | null = null
+    try {
+      envelope = b64.decode(body.envB64)
+    } catch {
+      envelope = null
+    }
+    const opened = envelope ? openEnvelope(isk, args.pairing.sidB64, 'therapist-to-owner', envelope) : null
+    offer = opened ? decodeTherapistOffer(opened) : null
   }
-  return { state: 'complete', isk }
+  return { state: 'complete', isk, offer }
+}
+
+/**
+ * Owner touch 4: approve the reply, forwarding the enrol ticket the offer carried. The server
+ * puts the invitation into REDEEMING and makes that ticket the one it will honour. The one
+ * request in the whole ceremony that carries the ticket; no response ever does.
+ */
+export async function ownerApprovePairing(
+  args: { relRef: string; bearerToken: string; exchangeId: string; enrolTicketB64: string; baseUrl?: string },
+  doFetch: FetchLike = fetch.bind(globalThis),
+): Promise<void> {
+  const res = await doFetch(
+    `${baseOf(args.baseUrl)}/v1/relations/${encodeURIComponent(args.relRef)}/pairing/${encodeURIComponent(args.exchangeId)}/approve`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${args.bearerToken}` },
+      body: JSON.stringify({ enrolTicketB64: args.enrolTicketB64 }),
+    },
+  )
+  if (res.status === 204) return
+  if (res.status === 409) throw new Error('pairing approve: the run changed underneath the approval; read it again')
+  throw new Error(`pairing approve refused (${res.status})`)
+}
+
+/**
+ * The owner's Cancel — or, on an approved run nobody finished, the Abandon that puts the
+ * invitation back. True when the server did it; false when there was nothing left to cancel.
+ */
+export async function ownerCancelPairing(
+  args: { relRef: string; bearerToken: string; exchangeId: string; baseUrl?: string },
+  doFetch: FetchLike = fetch.bind(globalThis),
+): Promise<boolean> {
+  const res = await doFetch(
+    `${baseOf(args.baseUrl)}/v1/relations/${encodeURIComponent(args.relRef)}/pairing/${encodeURIComponent(args.exchangeId)}/cancel`,
+    { method: 'POST', headers: { authorization: `Bearer ${args.bearerToken}` } },
+  )
+  if (res.status === 204) return true
+  if (res.status === 410) return false
+  throw new Error(`pairing cancel refused (${res.status})`)
+}
+
+export type TherapistStatusResult =
+  | { state: 'waiting' }
+  /** The owner approved; enrol with the ticket that went into the offer. `scope` is what the invitation grants. */
+  | { state: 'approved'; scope: string[] }
+  /** Cancelled, retired, reported, expired, or never this run: one answer, so ask for a new code. */
+  | { state: 'gone' }
+
+/**
+ * Therapist touch: has the owner decided? Poll at PAIRING_STATUS_POLL_MS. A 429 — rate limited,
+ * or the invitation locked by somebody else's guesses — is "still waiting", not an error: the
+ * ticket in the offer lives as long as the invitation, so waiting out a lockout costs nothing.
+ */
+export async function therapistPairingStatus(
+  args: { inviteId: string; secret: string; exchangeId: string; baseUrl?: string },
+  doFetch: FetchLike = fetch.bind(globalThis),
+): Promise<TherapistStatusResult> {
+  const res = await doFetch(
+    `${baseOf(args.baseUrl)}/v1/invite/${encodeURIComponent(args.inviteId)}/pairing/${encodeURIComponent(args.exchangeId)}/status`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ secret: args.secret }),
+    },
+  )
+  if (res.status === 429) return { state: 'waiting' }
+  if (res.status === 410) return { state: 'gone' }
+  if (res.status !== 200) throw new Error(`pairing status refused (${res.status})`)
+  const body = (await res.json()) as { state?: unknown; scope?: unknown }
+  if (body.state === 'WAITING') return { state: 'waiting' }
+  if (body.state === 'APPROVED') {
+    const scope = Array.isArray(body.scope) ? body.scope.filter((s): s is string => typeof s === 'string') : []
+    return { state: 'approved', scope }
+  }
+  throw new Error('pairing status: malformed response')
 }
