@@ -70,7 +70,7 @@ class InviteReportRoutesTest {
         // Nine guesses, spaced far enough apart to sit out each armed lockout, so this is a
         // sustained campaign rather than one burst that the backoff would have swallowed anyway.
         repeat(9) { i ->
-            val r = client.post("/v1/invite/${minted.inviteId}/redeem") {
+            val r = client.post("/v1/invite/${minted.inviteId}/pairing/fetch") {
                 contentType(ContentType.Application.Json); setBody("""{"secret":"wrong-$i"}""")
             }
             assertTrue(
@@ -82,10 +82,13 @@ class InviteReportRoutesTest {
         }
 
         assertEquals("PENDING", s.auth.inviteStatusFor(minted.inviteId))
-        val ok = client.post("/v1/invite/${minted.inviteId}/redeem") {
+        val ok = client.post("/v1/invite/${minted.inviteId}/pairing/fetch") {
             contentType(ContentType.Application.Json); setBody("""{"secret":"${minted.secret}"}""")
         }
-        assertEquals(HttpStatusCode.OK, ok.status, "the real therapist still gets in — that is what was being protected")
+        // "Still gets in" now means the secret is ACCEPTED and there is simply no pairing run
+        // waiting — 410, the shelf-is-empty answer — where a wrong secret is still 401. That
+        // difference is the assertion: the guesses did not burn the invitation.
+        assertEquals(HttpStatusCode.Gone, ok.status, "the real therapist's secret still passes — that is what was being protected")
 
         // Each guess is recorded. The automatic response is restrained on purpose, so the log is
         // the only thing that tells the owner somebody was working on their invite.
@@ -108,7 +111,7 @@ class InviteReportRoutesTest {
         assertEquals(HttpStatusCode.NoContent, reported.status, "an owner needs no body to say this wasn't me")
         assertEquals("REPORTED", s.auth.inviteStatusFor(minted.inviteId))
 
-        val afterwards = client.post("/v1/invite/${minted.inviteId}/redeem") {
+        val afterwards = client.post("/v1/invite/${minted.inviteId}/pairing/fetch") {
             contentType(ContentType.Application.Json); setBody("""{"secret":"${minted.secret}"}""")
         }
         assertEquals(HttpStatusCode.Gone, afterwards.status, "even the correct secret is refused once a person has reported it")
@@ -160,10 +163,11 @@ class InviteReportRoutesTest {
         assertEquals(HttpStatusCode.Unauthorized, guessed.status)
 
         assertEquals("PENDING", s.auth.inviteStatusFor(minted.inviteId), "the invitation is untouched")
-        val ok = client.post("/v1/invite/${minted.inviteId}/redeem") {
+        val ok = client.post("/v1/invite/${minted.inviteId}/pairing/fetch") {
             contentType(ContentType.Application.Json); setBody("""{"secret":"${minted.secret}"}""")
         }
-        assertEquals(HttpStatusCode.OK, ok.status)
+        // Accepted (410 = nothing waiting), not refused (401 = wrong secret). See above.
+        assertEquals(HttpStatusCode.Gone, ok.status)
     }
 
     @Test
@@ -202,7 +206,7 @@ class InviteReportRoutesTest {
         repeat(PAIR_MAX_PER_WINDOW + 1) {
             // A fresh invite each time, so nothing here is stopped by the per-invite counter.
             val minted = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
-            val r = client.post("/v1/invite/${minted.inviteId}/redeem") {
+            val r = client.post("/v1/invite/${minted.inviteId}/pairing/fetch") {
                 contentType(ContentType.Application.Json); setBody("""{"secret":"wrong"}""")
             }
             if (r.status == HttpStatusCode.TooManyRequests) rateLimited = true

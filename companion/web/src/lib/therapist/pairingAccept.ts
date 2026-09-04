@@ -37,6 +37,7 @@
  */
 import {
   AcceptError,
+  CREDENTIAL_ID_BYTES,
   enrolWithTicket,
   findKeyRecord,
   forgetKeyRecord,
@@ -56,9 +57,6 @@ import {
 import { newEnrolTicketB64, type TherapistOffer } from '../pairing/payloads'
 import { DISPLAY_NAME_MAX_CODEPOINTS, validDisplayName } from '../pairing/payloads'
 import { parsePairingCode, PAIRING_FAULT_TEXT, type CanonicalPairingCode } from '../pairing/pairingCode'
-
-/** 16 bytes, the same width beginAcceptance uses; both draw it from the shared ports. */
-const CREDENTIAL_ID_BYTES = 16
 
 /** Versioned, and in sessionStorage: a run belongs to the tab that opened it. */
 export const THERAPIST_RUN_STORAGE_KEY = 'daymark.pairing.therapist-run.v1'

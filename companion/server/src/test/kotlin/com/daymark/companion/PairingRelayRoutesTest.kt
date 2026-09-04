@@ -444,7 +444,7 @@ class PairingRelayRoutesTest {
         // itself still answers 401 (only later knocks answer 429 — see LockedInviteAuditTest),
         // so the proof of sharing is what it ARMS: one LOCKOUT row, and the next request —
         // with the CORRECT secret — bouncing off a lockout three guesses built across two doors.
-        val third = client.post("/v1/invite/${minted.inviteId}/redeem") {
+        val third = client.post("/v1/invite/${minted.inviteId}/pairing/fetch") {
             contentType(ContentType.Application.Json)
             setBody("""{"secret":"also-wrong"}""")
         }

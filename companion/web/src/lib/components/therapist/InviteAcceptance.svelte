@@ -65,7 +65,6 @@
     AcceptError,
     KEY_CHECK_COPY,
     MIN_PASSPHRASE_CHARS,
-    beginAcceptance,
     checkPassphrase,
     completeAcceptance,
     findKeyRecord,
@@ -79,6 +78,15 @@
     type KeyRecord,
     type Resumption,
   } from '../../therapist/inviteAccept'
+  import {
+    answerPairing,
+    enrolAfterApproval,
+    pairingPortsFor,
+    waitForApproval,
+    type AnsweredRun,
+    type PairingAcceptancePorts,
+  } from '../../therapist/pairingAccept'
+  import { THERAPIST_COPY } from '../../pairing/copy'
   import { zeroize } from '../../therapist/keyStore'
   import LowerAssuranceBanner from './LowerAssuranceBanner.svelte'
   import { Callout, Card } from '../ui'
@@ -114,6 +122,23 @@
   let passphrase = $state('')
   let confirmation = $state('')
   let problems = $state<string[]>([])
+
+  /*
+   * THE PAIRING HALF. The invitation link no longer buys anything on its own: it opens a
+   * conversation, and the short code the owner said out loud is what turns that conversation into
+   * an enrolment. So this screen asks for the code and a name before it asks for anything else, and
+   * then waits — possibly for a while — for the owner to approve what it sent.
+   *
+   * `waiting` is its own state rather than a flavour of `busy` because it is not a spinner: it can
+   * last minutes or hours, the person may close the laptop, and the honest thing to draw is a
+   * sentence saying so rather than a disabled button.
+   */
+  let typedCode = $state('')
+  let displayName = $state('')
+  let pairingRun = $state<AnsweredRun | null>(null)
+  let waiting = $state(false)
+  let gone = $state(false)
+  const leaving = { aborted: false }
 
   let enrolment = $state<Enrolment | null>(null)
   let code = $state('')
@@ -185,6 +210,12 @@
     return ports
   }
 
+  let pairingPorts: PairingAcceptancePorts | null = null
+  async function pairingPortsOnce(): Promise<PairingAcceptancePorts> {
+    if (!pairingPorts) pairingPorts = pairingPortsFor(await portsOnce(), apiBase)
+    return pairingPorts
+  }
+
   function usePastedLink() {
     error = ''
     const parsed = parseInviteLink(pasted)
@@ -216,20 +247,38 @@
     }
   }
 
+  /**
+   * Answer the owner's pairing run, then wait for them.
+   *
+   * WHAT IS DIFFERENT FROM WHAT THIS USED TO DO. It used to redeem the invitation secret, which the
+   * link carries — so this button was reachable by whoever read the email. Now the code decides:
+   * what goes out is sealed under a key only the right code derives, and the owner cannot approve
+   * what they cannot open. The invitation is not spent by any of this; a wrong code costs one of
+   * its eight attempts and nothing else.
+   *
+   * THE FRAGMENT IS NOT DROPPED HERE ANY MORE. It used to be dropped the moment the secret was
+   * spent, because it was spent. It is no longer: the secret is needed again for every poll while
+   * the owner decides, and a reload during that wait has to still work. It goes once the enrolment
+   * has committed, which is the first moment it really is finished with.
+   */
   async function accept() {
     error = ''
+    gone = false
     problems = checkPassphrase(passphrase, confirmation)
     if (problems.length > 0 || !invite) return
     busy = true
     try {
-      const p = await portsOnce()
-      enrolment = await beginAcceptance(p, {
+      const p = await pairingPortsOnce()
+      const run = await answerPairing(p, {
         inviteId: invite.inviteId,
         secret: invite.secret,
+        typedCode,
         passphrase,
+        displayName,
         host,
       })
-      dropSpentFragment()
+      pairingRun = run
+      typedCode = ''
       /*
        * The passphrase has done its one job. Dropping the reference is not a wipe — a JavaScript
        * string cannot be overwritten, and this one also passed through an input element — but it
@@ -238,13 +287,27 @@
        */
       passphrase = ''
       confirmation = ''
+      busy = false
+      waiting = true
+      const decided = await waitForApproval(p, run.record, invite.secret, { signal: leaving })
+      waiting = false
+      if (decided.state === 'gone') {
+        gone = true
+        pairingRun = null
+        return
+      }
+      if (decided.state !== 'approved') return
+      busy = true
+      enrolment = await enrolAfterApproval(p, run, decided.scope, host)
+      dropSpentFragment()
     } catch (e) {
-      // Everything past the redeem has spent the invitation, so the link in the address bar is dead
-      // whether this succeeded or failed. `step` is what tells the two apart.
-      if (e instanceof AcceptError && e.step !== 'redeem') dropSpentFragment()
       error = e instanceof Error ? e.message : 'This invitation could not be accepted.'
+      // Anything that got as far as enrolling has spent the invitation; anything earlier has not,
+      // and the link has to keep working so a new code can be tried on this same page.
+      if (e instanceof AcceptError && e.step === 'enrol') dropSpentFragment()
     } finally {
       busy = false
+      waiting = false
     }
   }
 
@@ -311,8 +374,12 @@
    * and that copy has exactly the same claim on being wiped as the freshly generated one.
    */
   onDestroy(() => {
+    // Stop the wait before anything else: waitForApproval loops until told otherwise, and a
+    // component that has gone away must not keep asking the server about a run nobody is watching.
+    leaving.aborted = true
     if (enrolment) zeroize(enrolment.keys)
     if (resumed) zeroize(resumed.keys)
+    if (pairingRun) zeroize(pairingRun.keys)
   })
 </script>
 
@@ -418,8 +485,46 @@
         <button class="primary" onclick={usePastedLink}>Use this link</button>
       </div>
     </Card>
+  {:else if waiting}
+    <!--
+      The wait. Not a spinner: the owner may be in a session, at lunch, or on a different day, and
+      nothing here gives up on its own. The ticket this browser is holding lives as long as the
+      invitation does, so waiting costs nothing.
+    -->
+    <Card title={THERAPIST_COPY.waitingTitle}>
+      <div class="stack">
+        <p>{THERAPIST_COPY.waitingBody}</p>
+        <p class="hint" role="status" aria-live="polite">{THERAPIST_COPY.waitingSlow}</p>
+      </div>
+    </Card>
   {:else if !enrolment}
-    <!-- Step one of two things a person types. -->
+    <!-- Step one: the code they said out loud, a name, and a passphrase of your own. -->
+    {#if gone}
+      <Callout tone="warn" title={THERAPIST_COPY.goneTitle}>{THERAPIST_COPY.goneBody}</Callout>
+    {/if}
+    <Card title={THERAPIST_COPY.title}>
+      <div class="stack">
+        <p>{THERAPIST_COPY.lede}</p>
+        <div class="field">
+          <label for="f-paircode">{THERAPIST_COPY.codeLabel}</label>
+          <input
+            id="f-paircode"
+            type="text"
+            inputmode="text"
+            autocapitalize="characters"
+            autocomplete="off"
+            spellcheck="false"
+            bind:value={typedCode}
+          />
+          <p class="hint">{THERAPIST_COPY.codeHint}</p>
+        </div>
+        <div class="field">
+          <label for="f-pairname">{THERAPIST_COPY.nameLabel}</label>
+          <input id="f-pairname" type="text" autocomplete="name" bind:value={displayName} />
+          <p class="hint">{THERAPIST_COPY.nameHint}</p>
+        </div>
+      </div>
+    </Card>
     <Card title="Choose a reading passphrase">
       <div class="stack">
         <p>
@@ -447,12 +552,13 @@
             </ul>
           </Callout>
         {/if}
-        <button class="primary" onclick={accept} disabled={busy}>
-          {busy ? 'Setting up…' : 'Accept invitation'}
+        <button class="primary" onclick={accept} disabled={busy || !typedCode || !displayName}>
+          {busy ? 'Sending…' : 'Send this to them'}
         </button>
         <p class="hint">
-          Setting up takes a few seconds: your keys are wrapped under this passphrase and then opened
-          again, here, to prove the wrapping worked before anything depends on it.
+          This takes a few seconds: your keys are wrapped under this passphrase and then opened
+          again, here, to prove the wrapping worked before anything depends on it. Then it waits for
+          the person who invited you to approve.
         </p>
       </div>
     </Card>

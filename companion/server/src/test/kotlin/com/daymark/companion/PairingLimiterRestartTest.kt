@@ -98,7 +98,7 @@ class PairingLimiterRestartTest {
             // attack the per-source budget was added for.
             repeat(PAIR_MAX_PER_WINDOW) { i ->
                 val decoy = s1.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
-                val r = client.post("/v1/invite/${decoy.inviteId}/redeem") {
+                val r = client.post("/v1/invite/${decoy.inviteId}/pairing/fetch") {
                     contentType(ContentType.Application.Json); setBody("""{"secret":"wrong-$i"}""")
                 }
                 assertEquals(
@@ -112,7 +112,7 @@ class PairingLimiterRestartTest {
             // before any secret is read. Establishing the 429 BEFORE the restart is what makes
             // the post-restart assertion meaningful: same source, same refusal, new process.
             val decoy = s1.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
-            val overBudget = client.post("/v1/invite/${decoy.inviteId}/redeem") {
+            val overBudget = client.post("/v1/invite/${decoy.inviteId}/pairing/fetch") {
                 contentType(ContentType.Application.Json); setBody("""{"secret":"still-wrong"}""")
             }
             assertEquals(HttpStatusCode.TooManyRequests, overBudget.status, "the per-source budget is spent")
@@ -140,7 +140,7 @@ class PairingLimiterRestartTest {
             // attacker a fresh budget this would be a 200 and the invite would be redeemed — the
             // exact outcome "one online guess per attempt" promises cannot happen. The route
             // checks the source budget before it reads the body, so being right changes nothing.
-            val afterRestart = client.post("/v1/invite/${victim.inviteId}/redeem") {
+            val afterRestart = client.post("/v1/invite/${victim.inviteId}/pairing/fetch") {
                 contentType(ContentType.Application.Json); setBody("""{"secret":"${victim.secret}"}""")
             }
             assertEquals(
@@ -158,12 +158,14 @@ class PairingLimiterRestartTest {
             // above already happened, hence the full window again is more than enough) puts this
             // source back in budget, and the honest holder of the link gets in.
             now += PAIR_WINDOW_MS
-            val healed = client.post("/v1/invite/${victim.inviteId}/redeem") {
+            val healed = client.post("/v1/invite/${victim.inviteId}/pairing/fetch") {
                 contentType(ContentType.Application.Json); setBody("""{"secret":"${victim.secret}"}""")
             }
             assertEquals(
-                HttpStatusCode.OK, healed.status,
-                "once the window has aged out the correct secret redeems — the budget heals, it does not ban",
+                HttpStatusCode.Gone, healed.status,
+                "once the window has aged out the correct secret is accepted again (410 = nothing " +
+                    "waiting, where a rate-limited or wrong one would be 429 or 401) — the budget " +
+                    "heals, it does not ban",
             )
         }
         s2.auth.close()
