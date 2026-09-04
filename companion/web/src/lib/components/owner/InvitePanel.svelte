@@ -20,6 +20,33 @@
   let busy = $state(false)
   let error = $state('')
   let copied = $state(false)
+  /** Set once the owner has ended the invitation shown; the link above it is then dead. */
+  let stopped = $state(false)
+
+  /**
+   * The one action that kills an invitation. A wrong code never does (the server cannot even
+   * see one); only this, a person saying "not this one". Copy at the button names exactly what
+   * it does and does not do, per plan §3.6.1: a revoke is not a message to the other person.
+   */
+  async function stop() {
+    if (!client || !invite) return
+    error = ''
+    busy = true
+    try {
+      await client.reportInvite(invite.inviteId)
+      stopped = true
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Could not end the invitation.'
+    } finally {
+      busy = false
+    }
+  }
+
+  function startAnother() {
+    invite = null
+    stopped = false
+    copied = false
+  }
 
   async function mint(sendEmail: boolean) {
     if (!client) {
@@ -63,6 +90,14 @@
 
     {#if !invite}
       <button class="primary" onclick={() => mint(false)} disabled={busy}>{busy ? 'Minting…' : 'Create invite link'}</button>
+    {:else if stopped}
+      <p class="ended" role="status">
+        This invitation has ended. The link no longer works. Nothing already shared has changed,
+        and nobody has been told.
+      </p>
+      <div class="row">
+        <button onclick={startAnother}>Create another invite link</button>
+      </div>
     {:else}
       <label class="linkbox">
         <span>Single-use invite link (expires {new Date(invite.expiresAt).toISOString()})</span>
@@ -70,6 +105,13 @@
       </label>
       <div class="row">
         <button onclick={copyLink}>{copied ? 'Copied' : 'Copy link'}</button>
+      </div>
+      <div class="stop">
+        <p>
+          Sent this to the wrong person, or no longer want it used? Ending it stops the link
+          working. It changes nothing already shared, and the other person is not told.
+        </p>
+        <button onclick={stop} disabled={busy}>{busy ? 'Ending…' : 'Stop this invitation'}</button>
       </div>
     {/if}
 
@@ -96,6 +138,10 @@
   input { font: inherit; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-bg); color: var(--ink-text); }
   input[readonly] { font-family: var(--font-mono); font-size: 0.8rem; }
   .row { display: flex; gap: var(--space-2); }
+  .ended { margin: 0; font-size: 0.9rem; color: var(--ink-text); }
+  .stop { display: flex; flex-direction: column; gap: var(--space-2); border-top: 1px solid var(--hairline); padding-top: var(--space-3); }
+  .stop p { margin: 0; font-size: 0.85rem; color: var(--ink-soft); }
+  .stop button { align-self: flex-start; }
   .email { display: flex; flex-direction: column; gap: var(--space-2); border-top: 1px solid var(--hairline); padding-top: var(--space-3); }
   .email label { display: flex; flex-direction: column; gap: var(--space-1); font-size: 0.85rem; }
   .email em { color: var(--text-subtle); font-style: normal; }

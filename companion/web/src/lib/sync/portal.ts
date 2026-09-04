@@ -201,6 +201,17 @@ export class PortalClient {
     return (await res.json()) as InviteResponse
   }
 
+  /**
+   * End an invitation the owner no longer trusts. This is the ONE thing that kills an invitation
+   * (plan §3.9.1: wrong codes never do; only a human report). The owner path is the bearer token
+   * itself — no body, no secret — and the server refuses everything minted under that invitation
+   * from then on. Nothing already shared changes, and nobody is told.
+   */
+  async reportInvite(inviteId: string): Promise<void> {
+    const res = await this.req(`/v1/invite/${encodeURIComponent(inviteId)}/report`, { method: 'POST' })
+    if (!res.ok) throw new PortalError('could not end the invitation', res.status)
+  }
+
   // --- owner notification-email registration (Track T2) ---
 
   async getNotificationSettings(): Promise<NotificationSettings> {

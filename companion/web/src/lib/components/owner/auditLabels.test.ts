@@ -13,6 +13,11 @@ describe('audit label mapping', () => {
       'assignment.publish',
       'gameplan.publish',
       'session.expired',
+      'pairing.opened',
+      'pairing.responded',
+      'pairing.cancelled',
+      'pair.guess_failed',
+      'invite.reported',
     ]) {
       expect(auditActionLabel(action)).not.toBe(action)
     }
