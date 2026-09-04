@@ -22,11 +22,35 @@ import {
   ownerCollectPairing,
   therapistAnswerPairing,
   channelIdentifier,
+  type OwnerPairingState,
 } from './relay'
 import { initCpace, parseLv } from './cpace'
+import { checkSymbol } from '../recovery/recoveryCode'
+import {
+  PAIRING_ALPHABET,
+  PAIRING_PAYLOAD_SYMBOLS,
+  newPairingCode,
+  parsePairingCode,
+  type CanonicalPairingCode,
+} from './pairingCode'
 
-const CODE = 'SEKRIT-7Q4X9Z'
-const WRONG_CODE = 'SEKRIT-7Q4X9A'
+/**
+ * Both codes are real, canonical pairing codes drawn fresh per run (relay.ts refuses anything
+ * else before the first request). WRONG_CODE differs from CODE in one payload symbol with the
+ * check symbol recomputed, so it is a well-formed code that is simply not the same code — the
+ * case the check symbol cannot catch and the PAKE is for.
+ */
+let CODE: CanonicalPairingCode
+let WRONG_CODE: CanonicalPairingCode
+
+function oneSymbolOff(code: CanonicalPairingCode): CanonicalPairingCode {
+  const i = PAIRING_ALPHABET.indexOf(code[0])
+  const other = PAIRING_ALPHABET[(i + 1) % PAIRING_ALPHABET.length]
+  const payload = other + code.slice(1, PAIRING_PAYLOAD_SYMBOLS)
+  const parsed = parsePairingCode(payload + checkSymbol(payload))
+  if (!parsed.ok) throw new Error('test setup: could not build a second code')
+  return parsed.code.canonical
+}
 const REL_REF = 'rel-ref-abc123'
 const INVITE_ID = 'invite-xyz789'
 const OTHER_INVITE_ID = 'invite-other456'
@@ -144,6 +168,70 @@ const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex')
 
 beforeAll(async () => {
   await initCpace()
+  CODE = (await newPairingCode()).canonical
+  WRONG_CODE = oneSymbolOff(CODE)
+})
+
+describe('the code is canonical before it is bytes', () => {
+  it('a typed, un-canonicalised code is refused before any request is made', async () => {
+    const { doFetch, recorded } = relayServer()
+    const typed = `${CODE.slice(0, 4)}-${CODE.slice(4)}`.toLowerCase() as CanonicalPairingCode
+    await expect(
+      ownerOpenPairing({ relRef: REL_REF, inviteId: INVITE_ID, code: typed, bearerToken: BEARER }, doFetch),
+    ).rejects.toThrow(/canonical/)
+    await expect(
+      therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, code: typed }, doFetch),
+    ).rejects.toThrow(/canonical/)
+    expect(recorded).toHaveLength(0)
+  })
+
+  it('however the therapist typed it, the canonical form keys the same as the owner', async () => {
+    const { doFetch } = relayServer()
+    const opened = await ownerOpenPairing(
+      { relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER },
+      doFetch,
+    )
+    const typed = parsePairingCode(` ${CODE.slice(0, 4).toLowerCase()} — ${CODE.slice(4)} `)
+    expect(typed.ok).toBe(true)
+    const therapist = await therapistAnswerPairing(
+      { inviteId: INVITE_ID, secret: INVITE_SECRET, code: typed.ok ? typed.code.canonical : CODE },
+      doFetch,
+    )
+    const collected = await ownerCollectPairing({ relRef: REL_REF, bearerToken: BEARER, pairing: opened }, doFetch)
+    expect(collected.state).toBe('complete')
+    expect(collected.state === 'complete' && hex(collected.isk)).toBe(hex(therapist.isk))
+  })
+
+  it('a restored run (scalar and pin only, no code) finishes and keeps its pin', async () => {
+    const { doFetch, exchange } = relayServer()
+    const opened = await ownerOpenPairing(
+      { relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER },
+      doFetch,
+    )
+    const therapist = await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, code: CODE }, doFetch)
+    // What a reload leaves: the persisted fields, and nothing derived.
+    const restored: OwnerPairingState = {
+      exchangeId: opened.exchangeId,
+      inviteId: opened.inviteId,
+      sidB64: opened.sidB64,
+      start: opened.start,
+    }
+    const first = await ownerCollectPairing({ relRef: REL_REF, bearerToken: BEARER, pairing: restored }, doFetch)
+    expect(first.state === 'complete' && hex(first.isk)).toBe(hex(therapist.isk))
+    expect(restored.pinnedMsgBB64).toBe(exchange.msgBB64)
+    // A second reload keeps only the pin; a swapped reply is refused, never re-keyed.
+    const again: OwnerPairingState = {
+      exchangeId: opened.exchangeId,
+      inviteId: opened.inviteId,
+      sidB64: opened.sidB64,
+      start: opened.start,
+      pinnedMsgBB64: restored.pinnedMsgBB64,
+    }
+    exchange.msgBB64 = exchange.msgBB64!.slice(0, -2) + 'AA'
+    await expect(
+      ownerCollectPairing({ relRef: REL_REF, bearerToken: BEARER, pairing: again }, doFetch),
+    ).rejects.toThrow(/changed after the key/)
+  })
 })
 
 describe('the relay carries a pairing end to end', () => {
@@ -158,7 +246,7 @@ describe('the relay carries a pairing end to end', () => {
       doFetch,
     )
     const collected = await ownerCollectPairing(
-      { relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened },
+      { relRef: REL_REF, bearerToken: BEARER, pairing: opened },
       doFetch,
     )
     expect(collected.state).toBe('complete')
@@ -178,7 +266,7 @@ describe('the relay carries a pairing end to end', () => {
       doFetch,
     )
     const collected = await ownerCollectPairing(
-      { relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened },
+      { relRef: REL_REF, bearerToken: BEARER, pairing: opened },
       doFetch,
     )
     expect(collected.state).toBe('complete')
@@ -193,13 +281,13 @@ describe('the relay carries a pairing end to end', () => {
       doFetch,
     )
     const waiting = await ownerCollectPairing(
-      { relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened },
+      { relRef: REL_REF, bearerToken: BEARER, pairing: opened },
       doFetch,
     )
     expect(waiting.state).toBe('waiting')
     exchange.state = 'CANCELLED'
     const cancelled = await ownerCollectPairing(
-      { relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened },
+      { relRef: REL_REF, bearerToken: BEARER, pairing: opened },
       doFetch,
     )
     expect(cancelled.state).toBe('cancelled')
@@ -207,7 +295,7 @@ describe('the relay carries a pairing end to end', () => {
     // state rather than throw at it, because a console polling an old run will meet it.
     exchange.state = 'SUPERSEDED'
     const superseded = await ownerCollectPairing(
-      { relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened },
+      { relRef: REL_REF, bearerToken: BEARER, pairing: opened },
       doFetch,
     )
     expect(superseded.state).toBe('superseded')
@@ -230,7 +318,7 @@ describe('what binds a run, and to what', () => {
       doFetch,
     )
     const collected = await ownerCollectPairing(
-      { relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened },
+      { relRef: REL_REF, bearerToken: BEARER, pairing: opened },
       doFetch,
     )
     expect(collected.state).toBe('complete')
@@ -257,7 +345,7 @@ describe('what binds a run, and to what', () => {
     )
     await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, code: CODE }, doFetch)
     const first = await ownerCollectPairing(
-      { relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened },
+      { relRef: REL_REF, bearerToken: BEARER, pairing: opened },
       doFetch,
     )
     expect(first.state).toBe('complete')
@@ -265,7 +353,7 @@ describe('what binds a run, and to what', () => {
 
     // Polling again with the same reply is the same key, byte for byte.
     const again = await ownerCollectPairing(
-      { relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened },
+      { relRef: REL_REF, bearerToken: BEARER, pairing: opened },
       doFetch,
     )
     expect(again.state).toBe('complete')
@@ -276,7 +364,7 @@ describe('what binds a run, and to what', () => {
     // moves an answered run forward, so a server saying otherwise is contradicting itself.
     exchange.state = 'OPEN'
     await expect(
-      ownerCollectPairing({ relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened }, doFetch),
+      ownerCollectPairing({ relRef: REL_REF, bearerToken: BEARER, pairing: opened }, doFetch),
     ).rejects.toThrow(/regressed/)
     exchange.state = 'CLOSED'
 
@@ -289,7 +377,7 @@ describe('what binds a run, and to what', () => {
     expect(other.exchange.msgBB64).not.toBe(exchange.msgBB64)
     exchange.msgBB64 = other.exchange.msgBB64
     await expect(
-      ownerCollectPairing({ relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened }, doFetch),
+      ownerCollectPairing({ relRef: REL_REF, bearerToken: BEARER, pairing: opened }, doFetch),
     ).rejects.toThrow(/reply changed/)
   })
 })
@@ -303,14 +391,14 @@ describe('the close is bookkeeping, and is retried', () => {
     )
     await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, code: CODE }, doFetch)
     const first = await ownerCollectPairing(
-      { relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened },
+      { relRef: REL_REF, bearerToken: BEARER, pairing: opened },
       doFetch,
     )
     expect(first.state).toBe('complete')
     expect(exchange.state).toBe('RESPONDED')
     expect(closeAttempts()).toBe(1)
     const second = await ownerCollectPairing(
-      { relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened },
+      { relRef: REL_REF, bearerToken: BEARER, pairing: opened },
       doFetch,
     )
     expect(second.state).toBe('complete')
@@ -330,14 +418,14 @@ describe('the close is bookkeeping, and is retried', () => {
     )
     await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, code: CODE }, doFetch)
     const first = await ownerCollectPairing(
-      { relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened },
+      { relRef: REL_REF, bearerToken: BEARER, pairing: opened },
       doFetch,
     )
     expect(first.state).toBe('complete')
     expect(exchange.state).toBe('RESPONDED')
     exchange.state = 'CANCELLED'
     const after = await ownerCollectPairing(
-      { relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened },
+      { relRef: REL_REF, bearerToken: BEARER, pairing: opened },
       doFetch,
     )
     expect(after.state).toBe('cancelled')
@@ -353,7 +441,7 @@ describe('§3.7.4 — the code never reaches the wire', () => {
     )
     await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, code: CODE }, doFetch)
     await ownerCollectPairing(
-      { relRef: REL_REF, code: CODE, bearerToken: BEARER, pairing: opened },
+      { relRef: REL_REF, bearerToken: BEARER, pairing: opened },
       doFetch,
     )
 

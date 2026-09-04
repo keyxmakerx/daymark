@@ -217,9 +217,15 @@ export function cpaceRespond(
   return { msgB, isk: deriveIsk(inputs.sid, k, msgA, msgB) }
 }
 
-/** Party A, final step: consume MSGb, produce the key. Throws on an invalid or identity point. */
+/**
+ * Party A, final step: consume MSGb, produce the key. Throws on an invalid or identity point.
+ *
+ * Takes only the sid from the inputs: the PRS and CI were spent computing the generator in
+ * cpaceStart and are not needed again. The narrowed type says so, which is what lets a caller
+ * persist the owner's half of a run without the code (relay.ts, ownerRunStore.ts).
+ */
 export function cpaceFinish(
-  inputs: CpaceInputs,
+  inputs: Pick<CpaceInputs, 'sid'>,
   start: CpaceStartResult,
   msgB: Uint8Array,
 ): Uint8Array {

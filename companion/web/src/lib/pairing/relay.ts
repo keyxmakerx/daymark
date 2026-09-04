@@ -16,6 +16,16 @@
  * the code in every encoding it could wear; that test is the §3.7.4 deliverable and removing
  * this property fails it.
  *
+ * THE CODE IS CANONICAL BEFORE IT IS BYTES. Two people typing "the same code" produce the same
+ * key only if both sides feed the PAKE the same bytes, and a trailing space, a lower-case letter
+ * or a chat client's em dash would otherwise make two different keys with no signal at all —
+ * indistinguishable from a wrong code, by design. So the code arrives here as a
+ * CanonicalPairingCode (pairingCode.ts: eight upper-case symbols, check symbol verified) and is
+ * checked AGAIN at runtime before it becomes bytes, because a cast is one keystroke and the bug
+ * this repo keeps producing is a check that assumes its input. The finishing touch does not take
+ * the code at all: cpaceFinish needs only the scalar, which is what lets the owner's persisted
+ * half of a run (ownerRunStore.ts) omit the code by construction.
+ *
  * WRONG CODE ≠ ERROR, here as everywhere in the §3.7 design: mismatched codes produce two
  * different keys and no signal in this module. The mismatch surfaces when the encrypted
  * negotiation built ON the key fails to open, and a person decides what that means (the burn
@@ -34,7 +44,8 @@
  * ONE RUN, ONE KEY. The owner's state pins the reply that produced its key; a later read that
  * shows a different reply is refused, never re-derived. CPace gives an online attacker one
  * guess per protocol run only if a run derives one key, and that is enforced here rather than
- * left to how often a caller polls.
+ * left to how often a caller polls. The pin survives a reload (ownerRunStore.ts carries it), so
+ * the property holds across tabs as well as within one.
  */
 import {
   initCpace,
@@ -44,10 +55,26 @@ import {
   lvCat,
   type CpaceStartResult,
 } from './cpace'
+import { isCanonicalPairingCode, type CanonicalPairingCode } from './pairingCode'
 
 type FetchLike = typeof fetch
 
 const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s)
+
+/**
+ * The code as PAKE bytes. Takes the branded type and STILL checks it: the brand keeps a typed
+ * string out at compile time, this keeps a cast out at run time. Throws before any request is
+ * made, so a mistake here costs nothing on the wire.
+ */
+function prsBytes(code: CanonicalPairingCode): Uint8Array {
+  if (!isCanonicalPairingCode(code)) {
+    throw new Error('pairing: the code must be canonical (parsePairingCode) before it enters the ceremony')
+  }
+  return utf8(code)
+}
+
+/** The server origin plus any deployment base path, without a trailing slash; '' means same-origin root. */
+const baseOf = (baseUrl: string | undefined): string => (baseUrl ?? '').replace(/\/+$/, '')
 
 /**
  * The CPace channel identifier: version tag, relationship reference, invite id — length-
@@ -87,29 +114,31 @@ export interface OwnerPairingState {
    * server holds nothing that can finish it. This module keeps it in memory and never
    * serializes it; a caller that has to survive a reload, or the store-and-forward gap of
    * §3.7.3 (the owner finishes "next time they open the app"), must keep it itself, on the
-   * device, under its own protection. Losing it makes the run unfinishable by anyone, and the
-   * remedy is a fresh run, which spends one of the invite's exchanges.
+   * device, under its own protection (ownerRunStore.ts does, in sessionStorage). Losing it makes
+   * the run unfinishable by anyone, and the remedy is a fresh run, which spends one of the
+   * invite's exchanges.
    */
   start: CpaceStartResult
   /**
-   * Set by the first successful collect: the reply that produced the key, and the key. A later
-   * read showing a different reply is refused rather than re-derived — see ONE RUN, ONE KEY.
+   * The reply that produced this run's key, once one has. A later read showing a different reply
+   * is refused rather than re-derived — see ONE RUN, ONE KEY. Persistable (it is public bytes),
+   * and restored by ownerRunStore.ts so the pin outlives the tab's memory.
    */
+  pinnedMsgBB64?: string
+  /** The derived key, cached in memory only. Never persisted; re-derived from the scalar after a reload. */
   finished?: { msgBB64: string; isk: Uint8Array }
 }
 
 /** Owner touch 1: derive MSGa from the code and post it for the invite. */
 export async function ownerOpenPairing(
-  args: { relRef: string; inviteId: string; code: string; bearerToken: string },
+  args: { relRef: string; inviteId: string; code: CanonicalPairingCode; bearerToken: string; baseUrl?: string },
   doFetch: FetchLike = fetch.bind(globalThis),
 ): Promise<OwnerPairingState> {
+  const prs = prsBytes(args.code)
   const sodium = await initCpace()
   const sid = sodium.randombytes_buf(16)
-  const start = cpaceStart(
-    { prs: utf8(args.code), ci: channelIdentifier(args.relRef, args.inviteId), sid },
-    AD_OWNER,
-  )
-  const res = await doFetch(`/v1/relations/${encodeURIComponent(args.relRef)}/pairing`, {
+  const start = cpaceStart({ prs, ci: channelIdentifier(args.relRef, args.inviteId), sid }, AD_OWNER)
+  const res = await doFetch(`${baseOf(args.baseUrl)}/v1/relations/${encodeURIComponent(args.relRef)}/pairing`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${args.bearerToken}` },
     body: JSON.stringify({
@@ -133,11 +162,13 @@ export interface TherapistPairingResult {
 
 /** Therapist touches: fetch the owner's opening message, answer it, keep the key. */
 export async function therapistAnswerPairing(
-  args: { inviteId: string; secret: string; code: string },
+  args: { inviteId: string; secret: string; code: CanonicalPairingCode; baseUrl?: string },
   doFetch: FetchLike = fetch.bind(globalThis),
 ): Promise<TherapistPairingResult> {
+  // Before the first request: a code that is not canonical costs nothing on the wire.
+  const prs = prsBytes(args.code)
   await initCpace()
-  const invitePath = `/v1/invite/${encodeURIComponent(args.inviteId)}/pairing`
+  const invitePath = `${baseOf(args.baseUrl)}/v1/invite/${encodeURIComponent(args.inviteId)}/pairing`
   const fetchRes = await doFetch(`${invitePath}/fetch`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -160,11 +191,7 @@ export async function therapistAnswerPairing(
   }
   // The invite id in the CI is args.inviteId — from the link, never from the response.
   const responded = cpaceRespond(
-    {
-      prs: utf8(args.code),
-      ci: channelIdentifier(body.relRef, args.inviteId),
-      sid: b64.decode(body.sidB64),
-    },
+    { prs, ci: channelIdentifier(body.relRef, args.inviteId), sid: b64.decode(body.sidB64) },
     b64.decode(body.msgAB64),
     AD_THERAPIST,
   )
@@ -184,13 +211,19 @@ export type OwnerCollectResult =
   | { state: 'superseded' }
   | { state: 'complete'; isk: Uint8Array }
 
-/** Owner touch 3: look for the reply; when it is there, derive the key and close the exchange. */
+/**
+ * Owner touch 3: look for the reply; when it is there, derive the key and close the exchange.
+ *
+ * Takes no code. cpaceFinish needs the scalar, the sid and the two messages, and nothing else;
+ * a run restored from ownerRunStore.ts after a reload finishes here without the owner having
+ * to know the code any more.
+ */
 export async function ownerCollectPairing(
-  args: { relRef: string; code: string; bearerToken: string; pairing: OwnerPairingState },
+  args: { relRef: string; bearerToken: string; pairing: OwnerPairingState; baseUrl?: string },
   doFetch: FetchLike = fetch.bind(globalThis),
 ): Promise<OwnerCollectResult> {
   await initCpace()
-  const base = `/v1/relations/${encodeURIComponent(args.relRef)}/pairing/${encodeURIComponent(args.pairing.exchangeId)}`
+  const base = `${baseOf(args.baseUrl)}/v1/relations/${encodeURIComponent(args.relRef)}/pairing/${encodeURIComponent(args.pairing.exchangeId)}`
   const res = await doFetch(base, {
     method: 'GET',
     headers: { authorization: `Bearer ${args.bearerToken}` },
@@ -198,7 +231,8 @@ export async function ownerCollectPairing(
   if (res.status !== 200) throw new Error(`pairing read refused (${res.status})`)
   const body = (await res.json()) as { state?: unknown; msgBB64?: unknown }
   const answered = body.state === 'RESPONDED' || body.state === 'CLOSED'
-  if (args.pairing.finished && (body.state === 'OPEN' || body.state === 'SUPERSEDED')) {
+  const keyed = args.pairing.finished !== undefined || args.pairing.pinnedMsgBB64 !== undefined
+  if (keyed && (body.state === 'OPEN' || body.state === 'SUPERSEDED')) {
     // The store only ever moves an answered run forward: RESPONDED → CLOSED, or → CANCELLED by
     // the owner's own Cancel, which is a legal step and reported below as one. A read that
     // shows the run waiting or retired AGAIN is a server contradicting its own record, and the
@@ -212,25 +246,22 @@ export async function ownerCollectPairing(
   if (body.state === 'SUPERSEDED') return { state: 'superseded' }
   if (!answered) throw new Error('pairing read: malformed response')
   if (typeof body.msgBB64 !== 'string') throw new Error('pairing read: reply missing')
+  // ONE RUN, ONE KEY: the server does not get a second reply into this run by returning a
+  // different one on a later read — in this tab or after a reload. Refusing is the honest
+  // answer; nothing else is derived.
+  if (args.pairing.pinnedMsgBB64 !== undefined && args.pairing.pinnedMsgBB64 !== body.msgBB64) {
+    throw new Error('pairing read: the reply changed after the key was derived')
+  }
   let isk: Uint8Array
   if (args.pairing.finished) {
-    // ONE RUN, ONE KEY: the server does not get a second reply into this run by returning a
-    // different one on a later read. Refusing is the honest answer; nothing else is derived.
     if (args.pairing.finished.msgBB64 !== body.msgBB64) {
       throw new Error('pairing read: the reply changed after the key was derived')
     }
     isk = args.pairing.finished.isk
   } else {
-    isk = cpaceFinish(
-      {
-        prs: utf8(args.code),
-        ci: channelIdentifier(args.relRef, args.pairing.inviteId),
-        sid: b64.decode(args.pairing.sidB64),
-      },
-      args.pairing.start,
-      b64.decode(body.msgBB64),
-    )
+    isk = cpaceFinish({ sid: b64.decode(args.pairing.sidB64) }, args.pairing.start, b64.decode(body.msgBB64))
     args.pairing.finished = { msgBB64: body.msgBB64, isk }
+    args.pairing.pinnedMsgBB64 = body.msgBB64
   }
   if (body.state === 'RESPONDED') {
     // Bookkeeping only; the key is already derived, so a failed close costs a later retry of
