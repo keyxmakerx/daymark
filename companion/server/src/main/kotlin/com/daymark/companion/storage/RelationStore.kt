@@ -269,19 +269,32 @@ class RelationStore(
     }
 
     /**
-     * Withdraw every version of a lineage. Returns how many rows were marked.
+     * What a withdrawal did: rows marked, ciphertext files actually removed, and files that could
+     * NOT be removed. The last number is the one that matters to an owner who just took something
+     * back — "withdrawn" with a copy still on the volume is not the thing they asked for, and the
+     * route reports it rather than rounding it to success.
+     */
+    data class RevokeOutcome(val marked: Int, val deleted: Int, val undeletable: Int)
+
+    /**
+     * Withdraw every version of a lineage.
      *
      * Marks all versions, not just the newest: prior versions stay on disk up to the retention
      * window and are individually fetchable by `GET /{lineage}/{version}`, so withdrawing only the
      * head would leave the previous share readable — the same partial-guard shape as the original
      * bug.
      *
-     * The ciphertext is deleted too, best-effort. Keeping withdrawn bytes on the volume is live
-     * exposure against a compromised-server threat model for data the owner has explicitly taken
-     * back, and nothing needs them: the index row remains, so version numbering and the audit trail
-     * are intact, and [gateLocked] refuses before the file would ever be read.
+     * The ciphertext is deleted too. Keeping withdrawn bytes on the volume is live exposure against
+     * a compromised-server threat model for data the owner has explicitly taken back, and nothing
+     * needs them: the index row remains, so version numbering and the audit trail are intact, and
+     * [gateLocked] refuses before the file would ever be read. A file that will not delete is
+     * COUNTED, not swallowed: the previous version of this wrapped both the listing and every
+     * delete in `runCatching` and returned only the marked count, so a full volume, a permissions
+     * slip, or a stray directory left "withdrawn" reading as complete while the bytes stayed. If the
+     * directory cannot even be listed, every marked version is reported as undeletable, because
+     * that is what is known.
      */
-    fun revokeLineage(relRef: String, channel: Channel, lineage: String): Int = synchronized(lock) {
+    fun revokeLineage(relRef: String, channel: Channel, lineage: String): RevokeOutcome = synchronized(lock) {
         requireName(relRef)
         requireName(lineage)
         val marked = conn.prepareStatement(
@@ -291,13 +304,25 @@ class RelationStore(
             ps.executeUpdate()
         }
         val dir = relDir.resolve(relRef).resolve(channel.wire).resolve(lineage)
-        runCatching {
-            Files.list(dir).use { paths ->
-                paths.filter { it.fileName.toString().endsWith(".blob") }
-                    .forEach { runCatching { Files.deleteIfExists(it) } }
+        if (!Files.isDirectory(dir)) {
+            // Nothing was ever written under this lineage (or it was already cleared): no copies to remove.
+            return@synchronized RevokeOutcome(marked, deleted = 0, undeletable = 0)
+        }
+        val blobs = try {
+            Files.list(dir).use { paths -> paths.filter { it.fileName.toString().endsWith(".blob") }.toList() }
+        } catch (e: IOException) {
+            return@synchronized RevokeOutcome(marked, deleted = 0, undeletable = marked)
+        }
+        var deleted = 0
+        var undeletable = 0
+        for (path in blobs) {
+            try {
+                if (Files.deleteIfExists(path)) deleted++
+            } catch (e: IOException) {
+                undeletable++
             }
         }
-        marked
+        RevokeOutcome(marked, deleted, undeletable)
     }
 
     fun fetch(relRef: String, channel: Channel, lineage: String, version: Long): ByteArray = synchronized(lock) {

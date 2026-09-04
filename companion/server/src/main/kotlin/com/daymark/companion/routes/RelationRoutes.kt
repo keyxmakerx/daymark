@@ -43,7 +43,13 @@ import org.slf4j.LoggerFactory
  * hand the restricted party the exact distinction the 410 exists to withhold. The owner learns the
  * state from their own audit log.
  */
-@Serializable data class RelRevokeResult(val lineage: String, val revokedVersions: Int)
+/**
+ * `copiesNotRemoved` is the number of ciphertext files that could not be deleted from the volume
+ * after the rows were marked withdrawn. Zero is the normal case. Non-zero is reported, not hidden:
+ * the share is refused on every read path either way ([RelationStore.gateLocked]), but the bytes
+ * are still on disk, and that is the owner's to know.
+ */
+@Serializable data class RelRevokeResult(val lineage: String, val revokedVersions: Int, val copiesNotRemoved: Int = 0)
 @Serializable data class RelPutResult(val relRef: String, val channel: String, val lineage: String, val version: Long, val size: Long, val contentHash: String)
 
 private fun RelMeta.toDto() = RelMetaDto(version, size, contentHash, settingKey, createdAt)
@@ -147,7 +153,7 @@ fun Route.relationRoutes(
             }
             val lineage = call.parameters["lineage"] ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("missing lineage"))
             try {
-                val marked = store.revokeLineage(ctx.relRef, ctx.channel, lineage)
+                val outcome = store.revokeLineage(ctx.relRef, ctx.channel, lineage)
                 auditSafely {
                     auditStore.append(
                         ctx.relRef,
@@ -157,7 +163,7 @@ fun Route.relationRoutes(
                         meta = sourceIpMeta(auditSourceIp, call),
                     )
                 }
-                call.respond(HttpStatusCode.OK, RelRevokeResult(lineage, marked))
+                call.respond(HttpStatusCode.OK, RelRevokeResult(lineage, outcome.marked, outcome.undeletable))
             } catch (e: RelationStoreException) {
                 call.failRel(e)
             }
