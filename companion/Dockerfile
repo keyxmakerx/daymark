@@ -46,7 +46,7 @@ RUN go mod init daymark/healthcheck \
 # but is off it. gcr.io remains the canonical domain — distroless moved its serving infra
 # to Artifact Registry behind the same hostname, so the 2025 "gcr.io shutdown" panic does
 # not apply. Base carries JAVA_VERSION=21.0.12 (July 2026 CPU), User=65532, ~63.5 MB.
-FROM gcr.io/distroless/java21-debian13:nonroot@sha256:4e664bc71c4459c50407bbbeda96058f82c6b6d07d155d1ac39b8deca3cd42c0 AS runtime
+FROM gcr.io/distroless/java21-debian13:nonroot@sha256:bb0b3c7edc4417acdf76ea0f52bb5fae28881fe05aae6cc55af4cc4cb0200d2d AS runtime
 WORKDIR /app
 COPY --from=server      /src/build/libs/daymark-companion.jar /app/app.jar
 COPY --from=web         /web/dist                             /app/web
