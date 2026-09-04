@@ -170,7 +170,7 @@ export function defaultKeyStorage(): KeyRecordStorage | null {
   }
 }
 
-export type AcceptStep = 'redeem' | 'record' | 'wrap' | 'enrol' | 'login' | 'register'
+export type AcceptStep = 'redeem' | 'record' | 'wrap' | 'enrol' | 'login' | 'register' | 'code' | 'name' | 'pairing'
 
 /**
  * A refusal, carrying WHICH step refused.
@@ -617,7 +617,7 @@ const TOTP_SECRET_BYTES = 20
 /** How long the credential id is. Opaque, unguessable, and never displayed as anything meaningful. */
 const CREDENTIAL_ID_BYTES = 16
 
-function sameKeys(a: TherapistKeys, b: TherapistKeys): boolean {
+export function sameKeys(a: TherapistKeys, b: TherapistKeys): boolean {
   const eq = (x: Uint8Array, y: Uint8Array) => x.length === y.length && x.every((v, i) => v === y[i])
   // Not constant-time, and it does not need to be: both sides of this comparison are values this
   // page generated moments ago and already holds in full. There is no secret here to leak to a
@@ -707,16 +707,60 @@ export async function beginAcceptance(ports: AcceptancePorts, input: AcceptInput
     )
   }
 
-  // 5. Store, then enrol. `saveKeyRecord` refuses to overwrite; the rollback below undoes only the
-  //    record this call wrote, and only when the enrolment it belongs to never happened.
+  // 5. Store, then enrol. `saveKeyRecord` refuses to overwrite; the rollback inside
+  //    `enrolWithTicket` undoes only the record this call wrote, and only when the enrolment it
+  //    belongs to never happened.
   const credentialId = ports.randomToken(CREDENTIAL_ID_BYTES).b64url
   const record: KeyRecord = { v: 1, relRef, credentialId, wrapped, createdAt: ports.now() }
   saveKeyRecord(record, ports.storage)
 
+  return enrolWithTicket(ports, {
+    relRef,
+    scope: redeemed.scope ?? [],
+    enrollTicket: redeemed.enrollTicket,
+    credentialId,
+    keys,
+    host: input.host,
+  })
+}
+
+/**
+ * Spend an enrolment ticket: mint the authenticator secret, enrol it, and hand back everything the
+ * screen needs to show the person their authenticator entry.
+ *
+ * EXTRACTED SO THAT TWO CEREMONIES CAN SHARE IT. The invite-secret path above reaches this after a
+ * redeem; the pairing path (therapist/pairingAccept.ts) reaches it after the owner has approved a
+ * matched code and the ticket has come back through the encrypted channel. Everything from here on
+ * is identical in both — the same insert-only enrolment, the same three-valued outcome, the same
+ * rollback rule — and it is identical because the server cannot tell the two apart by this point:
+ * a ticket is a ticket.
+ *
+ * WHAT IT ASSUMES OF ITS CALLER, and cannot check: that the KeyRecord for [relRef] has already been
+ * written, and that [keys] are the keys inside it. Both callers write the record immediately before
+ * calling, for the reason argued above `beginAcceptance` — the losable window is the recoverable
+ * one. The rollback here removes that record, so a caller that had not written one would be
+ * deleting somebody else's; that is why this is not exported for general use but for those two.
+ *
+ * THE THREE-VALUED OUTCOME IS THE POINT. 'refused' is the only value that rolls back, because it is
+ * the only one that says the server wrote nothing. 'unknown' — a request whose answer never arrived
+ * — keeps the record and the secret and says so, because the enrolment may well have committed and
+ * no route in this product un-enrols a relationship.
+ */
+export async function enrolWithTicket(
+  ports: AcceptancePorts,
+  args: {
+    relRef: string
+    scope: string[]
+    enrollTicket: string
+    credentialId: string
+    keys: TherapistKeys
+    host?: string
+  },
+): Promise<Enrolment> {
   const totp = ports.randomToken(TOTP_SECRET_BYTES)
   let outcome: EnrolOutcome
   try {
-    outcome = await ports.enrol(redeemed.enrollTicket, credentialId, totp.b64url)
+    outcome = await ports.enrol(args.enrollTicket, args.credentialId, totp.b64url)
   } catch {
     // A rejected fetch says nothing about the server's state. A request that was answered and whose
     // answer was lost on the way back looks exactly like a request that never arrived, and only one
@@ -724,7 +768,7 @@ export async function beginAcceptance(ports: AcceptancePorts, input: AcceptInput
     outcome = 'unknown'
   }
   if (outcome === 'refused') {
-    forgetKeyRecord(relRef, ports.storage)
+    forgetKeyRecord(args.relRef, ports.storage)
     throw new AcceptError(
       'The server would not enrol an authenticator for this invitation, so nothing was set up. Ask the person who invited you for a fresh link.',
       'enrol',
@@ -733,13 +777,13 @@ export async function beginAcceptance(ports: AcceptancePorts, input: AcceptInput
 
   const totpSecretBase32 = base32(totp.raw)
   return {
-    relRef,
-    scope: redeemed.scope ?? [],
-    credentialId,
+    relRef: args.relRef,
+    scope: args.scope,
+    credentialId: args.credentialId,
     totpSecretBase32,
-    otpauthUri: otpauthUri(totpSecretBase32, input.host ?? '', relRef),
+    otpauthUri: otpauthUri(totpSecretBase32, args.host ?? '', args.relRef),
     serverConfirmedEnrolment: outcome === 'enrolled',
-    ...identityOf(ports, keys),
+    ...identityOf(ports, args.keys),
   }
 }
 

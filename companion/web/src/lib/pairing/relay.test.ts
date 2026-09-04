@@ -222,7 +222,7 @@ describe('the code is canonical before it is bytes', () => {
       ownerOpenPairing({ relRef: REL_REF, inviteId: INVITE_ID, code: typed, bearerToken: BEARER }, doFetch),
     ).rejects.toThrow(/canonical/)
     await expect(
-      therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: typed }, doFetch),
+      therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, makeOffer: async () => OFFER, code: typed }, doFetch),
     ).rejects.toThrow(/canonical/)
     expect(recorded).toHaveLength(0)
   })
@@ -236,7 +236,7 @@ describe('the code is canonical before it is bytes', () => {
     const typed = parsePairingCode(` ${CODE.slice(0, 4).toLowerCase()} — ${CODE.slice(4)} `)
     expect(typed.ok).toBe(true)
     const therapist = await therapistAnswerPairing(
-      { inviteId: INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: typed.ok ? typed.code.canonical : CODE },
+      { inviteId: INVITE_ID, secret: INVITE_SECRET, makeOffer: async () => OFFER, code: typed.ok ? typed.code.canonical : CODE },
       doFetch,
     )
     const collected = await ownerCollectPairing({ relRef: REL_REF, bearerToken: BEARER, pairing: opened }, doFetch)
@@ -250,7 +250,7 @@ describe('the code is canonical before it is bytes', () => {
       { relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER },
       doFetch,
     )
-    const therapist = await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: CODE }, doFetch)
+    const therapist = await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, makeOffer: async () => OFFER, code: CODE }, doFetch)
     // What a reload leaves: the persisted fields, and nothing derived.
     const restored: OwnerPairingState = {
       exchangeId: opened.exchangeId,
@@ -284,7 +284,7 @@ describe('the relay carries a pairing end to end', () => {
       doFetch,
     )
     const therapist = await therapistAnswerPairing(
-      { inviteId: INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: CODE },
+      { inviteId: INVITE_ID, secret: INVITE_SECRET, makeOffer: async () => OFFER, code: CODE },
       doFetch,
     )
     const collected = await ownerCollectPairing(
@@ -306,7 +306,7 @@ describe('the relay carries a pairing end to end', () => {
       doFetch,
     )
     const therapist = await therapistAnswerPairing(
-      { inviteId: INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: WRONG_CODE },
+      { inviteId: INVITE_ID, secret: INVITE_SECRET, makeOffer: async () => OFFER, code: WRONG_CODE },
       doFetch,
     )
     const collected = await ownerCollectPairing(
@@ -360,7 +360,7 @@ describe('what binds a run, and to what', () => {
       doFetch,
     )
     const spliced = await therapistAnswerPairing(
-      { inviteId: OTHER_INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: CODE },
+      { inviteId: OTHER_INVITE_ID, secret: INVITE_SECRET, makeOffer: async () => OFFER, code: CODE },
       doFetch,
     )
     const collected = await ownerCollectPairing(
@@ -391,7 +391,7 @@ describe('what binds a run, and to what', () => {
       { relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER },
       doFetch,
     )
-    await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: CODE }, doFetch)
+    await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, makeOffer: async () => OFFER, code: CODE }, doFetch)
     const first = await ownerCollectPairing(
       { relRef: REL_REF, bearerToken: BEARER, pairing: opened },
       doFetch,
@@ -420,7 +420,7 @@ describe('what binds a run, and to what', () => {
     // second guess against the owner's scalar. It gets a refusal, not a second key.
     const other = relayServer()
     await ownerOpenPairing({ relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER }, other.doFetch)
-    await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: CODE }, other.doFetch)
+    await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, makeOffer: async () => OFFER, code: CODE }, other.doFetch)
     expect(other.exchange.msgBB64).toBeTypeOf('string')
     expect(other.exchange.msgBB64).not.toBe(exchange.msgBB64)
     exchange.msgBB64 = other.exchange.msgBB64
@@ -437,7 +437,7 @@ describe('the offer and the approval', () => {
       { relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER },
       doFetch,
     )
-    await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: CODE }, doFetch)
+    await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, makeOffer: async () => OFFER, code: CODE }, doFetch)
     const status = { inviteId: INVITE_ID, secret: INVITE_SECRET, exchangeId: opened.exchangeId }
     expect(await therapistPairingStatus(status, doFetch)).toEqual({ state: 'waiting' })
 
@@ -473,7 +473,7 @@ describe('the offer and the approval', () => {
       { relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER },
       doFetch,
     )
-    const therapist = await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: CODE }, doFetch)
+    const therapist = await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, makeOffer: async () => OFFER, code: CODE }, doFetch)
     // One byte of ciphertext turned: the AEAD refuses, and the key is untouched.
     const sealed = exchange.envB64!
     exchange.envB64 = sealed.slice(0, -3) + (sealed.endsWith('A') ? 'B' : 'A') + sealed.slice(-2)
@@ -494,15 +494,19 @@ describe('the offer and the approval', () => {
     expect(real.state === 'complete' && real.offer).toEqual(OFFER)
   })
 
-  it('an invalid offer is refused before the first request', async () => {
+  it('an invalid offer never reaches the wire: the run is fetched but never answered', async () => {
     const { doFetch, recorded } = relayServer()
+    await ownerOpenPairing({ relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER }, doFetch)
+    recorded.length = 0
     await expect(
       therapistAnswerPairing(
-        { inviteId: INVITE_ID, secret: INVITE_SECRET, offer: { ...OFFER, enrolTicketB64: 'short' }, code: CODE },
+        { inviteId: INVITE_ID, secret: INVITE_SECRET, makeOffer: async () => ({ ...OFFER, enrolTicketB64: 'short' }), code: CODE },
         doFetch,
       ),
     ).rejects.toThrow(/invalid offer/)
-    expect(recorded).toHaveLength(0)
+    // The fetch happened (the offer needs the relRef it returns); the RESPOND did not, so no run
+    // was spent and nothing malformed reached the wire.
+    expect(recorded.map((r) => r.url)).toEqual([`/v1/invite/${INVITE_ID}/pairing/fetch`])
   })
 
   it('a 429 on the status poll is waiting, not an error', async () => {
@@ -525,7 +529,7 @@ describe('§3.7.4 — the code never reaches the wire, and the ticket reaches it
       { relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER },
       doFetch,
     )
-    await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, offer: OFFER, code: CODE }, doFetch)
+    await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, makeOffer: async () => OFFER, code: CODE }, doFetch)
     await therapistPairingStatus({ inviteId: INVITE_ID, secret: INVITE_SECRET, exchangeId: opened.exchangeId }, doFetch)
     await ownerCollectPairing({ relRef: REL_REF, bearerToken: BEARER, pairing: opened }, doFetch)
     await ownerApprovePairing(

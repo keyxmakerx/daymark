@@ -193,13 +193,24 @@ export interface TherapistPairingResult {
  * both and can read neither.
  */
 export async function therapistAnswerPairing(
-  args: { inviteId: string; secret: string; code: CanonicalPairingCode; offer: TherapistOffer; baseUrl?: string },
+  args: {
+    inviteId: string
+    secret: string
+    code: CanonicalPairingCode
+    /**
+     * Built AFTER the fetch, because the relationship reference is what the fetch is for and the
+     * caller cannot make the offer without it: it is the key under which this browser's records are
+     * filed, so it decides whether new keys should be generated at all (pairingAccept.ts refuses to
+     * make a second set for a relationship it already holds). The offer is validated before it is
+     * sealed, so a malformed one still never reaches the wire.
+     */
+    makeOffer: (relRef: string) => Promise<TherapistOffer>
+    baseUrl?: string
+  },
   doFetch: FetchLike = fetch.bind(globalThis),
 ): Promise<TherapistPairingResult> {
-  // Before the first request: a code that is not canonical, or an offer that is not well formed,
-  // costs nothing on the wire.
+  // Before the first request: a code that is not canonical costs nothing on the wire.
   const prs = prsBytes(args.code)
-  const offerBytes = encodeTherapistOffer(args.offer)
   await initCpace()
   await initEnvelope()
   const invitePath = `${baseOf(args.baseUrl)}/v1/invite/${encodeURIComponent(args.inviteId)}/pairing`
@@ -230,6 +241,7 @@ export async function therapistAnswerPairing(
     AD_THERAPIST,
   )
   // The AAD carries the sid exactly as the owner posted it, which is exactly as it came back.
+  const offerBytes = encodeTherapistOffer(await args.makeOffer(body.relRef))
   const envelope = sealEnvelope(responded.isk, body.sidB64, 'therapist-to-owner', offerBytes)
   const respondRes = await doFetch(`${invitePath}/${encodeURIComponent(body.exchangeId)}/respond`, {
     method: 'POST',

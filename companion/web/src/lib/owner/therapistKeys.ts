@@ -351,3 +351,51 @@ export function acceptTherapistKeys(
   if (pendingRotation(pins, peerOf(record)) !== null) return 'differs-from-pin'
   return pinOnFirstUse(pins, peerOf(record), now) === 'pinned-now' ? 'pinned-now' : 'already-pinned'
 }
+
+/* ── Pinning from the pairing channel ─────────────────────────────────────────────────────── */
+
+/**
+ * The therapist's two public keys as they arrived inside a pairing envelope.
+ *
+ * A DIFFERENT AUTHORITY FROM [fetchTherapistKeys], AND A STRONGER ONE. Those keys come from the
+ * server, in a body it composes, which is why nothing may be pinned from them without a human
+ * reading fingerprints aloud on a channel the server is not on ([acceptTherapistKeys]). These keys
+ * came out of an envelope that opened under the pairing key — a key only someone who typed the
+ * owner's short code could derive (pairing/relay.ts). The server cannot compose that envelope, and
+ * cannot alter one without it failing to open; a holder of the invitation link who never learned
+ * the code produces one the owner's device rejects as noise. So the confirmation the read-aloud was
+ * standing in for has already happened, out of band, at the moment the code was spoken.
+ *
+ * Returns null for anything that is not two well-formed 32-byte keys. The caller has an offer that
+ * decoded, so this should not fail; it returns null rather than throwing because "the bytes are
+ * wrong" reads the same to a person as "the code did not match", and both mean start again.
+ */
+export function identityFromOffer(offer: { boxPubB64: string; signPubB64: string }): PublicIdentity | null {
+  try {
+    const x25519Pub = fromBase64(offer.boxPubB64)
+    const ed25519Pub = fromBase64(offer.signPubB64)
+    if (x25519Pub.length !== PUBLIC_KEY_BYTES || ed25519Pub.length !== PUBLIC_KEY_BYTES) return null
+    return { x25519Pub, ed25519Pub }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Pin keys that arrived through the pairing channel.
+ *
+ * WHY THIS EXISTS ALONGSIDE [acceptTherapistKeys] RATHER THAN CALLING IT. That function's whole
+ * argument is that a caller must not be able to supply both the expected and the typed
+ * fingerprints, because then the gate compares a value with itself. Passing it the fingerprints of
+ * the very record being pinned would be exactly that tautology, dressed as a call — so this is a
+ * separate door with its own stated authority (the envelope), not a bypass of that one.
+ *
+ * WHAT IT KEEPS FROM THE OTHER PATH. The rotation check, unchanged and for the same reason: if this
+ * console already holds a different key for this person, pinning quietly over it would hide the
+ * substitution the record exists to make visible. A rotation is refused here as it is there, and
+ * the owner is told to reach them another way. Nothing is persisted until the caller saves.
+ */
+export function pinFromPairing(pins: PinStore, peer: PublicIdentity, now: number = Date.now()): KeyAcceptance {
+  if (pendingRotation(pins, peer) !== null) return 'differs-from-pin'
+  return pinOnFirstUse(pins, peer, now) === 'pinned-now' ? 'pinned-now' : 'already-pinned'
+}
