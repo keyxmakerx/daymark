@@ -4,7 +4,7 @@
  *
  * IMPORTANT — real server contract (NOT the spec's assumed `/portal/*`): the server built in the
  * prior slices exposes:
- *   POST /v1/invite/{inviteId}/redeem   → { relRef, scope, enrollTicket }  (capped-backoff, no-referrer)
+ *   (the redeem route is gone — a ticket comes from the owner's pairing approval)
  *   POST /v1/totp/enroll                → 204   (single-use enrollTicket-gated; relRef derived server-side)
  *   POST /v1/totp/verify                → sets HttpOnly daymark_session cookie + { csrfToken, absoluteExpiry }
  *   POST /v1/session/logout             → 204                         (needs cookie + X-CSRF-Token)
@@ -116,29 +116,18 @@ export class PortalClient {
     return this.doFetch(this.base + path, { credentials: 'include', ...init })
   }
 
-  /**
-   * Redeem a single-use invite secret (from the OOB short code / invite link). Best-effort
-   * convenience: on success the server returns the relRef + granted scope; the security-bearing
-   * OOB pairing (SAS pin) still governs trust. Capped-backoff on wrong secret (410/401/429).
+  /*
+   * `redeemInvite` USED TO BE HERE, and its route is gone from the server (plan §3.7,
+   * 2026-09-04). It exchanged the invitation secret — which the emailed link carries — for an
+   * enrolment ticket, so the pairing code secured nothing. A ticket is now chosen by the
+   * therapist, sealed to the owner under the pairing key, and made live by the owner's approval;
+   * see therapist/pairingAccept.ts and pairing/relay.ts. `RedeemResult` survives as the shape the
+   * pairing fetch answers with.
    */
-  async redeemInvite(inviteId: string, secret: string): Promise<RedeemResult> {
-    const res = await this.req(`/v1/invite/${encodeURIComponent(inviteId)}/redeem`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ secret }),
-    })
-    if (res.status === 200) {
-      const body = (await res.json()) as { relRef: string; scope: string[]; enrollTicket: string }
-      return { ok: true, relRef: body.relRef, scope: body.scope, enrollTicket: body.enrollTicket }
-    }
-    if (res.status === 429) return { ok: false, error: 'Too many attempts — wait and try again.' }
-    if (res.status === 410) return { ok: false, error: 'This invite is no longer available.' }
-    return { ok: false, error: 'Invite could not be redeemed.' }
-  }
 
   /**
    * Enrol a TOTP credential with a client-set, high-entropy secret (base64url). Gated on the
-   * single-use `enrollTicket` returned by redeemInvite; the relRef is derived server-side from the
+   * single-use `enrollTicket` the owner approved; the relRef is derived server-side from the
    * ticket, so it is NOT sent (and cannot be spoofed) here. Insert-only: a 409 means a credential
    * already exists for this relationship.
    *
@@ -176,7 +165,7 @@ export class PortalClient {
     })
     if (res.status === 200) {
       const body = (await res.json()) as { csrfToken: string; absoluteExpiry: number }
-      // relRef is not echoed by verify; the caller supplies it (from redeem/enroll). We expose a
+      // relRef is not echoed by verify; the caller supplies it (from the pairing fetch). We expose a
       // session with a placeholder relRef the portal fills in via `bindRelRef`.
       return {
         ok: true,
@@ -217,7 +206,7 @@ export class PortalClient {
    * to say so honestly — never to retry, and never to overwrite, because an overwrite is precisely
    * the key substitution the pin exists to catch.
    *
-   * THE relRef IN THE PATH COMES FROM THE SESSION. `session.relRef` is bound from the redeem, and
+   * THE relRef IN THE PATH COMES FROM THE SESSION. `session.relRef` is bound from the pairing, and
    * the server independently derives the relRef from the session cookie; a path that disagrees with
    * the session is a 403 rather than a hint. So this method has no relRef parameter of its own —
    * there is no caller-supplied value here for a bug or a tampered page to point somewhere else.

@@ -286,16 +286,7 @@ class AuthStore(
             setInviteStatus(inviteId, "REDEEMING")
             // Mint a short-lived, single-use enrollment ticket pinning this invite's relRef.
             val ticket = Secrets.newToken()
-            conn.prepareStatement(
-                "INSERT INTO enroll_tickets(ticket_hash, invite_id, rel_ref, scope, expiry) VALUES (?,?,?,?,?)",
-            ).use { ins ->
-                ins.setString(1, Secrets.tokenHash(ticket))
-                ins.setString(2, inviteId)
-                ins.setString(3, row.relRef)
-                ins.setString(4, row.scope.joinToString(","))
-                ins.setLong(5, now + ENROLL_TICKET_TTL_MS)
-                ins.executeUpdate()
-            }
+            mintEnrollTicketLocked(inviteId, row, ticket, expiry = now + ENROLL_TICKET_TTL_MS)
             return RedeemResult(RedeemStatus.OK, row.relRef, row.scope, ticket)
         }
         // Wrong secret: bump fail count, apply capped backoff. Never consume the invite.
@@ -318,11 +309,24 @@ class AuthStore(
      * success. Proof of possession is a question, and questions leave no marks. (The one write
      * it shares with redeem is lazy expiry — an invite found past its time is marked EXPIRED —
      * which finalises a fact the clock already settled rather than answering the question.)
+     *
+     * [allowRedeeming] is for exactly one caller: the therapist's status poll after the owner has
+     * approved, when the invite is REDEEMING by design and the therapist still has to learn that.
+     * The touches that START a run (fetch, respond) keep the PENDING gate, so no new run can be
+     * opened or answered once an approval exists — proof of the secret against a REDEEMING invite
+     * yields a state word and nothing else.
      */
-    fun checkInviteSecret(inviteId: String, secret: String, lockoutFails: Int, lockoutBaseMs: Long): RedeemResult = synchronized(lock) {
+    fun checkInviteSecret(
+        inviteId: String,
+        secret: String,
+        lockoutFails: Int,
+        lockoutBaseMs: Long,
+        allowRedeeming: Boolean = false,
+    ): RedeemResult = synchronized(lock) {
         val now = clock()
         val row = readInviteLocked(inviteId) ?: return RedeemResult(RedeemStatus.GONE)
-        if (row.status != "PENDING") return RedeemResult(RedeemStatus.GONE)
+        val statusOk = row.status == "PENDING" || (allowRedeeming && row.status == "REDEEMING")
+        if (!statusOk) return RedeemResult(RedeemStatus.GONE)
         if (now >= row.expiry) {
             setInviteStatus(inviteId, "EXPIRED")
             return RedeemResult(RedeemStatus.GONE)
@@ -345,6 +349,103 @@ class AuthStore(
     fun inviteMetaFor(inviteId: String): InviteMeta? = synchronized(lock) {
         val row = readInviteLocked(inviteId) ?: return null
         InviteMeta(row.relRef, row.status, row.expiry)
+    }
+
+    /** The single place a ticket row is written; every minting path goes through it. */
+    private fun mintEnrollTicketLocked(inviteId: String, row: InviteRow, ticket: String, expiry: Long) {
+        conn.prepareStatement(
+            "INSERT INTO enroll_tickets(ticket_hash, invite_id, rel_ref, scope, expiry) VALUES (?,?,?,?,?)",
+        ).use { ins ->
+            ins.setString(1, Secrets.tokenHash(ticket))
+            ins.setString(2, inviteId)
+            ins.setString(3, row.relRef)
+            ins.setString(4, row.scope.joinToString(","))
+            ins.setLong(5, expiry)
+            ins.executeUpdate()
+        }
+    }
+
+    enum class ApproveStatus { OK, GONE }
+    data class ApproveResult(val status: ApproveStatus, val relRef: String? = null, val scope: List<String>? = null)
+
+    /**
+     * The owner approves a pairing run: the invite moves PENDING -> REDEEMING, and the enrolment
+     * ticket THE THERAPIST CHOSE becomes the one ticket this invite will honour. That ticket
+     * reached the owner sealed under the pairing key (plan §3.7.3), so only someone who typed the
+     * right code holds it; the owner forwards it here, and the server, as ever, never sees the
+     * code — only a 32-byte value it will later compare a hash against.
+     *
+     * This is how a ticket comes to exist once the PAKE runs BEFORE redeem, and two things differ
+     * from [redeemInvite] on purpose:
+     *  - No secret is checked and `locked_until` is IGNORED. The owner presents the bearer token,
+     *    not the invite secret. A link-holder's wrong guesses lock the secret's door, and must not
+     *    be able to lock the owner out of approving the person who typed the right code.
+     *  - The ticket lives until the INVITE expires, not ten minutes. The clock now starts at the
+     *    owner's approval; the therapist learns of it by polling at most every 45 seconds; and a
+     *    lockout raised by a link-holder can keep their status route shut for up to an hour. A
+     *    ten-minute ticket would expire under an honest therapist's feet. What bounds exposure is
+     *    what already bounds it: the invite's own TTL, [killInviteLocked] on a report, and
+     *    [abandonRedeem] when the owner starts over.
+     */
+    fun approveRedeem(inviteId: String, ticket: String): ApproveResult = synchronized(lock) {
+        val now = clock()
+        val row = readInviteLocked(inviteId) ?: return ApproveResult(ApproveStatus.GONE)
+        if (row.status != "PENDING") return ApproveResult(ApproveStatus.GONE)
+        if (now >= row.expiry) {
+            setInviteStatus(inviteId, "EXPIRED")
+            return ApproveResult(ApproveStatus.GONE)
+        }
+        setInviteStatus(inviteId, "REDEEMING")
+        mintEnrollTicketLocked(inviteId, row, ticket, expiry = row.expiry)
+        return ApproveResult(ApproveStatus.OK, row.relRef, row.scope)
+    }
+
+    /**
+     * The owner takes back an approval nobody finished: REDEEMING -> PENDING, and the invite's
+     * unconsumed tickets go with it. Only from REDEEMING — a CONSUMED invite has a credential
+     * behind it, and un-enrolling is a different act (revoking that credential), not this one.
+     * Returns false when there was nothing to abandon.
+     */
+    fun abandonRedeem(inviteId: String): Boolean = synchronized(lock) {
+        val row = readInviteLocked(inviteId) ?: return false
+        if (row.status != "REDEEMING") return false
+        conn.prepareStatement("DELETE FROM enroll_tickets WHERE invite_id=?").use { ps ->
+            ps.setString(1, inviteId); ps.executeUpdate()
+        }
+        setInviteStatus(inviteId, "PENDING")
+        true
+    }
+
+    data class InviteSummary(val inviteId: String, val status: String, val createdAt: Long, val expiry: Long, val failCount: Int)
+
+    /**
+     * Every invitation of one relationship, newest first, for the owner console's
+     * waiting / in progress / finished / dead rendering. Reads only: an invite past its time is
+     * reported here as EXPIRED without the row being written, so a listing is never a side
+     * effect. `failCount` is how many wrong secrets have been presented against the invite — the
+     * one signal the owner has that somebody is working on their link, shown as a count and never
+     * as a verdict. Owner-authenticated callers only: to an anonymous caller this would be the
+     * invite-status oracle [inviteStatusFor] refuses to be.
+     */
+    fun invitesFor(relRef: String, limit: Int = 50): List<InviteSummary> = synchronized(lock) {
+        val now = clock()
+        conn.prepareStatement(
+            "SELECT invite_id, status, created_at, ttl_expiry, fail_count FROM invites WHERE rel_ref=? " +
+                "ORDER BY created_at DESC, invite_id DESC LIMIT ?",
+        ).use { ps ->
+            ps.setString(1, relRef)
+            ps.setInt(2, limit)
+            ps.executeQuery().use { rs ->
+                val out = mutableListOf<InviteSummary>()
+                while (rs.next()) {
+                    val stored = rs.getString(2)
+                    val expiry = rs.getLong(4)
+                    val status = if (now >= expiry && (stored == "PENDING" || stored == "REDEEMING")) "EXPIRED" else stored
+                    out += InviteSummary(rs.getString(1), status, rs.getLong(3), expiry, rs.getInt(5))
+                }
+                out
+            }
+        }
     }
 
     /**

@@ -380,6 +380,16 @@ SAS comparison is the binding step**. This protocol is a **named deliverable
 (PAIRING.md)**, not hand-waved as "(out-of-band)". See
 [COMPANION_THERAPIST.md](COMPANION_THERAPIST.md) for the enrollment ceremony.
 
+**Status, 2026-09.** The binding step is moving from the read-aloud SAS to a short pairing
+code and a PAKE (PLAN_2026-08-COMPANION-NEXT.md §3.7): the owner's device generates an
+eight-character code, the therapist types it, and the two derive a shared key that a holder
+of the link alone cannot. The invariant that carries over unchanged, and that the web client
+tests by grepping the wire: **the pairing code never leaves the device it was typed on.** It is
+never in a request body, a header, a query string, or a log line, on either side. A wrong code
+is not an error and never burns an invitation; only a human report does (§3.9.1 of the plan).
+The SAS words remain as a fingerprint the connections screen can show; they stop being a
+blocking step once the code-based ceremony has a screen.
+
 ### 5.7 Recovery & revocation
 
 - **No server-side escrow.** Single lost device → optional self-held,

@@ -82,12 +82,11 @@ class LockedTotpAuditTest {
         auth: AuthStore,
         credentialId: String,
     ) {
+        // A ticket, through the store: the only route that mints one is the owner's pairing
+        // approve, and this test is about what happens to a credential long after enrolment.
         val minted = auth.mintInvite(relRef, listOf("read.share"), 86_400L)
-        val redeem = client.post("/v1/invite/${minted.inviteId}/redeem") {
-            contentType(ContentType.Application.Json); setBody("""{"secret":"${minted.secret}"}""")
-        }
-        assertEquals(HttpStatusCode.OK, redeem.status)
-        val ticket = Regex("\"enrollTicket\":\"([^\"]+)\"").find(redeem.bodyAsText())!!.groupValues[1]
+        val ticket = Secrets.b64url(ByteArray(32) { (it + 7).toByte() })
+        assertEquals(AuthStore.ApproveStatus.OK, auth.approveRedeem(minted.inviteId, ticket).status)
         val enroll = client.post("/v1/totp/enroll") {
             contentType(ContentType.Application.Json)
             setBody("""{"enrollTicket":"$ticket","credentialId":"$credentialId","secret":"${Secrets.b64url(secretBytes)}"}""")

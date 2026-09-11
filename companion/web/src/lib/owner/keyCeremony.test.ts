@@ -40,10 +40,12 @@ import {
   TherapistKeyError,
   type TherapistKeyRecord,
 } from './therapistKeys'
-import { beginAcceptance, completeAcceptance, type AcceptancePorts, type Enrolment } from '../therapist/inviteAccept'
+import { completeAcceptance, type AcceptancePorts, type Enrolment } from '../therapist/inviteAccept'
+import { answerPairing, enrolAfterApproval, type PairingAcceptancePorts } from '../therapist/pairingAccept'
+import { newPairingCode } from '../pairing/pairingCode'
 import { initAssignmentCrypto, newBoxKeyPair, newSignKeyPair } from '../assignments/crypto'
 import { initShareCrypto, PinStore } from '../share/pairing'
-import type { KeyRegistration, LoginResult, RedeemResult, SessionInfo } from '../therapist/session'
+import type { KeyRegistration, LoginResult, SessionInfo } from '../therapist/session'
 import type { TherapistKeys, WrappedKeyBlob } from '../therapist/keyStore'
 
 const RELREF = 'rel-ref-opaque-0001'
@@ -61,11 +63,10 @@ function memoryStorage() {
  * which costs a second per derivation and has nothing to do with what this file asserts.
  */
 function therapistPorts(published: { boxPubB64: string; signPubB64: string }[]): AcceptancePorts {
-  // The wrap has to round-trip, because `beginAcceptance` proves it does before it will go on —
+  // The wrap has to round-trip, because the acceptance proves it does before it will go on —
   // deliberately, and that proof is the reason a stub cannot simply hand back a fresh keypair.
   const vault = new Map<string, TherapistKeys>()
   return {
-    redeem: async (): Promise<RedeemResult> => ({ ok: true, relRef: RELREF, scope: [], enrollTicket: 'ticket' }),
     enrol: async () => 'enrolled',
     login: async (): Promise<LoginResult> => ({
       ok: true,
@@ -113,7 +114,26 @@ async function ceremony(substitute: (posted: { boxPubB64: string; signPubB64: st
 } = (p) => p): Promise<{ enrolment: Enrolment; record: TherapistKeyRecord }> {
   const published: { boxPubB64: string; signPubB64: string }[] = []
   const ports = therapistPorts(published)
-  const enrolment = await beginAcceptance(ports, { inviteId: 'inv', secret: 's', passphrase: 'seven brass lanterns' })
+  // Through the ceremony that exists: the relay is stubbed (its own tests own the wire), and what
+  // this file is about is the two fingerprints that come out the far end.
+  const pairing: PairingAcceptancePorts = {
+    answer: async (args) => {
+      await args.makeOffer(RELREF)
+      return { exchangeId: 'ex-1', relRef: RELREF }
+    },
+    status: async () => ({ state: 'approved', scope: [] }),
+    accept: ports,
+    runStorage: null,
+    wait: async () => {},
+  }
+  const run = await answerPairing(pairing, {
+    inviteId: 'inv',
+    secret: 's',
+    typedCode: (await newPairingCode()).display,
+    passphrase: 'seven brass lanterns',
+    displayName: 'Dr Example',
+  })
+  const enrolment = await enrolAfterApproval(pairing, run, [])
   await completeAcceptance(ports, enrolment, '123456')
   expect(published).toHaveLength(1)
   const body = { ...substitute(published[0]!), registeredAt: 1_700_000_000_000 }

@@ -31,7 +31,6 @@ import {
   KEY_CHECK_COPY,
   MIN_PASSPHRASE_CHARS,
   base32,
-  beginAcceptance,
   checkPassphrase,
   completeAcceptance,
   findKeyRecord,
@@ -41,14 +40,16 @@ import {
   resumeAcceptance,
   unfinishedKeyRecords,
   type AcceptancePorts,
+  type Enrolment,
   type KeyRecordStorage,
 } from './inviteAccept'
+import { answerPairing, enrolAfterApproval, type PairingAcceptancePorts } from './pairingAccept'
+import { newPairingCode, type PairingCode } from '../pairing/pairingCode'
 import { KeyUnwrapError, unwrap, wrap, type TherapistKeys, type WrappedKeyBlob } from './keyStore'
 import { fingerprint, initAssignmentCrypto, newBoxKeyPair, newSignKeyPair } from '../assignments/crypto'
-import { PortalError, type LoginResult, type RedeemResult } from './session'
+import { PortalError, type LoginResult } from './session'
 
 const RELREF = 'rel-ref-opaque-0001'
-const TICKET = 'enrol-ticket-single-use'
 const PASSPHRASE = 'seven brass lanterns humming'
 
 /* ── A storage that behaves like the browser's, and one that refuses to ──────────────────── */
@@ -114,7 +115,6 @@ function harness(over: Partial<AcceptancePorts> = {}, seed: string | null = null
   let counter = 0
 
   const base: AcceptancePorts = {
-    redeem: async (): Promise<RedeemResult> => ({ ok: true, relRef: RELREF, scope: ['read.share'], enrollTicket: TICKET }),
     enrol: async (ticket, credentialId, secretB64) => {
       enrolments.push({ ticket, credentialId, secretB64 })
       return 'enrolled'
@@ -152,7 +152,7 @@ function harness(over: Partial<AcceptancePorts> = {}, seed: string | null = null
   const merged: AcceptancePorts = { ...base, ...over }
   const ports: AcceptancePorts = { ...merged }
   const recorder = ports as unknown as Record<string, (...args: unknown[]) => unknown>
-  for (const name of ['redeem', 'enrol', 'login', 'register', 'logout'] as const) {
+  for (const name of ['enrol', 'login', 'register', 'logout'] as const) {
     const inner = merged[name] as (...args: unknown[]) => unknown
     recorder[name] = (...args: unknown[]) => {
       calls.push(name)
@@ -163,32 +163,73 @@ function harness(over: Partial<AcceptancePorts> = {}, seed: string | null = null
   return { ports, calls, storage, registered, enrolments }
 }
 
+/** One real pairing code for the whole file: the ceremony refuses anything that is not canonical. */
+let PAIRING_CODE: PairingCode
+
 beforeAll(async () => {
   // fingerprint() and the keypair generators are sodium-backed; the stubs above are not.
   await initAssignmentCrypto()
+  PAIRING_CODE = await newPairingCode()
 })
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
+/**
+ * What `beginAcceptance` used to be, over the ceremony that replaced it.
+ *
+ * The redeem route is gone (plan §3.7, 2026-09-04), so the first half of the ceremony is now
+ * `answerPairing` — the same generate, wrap, prove and store steps in the same order — followed by
+ * `enrolAfterApproval` once the owner has approved. Everything this file tests about those steps is
+ * still true and still worth testing, so the cases below drive them through this, which wires the
+ * pairing ports to the SAME harness they always used. The relay itself is stubbed: what a fetch and
+ * a respond do on the wire is pairing/relay.test.ts's subject, not this file's.
+ */
+async function acceptViaPairing(
+  ports: AcceptancePorts,
+  input: { passphrase: string; host?: string; typedCode?: string; displayName?: string },
+): Promise<Enrolment> {
+  const pairing: PairingAcceptancePorts = {
+    answer: async (args) => {
+      await args.makeOffer(RELREF)
+      return { exchangeId: 'ex-1', relRef: RELREF }
+    },
+    status: async () => ({ state: 'approved', scope: ['read.share'] }),
+    accept: ports,
+    runStorage: null,
+    wait: async () => {},
+  }
+  const run = await answerPairing(pairing, {
+    inviteId: 'inv-1',
+    secret: 's3cret',
+    typedCode: input.typedCode ?? PAIRING_CODE.display,
+    passphrase: input.passphrase,
+    displayName: input.displayName ?? 'Dr Example',
+    host: input.host,
+  })
+  return enrolAfterApproval(pairing, run, ['read.share'], input.host)
+}
+
+
+
 describe('the ceremony, in order', () => {
-  it('redeems, enrols, signs in, registers the public keys, and then drops the session', async () => {
+  it('enrols, signs in, registers the public keys, and then drops the session', async () => {
     const h = harness()
-    const enrolment = await beginAcceptance(h.ports, { inviteId: 'inv-1', secret: 's3cret', passphrase: PASSPHRASE })
+    const enrolment = await acceptViaPairing(h.ports, { passphrase: PASSPHRASE })
     const done = await completeAcceptance(h.ports, enrolment, '123456')
 
     // THE ordering claim, as a sequence rather than as four separate "was it called" checks.
-    expect(h.calls).toEqual(['redeem', 'enrol', 'login', 'register', 'logout'])
+    expect(h.calls).toEqual(['enrol', 'login', 'register', 'logout'])
     expect(done.registration).toBe('registered')
 
-    // The relRef in the register call comes from the redeem, not from the login (verify does not
-    // echo one) and not from anywhere a caller chose. A wrong value here is a 403, by design.
+    // The relRef in the register call comes from the pairing fetch, not from the login (verify
+    // does not echo one) and not from anywhere a caller chose. A wrong value here is a 403.
     expect(h.registered).toEqual([
       { relRef: RELREF, boxPubB64: enrolment.boxPubB64, signPubB64: enrolment.signPubB64 },
     ])
 
-    // The enrolment presented the single-use ticket from the redeem, and a secret long enough for
-    // the server to accept (it rejects anything under 16 bytes decoded).
-    expect(h.enrolments[0].ticket).toBe(TICKET)
+    // The enrolment presented the ticket THIS BROWSER chose and sealed to the owner, and a secret
+    // long enough for the server to accept (it rejects anything under 16 bytes decoded).
+    expect(Buffer.from(h.enrolments[0].ticket, 'base64url')).toHaveLength(32)
     expect(h.enrolments[0].credentialId).toBe(enrolment.credentialId)
 
     // The authenticator secret is shown in base32 and sent in base64url — two spellings of the one
@@ -207,36 +248,18 @@ describe('the ceremony, in order', () => {
     // The acceptance page cannot open the portal — it holds none of the owner's keys — so a live
     // cookie left behind on a shared clinic machine would be a session nobody is using.
     const h = harness()
-    const enrolment = await beginAcceptance(h.ports, { inviteId: 'inv-1', secret: 's', passphrase: PASSPHRASE })
+    const enrolment = await acceptViaPairing(h.ports, { passphrase: PASSPHRASE })
     await completeAcceptance(h.ports, enrolment, '123456')
     expect(h.calls[h.calls.length - 1]).toBe('logout')
   })
 })
 
-describe('a redeem that fails costs nothing', () => {
-  it('stops at the redeem, stores nothing, and enrols nothing', async () => {
-    const h = harness({
-      redeem: async () => {
-        return { ok: false, error: 'This invite is no longer available.' }
-      },
-    })
-    await expect(
-      beginAcceptance(h.ports, { inviteId: 'inv-1', secret: 'wrong', passphrase: PASSPHRASE }),
-    ).rejects.toMatchObject({ step: 'redeem' })
-
-    // The redeem was attempted and refused; nothing after it ran.
-    expect(h.calls).toEqual(['redeem'])
-    expect(h.storage.raw()).toBeNull()
-    expect(h.enrolments).toEqual([])
-  })
-
-  it('surfaces the wording the client chose, including the rate limit a clinician has to wait out', async () => {
-    const h = harness({ redeem: async () => ({ ok: false, error: 'Too many attempts — wait and try again.' }) })
-    await expect(
-      beginAcceptance(h.ports, { inviteId: 'inv-1', secret: 'x', passphrase: PASSPHRASE }),
-    ).rejects.toThrow(/Too many attempts/)
-  })
-})
+/*
+ * "A redeem that fails costs nothing" used to live here. There is no redeem: the invitation secret
+ * now only opens a conversation, and what a refused one does is pairing/relay.test.ts's and the
+ * server's PairingRelayRoutesTest's subject. therapist/pairingAccept.test.ts carries the client
+ * half — a run that cannot be answered leaves no record behind, so a new code can be tried.
+ */
 
 describe('a passphrase that does not round-trip stops the ceremony', () => {
   it('refuses when the wrapped blob will not reopen', async () => {
@@ -248,10 +271,10 @@ describe('a passphrase that does not round-trip stops the ceremony', () => {
       },
     })
     await expect(
-      beginAcceptance(h.ports, { inviteId: 'inv-1', secret: 's', passphrase: PASSPHRASE }),
+      acceptViaPairing(h.ports, { passphrase: PASSPHRASE }),
     ).rejects.toMatchObject({ step: 'wrap' })
 
-    expect(h.calls).toEqual(['redeem'])
+    expect(h.calls).toEqual([])
     expect(h.storage.raw()).toBeNull()
   })
 
@@ -262,9 +285,9 @@ describe('a passphrase that does not round-trip stops the ceremony', () => {
       unwrapKeys: async () => ({ box: newBoxKeyPair(), sign: newSignKeyPair() }),
     })
     await expect(
-      beginAcceptance(h.ports, { inviteId: 'inv-1', secret: 's', passphrase: PASSPHRASE }),
+      acceptViaPairing(h.ports, { passphrase: PASSPHRASE }),
     ).rejects.toMatchObject({ step: 'wrap' })
-    expect(h.calls).toEqual(['redeem'])
+    expect(h.calls).toEqual([])
     expect(h.storage.raw()).toBeNull()
   })
 
@@ -272,7 +295,7 @@ describe('a passphrase that does not round-trip stops the ceremony', () => {
     // The one case that pays for the real derivations. Without it the three stubbed cases above
     // would be a test of the stub.
     const h = harness({ wrapKeys: (k, p) => wrap(k, p), unwrapKeys: (b, p) => unwrap(b, p) })
-    const enrolment = await beginAcceptance(h.ports, { inviteId: 'inv-1', secret: 's', passphrase: PASSPHRASE })
+    const enrolment = await acceptViaPairing(h.ports, { passphrase: PASSPHRASE })
 
     const record = findKeyRecord(RELREF, h.storage)
     expect(record).not.toBeNull()
@@ -290,10 +313,10 @@ describe('keys are registered only after enrolment succeeds', () => {
     // but whose credential never enrolled is one the owner can seal to and the therapist cannot open.
     const h = harness({ enrol: async () => 'refused' })
     await expect(
-      beginAcceptance(h.ports, { inviteId: 'inv-1', secret: 's', passphrase: PASSPHRASE }),
+      acceptViaPairing(h.ports, { passphrase: PASSPHRASE }),
     ).rejects.toMatchObject({ step: 'enrol' })
 
-    expect(h.calls).toEqual(['redeem', 'enrol'])
+    expect(h.calls).toEqual(['enrol'])
     expect(h.calls).not.toContain('register')
     expect(h.registered).toEqual([])
   })
@@ -305,7 +328,7 @@ describe('keys are registered only after enrolment succeeds', () => {
     // is the server saying no in its own words, which is the ONLY thing this rollback may run on.
     const h = harness({ enrol: async () => 'refused' })
     await expect(
-      beginAcceptance(h.ports, { inviteId: 'inv-1', secret: 's', passphrase: PASSPHRASE }),
+      acceptViaPairing(h.ports, { passphrase: PASSPHRASE }),
     ).rejects.toMatchObject({ step: 'enrol' })
     expect(loadKeyRecords(h.storage)).toEqual([])
   })
@@ -315,7 +338,7 @@ describe('keys are registered only after enrolment succeeds', () => {
    An enrolment whose ANSWER went missing.
 
    THE BUG THIS BLOCK EXISTS FOR, in full, because every assertion here is shaped by it. `enrol`
-   used to answer a boolean and `beginAcceptance` used to roll the stored record back on `false` —
+   used to answer a boolean and the acceptance used to roll the stored record back on `false` —
    which collapsed "the server refused" and "I never heard back" into one branch. The second of
    those is not a refusal. `POST /v1/totp/enroll` inserts the credential, spends the ticket and
    drives the invite to CONSUMED in one transaction; no route un-enrols one, and a second attempt
@@ -341,7 +364,7 @@ describe('an enrolment with no answer is not an enrolment that was refused', () 
   ] as const) {
     it(`keeps the clinician's keys after ${name}`, async () => {
       const h = harness(over)
-      const enrolment = await beginAcceptance(h.ports, { inviteId: 'inv-1', secret: 's', passphrase: PASSPHRASE })
+      const enrolment = await acceptViaPairing(h.ports, { passphrase: PASSPHRASE })
 
       // THE assertion. The wrapped blob is the only copy of these secret keys that survives the
       // tab, and the server may already hold the credential they belong to.
@@ -367,9 +390,9 @@ describe('an enrolment with no answer is not an enrolment that was refused', () 
     // is unsure about cannot put a public key on the server ahead of a real one — the server
     // decides, and it decides in the right order.
     const h = harness({ ...lost, login: async () => ({ ok: false, error: 'Code not accepted.' }) })
-    const enrolment = await beginAcceptance(h.ports, { inviteId: 'inv-1', secret: 's', passphrase: PASSPHRASE })
+    const enrolment = await acceptViaPairing(h.ports, { passphrase: PASSPHRASE })
     await expect(completeAcceptance(h.ports, enrolment, '000000')).rejects.toMatchObject({ step: 'login' })
-    expect(h.calls).toEqual(['redeem', 'enrol', 'login'])
+    expect(h.calls).toEqual(['enrol', 'login'])
     expect(h.registered).toEqual([])
   })
 
@@ -377,10 +400,10 @@ describe('an enrolment with no answer is not an enrolment that was refused', () 
     // The common case behind an unknown answer: it worked, and the proof is that a code from the
     // authenticator is accepted. Nothing about the rest of the ceremony changes.
     const h = harness(lost)
-    const enrolment = await beginAcceptance(h.ports, { inviteId: 'inv-1', secret: 's', passphrase: PASSPHRASE })
+    const enrolment = await acceptViaPairing(h.ports, { passphrase: PASSPHRASE })
     const done = await completeAcceptance(h.ports, enrolment, '123456')
     expect(done.registration).toBe('registered')
-    expect(h.calls).toEqual(['redeem', 'enrol', 'login', 'register', 'logout'])
+    expect(h.calls).toEqual(['enrol', 'login', 'register', 'logout'])
   })
 
   it('the server saying no in its own words is still a refusal, and still rolls back', async () => {
@@ -389,7 +412,7 @@ describe('an enrolment with no answer is not an enrolment that was refused', () 
     // nothing; on those the record must go, or it would block the retry a fresh invite allows.
     const h = harness({ enrol: async () => 'refused' })
     await expect(
-      beginAcceptance(h.ports, { inviteId: 'inv-1', secret: 's', passphrase: PASSPHRASE }),
+      acceptViaPairing(h.ports, { passphrase: PASSPHRASE }),
     ).rejects.toMatchObject({ step: 'enrol' })
     expect(loadKeyRecords(h.storage)).toEqual([])
   })
@@ -398,15 +421,15 @@ describe('an enrolment with no answer is not an enrolment that was refused', () 
 describe('this browser never replaces keys it already holds', () => {
   it('refuses a second acceptance for the same relationship, and leaves the first record intact', async () => {
     const first = harness()
-    const enrolment = await beginAcceptance(first.ports, { inviteId: 'inv-1', secret: 's', passphrase: PASSPHRASE })
+    const enrolment = await acceptViaPairing(first.ports, { passphrase: PASSPHRASE })
     const stored = first.storage.raw()
 
     const second = harness({}, stored)
     await expect(
-      beginAcceptance(second.ports, { inviteId: 'inv-2', secret: 's2', passphrase: 'a different passphrase' }),
+      acceptViaPairing(second.ports, { passphrase: 'a different passphrase' }),
     ).rejects.toMatchObject({ step: 'record' })
 
-    expect(second.calls).toEqual(['redeem'])
+    expect(second.calls).toEqual([])
     expect(second.storage.raw()).toBe(stored)
     expect(findKeyRecord(RELREF, second.storage)?.credentialId).toBe(enrolment.credentialId)
   })
@@ -416,17 +439,17 @@ describe('this browser never replaces keys it already holds', () => {
     // keys" and "this browser holds no keys" are different answers, and only one of them is safe.
     const h = harness({}, '{ not json at all')
     await expect(
-      beginAcceptance(h.ports, { inviteId: 'inv-1', secret: 's', passphrase: PASSPHRASE }),
+      acceptViaPairing(h.ports, { passphrase: PASSPHRASE }),
     ).rejects.toBeInstanceOf(AcceptError)
-    expect(h.calls).toEqual(['redeem'])
+    expect(h.calls).toEqual([])
   })
 
   it('refuses when the browser will not store at all', async () => {
     const h = harness({ storage: null })
     await expect(
-      beginAcceptance(h.ports, { inviteId: 'inv-1', secret: 's', passphrase: PASSPHRASE }),
+      acceptViaPairing(h.ports, { passphrase: PASSPHRASE }),
     ).rejects.toMatchObject({ step: 'record' })
-    expect(h.calls).toEqual(['redeem'])
+    expect(h.calls).toEqual([])
   })
 
   it('ignores a record from a format it does not know rather than trusting it', async () => {
@@ -440,14 +463,14 @@ describe('the server refusing to overwrite is an answer, not a failure', () => {
     // 409 means keys are already on file for this relationship. The client cannot tell "me, on
     // another device" from "somebody else" — so it hands the fact back and lets the screen say so.
     const h = harness({ register: async () => 'already-registered' })
-    const enrolment = await beginAcceptance(h.ports, { inviteId: 'inv-1', secret: 's', passphrase: PASSPHRASE })
+    const enrolment = await acceptViaPairing(h.ports, { passphrase: PASSPHRASE })
     const done = await completeAcceptance(h.ports, enrolment, '123456')
     expect(done.registration).toBe('already-registered')
   })
 
   it('a rejected code stops before the keys are offered', async () => {
     const h = harness({ login: async () => ({ ok: false, error: 'Code not accepted.' }) })
-    const enrolment = await beginAcceptance(h.ports, { inviteId: 'inv-1', secret: 's', passphrase: PASSPHRASE })
+    const enrolment = await acceptViaPairing(h.ports, { passphrase: PASSPHRASE })
     await expect(completeAcceptance(h.ports, enrolment, '000000')).rejects.toMatchObject({ step: 'login' })
     expect(h.registered).toEqual([])
   })
@@ -505,16 +528,34 @@ describe('the fingerprint is read out, not compared on screen', () => {
     expect(groupForReading('MZXW6YTBOI').join('')).toBe('MZXW6YTBOI')
   })
 
-  it('the copy asks for a channel the server does not draw', () => {
-    // THE security-bearing sentence in this flow. Comparing two screens catches a typo; both
-    // screens are drawn by the same server, so a substituted key would be drawn in both places and
-    // the comparison would agree about the attacker's key. Only a voice is outside that.
+  it('the copy names the channel the server does not draw — which is now the code, not a voice', () => {
+    /*
+     * THE security-bearing sentence in this flow, and it moved. Comparing two screens catches a
+     * typo; both screens are drawn by the same server, so a substituted key would be drawn in both
+     * places and the comparison would agree about the attacker's key. Something outside the
+     * server's reach has to do the confirming. It used to be a voice reading fingerprints. It is
+     * now the short pairing code: it never reaches the server (pairing/relay.ts greps the wire for
+     * it), so only the person who spoke it can open what this browser sealed under it, and these
+     * keys reached the owner inside exactly that envelope.
+     *
+     * So the copy must NOT instruct a phone call any more — the ceremony no longer needs one and
+     * asking for it would train people to perform a check that is not load-bearing — and it must
+     * still say why these fingerprints can be trusted at all.
+     */
     const all = Object.values(KEY_CHECK_COPY).join(' ')
-    expect(all).toMatch(/read (it|this|them|these|both of these) (out|aloud)/i)
-    expect(KEY_CHECK_COPY.why).toMatch(/aloud/i)
+    // It must not INSTRUCT one. The negation ("you do not need to read these out") contains the
+    // same words, so the check is for the imperative rather than for the substring.
+    expect(all).not.toMatch(/(^|[.!?]\s+)Read (it|this|them|these|both)/i)
+    expect(all).not.toMatch(/\b(must|should|please) read (it|this|them|these|both)/i)
+    expect(KEY_CHECK_COPY.why).toMatch(/do not need to read/i)
+    expect(KEY_CHECK_COPY.why).toMatch(/code/i)
+    expect(KEY_CHECK_COPY.why).toMatch(/never reached the server/i)
+    // Still not a screen-to-screen comparison dressed as a check.
     expect(all).not.toMatch(/matches on screen|check it matches|make sure (it|they) match/i)
     // And it says what to do when it does not match, which is the half that usually goes missing.
     expect(KEY_CHECK_COPY.mismatch).toMatch(/stop/i)
+    // Control: the detector still fires on the instruction it used to match.
+    expect('Read them aloud rather than sending them.').toMatch(/(^|[.!?]\s+)Read (it|this|them|these|both)/i)
   })
 
   it('and asks for both keys, because the console at the other end will not pin on one', () => {
@@ -526,14 +567,14 @@ describe('the fingerprint is read out, not compared on screen', () => {
     expect(all).toContain('encryption key')
     expect(all).toContain('signing key')
     expect(KEY_CHECK_COPY.both).toMatch(/both/i)
-    expect(KEY_CHECK_COPY.both).toMatch(/half a check is not a check/i)
+    expect(KEY_CHECK_COPY.both).toMatch(/half a record/i)
   })
 })
 
 describe('an enrolment carries the fingerprint of each key it made', () => {
   it('both, and each is the fingerprint of its own public key', async () => {
     const h = harness()
-    const e = await beginAcceptance(h.ports, { inviteId: 'inv-1', secret: 's', passphrase: PASSPHRASE })
+    const e = await acceptViaPairing(h.ports, { passphrase: PASSPHRASE })
 
     // Computed from the bytes rather than copied from anywhere, and computed for BOTH keys. The
     // version of this interface that carried only `signFingerprint` made the owner's confirmation
@@ -580,7 +621,7 @@ describe('a browser that died before the last step can still finish', () => {
       }
       return recorded(session, boxPubB64, signPubB64)
     }
-    const enrolment = await beginAcceptance(h.ports, { inviteId: 'inv-1', secret: 's', passphrase: PASSPHRASE })
+    const enrolment = await acceptViaPairing(h.ports, { passphrase: PASSPHRASE })
     await expect(completeAcceptance(h.ports, enrolment, '123456')).rejects.toMatchObject({ step: 'register' })
     return { h, enrolment }
   }
@@ -675,7 +716,7 @@ describe('a browser that died before the last step can still finish', () => {
         throw new PortalError('key registration failed', 502)
       },
     })
-    const enrolment = await beginAcceptance(h.ports, { inviteId: 'inv-1', secret: 's', passphrase: PASSPHRASE })
+    const enrolment = await acceptViaPairing(h.ports, { passphrase: PASSPHRASE })
     await expect(completeAcceptance(h.ports, enrolment, '123456')).rejects.toMatchObject({ step: 'register' })
 
     h.ports.register = async (session, boxPubB64, signPubB64) => {
@@ -692,7 +733,7 @@ describe('a browser that died before the last step can still finish', () => {
 describe('nothing durable holds a secret', () => {
   it('the stored record is the wrapped blob and two opaque identifiers', async () => {
     const h = harness()
-    await beginAcceptance(h.ports, { inviteId: 'inv-1', secret: 'the-invite-secret', passphrase: PASSPHRASE })
+    await acceptViaPairing(h.ports, { passphrase: PASSPHRASE })
     const raw = h.storage.raw()!
     expect(raw).not.toContain(PASSPHRASE)
     expect(raw).not.toContain('the-invite-secret')

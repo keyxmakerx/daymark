@@ -20,6 +20,7 @@ import io.ktor.server.testing.testApplication
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -73,7 +74,7 @@ class TherapistAuthTest {
     }
 
     @Test
-    fun `redeem is single-use and honours capped backoff without permanent burn`() = testApplication {
+    fun `the invite secret honours capped backoff without permanent burn, on the surface that still takes it`() = testApplication {
         var now = 1_000_000L
         val dir = tmpDir()
         val cfg = config(dir)
@@ -83,30 +84,67 @@ class TherapistAuthTest {
 
         // Wrong secret a few times -> 401, then locked -> 429; real therapist still succeeds later.
         repeat(cfg.totpLockoutFails) {
-            val r = client.post("/v1/invite/${minted.inviteId}/redeem") {
+            val r = client.post("/v1/invite/${minted.inviteId}/pairing/fetch") {
                 contentType(ContentType.Application.Json); setBody("""{"secret":"wrong"}""")
             }
             assertEquals(HttpStatusCode.Unauthorized, r.status)
         }
         // Now locked.
-        val locked = client.post("/v1/invite/${minted.inviteId}/redeem") {
+        val locked = client.post("/v1/invite/${minted.inviteId}/pairing/fetch") {
             contentType(ContentType.Application.Json); setBody("""{"secret":"${minted.secret}"}""")
         }
         assertEquals(HttpStatusCode.TooManyRequests, locked.status)
 
-        // Advance the clock past the backoff window; the real therapist can still redeem.
+        /*
+         * Advance past the backoff window; the real therapist is let through again. "Through" now
+         * means the SECRET was accepted and there is simply no pairing run waiting for them — 410,
+         * the shelf-is-empty answer — where a wrong secret would still be 401. That difference is
+         * the whole assertion: the invite was never burned by the guesses.
+         */
         now += 10 * 60 * 1000
-        val ok = client.post("/v1/invite/${minted.inviteId}/redeem") {
+        val ok = client.post("/v1/invite/${minted.inviteId}/pairing/fetch") {
             contentType(ContentType.Application.Json); setBody("""{"secret":"${minted.secret}"}""")
         }
-        assertEquals(HttpStatusCode.OK, ok.status)
-        assertTrue(ok.bodyAsText().contains(relRef))
+        assertEquals(HttpStatusCode.Gone, ok.status)
+        val stillWrong = client.post("/v1/invite/${minted.inviteId}/pairing/fetch") {
+            contentType(ContentType.Application.Json); setBody("""{"secret":"still-wrong"}""")
+        }
+        assertEquals(HttpStatusCode.Unauthorized, stillWrong.status)
 
-        // Second redemption of a single-use invite -> 410.
-        val again = client.post("/v1/invite/${minted.inviteId}/redeem") {
+        // And the invite is untouched by any of it: still PENDING, still awaiting a pairing.
+        assertEquals("PENDING", auth.inviteStatusFor(minted.inviteId))
+    }
+
+    @Test
+    fun `the redeem route is gone, and no route in the package mints a ticket from the secret`() = testApplication {
+        /*
+         * THE CUT-OVER, asserted rather than described. `POST /v1/invite/{id}/redeem` used to hand
+         * an enrolment ticket to whoever proved the invitation secret — which the emailed link
+         * carries — so the pairing code secured nothing. Two checks, because either alone can pass
+         * while the hole is open: the path answers as an unknown route, AND no source file under
+         * routes/ mentions the store function that mints, so a future handler cannot quietly
+         * reintroduce it.
+         */
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val (auth, rel) = stores(dir, cfg)
+        application { module(cfg, null, null, rel, auth) }
+        val minted = auth.mintInvite(relRef, listOf("read.share"), 3600L)
+
+        val gone = client.post("/v1/invite/${minted.inviteId}/redeem") {
             contentType(ContentType.Application.Json); setBody("""{"secret":"${minted.secret}"}""")
         }
-        assertEquals(HttpStatusCode.Gone, again.status)
+        assertEquals(HttpStatusCode.NotFound, gone.status)
+        assertEquals(0, auth.enrollTicketCountFor(minted.inviteId))
+
+        val routes = java.io.File("src/main/kotlin/com/daymark/companion/routes").listFiles()!!.filter { it.name.endsWith(".kt") }
+        assertTrue(routes.size > 5, "there should be route files to search")
+        for (f in routes) {
+            val body = f.readText().replace(Regex("(?s)/\\*.*?\\*/"), "").replace(Regex("//[^\n]*"), "")
+            assertFalse(body.contains("redeemInvite"), "\${f.name} mints a ticket from the invite secret")
+        }
+        // Control: the search sees the name when it is present.
+        assertTrue("authStore.redeemInvite(x)".contains("redeemInvite"))
     }
 
     @Test
@@ -118,20 +156,26 @@ class TherapistAuthTest {
         application { module(cfg, null, null, rel, auth) }
         val minted = auth.mintInvite(relRef, listOf("read.share"), 10L)
         now += 20_000 // past the 10s TTL
-        val res = client.post("/v1/invite/${minted.inviteId}/redeem") {
+        val res = client.post("/v1/invite/${minted.inviteId}/pairing/fetch") {
             contentType(ContentType.Application.Json); setBody("""{"secret":"${minted.secret}"}""")
         }
         assertEquals(HttpStatusCode.Gone, res.status)
     }
 
-    /** Redeem a fresh invite for [relRef] and return its single-use enrollment ticket. */
-    private suspend fun redeemForTicket(client: io.ktor.client.HttpClient, auth: AuthStore, relRef: String): String {
+    /**
+     * A fresh invite for [relRef], approved, and the enrolment ticket that approval made live.
+     *
+     * Through the store rather than over the wire because the ONLY route that mints a ticket is the
+     * owner's pairing approve, and that needs a whole CPace run to exist first
+     * (PairingRelayRoutesTest drives it end to end). These tests are about what happens AFTER a
+     * ticket exists, so they take the short way to one — which is also the proof that the ticket is
+     * a therapist-chosen value the owner forwards, not something the server hands out for a secret.
+     */
+    private fun approvedTicket(auth: AuthStore, relRef: String): String {
         val minted = auth.mintInvite(relRef, listOf("read.share"), 3600L)
-        val res = client.post("/v1/invite/${minted.inviteId}/redeem") {
-            contentType(ContentType.Application.Json); setBody("""{"secret":"${minted.secret}"}""")
-        }
-        assertEquals(HttpStatusCode.OK, res.status)
-        return Regex("\"enrollTicket\":\"([^\"]+)\"").find(res.bodyAsText())!!.groupValues[1]
+        val ticket = Secrets.b64url(ByteArray(32) { (it + 1).toByte() })
+        assertEquals(AuthStore.ApproveStatus.OK, auth.approveRedeem(minted.inviteId, ticket).status)
+        return ticket
     }
 
     @Test
@@ -144,7 +188,7 @@ class TherapistAuthTest {
         val secretBytes = ByteArray(20) { (it + 3).toByte() }
         val secretB64 = Secrets.b64url(secretBytes)
 
-        val ticket = redeemForTicket(client, auth, relRef)
+        val ticket = approvedTicket(auth, relRef)
         val enroll = client.post("/v1/totp/enroll") {
             contentType(ContentType.Application.Json)
             setBody("""{"enrollTicket":"$ticket","credentialId":"$credentialId","secret":"$secretB64"}""")
@@ -203,7 +247,7 @@ class TherapistAuthTest {
         val secretB64 = Secrets.b64url(ByteArray(20) { (it + 3).toByte() })
 
         // First therapist enrolls with a valid ticket -> 204.
-        val ticket1 = redeemForTicket(client, auth, relRef)
+        val ticket1 = approvedTicket(auth, relRef)
         val first = client.post("/v1/totp/enroll") {
             contentType(ContentType.Application.Json)
             setBody("""{"enrollTicket":"$ticket1","credentialId":"legit-cred","secret":"$secretB64"}""")
@@ -219,7 +263,7 @@ class TherapistAuthTest {
 
         // Even with a fresh ticket for the SAME relRef, a credential already exists -> 409, and the
         // live credential is NOT overwritten (attacker cannot take over the auth factor).
-        val ticket2 = redeemForTicket(client, auth, relRef)
+        val ticket2 = approvedTicket(auth, relRef)
         val overwrite = client.post("/v1/totp/enroll") {
             contentType(ContentType.Application.Json)
             setBody("""{"enrollTicket":"$ticket2","credentialId":"legit-cred","secret":"${Secrets.b64url(ByteArray(20) { 9 })}"}""")
@@ -321,7 +365,7 @@ class TherapistAuthTest {
             setBody("""{"email":"owner@example.org","events":["THERAPIST_ENROLLED"]}""")
         }
 
-        val ticket = redeemForTicket(client, auth, relRef)
+        val ticket = approvedTicket(auth, relRef)
         val secretB64 = Secrets.b64url(ByteArray(20) { (it + 3).toByte() })
         val enroll = client.post("/v1/totp/enroll") {
             contentType(ContentType.Application.Json)

@@ -80,7 +80,7 @@ class LockedInviteAuditTest {
         // verification, so each is on the record as a guess — and the third also writes the one
         // LOCKOUT row, because it is the request on which the lockout came into force.
         repeat(cfg.totpLockoutFails) { i ->
-            val r = client.post("/v1/invite/${minted.inviteId}/redeem") {
+            val r = client.post("/v1/invite/${minted.inviteId}/pairing/fetch") {
                 contentType(ContentType.Application.Json); setBody("""{"secret":"wrong-$i"}""")
             }
             assertEquals(HttpStatusCode.Unauthorized, r.status)
@@ -92,7 +92,7 @@ class LockedInviteAuditTest {
         // and not one of them may reach the owner's chain — this is the free-of-charge path the
         // finding is about.
         repeat(8) {
-            val r = client.post("/v1/invite/${minted.inviteId}/redeem") {
+            val r = client.post("/v1/invite/${minted.inviteId}/pairing/fetch") {
                 contentType(ContentType.Application.Json); setBody("""{"secret":"whatever"}""")
             }
             assertEquals(HttpStatusCode.TooManyRequests, r.status)
@@ -104,7 +104,7 @@ class LockedInviteAuditTest {
         // lockout, and still nothing lands in the chain.
         now += PAIR_WINDOW_MS + 1_000
         repeat(12) {
-            val r = client.post("/v1/invite/${minted.inviteId}/redeem") {
+            val r = client.post("/v1/invite/${minted.inviteId}/pairing/fetch") {
                 contentType(ContentType.Application.Json); setBody("""{"secret":"whatever"}""")
             }
             assertEquals(HttpStatusCode.TooManyRequests, r.status)
@@ -130,7 +130,7 @@ class LockedInviteAuditTest {
         val minted = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
 
         repeat(cfg.totpLockoutFails) { i ->
-            client.post("/v1/invite/${minted.inviteId}/redeem") {
+            client.post("/v1/invite/${minted.inviteId}/pairing/fetch") {
                 contentType(ContentType.Application.Json); setBody("""{"secret":"wrong-$i"}""")
             }
         }
@@ -141,7 +141,7 @@ class LockedInviteAuditTest {
         // fresh failures again — and the failure that crosses it writes row number two.
         now += 3_600_000L + 1_000
         repeat(cfg.totpLockoutFails) { i ->
-            val r = client.post("/v1/invite/${minted.inviteId}/redeem") {
+            val r = client.post("/v1/invite/${minted.inviteId}/pairing/fetch") {
                 contentType(ContentType.Application.Json); setBody("""{"secret":"still-wrong-$i"}""")
             }
             assertEquals(HttpStatusCode.Unauthorized, r.status)

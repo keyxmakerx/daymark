@@ -7,6 +7,30 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Companion — the pairing key now carries something: the therapist's offer, and the owner's
+  approval of it.** When a therapist answers a pairing code, their reply now travels with their
+  public keys, a name, and an enrolment ticket they chose, sealed under the key that only the
+  right code produces. The owner's side opens it, or cannot, which is the first and only place a
+  wrong code shows itself: as a reply that did not match, never as an error and never as a
+  verdict about who sent it. Approving hands that ticket to the server, which is how enrolment
+  becomes possible at all; a link-holder who answers a run first has produced something the
+  owner cannot open, and gets nothing. The ticket lives as long as the invitation rather than
+  ten minutes, because the clock now starts at the owner's approval and a stranger's wrong
+  guesses can lock the therapist's own status poll for an hour. An approval nobody finished can
+  be taken back, which puts the invitation back where it was. The owner can also list their
+  invitations and see where each stands, including how many wrong secrets have been tried
+  against it, as a count and nothing more. The old secret-only redeem route is still present
+  until the screens move over; the next change removes it.
+- **Companion — the pairing code exists, and the ceremony refuses a code that has not been read
+  properly first.** Eight characters in two groups of four, `K7M4-RD96`: seven carry the secret
+  and the eighth checks the other seven, so a mistyped or swapped character is caught on the
+  therapist's screen, with its position, before anything is sent. The code is generated on the
+  owner's device and has no field anywhere it could be stored: the owner's half of an open
+  pairing now survives a page reload in the tab's own storage, and a test greps that record for
+  the code in every encoding. The relay takes the canonical form only and checks it again at the
+  door, because a trailing space or a lower-case letter used to make a silently different key.
+  The owner console also gained the one button that ends an invitation, with copy that says what
+  that does and does not do. No screen runs the ceremony yet; that is the next two changes.
 - **Companion — the pairing ceremony is complete, end to end.** A clinician can now be invited,
   accept, and end up with keys the owner has actually confirmed — no step of it hand-carried:
   the invitation link opens an acceptance page (one code, one passphrase); the therapist's public
@@ -316,6 +340,10 @@ All notable changes to this project are documented here. The format is based on
   permission and makes no network connections.
 
 ### Fixed
+- **Companion — withdrawing a share now says when a copy could not be removed.** The store used
+  to mark the rows and swallow every failure to delete the ciphertext files, so "withdrawn" read
+  as complete while the bytes stayed on the volume. The count of copies that would not delete now
+  comes back with the result, and a test makes one refuse.
 - **Companion — the pairing relay was audited before anything was built on it, and three things
   moved.** A re-open now retires the run it replaces: before, the abandoned exchange stayed
   answerable and, once the newer one was answered or cancelled, came back as "newest" to the next

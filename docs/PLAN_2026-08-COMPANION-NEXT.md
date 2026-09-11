@@ -641,7 +641,7 @@ citations.
   and mobile applications using ephemeral pin codes, QR-codes, serial numbers"* — this exact use
   case. Single round trip; `crypto_cpace_step1/2/3`.
 
-The defining property, and the reason a six-character code suffices where it would be absurd as a
+The defining property, and the reason an eight-character code suffices where it would be absurd as a
 password: **a man-in-the-middle gets one online guess per attempt and no offline dictionary attack.**
 Rate-limit attempts to a handful and a short code is genuinely enough.
 
@@ -1123,7 +1123,7 @@ A PAKE proves identity, never entitlement. That distinction is why the last row 
 
 ### 3.10.5 Concerns
 
-- **Rate limiting is load-bearing.** A six-character code with unmetered attempts is weak. The
+- **Rate limiting is load-bearing.** An eight-character code with unmetered attempts is weak. The
   persisted limiter from PR #75 is the prerequisite — that work was not a side quest.
 - **The patient may not have the app.** A clinician-initiated QR must lead somewhere sensible when
   nothing is installed, rather than dead-ending. Easy to overlook, and it is the modal first contact.
@@ -1472,6 +1472,27 @@ attempt, with a threshold that alerts (§3.7.5).
 > expiry filter, so a run nobody answered reads as waiting after its invitation has died; the
 > console shows invite state alongside, or the read learns the expiry.
 
+ADDED 2026-09-04, the channel the phone must also speak (built and tested on the web side; the
+server routes are live): the therapist's reply carries, beside MSGb, an ENVELOPE sealed under
+the ISK (`pairing/envelope.ts`: direction `therapist-to-owner`, AAD
+`daymark/pairing/env/v1|<sidB64>|therapist-to-owner`, XChaCha20-Poly1305, wire
+`version(1)=0x01 | nonce(24) | ciphertext`) whose plaintext is the OFFER, UTF-8 JSON with
+exactly these fields and no others: `v` = 1, `boxPubB64` (X25519, 32 bytes), `signPubB64`
+(Ed25519, 32 bytes), `displayName` (at most 64 code points, no control, format or bidi
+characters), `enrolTicketB64` (32 random bytes the therapist chose). The owner's device opens it
+or gets nothing — that null is the whole signal for a wrong code — and on Approve posts
+`{ "enrolTicketB64" }` to `POST /v1/relations/{relRef}/pairing/{exchangeId}/approve` (bearer; the
+run must be RESPONDED; the invitation goes to REDEEMING and the ticket is honoured until the
+invitation expires). The therapist polls `POST /v1/invite/{inviteId}/pairing/{exchangeId}/status`
+with `{ "secret" }` no more often than every 45 seconds (the shared per-source budget charges
+every allowed request; a 429 means wait) and receives `{ "state": "WAITING" }`,
+`{ "state": "APPROVED", "scope": [...] }`, or a flat 410 for everything else, then enrols with
+the ticket as before. The owner lists invitations at `GET /v1/relations/{relRef}/invites`
+(bearer): status, `failCount`, `exchangeCount`, and the newest run's state. `close` no longer
+exists; cancel on a CLOSED run is the abandon that puts the invitation back to PENDING.
+`companion/web/src/lib/pairing/payloads.ts` and `relay.test.ts` are the reference; the phone
+reproduces those bytes or the owner's device refuses the offer.
+
 **4.0b — the phone becomes the owner's pairing device.** §3.7.6 + §3.6.5 layer 1. A separate stage,
 not a separate design: the protocol is identical, only the device running the owner's half changes.
 
@@ -1617,12 +1638,18 @@ Unchanged and still open:
    automatically, or left alone until the owner decides? Auto-revoking is tidier; it also lets a
    stolen therapist credential trigger revocation of the owner's own material, which is why the
    table currently says *never*. Leaving them is the safer default and the messier one.
-7. **§3.7.3** — what shape is the pairing code? It has to be read over a phone line without
-   ambiguity and typed without a keyboard fight. Candidates: four words from a short list (longest
-   to say, easiest to get right, no case or digit confusion), or 8–10 characters from a
-   confusable-free alphabet like Crockford base32. The PAKE makes either strong enough; this is
-   purely a question about the human moment, and the maintainer is better placed to answer it than
-   the threat model is.
+7. **§3.7.3** — what shape is the pairing code? **Answered 2026-09-03.** Eight symbols shown as
+   two groups of four, `K7M4-RD96`: seven carry entropy and the eighth is a check symbol, over the
+   31-symbol recovery alphabet (digits 2–9, letters without I, L and O), case-insensitive, and
+   canonicalised before it enters the ceremony. Seven symbols is 34.7 bits, which the guess bound
+   in the 4.0a AUDIT banner (one online test per exchange, eight exchanges per invitation, no
+   offline test) makes sufficient; the check symbol catches any single wrong character and any
+   swapped pair on the therapist's device before an exchange is spent, which matters because a
+   wrong code produces no error by design. Words were rejected because the SAS wordlist already
+   means "compare this aloud" and a second vocabulary carrying the same instruction would blur into
+   it. After a mismatch the owner's action is **New code** and the therapist's is **Try again**;
+   the owner's screen shows attempts left. Built: `companion/web/src/lib/pairing/pairingCode.ts`;
+   the relay takes only the canonical form and checks it again at the door.
 8. **Post-quantum** is explicitly *not now.* There is early CFRG work on hybrid PQ PAKEs
    (`draft-vos-cfrg-pqpake`), but it is a long way from settled and nothing in this threat model
    justifies tracking a moving draft. Noted so the omission is a decision rather than an oversight.

@@ -68,7 +68,10 @@ class RelationStoreGateTest {
         s.put(rel, Channel.SHARES, "share", 0, body, null, expiry = now + 100_000)
         s.put(rel, Channel.SHARES, "share", 1, body, null, expiry = now + 100_000)
 
-        assertEquals(2, s.revokeLineage(rel, Channel.SHARES, "share"))
+        val outcome = s.revokeLineage(rel, Channel.SHARES, "share")
+        assertEquals(2, outcome.marked)
+        assertEquals(2, outcome.deleted, "both ciphertext files should be gone from the volume")
+        assertEquals(0, outcome.undeletable)
 
         for (v in 0L..1L) {
             assertEquals(
@@ -87,8 +90,36 @@ class RelationStoreGateTest {
     fun `revoking is idempotent and does not double-count`() {
         val s = store()
         s.put(rel, Channel.SHARES, "share", 0, body, null, expiry = now + 100_000)
-        assertEquals(1, s.revokeLineage(rel, Channel.SHARES, "share"))
-        assertEquals(0, s.revokeLineage(rel, Channel.SHARES, "share"), "already-withdrawn rows must not be re-counted")
+        assertEquals(1, s.revokeLineage(rel, Channel.SHARES, "share").marked)
+        assertEquals(0, s.revokeLineage(rel, Channel.SHARES, "share").marked, "already-withdrawn rows must not be re-counted")
+    }
+
+    @Test
+    fun `a ciphertext copy that will not delete is counted, not swallowed`() {
+        /*
+         * The previous revokeLineage wrapped every delete in runCatching and returned the marked
+         * count alone, so "withdrawn" read as complete while the bytes stayed on the volume. A
+         * non-empty directory whose name ends in .blob is the portable way to make deleteIfExists
+         * throw: the test process may be root, so permissions cannot be relied on to refuse.
+         */
+        val dir = createTempDirectory("relgate").toString()
+        val s = RelationStore(dataDir = dir, maxBlobBytes = 1_000_000, maxVersions = 50, perRelQuotaBytes = 10_000_000, clock = { now })
+        s.put(rel, Channel.SHARES, "share", 0, body, null, expiry = now + 100_000)
+        val lineageDir = java.nio.file.Path.of(dir, "rel", rel, Channel.SHARES.wire, "share")
+        assertTrue(java.nio.file.Files.isDirectory(lineageDir), "the lineage directory should exist where the store writes blobs")
+        val stuck = lineageDir.resolve("9.blob")
+        java.nio.file.Files.createDirectories(stuck.resolve("child"))
+
+        val outcome = s.revokeLineage(rel, Channel.SHARES, "share")
+
+        assertEquals(1, outcome.marked)
+        assertEquals(1, outcome.deleted, "the real blob is removed")
+        assertEquals(1, outcome.undeletable, "the copy that refused deletion is reported")
+        assertEquals(
+            RelationStoreException.Kind.GONE,
+            assertFailsWith<RelationStoreException> { s.fetch(rel, Channel.SHARES, "share", 0) }.kind,
+            "the share is refused regardless of what is left on the volume",
+        )
     }
 
     @Test

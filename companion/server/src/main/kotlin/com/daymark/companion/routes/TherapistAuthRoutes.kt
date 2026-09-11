@@ -155,101 +155,27 @@ fun Route.therapistAuthRoutes(
             call.respond(HttpStatusCode.Created, InviteResponse(minted.inviteId, link, minted.expiresAt))
         }
 
-        // Therapist redeems the invite secret. Capped backoff, never burn-after-N. No-referrer.
-        //
-        // A wrong secret NEVER consumes the invite, and that is a deliberate refusal rather than an
-        // omission: with a PAKE a mistyped code and an attacker's guess are the same event, so
-        // burning on failure would hand whoever holds the link a free veto over every invitation
-        // the owner ever mints. The only thing that kills an invite is the report route below,
-        // which a person has to reach for. See AuthStore.reportInviteByOwner for the full argument
-        // and InviteBurnRuleTest for the regression guard.
-        post("/invite/{inviteId}/redeem") {
-            call.response.header("Referrer-Policy", "no-referrer")
-            // Source budget BEFORE the body is read, for the same reason TOTP verify does it: this
-            // route takes no credential, so without it an unlimited stream of guesses is free to
-            // the attacker in both memory and per-invite lockout budget.
-            if (!pairSourceLimiter.allow(call.clientAddress())) {
-                call.respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited"))
-                return@post
-            }
-            val inviteId = call.parameters["inviteId"] ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("missing inviteId"))
-            val req = call.receiveCappedJson<RedeemRequest>() ?: return@post
-            val lockoutBaseMs = totpLockoutSeconds * 1000
-            val result = authStore.redeemInvite(inviteId, req.secret, totpLockoutFails, lockoutBaseMs)
-            when (result.status) {
-                AuthStore.RedeemStatus.OK -> {
-                    pairSourceLimiter.reset(call.clientAddress())
-                    call.respond(HttpStatusCode.OK, RedeemResult(result.relRef!!, result.scope, result.enrollTicket!!))
-                }
-                // The relRef never reaches the body here — it is carried back only so the guess can
-                // be recorded against the right relationship. The caller still sees a bare 401.
-                AuthStore.RedeemStatus.WRONG_SECRET -> {
-                    call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized"))
-                    result.relRef?.let { rel ->
-                        auditSafely {
-                            auditStore.append(rel, AuditActor.THERAPIST, AuditAction.PAIR_GUESS_FAILED, meta = auditMeta(auditSourceIp, call))
-                        }
-                        // The LOCKOUT row is written HERE, on the one failure that armed the
-                        // lockout, and nowhere else. The LOCKED branch below explains why the
-                        // rows that used to be written there were the attacker's to mint. It gets
-                        // its OWN auditSafely block: this row is the episode's only record, and a
-                        // throw in the routine guess append above must not take it down with it.
-                        // A crash between the store's durable lockout write and this append can
-                        // still lose the row — accepted; audit is additive, never load-bearing.
-                        if (result.lockoutArmed) {
-                            auditSafely {
-                                auditStore.append(rel, AuditActor.THERAPIST, AuditAction.LOCKOUT, meta = auditMeta(auditSourceIp, call))
-                            }
-                        }
-                    }
-                }
-                // Deliberately NO audit append on the already-locked path, and the absence is the
-                // control rather than an economy. Reaching this branch takes no secret and no
-                // crypto work — the lockout check is the first thing the store consults, before
-                // any Argon2 verification — so anyone who has merely SEEN the invite link used to
-                // be able to append a row to the owner's audit chain per request, at a pace they
-                // chose, for free. The audit chain is the one place the owner reads what their
-                // access control did, and an attacker who can pump arbitrary volume into it buries
-                // the signal it exists to carry: the row that says a lockout happened is findable
-                // among ten rows and lost among a hundred thousand, and every extra row was also a
-                // permanent write into a chain that never forgets. So the lockout is recorded
-                // exactly once, at the moment it is armed — the WRONG_SECRET branch above, on a
-                // request that did pay for a hash — and probes bouncing off an armed lockout write
-                // nothing. The trade, stated plainly so nobody "fixes" it back: the owner learns
-                // THAT a lockout happened and when, not how many times somebody knocked on it
-                // afterwards. The per-probe count was never evidence anyway — its magnitude was
-                // the attacker's choice, not a measurement.
-                AuthStore.RedeemStatus.LOCKED ->
-                    call.respond(HttpStatusCode.TooManyRequests, ErrorDto("temporarily locked"))
-                AuthStore.RedeemStatus.GONE -> call.respond(HttpStatusCode.Gone, ErrorDto("invite unavailable"))
-            }
-        }
-
         /*
-         * "This wasn't me." The only route in the system that destroys an invitation.
+         * THE REDEEM ROUTE IS GONE, and its absence is the point (plan §3.7, 2026-09-04).
          *
-         * It exists because the alternative that suggests itself — kill the invite when a
-         * confirmation fails — is a denial-of-service primitive dressed as a security control. The
-         * split it implements is between an event the server CANNOT interpret (a wrong code, which
-         * is a typo and an attack in equal measure) and one it can (a human saying they did not
-         * expect this). Only the second may burn.
+         * It took the invitation secret — which the emailed link carries — and answered with an
+         * enrolment ticket. So whoever read that email could enrol as the therapist, and the short
+         * pairing code the design document describes secured nothing: it was a ceremony bolted to
+         * the side of a door that was already open.
          *
-         * Two callers, one outcome:
+         * An enrolment ticket is now minted in exactly one place: `POST
+         * /v1/relations/{relRef}/pairing/{exchangeId}/approve`, which is owner-authenticated and
+         * carries a ticket the therapist chose and sealed under the pairing key (PairingRelayRoutes).
+         * Only someone who typed the owner's code can produce a sealing the owner can open, so only
+         * they can have a ticket forwarded. A link-holder can still open a conversation on the relay
+         * — fetch, and answer once — and gets ciphertext nobody approves.
          *
-         *  - The owner, holding the bearer token, reporting an invitation they did not expect or
-         *    that their therapist has told them never arrived. No secret: the owner was not the
-         *    party handed one.
-         *  - The invited party, holding the link, reporting a link they never asked for. They must
-         *    present the CORRECT secret — which is not the DoS this route avoids, because anyone
-         *    who can pass that gate could have redeemed the invite and become the therapist
-         *    instead. A wrong secret takes the same capped backoff as a wrong redeem, so this
-         *    cannot become an unmetered oracle for guessing the secret.
-         *
-         * Errors follow the non-enumerating style of the rest of the file: an unknown invite id, an
-         * already-terminal invite and an invite whose TTL has run out are one 410 between them, and
-         * a wrong secret is the same bare 401 a wrong redeem gets. The distinctions live in the
-         * owner's audit log, which is the one place a caller cannot read them from.
+         * `AuthStore.redeemInvite` survives as a store function because the invite lockout and
+         * burn-rule tests are written against it and its failure semantics are the ones
+         * `checkInviteSecret` shares. NO ROUTE MAY CALL IT: TherapistAuthTest greps this package to
+         * say so, and proves this path now answers as an unknown route.
          */
+
         post("/invite/{inviteId}/report") {
             call.response.header("Referrer-Policy", "no-referrer")
             val inviteId = call.parameters["inviteId"] ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("missing inviteId"))

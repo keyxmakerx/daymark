@@ -354,10 +354,11 @@ export const AUTH_PRESSURE: readonly StatedGap[] = [
   {
     id: 'invite-failures',
     subject: 'Failed invite redemptions',
-    statement: 'This build exposes no counter for failed invite redemptions.',
+    statement: 'This build exposes no aggregate counter for failed invite redemptions.',
     heldAt:
-      'auth.db, table invites, column fail_count, which drives the redemption backoff. Served by ' +
-      'no route.',
+      'auth.db, table invites, column fail_count, which drives the redemption backoff. Served to ' +
+      'the owner, per invitation, by GET /v1/relations/{relRef}/invites; there is no total across ' +
+      'invitations and nothing an operator can read.',
   },
 ]
 

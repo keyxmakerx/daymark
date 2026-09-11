@@ -75,7 +75,7 @@
 import _sodium from 'libsodium-wrappers-sumo'
 import { fingerprint, initAssignmentCrypto, newBoxKeyPair, newSignKeyPair } from '../assignments/crypto'
 import { unwrap, wrap, zeroize, type TherapistKeys, type WrappedKeyBlob } from './keyStore'
-import type { EnrolOutcome, KeyRegistration, LoginResult, PortalClient, RedeemResult, SessionInfo } from './session'
+import type { EnrolOutcome, KeyRegistration, LoginResult, PortalClient, SessionInfo } from './session'
 
 const URLSAFE = () => _sodium.base64_variants.URLSAFE_NO_PADDING
 
@@ -170,7 +170,7 @@ export function defaultKeyStorage(): KeyRecordStorage | null {
   }
 }
 
-export type AcceptStep = 'redeem' | 'record' | 'wrap' | 'enrol' | 'login' | 'register'
+export type AcceptStep = 'redeem' | 'record' | 'wrap' | 'enrol' | 'login' | 'register' | 'code' | 'name' | 'pairing'
 
 /**
  * A refusal, carrying WHICH step refused.
@@ -461,7 +461,7 @@ export function groupForReading(value: string, size = 4): string[] {
  * here because both are pinned there.
  */
 export const KEY_CHECK_COPY = {
-  title: 'Read these to the person who invited you',
+  title: 'Your key fingerprints',
   lede:
     'These are the fingerprints of the two keys this browser just made for you — the encryption ' +
     'key, which is what they seal everything they send you to, and the signing key, which is what ' +
@@ -469,15 +469,14 @@ export const KEY_CHECK_COPY = {
     'what the server says your keys are, and they will ask you to read both of these out — on the ' +
     'phone, or in the room with them.',
   why:
-    'Read them aloud rather than sending them. This page and their page are both drawn by the same ' +
-    'server, so if that server ever handed them a different key in place of yours, it would draw ' +
-    'the substitute on both screens and the two would appear to agree. Your voice is the one ' +
-    'channel it cannot redraw, which is what makes reading it out the check that catches this.',
+    'You do not need to read these out. The short code you typed is what proved these keys are ' +
+    'yours: it never reached the server, so only the person who gave it to you could open what ' +
+    'this browser sealed with it, and their console recorded these two the moment they did. They ' +
+    'are here so either of you can compare them with what their screen shows, if you ever want to.',
   both:
-    'Both of them, not just the interesting one. They arrive at the other end together, in one ' +
-    'answer from one machine, so a key left unread is a key that could have been swapped without ' +
-    'either of you hearing it. Half a check is not a check, and their console will not record ' +
-    'anything on the strength of one.',
+    'Both of them, not just the interesting one. They travelled together, sealed under the same ' +
+    'code, and their console recorded the pair — an encryption key without its signing key is not ' +
+    'a therapist, it is half a record.',
   mismatch:
     'If what they have does not match what you read, stop and say so. Do not send anything, and do ' +
     'not accept a new invitation until you have worked out why, on a channel that is not this ' +
@@ -501,7 +500,6 @@ export const KEY_CHECK_COPY = {
  * stubbed in the ones that are about something else.
  */
 export interface AcceptancePorts {
-  redeem(inviteId: string, secret: string): Promise<RedeemResult>
   /**
    * Three-valued, and it is the most important type in this interface. See [EnrolOutcome]: this
    * call commits something no route in the product can undo, so "I did not hear a yes" and "I heard
@@ -528,7 +526,6 @@ export async function portsFor(
 ): Promise<AcceptancePorts> {
   const so = await initAssignmentCrypto()
   return {
-    redeem: (inviteId, secret) => client.redeemInvite(inviteId, secret),
     enrol: (ticket, credentialId, secret) => client.enrollTotp(ticket, credentialId, secret),
     login: (credentialId, code) => client.loginTotp(credentialId, code),
     register: (session, boxPubB64, signPubB64) => client.registerTherapistKeys(session, boxPubB64, signPubB64),
@@ -614,10 +611,14 @@ export interface AcceptInput {
 /** How long the authenticator secret is. 20 bytes is the RFC 6238 recommendation for HMAC-SHA1. */
 const TOTP_SECRET_BYTES = 20
 
-/** How long the credential id is. Opaque, unguessable, and never displayed as anything meaningful. */
-const CREDENTIAL_ID_BYTES = 16
+/**
+ * How long the credential id is. Opaque, unguessable, and never displayed as anything meaningful.
+ * Exported because therapist/pairingAccept.ts mints one at the same width, and two independent
+ * sixteens are a number waiting to disagree.
+ */
+export const CREDENTIAL_ID_BYTES = 16
 
-function sameKeys(a: TherapistKeys, b: TherapistKeys): boolean {
+export function sameKeys(a: TherapistKeys, b: TherapistKeys): boolean {
   const eq = (x: Uint8Array, y: Uint8Array) => x.length === y.length && x.every((v, i) => v === y[i])
   // Not constant-time, and it does not need to be: both sides of this comparison are values this
   // page generated moments ago and already holds in full. There is no secret here to leak to a
@@ -625,98 +626,61 @@ function sameKeys(a: TherapistKeys, b: TherapistKeys): boolean {
   return eq(a.box.privateKey, b.box.privateKey) && eq(a.sign.privateKey, b.sign.privateKey)
 }
 
-/**
- * Steps 1 to 5: redeem, refuse a second set of keys, generate, wrap, prove, store, enrol.
+/*
+ * `beginAcceptance` USED TO LIVE HERE, and its removal is the cut-over (plan §3.7, 2026-09-04).
  *
- * WHY THE WRAP IS PROVEN BEFORE ANYTHING DEPENDS ON IT. Once this returns, the wrapped blob is the
- * ONLY copy of the clinician's secret keys that will exist after the tab closes, and the passphrase
- * is the only thing that opens it. If wrapping and unwrapping disagreed for any reason — a KDF
- * parameter changed underneath, a libsodium build quirk, a passphrase carrying a character that
- * normalises differently on the way back in — the failure would be silent here and discovered weeks
- * later by a clinician who could no longer read anything anyone had sent them. Proving the blob
- * opens costs a second Argon2id derivation at the 256 MiB floor, which is roughly a second of
- * somebody's life, once, ever. It is the cheapest insurance in this file.
+ * It began by redeeming the invitation secret — which the emailed link carries — so the ceremony
+ * it opened was reachable by whoever read that email, and the short pairing code in the design
+ * document secured nothing. The route it called is gone from the server; this is the client half
+ * of the same removal.
  *
- * WHY THE RECORD IS WRITTEN BEFORE THE ENROLMENT RATHER THAN AFTER. Both orders have a window. Write
- * first and a failed enrolment leaves a record for a relationship that has no credential, which
- * would block a retry — so this rolls that record back. Write second and a crash between the
- * server's commit and the write loses the keys outright, with the credential live and nothing to
- * unwrap. The first window is recoverable and the second is not, so this takes the first.
+ * What replaced it is therapist/pairingAccept.ts: the same generate, wrap, prove and store steps,
+ * in the same order and with the same refusals — including the insert-only rule, which now asks
+ * its question at the first moment the relationship is known rather than after a redeem — but
+ * reached only once the therapist has typed the code the owner spoke, and finishing only once the
+ * owner has approved what that code sealed.
  *
- * AND WHY THE ROLLBACK ASKS A NARROWER QUESTION THAN IT USED TO. The paragraph above was written as
- * though the two outcomes of an enrolment were success and failure. There is a third, it is the
- * common one on a bad network, and the old code answered it with the rollback: an enrolment whose
- * ANSWER never arrived. The server's side of that is not a failure at all — the credential is
- * inserted, the ticket is spent, the invite is CONSUMED, and no route in this product un-enrols a
- * relationship — so deleting the record deleted the only copy of the clinician's secret keys while
- * the thing it was rolling back had already happened. Worse, the authenticator secret was computed
- * into `totpSecretBase32` only on the success path, so nobody ever saw the secret of the credential
- * that now existed: a relationship enrolled to a key nobody holds, unrepairable by a fresh
- * invitation because the second enrolment answers ALREADY_ENROLLED, and the screen told the person
- * "nothing was set up. Ask for a fresh link."
- *
- * So the rollback now runs on `refused` alone — the statuses the enrol handler emits from branches
- * that write nothing — and `unknown` keeps the record, keeps the secret, shows it, and says what is
- * and is not known. Nothing is registered on the strength of a guess either way: the sign-in that
- * comes next is the arbiter, and it can only succeed if the enrolment really did commit.
+ * Everything from a TICKET onwards is unchanged and still lives below, shared by both ceremonies:
+ * they differ in how a ticket comes to exist and in nothing after it.
  */
-export async function beginAcceptance(ports: AcceptancePorts, input: AcceptInput): Promise<Enrolment> {
-  // 1. Redeem. A wrong secret is metered rather than consumed, so a mistyped paste is recoverable.
-  const redeemed = await ports.redeem(input.inviteId, input.secret)
-  if (!redeemed.ok || !redeemed.relRef || !redeemed.enrollTicket) {
-    throw new AcceptError(redeemed.error ?? 'This invitation could not be redeemed.', 'redeem')
-  }
-  const relRef = redeemed.relRef
 
-  // 2. Insert-only, locally. `findKeyRecord` throws rather than answering "no" when it cannot read
-  //    what is stored, which is deliberate: an unreadable record must not become permission.
-  if (findKeyRecord(relRef, ports.storage) !== null) {
-    throw new AcceptError(
-      'This browser already holds keys for this relationship. Sign in with your reading passphrase instead — accepting again here would replace keys that cannot be recovered.',
-      'record',
-    )
-  }
-
-  // 3. The keypairs. Generated here, in this browser, and the secret halves go nowhere else.
-  const keys = ports.newKeys()
-
-  // 4. Wrap, and prove the wrap opens before anything is allowed to depend on it.
-  let wrapped: WrappedKeyBlob
-  try {
-    wrapped = await ports.wrapKeys(keys, input.passphrase)
-  } catch {
-    throw new AcceptError('Your keys could not be wrapped under that passphrase, so nothing was enrolled.', 'wrap')
-  }
-  let reopened: TherapistKeys | null = null
-  try {
-    reopened = await ports.unwrapKeys(wrapped, input.passphrase)
-  } catch {
-    throw new AcceptError(
-      'The wrapped keys would not open again under the passphrase you chose, so nothing was enrolled. Nothing has been lost — try again, and if it happens twice the fault is in this page rather than in what you typed.',
-      'wrap',
-    )
-  }
-  const opens = sameKeys(reopened, keys)
-  // The reopened copy is a second, independent home for the same secret keys. It has done its one
-  // job; leaving it live would put the therapist's signing key in the heap twice for no reason.
-  zeroize(reopened)
-  if (!opens) {
-    throw new AcceptError(
-      'The wrapped keys opened to something other than the keys that went in, so nothing was enrolled. This is a fault in this page, not in what you typed.',
-      'wrap',
-    )
-  }
-
-  // 5. Store, then enrol. `saveKeyRecord` refuses to overwrite; the rollback below undoes only the
-  //    record this call wrote, and only when the enrolment it belongs to never happened.
-  const credentialId = ports.randomToken(CREDENTIAL_ID_BYTES).b64url
-  const record: KeyRecord = { v: 1, relRef, credentialId, wrapped, createdAt: ports.now() }
-  saveKeyRecord(record, ports.storage)
-
+/**
+ * Spend an enrolment ticket: mint the authenticator secret, enrol it, and hand back everything the
+ * screen needs to show the person their authenticator entry.
+ *
+ * EXTRACTED SO THAT TWO CEREMONIES CAN SHARE IT. The invite-secret path above reaches this after a
+ * redeem; the pairing path (therapist/pairingAccept.ts) reaches it after the owner has approved a
+ * matched code and the ticket has come back through the encrypted channel. Everything from here on
+ * is identical in both — the same insert-only enrolment, the same three-valued outcome, the same
+ * rollback rule — and it is identical because the server cannot tell the two apart by this point:
+ * a ticket is a ticket.
+ *
+ * WHAT IT ASSUMES OF ITS CALLER, and cannot check: that the KeyRecord for [relRef] has already been
+ * written, and that [keys] are the keys inside it. Both callers write the record immediately before
+ * calling, for the reason argued above `beginAcceptance` — the losable window is the recoverable
+ * one. The rollback here removes that record, so a caller that had not written one would be
+ * deleting somebody else's; that is why this is not exported for general use but for those two.
+ *
+ * THE THREE-VALUED OUTCOME IS THE POINT. 'refused' is the only value that rolls back, because it is
+ * the only one that says the server wrote nothing. 'unknown' — a request whose answer never arrived
+ * — keeps the record and the secret and says so, because the enrolment may well have committed and
+ * no route in this product un-enrols a relationship.
+ */
+export async function enrolWithTicket(
+  ports: AcceptancePorts,
+  args: {
+    relRef: string
+    scope: string[]
+    enrollTicket: string
+    credentialId: string
+    keys: TherapistKeys
+    host?: string
+  },
+): Promise<Enrolment> {
   const totp = ports.randomToken(TOTP_SECRET_BYTES)
   let outcome: EnrolOutcome
   try {
-    outcome = await ports.enrol(redeemed.enrollTicket, credentialId, totp.b64url)
+    outcome = await ports.enrol(args.enrollTicket, args.credentialId, totp.b64url)
   } catch {
     // A rejected fetch says nothing about the server's state. A request that was answered and whose
     // answer was lost on the way back looks exactly like a request that never arrived, and only one
@@ -724,7 +688,7 @@ export async function beginAcceptance(ports: AcceptancePorts, input: AcceptInput
     outcome = 'unknown'
   }
   if (outcome === 'refused') {
-    forgetKeyRecord(relRef, ports.storage)
+    forgetKeyRecord(args.relRef, ports.storage)
     throw new AcceptError(
       'The server would not enrol an authenticator for this invitation, so nothing was set up. Ask the person who invited you for a fresh link.',
       'enrol',
@@ -733,13 +697,13 @@ export async function beginAcceptance(ports: AcceptancePorts, input: AcceptInput
 
   const totpSecretBase32 = base32(totp.raw)
   return {
-    relRef,
-    scope: redeemed.scope ?? [],
-    credentialId,
+    relRef: args.relRef,
+    scope: args.scope,
+    credentialId: args.credentialId,
     totpSecretBase32,
-    otpauthUri: otpauthUri(totpSecretBase32, input.host ?? '', relRef),
+    otpauthUri: otpauthUri(totpSecretBase32, args.host ?? '', args.relRef),
     serverConfirmedEnrolment: outcome === 'enrolled',
-    ...identityOf(ports, keys),
+    ...identityOf(ports, args.keys),
   }
 }
 

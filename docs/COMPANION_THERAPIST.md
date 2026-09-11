@@ -227,7 +227,16 @@ server can use to impersonate the therapist**; it bootstraps registration only.
   therapist out forever). `inviteId`s are **unguessable**, and the enroll page is served with **no
   referrer**.
 
-### 5.2 Enroll + mutual out-of-band pairing (MANDATORY)
+#> **Status 2026-09-04.** The ceremony below is superseded by the pairing code (plan §3.7 and
+> §4.0a). The mandatory out-of-band step is now a short code the owner's device generates and
+> speaks; the clinician types it, and their public keys travel to the owner sealed under the key it
+> produces. The owner records the fingerprints on that authority, so there is no longer a blocking
+> read-aloud — the fingerprints remain on both screens for anyone who wants to compare them. The
+> enrolment ticket is chosen by the clinician's browser and made live by the owner's approval;
+> `POST /v1/invite/{id}/redeem` no longer exists. Read what follows as the shape of the enrolment
+> from a ticket onwards, which is unchanged.
+
+## 5.2 Enroll + mutual out-of-band pairing (MANDATORY)
 
 ```
 THERAPIST BROWSER / CLIENT                 SERVER                         OWNER (phone Sync flavor)
