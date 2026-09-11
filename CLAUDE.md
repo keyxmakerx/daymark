@@ -91,3 +91,28 @@ Long sessions have repeatedly burned context re-deriving what is already written
 - Prefer one task per module; `companion/web` and `companion/server` have independent test oracles.
 - Use subagents for fan-out search and keep their conclusion, not their file dumps.
 - Anything worth keeping must be committed and pushed — the container is ephemeral.
+
+## 7. The division of labour
+
+Five jobs recur in this repository and four of them produce far more output than conclusion. Those
+are delegated, so their noise never enters the main conversation. Definitions live in
+`.claude/agents`; the commands a person types live in `.claude/skills`.
+
+| Agent | Model | Can use | For |
+| --- | --- | --- | --- |
+| `verifier` | haiku | Bash, Read | Running the suites; returns counts and failures, never logs |
+| `designer` | fable | Read only | One visible decision — layout, wording, what a screen says at its worst moment |
+| `skeptic` | opus | read-only | Attacking a claim before it is believed; breaks the property and re-runs the test |
+| `browser-pilot` | sonnet | Bash, Read, Write | Driving the consoles in Chromium and reporting what a person sees |
+
+Commands: `/verify`, `/ux`, `/challenge`, `/walkthrough`, `/wrapup`.
+
+**Briefing is the lead's job, not the agent's.** A forked agent sees none of this conversation, and
+`designer` in particular has no search tools and a turn cap — deliberately, so it cannot wander.
+Paste the actual source and state the decision you want back. A vague brief wastes the whole call,
+and on the expensive model it wastes it visibly.
+
+**Scale.** Three to five agents is the useful range here; beyond that the coordination costs more
+than the parallelism returns. Workflow scripts (`.claude/workflows`) exist for fan-out across
+dozens of files and are almost never the right tool for this repository — reach for one only when
+the same narrow question must be asked of many files at once.
