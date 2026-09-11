@@ -102,6 +102,7 @@ are delegated, so their noise never enters the main conversation. Definitions li
 | --- | --- | --- | --- |
 | `verifier` | haiku | Bash, Read | Running the suites; returns counts and failures, never logs |
 | `designer` | fable | Read only | One visible decision — layout, wording, what a screen says at its worst moment |
+| `adviser` | fable | Read only | One bounded high-stakes call — a security trade-off, an architecture or product choice |
 | `skeptic` | opus | read-only | Attacking a claim before it is believed; breaks the property and re-runs the test |
 | `browser-pilot` | sonnet | Bash, Read, Write | Driving the consoles in Chromium and reporting what a person sees |
 
@@ -111,6 +112,12 @@ Commands: `/tests`, `/ux`, `/challenge`, `/walkthrough`, `/wrapup`.
 `designer` in particular has no search tools and a turn cap — deliberately, so it cannot wander.
 Paste the actual source and state the decision you want back. A vague brief wastes the whole call,
 and on the expensive model it wastes it visibly.
+
+**Match the model to the shape of the job.** Fable decides — bounded judgement stated fully in a
+brief, where the cost of being wrong is high and the cost of reading is low; it has no search tools
+precisely so it cannot turn a decision into an investigation. Opus investigates, because that needs
+context. Haiku counts. Sonnet drives the product. Reaching for the strongest model on a mechanical
+job is the common waste; reaching for a cheap one on a judgement call is the expensive one.
 
 **Scale.** Three to five agents is the useful range here; beyond that the coordination costs more
 than the parallelism returns. Workflow scripts (`.claude/workflows`) exist for fan-out across
@@ -124,11 +131,16 @@ runner is `/tests`.
 ## 8. Working unattended
 
 The backlog is GitHub issues in `keyxmakerx/daymark` labelled `claude-ready`. `/next` takes the
-lowest-numbered one, does it, and stops. The maintainer is not a programmer and is usually not
+lowest-numbered one, does it, drops the label, and then either starts a fresh session for the next
+item or goes quiet if none remain. The maintainer is not a programmer and is usually not
 watching, so every report is written for someone who has not opened the repository.
 
-**One issue per session, then stop.** Context is re-sent every turn, so a session that wanders
-costs many times one that finishes. There is no credit for touching more files.
+**One issue per session, then hand off.** Context is re-sent every turn, so a session that wanders
+costs many times one that finishes. Finishing and starting fresh is cheaper than continuing, which
+is why the loop spawns a new session rather than carrying on in an old one.
+
+**The list is the budget.** Dropping the label is how an item leaves the queue; only a person can
+put one back. Nothing here can extend its own runway, and nothing may spin on the same issue twice.
 
 **The line that is not yours to cross.** Push to a `claude/*` branch and stop there. Never push to
 `main`, never open a pull request, never merge. The maintainer ships their own work.
