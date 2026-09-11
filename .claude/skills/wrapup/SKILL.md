@@ -8,7 +8,7 @@ pushed is gone.
 
 In order:
 
-1. **Check it.** Run `/verify` (or spawn `verifier`) and wait for the verdict. Do not proceed on a
+1. **Check it.** Run `/tests` (or spawn `verifier`) and wait for the verdict. Do not proceed on a
    failure — fix it, or say plainly what is broken and stop.
 2. **Write down what changed.** Add a `CHANGELOG.md` entry. If the work shifted where the project
    stands — something finished, something deferred, a decision made — append a dated addendum to

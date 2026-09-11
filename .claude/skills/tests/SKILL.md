@@ -1,5 +1,5 @@
 ---
-name: verify
+name: tests
 description: Run the Daymark test suites and report a verdict — web tests, type-check, build, and the Companion server tests. Use before committing, before calling a change done, and whenever someone asks whether the tests pass.
 argument-hint: [web | server | all]
 context: fork

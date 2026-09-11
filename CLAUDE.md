@@ -105,7 +105,7 @@ are delegated, so their noise never enters the main conversation. Definitions li
 | `skeptic` | opus | read-only | Attacking a claim before it is believed; breaks the property and re-runs the test |
 | `browser-pilot` | sonnet | Bash, Read, Write | Driving the consoles in Chromium and reporting what a person sees |
 
-Commands: `/verify`, `/ux`, `/challenge`, `/walkthrough`, `/wrapup`.
+Commands: `/tests`, `/ux`, `/challenge`, `/walkthrough`, `/wrapup`.
 
 **Briefing is the lead's job, not the agent's.** A forked agent sees none of this conversation, and
 `designer` in particular has no search tools and a turn cap — deliberately, so it cannot wander.
@@ -116,3 +116,7 @@ and on the expensive model it wastes it visibly.
 than the parallelism returns. Workflow scripts (`.claude/workflows`) exist for fan-out across
 dozens of files and are almost never the right tool for this repository — reach for one only when
 the same narrow question must be asked of many files at once.
+
+**`/verify` is not ours.** A bundled skill owns that name and wins the invocation; it drives the
+running app rather than the suites, which is the more valuable check and worth keeping. The suite
+runner is `/tests`.
