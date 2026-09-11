@@ -120,3 +120,19 @@ the same narrow question must be asked of many files at once.
 **`/verify` is not ours.** A bundled skill owns that name and wins the invocation; it drives the
 running app rather than the suites, which is the more valuable check and worth keeping. The suite
 runner is `/tests`.
+
+## 8. Working unattended
+
+The backlog is GitHub issues in `keyxmakerx/daymark` labelled `claude-ready`. `/next` takes the
+lowest-numbered one, does it, and stops. The maintainer is not a programmer and is usually not
+watching, so every report is written for someone who has not opened the repository.
+
+**One issue per session, then stop.** Context is re-sent every turn, so a session that wanders
+costs many times one that finishes. There is no credit for touching more files.
+
+**The line that is not yours to cross.** Push to a `claude/*` branch and stop there. Never push to
+`main`, never open a pull request, never merge. The maintainer ships their own work.
+
+**Stop early and say so** when a decision belongs to them — a trade-off about their product, their
+users, or their money. Write the options into an issue comment and wait. A half-finished piece with
+honest notes is a good session; a guess dressed as a decision is not.
