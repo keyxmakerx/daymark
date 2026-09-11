@@ -28,7 +28,23 @@ updates:
       # here — nothing in this repo uses applicationVariants/libraryVariants/variantFilter/etc —
       # but the Gradle wrapper jump and the built-in-Kotlin decision are a deliberate, reviewed
       # piece of work, not a dependency bump.
-      - dependency-name: "com.android.tools.build:gradle"
+      #
+      # NAMING, AND WHY THIS RULE ONCE DID NOTHING. It was written as
+      # `com.android.tools.build:gradle` — the artifact you would name if AGP arrived as a
+      # buildscript classpath dependency. It does not. It is a PLUGIN, declared in
+      # gradle/libs.versions.toml as
+      #   android-application = { id = "com.android.application", version.ref = "agp" }
+      # and the string `com.android.tools.build` appears nowhere in this repository. A rule naming
+      # a coordinate the build never mentions cannot match anything, so this read as a safeguard
+      # while doing nothing — which is worse than no rule, because the next person believes it.
+      #
+      # The real name is written down in Dependabot's own output: PR #85, "bump
+      # com.android.application from 8.13.0 to 9.4.0", on branch
+      # dependabot/gradle/com.android.application-9.4.0. Plugins declared in a version catalog are
+      # matched by their PLUGIN ID, not by the artifact that implements them. The trailing glob
+      # also covers the marker artifact form (com.android.application.gradle.plugin) in case
+      # Dependabot ever reports it that way instead.
+      - dependency-name: "com.android.application*"
         versions: [">=9.0.0"]
 
       # --- Kotlin, and KSP, which must move together -----------------------------------------
