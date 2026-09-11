@@ -31,9 +31,9 @@ glance = "1.1.0"
 qrcodegen = "1.8.0"
 junit = "4.13.2"
 coroutines = "1.9.0"
-androidxTestExt = "1.2.1"
-androidxTestCore = "1.6.1"
-androidxTestRunner = "1.6.2"
+androidxTestExt = "1.3.0"
+androidxTestCore = "1.7.0"
+androidxTestRunner = "1.7.0"
 # 5.2.0 bundles libsodium 1.0.20 (2024) into the phone in place of 5.1.0's 1.0.18 (2019) —
 # that .so is the actual C cryptography encrypting the journal, and it was five years behind
 # while the comment here talked only about the Java API surface. The recorded blocker was
