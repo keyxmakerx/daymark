@@ -163,3 +163,47 @@ svelte-check 541 files clean, production build clean.
 
 Not done in this change: the Playwright pass driving both screens against a live server, and the
 therapist self-leave (Slice E).
+
+## Addendum 2026-09-11 — the pairing UI is finished and verified; handoff for a fresh session
+
+Branch `claude/pairing-stack-audit-suak0v`, nine commits on top of `main` (`3d46bf8`), head
+`a55159b`. **No pull request has been opened** — that is the maintainer's call. Both CI workflows
+are green on the head commit.
+
+All three planned changes landed (foundations, the channel, the screens and the cut-over; each has
+its own addendum above). What the last commit added on top of them: the ceremony was driven end to
+end in two real Chromium profiles against a locally built server, and that run found two copy bugs
+no unit test could — the acceptance page still promised a read-aloud it no longer performs, and
+"Accept an invitation" was printed twice, as the page heading and again as the first card title.
+Both fixed. The server's own record of the live run: `pairing.opened, pairing.responded,
+pairing.approved, enrol.ok`, invitation `CONSUMED`, one credential, zero unconsumed tickets, the
+exchange `CLOSED` with both `msg_b` and `env_to_owner` stored. Suites at the last full local run:
+server 383, web 1443, svelte-check 541 files clean, production build clean.
+
+**The one rough edge, recorded rather than fixed.** After a reload the owner can still collect, open
+the offer and approve — but cannot re-show the invitation link (only the mint response carries it)
+nor the code (it is deliberately never persisted). The screen says so and offers New code. Fixing it
+means either a route that re-serves the link or accepting that a reload ends the invitation.
+
+**Not done, in the order they were deferred.** (1) Therapist self-leave, Slice E — planned, never
+started; it destroys only the clinician's own credential. (2) The phone side, plan 4.0b — the offer
+bytes and the approve/status/invites contract are written into the 4.0a banner so it does not start
+from a comment, but no phone-side pairing code exists. (3) Dependabot: post `@dependabot rebase`
+before merging anything (CI has been push-only since `9efaa49`, so every open PR's last run tested
+its tip against a stale parent), and close #39 — the AGP ignore rule in the Dependabot config names
+a coordinate that appears nowhere in the tree, which is why #39 reappears.
+
+**Releases, since it came up and was not written down.** Pushing a `v*` tag runs
+`.github/workflows/release.yml`, which builds `assembleFossRelease`, re-verifies the APK declares no
+INTERNET, and *creates* the GitHub Release with the APK attached. You do not draft a release first.
+Only the `foss` flavor is published; `sync` gets its own path when it is feature-complete. If the
+`KEYSTORE_BASE64` secret is missing the build **silently falls back to debug signing** rather than
+failing, and Android will not update across that signature change — so check the secrets before
+tagging. A tag can point at a commit `build.yml` never ran; tag something already verified.
+
+**Workflow change made in this session.** `CLAUDE.md` now exists at the repository root, auto-loaded
+into every session and every subagent. It carries the prime directive, the repo map, the commands
+and which oracle works where, the recurring copy/security/process rules, the testing conventions,
+and a pointer table saying which single document answers which question. It exists because sessions
+kept spending their context re-deriving all of that. Keep it short; when it grows, move the detail
+into the document the table points at.
