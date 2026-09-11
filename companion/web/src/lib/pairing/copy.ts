@@ -37,8 +37,10 @@ export const OWNER_COPY = {
 
   waiting: 'Waiting for them to type it. You can leave this page open, or come back to it.',
   waitingReload:
-    'This pairing is still open and can still be finished from here. The code itself was never ' +
-    'saved, so it cannot be shown again — if they need it, give them a new one.',
+    'This pairing is still open. The link and the code were not kept when the page reloaded, so ' +
+    'neither can be shown again. If you already sent the link, give them a new code — it works ' +
+    'with the link they have. If you had not sent the link yet, stop this invitation and send a ' +
+    'fresh one.',
 
   /**
    * The mismatch. A question, not a verdict: a typo and a stranger holding the link produce the
@@ -75,16 +77,22 @@ export const OWNER_COPY = {
   /** Ending an invitation: what it does, and the two things it does not do. */
   stopLabel: 'Stop this invitation',
   stopBody:
-    'Sent it to the wrong person, or no longer want it used? Ending it stops the link working. ' +
-    'It changes nothing already shared, and the other person is not told.',
+    'Sent it to the wrong person, lost the link, or no longer want it used? Ending it stops the ' +
+    'link working. It changes nothing already shared, and the other person is not told. You can ' +
+    'send a fresh one afterwards.',
   stoppedBody:
-    'This invitation has ended. The link no longer works. Nothing already shared has changed, ' +
-    'and nobody has been told.',
+    'This invitation has ended. The old link no longer works. Nothing already shared has ' +
+    'changed, and nobody has been told. A fresh invitation comes with a new link and a new code.',
 
   newCodeLabel: 'New code',
-  newCodeHint: 'Ends this attempt and starts another with a different code.',
+  /** The one way to a new link: every fresh invitation starts from a stopped or spent one. */
+  freshLabel: 'Send a fresh invitation',
+  newCodeHint:
+    'Same link, different code. Ends this attempt and starts another. If you no longer have the ' +
+    'link, stop this invitation and send a fresh one.',
   cappedTitle: 'This invitation has been tried eight times',
-  cappedBody: 'Send a fresh invitation. That also gives them a new link, which is worth doing anyway.',
+  cappedBody:
+    'The old link cannot be used again. A fresh invitation comes with a new link and a new code.',
   endedCancelled: 'You stopped this pairing. Start another whenever you are ready.',
   endedSuperseded: 'A newer code was made for this invitation, so this attempt is closed.',
 } as const

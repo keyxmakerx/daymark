@@ -283,7 +283,7 @@
         </p>
         <div class="row">
           <button class="primary" onclick={() => step(() => startInvitation(ports))} disabled={busy}>
-            Create another invitation
+            {OWNER_COPY.freshLabel}
           </button>
         </div>
       {/if}
