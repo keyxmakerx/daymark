@@ -480,6 +480,27 @@ export const OWNER_KEY_MISMATCH =
   'who invited you, on a channel that is not this server.'
 
 /**
+ * What "nobody can reset it" means when the reader works in a practice (issue #100).
+ *
+ * The old sentence said nobody, which was true and which a clinician in a clinic will not read as
+ * including their own administrator — every other system they use has an admin who can reset
+ * things, so "nobody" arrives pre-qualified. The three are therefore named.
+ *
+ * The decision behind it: an escrow that lets a practice admin recover a clinician's keys is an
+ * escrow that lets the practice read its patients' journals, and the clinical deployment is the
+ * MOST sensitive one rather than the least. The cost is real -- re-pairing after a lost passphrase
+ * is tedious -- and it is the same cost the solo shape already charges.
+ *
+ * Register: a consequence stated plainly, not a warning. It says what would have to happen, which
+ * is a thing a person can plan around, rather than telling them to be careful.
+ */
+export const PASSPHRASE_NO_RESET =
+  'The server never receives it, which also means nobody can reset it for you: not the person who ' +
+  'invited you, not an administrator at your practice, and not whoever runs this server. If you ' +
+  'lose it, what has been shared with you cannot be opened again, and everyone who shared with you ' +
+  'would have to invite you afresh.'
+
+/**
  * The caveat beside the manual owner-key fields (issue #101).
  *
  * The rebuilt pairing makes the code load-bearing in ONE direction: the owner learns the

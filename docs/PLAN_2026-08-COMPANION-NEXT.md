@@ -1218,6 +1218,35 @@ rather than a consequence discovered after the screens are drawn.
 Recommendation: **build Solo and Paired first; treat Practice as a separate decision whose gate is
 that question**, answered before any of its screens exist.
 
+#### ANSWERED, 2026-09-12 (issue #100): nobody.
+
+Not the clinician, not the practice administrator, not whoever runs the server, not Daymark. A
+forgotten passphrase means that clinician's keys are gone, and every relationship they hold is
+re-paired with a fresh invitation from the patient.
+
+The reason is the one at the top of this section. An escrow that lets a practice admin recover a
+clinician's keys is an escrow that lets the practice read its patients' journals — and the clinical
+deployment is the **most** sensitive one, not the least. The alternative was considered by name and
+refused: "administrator reset, with an audit row" still puts a person inside the practice one click
+from every patient's content, and an audit row is a receipt, not a lock.
+
+The cost is real. Re-pairing after a lost passphrase is tedious, and in a clinic it is tedious for
+several people at once. It is the honest price, and it is **the same price the Solo shape already
+charges** — this answer does not make Practice worse than Solo, it refuses to make it better at
+Solo's expense.
+
+The gate is therefore passed, and the answer is enforced rather than remembered:
+
+- `OrgRole.kt` has no capability naming a key, a passphrase, a reset, a recovery or an escrow, and
+  `OrgModelTest` asserts it over every action, role and wire value, with four planted entries
+  proving the detector is not blind. Planting `RESET_PASSPHRASE` reddens it.
+- `Plane.DATA` is declared and empty for the same reason, and asserted separately.
+- `Membership` has no field a key could be written into, also asserted.
+- The clinician's own screen names the three people who cannot reset it
+  (`PASSPHRASE_NO_RESET`, `companion/web/src/lib/therapist/inviteAccept.ts`), because "nobody"
+  arrives pre-qualified to somebody who works in a clinic where every other system has an admin who
+  can reset things.
+
 ### 3.11.4 Roles are capabilities with presets, and only Practice needs them
 
 Neither hardcoded roles nor group permissions. **Capabilities**, with roles as named presets over
@@ -1256,6 +1285,19 @@ the server, web or app source.
 Worth recording *why* the mistake was reasonable: a thorough specification reads exactly like a
 description of a working system. That document should carry a header saying it is a design, not a
 description, because this will otherwise recur.
+
+**Out of date as of 2026-09-12 (issue #100).** Part of the model has since been built, and this
+paragraph's "no corresponding code" is no longer true. What exists:
+`companion/server/src/main/kotlin/com/daymark/companion/org/OrgRole.kt` (the three planes, the
+action catalog, the six member roles), `org/OrgStore.kt` (practices, memberships, tenant
+isolation), `companion/web/practice.html`, and a first-run picker that offers Practice. What does
+**not** exist is the rest of the shape — no scheduling surface, no practice-side screens beyond the
+picker.
+
+It shipped ahead of §3.11.3's gate, which is how the Solo answer came to be inherited by accident;
+that gate is now answered above, deliberately, and enforced by tests rather than by the absence of
+code. The irony is worth keeping: this paragraph was written to stop a specification being mistaken
+for a running system, and then became a description that was mistaken for a current one.
 
 ### 3.11.7 The demonstration deadline
 
@@ -1575,6 +1617,12 @@ the corpus that now reads component markup.
 **Explicitly not in scope:** orgs, roles, RBAC, multi-tenant. `COMPANION_ACCESS_CONTROL.md` is a
 specification, not the running system, and building the org model by drawing its screens is the
 mistake that doc already warns against.
+
+> **Amended 2026-09-12 (issue #100).** The role and membership half of that model *was*
+> subsequently built — see the note in §3.11.6 for exactly what — so "not in scope" now means this
+> step does not touch it, rather than that it does not exist. The warning it quotes still stands
+> for everything still unbuilt, and the passphrase-reset gate that should have preceded it is
+> answered in §3.11.3.
 
 ### 4.3 — Signed requests *(the highest-value change for goal A)*
 

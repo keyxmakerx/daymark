@@ -118,6 +118,25 @@ export const NO_PATIENT_LIST =
   'people. A roster that grew a patient list would turn that into a register of who is in therapy ' +
   'where, so no route assembles one.'
 
+/**
+ * What an administrator cannot do about a forgotten passphrase (issue #100).
+ *
+ * The question the Practice shape was gated on was who resets a forgotten passphrase in a clinic.
+ * The answer is nobody, and it is stated here because this is the console where somebody would come
+ * looking for the button. Every other staff system an administrator has ever used has a password
+ * reset, so its absence has to be an explicit sentence rather than an empty screen.
+ *
+ * Said as what happens instead, not as a warning. An administrator who reads this can plan around
+ * it -- tell the clinician to keep the passphrase somewhere, know what the recovery looks like --
+ * which is more use than being told to be careful.
+ */
+export const ADMIN_CANNOT_RESET_A_PASSPHRASE =
+  'You cannot reset a clinician’s reading passphrase, and neither can anyone else — not this ' +
+  'console, not whoever runs the server, not Daymark. It never reaches the server, so there is ' +
+  'nothing here to reset. A clinician who loses theirs keeps their seat in the practice and loses ' +
+  'the material shared with them; each patient invites them again, and the sharing starts over. ' +
+  'The alternative would be a practice that can read its patients’ journals.'
+
 /** The practice's log, qualified where it is read. */
 export const AUDIT_IS_METADATA_ONLY =
   'Metadata only, and not provably complete. This is the practice’s own record of memberships, ' +
