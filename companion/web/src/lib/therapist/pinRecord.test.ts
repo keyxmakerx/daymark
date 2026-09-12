@@ -36,6 +36,7 @@ import {
   loadPins,
   savePins,
   listPins,
+  pinHistory,
   forgetAllPins,
   forgetPeer,
   pendingRotation,
@@ -247,7 +248,7 @@ describe('forgetting and rotating the pin record', () => {
     expect(sasWordsMatch('one two three', 'one two three')).toBe(false)
   })
 
-  it('rotation replaces the recorded key rather than adding to it, across sessions', () => {
+  it('rotation writes a second row and seals to it alone, across sessions', () => {
     const storage = storageWithPin()
     const pins = loadPins(storage)
     const peer = { x25519Pub: newBox.publicKey, ed25519Pub: ther.ed25519.publicKey }
@@ -256,11 +257,46 @@ describe('forgetting and rotating the pin record', () => {
 
     // A later session, reading the stored bytes alone.
     const later = loadPins(storage)
+    // One LIVE record for this clinician — the screen must not show a person two entries for one
+    // relationship with nothing saying which is in force…
     expect(listPins(later)).toHaveLength(1)
+    expect(listPins(later)[0].x25519Fp).toBe(fingerprint(newBox.publicKey))
+    // …and the row it superseded is still on file, which is the whole point of an insert-only
+    // record: "what was on file before, and until when" survives the change.
+    expect(pinHistory(later)).toHaveLength(2)
+    expect(pinHistory(later).map((p) => p.x25519Fp)).toEqual([
+      fingerprint(ther.x25519.publicKey),
+      fingerprint(newBox.publicKey),
+    ])
+    // Control: a store that replaced would have one row here, so the length above can fail.
+    expect(pinHistory(loadPins(storageWithPin()))).toHaveLength(1)
+
     expect(seal(newBox.publicKey, later).recipientFp).toBe(fingerprint(newBox.publicKey))
     // The old key is now the one that gets refused — otherwise "rotate" would mean "trust both",
-    // and a substituted key would stay usable for as long as the owner kept sealing.
+    // and a substituted key would stay usable for as long as the owner kept sealing. Keeping the
+    // row must not keep the key usable, and this is the assertion that says so.
     expect(() => seal(ther.x25519.publicKey, later)).toThrow(ShareUnpinnedError)
+  })
+
+  it('forgetting one clinician takes their superseded rows with them, and nobody else’s', () => {
+    const storage = memoryStorage()
+    const pins = new PinStore()
+    pins.pin(publicOf(ther), 1)
+    pins.pin({ x25519Pub: newBox.publicKey, ed25519Pub: ther.ed25519.publicKey }, 2)
+    pins.pin(publicOf(other), 3)
+    savePins(pins, storage)
+    expect(pinHistory(loadPins(storage))).toHaveLength(3)
+
+    savePins(forgetPeer(loadPins(storage), therFp), storage)
+
+    const after = loadPins(storage)
+    // Both of the forgotten clinician's rows are gone — history included, because a person
+    // forgetting someone is forgetting every key that was ever on file for them.
+    expect(pinHistory(after).map((p) => p.ed25519Fp)).toEqual([fingerprint(other.ed25519.publicKey)])
+    // And the other relationship kept every row it had, rather than being flattened to its newest
+    // as a side effect of somebody else's erasure.
+    expect(pinHistory(after).some((p) => p.ed25519Fp === therFp)).toBe(false)
+    expect(after.history(fingerprint(other.ed25519.publicKey))).toHaveLength(1)
   })
 
   it('there is nothing to rotate when nothing is pinned, or when nothing changed', () => {
