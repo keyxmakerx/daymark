@@ -65,8 +65,15 @@
  * WHAT IS NEVER STORED, ANYWHERE. The passphrase and the unwrapped secret keys. The passphrase is
  * used to derive the wrapping key and is then the caller's to drop; the keys live in memory for the
  * length of the ceremony and are zeroized by the screen when it goes away. What persists in this
- * browser is the WRAPPED blob and two opaque identifiers — see KeyRecord for the honest accounting
- * of what that record still discloses about the person holding it.
+ * browser is the WRAPPED blob, two opaque identifiers and two timestamps — see KeyRecord for the
+ * honest accounting of what that record still discloses about the person holding it.
+ *
+ * AND WHAT PERSISTS SOMEWHERE ELSE, BECAUSE THIS PARAGRAPH USED TO BE WRONG. The relationship's
+ * inbox token is NOT in that record. It used to have a field here — dead, because the write that
+ * would have filled it in always threw and the throw was swallowed (issue #125) — and the sentence
+ * above went on claiming a record that carried nothing else while a field for a bare credential sat
+ * ten lines below it. The token now lives in sessionStorage, for the life of one tab, in
+ * therapist/inboxTokenStore.ts, which says why that and not this file.
  *
  * NO SVELTE, NO DOM, NO CLOCK OF ITS OWN. `now` is a port, `storage` is a port, and every network
  * call is a port, so the whole ceremony — including its ordering — is testable in the node
@@ -115,19 +122,23 @@ export interface KeyRecord {
   /** Argon2id-wrapped X25519 + Ed25519 secret keys. Opens only under the reading passphrase. */
   wrapped: WrappedKeyBlob
   createdAt: number
-  /**
-   * The relationship's inbox token, remembered after the first sign-in that supplied one.
+  /*
+   * THERE IS NO INBOX TOKEN HERE, AND THERE WAS NEVER ONE IN PRACTICE.
    *
-   * OPTIONAL, and it is the one value the acceptance ceremony cannot produce. The token is a second
-   * factor on the relationship channels and its digest IS the relRef, so the server cannot hand it
-   * back without giving away the thing it authenticates. It arrives with the invitation, out of
-   * band, like the invitation secret itself.
+   * This record used to declare an optional `inboxToken`, with a doc saying it was kept "so a
+   * clinician types it once rather than every visit". LoginGate tried to fill it in after each
+   * successful sign-in, and that write threw every single time: saveKeyRecord is insert-only, and
+   * the record it was updating had by construction just been read out of storage. The throw landed
+   * in a catch written for a browser refusing storage and was swallowed, so the feature was dead
+   * and silent from the day it shipped, and every clinician retyped forty-three characters at every
+   * visit (issue #125).
    *
-   * Kept here so a clinician types it once rather than every visit. Absent on records written
-   * before this existed and on any that have never been signed in with — both read as "ask for it",
-   * which is the harmless direction.
+   * It is not repaired here. Fixing the write would have put a bare journal credential in
+   * localStorage, in the clear, beside the wrapped keys and permanently — the passphrase would not
+   * protect it, since it is not inside the blob — which is a larger decision than the bug that
+   * exposed it. therapist/inboxTokenStore.ts holds it in sessionStorage for the life of one tab
+   * instead: a clinician who reloads is not asked again, and nothing survives the tab closing.
    */
-  inboxToken?: string
   /**
    * When this browser last saw the server confirm it holds THESE public keys for the relationship,
    * in epoch milliseconds. ABSENT means the ceremony never got that far.
