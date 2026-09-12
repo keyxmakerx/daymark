@@ -249,7 +249,29 @@ Each adversary lists **can**, **cannot (when defenses honored)**, and **defenses
 | Signing / authorship | **Ed25519** | **Owner** signs every share bundle *and* verifies game plans. **Therapist** signs every game plan *and* signed attestations. Owner identity is a first-class pinned trust anchor, symmetric with the therapist's. |
 | Fingerprints / SAS | **BLAKE2b** over the raw pubkey | Rendered as a 4–6 word code / QR for **bidirectional** OOB verification (§5.6). |
 | Therapist key custody at rest | wrapped under **WebAuthn-PRF**-derived KUK (else Argon2id passphrase) | Private key never leaves the client; server stores only the public key + WebAuthn credential public key. **`prfSalt` is rotatable (R5).** |
-| Capability / inbox token | 256-bit CSPRNG, stored **hashed** (BLAKE2b) | Per-relationship; never logged in plaintext; **bound to the authenticated WebAuthn credential at first fetch** (§5.5). |
+| Capability / inbox token | 256-bit CSPRNG, stored **hashed** (BLAKE2b) | Per-relationship; minted by the owner console since 2026-09-12 (see below); never logged in plaintext; **bound to the authenticated WebAuthn credential at first fetch** (§5.5). |
+
+**The inbox token became a 256-bit CSPRNG value on 2026-09-12 (issue #126). Before that date the row
+above described an intention, not the code.** Nothing in this repository generated one. The only way
+a token entered the system was a text box on the owner console whose entire validation was
+"not empty", so a single character produced a perfectly valid relationship reference — while the
+server's own `Secrets.newToken()`, a real `SecureRandom`, was never called for this value at all.
+The owner console now takes 32 bytes from libsodium's CSPRNG when a clinician is added
+(`companion/web/src/lib/owner/inboxToken.ts`), shows the result once, and has no field to type one
+into: a hand-chosen token is the defect, so the generate path replaces the input rather than
+guarding it. Two consequences worth stating. The token is now 43 characters of base64url, which is
+what makes a stolen database useless — the property this design leans on and the typed path quietly
+removed. And two clinicians can no longer be given one token by accident, which used to hand them a
+shared relationship reference and each other's shares, grants, assignments and audit log; the
+console could not have shown it, because its pending id embedded the first eight characters of the
+token followed by the list index, so one token rendered as two different-looking rows.
+
+**The token has never been deliverable by the invitation, and still is not.** The mail message has no
+field for it, and the mint API is handed the digest rather than the value, so the server has never
+held a token it could put in one. "Out of band" is therefore the only channel this value has ever
+had. Until 2026-09-12 one screen said otherwise — `companion/web/src/lib/onboarding/fieldHelp.ts`
+told the clinician the token "was in the invitation", which is the sentence they read while the
+other person is on the phone asking what to send. Both consoles now say the same true thing.
 
 ### Key hierarchy
 

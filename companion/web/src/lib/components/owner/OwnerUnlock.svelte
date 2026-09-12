@@ -38,7 +38,12 @@
     UNLOCK_ACTION,
     UNLOCK_BUSY,
     FINGERPRINT_IS_STABLE,
+    ADDING_MINTS_A_TOKEN,
+    INBOX_TOKEN_LABEL,
+    INBOX_TOKEN_TWO_CHANNELS,
+    INBOX_TOKEN_SHOWN_ONCE,
   } from '../../owner/unlockCopy'
+  import { mintInboxToken } from '../../owner/inboxToken'
   import { Card, Callout } from '../ui'
   import type { OwnerSession, PinnedTherapist } from './session'
 
@@ -65,14 +70,39 @@
   let problem = $state<GroupProblem | null>(null)
 
   const messageId = $props.id()
+  /** Derived from the one id this component may ask for — `$props.id()` is once per component. */
+  const mintedLabelId = `${messageId}-token`
 
   // Add-a-pinned-therapist form (keys pasted after OOB verification).
   let tName = $state('')
   let tSignPubB64 = $state('')
   let tBoxPubB64 = $state('')
-  let tInboxToken = $state('')
   const pinned: PinnedTherapist[] = []
   let pinnedView = $state<PinnedTherapist[]>([])
+
+  /**
+   * The token just minted, and who it is for. Shown once, here, and by nothing else in the console.
+   *
+   * It is NOT an input's value. Same reasoning as the pairing code in PairingPanel.svelte: a secret
+   * inside a form control is a secret a browser offers to save, a password manager offers to fill
+   * and an autofill carries into the next form that looks similar. It is rendered into an <output>
+   * for a person to read off the screen and hand over by some other channel.
+   */
+  let mintedToken = $state('')
+  let mintedFor = $state('')
+
+  /**
+   * What names a pending entry before its keys exist.
+   *
+   * A COUNTER, AND DELIBERATELY NOT THE TOKEN. This used to be `pending:${token.slice(0,8)}:${n}`,
+   * which put eight characters of a journal credential into the entry's id — and therefore into
+   * `emptyGrant(id).therapistFingerprint`, which encodeSignedGrant emits as plain JSON: signed, not
+   * encrypted, stored under that same token's digest. Nothing published it, because the Grants tab
+   * is replaced by a message while an entry is pending, so the leak was one tab-visibility
+   * condition away from being real (issue #126). An id has no need of the token, so it no longer
+   * has any of it.
+   */
+  let pendingSeq = 0
 
   async function chooseFile(event: Event) {
     error = ''
@@ -147,12 +177,28 @@
     }
   }
 
-  function addTherapist() {
+  /**
+   * Add a clinician, and mint the token that routes their requests.
+   *
+   * THERE IS NO FIELD FOR THE TOKEN, and that is the fix rather than a side effect of it. It used
+   * to be typed — an "Inbox token (OOB)" box whose entire validation was "not empty", so the secret
+   * standing between a stolen database and a person's journal was whatever the owner thought of,
+   * while the security document described it as a 256-bit CSPRNG (issue #126). owner/inboxToken.ts
+   * now produces it and this screen shows it once; a token from a keyboard is the defect, so there
+   * is nowhere left to type one.
+   *
+   * NOTHING CHECKS FOR A DUPLICATE, because a duplicate can no longer be made. Two clinicians on
+   * one token share a relationship reference and can read each other's material, and the old typed
+   * path made that a plausible accident — one owner, one remembered string, two clinicians. Off a
+   * 256-bit CSPRNG it is not a case to defend against.
+   */
+  async function addTherapist() {
     error = ''
-    if (!tName.trim() || !tInboxToken.trim()) {
-      error = 'Fill in at least the name and the inbox token.'
+    if (!tName.trim()) {
+      error = 'Enter a name for this clinician. Nothing has been added.'
       return
     }
+
     /*
      * The keys are OPTIONAL now, because at the moment the owner sets a relationship up the
      * clinician's keys DO NOT EXIST — they are generated in the clinician's browser during
@@ -162,47 +208,60 @@
      * its keys through the Published-keys tab once the clinician has accepted — checked against
      * what they read aloud, exactly as a hand-pasted pair would have been.
      */
-    if (!tSignPubB64.trim() && !tBoxPubB64.trim()) {
-      const t: PinnedTherapist = {
-        id: `pending:${tInboxToken.trim().slice(0, 8)}:${pinned.length}`,
-        displayName: tName.trim(),
-        signPub: new Uint8Array(0),
-        boxPub: new Uint8Array(0),
-        grant: emptyGrant(`pending:${tInboxToken.trim().slice(0, 8)}:${pinned.length}`),
-        inboxToken: tInboxToken.trim(),
-        fingerprintWords: '',
-        pinnedAt: Date.now(),
-        keysPending: true,
-      }
-      pinned.push(t)
-      pinnedView = [...pinned]
-      tName = ''; tSignPubB64 = ''; tBoxPubB64 = ''; tInboxToken = ''
-      return
-    }
-    if (!tSignPubB64.trim() || !tBoxPubB64.trim()) {
+    const noKeys = !tSignPubB64.trim() && !tBoxPubB64.trim()
+    if (!noKeys && (!tSignPubB64.trim() || !tBoxPubB64.trim())) {
       error = 'Enter both keys, or neither — half a keypair cannot be checked against anything.'
       return
     }
-    try {
-      const signPub = fromBase64(tSignPubB64.trim())
-      const boxPub = fromBase64(tBoxPubB64.trim())
-      const words = sasWords(publicOf(ownerIdentity!), { x25519Pub: boxPub, ed25519Pub: signPub }).join(' ')
-      const t: PinnedTherapist = {
-        id: fingerprint(signPub),
-        displayName: tName.trim(),
-        signPub,
-        boxPub,
-        grant: emptyGrant(fingerprint(signPub)),
-        inboxToken: tInboxToken.trim(),
-        fingerprintWords: words,
-        pinnedAt: Date.now(),
+
+    /*
+     * The keys are read BEFORE the token is made, so an unreadable paste costs nothing. A token
+     * minted and then thrown away is harmless, but it would also be a token this screen had shown
+     * nobody, and an entry half-added is the state this form must never leave behind.
+     */
+    let id: string
+    let signPub: Uint8Array = new Uint8Array(0)
+    let boxPub: Uint8Array = new Uint8Array(0)
+    let words = ''
+    if (noKeys) {
+      id = `pending:${++pendingSeq}`
+    } else {
+      try {
+        signPub = fromBase64(tSignPubB64.trim())
+        boxPub = fromBase64(tBoxPubB64.trim())
+        words = sasWords(publicOf(ownerIdentity!), { x25519Pub: boxPub, ed25519Pub: signPub }).join(' ')
+        id = fingerprint(signPub)
+      } catch {
+        error = 'Could not parse the public keys (expect URL-safe base64, no padding).'
+        return
       }
-      pinned.push(t)
-      pinnedView = [...pinned]
-      tName = ''; tSignPubB64 = ''; tBoxPubB64 = ''; tInboxToken = ''
-    } catch {
-      error = 'Could not parse the public keys (expect URL-safe base64, no padding).'
     }
+
+    let token: string
+    try {
+      token = await mintInboxToken()
+    } catch {
+      // A consequence, not a cause: this screen cannot know why libsodium did not answer.
+      error = 'No token could be made, so this clinician has not been added.'
+      return
+    }
+
+    const t: PinnedTherapist = {
+      id,
+      displayName: tName.trim(),
+      signPub,
+      boxPub,
+      grant: emptyGrant(id),
+      inboxToken: token,
+      fingerprintWords: words,
+      pinnedAt: Date.now(),
+      keysPending: noKeys,
+    }
+    pinned.push(t)
+    pinnedView = [...pinned]
+    mintedFor = t.displayName
+    mintedToken = token
+    tName = ''; tSignPubB64 = ''; tBoxPubB64 = ''
   }
 
   function enter() {
@@ -270,17 +329,36 @@
 
         <fieldset class="add">
           <legend>Add a clinician</legend>
+          <p class="hint">{ADDING_MINTS_A_TOKEN}</p>
           <p class="hint">
-            Only the name and the inbox token are needed to start — their keys are created in their
-            browser when they accept your invitation, and arrive on the Published keys tab. Paste
-            keys here only if you already hold them from an earlier exchange.
+            Their keys are created in their browser when they accept your invitation, and arrive on
+            the Published keys tab. Paste keys here only if you already hold them from an earlier
+            exchange.
           </p>
           <label><span>Display name</span><input type="text" bind:value={tName} autocomplete="off" /></label>
           <label><span>Ed25519 public key <em>(optional — arrives when they accept)</em></span><input type="text" bind:value={tSignPubB64} autocomplete="off" /></label>
           <label><span>X25519 public key <em>(optional — arrives when they accept)</em></span><input type="text" bind:value={tBoxPubB64} autocomplete="off" /></label>
-          <label><span>Inbox token (OOB)</span><input type="password" bind:value={tInboxToken} autocomplete="off" /></label>
-          <button onclick={addTherapist}>Add clinician</button>
+          <button onclick={() => void addTherapist()}>Add clinician</button>
         </fieldset>
+
+        {#if mintedToken}
+          <!--
+            THE ONE SIGHTING OF THE TOKEN.
+
+            An <output> with aria-live, not an input and not a link — the same choice PairingPanel
+            makes for the pairing code, for the same reason: a form control is something a browser
+            saves, a password manager offers and an autofill carries into the next form. There is no
+            copy button either, deliberately. The clipboard is a shared surface this screen cannot
+            see the other end of, and the one secret it holds is the one the owner is about to send
+            by a channel of their own choosing.
+          -->
+          <div class="minted">
+            <span class="token-label" id={mintedLabelId}>{INBOX_TOKEN_LABEL} — {mintedFor}</span>
+            <output class="token" aria-labelledby={mintedLabelId} aria-live="polite">{mintedToken}</output>
+            <p class="hint">{INBOX_TOKEN_TWO_CHANNELS}</p>
+            <p class="hint">{INBOX_TOKEN_SHOWN_ONCE}</p>
+          </div>
+        {/if}
 
         {#if pinnedView.length > 0}
           <ul class="pinned">
@@ -313,4 +391,24 @@
   input { font: inherit; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-bg); color: var(--ink-text); }
   .pinned { margin: 0; padding-left: var(--space-4); font-size: 0.9rem; }
   .sas { font-family: var(--font-mono); font-size: 0.75rem; }
+
+  /*
+   * The minted token, drawn as PairingPanel draws the pairing code — same box, same `user-select:
+   * all` so one click takes the whole value, and no colour that reads as a verdict. Forty-three
+   * characters rather than eight, so it wraps instead of setting at 2rem.
+   */
+  .minted { display: flex; flex-direction: column; gap: var(--space-1); }
+  .token-label { font-size: 0.85rem; color: var(--ink-soft); }
+  .token {
+    font-family: var(--font-mono);
+    font-size: 1rem;
+    line-height: 1.5;
+    color: var(--ink-text);
+    background: var(--paper-bg);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+    word-break: break-all;
+    user-select: all;
+  }
 </style>
