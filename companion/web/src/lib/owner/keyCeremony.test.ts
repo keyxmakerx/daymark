@@ -119,9 +119,13 @@ async function ceremony(substitute: (posted: { boxPubB64: string; signPubB64: st
   const pairing: PairingAcceptancePorts = {
     answer: async (args) => {
       await args.makeOffer(RELREF)
-      return { exchangeId: 'ex-1', relRef: RELREF }
+      return { exchangeId: 'ex-1', relRef: RELREF, sidB64: 'c2lk', ybB64: 'eWI', msgAB64: 'YQ', msgBB64: 'Yg' }
     },
-    status: async () => ({ state: 'approved', scope: [] }),
+    status: async () => ({ state: 'approved', scope: [], envB64: 'AQ-owner-env' }),
+    // The other direction of the same ceremony (issue #101): stubbed here, because this file is
+    // about the fingerprints the CLINICIAN's keys come out with. relay.test.ts owns the envelope.
+    ownerKeysFrom: () => ({ signPubB64: 'OWNER-SIGN', boxPubB64: 'OWNER-BOX' }),
+    pinOwnerKeys: () => 'pinned-now',
     accept: ports,
     runStorage: null,
     wait: async () => {},
@@ -133,7 +137,7 @@ async function ceremony(substitute: (posted: { boxPubB64: string; signPubB64: st
     passphrase: 'seven brass lanterns',
     displayName: 'Dr Example',
   })
-  const enrolment = await enrolAfterApproval(pairing, run, [])
+  const enrolment = await enrolAfterApproval(pairing, run, [], undefined, 'AQ-owner-env')
   await completeAcceptance(ports, enrolment, '123456')
   expect(published).toHaveLength(1)
   const body = { ...substitute(published[0]!), registeredAt: 1_700_000_000_000 }

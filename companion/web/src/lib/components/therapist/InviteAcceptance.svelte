@@ -310,7 +310,9 @@
       }
       if (decided.state !== 'approved') return
       busy = true
-      enrolment = await enrolAfterApproval(p, run, decided.scope, host)
+      // The approval carries the owner's own keys, sealed under this run's key. They are written
+      // into this browser's record before the enrolment commits — see enrolAfterApproval.
+      enrolment = await enrolAfterApproval(p, run, decided.scope, host, decided.envB64)
       dropSpentFragment()
     } catch (e) {
       error = e instanceof Error ? e.message : 'This invitation could not be accepted.'

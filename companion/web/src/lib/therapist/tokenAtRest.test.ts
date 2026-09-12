@@ -26,6 +26,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import {
   loadKeyRecords,
+  pinOwnerKeysOnRecord,
   type AcceptancePorts,
   type Enrolment,
   type KeyRecordStorage,
@@ -55,6 +56,9 @@ const LOGIN_GATE_CODE = LOGIN_GATE.replace(/<!--[\s\S]*?-->/g, '')
 
 const RELREF = 'rel-ref-opaque-0001'
 const PASSPHRASE = 'seven brass lanterns humming'
+
+/** E2 as the approval carries it: the owner's own keys, sealed under the pairing code (issue #101). */
+const OWNER_ENV = 'AQ-owner-sealed-keys'
 
 /** A real minted token's shape: 43 characters of base64url, as owner/inboxToken.ts produces. */
 const TOKEN = 'kQ7bXm2pR9tYw4vZ1nL6sH8jF3dG5aC0eB7uI9oP2xM'
@@ -162,9 +166,13 @@ async function accept(ports: AcceptancePorts): Promise<Enrolment> {
   const pairing: PairingAcceptancePorts = {
     answer: async (args) => {
       await args.makeOffer(RELREF)
-      return { exchangeId: 'ex-1', relRef: RELREF }
+      return { exchangeId: 'ex-1', relRef: RELREF, sidB64: 'c2lk', ybB64: 'eWI', msgAB64: 'YQ', msgBB64: 'Yg' }
     },
-    status: async () => ({ state: 'approved', scope: ['read.share'] }),
+    status: async () => ({ state: 'approved', scope: ['read.share'], envB64: OWNER_ENV }),
+    // The owner's keys, out of the envelope their approval carries (issue #101). Public halves, and
+    // the record they land in is one of the things this file then greps for a token.
+    ownerKeysFrom: () => ({ signPubB64: 'OWNER-SIGN-PUB', boxPubB64: 'OWNER-BOX-PUB' }),
+    pinOwnerKeys: (relRef, keys) => pinOwnerKeysOnRecord(relRef, keys, ports.storage),
     accept: ports,
     runStorage: null,
     wait: async () => {},
@@ -176,7 +184,7 @@ async function accept(ports: AcceptancePorts): Promise<Enrolment> {
     passphrase: PASSPHRASE,
     displayName: 'Dr Example',
   })
-  return enrolAfterApproval(pairing, run, ['read.share'])
+  return enrolAfterApproval(pairing, run, ['read.share'], undefined, OWNER_ENV)
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════

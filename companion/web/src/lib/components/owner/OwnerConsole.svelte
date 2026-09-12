@@ -222,6 +222,8 @@
             {token}
             {smtpEnabled}
             scope={['read.share']}
+            ownerSignPub={session.ownerSign.publicKey}
+            ownerBoxPub={session.ownerBox.publicKey}
             onpaired={(keys) => { pairingOpen = true; keysArrived(keys) }}
             ondone={() => (pairingOpen = false)}
           />

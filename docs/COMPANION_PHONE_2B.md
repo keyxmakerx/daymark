@@ -103,6 +103,44 @@ therapist via a **mutual out-of-band short-authentication-string** (the `share/p
 wordlist + SAS), and pins the therapist's keys. The owner then issues the signed **Grant**
 (capabilities + apply modes) and can build/send **shares** (curated, scores/bands only).
 
+### 4.1 The code-based ceremony, and both of its envelopes
+
+The web's pairing is the contract the phone has to meet, not a different design. The owner speaks
+an eight-character code, the clinician types it, CPace turns that into a 64-byte ISK on both sides,
+and **two** sealed envelopes travel through the server, which holds a key for neither:
+
+- **E1, clinician → owner**, on the reply: their two public keys, a display name, and the enrolment
+  ticket they chose. Sealed with the ISK under direction `therapist-to-owner`.
+- **E2, owner → clinician**, on the approval: `{ v: 1, boxPubB64, signPubB64 }` — the owner's two
+  public keys and nothing else. Sealed with the same ISK under direction `owner-to-therapist`.
+
+The phone's owner side must produce E2 at approve, byte-compatibly:
+
+- **The identity is DERIVED, not generated.** `crypto_kdf_derive_from_key` over the same master with
+  context `"dmsync01"`, **subkey id 3 → the X25519 seed, subkey id 4 → the Ed25519 seed**, each
+  32 bytes, then `crypto_box_seed_keypair` / `crypto_sign_seed_keypair`. Ids 1 and 2 are the sync
+  layer's (§1) and are not free; 3 and 4 are reserved for this on both platforms. The reference is
+  `companion/web/src/lib/owner/identity.ts`, and `identity.test.ts` pins a fixed master to fixed
+  public keys precisely so the Android side can be tested against the same vector. Deriving is what
+  makes the phone and the browser the same owner rather than two: nothing migrates.
+- **The envelope.** Sealing key `crypto_generichash(32, utf8("daymark/pairing/key/v1|" + direction),
+  key = ISK)` — the whole 64-byte ISK as the BLAKE2b key. Wire shape `version(1) | nonce(24) |
+  XChaCha20Poly1305(payload, AAD, nonce, key)`, AAD `utf8("daymark/pairing/env/v1|" + sidB64 + "|" +
+  direction)`. The sid is exactly the base64url string the owner posted. Reference:
+  `companion/web/src/lib/pairing/envelope.ts`.
+- **The payload.** UTF-8 JSON, keys in the order `v, boxPubB64, signPubB64`, base64url with no
+  padding, and strict on the way in: unknown `v`, a missing or extra field, or a key that is not
+  32 bytes is refused as a whole rather than repaired. Reference:
+  `companion/web/src/lib/pairing/payloads.ts`.
+- **When.** At approve and not before: a run the owner abandons after a mismatch must never carry
+  their keys anywhere, so "the owner said yes" and "the clinician learned the owner's keys" stay one
+  event. The approve request carries `{ enrolTicketB64, envB64 }` and the server refuses it without
+  both.
+
+A phone that skips E2 would enrol clinicians who can verify nothing the owner later signs — the
+defect issue #101 was about. There is no fallback path for them to type the keys in instead; the web
+deleted those fields.
+
 **When a reply does not open (4.0b contract, issue #112).** The web console shows one notice on the
 invitation screen and raises no notification, because the owner's half is a browser tab there and a
 closed tab cannot raise one honestly (`companion/web/src/lib/pairing/copy.ts`, `mismatchTitle` /

@@ -15,6 +15,7 @@ import {
   calculateGenerator,
   cpaceFinish,
   cpaceRespond,
+  cpaceResumeRespond,
   cpaceStart,
   generatorString,
   initCpace,
@@ -171,5 +172,19 @@ describe('the properties the pairing design leans on', () => {
   it('a sid of the wrong size is refused before any crypto runs', () => {
     expect(CPACE_SID_BYTES).toBe(16)
     expect(() => cpaceStart({ ...INPUTS, sid: SID.subarray(0, 8) }, ADA)).toThrow(/16 bytes/)
+  })
+
+  it('the responder can re-derive its key from the scalar and the transcript, with no code', () => {
+    // What a clinician's tab has after a reload: the scalar it answered with, and the two public
+    // messages. The code is gone, and this is the whole reason the owner's keys can be sealed to
+    // them at approval rather than at answer.
+    const a = cpaceStart(INPUTS, ADA)
+    const b = cpaceRespond(INPUTS, a.msgA, ADB)
+    expect(toHex(cpaceResumeRespond({ sid: SID }, b.yb, a.msgA, b.msgB))).toBe(toHex(b.isk))
+
+    // Another run's scalar, or another run's transcript, gives a different key — never this one.
+    const other = cpaceRespond(INPUTS, a.msgA, ADB)
+    expect(toHex(cpaceResumeRespond({ sid: SID }, other.yb, a.msgA, b.msgB))).not.toBe(toHex(b.isk))
+    expect(toHex(cpaceResumeRespond({ sid: SID }, b.yb, a.msgA, other.msgB))).not.toBe(toHex(b.isk))
   })
 })

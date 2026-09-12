@@ -32,10 +32,20 @@
    * the fold opens. The alert sits above the button, and the field it is about is marked and
    * focused.
    *
-   * ON TRUSTING WHAT COMES BACK: the owner's keys arrive from a server that does not vouch for
-   * them. A compromised one can hand back keys it controls, and every forged share would then
-   * verify. What catches that is the clinician comparing the fingerprint against what the owner
-   * reads aloud, so the fingerprint is SHOWN on unlock rather than quietly accepted.
+   * WHERE THE OWNER'S KEYS COME FROM, WHICH IS THE CHANGE THIS FILE EXISTS AFTER (issue #101).
+   * This form used to ask a clinician to paste them in as base64, and what they pinned was worth
+   * whatever the channel that string arrived on was worth — while the same ceremony proved THEIR
+   * keys to the owner under a code no server ever sees. The pairing now seals the owner's keys back
+   * the other way, so the record this browser wrote at acceptance already carries them, and there
+   * is no longer any field here to type an owner key into. That is the point, not a tidy-up: a
+   * field would be a way to reintroduce the weaker half.
+   *
+   * The server's published copy is still fetched, and it is a CROSS-CHECK and never an override —
+   * the pin wins, a disagreement refuses the sign-in (therapist/inviteAccept.ts, chooseOwnerKeys),
+   * and a server that publishes nothing takes nothing away. A record from before the envelope
+   * existed has no pin, signs in on the published copy alone, and is told so in the one place it
+   * matters. The fingerprint is still SHOWN on unlock, because a clinician reading it back is what
+   * catches a key that changed for a reason nobody mentioned.
    */
   import { tick } from 'svelte'
   import { PortalClient, type SessionInfo } from '../../therapist/session'
@@ -49,8 +59,10 @@
     chooseOwnerKeys,
     groupForReading,
     loadKeyRecords,
+    pinnedOwnerKeysOf,
     OWNER_KEY_MISMATCH,
-    OWNER_KEY_PASTE_CAVEAT,
+    OWNER_KEY_NO_PUBLISHED_COPY,
+    OWNER_KEY_UNPINNED_CAVEAT,
     type KeyRecord,
   } from '../../therapist/inviteAccept'
   import {
@@ -110,12 +122,20 @@
   let inboxToken = $state('')
   let relRef = $state('')
   let credentialId = $state('')
-  let pinnedOwnerSignPubB64 = $state('')
-  let ownerBoxPubB64 = $state('')
   let wrappedKeyJson = $state('')
 
   /** Shown after a successful unlock so the clinician can read it back to the owner. */
   let ownerFpGroups = $state<string[] | null>(null)
+
+  /**
+   * What the sign-in that just succeeded rested on. Null until one has.
+   *
+   * 'unpinned' is the only one that is a caveat: a record from before the pairing proved the
+   * owner's keys, signing in on a copy the server does not vouch for. 'nothing-to-compare' is a
+   * single line of fact, not a warning — the stronger of the two values is present and the weaker
+   * one is simply absent.
+   */
+  let assurance = $state<'pinned' | 'nothing-to-compare' | 'unpinned' | null>(null)
 
   // Secrets — entered per session, never stored.
   let totpCode = $state('')
@@ -166,6 +186,7 @@
     error = ''
     invalidField = null
     ownerFpGroups = null
+    assurance = null
 
     /*
      * The form is judged before anything is unwrapped or sent. The first gap in reading order is
@@ -228,31 +249,28 @@
       /*
        * 4. The owner's keys.
        *
-       * THE SERVER'S COPY IS A CROSS-CHECK, NEVER AN OVERRIDE. This used to assign the published
-       * keys over whatever had been typed, with no comparison and no notice (issue #122) — so a
-       * server that handed back a key it controlled would have quietly replaced the one this
-       * clinician had verified out of band, and every forged share would then have verified.
-       * session.ts's own header says the caller must pin on first use and refuse a change; this is
-       * the caller doing it.
+       * WHAT THE PAIRING PROVED WINS, AND THE SERVER'S COPY IS A CROSS-CHECK (issues #101, #122).
+       * The record this browser wrote when it accepted the invitation carries the owner's keys as
+       * they came out of the envelope the owner sealed under the pairing code. That is the only one
+       * of the two available values anything proved, so it is the one used; the published copy is
+       * compared against it and a disagreement refuses the sign-in rather than picking a winner.
        *
-       * Typed keys win when both are present, because those are the ones a human checked. The
-       * server's copy is used only when nothing was typed, which is the honestly-weaker path a
-       * manual sign-in takes against a server whose owner has published — and a dead end otherwise,
-       * which is a real state rather than an error.
+       * A record with no pin — accepted before the envelope existed — signs in on the published
+       * copy and says so. There is no typed path any more: an owner key cannot be entered into
+       * this product by hand.
        */
       const published = await client.ownerKeys(session).catch(() => null)
-      const choice = chooseOwnerKeys(
-        { signPubB64: pinnedOwnerSignPubB64, boxPubB64: ownerBoxPubB64 },
-        published,
-      )
+      const choice = chooseOwnerKeys(rec ? pinnedOwnerKeysOf(rec) : null, published)
       if (!choice.ok) {
         throw new Error(
           choice.reason === 'mismatch'
             ? OWNER_KEY_MISMATCH
-            : 'This server has no owner keys published for the relationship, and none were entered. ' +
-              'Ask the person who invited you to publish them from their console.',
+            : 'This server publishes no owner keys for the relationship, and your pairing never ' +
+              'proved any to this browser. Ask the person who invited you for a fresh invitation, ' +
+              'and accept it in this browser.',
         )
       }
+      assurance = choice.source === 'published' ? 'unpinned' : choice.nothingToCompare ? 'nothing-to-compare' : 'pinned'
       const signB64 = choice.keys.signPubB64
       const boxB64 = choice.keys.boxPubB64
       const pinnedOwnerSignPub = so.from_base64(signB64, b)
@@ -387,19 +405,15 @@
             <label for="f-credentialId"><span>{FIELD_HELP.credentialId.label}</span></label><FieldHelp field="credentialId" />
             <input id="f-credentialId" type="text" bind:value={credentialId} placeholder={FIELD_HELP.credentialId.placeholder} autocomplete="off" aria-invalid={invalidField === 'credentialId' || undefined} aria-describedby={describedBy('credentialId')} />
           </div>
-          <div class="field wide">
-            <!-- Issue #101: the pairing code is the authority in the OTHER direction only. Said
-                 here, beside the fields, rather than in a banner someone has already scrolled past. -->
-            <Callout tone="warn" title="The weaker half">{OWNER_KEY_PASTE_CAVEAT}</Callout>
-          </div>
-          <div class="field">
-            <label for="f-pinnedOwnerSignPub"><span>{FIELD_HELP.pinnedOwnerSignPub.label}</span></label><FieldHelp field="pinnedOwnerSignPub" />
-            <input id="f-pinnedOwnerSignPub" type="text" bind:value={pinnedOwnerSignPubB64} placeholder={FIELD_HELP.pinnedOwnerSignPub.placeholder} autocomplete="off" />
-          </div>
-          <div class="field">
-            <label for="f-ownerBoxPub"><span>{FIELD_HELP.ownerBoxPub.label}</span></label><FieldHelp field="ownerBoxPub" />
-            <input id="f-ownerBoxPub" type="text" bind:value={ownerBoxPubB64} placeholder={FIELD_HELP.ownerBoxPub.placeholder} autocomplete="off" />
-          </div>
+          <!--
+            THERE ARE NO OWNER-KEY FIELDS HERE, AND THAT IS DELIBERATE (issue #101). They used to
+            sit at this point in the form with a caveat saying they were the weaker half of the
+            pairing. The pairing now proves the owner's keys to this browser under the same code
+            that proves this browser's keys to them, so a field to type one into would be a way
+            back to the weaker half. A browser with no record of the invitation therefore cannot
+            sign in at ceremony assurance at all — it falls back to what the server publishes, and
+            the line under the button says so.
+          -->
           <div class="field wide">
             <label for="f-wrappedKey"><span>{FIELD_HELP.wrappedKey.label}</span></label><FieldHelp field="wrappedKey" />
             <textarea id="f-wrappedKey" bind:value={wrappedKeyJson} rows="3" placeholder={FIELD_HELP.wrappedKey.placeholder} autocomplete="off" aria-invalid={invalidField === 'wrappedKey' || undefined} aria-describedby={describedBy('wrappedKey')}></textarea>
@@ -424,16 +438,31 @@
       </button>
     </p>
   {/if}
+  {#if assurance === 'unpinned'}
+    <!--
+      A record from before the pairing could prove the owner's keys. The consequence first, then the
+      remedy — and never in words that leave the reader feeling covered.
+    -->
+    <Callout tone="warn" title="Nothing proved these keys to you">{OWNER_KEY_UNPINNED_CAVEAT}</Callout>
+  {:else if assurance === 'nothing-to-compare'}
+    <p class="faint note">{OWNER_KEY_NO_PUBLISHED_COPY}</p>
+  {/if}
   {#if ownerFpGroups}
     <!--
-      The out-of-band check, at the only moment both people are reliably present. The server
-      relaying these keys does not vouch for them, so this is what catches a substituted one.
+      The fingerprint, at the one moment both people are reliably present. For a record the pairing
+      proved it is a courtesy, not a control — the code already did that work — and for one it did
+      not, it is the only control there is. The sentence under it says which of the two this was.
     -->
-    <Callout tone="info" title="Read this back to the person who invited you">
+    <Callout tone="info" title="Their signing key, if you ever want to check it">
       <p class="fp">{ownerFpGroups.join(' ')}</p>
       <p class="faint">
-        This is their signing key as this server handed it over. If it does not match what they read
-        out, stop and tell them — do not compare it on a screen they are not holding.
+        {#if assurance === 'unpinned'}
+          This is their signing key as this server handed it over. If it does not match what they
+          read out, stop and tell them — do not compare it on a screen they are not holding.
+        {:else}
+          This is their signing key as your pairing code proved it. Reading it back to them costs
+          nothing, but the code is what settled it.
+        {/if}
       </p>
     </Callout>
   {/if}

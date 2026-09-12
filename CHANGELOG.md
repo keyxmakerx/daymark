@@ -107,6 +107,29 @@ All notable changes to this project are documented here. The format is based on
   If a different key is already on file the console says so plainly instead of showing an error
   code, because that means this clinician can no longer verify you and no button can fix it.
 
+- **Companion — your clinician now learns your keys from the code you spoke, and stops typing them
+  in by hand.** The short code you read out to a clinician has always proved *their* keys to *you*:
+  what they send back can only be opened by someone who heard it, so nobody who merely got hold of
+  the invitation link can be approved. The other direction was not like that. Your keys reached them
+  as a long line of characters they pasted into a form, and what that proved depended entirely on
+  how the characters got to them — an email anyone could have sent, a message anyone could have
+  changed. That was the direction your journal travels along.
+  <br><br>
+  When you approve a clinician now, your console seals your own two keys with the same code and
+  sends them back through the same exchange. Their browser opens them and writes them down before it
+  finishes setting them up, so a clinician is never signed up unable to check that what arrives is
+  really from you. The two fields where they used to paste your keys are gone from the sign-in
+  screen, and there is no longer any way to type one in.
+  <br><br>
+  The copy of your key that sits on the server has not gone away and still does a job: when your
+  clinician signs in, it is compared with the one the code proved. If the two disagree the sign-in
+  stops and says so — it does not choose one. If you have not sent your key to the server at all,
+  nothing is missing; the screen says there was nothing to compare and carries on with the one the
+  code proved. A clinician who was set up before today has no proved copy, signs in on the server's,
+  and is told plainly that nothing proved those keys to them and that a fresh invitation from you
+  fixes it. Nothing about this asks anything new of you: it is the same code, spoken once, doing
+  both jobs.
+
 ### Changed
 - **Companion — a reply that will not open now asks you a question instead of guessing.** When
   somebody answers your invitation and what comes back does not open with your code, the screen used

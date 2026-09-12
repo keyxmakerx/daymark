@@ -40,8 +40,6 @@ export type FieldId =
   | 'inboxToken'
   | 'relRef'
   | 'credentialId'
-  | 'pinnedOwnerSignPub'
-  | 'ownerBoxPub'
   | 'wrappedKey'
   | 'totpCode'
   | 'readingPassphrase'
@@ -128,23 +126,13 @@ export const FIELD_HELP: Record<FieldId, FieldHelp> = {
     secret: false,
   },
 
-  pinnedOwnerSignPub: {
-    label: 'Owner signing key',
-    placeholder: 'base64url, about 43 characters',
-    what:
-      'The key that proves a share really came from the person who invited you. Anything not ' +
-      'signed by it is refused rather than shown.',
-    where: FROM_INVITE,
-    secret: false,
-  },
-
-  ownerBoxPub: {
-    label: 'Owner encryption key',
-    placeholder: 'base64url, about 43 characters',
-    what: 'The key anything you send back is sealed to, so only they can open it.',
-    where: FROM_INVITE,
-    secret: false,
-  },
+  /*
+   * THE OWNER'S TWO KEYS USED TO BE FIELDS HERE, and they are gone rather than hidden (issue #101).
+   * A clinician typed them in as base64 and pinned something worth whatever the channel it arrived
+   * on was worth. The pairing now seals the owner's keys back to the clinician under the same code
+   * that proves the clinician's keys to the owner, so there is nothing left to type and no help
+   * text to write. Leaving the entries behind would leave the field one import away.
+   */
 
   wrappedKey: {
     label: 'Your wrapped reading key',

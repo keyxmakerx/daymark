@@ -64,7 +64,7 @@ export interface OwnerCeremonyPorts {
     | { state: 'superseded' }
     | { state: 'complete'; isk: Uint8Array; offer: TherapistOffer | null }
   >
-  approveRun(exchangeId: string, enrolTicketB64: string): Promise<void>
+  approveRun(exchangeId: string, enrolTicketB64: string, envB64: string): Promise<void>
   cancelRun(exchangeId: string): Promise<boolean>
   reportInvite(inviteId: string): Promise<void>
   /**
@@ -75,6 +75,22 @@ export interface OwnerCeremonyPorts {
   inspectOffer(offer: TherapistOffer): OfferCheck
   /** Record the offer's keys. Insert-only: a supersession is a new row beside the old, never over. */
   pinOffer(offer: TherapistOffer): PinWrite | 'unreadable'
+  /**
+   * Seal E2 — the owner's own public keys — under this run's key, for the clinician to open.
+   *
+   * A port rather than a call into relay.ts because what this module owns is the ORDER (pin, seal,
+   * forward) and because the two things the sealing needs are held elsewhere: the run's derived key
+   * lives in relay.ts's in-memory state, and the owner's identity lives in the unlocked console
+   * session. Throwing is the honest failure — a run with no key derived yet has nothing to seal
+   * with — and the order below makes a throw mean nothing was approved.
+   *
+   * EVERY approval seals it, the re-key included. A clinician coming back with new keys is
+   * enrolling afresh, and the identity they must be able to verify is the same one — the owner's
+   * is derived, not generated (owner/identity.ts), so a replacement pairing proves exactly the
+   * keys the first one did. An approval path that skipped this would quietly re-create the gap
+   * issue #101 closed, for precisely the person being re-verified.
+   */
+  sealOwnerKeys(run: OwnerPairingState): string
   /** A fresh code. A port so a test can pin one; the real one is newPairingCode. */
   freshCode(): Promise<PairingCode>
   /**
@@ -207,7 +223,8 @@ export async function checkForReply(ports: OwnerCeremonyPorts, state: OwnerCerem
 }
 
 /**
- * Approve: record the keys, then forward the ticket. In that order, and the order is the point.
+ * Approve: record the keys, seal the owner's own keys back, then forward both. In that order, and
+ * the order is the point.
  *
  * Recording is local and reversible by the owner; forwarding the ticket is neither, because it puts
  * the invitation into REDEEMING and lets a person enrol. If the record refuses, nothing is forwarded
@@ -221,6 +238,19 @@ export async function checkForReply(ports: OwnerCeremonyPorts, state: OwnerCerem
  * that replacing a key reaches nothing already sealed. The screen states the second one before the
  * button; this function's part is to refuse the one case that IS ambiguous — keys already recorded
  * for a different person — and to leave everything else to the person who typed the code.
+ *
+ * SEALING SITS BETWEEN THE RECORD AND THE REQUEST, for the same reason the record does (issue
+ * #101). E2 is how the clinician comes to hold the owner's keys on the code's authority instead of
+ * on a base64 string somebody pasted, so an approval that could not produce it would enrol a
+ * clinician who can verify nothing the owner later signs. A failure here leaves the invitation
+ * exactly where it was, with a fresh code as the remedy.
+ *
+ * A RE-KEY IS SEALED LIKE ANY OTHER APPROVAL, and there is no branch here that could omit it. The
+ * two changes meet on exactly this line: #111 says a clinician may come back with new keys, and
+ * #101 says every clinician leaves with the owner's — so the person being re-verified is the last
+ * one who should be sent away unable to verify back. The owner's identity is derived rather than
+ * generated (owner/identity.ts), so what the replacement pairing proves is the same identity the
+ * first one did; nothing about their side changing changes the owner's.
  */
 export async function approve(ports: OwnerCeremonyPorts, state: OwnerCeremony): Promise<OwnerCeremony> {
   if (state.phase !== 'answered') throw new CeremonyError('there is no answered pairing run to approve')
@@ -234,7 +264,15 @@ export async function approve(ports: OwnerCeremonyPorts, state: OwnerCeremony): 
   if (pin === 'unreadable') {
     throw new CeremonyError('The keys in that reply could not be read. Nothing was approved; give them a new code.')
   }
-  await ports.approveRun(state.run.exchangeId, state.offer.enrolTicketB64)
+  let envB64: string
+  try {
+    envB64 = ports.sealOwnerKeys(state.run)
+  } catch {
+    throw new CeremonyError(
+      'Your own keys could not be sealed for them, so nothing was approved and they cannot enrol yet. Unlock this console again and give them a new code.',
+    )
+  }
+  await ports.approveRun(state.run.exchangeId, state.offer.enrolTicketB64, envB64)
   forgetOwnerRun(ports.storage)
   // `replaced` comes from the check made BEFORE the write, not from what the write returned: a
   // clinician who re-keyed completely is a brand-new identity to the pin record ('pinned-now')

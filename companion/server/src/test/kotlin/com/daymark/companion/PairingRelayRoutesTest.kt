@@ -130,7 +130,20 @@ class PairingRelayRoutesTest {
             setBody("""{"secret":"$secret"}""")
         }
 
-    private suspend fun ApplicationTestBuilder.approve(exchangeId: String, enrolTicket: String): HttpResponse =
+    /** The owner's approval: the ticket the offer carried, and their own keys sealed back (E2). */
+    private suspend fun ApplicationTestBuilder.approve(
+        exchangeId: String,
+        enrolTicket: String,
+        env: String = fakeEnv(11),
+    ): HttpResponse =
+        client.post("/v1/relations/$relRef/pairing/$exchangeId/approve") {
+            bearerAuth(ownerToken)
+            contentType(ContentType.Application.Json)
+            setBody("""{"enrolTicketB64":"$enrolTicket","envB64":"$env"}""")
+        }
+
+    /** An approval with no envelope at all — what an owner console from before issue #101 would send. */
+    private suspend fun ApplicationTestBuilder.approveWithNoEnvelope(exchangeId: String, enrolTicket: String): HttpResponse =
         client.post("/v1/relations/$relRef/pairing/$exchangeId/approve") {
             bearerAuth(ownerToken)
             contentType(ContentType.Application.Json)
@@ -191,17 +204,31 @@ class PairingRelayRoutesTest {
         assertTrue(readBody.contains("\"msgBB64\":\"$msgB\""), "MSGb must come back byte-identical")
         assertTrue(readBody.contains("\"envB64\":\"$env\""), "the sealed offer must come back byte-identical")
 
-        // The owner approves, forwarding the ticket the offer carried.
-        assertEquals(HttpStatusCode.NoContent, approve(exchangeId, chosen).status)
+        // The waiting answer carries no envelope of the owner's: there is nothing to carry yet,
+        // and the run is not closed. This is the line that turns red if the route ever serves
+        // env_to_therapist before an approval.
+        assertFalse(waiting.bodyAsText().contains("envB64"), "no owner envelope before the approval")
+
+        // The owner approves, forwarding the ticket the offer carried and their own keys sealed
+        // back under the same run's key (E2 — issue #101).
+        val ownerEnv = fakeEnv(5, size = 120)
+        assertEquals(HttpStatusCode.NoContent, approve(exchangeId, chosen, ownerEnv).status)
         val after = client.get("/v1/relations/$relRef/pairing/$exchangeId") { bearerAuth(ownerToken) }
         assertTrue(after.bodyAsText().contains("\"state\":\"CLOSED\""))
         assertEquals("REDEEMING", s.auth.inviteStatusFor(minted.inviteId))
         assertEquals(1, s.auth.enrollTicketCountFor(minted.inviteId))
+        // The owner's own read does not echo it back at them — it is the therapist's parcel, and
+        // the owner is the party that just posted it.
+        assertFalse(after.bodyAsText().contains(ownerEnv), "the owner's envelope is not served back to the owner")
 
-        // The therapist learns of it on the next poll, with the scope the invitation grants...
+        // The therapist learns of it on the next poll, with the scope the invitation grants and
+        // the owner's envelope, byte-identical...
         val approved = status(minted.inviteId, minted.secret, exchangeId)
         assertEquals(HttpStatusCode.OK, approved.status)
-        assertEquals("""{"state":"APPROVED","scope":["read.share"]}""", approved.bodyAsText())
+        assertEquals(
+            """{"state":"APPROVED","scope":["read.share"],"envB64":"$ownerEnv"}""",
+            approved.bodyAsText(),
+        )
         // ...and enrols with the ticket they chose, which only they and the owner ever held.
         assertEquals(HttpStatusCode.NoContent, enrol(chosen, "cred-1").status)
         assertEquals("CONSUMED", s.auth.inviteStatusFor(minted.inviteId))
@@ -587,6 +614,81 @@ class PairingRelayRoutesTest {
     }
 
     @Test
+    fun `an approval must carry the owner's keys, and they leave the shelf only once the run is closed`() = testApplication {
+        /*
+         * ISSUE #101, ON THE WIRE. The clinician used to learn the owner's keys by having them
+         * pasted into a form; they now come out of an envelope the owner seals at approval. Two
+         * properties keep that honest here, and each is written so that removing the rule reddens
+         * this test rather than some distant one:
+         *
+         *  1. An approval WITHOUT the envelope is refused, and refused before anything is spent.
+         *     Accepting it would enrol a clinician who can verify nothing the owner later signs,
+         *     and there is no route that repairs that afterwards.
+         *  2. The envelope is served on a CLOSED run and never before. A link-holder who answered
+         *     a run without knowing the code polls the same route and must get a state word.
+         */
+        var now = 1_000_000L
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val s = stores(dir, cfg) { now }
+        application { module(cfg, null, null, s.rel, s.auth, s.audit, pairingStore = s.pairing) }
+        val minted = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
+        val exchangeId = exchangeIdOf(ownerOpen(minted.inviteId, sid(1), fakeMsg(1)).bodyAsText())
+        assertEquals(HttpStatusCode.NoContent, respond(minted.inviteId, minted.secret, exchangeId, fakeMsg(2)).status)
+
+        // (1) No envelope: 400, and NOTHING is spent — the run is still answered and waiting, the
+        // invitation is still PENDING, and no ticket exists. The owner can reload and approve.
+        assertEquals(HttpStatusCode.BadRequest, approveWithNoEnvelope(exchangeId, ticket(1)).status)
+        assertEquals(PairingStore.State.RESPONDED, s.pairing.exchangeFor(exchangeId, relRef)!!.state)
+        assertEquals("PENDING", s.auth.inviteStatusFor(minted.inviteId))
+        assertEquals(0, s.auth.enrollTicketCountFor(minted.inviteId))
+
+        // The same for an envelope of an implausible size, in both directions.
+        assertEquals(HttpStatusCode.BadRequest, approve(exchangeId, ticket(1), b64(ByteArray(8))).status)
+        assertEquals(HttpStatusCode.BadRequest, approve(exchangeId, ticket(1), fakeEnv(6, size = 4097)).status)
+        assertEquals("PENDING", s.auth.inviteStatusFor(minted.inviteId))
+
+        // (2) Before the approval the therapist's poll is a state word and nothing else.
+        val waiting = status(minted.inviteId, minted.secret, exchangeId)
+        assertEquals("""{"state":"WAITING"}""", waiting.bodyAsText())
+
+        val ownerEnv = fakeEnv(7, size = 200)
+        assertEquals(HttpStatusCode.NoContent, approve(exchangeId, ticket(1), ownerEnv).status)
+        val approved = status(minted.inviteId, minted.secret, exchangeId)
+        assertTrue(approved.bodyAsText().contains("\"envB64\":\"$ownerEnv\""), "byte-identical after the approval")
+        // Control for the absence above: the same detector, on the same route, sees it when it is
+        // there — so "no envelope while waiting" is a refusal rather than a blind assertion.
+        assertFalse(waiting.bodyAsText().contains(ownerEnv))
+        assertTrue(approved.bodyAsText().contains(ownerEnv))
+
+        // The envelope is written once. A second approval cannot replace it, because the run has
+        // moved off RESPONDED — the same once-only rule the therapist's reply has.
+        assertEquals(HttpStatusCode.Gone, approve(exchangeId, ticket(2), fakeEnv(9)).status)
+        assertEquals(ownerEnv, s.pairing.exchangeFor(exchangeId, relRef)!!.envToTherapistB64)
+    }
+
+    @Test
+    fun `an approval stored before the owner's envelope existed reads back without one`() = testApplication {
+        // The additive-column case from the other side: a row closed by the previous build has no
+        // env_to_therapist, and the clinician's client reads that as "this approval proved no
+        // keys" rather than as a malformed response.
+        var now = 1_000_000L
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val s = stores(dir, cfg) { now }
+        application { module(cfg, null, null, s.rel, s.auth, s.audit, pairingStore = s.pairing) }
+        val minted = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
+        val exchangeId = exchangeIdOf(ownerOpen(minted.inviteId, sid(1), fakeMsg(1)).bodyAsText())
+        assertEquals(PairingStore.RespondStatus.OK, s.pairing.respond(exchangeId, minted.inviteId, fakeMsg(2), fakeEnv(3)))
+        // Through the store, as the previous build's approval would have left it.
+        assertEquals(PairingStore.TransitionStatus.OK, s.pairing.approve(exchangeId, relRef, null))
+        assertTrue(s.auth.approveRedeem(minted.inviteId, ticket(1)).status == AuthStore.ApproveStatus.OK)
+        val polled = status(minted.inviteId, minted.secret, exchangeId).bodyAsText()
+        assertTrue(polled.contains("\"state\":\"APPROVED\""))
+        assertFalse(polled.contains("envB64"), "no envelope must not be rendered as one")
+    }
+
+    @Test
     fun `a reply stored before envelopes existed reads back without one`() = testApplication {
         var now = 1_000_000L
         val dir = tmpDir()
@@ -721,7 +823,7 @@ class PairingRelayRoutesTest {
             HttpStatusCode.Unauthorized,
             client.post("/v1/relations/$relRef/pairing/$exchangeId/approve") {
                 contentType(ContentType.Application.Json)
-                setBody("""{"enrolTicketB64":"${ticket(1)}"}""")
+                setBody("""{"enrolTicketB64":"${ticket(1)}","envB64":"${fakeEnv(1)}"}""")
             }.status,
         )
 
@@ -737,7 +839,7 @@ class PairingRelayRoutesTest {
         val crossApprove = client.post("/v1/relations/$otherRelRef/pairing/$exchangeId/approve") {
             bearerAuth(ownerToken)
             contentType(ContentType.Application.Json)
-            setBody("""{"enrolTicketB64":"${ticket(1)}"}""")
+            setBody("""{"enrolTicketB64":"${ticket(1)}","envB64":"${fakeEnv(1)}"}""")
         }
         assertEquals(HttpStatusCode.Gone, crossApprove.status)
         assertEquals(0, s.auth.enrollTicketCountFor(minted.inviteId))
@@ -861,10 +963,18 @@ class PairingRelayRoutesTest {
         assertEquals(PairingStore.State.OPEN, s.pairing.exchangeFor(exchangeId, relRef)!!.state)
         assertEquals(HttpStatusCode.NoContent, respond(minted.inviteId, minted.secret, exchangeId, fakeMsg(2), fakeEnv(1, size = 4096)).status)
 
-        // The ticket the owner forwards must be exactly what the therapist could have chosen.
+        // The ticket the owner forwards must be exactly what the therapist could have chosen, and
+        // their own envelope has the same bounds the therapist's does — one constant for both
+        // directions, so the two cannot drift apart.
         assertEquals(HttpStatusCode.BadRequest, approve(exchangeId, b64(ByteArray(31))).status)
         assertEquals(HttpStatusCode.BadRequest, approve(exchangeId, "nope").status)
+        assertEquals(HttpStatusCode.BadRequest, approve(exchangeId, ticket(1), fakeEnv(2, size = 40)).status)
+        assertEquals(HttpStatusCode.BadRequest, approve(exchangeId, ticket(1), "not/base64url!").status)
         assertEquals(0, s.auth.enrollTicketCountFor(minted.inviteId))
+        // Control: the same approval with an envelope of an honest size goes through, so the
+        // refusals above are about the shapes rather than about the route being shut.
+        assertEquals(HttpStatusCode.NoContent, approve(exchangeId, ticket(1), fakeEnv(2, size = 4096)).status)
+        assertEquals(1, s.auth.enrollTicketCountFor(minted.inviteId))
 
         // The invite must be this relationship's AND alive: an expired one is refused.
         val expiring = s.auth.mintInvite(relRef, listOf("read.share"), 10L)

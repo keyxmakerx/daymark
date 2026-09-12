@@ -27,6 +27,25 @@ import { PairingPausedError, type TherapistStatusResult } from '../pairing/relay
 const REL_REF = 'rel-ref-abc'
 let code: PairingCode
 
+/**
+ * The run's transcript as the relay hands it back: one secret scalar and three public messages.
+ * Opaque here — the real bytes and the real re-derivation are proved in pairing/relay.test.ts,
+ * against a ceremony that actually runs. What this file proves is the ORDER they are used in.
+ */
+const KEYING = {
+  sidB64: 'c2lkLXNpZC1zaWQtc2lk',
+  ybB64: 'eWItc2NhbGFyLWJ5dGVz',
+  msgAB64: 'bXNnLWEtYnl0ZXM',
+  msgBB64: 'bXNnLWItYnl0ZXM',
+}
+
+/** E2 as the status poll delivers it, and the two keys a matching code gets out of it. */
+const OWNER_ENV = 'AQ-owner-sealed-keys'
+const OWNER_KEYS = {
+  signPubB64: Buffer.from(new Uint8Array(32).fill(3)).toString('base64url'),
+  boxPubB64: Buffer.from(new Uint8Array(32).fill(4)).toString('base64url'),
+}
+
 function memory(): TherapistRunStorage & { data: Map<string, string> } {
   const data = new Map<string, string>()
   return {
@@ -48,6 +67,9 @@ interface Harness {
   reopensDifferently: boolean
   statuses: TherapistStatusResult[]
   enrolOutcome: 'enrolled' | 'refused' | 'unknown'
+  /** What opening E2 yields. Null stands for every way an envelope can refuse: one bit, no reason. */
+  ownerKeysOpen: typeof OWNER_KEYS | null
+  ownerPin: 'pinned-now' | 'already-pinned' | 'differs-from-pin' | 'no-record'
 }
 
 function harness(): Harness {
@@ -67,6 +89,8 @@ function harness(): Harness {
     reopensDifferently: false,
     statuses: [],
     enrolOutcome: 'enrolled',
+    ownerKeysOpen: OWNER_KEYS,
+    ownerPin: 'pinned-now',
     ports: {
       async answer(args) {
         calls.push('fetch')
@@ -74,11 +98,19 @@ function harness(): Harness {
         offers.push(offer)
         calls.push('respond')
         if (h.answerFails) throw h.answerFails
-        return { exchangeId: 'ex-1', relRef: REL_REF }
+        return { exchangeId: 'ex-1', relRef: REL_REF, ...KEYING }
       },
       async status() {
         calls.push('status')
         return h.statuses.shift() ?? { state: 'waiting' }
+      },
+      ownerKeysFrom(run, envB64) {
+        calls.push(`openOwnerEnv:${run.exchangeId}:${envB64}`)
+        return h.ownerKeysOpen
+      },
+      pinOwnerKeys(relRef, keys) {
+        calls.push(`pinOwner:${relRef}:${keys.signPubB64}:${keys.boxPubB64}`)
+        return h.ownerPin
       },
       accept: {
         redeem: async () => {
@@ -296,9 +328,19 @@ describe('waiting for the owner', () => {
 })
 
 describe('after the owner approves', () => {
-  it('enrols with the ticket from the offer and then forgets the run', async () => {
+  it('writes the owner’s keys down BEFORE enrolling, and then forgets the run', async () => {
     const run = await answerPairing(h.ports, input())
-    const enrolment = await enrolAfterApproval(h.ports, run, ['read.share'])
+    const enrolment = await enrolAfterApproval(h.ports, run, ['read.share'], undefined, OWNER_ENV)
+    const openAt = h.calls.findIndex((c) => c.startsWith('openOwnerEnv:'))
+    const pinAt = h.calls.findIndex((c) => c.startsWith('pinOwner:'))
+    const enrolAt = h.calls.findIndex((c) => c.startsWith('enrol:'))
+    expect(openAt).toBeGreaterThanOrEqual(0)
+    expect(pinAt).toBeGreaterThan(openAt)
+    // The one that matters: enrolment is irreversible, pinning is a local write, so the local
+    // write comes first and nobody ends up enrolled unable to verify the owner.
+    expect(enrolAt).toBeGreaterThan(pinAt)
+    expect(h.calls[openAt]).toBe(`openOwnerEnv:${run.record.exchangeId}:${OWNER_ENV}`)
+    expect(h.calls[pinAt]).toBe(`pinOwner:${REL_REF}:${OWNER_KEYS.signPubB64}:${OWNER_KEYS.boxPubB64}`)
     expect(h.calls).toContain(`enrol:${run.record.enrolTicketB64}:${run.record.credentialId}`)
     expect(enrolment.relRef).toBe(REL_REF)
     expect(enrolment.scope).toEqual(['read.share'])
@@ -308,16 +350,40 @@ describe('after the owner approves', () => {
     expect(findKeyRecord(REL_REF, h.keyStore)).not.toBeNull()
   })
 
+  it('an approval that proves no owner keys enrols nobody', async () => {
+    // Three ways to arrive with nothing proved; all of them stop before the enrolment, because
+    // the state they would otherwise create — enrolled, with no verifiable owner — has no repair.
+    for (const [why, setup] of [
+      ['no envelope at all', () => undefined],
+      ['an envelope that will not open', () => void (h.ownerKeysOpen = null)],
+      ['a record already holding different owner keys', () => void (h.ownerPin = 'differs-from-pin')],
+    ] as Array<[string, () => undefined]>) {
+      h = harness()
+      const run = await answerPairing(h.ports, input())
+      const env = why === 'no envelope at all' ? undefined : OWNER_ENV
+      setup()
+      await expect(enrolAfterApproval(h.ports, run, [], undefined, env), why).rejects.toThrow(
+        /nothing was enrolled/,
+      )
+      expect(h.calls.some((c) => c.startsWith('enrol:')), why).toBe(false)
+    }
+    // Control: the same harness, nothing broken, reaches the enrolment.
+    h = harness()
+    const ok = await answerPairing(h.ports, input())
+    await enrolAfterApproval(h.ports, ok, [], undefined, OWNER_ENV)
+    expect(h.calls.some((c) => c.startsWith('enrol:'))).toBe(true)
+  })
+
   it('a refused enrolment rolls the record back; an unanswered one keeps it', async () => {
     h.enrolOutcome = 'refused'
     let run = await answerPairing(h.ports, input())
-    await expect(enrolAfterApproval(h.ports, run, [])).rejects.toThrow(/would not enrol/)
+    await expect(enrolAfterApproval(h.ports, run, [], undefined, OWNER_ENV)).rejects.toThrow(/would not enrol/)
     expect(findKeyRecord(REL_REF, h.keyStore)).toBeNull()
 
     h = harness()
     h.enrolOutcome = 'unknown'
     run = await answerPairing(h.ports, input())
-    const enrolment = await enrolAfterApproval(h.ports, run, [])
+    const enrolment = await enrolAfterApproval(h.ports, run, [], undefined, OWNER_ENV)
     expect(enrolment.serverConfirmedEnrolment).toBe(false)
     expect(findKeyRecord(REL_REF, h.keyStore)).not.toBeNull()
   })
@@ -333,10 +399,21 @@ describe('the stored run', () => {
       relRef: 'rel',
       enrolTicketB64: 'tick',
       credentialId: 'cred',
+      ...KEYING,
     }
     saveTherapistRun(store, good)
     expect(loadTherapistRun(store)).toEqual(good)
-    for (const bad of ['nope', '[]', JSON.stringify({ ...good, v: 2 }), JSON.stringify({ ...good, relRef: '' })]) {
+    for (const bad of [
+      'nope',
+      '[]',
+      JSON.stringify({ ...good, v: 2 }),
+      JSON.stringify({ ...good, relRef: '' }),
+      // A record written before the run carried its transcript cannot open the owner's envelope,
+      // so it is treated as absent rather than as a run that half works.
+      JSON.stringify({ ...good, ybB64: undefined }),
+      JSON.stringify({ ...good, msgBB64: '' }),
+      JSON.stringify({ ...good, sidB64: 5 }),
+    ]) {
       const s = memory()
       s.data.set(THERAPIST_RUN_STORAGE_KEY, bad)
       expect(loadTherapistRun(s), bad).toBeNull()
@@ -344,5 +421,61 @@ describe('the stored run', () => {
     forgetTherapistRun(store)
     expect(loadTherapistRun(store)).toBeNull()
     expect(loadTherapistRun(null)).toBeNull()
+  })
+
+  it('carries the scalar so a reloaded tab can still open the owner’s keys — and neither the code nor the key', async () => {
+    /*
+     * The mirror of pairing/ownerRunStore.test.ts, for the other side of the run. The clinician's
+     * tab has to survive from answering until the owner approves, which may be a day; what it keeps
+     * is the scalar and the public transcript, and what it must never keep is the short code or the
+     * derived key. Greps with planted controls, because a grep that cannot see a planted example
+     * proves only that it is blind.
+     */
+    const run = await answerPairing(h.ports, input())
+    const stored = h.runStore.data.get(THERAPIST_RUN_STORAGE_KEY)!
+    expect(stored.length).toBeGreaterThan(100)
+    // It keeps what a reload needs: the scalar and both messages.
+    for (const needed of [KEYING.ybB64, KEYING.msgAB64, KEYING.msgBB64, KEYING.sidB64]) {
+      expect(stored.includes(needed), `missing from the stored run: ${needed}`).toBe(true)
+    }
+    expect(loadTherapistRun(h.runStore)).toEqual(run.record)
+
+    const encodingsOf = (value: string): string[] => {
+      const bytes = new TextEncoder().encode(value)
+      let raw = ''
+      for (const b of bytes) raw += String.fromCharCode(b)
+      const std = btoa(raw)
+      return [
+        value,
+        value.toLowerCase(),
+        encodeURIComponent(value),
+        std,
+        std.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
+        Array.from(bytes)
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join(''),
+      ]
+    }
+    // The code, in every encoding the wire test checks — and the passphrase with it.
+    for (const secret of [code.canonical, code.display, input().passphrase]) {
+      for (const encoding of encodingsOf(secret)) {
+        expect(stored.includes(encoding), `stored as: ${encoding}`).toBe(false)
+        // Control, per encoding: the detector finds a planted one.
+        expect((stored + encoding).includes(encoding)).toBe(true)
+      }
+    }
+    // And no field could hold the derived key even if something tried.
+    expect(Object.keys(run.record).sort()).toEqual([
+      'credentialId',
+      'enrolTicketB64',
+      'exchangeId',
+      'inviteId',
+      'msgAB64',
+      'msgBB64',
+      'relRef',
+      'sidB64',
+      'v',
+      'ybB64',
+    ])
   })
 })

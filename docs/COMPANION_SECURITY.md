@@ -445,19 +445,39 @@ is not an error and never burns an invitation; only a human report does (§3.9.1
 The SAS words remain as a fingerprint the connections screen can show; they stop being a
 blocking step once the code-based ceremony has a screen.
 
-**What is true in each direction, 2026-09-12 (issue #101).** The two directions are NOT at the same
-assurance and the consoles must not imply they are.
+**What each direction rests on, 2026-09-12 (issue #101 — closed).** Both directions now rest on the
+short code, and neither rests on a channel the server can reach.
 
-| Direction | How the key is learned | Assurance |
+| Direction | How the key is learned | What it rests on |
 | --- | --- | --- |
-| Owner learns the clinician's keys | Sealed in the pairing envelope, openable only by deriving the ISK from the code | **Ceremony.** A link-holder who answers first produces something the owner cannot open. |
-| Clinician learns the owner's keys | Typed into the sign-in form by hand, or read from the server's published copy when nothing is typed | **Whatever the channel was.** Nothing proves a pasted key came from the owner; the published copy is trust-on-first-use against a server that could hand back anything. |
+| Owner learns the clinician's keys | **E1**, sealed by the clinician into the pairing reply and opened only by deriving the ISK from the code | The code. A link-holder who answers first produces something the owner cannot open, so nothing of theirs is ever pinned or approved. |
+| Clinician learns the owner's keys | **E2**, sealed by the owner at Approve under the same run's key in the other direction, and served to the clinician on the status poll of a closed run | The code. An envelope that opens was sealed by the person who spoke it, and one that does not is a null — not a diagnosis. |
 
-Two things changed on 2026-09-12 and neither closes the gap. The owner's identity is now derived
-rather than generated (§4), so the value a clinician pins is at least *stable* — before that it
-changed every owner session, which made the pin not weak but meaningless (#121). And a typed key is
-no longer silently overwritten by the server's copy (#122): typed wins, the published copy is a
-cross-check, and a disagreement refuses the sign-in.
+The two envelopes are sealed under **different** keys derived from the same ISK (the direction is in
+the key label and in the AAD), so neither can be reflected back and opened as the other, and each
+payload decoder refuses the other's shape field for field. The server relays both and holds a key
+for neither. E2 travels in exactly one request (the owner's approve) and comes back in exactly one
+response (a status poll of a `CLOSED` run); E1 the same, one request and one response the other way.
+An approval that carries no E2 is **refused** rather than closed — the recoverable failure is a
+reload and a fresh code, the unrecoverable one is a clinician enrolled with no owner keys proved to
+them.
+
+**What the server-published owner key is still for.** The owner publishes their two public keys to
+the server (`/v1/relations/{relRef}/owner-keys`), and that copy has not gone away. It is now the
+**cross-check and never the source**: at sign-in the clinician's console compares it against what the
+ceremony pinned, a disagreement on either half refuses the sign-in naming the consequence, and a
+server that publishes nothing takes nothing away, because the pin is the stronger value and is
+already in hand. This is the mirror of what `TherapistKeyIntake` does on the owner's side with the
+server-registered clinician keys.
+
+**Records that predate E2.** A clinician who enrolled before this existed has no ceremony pin, and
+nothing can retroactively make their ceremony have proved one. They sign in on the published copy
+alone, are told exactly that — nothing proved these keys to you, this server does not vouch for
+them, check the fingerprint on another channel — and are told that accepting a fresh invitation
+replaces it with keys the code proves (`OWNER_KEY_UNPINNED_CAVEAT`,
+`companion/web/src/lib/therapist/inviteAccept.ts`). There is no longer any way for a clinician to
+type an owner key into this product, which is the point rather than a simplification: a field would
+be a way back to the weaker half.
 
 **A matching code on a FRESH invitation replaces a pinned key (issue #111, 2026-09-12).** The owner
 console used to refuse to approve a reply whose keys were not the ones it already held, and told the
@@ -491,12 +511,11 @@ code-typing settles. And the OTHER key route is unchanged: keys the **server** h
 manual rotation screen still requires the SAS words, because on those channels nothing has replaced
 them.
 
-**The remaining fix is now unblocked and is not 4.0b.** This gap was previously deferred to the
-phone because there was no durable owner identity to carry. There is one now, so the owner's public
-keys can travel to the clinician the same way the clinician's travel to the owner: a second
-envelope in the pairing exchange, owner → clinician, under a new payload version. Until that ships,
-the manual fields carry a caveat naming the consequence
-(`OWNER_KEY_PASTE_CAVEAT`, `companion/web/src/lib/therapist/inviteAccept.ts`).
+**A replacement pairing seals E2 too.** The re-key path above runs through the same approve, so a
+clinician who comes back with new keys leaves holding the owner's, proved by the code they just
+typed. The owner's identity is derived rather than generated, so what the replacement proves is the
+same identity the first pairing did — and the person being re-verified is the last one who should
+be left unable to verify back.
 
 ### 5.7 Recovery & revocation
 

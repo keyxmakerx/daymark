@@ -27,9 +27,19 @@
  *      open tomorrow. A record written for a run that then fails is removed (see `forget`).
  *   5. Respond: MSGb and the sealed offer, together, once.
  *   6. Wait for the owner. Polling, at the cadence the shared rate budget allows.
- *   7. Enrol with the ticket from the offer, then sign in and register the public keys — the same
+ *   7. Take the OWNER'S keys out of the envelope their approval carried and write them into this
+ *      relationship's record — before enrolling, so a clinician is never enrolled into a
+ *      relationship whose owner they cannot verify (issue #101).
+ *   8. Enrol with the ticket from the offer, then sign in and register the public keys — the same
  *      steps as before, through the same code (inviteAccept.ts's enrolWithTicket and
  *      completeAcceptance), because from a ticket onwards the two ceremonies are one.
+ *
+ * WHY STEP 7 EXISTS. The pairing used to prove keys in one direction only. The owner learned the
+ * clinician's keys from an envelope no one without the code could have sealed; the clinician
+ * learned the owner's by typing base64 into the sign-in form, which is worth whatever the channel
+ * that string travelled on was worth — and the clinical content flows along that direction. The
+ * owner's approval now carries their own two public keys sealed under the same run's key in the
+ * other direction, and this module is where they are opened and written down.
  *
  * NOTHING HERE RETRIES BY ITSELF. A run the owner cancelled, a run superseded by a fresh code, an
  * invitation that died: all read as `gone`, and the answer is to ask the person for a new code. An
@@ -41,18 +51,22 @@ import {
   enrolWithTicket,
   findKeyRecord,
   forgetKeyRecord,
+  pinOwnerKeysOnRecord,
   saveKeyRecord,
   sameKeys,
   type AcceptancePorts,
   type Enrolment,
   type KeyRecord,
+  type OwnerPublicKeysB64,
 } from './inviteAccept'
 import { zeroize, type TherapistKeys, type WrappedKeyBlob } from './keyStore'
 import {
   PAIRING_STATUS_POLL_MS,
+  ownerKeysFromEnvelope,
   PairingPausedError,
   therapistAnswerPairing,
   therapistPairingStatus,
+  type TherapistRunKeying,
   type TherapistStatusResult,
 } from '../pairing/relay'
 import { newEnrolTicketB64, type TherapistOffer } from '../pairing/payloads'
@@ -65,9 +79,26 @@ export const THERAPIST_RUN_STORAGE_KEY = 'daymark.pairing.therapist-run.v1'
 /**
  * What this browser keeps between answering and the owner approving.
  *
- * NOT THE CODE, and not the passphrase. What is here is the ticket — a secret, but one whose whole
- * life is this ceremony and whose only power is to enrol the credential this browser already holds
- * the keys for — plus the ids needed to ask whether the owner has decided yet.
+ * NOT THE CODE, and not the passphrase, and not the derived key. What is here is the ticket — a
+ * secret, but one whose whole life is this ceremony and whose only power is to enrol the credential
+ * this browser already holds the keys for — the ids needed to ask whether the owner has decided
+ * yet, and this run's half of the CPace transcript.
+ *
+ * WHY THE TRANSCRIPT IS HERE, which is new with the owner → clinician envelope. The owner's keys
+ * arrive sealed under this run's key, at approval, which can be an hour or a day after the answer.
+ * A clinician who reloads the tab in between must still be able to open it, and the honest way to
+ * make that possible is the one the owner's side already uses (pairing/ownerRunStore.ts): keep the
+ * SCALAR — one secret, whose life is this run — and the public messages that were on the wire
+ * anyway, and re-derive. Keeping the key itself would be storing the thing that opens the envelope
+ * rather than the thing that computes it, for no gain; keeping the code would break the one
+ * invariant the whole ceremony rests on (§3.7.4). A test greps a stored record for both, with
+ * planted controls so it cannot pass by being blind.
+ *
+ * MSGb is stored as well as MSGa, and that is not redundancy: the responder's transcript half
+ * cannot be recomputed from the scalar without the generator, and the generator needs the code.
+ *
+ * sessionStorage, so all of it dies with the tab. A run that outlives its tab is the case the copy
+ * already handles by asking for a new code.
  */
 export interface TherapistRunRecord {
   v: 1
@@ -76,6 +107,14 @@ export interface TherapistRunRecord {
   relRef: string
   enrolTicketB64: string
   credentialId: string
+  /** This run's sid, as the owner posted it. Public. */
+  sidB64: string
+  /** The CPace scalar this browser answered with. Secret, and the reason this record is per-tab. */
+  ybB64: string
+  /** The owner's opening message, as fetched. Public. */
+  msgAB64: string
+  /** This browser's reply, as posted. Public, and not recomputable without the code. */
+  msgBB64: string
 }
 
 export interface TherapistRunStorage {
@@ -119,7 +158,17 @@ export function loadTherapistRun(storage: TherapistRunStorage | null): Therapist
   if (typeof parsed !== 'object' || parsed === null) return null
   const r = parsed as Record<string, unknown>
   if (r.v !== 1) return null
-  for (const k of ['inviteId', 'exchangeId', 'relRef', 'enrolTicketB64', 'credentialId'] as const) {
+  for (const k of [
+    'inviteId',
+    'exchangeId',
+    'relRef',
+    'enrolTicketB64',
+    'credentialId',
+    'sidB64',
+    'ybB64',
+    'msgAB64',
+    'msgBB64',
+  ] as const) {
     if (typeof r[k] !== 'string' || (r[k] as string).length === 0) return null
   }
   return {
@@ -129,6 +178,10 @@ export function loadTherapistRun(storage: TherapistRunStorage | null): Therapist
     relRef: r.relRef as string,
     enrolTicketB64: r.enrolTicketB64 as string,
     credentialId: r.credentialId as string,
+    sidB64: r.sidB64 as string,
+    ybB64: r.ybB64 as string,
+    msgAB64: r.msgAB64 as string,
+    msgBB64: r.msgBB64 as string,
   }
 }
 
@@ -150,9 +203,20 @@ export interface PairingAcceptancePorts {
     secret: string
     code: CanonicalPairingCode
     makeOffer: (relRef: string) => Promise<TherapistOffer>
-  }): Promise<{ exchangeId: string; relRef: string }>
+  }): Promise<{ exchangeId: string; relRef: string } & TherapistRunKeying>
   /** Has the owner decided? */
   status(args: { inviteId: string; secret: string; exchangeId: string }): Promise<TherapistStatusResult>
+  /**
+   * Open the envelope the owner's approval carried, using this run's transcript, and return the two
+   * public keys inside — or null for every failure, which is the only honest answer an AEAD gives.
+   *
+   * A port so that the ORDER this module owns (owner keys written down, THEN enrolment) stays a
+   * node test over stubs, while the crypto it stands for is proved end to end where a real ceremony
+   * runs: pairing/relay.ts's ownerKeysFromEnvelope, against a real envelope the owner's side sealed.
+   */
+  ownerKeysFrom(run: TherapistRunRecord, envB64: string): OwnerPublicKeysB64 | null
+  /** Write the owner's keys into this relationship's record. Insert-only; see pinOwnerKeysOnRecord. */
+  pinOwnerKeys(relRef: string, keys: OwnerPublicKeysB64): 'pinned-now' | 'already-pinned' | 'differs-from-pin' | 'no-record'
   /** The enrolment half, and everything after it. */
   accept: AcceptancePorts
   runStorage: TherapistRunStorage | null
@@ -169,9 +233,18 @@ export function pairingPortsFor(
   return {
     answer: async (args) => {
       const r = await therapistAnswerPairing({ ...args, baseUrl })
-      return { exchangeId: r.exchangeId, relRef: r.relRef }
+      return {
+        exchangeId: r.exchangeId,
+        relRef: r.relRef,
+        sidB64: r.sidB64,
+        ybB64: r.ybB64,
+        msgAB64: r.msgAB64,
+        msgBB64: r.msgBB64,
+      }
     },
     status: (args) => therapistPairingStatus({ ...args, baseUrl }),
+    ownerKeysFrom: (run, envB64) => ownerKeysFromEnvelope(run, envB64),
+    pinOwnerKeys: (relRef, keys) => pinOwnerKeysOnRecord(relRef, keys, accept.storage),
     accept,
     runStorage,
     wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -213,7 +286,8 @@ export function pausedUntilText(retryAfterSeconds: number, now: Date = new Date(
 /** Where an answered run stands while the owner decides. */
 export type PairingWait =
   | { state: 'waiting' }
-  | { state: 'approved'; scope: string[] }
+  /** `envB64` is the owner's keys, sealed under this run's key; absent from a console that predates them. */
+  | { state: 'approved'; scope: string[]; envB64?: string }
   /** Cancelled, superseded, reported, expired: one answer, and the remedy is a new code. */
   | { state: 'gone' }
 
@@ -302,6 +376,10 @@ export async function answerPairing(ports: PairingAcceptancePorts, input: Pairin
       relRef: answered.relRef,
       enrolTicketB64: built.ticket,
       credentialId: built.record.credentialId,
+      sidB64: answered.sidB64,
+      ybB64: answered.ybB64,
+      msgAB64: answered.msgAB64,
+      msgBB64: answered.msgBB64,
     }
     saveTherapistRun(ports.runStorage, record)
     return { record, keys: built.keys }
@@ -360,16 +438,59 @@ export async function waitForApproval(
 }
 
 /**
- * Step 7: spend the ticket the owner just made live, through the same enrolment code the
- * invite-secret ceremony used. From here the two paths are identical, which is why this is four
- * lines and not a second ceremony.
+ * Steps 7 and 8: write down the owner's keys, then spend the ticket the owner just made live.
+ *
+ * THE ORDER IS THE POINT, and it is the mirror of the owner's own (pairing/ownerCeremony.ts pins
+ * before it forwards a ticket). Enrolling is not reversible from this side: the ticket is spent,
+ * the credential exists, the invitation is CONSUMED, and no route un-enrols one. Pinning is a local
+ * write. So the local write happens first, and a clinician is never left enrolled into a
+ * relationship whose owner nothing ever proved to them.
+ *
+ * WHAT EACH REFUSAL MEANS. A missing envelope is an owner console that approved before this existed;
+ * one that will not open is a run this browser is not the other end of, or bytes that were changed.
+ * Both say the same thing to a person — ask for a new code — because this side cannot tell them
+ * apart and a guess here would be a guess about whether someone is being attacked. A record that
+ * already holds DIFFERENT owner keys is the substitution the pin exists to make visible, and it
+ * stops everything.
  */
 export async function enrolAfterApproval(
   ports: PairingAcceptancePorts,
   run: AnsweredRun,
   scope: string[],
   host?: string,
+  /** E2, as the status poll returned it. Absent means the owner's console proved nothing. */
+  envB64?: string,
 ): Promise<Enrolment> {
+  if (!envB64) {
+    throw new AcceptError(
+      'The approval carried no keys for you to check them by, so nothing was enrolled. Ask the person ' +
+        'who invited you for a new code, from a console they have reloaded.',
+      'pairing',
+    )
+  }
+  const ownerKeys = ports.ownerKeysFrom(run.record, envB64)
+  if (!ownerKeys) {
+    throw new AcceptError(
+      'The keys that came back with the approval could not be opened, so nothing was enrolled. Ask ' +
+        'the person who invited you for a new code.',
+      'pairing',
+    )
+  }
+  const pinned = ports.pinOwnerKeys(run.record.relRef, ownerKeys)
+  if (pinned === 'differs-from-pin') {
+    throw new AcceptError(
+      'This browser already holds different keys for the person who invited you, so nothing was ' +
+        'enrolled. Check with them on a channel that is not this server before going further.',
+      'record',
+    )
+  }
+  if (pinned === 'no-record') {
+    throw new AcceptError(
+      'This browser no longer holds the keys it made for this relationship, so nothing was enrolled. ' +
+        'Ask for a new invitation and accept it in this browser.',
+      'record',
+    )
+  }
   const enrolment = await enrolWithTicket(ports.accept, {
     relRef: run.record.relRef,
     scope,
