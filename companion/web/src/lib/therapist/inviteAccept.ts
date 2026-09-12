@@ -479,6 +479,24 @@ export const OWNER_KEY_MISMATCH =
   'and will not choose for you. Nothing has been signed in. Check the fingerprint with the person ' +
   'who invited you, on a channel that is not this server.'
 
+/**
+ * The caveat beside the manual owner-key fields (issue #101).
+ *
+ * The rebuilt pairing makes the code load-bearing in ONE direction: the owner learns the
+ * clinician's keys from an envelope only a code-holder could seal. Typing the owner's keys into
+ * this form is the other direction, and it is not the same thing — nothing about a pasted key
+ * proves it came from the owner. It is as good as the channel it arrived on and no better.
+ *
+ * Said in the consequence rather than the mechanism, and NOT in reassuring words. A caveat that
+ * makes someone feel covered is worse than no caveat, because it spends the one moment they were
+ * going to think about it.
+ */
+export const OWNER_KEY_PASTE_CAVEAT =
+  'Typing these is the weaker half of the pairing. The code you were given proves your keys to the ' +
+  'person who invited you; nothing here proves theirs to you. These are only as trustworthy as ' +
+  'wherever you copied them from, so check the fingerprint with them directly before you read ' +
+  'anything they send.'
+
 /** A public key pair as it travels between the two sides: base64url strings, never bytes. */
 export interface OwnerPublicKeysB64 {
   signPubB64: string

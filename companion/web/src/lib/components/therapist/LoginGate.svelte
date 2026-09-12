@@ -51,6 +51,7 @@
     loadKeyRecords,
     saveKeyRecord,
     OWNER_KEY_MISMATCH,
+    OWNER_KEY_PASTE_CAVEAT,
     type KeyRecord,
   } from '../../therapist/inviteAccept'
   import { firstProblem, WRAPPED_KEY_UNREADABLE, type UnlockFieldId } from '../../therapist/loginGate'
@@ -350,6 +351,11 @@
           <div class="field">
             <label for="f-credentialId"><span>{FIELD_HELP.credentialId.label}</span></label><FieldHelp field="credentialId" />
             <input id="f-credentialId" type="text" bind:value={credentialId} placeholder={FIELD_HELP.credentialId.placeholder} autocomplete="off" aria-invalid={invalidField === 'credentialId' || undefined} aria-describedby={describedBy('credentialId')} />
+          </div>
+          <div class="field wide">
+            <!-- Issue #101: the pairing code is the authority in the OTHER direction only. Said
+                 here, beside the fields, rather than in a banner someone has already scrolled past. -->
+            <Callout tone="warn" title="The weaker half">{OWNER_KEY_PASTE_CAVEAT}</Callout>
           </div>
           <div class="field">
             <label for="f-pinnedOwnerSignPub"><span>{FIELD_HELP.pinnedOwnerSignPub.label}</span></label><FieldHelp field="pinnedOwnerSignPub" />

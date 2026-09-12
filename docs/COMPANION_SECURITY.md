@@ -294,9 +294,12 @@ only read.** The recovery code on paper is no longer read-only. Subkey ids 3 and
 cross-platform contract for the phone side.
 
 **`owner_keys` is insert-only, and the owner can read it back.** The first key published for a
-relationship is that relationship's key permanently — no update path, no delete — because a table
-that could be updated would make a server swapping the owner's key indistinguishable from the
-owner rotating it. A second publish answers 409, which alone cannot say whether the frozen key is
+relationship is that relationship's key permanently — the store's only writer is
+`INSERT OR IGNORE`, with no update path and no delete — because a route that could overwrite would
+make a server swapping the owner's key indistinguishable from the owner rotating it. **That is a
+property of the application, not of the file.** There is no trigger and no constraint behind it, so
+anyone with WRITE access to the database can `UPDATE` the row; read-only dumps are unaffected, and
+"insert-only" must not be inherited as a property that holds against someone holding the disk. A second publish answers 409, which alone cannot say whether the frozen key is
 the owner's own (a harmless repeat) or one they can no longer produce; so the owner may GET the
 route with their bearer token and compare. Their own read is not audited: the audit log is what
 the owner reads to see what the *clinician* did.
@@ -418,6 +421,27 @@ never in a request body, a header, a query string, or a log line, on either side
 is not an error and never burns an invitation; only a human report does (§3.9.1 of the plan).
 The SAS words remain as a fingerprint the connections screen can show; they stop being a
 blocking step once the code-based ceremony has a screen.
+
+**What is true in each direction, 2026-09-12 (issue #101).** The two directions are NOT at the same
+assurance and the consoles must not imply they are.
+
+| Direction | How the key is learned | Assurance |
+| --- | --- | --- |
+| Owner learns the clinician's keys | Sealed in the pairing envelope, openable only by deriving the ISK from the code | **Ceremony.** A link-holder who answers first produces something the owner cannot open. |
+| Clinician learns the owner's keys | Typed into the sign-in form by hand, or read from the server's published copy when nothing is typed | **Whatever the channel was.** Nothing proves a pasted key came from the owner; the published copy is trust-on-first-use against a server that could hand back anything. |
+
+Two things changed on 2026-09-12 and neither closes the gap. The owner's identity is now derived
+rather than generated (§4), so the value a clinician pins is at least *stable* — before that it
+changed every owner session, which made the pin not weak but meaningless (#121). And a typed key is
+no longer silently overwritten by the server's copy (#122): typed wins, the published copy is a
+cross-check, and a disagreement refuses the sign-in.
+
+**The remaining fix is now unblocked and is not 4.0b.** This gap was previously deferred to the
+phone because there was no durable owner identity to carry. There is one now, so the owner's public
+keys can travel to the clinician the same way the clinician's travel to the owner: a second
+envelope in the pairing exchange, owner → clinician, under a new payload version. Until that ships,
+the manual fields carry a caveat naming the consequence
+(`OWNER_KEY_PASTE_CAVEAT`, `companion/web/src/lib/therapist/inviteAccept.ts`).
 
 ### 5.7 Recovery & revocation
 

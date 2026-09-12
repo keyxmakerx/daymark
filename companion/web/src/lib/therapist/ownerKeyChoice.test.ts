@@ -12,7 +12,9 @@
  * change. These are the tests for the caller finally doing it.
  */
 import { describe, it, expect } from 'vitest'
-import { chooseOwnerKeys, OWNER_KEY_MISMATCH } from './inviteAccept'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { chooseOwnerKeys, OWNER_KEY_MISMATCH, OWNER_KEY_PASTE_CAVEAT } from './inviteAccept'
 
 const TYPED = { signPubB64: 'SIGN-TYPED', boxPubB64: 'BOX-TYPED' }
 const NOTHING_TYPED = { signPubB64: '', boxPubB64: '' }
@@ -101,5 +103,43 @@ describe('(d) what the refusal says', () => {
 
   it('echoes no key', () => {
     expect(OWNER_KEY_MISMATCH).not.toMatch(/\$\{|[A-Za-z0-9_-]{30,}/)
+  })
+})
+
+describe('(e) the caveat beside the manual owner-key fields (issue #101)', () => {
+  const source = readFileSync(
+    fileURLToPath(new URL('../components/therapist/LoginGate.svelte', import.meta.url)),
+    'utf8',
+  )
+
+  it('names the consequence and does not reassure', () => {
+    // A caveat that makes someone feel covered is worse than none: it spends the one moment they
+    // were going to think about it.
+    expect(OWNER_KEY_PASTE_CAVEAT).toContain('weaker half')
+    expect(OWNER_KEY_PASTE_CAVEAT).toContain('nothing here proves theirs to you')
+    expect(OWNER_KEY_PASTE_CAVEAT).toMatch(/check the fingerprint with them/i)
+  })
+
+  it('does not describe the paste as equivalent to the ceremony', () => {
+    const FORBIDDEN = [
+      { name: 'equivalence', pattern: /\b(just as (safe|secure)|equally|same as the code|fully verified)\b/i, planted: 'This is just as safe as the code.' },
+      { name: 'reassurance', pattern: /\b(don't worry|no need to|perfectly (safe|fine)|secure)\b/i, planted: "Don't worry, this is secure." },
+    ]
+    for (const { name, pattern, planted } of FORBIDDEN) {
+      expect(pattern.test(planted), name).toBe(true)
+      expect(pattern.test(OWNER_KEY_PASTE_CAVEAT), name).toBe(false)
+    }
+  })
+
+  it('is rendered beside the fields it is about, not in a banner above the form', () => {
+    // Someone reaching these fields has already scrolled past every banner on the page.
+    const caveat = source.indexOf('{OWNER_KEY_PASTE_CAVEAT}')
+    const signField = source.indexOf('f-pinnedOwnerSignPub')
+    const boxField = source.indexOf('f-ownerBoxPub')
+    expect(caveat).toBeGreaterThan(-1)
+    expect(caveat).toBeLessThan(signField)
+    expect(signField).toBeLessThan(boxField)
+    // Close enough to be read as belonging to them.
+    expect(signField - caveat).toBeLessThan(400)
   })
 })
