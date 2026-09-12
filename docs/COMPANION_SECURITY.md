@@ -458,6 +458,38 @@ changed every owner session, which made the pin not weak but meaningless (#121).
 no longer silently overwritten by the server's copy (#122): typed wins, the published copy is a
 cross-check, and a disagreement refuses the sign-in.
 
+**A matching code on a FRESH invitation replaces a pinned key (issue #111, 2026-09-12).** The owner
+console used to refuse to approve a reply whose keys were not the ones it already held, and told the
+owner to reach the clinician another way. That refusal is retracted, and the reasoning is worth
+stating because it is the same shape as several arguments in this document. The pin's authority IS
+the code: the existing pin was recorded on exactly the proof *"the party that sealed this envelope
+is the party I spoke the code to"* and on nothing stronger. Demanding a stronger proof to replace a
+pin than to create one is incoherent, and it buys nothing — someone who obtains a code can already
+pair fresh and be sent every future share, so letting them replace a pin adds no access. It adds
+detectability: the real clinician's next share stops opening and they phone.
+
+Three things carry that trade and none is optional.
+
+1. **Rotation always costs a fresh invitation.** Approving moves the invitation out of `PENDING`,
+   and every route that starts or answers a run demands `PENDING`, so the old invitation and its
+   code are dead by the time a second offer could exist. A touch against a spent invitation is
+   refused by status: no burn, no error, it simply never opens. Pinned in
+   `companion/server/src/test/kotlin/com/daymark/companion/PairingRelayRoutesTest.kt`.
+2. **It reaches nothing already sealed.** Rotation changes what is sealed from now on and nothing
+   else; whoever holds the device that carried the old keys can still open every share sent before.
+   The screen says so, in those words, at the point of the click — the same standing fact as
+   *"Revoking does not un-send what was already read."*
+3. **The record is insert-only.** A supersession is a NEW pin row; the old one stays as history and
+   seals target the newest (`companion/web/src/lib/share/pairing.ts`). The owner's record can say a
+   key changed and when, rather than quietly looking as though it never had.
+
+What the console still refuses on this route is keys it has already recorded for a DIFFERENT
+relationship — not a rotation but an ambiguity about who a share is for, which no amount of
+code-typing settles. And the OTHER key route is unchanged: keys the **server** hands over
+(`owner/therapistKeys.ts`, `acceptTherapistKeys`) still require the fingerprints read aloud, and the
+manual rotation screen still requires the SAS words, because on those channels nothing has replaced
+them.
+
 **The remaining fix is now unblocked and is not 4.0b.** This gap was previously deferred to the
 phone because there was no durable owner identity to carry. There is one now, so the owner's public
 keys can travel to the clinician the same way the clinician's travel to the owner: a second

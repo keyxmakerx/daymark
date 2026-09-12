@@ -19,6 +19,8 @@ import {
   fetchTherapistKeys,
   parseTherapistKeyRecord,
   acceptTherapistKeys,
+  checkOffer,
+  pinFromPairing,
   confirmationMatches,
   keyFingerprints,
   groupFingerprint,
@@ -278,5 +280,118 @@ describe('the confirmation gate in front of the pin', () => {
     expect(
       confirmationMatches({ ...record, boxPub: new Uint8Array(0) }, { boxFp: '', signFp: heard.signFp }),
     ).toBe(false)
+  })
+})
+
+/*
+ * ISSUE #111: reading an offer against what this console already holds.
+ *
+ * The decision under test is that 'supersedes' is an ANSWER and not a refusal — the pin was created
+ * on the strength of a code and may be replaced on the strength of a code — and that exactly one
+ * case still refuses, because no amount of code-typing settles which of two people a key belongs to.
+ */
+describe('an offer, set against the keys already on file', () => {
+  let ther: Identity
+  let other: Identity
+
+  beforeAll(async () => {
+    await initShareCrypto()
+    ther = newIdentity()
+    other = newIdentity()
+  })
+
+  const offerOf = (id: Identity, boxPub: Uint8Array = id.x25519.publicKey) => ({
+    boxPubB64: toBase64(boxPub),
+    signPubB64: toBase64(id.ed25519.publicKey),
+  })
+  const heldOf = (id: Identity, boxPub: Uint8Array = id.x25519.publicKey) => ({
+    boxPub,
+    signPub: id.ed25519.publicKey,
+  })
+
+  it('nothing on file is a first pairing', () => {
+    expect(checkOffer(offerOf(ther), null).kind).toBe('first')
+  })
+
+  it('the same keys again change nothing and say so', () => {
+    expect(checkOffer(offerOf(ther), heldOf(ther)).kind).toBe('unchanged')
+  })
+
+  it('a different encryption key under the same identity supersedes rather than refusing', () => {
+    const rekeyed = newBoxKeyPair().publicKey
+    expect(checkOffer(offerOf(ther, rekeyed), heldOf(ther)).kind).toBe('supersedes')
+  })
+
+  it('a wholly new keypair for the same relationship supersedes too — the person is the subject', () => {
+    // The common case: a clinician on a new browser makes both keys afresh. The pin RECORD has
+    // never seen this identity, but the owner's relationship has keys and they are about to change,
+    // which is the thing the screen has to say.
+    expect(checkOffer(offerOf(other), heldOf(ther)).kind).toBe('supersedes')
+  })
+
+  it('keys already recorded for someone else are refused, by either key', () => {
+    const named = { displayName: 'Dr Okafor', ...heldOf(other) }
+    // The signing key shared: the console would file two people under one identity.
+    const sameSign = checkOffer(offerOf(other, newBoxKeyPair().publicKey), heldOf(ther), [named])
+    expect(sameSign.kind).toBe('other-person')
+    expect(sameSign.kind === 'other-person' && sameSign.displayName).toBe('Dr Okafor')
+    // The encryption key shared: a share meant for either could be opened by the other.
+    const sameBox = checkOffer(offerOf(newIdentity(), other.x25519.publicKey), heldOf(ther), [named])
+    expect(sameBox.kind).toBe('other-person')
+    // Control: the same offer with nobody else on file is an ordinary replacement.
+    expect(checkOffer(offerOf(other), heldOf(ther), []).kind).toBe('supersedes')
+  })
+
+  it('relationships with no keys yet never collide with each other', () => {
+    // A pending entry carries EMPTY key arrays, not absent ones. Comparing two of those by
+    // fingerprint would report every first pairing in a console with two pending clinicians as a
+    // collision, and the owner would be stuck with a refusal about a person who has no keys.
+    const pending = { displayName: 'Not yet', boxPub: new Uint8Array(0), signPub: new Uint8Array(0) }
+    expect(checkOffer(offerOf(ther), null, [pending]).kind).toBe('first')
+    expect(checkOffer(offerOf(ther), { boxPub: new Uint8Array(0), signPub: new Uint8Array(0) }).kind).toBe('first')
+    // Control: a REAL other relationship in the same list is still caught.
+    expect(checkOffer(offerOf(other), null, [pending, { displayName: 'Dr Okafor', ...heldOf(other) }]).kind).toBe(
+      'other-person',
+    )
+  })
+
+  it('bytes that are not two public keys are unreadable, not a comparison', () => {
+    expect(checkOffer({ boxPubB64: 'nope!', signPubB64: 'nope!' }, heldOf(ther)).kind).toBe('unreadable')
+    expect(checkOffer({ boxPubB64: toBase64(new Uint8Array(31)), signPubB64: toBase64(new Uint8Array(32)) }, null).kind)
+      .toBe('unreadable')
+  })
+
+  it('recording an offer appends; it no longer refuses a key that differs from the one on file', () => {
+    const pins = new PinStore()
+    expect(pinFromPairing(pins, publicOf(ther), 1)).toBe('pinned-now')
+    expect(pinFromPairing(pins, publicOf(ther), 2)).toBe('already-pinned')
+
+    const rekeyed = { x25519Pub: newBoxKeyPair().publicKey, ed25519Pub: ther.ed25519.publicKey }
+    // This is the line issue #111 changed: it used to return 'differs-from-pin' and write nothing.
+    expect(pinFromPairing(pins, rekeyed, 3)).toBe('superseded')
+    const { ed25519Fp } = fingerprints(publicOf(ther))
+    expect(pins.pinnedX25519Fp(ed25519Fp)).toBe(fingerprints(rekeyed).x25519Fp)
+    // Insert-only: the superseded row is still on file, so the record can say what changed and when.
+    expect(pins.history(ed25519Fp)).toHaveLength(2)
+    expect(pins.history(ed25519Fp)[0].x25519Fp).toBe(fingerprints(publicOf(ther)).x25519Fp)
+    // Control: an unchanged offer writes no row at all, so the length above means something.
+    expect(pinFromPairing(pins, rekeyed, 4)).toBe('already-pinned')
+    expect(pins.history(ed25519Fp)).toHaveLength(2)
+  })
+
+  it('the OTHER route still asks for the words, so the two doors did not merge', () => {
+    // acceptTherapistKeys reads keys the SERVER handed over and has no code behind it, so a key
+    // that differs from the record is still refused there. Retiring the words on the pairing route
+    // must not retire them where nothing has replaced them.
+    const pins = new PinStore()
+    pins.pin(publicOf(ther), 1)
+    const substituted: TherapistKeyRecord = {
+      boxPub: newBoxKeyPair().publicKey,
+      signPub: ther.ed25519.publicKey,
+      registeredAt: 2,
+    }
+    const before = pins.serialize()
+    expect(acceptTherapistKeys(pins, substituted, keyFingerprints(substituted))).toBe('differs-from-pin')
+    expect(pins.serialize()).toBe(before)
   })
 })
