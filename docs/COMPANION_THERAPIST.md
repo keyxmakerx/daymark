@@ -45,6 +45,7 @@ Baseline context: [DOCKER_COMPANION.md](DOCKER_COMPANION.md),
 - [7. Game plans — therapist write-back](#7-game-plans--therapist-write-back)
 - [8. Authentication, sessions, and step-up sign-off](#8-authentication-sessions-and-step-up-sign-off)
 - [9. Revocation, rotation, expiry — honestly scoped](#9-revocation-rotation-expiry--honestly-scoped)
+- [9a. The clinician's own exit, and the case it does not cover](#9a-the-clinicians-own-exit-and-the-case-it-does-not-cover)
 - [10. The audit log (owner-readable, metadata-only)](#10-the-audit-log-owner-readable-metadata-only)
 - [11. Honest limits (read this twice)](#11-honest-limits-read-this-twice)
 - [12. v1 scope lock](#12-v1-scope-lock)
@@ -582,6 +583,88 @@ reading key without bothering the owner; it never touches the server.
 
 ---
 
+## 9a. The clinician's own exit, and the case it does not cover
+
+Everything in §9 is the owner's direction: they end a share, they re-key, they stop publishing. The
+clinician's own direction was missing until issue #91, and its absence was not only a discourtesy.
+
+### What "Leave this relationship" does
+
+At the foot of the therapist console's **Allowed** tab, a plain control. Confirming it does exactly
+three things, in this order:
+
+1. **The server records an ending** — one insert-only row keyed on the relationship — and closes the
+   clinician's sign-in for it. The TOTP verify path consults that row before it issues a session, so
+   a correct code from the right authenticator is answered `410 Gone` from then on. Every live
+   session the credential holds is cut at the same moment.
+2. **The browser forgets its key record** for the relationship, and the write is re-read to check it
+   actually went. A browser that refuses the write is told so rather than reassured.
+3. **The session is signed out** from this side.
+
+`companion/web/src/lib/therapist/leave.ts` is those three operations and nothing else — the list is
+in its header precisely so "this cannot destroy anything belonging to the owner" is a claim a reader
+can check rather than one they have to take. The route is
+`POST /v1/relations/{relRef}/ending`, in `companion/server/src/main/kotlin/com/daymark/companion/routes/RelationshipEndingRoutes.kt`.
+
+### What it deliberately does not do
+
+- **It does not un-read anything.** Whatever the clinician already decrypted is on their machine.
+- **It touches nothing of the owner's.** No share is withdrawn, no grant altered, no blob removed.
+  Their entries, the material they shared, and their record of having shared it are exactly as they
+  were. If a clinician wants what they hold to stop being delivered, the owner's Revoke is the thing
+  that does that, and it is the owner's to press.
+- **It does not delete a credential.** The closure is a row in a separate insert-only table, read on
+  the way in; `totp` is never deleted from or updated. `docs/COMPANION_SECURITY.md` §9a says why the
+  difference matters.
+- **It does not reach copies.** The acceptance screen offers the key record as text to keep
+  somewhere, on purpose, and the confirm says so rather than implying the record is now unreachable.
+
+The standing sentence *"Revoking does not un-send what was already read"* is **not** used on this
+surface, and that is a decision rather than an oversight. It is about a reader who already holds
+something; from the clinician's side there is no such reader and nothing is being un-sent. The
+surface says the honest mirror instead, and the exemption is written and checked beside the rule in
+`companion/web/src/lib/components/owner/revokeCaveat.test.ts`.
+
+### How the owner finds out — and how they do not
+
+Three places, none of which is a message:
+
+| Where | What it says |
+|---|---|
+| That relationship's access log | *Your therapist · Ended their access to what you share* |
+| The sharing strip, on every owner screen | *…ended their access on {date}. Nothing you send now would be read.* — replacing the "Sharing real entries with…" line, because both cannot be true at once |
+| The next attempt to seal a share to them | Refused before anything is sealed, naming the date and the two things they can do: revoke what is still published, or invite them again |
+
+**No email, and no `owner_notify` write.** An email saying a therapy connection ended, arriving at an
+address that may be shared or watched, is a safety trade-off about real people, and it is the
+maintainer's call rather than one to make in passing. It is [open](#13-open-questions-unresolved).
+
+### The case this does not cover: a clinician who is dismissed
+
+A clinician who is let go does not choose to leave, so none of the above fires — and this is worth
+stating plainly because the shape of the system makes it permanent rather than a gap to close later.
+
+- A practice admin removing a member deletes the membership row and cuts every session that
+  credential holds. That is a **sign-out**, not a revocation: the person signs back in within the
+  minute and reads exactly what they read yesterday.
+- The practice cannot end the relationship, because the relationship is between the clinician and a
+  **patient**, created by the patient's invitation. `AuthStore` holds no `org_id` at all.
+- The practice cannot even warn the affected patients, because there is deliberately no list of a
+  practice's patients — a roster that grew one would be a register of who is in therapy where. That
+  decision is right and its cost lands exactly here.
+- Giving a practice the power to invoke the leave route would mean a practice reaching into a
+  patient's relationship, which is the thing the whole access-control model refuses. It is not built
+  and should not be.
+
+So in the case where the patient is most exposed, the protection is the **patient's own Revoke**, and
+it only ever stops future delivery. The one thing that helps is that the sharing strip puts who has
+standing access on every owner screen, permanently, with Revoke beside it.
+
+Both consoles now say so at the moment somebody would otherwise assume otherwise: the practice
+console's remove-member confirm states that removal ends a standing in the practice and ends nobody's
+relationship, and that only the patient — or the clinician themselves — can do that.
+---
+
 ## 10. The audit log (owner-readable, metadata-only)
 
 Principle: log **EVENTS, not CONTENT.** The owner's question is "did my therapist actually look, and
@@ -589,7 +672,7 @@ did anything tamper?" — answerable without a per-record surveillance trail.
 
 | Logged | NEVER logged |
 |---|---|
-| timestamp, relationship/shareId, event type (`invite.redeem`, `auth.success`, `auth.fail`, `share.open`, `gameplan.publish`, `share.revoked`, `expired`, `version.published`, `lockout`), acting credential id | which individual records/moods were viewed; any plaintext; any key/CEK/PRF output; TOTP codes or passphrases |
+| timestamp, relationship/shareId, event type (`invite.redeem`, `auth.success`, `auth.fail`, `share.open`, `gameplan.publish`, `share.revoked`, `relationship.ended`, `expired`, `version.published`, `lockout`), acting credential id | which individual records/moods were viewed; any plaintext; any key/CEK/PRF output; TOTP codes or passphrases |
 
 - **Append-only, owner-readable**, short configurable retention (default **90 days**), then pruned —
   the log is itself sensitive metadata.

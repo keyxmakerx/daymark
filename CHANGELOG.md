@@ -7,6 +7,43 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Companion — a clinician can now end their own access, and it really ends it.** Until now only
+  the person sharing could end a connection; a clinician who left a practice, retired, or simply
+  should not be holding it any longer had no way to put it down. There is now a plain "Leave this
+  relationship" at the foot of their console. It closes their sign-in for that person on every
+  device, not just the browser they clicked it in, and there is no way back without a fresh
+  invitation.
+
+  What it does not do is the point of it. It touches nothing belonging to the person who invited
+  them: no entry is deleted, nothing is un-shared, and the record of what was shared is exactly as
+  it was. It also cannot reach copies — anything the clinician already opened, printed or saved is
+  still wherever they put it, and the screen says so rather than implying otherwise. Nothing about
+  the act reads as failure or punishment; putting down access is an ordinary professional thing to
+  do.
+
+  Under the surface, ending it writes one permanent line rather than deleting anything. The
+  clinician's sign-in credential is never removed, because removing it would let anyone still
+  holding the old invitation link set up a brand-new one against a connection somebody had just
+  ended.
+
+- **Companion — you find out when a clinician ends their access, without being messaged about it.**
+  Three places, all of them somewhere you were already looking. The strip at the top of every screen
+  stops saying somebody is reading your entries and says they ended their access, with the date. The
+  next time you try to send them something, it is refused before anything is sealed, and says why
+  and what you can do — take back what is still published to them, or invite them again. And the
+  access log for that connection carries a line.
+
+  **No email is sent, and that is deliberate but not settled.** An email saying a therapy connection
+  has ended could land in an inbox somebody else reads. Whether to offer one is a decision about
+  your users' safety and is left open rather than guessed at.
+
+- **Companion — the practice console now says what removing somebody does, and what it does not.**
+  Removing a member ends their standing in the practice. It does not end any patient's relationship
+  with them: the relationship belongs to the patient, was made by the patient's invitation, and only
+  the patient can end it — or the clinician themselves, now that they can. An administrator letting
+  somebody go will assume the button did more than it did, so the confirmation says so at the moment
+  they are about to press it. No new power was given to a practice over a patient's connection, and
+  none should be.
 - **Companion — your identity is now yours, instead of a new one every visit.** The owner console
   used to make a fresh pair of keys each time you opened it, which meant a clinician who carefully
   wrote down your fingerprint could not verify anything you sent them afterwards. It looked like
