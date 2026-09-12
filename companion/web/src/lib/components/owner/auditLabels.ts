@@ -20,6 +20,16 @@ const ACTION_LABELS: Record<string, string> = {
   'pairing.cancelled': 'Cancelled a pairing',
   'pair.guess_failed': 'A wrong invitation link was tried',
   'invite.reported': 'Ended an invitation',
+  /*
+   * The one line in this log the owner did not cause (issue #91).
+   *
+   * "Ended their access" rather than "left" or "revoked". Left is a story about why, which nothing
+   * here knows; revoked is the owner's own word for their own act and would read as something they
+   * did. This says what happened and nothing about what it meant.
+   *
+   * The actor label already reads "Your therapist", so the two together say the whole fact.
+   */
+  'relationship.ended': 'Ended their access to what you share',
 }
 
 export function auditActionLabel(action: string): string {

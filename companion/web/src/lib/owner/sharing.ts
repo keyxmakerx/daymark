@@ -88,6 +88,57 @@ export function revokeConsequence(name: string): string {
 /** Not "Cancel". Cancel names the dialog; this names what keeping the dialog shut actually does. */
 export const KEEP_SHARING = 'Keep sharing'
 
+/* ── When the clinician has ended their own access (issue #91) ────────────────────────────── */
+
+/**
+ * The micro-label for a relationship the other party ended.
+ *
+ * A noun for the state, like SHARING, and on the same chrome ground rather than in clay. Clay means
+ * needs a human, overdue, refused, or destructive; a clinician putting down their own access is an
+ * ordinary professional act and none of those. Lighting the alarm hue over somebody else's ordinary
+ * decision would also read as an accusation, which is not what happened and not this product's
+ * business to imply. The words carry the fact.
+ */
+export const ENDED_LABEL = 'ACCESS ENDED'
+
+/**
+ * The standing line where "Sharing real entries with…" used to be.
+ *
+ * It replaces that sentence rather than sitting beside it, because both cannot be true at once: the
+ * bytes may still be on the server, but nobody can open them, and a strip that still said somebody
+ * had standing access would be the one screen element whose presence a person would read as
+ * reassurance that their notes were reaching someone.
+ *
+ * It says WHAT and WHEN and stops. Not why — the server does not know why, and a console that
+ * guessed would be narrating somebody's professional life to a patient.
+ */
+export function endedLine(name: string, when: string | null): string {
+  const who = name.trim() || UNNAMED_RECIPIENT
+  return when
+    ? `${who} ended their access on ${when}. Nothing you send now would be read.`
+    : `${who} ended their access. Nothing you send now would be read.`
+}
+
+/**
+ * The refusal at the point of sharing, which is the mitigation that actually matters.
+ *
+ * The owner meets the fact exactly where the harm would otherwise happen — at the moment they are
+ * about to seal their journal to a key nobody will open — rather than in a log they may never read
+ * or an email that lands in an inbox other people can see.
+ *
+ * It names the CONSEQUENCE (nothing sent now would be read) and the two things a person can do
+ * about it, and no cause: the server knows the relationship ended and nothing whatever about why.
+ */
+export function shareRefusedBecauseEnded(name: string, when: string | null): string {
+  const who = name.trim() || UNNAMED_RECIPIENT
+  const on = when ? ` on ${when}` : ''
+  return (
+    `Nothing was sealed or sent. ${who} ended their access${on}, so nothing sent now would be ` +
+    `read. You can revoke what is still published to them, or invite them again if they are ` +
+    `coming back.`
+  )
+}
+
 /**
  * When the server marked the versions but could not remove every copy.
  *

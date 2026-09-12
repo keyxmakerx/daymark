@@ -34,6 +34,7 @@
 - [7. Reverse-proxy / trusted-proxy hardening](#7-reverse-proxy--trusted-proxy-hardening)
 - [8. Anti-rollback & integrity (client-anchored)](#8-anti-rollback--integrity-client-anchored)
 - [9. Audit-logging posture](#9-audit-logging-posture)
+- [9a. Closing a credential without deleting one](#9a-closing-a-credential-without-deleting-one)
 - [10. Hardening checklist (copy-paste)](#10-hardening-checklist-copy-paste)
 - [11. Out of scope / honest limits](#11-out-of-scope--honest-limits)
 - [Related documents](#related-documents)
@@ -694,7 +695,8 @@ fetch, assignment/game-plan publish, session expiry) — never client-supplied.
   "actor": "therapist",           // "owner" | "therapist" — who performed the action
   "action": "share.open",         // auth.success | auth.fail | lockout | enrol.ok |
                                    //   share.open | gameplan.open | assignment.publish |
-                                   //   gameplan.publish | session.expired (extend as needed)
+                                   //   gameplan.publish | session.expired |
+                                   //   relationship.ended (extend as needed)
   "objectRef": "lin1:3",          // opaque channel-scoped id (lineage:version); never content
   "meta": { "credentialId": "…" },// small, fixed, non-content annotations only (optional)
   "entryHash": "<sha256 hex>"      // = SHA256(prevHash ‖ seq ‖ ts ‖ relRef ‖ actor ‖ action ‖ objectRef ‖ meta)
@@ -719,6 +721,76 @@ fetch, assignment/game-plan publish, session expiry) — never client-supplied.
   is now detectable; withholding is not. Full suppression-resistance still needs the
   originally-scoped signed client attestation, which has not shipped.
 
+---
+
+## 9a. Closing a credential without deleting one
+
+Issue #91 gave a clinician a way to end their own access. The security-relevant half of it is one
+row, and the shape of that row is the whole argument.
+
+### The table
+
+```sql
+CREATE TABLE IF NOT EXISTS relationship_endings (
+    rel_ref       TEXT    NOT NULL PRIMARY KEY,
+    credential_id TEXT    NOT NULL,
+    ended_at      INTEGER NOT NULL
+)
+```
+
+Written by `POST /v1/relations/{relRef}/ending` (therapist session cookie + `X-CSRF-Token`, and the
+session must be bound to that exact relationship — a session for another one is refused `403`,
+identically to every other cross-relationship request). Read on the sign-in path: `POST
+/v1/totp/verify` consults it after the code verifies and answers `410 Gone` instead of issuing a
+session. Read again on the owner's share publish, which is refused `410` before the body is read.
+
+### Why a separate table, and not a flag or a delete
+
+`totp` is insert-only, and both halves of that property are load-bearing here.
+
+- **A DELETE would be worse than doing nothing.** The `UNIQUE` index `idx_totp_rel_ref` is the only
+  thing stopping a second enrolment against a relationship. Removing the row would hand anyone still
+  holding the invitation link a way to enrol a *fresh* credential against a relationship somebody has
+  just left — turning an exit into an entrance.
+- **An UPDATE (`disabled=1`) would be an update path into the one table whose safety property is
+  that it has none.** Every other protection in that table rests on "a row, once written, is never
+  rewritten"; adding one mutable column adds one code path that can be reached by a bug, a stolen
+  session, or a later refactor that does not know why the rule existed.
+
+So the closure lives beside the credential rather than inside it, and `totp` is never touched by any
+of this. The same reasoning the `therapist_keys` and `owner_keys` tables already use: `rel_ref` is
+the PRIMARY KEY, the constraint refuses inside the `INSERT OR IGNORE` statement rather than in a
+check a second connection could slip past, and idempotence falls out of it for free.
+
+### Keyed on the relationship, not the credential
+
+`idx_totp_rel_ref` makes a TOTP credential per-relationship: `enrollTotp` refuses a second credential
+for a `rel_ref`, so closing one closes exactly one relationship and can reach no other patient's
+work. Keying the ending on the **relationship** puts that property in the schema rather than in a
+coincidence — and it means the ending survives any future re-enrolment path. A relationship that was
+ended stays ended; the way back is a fresh invitation, which is a fresh relationship, exactly as the
+clinician is told at the point of the click.
+
+### What it discloses, and to whom
+
+- The `410` on sign-in is reachable **only behind a correct code**. Every earlier refusal on that
+  route collapses into an identical `401`, so a caller holding only a credential id — which is a
+  therapist-typed username, not a secret — learns nothing. Behind the code, the only caller who can
+  reach the honest answer is the clinician themselves.
+- `GET /v1/relations/{relRef}/ending` answers the owner's bearer token with a timestamp and `404`
+  while the relationship is live. The credential id is deliberately **not** echoed: the owner has no
+  use for it, and a route that hands one back is a route that can be asked for one.
+- The audit line carries the event and the credential id as membership metadata — the same
+  annotation the sign-in lines already carry — and nothing about what was read, shared or written.
+  It is appended **once**, when the ending is recorded, never per call: the same rule as a lockout,
+  for the same reason. A log that grows a row per retry buries the row that matters.
+
+### Ordering, and what survives a crash
+
+The row is written **before** sessions are cut. If the process dies between them the surviving state
+is "ended, with a session alive until it times out" — bounded, and already closed to any new sign-in.
+The other order would leave "signed out, not ended", which looks exactly like a completed leave and
+is not one.
 ---
 
 ## 10. Hardening checklist (copy-paste)
