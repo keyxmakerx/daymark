@@ -351,6 +351,35 @@ fun Route.therapistAuthRoutes(
                 }
                 return@post
             }
+            /*
+             * THE CREDENTIAL IS CLOSED, BECAUSE THE CLINICIAN ENDED THIS RELATIONSHIP (issue #91).
+             *
+             * This is what makes self-leave an off switch rather than one browser's housekeeping.
+             * The clinician's wrapped keys live only in their own browser and the acceptance screen
+             * hands them the key record as text to keep, so without a check here a saved copy plus
+             * the passphrase plus the authenticator would still open the door from anywhere, and a
+             * clinician who needed to be certain they were out could never get there.
+             *
+             * READ AFTER THE CODE IS VERIFIED, WHICH IS THE WHOLE REASON IT CAN BE HONEST. Every
+             * other refusal on this route collapses into an identical 401 so that nobody learns
+             * whether a credential exists by guessing at one. If this check ran before the code, a
+             * distinct answer here would leak exactly that — anyone holding a credential id, which
+             * is a therapist-typed username, could ask whether its relationship had ended. Behind
+             * the code, the only caller who can reach this line is the person holding the
+             * authenticator, which is the clinician themselves. So it can say the true thing.
+             *
+             * 410 rather than 401: the credential is real, the code was right, and no amount of
+             * re-authenticating will help — the relationship is over. Re-enrolling is not offered
+             * and cannot be; the way back is a fresh invitation, which is a fresh relationship.
+             * The message names the consequence and no cause this server could not know.
+             *
+             * NO SESSION IS CREATED, and the step the code spent stays spent. Nothing else here
+             * changes: the `totp` row is untouched, as it is on every path in this file.
+             */
+            if (authStore.relationshipEnding(rec.relRef) != null) {
+                call.respond(HttpStatusCode.Gone, ErrorDto("this relationship was ended"))
+                return@post
+            }
             authStore.recordTotpSuccess(req.credentialId)
             totpSourceLimiter.reset(call.clientAddress())
             val session = authStore.createSession(req.credentialId, rec.relRef, sessionIdleSeconds, sessionAbsoluteSeconds)

@@ -268,6 +268,36 @@ fun Route.relationRoutes(
              */
             val expiry: Long?
             if (ctx.channel == Channel.SHARES) {
+                /*
+                 * NOBODY IS LEFT TO READ THIS (issue #91).
+                 *
+                 * The clinician ended the relationship from their own console: their sign-in is
+                 * closed and cannot be reopened. Publishing here would still work — the bytes would
+                 * land, the console would say a share was sent — and not one word of that would be
+                 * false, which is exactly the problem. The owner would go on sealing their journal
+                 * to a key nobody will ever unwrap, and the server would go on accumulating
+                 * ciphertext for a reader who is gone, with nothing anywhere recording that the
+                 * relationship was over.
+                 *
+                 * So the refusal is here, at the point of the act, rather than left to the console.
+                 * The console does say it too, and better — it names the date and the two things the
+                 * owner can do about it — but a rule that lives only in a screen is a rule that a
+                 * second client, a retry, or a future edit does not inherit.
+                 *
+                 * BEFORE THE BODY IS READ. Refusing after would mean taking delivery of somebody's
+                 * sealed journal in order to throw it away, which is a strange thing for a server
+                 * that holds no content to do. 410 rather than 403 because the caller's authority is
+                 * not in question; the thing they are addressing has ended.
+                 *
+                 * SHARES ONLY. The other channels are untouched and deliberately so: this branch is
+                 * already the shares-only branch, and widening it would be inventing rules for
+                 * directions nobody has thought through. An assignment written to an ended
+                 * relationship is a therapist-direction write that their closed session cannot make.
+                 */
+                if (authStore.relationshipEnding(ctx.relRef) != null) {
+                    call.respond(HttpStatusCode.Gone, ErrorDto("this relationship was ended"))
+                    return@put
+                }
                 expiry = parseShareExpiry(call.request.headers["X-Share-Meta"], clock())
                 if (expiry == null) {
                     call.respond(HttpStatusCode.BadRequest, ErrorDto("missing, malformed, or past share expiry"))
