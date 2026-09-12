@@ -138,6 +138,25 @@ A QR must encode an address the phone can reach. Three deployments:
 | Reverse proxy + TLS | `https://daymark.example.com` | TLS | safe |
 | Tailscale / VPN | `http://100.x.y.z:8080` | encrypted at network layer | safe in practice |
 
+**Which row this project's own deployment is on, stated 2026-09-12 by the maintainer: reverse proxy
++ TLS.** So the §3.3 gate below — offer the QR only when `publicBaseUrl` resolves to `https://…` —
+does not block it here, and the QR work does not need the `DAYMARK_ALLOW_INSECURE_PAIRING` opt-in
+to be usable by the person building it. The gate still earns its place for everyone else who
+self-hosts, and the LAN row stays in this table for them.
+
+Two consequences that are easy to lose:
+
+- **`DAYMARK_TRUSTED_PROXIES` must be set, narrowly.** Behind a proxy it defaults to trusting
+  nothing, which is the safe default and the wrong one for this topology: every per-client control
+  in the server — the invite lockout, the pairing rate limit, TOTP lockout, audit `sourceIp` —
+  would key on the proxy's address and share one bucket across the whole internet. The server logs
+  a warning when it sees `X-Forwarded-For` with no allowlist configured, and
+  `docs/COMPANION_DEPLOYMENT.md` has the Caddy, Traefik and nginx forms.
+- **A QR carrying an `https://` address is not the same as the phone verifying who answered it.**
+  TLS makes the transport safe; it does not make the QR trustworthy, because the QR is forgeable
+  before it is ever scanned. The layering in §3.10.4 is unchanged: the QR is routing, the spoken
+  code is the secret, and the human tap is the consent.
+
 `docker-compose.yml` already says this about the LAN case: *"the app speaks plain HTTP and
 authenticates with a bearer token, so anything that can read the wire can read the token."*
 
