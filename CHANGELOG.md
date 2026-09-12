@@ -25,6 +25,25 @@ All notable changes to this project are documented here. The format is based on
   code, because that means this clinician can no longer verify you and no button can fix it.
 
 ### Fixed
+- **Companion — the secret that guards your journal is now made by the console, not typed into a
+  box.** Every request a clinician makes for your material carries a token, and the token is what
+  makes a copy of the server's database useless to whoever took it. Nothing in Daymark made one.
+  The console asked you to type it, accepted anything at all, and a single letter worked — while
+  the security document described it as 256 random bits. The console now makes a real one when you
+  add a clinician and shows it once, with no box to type your own into. Two things follow. Nobody
+  can hand two clinicians the same token by accident any more, which used to put them in each
+  other's material with nothing on screen to show it. And the help text on the clinician's side has
+  stopped telling them to look in the invitation for it: the token has never been in the
+  invitation, cannot be put there, and has to reach them another way — said out loud, sent by text,
+  handed over. Losing it is not a dead end: adding that clinician again makes a new one, and what
+  was already shared stays as it was.
+- **Companion — a clinician no longer retypes forty-three characters at every single visit.** The
+  sign-in screen was meant to remember that token after the first time, and the code that
+  remembered it failed every time it ran, silently, from the day it was written. Nobody was told
+  and nothing looked broken — it just asked again, forever. It is remembered now, for as long as
+  that tab stays open, and deliberately not for longer: it is not kept next to their stored keys,
+  because a copy of their browser would then carry both halves of what the server asks for. Closing
+  the tab means being asked once more, and the screen says so where the question used to be.
 - **Companion — a clinician's hand-checked copy of your key is no longer silently replaced by the
   server's.** Signing in used to take whatever the server said your keys were and write it over the
   one the clinician had verified with you, without comparing them or mentioning it. It had never
