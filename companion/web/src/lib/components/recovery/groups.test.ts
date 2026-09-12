@@ -291,7 +291,20 @@ describe('the check character detects, and refuses to point', () => {
     expect(firstGroupProblem(good.map((g) => g.toLowerCase()))).toBeNull()
     expect(firstGroupProblem(good.map((g) => ` ${g} `))).toBeNull()
     expect(codeFromGroups(good)?.canonical).toBe(code.canonical)
-    expect(codeFromGroups(withGroup(1, 'AB2CD'))).toBeNull()
+    /*
+     * The refusal is driven by a SINGLE substitution, because that is the error the weighted check
+     * character is guaranteed to catch. Replacing a whole group with a fixed string — which this
+     * line used to do — changes five payload symbols at once, and five-symbol changes agree with
+     * the original check character about one time in thirty-one. Measured at 97 in 3000 against
+     * freshly drawn codes: 3.23%, which is 1/31 to two decimal places. So that version of this
+     * assertion failed roughly one run in thirty-one, for no reason the next person could
+     * reproduce, and against behaviour that is correct — a check character is an error detector,
+     * not a signature.
+     */
+    const firstGroup = good[1]
+    const oneSymbolOff = (firstGroup[0] === 'Z' ? 'Y' : 'Z') + firstGroup.slice(1)
+    expect(oneSymbolOff).not.toBe(firstGroup)
+    expect(codeFromGroups(withGroup(1, oneSymbolOff))).toBeNull()
   })
 })
 
