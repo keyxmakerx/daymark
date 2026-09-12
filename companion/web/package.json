@@ -2,7 +2,7 @@
   "name": "daymark-companion-web",
   "version": "0.0.1",
   "private": true,
-  "description": "Daymark Companion web UI — Phase-0 offline report viewer (vendored, zero-third-party, strict-CSP).",
+  "description": "Daymark Companion web UI \u2014 Phase-0 offline report viewer (vendored, zero-third-party, strict-CSP).",
   "license": "GPL-3.0-only",
   "type": "module",
   "packageManager": "pnpm@10.33.0",
@@ -24,11 +24,11 @@
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tsconfig/svelte": "^5.0.4",
     "@types/libsodium-wrappers-sumo": "^0.7.8",
-    "@types/node": "^22.10.5",
-    "svelte": "^5.19.0",
+    "@types/node": "^26.5.0",
+    "svelte": "^5.57.0",
     "svelte-check": "^4.1.4",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3",
+    "typescript": "^5.9.3",
     "vite": "^6.0.7",
     "vitest": "^2.1.8"
   }
