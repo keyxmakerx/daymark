@@ -21,9 +21,14 @@ package com.daymark.companion.auth
  *    made, rather than a different-shaped call that discourages revisiting it.
  *
  * [scope] namespaces one budget from another inside the shared table. Two surfaces that should not
- * be able to fund each other's guessing get one scope between them, deliberately: the invite-redeem
- * and invite-report routes both verify the same invite secret, so giving them separate scopes would
- * let an attacker alternate routes and spend twice the budget on one secret.
+ * be able to fund each other's guessing get one scope between them, deliberately: the pairing
+ * relay's fetch and respond both verify the same invite secret, so giving them separate scopes
+ * would let an attacker alternate routes and spend twice the budget on one secret.
+ *
+ * The invite REPORT route used to share that scope and no longer does — it is metered by nothing
+ * but a raw flood guard, for the reasons set out on the route itself. The short form: a report is
+ * the one call this product most needs to accept from someone it cannot identify, and a budget
+ * that an honest ceremony's own waiting can exhaust is the wrong thing to put in front of it.
  */
 class PersistentAttemptLimiter(
     private val store: AuthStore,
@@ -35,4 +40,6 @@ class PersistentAttemptLimiter(
     override fun allow(source: String): Boolean = store.allowAttempt(scope, source, maxPerWindow, windowMs)
 
     override fun reset(source: String) = store.resetAttempts(scope, source)
+
+    override fun retryAfterMs(source: String): Long = store.attemptRetryAfterMs(scope, source, windowMs)
 }

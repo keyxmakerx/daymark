@@ -268,10 +268,12 @@ class ReportDataBuilder @Inject constructor(
                 bestDay = dow.maxByOrNull { it.value }?.key,
                 worstDay = dow.minByOrNull { it.value }?.key,
                 topFactorUp = topUp,
-                // Zero, always: PeriodReview only adds its streak sentence at two or more, so this
+                // Zero, always: PeriodReview omits the sentence entirely at zero, so this
                 // suppresses it for the report without touching the shared copy the in-app card
-                // still uses. The report carries no streak (D6).
-                currentStreak = 0,
+                // still uses. The reason has not changed with the sentence — a continuity figure
+                // reports adherence to the app rather than anything about the person, and a
+                // clinician reading a printed one has no way to tell those apart.
+                daysWithEntryLast30 = 0,
             ),
         )
 

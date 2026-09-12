@@ -718,7 +718,7 @@ Serving under a prefix is split between proxy and app:
 | `DAYMARK_MAX_REQUEST_BYTES` | `27262976` | Hard request-body cap (≥ blob + envelope). |
 | `DAYMARK_MAX_VERSIONS` | `200` | Append-only retention cap per snapshot lineage; oldest pruned beyond this (only after a newer durable version is confirmed). |
 | `DAYMARK_PER_TOKEN_QUOTA_BYTES` | `5368709120` | Per-token storage quota (5 GiB); disk-full fails closed. |
-| `DAYMARK_RATE_LIMIT_RPS` | `5` | Per-source request rate limit (keyed by trusted IP or socket peer). |
+| `DAYMARK_RATE_LIMIT_RPS` | `5` | Request rate limit for bearer-token traffic only (sync and owner routes), keyed by trusted IP or socket peer. Anonymous pairing and report routes have their own limits (see `PairingRelayRoutes.kt`). |
 | `DAYMARK_LINEAGE_CREATE_RPM` | `10` | Cap on lineage/version creation (anti monotonic-poisoning / queue-flooding). |
 | `DAYMARK_AUTH_LOCKOUT_FAILS` | `8` | Failed-auth attempts before lockout. |
 | `DAYMARK_AUTH_LOCKOUT_SECONDS` | `900` | Lockout duration. |

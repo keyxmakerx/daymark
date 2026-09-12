@@ -5,6 +5,7 @@ import {
   enrolAfterApproval,
   forgetTherapistRun,
   loadTherapistRun,
+  pausedUntilText,
   saveTherapistRun,
   waitForApproval,
   type PairingAcceptancePorts,
@@ -15,7 +16,7 @@ import { AcceptError, findKeyRecord, saveKeyRecord, type AcceptancePorts, type K
 import { newPairingCode, type PairingCode } from '../pairing/pairingCode'
 import { initAssignmentCrypto } from '../assignments/crypto'
 import type { TherapistOffer } from '../pairing/payloads'
-import type { TherapistStatusResult } from '../pairing/relay'
+import { PairingPausedError, type TherapistStatusResult } from '../pairing/relay'
 
 /*
  * The ORDER is the property. Every port records its call, so a test can assert that no keys are
@@ -244,6 +245,51 @@ describe('answering a run', () => {
     // And the second attempt is not blocked by the first.
     h.answerFails = null
     await expect(answerPairing(h.ports, input())).resolves.toBeTruthy()
+  })
+
+  it('a paused connection is told as a pause, with the time and the reassurance', async () => {
+    /*
+     * The sentence a therapist actually reads when the server's per-address budget is spent — by
+     * their own colleague, most likely, since a clinic is one address. It has to say three things
+     * and not a fourth: that it is the CONNECTION that is paused (the server knows the address was
+     * busy, not that this person was doing anything), until WHEN, and that their invitation is
+     * untouched. The fourth — "too many attempts" — would be the server telling a person a story
+     * about themselves that it has no way of knowing.
+     */
+    h.answerFails = new PairingPausedError(300)
+    const refused = await answerPairing(h.ports, input()).catch((e) => e)
+    expect(refused).toBeInstanceOf(AcceptError)
+    expect((refused as AcceptError).step).toBe('paused')
+    expect((refused as AcceptError).message).toMatch(
+      /^Pairing from this connection is paused until .+\. Your invitation is unchanged and will still open then\.$/,
+    )
+    expect((refused as AcceptError).message).not.toMatch(/attempt|too many|rate/i)
+
+    // Nothing was kept: a pause must leave this browser exactly as it found it, so the person can
+    // simply try again when it lifts.
+    expect(findKeyRecord(REL_REF, h.keyStore)).toBeNull()
+    expect(loadTherapistRun(h.runStore)).toBeNull()
+    h.answerFails = null
+    await expect(answerPairing(h.ports, input())).resolves.toBeTruthy()
+  })
+
+  it('the time in that sentence is the one the server named, rounded so it is never early', () => {
+    // The expected instants are computed here rather than borrowed from the implementation, so
+    // this fails if the rounding goes the other way.
+    const at = new Date(Date.UTC(2026, 8, 12, 15, 4, 30))
+    const shown = (d: Date) => d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+
+    // 90 seconds lands exactly on 15:06:00.
+    expect(pausedUntilText(90, at)).toBe(
+      `Pairing from this connection is paused until ${shown(new Date(Date.UTC(2026, 8, 12, 15, 6, 0)))}. ` +
+        'Your invitation is unchanged and will still open then.',
+    )
+    // 20 seconds lands at 15:04:50, which is shown as 15:04 — a minute a person would arrive back
+    // INSIDE the pause. It rounds up to 15:05.
+    expect(pausedUntilText(20, at)).toBe(
+      `Pairing from this connection is paused until ${shown(new Date(Date.UTC(2026, 8, 12, 15, 5, 0)))}. ` +
+        'Your invitation is unchanged and will still open then.',
+    )
   })
 
   it('a wrap that will not reopen sends nothing and keeps nothing', async () => {

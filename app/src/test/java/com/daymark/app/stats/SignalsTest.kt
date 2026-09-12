@@ -20,12 +20,9 @@ class SignalsTest {
         avgMood = 3.4,
         moodTodayLevel = 3,
         loggedToday = true,
-        currentStreak = 1,
-        longestStreak = 5,
         topLift = null,
         topDrag = null,
         monthDeltaPct = null,
-        newlyUnlockedAchievement = null,
         dueCheckin = null,
         onThisDayNote = null,
     )
@@ -110,15 +107,56 @@ class SignalsTest {
         assertFalse("month_down" in Signals.build(base().copy(monthDeltaPct = -5.0)).kinds())
     }
 
+    /**
+     * The two deleted rules, asserted absent from every input this suite can reach — and the
+     * category with them.
+     *
+     * `streakMilestone_firesOnNamedMilestoneAndAllTimeBest` and the achievement test used to live
+     * here. An absence check is worth nothing without a control that it can see something, so this
+     * one proves its own detector twice: the `kinds` set it searches is non-empty, and the same
+     * membership test finds a kind that IS present.
+     */
     @Test
-    fun streakMilestone_firesOnNamedMilestoneAndAllTimeBest() {
-        assertTrue("streak_milestone" in Signals.build(base().copy(currentStreak = 7)).kinds())
-        // Matching the all-time best (>=3) counts even if not a named milestone.
-        assertTrue("streak_milestone" in
-            Signals.build(base().copy(currentStreak = 5, longestStreak = 5)).kinds())
-        // A non-milestone, non-best streak does not.
-        assertFalse("streak_milestone" in
-            Signals.build(base().copy(currentStreak = 4, longestStreak = 9)).kinds())
+    fun noCardIsEverACelebration_andTheTwoRewardRulesAreGone() {
+        val everything = listOf(
+            base(),
+            base().copy(moodTodayLevel = 1),
+            base().copy(loggedToday = false),
+            base().copy(monthDeltaPct = 30.0),
+            base().copy(monthDeltaPct = -30.0),
+            base().copy(dueCheckin = "WHO-5"),
+            base().copy(onThisDayNote = "a line from a year ago"),
+            base().copy(topLift = Signals.FactorLift("Running", 0.6, 8)),
+        ).flatMap { Signals.build(it) }
+
+        // The control: the collection under test is populated, and the membership test works.
+        assertTrue(everything.isNotEmpty())
+        assertTrue("support_breathe" in everything.kinds())
+
+        assertFalse("streak_milestone" in everything.kinds())
+        assertFalse("achievement_unlocked" in everything.kinds())
+        // Category.Celebration no longer exists as a name; this is the behavioural half — the
+        // upward month card is now the same kind of statement as its downward mirror.
+        val up = Signals.build(base().copy(monthDeltaPct = 30.0)).first { it.kind == "month_up" }
+        val down = Signals.build(base().copy(monthDeltaPct = -30.0)).first { it.kind == "month_down" }
+        assertEquals(Signals.Category.Insight, up.category)
+        assertEquals(down.category, up.category)
+    }
+
+    /** No card anywhere describes a run of consecutive days, whatever words it uses for one. */
+    @Test
+    fun noCardSpeaksOfARunOfDays() {
+        val breakable = Regex("""streak|days? in a row|consecutive|keep it up|don'?t break""", RegexOption.IGNORE_CASE)
+        // The detector must be able to fail, or the assertion below is empty.
+        assertTrue(breakable.containsMatchIn("You're on a 5-day streak — keep it up"))
+
+        val prose = listOf(
+            base().copy(moodTodayLevel = 1, loggedToday = false, monthDeltaPct = 30.0, dueCheckin = "WHO-5"),
+            base().copy(topLift = Signals.FactorLift("Running", 0.6, 8), onThisDayNote = "a note"),
+        ).flatMap { Signals.build(it) }.flatMap { listOf(it.title, it.body) }
+
+        assertTrue(prose.isNotEmpty())
+        assertTrue(prose.none { breakable.containsMatchIn(it) })
     }
 
     @Test
@@ -146,7 +184,7 @@ class SignalsTest {
             base().copy(
                 loggedToday = false,
                 moodTodayLevel = null,
-                newlyUnlockedAchievement = "First week",
+                monthDeltaPct = 30.0,
                 topLift = Signals.FactorLift("Friends", 0.6, 10),
             ),
         )

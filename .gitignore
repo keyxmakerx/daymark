@@ -48,3 +48,6 @@ companion/secrets/
 # as deleted — which is exactly how one reached a commit on 2026-09-12. Build
 # scratch, never source.
 companion/web/vite.config.ts.timestamp-*.mjs
+
+# Kotlin compiler session data written beside the Companion server build
+companion/server/.kotlin/

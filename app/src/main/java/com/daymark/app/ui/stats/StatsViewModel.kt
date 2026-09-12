@@ -19,8 +19,12 @@ data class ActivityStat(val name: String, val averageMood: Double, val count: In
 data class StatsUiState(
     val totalEntries: Int = 0,
     val averageMood: Double? = null,
-    val currentStreak: Int = 0,
-    val longestStreak: Int = 0,
+    /**
+     * Calendar days in the last [MoodStats.WINDOW_DAYS] with at least one entry. Zero means the
+     * card is not drawn at all — see [com.daymark.app.ui.insights.InsightsScreen]. An empty window
+     * is not a nought to show someone; it is nothing to say.
+     */
+    val daysWithEntryLast30: Int = 0,
     val moodCounts: Map<Int, Int> = emptyMap(),
     /** Last 30 days, oldest → newest; null where no entry that day. */
     val trend: List<Double?> = emptyList(),
@@ -68,8 +72,7 @@ class StatsViewModel @Inject constructor(
         return StatsUiState(
             totalEntries = entries.size,
             averageMood = MoodStats.averageMood(levels),
-            currentStreak = MoodStats.currentStreak(days, today),
-            longestStreak = MoodStats.longestStreak(days),
+            daysWithEntryLast30 = MoodStats.daysWithEntryInLast30(days, today),
             moodCounts = MoodStats.moodCounts(levels),
             trend = trend,
             topActivities = topActivities,

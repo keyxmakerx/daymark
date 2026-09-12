@@ -74,3 +74,45 @@ export const UNLOCK_BUSY = 'Opening your key — this takes a few seconds'
 export const FINGERPRINT_IS_STABLE =
   'With this key file it is the same every time. A clinician who wrote it down can check it against ' +
   'what they see.'
+
+/* ── Adding a clinician, and the token that comes with it ─────────────────────────────────── */
+
+/**
+ * What adding a clinician does now, said before the button rather than after it.
+ *
+ * The field it replaces asked for an "Inbox token (OOB)" and accepted anything at all, so the
+ * secret guarding a person's journal was whatever the owner typed (issue #126). There is no field
+ * now, so the sentence has to say where the value comes from instead — otherwise the first time
+ * anybody meets the token is as forty-three characters that appeared on their screen unannounced.
+ */
+export const ADDING_MINTS_A_TOKEN =
+  'Only a name is needed to start. Adding them makes the token that routes their requests to this ' +
+  'one relationship, and the token is shown once, here.'
+
+/** The token's own label. "Inbox token" is what both consoles and the server call it. */
+export const INBOX_TOKEN_LABEL = 'Their inbox token'
+
+/**
+ * The two-channel rule, at the point it is broken or kept.
+ *
+ * Word for word the job pairing/copy.ts's `twoChannels` does for the pairing code, and it has to be
+ * said again here because this is a different secret on a different screen. The second sentence is
+ * the correction the audit asked for: onboarding/fieldHelp.ts told clinicians this value was in the
+ * invitation, and it never has been — the mail message has no field for it and the mint API is
+ * given the digest, so the server has never held the value to put in one.
+ */
+export const INBOX_TOKEN_TWO_CHANNELS =
+  'Give it to them some way other than the invitation — say it out loud, send it by text, hand it ' +
+  'over in the room. It is not in the invitation and cannot be put there.'
+
+/**
+ * That this is the only sighting.
+ *
+ * Not a warning and not an instruction to write it down somewhere: it says what is true and leaves
+ * the owner to decide. The last clause is the consequence, because "shown once" without a way
+ * forward reads as a threat.
+ */
+export const INBOX_TOKEN_SHOWN_ONCE =
+  'This console shows it here and nowhere else, and nothing on this machine writes it down. If it ' +
+  'goes astray, adding this clinician again makes a new token and a new relationship — what was ' +
+  'already shared under the old one stays as it is.'

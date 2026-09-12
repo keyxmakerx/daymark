@@ -39,6 +39,15 @@
  * erase it from inside the app — previously the only way to clear it was clearing site data, which
  * a person would have to know to do. components/owner/PinRecord.svelte is the screen.
  *
+ * AND THE STORE IS NOW INSERT-ONLY, which costs a little more of the same. A key that changes adds
+ * a row instead of replacing one, so the record also says "this relationship's keys changed, on
+ * these dates" — one more fact about someone's care sitting unencrypted on a device that might be
+ * shared. It is kept because the alternative is worse in the same direction: with a replacing
+ * store, the only way to ask what the old key was is to have already destroyed the answer, and
+ * "their key changed and I cannot tell you what it was before" is the sentence a person is left
+ * with at exactly the moment it matters. forgetPeer erases a relationship's whole history at once,
+ * so the extra rows are as forgettable as the first one was.
+ *
  * AND A WAY BACK. Failing closed on a changed key is the point, but a therapist who legitimately
  * re-keys would otherwise leave the owner permanently unable to share, with no route back except
  * that same site-data reset — a bigger hammer that silently un-pins everyone. rotatePin below is
@@ -134,6 +143,9 @@ export function savePins(pins: PinStore, storage: PinStorage | null = defaultPin
 
 export type PinOutcome = 'pinned-now' | 'already-pinned'
 
+/** What a write to the record did. `superseded` is a NEW row beside the old, never a replaced one. */
+export type PinWrite = PinOutcome | 'superseded'
+
 /**
  * Trust-on-first-use, and only on first use.
  *
@@ -150,15 +162,43 @@ export function pinOnFirstUse(pins: PinStore, peer: PublicIdentity, now: number 
 }
 
 /**
- * The pins as data, so a screen can show a person what is being kept about them.
+ * Record a peer's keys, insert-only — the one door the pairing ceremony writes through.
  *
- * PinStore answers questions about one peer at a time and exposes no iterator; pairing.ts is
- * another slice's file, so this reads back the exact bytes savePins() writes instead of adding an
- * accessor there. That is worth keeping even if PinStore later grows one: what the console shows
- * is parsed from the stored form, so the screen cannot display something other than what is stored.
+ * THE DIFFERENCE FROM [pinOnFirstUse]. That one exists to protect a first pin from being quietly
+ * overwritten by the very key it is checking, so it writes nothing once an identity is on file.
+ * This one is for the moment a person has decided, in front of a screen that told them what they
+ * were replacing, that the keys in front of them are the ones to use from now on. So it writes —
+ * but it APPENDS, leaving the row it supersedes where it is. Nothing here ever edits a row.
+ *
+ * The three outcomes are three different things to say to a person and they must not be collapsed:
+ * nothing was on file, these exact keys already are, or something else was and has been superseded.
+ * A caller that treated the third as the second would tell an owner nothing had changed on the one
+ * occasion something had.
+ */
+export function recordPin(pins: PinStore, peer: PublicIdentity, now: number = Date.now()): PinWrite {
+  const { ed25519Fp, x25519Fp } = fingerprints(peer)
+  if (pins.pinnedX25519Fp(ed25519Fp) === x25519Fp) return 'already-pinned'
+  const superseded = pins.isPinned(ed25519Fp)
+  pins.pin(peer, now)
+  return superseded ? 'superseded' : 'pinned-now'
+}
+
+/**
+ * The CURRENT pins as data, so a screen can show a person what is being kept about them: one row
+ * per identity, the newest recorded for each. What the console seals to, and what it refuses by.
+ *
+ * `pinHistory` below is the superseded rows beside them. The two are separate functions rather than
+ * one with a flag because the screen that lists "the keys this browser holds" and the screen that
+ * answers "what was held before" are answering different questions, and a list that silently mixed
+ * them would show a person two entries for one clinician with nothing saying which is live.
  */
 export function listPins(pins: PinStore): PinnedIdentity[] {
-  return JSON.parse(pins.serialize()) as PinnedIdentity[]
+  return pins.current()
+}
+
+/** Every row ever recorded, oldest first, superseded ones included. History, not the live record. */
+export function pinHistory(pins: PinStore): PinnedIdentity[] {
+  return pins.rows()
 }
 
 /**
@@ -194,9 +234,13 @@ export function forgetAllPins(storage: PinStorage | null = defaultPinStorage()):
  *
  * PinStore has no delete, so this rebuilds one from the entries that are kept. Via load(), so an
  * entry that has gone malformed is rejected here rather than being written back out.
+ *
+ * Over the FULL log rather than the current view: a person forgetting one clinician is forgetting
+ * every key that was ever on file for them, and filtering the current view would have dropped every
+ * other clinician's superseded rows as a side effect of erasing this one's.
  */
 export function forgetPeer(pins: PinStore, ed25519Fp: string): PinStore {
-  return PinStore.load(JSON.stringify(listPins(pins).filter((p) => p.ed25519Fp !== ed25519Fp)))
+  return PinStore.load(JSON.stringify(pinHistory(pins).filter((p) => p.ed25519Fp !== ed25519Fp)))
 }
 
 /** A recorded encryption key and the different one the console is holding for the same therapist. */
@@ -261,7 +305,14 @@ export function sasWordsMatch(expectedWords: string, typedWords: string): boolea
 }
 
 /**
- * Replace the recorded encryption key for a therapist who re-keyed.
+ * Supersede the recorded encryption key for a therapist who re-keyed, on the strength of the SAS
+ * words read back out of band. The MANUAL route — PinRecord.svelte, where there is no pairing code
+ * to lean on and the words are the only thing the server cannot supply. The pairing ceremony has
+ * its own door (`recordPin`, reached through owner/therapistKeys.ts) and asks for no words,
+ * because the code already did that job; see COMPANION_SECURITY.md §5.6.
+ *
+ * It APPENDS, like every other write here: the superseded row stays as history and the newest row
+ * is what seals go to. "Replace" is what it means to the person, not what it does to the record.
  *
  * WHY IT TAKES WORDS AND NOT A BOOLEAN. A pin is worth exactly one thing: a key that changed
  * behind the owner's back is refused. Any affordance that accepts the new key on the strength of

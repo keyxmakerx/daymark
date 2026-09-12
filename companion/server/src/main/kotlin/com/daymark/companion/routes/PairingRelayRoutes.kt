@@ -5,11 +5,14 @@ import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.auth.PairingStore
 import com.daymark.companion.auth.PersistentAttemptLimiter
+import com.daymark.companion.auth.TokenBucketLimiter
 import com.daymark.companion.clientAddress
 import com.daymark.companion.storage.AuditAction
 import com.daymark.companion.storage.AuditActor
 import com.daymark.companion.storage.AuditStore
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -135,11 +138,45 @@ private const val MAX_ENV_BYTES = 4096
 private const val ENROL_TICKET_BYTES = 32
 
 /**
- * How often a therapist may poll the status route without spending their own budget: the shared
- * per-source window allows [PAIR_MAX_PER_WINDOW] touches per [PAIR_WINDOW_MS], fetch and respond
- * cost two, and every allowed request is charged. At 45 seconds, five minutes hold six polls with
- * room to spare; anything under 30 seconds locks an honest therapist out of their own ceremony.
- * The client is written to this number and treats a 429 as "still waiting".
+ * The status poll's allowance, KEYED ON THE PAIRING RUN rather than on the address.
+ *
+ * ## Why the run and not the address
+ *
+ * A poll asks one question — has the owner decided? — and proves the same secret every time. It
+ * tests nothing, moves nothing, and reveals nothing beyond a state word the caller already had to
+ * prove the secret to reach. Metering it per address charged the wrong party: two clinicians behind
+ * one clinic NAT spent each other's allowance, while the attacker it was supposedly aimed at holds
+ * one link and one address and was never troubled by it.
+ *
+ * The run is the honest unit. A run is opened by the owner and its id is handed out in exactly one
+ * place — the fetch response, which requires the invite secret — so an allowance attached to it is
+ * an allowance attached to one ceremony, and one person's waiting cannot cost another's.
+ *
+ * ## The numbers
+ *
+ * One every ten seconds, sustained, with six in hand for the honest interruptions: a reload, a tab
+ * restored, a laptop waking up and firing the poll it owed. [PAIRING_STATUS_POLL_SECONDS] is the
+ * cadence the client actually keeps and is far slower than the refill, so an honest poller is never
+ * refused however long the owner takes — which matters, because they may take a day.
+ *
+ * Over the allowance the answer is 429 with `Retry-After`, and the client renders NOTHING new: a
+ * throttled poll is "still waiting", the same as any other poll that found no decision yet. The
+ * person waiting is told nothing, because nothing has happened.
+ *
+ * WHO CAN SPEND IT is worth stating plainly: the budget is charged before the secret is verified,
+ * so anyone who knows a run's id — the owner, or whoever has already proved the secret on this
+ * invitation — can spend that run's polls. That is deliberate. Charging after the verify would
+ * leave an anonymous route running a 64 MiB Argon2id verification per request with nothing in
+ * front of it, and the cost of the choice is small in the other direction: a run whose polls are
+ * being spent is a run whose therapist learns of an approval a little later, never one that fails.
+ */
+internal const val PAIRING_STATUS_BURST = 6
+internal const val PAIRING_STATUS_REFILL_MS = 10_000L
+
+/**
+ * How often the therapist's side polls, and the number the client is written to. Comfortably
+ * slower than PAIRING_STATUS_REFILL_MS, so the honest cadence never meets the allowance at all;
+ * a 429 is treated as "still waiting" either way.
  */
 const val PAIRING_STATUS_POLL_SECONDS = 45L
 
@@ -181,13 +218,16 @@ const val PAIRING_STATUS_POLL_SECONDS = 45L
  * invitation. The status poll is the one touch allowed against a REDEEMING invite, and it yields
  * a state word and nothing else.
  *
- * WHY THE PER-SOURCE BUDGET IS THE SAME SCOPE AS REDEEM'S. The relay verifies the same secret
- * redeem verifies, so a separate budget would hand an attacker double the guesses by
- * alternating surfaces. [PersistentAttemptLimiter] keeps its state in the attempt_windows
- * table keyed by scope, so a second instance over the same scope IS the same budget — shared
- * durable state by construction, not by careful wiring. It is never reset by a relay success:
- * a status poll succeeds repeatedly, and a reset on success would let a link-holder clear the
- * window at will.
+ * WHAT IS METERED, AND BY WHAT. Fetch and respond share ONE per-address window with each other
+ * (PAIR_MAX_PER_WINDOW) because they verify the same secret, and a separate budget per surface
+ * would hand an attacker double the attempts by alternating routes. [PersistentAttemptLimiter]
+ * keeps that window in the attempt_windows table keyed by scope, so a second instance over the
+ * same scope IS the same budget — shared durable state by construction, not by careful wiring —
+ * and it is never reset by a success, because a limiter a link-holder can clear by succeeding is
+ * one they can clear at will. The STATUS POLL is not in that window: it is metered per RUN, at a
+ * cadence rather than a ration (PAIRING_STATUS_BURST / PAIRING_STATUS_REFILL_MS), because polling
+ * is what honest waiting looks like and charging it to the address made an honest ceremony pay
+ * for itself.
  *
  * THE FAILURE ANSWERS ARE DELIBERATELY FLAT. A wrong secret, a right secret against an invite
  * with no open exchange, and a right secret against an invite that never existed must not be
@@ -212,7 +252,38 @@ fun Route.pairingRelayRoutes(
         maxPerWindow = PAIR_MAX_PER_WINDOW,
         windowMs = PAIR_WINDOW_MS,
     ),
+    /**
+     * The status poll's per-RUN allowance. In process memory, unlike the budget above, and the
+     * difference is the one [com.daymark.companion.auth.AttemptBudget] names: that one bounds
+     * guessing at a secret and must survive a restart, this one shapes the volume of a question
+     * that tests nothing, so a restart returns at most one burst per run and no secret becomes
+     * easier to guess. The store's clock, so a test that advances time advances this too.
+     */
+    statusRunLimiter: AttemptBudget = TokenBucketLimiter(
+        burst = PAIRING_STATUS_BURST,
+        refillIntervalMs = PAIRING_STATUS_REFILL_MS,
+        clock = authStore::nowMs,
+    ),
 ) {
+    /**
+     * The throttled answer, with `Retry-After` in seconds.
+     *
+     * The header is the whole point of the refusal being worth anything to a person: the
+     * therapist's screen says "paused until {time}. Your invitation is unchanged and will still
+     * open then", and it can only say a time because the server sent one. Rounded UP, so the
+     * client never comes back a second early and meets the same wall; never below one second.
+     *
+     * Note what carries no Retry-After: the invitation's own LOCKOUT, whose 429 comes from
+     * checkInviteSecret. That is deliberate and the client depends on it — a lockout is a fact
+     * about the invitation, this is a fact about the connection, and they are two different
+     * sentences to read.
+     */
+    suspend fun ApplicationCall.refuseThrottled(budget: AttemptBudget, key: String) {
+        val seconds = ((budget.retryAfterMs(key) + 999) / 1000).coerceAtLeast(1L)
+        response.header(HttpHeaders.RetryAfter, seconds.toString())
+        respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited"))
+    }
+
     /** Decode-and-size check; the relay checks shape, never meaning. */
     fun decodedSize(b64: String, min: Int, max: Int): Boolean {
         val bytes = try {
@@ -436,7 +507,7 @@ fun Route.pairingRelayRoutes(
         post("/fetch") {
             call.response.header("Referrer-Policy", "no-referrer")
             if (!pairSourceLimiter.allow(call.clientAddress())) {
-                return@post call.respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited"))
+                return@post call.refuseThrottled(pairSourceLimiter, call.clientAddress())
             }
             val req = call.receiveCappedJson<PairingFetchRequest>() ?: return@post
             call.relayAuthorized(req.secret) ?: return@post
@@ -453,7 +524,7 @@ fun Route.pairingRelayRoutes(
         post("/{exchangeId}/respond") {
             call.response.header("Referrer-Policy", "no-referrer")
             if (!pairSourceLimiter.allow(call.clientAddress())) {
-                return@post call.respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited"))
+                return@post call.refuseThrottled(pairSourceLimiter, call.clientAddress())
             }
             val req = call.receiveCappedJson<PairingRespondRequest>() ?: return@post
             if (!decodedSize(req.msgBB64, 34, MAX_MSG_BYTES)) {
@@ -482,13 +553,14 @@ fun Route.pairingRelayRoutes(
         // is a question, and the answer is a state word.
         post("/{exchangeId}/status") {
             call.response.header("Referrer-Policy", "no-referrer")
-            if (!pairSourceLimiter.allow(call.clientAddress())) {
-                return@post call.respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited"))
+            val exchangeId = call.parameters["exchangeId"] ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("missing exchangeId"))
+            // Per RUN, not per address, and spent before the secret is read — see the constants.
+            if (!statusRunLimiter.allow(exchangeId)) {
+                return@post call.refuseThrottled(statusRunLimiter, exchangeId)
             }
             val req = call.receiveCappedJson<PairingFetchRequest>() ?: return@post
             val verdict = call.relayAuthorized(req.secret, allowRedeeming = true) ?: return@post
             val inviteId = call.parameters["inviteId"]!!
-            val exchangeId = call.parameters["exchangeId"] ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("missing exchangeId"))
             val exchange = pairingStore.exchangeForInvite(exchangeId, inviteId)
             when (exchange?.state) {
                 PairingStore.State.RESPONDED -> call.respond(PairingStatusResponse("WAITING"))

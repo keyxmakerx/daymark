@@ -34,6 +34,7 @@
 - [7. Reverse-proxy / trusted-proxy hardening](#7-reverse-proxy--trusted-proxy-hardening)
 - [8. Anti-rollback & integrity (client-anchored)](#8-anti-rollback--integrity-client-anchored)
 - [9. Audit-logging posture](#9-audit-logging-posture)
+- [9a. Closing a credential without deleting one](#9a-closing-a-credential-without-deleting-one)
 - [10. Hardening checklist (copy-paste)](#10-hardening-checklist-copy-paste)
 - [11. Out of scope / honest limits](#11-out-of-scope--honest-limits)
 - [Related documents](#related-documents)
@@ -249,7 +250,29 @@ Each adversary lists **can**, **cannot (when defenses honored)**, and **defenses
 | Signing / authorship | **Ed25519** | **Owner** signs every share bundle *and* verifies game plans. **Therapist** signs every game plan *and* signed attestations. Owner identity is a first-class pinned trust anchor, symmetric with the therapist's. |
 | Fingerprints / SAS | **BLAKE2b** over the raw pubkey | Rendered as a 4–6 word code / QR for **bidirectional** OOB verification (§5.6). |
 | Therapist key custody at rest | wrapped under **WebAuthn-PRF**-derived KUK (else Argon2id passphrase) | Private key never leaves the client; server stores only the public key + WebAuthn credential public key. **`prfSalt` is rotatable (R5).** |
-| Capability / inbox token | 256-bit CSPRNG, stored **hashed** (BLAKE2b) | Per-relationship; never logged in plaintext; **bound to the authenticated WebAuthn credential at first fetch** (§5.5). |
+| Capability / inbox token | 256-bit CSPRNG, stored **hashed** (BLAKE2b) | Per-relationship; minted by the owner console since 2026-09-12 (see below); never logged in plaintext; **bound to the authenticated WebAuthn credential at first fetch** (§5.5). |
+
+**The inbox token became a 256-bit CSPRNG value on 2026-09-12 (issue #126). Before that date the row
+above described an intention, not the code.** Nothing in this repository generated one. The only way
+a token entered the system was a text box on the owner console whose entire validation was
+"not empty", so a single character produced a perfectly valid relationship reference — while the
+server's own `Secrets.newToken()`, a real `SecureRandom`, was never called for this value at all.
+The owner console now takes 32 bytes from libsodium's CSPRNG when a clinician is added
+(`companion/web/src/lib/owner/inboxToken.ts`), shows the result once, and has no field to type one
+into: a hand-chosen token is the defect, so the generate path replaces the input rather than
+guarding it. Two consequences worth stating. The token is now 43 characters of base64url, which is
+what makes a stolen database useless — the property this design leans on and the typed path quietly
+removed. And two clinicians can no longer be given one token by accident, which used to hand them a
+shared relationship reference and each other's shares, grants, assignments and audit log; the
+console could not have shown it, because its pending id embedded the first eight characters of the
+token followed by the list index, so one token rendered as two different-looking rows.
+
+**The token has never been deliverable by the invitation, and still is not.** The mail message has no
+field for it, and the mint API is handed the digest rather than the value, so the server has never
+held a token it could put in one. "Out of band" is therefore the only channel this value has ever
+had. Until 2026-09-12 one screen said otherwise — `companion/web/src/lib/onboarding/fieldHelp.ts`
+told the clinician the token "was in the invitation", which is the sentence they read while the
+other person is on the phone asking what to send. Both consoles now say the same true thing.
 
 ### Key hierarchy
 
@@ -456,6 +479,44 @@ replaces it with keys the code proves (`OWNER_KEY_UNPINNED_CAVEAT`,
 type an owner key into this product, which is the point rather than a simplification: a field would
 be a way back to the weaker half.
 
+**A matching code on a FRESH invitation replaces a pinned key (issue #111, 2026-09-12).** The owner
+console used to refuse to approve a reply whose keys were not the ones it already held, and told the
+owner to reach the clinician another way. That refusal is retracted, and the reasoning is worth
+stating because it is the same shape as several arguments in this document. The pin's authority IS
+the code: the existing pin was recorded on exactly the proof *"the party that sealed this envelope
+is the party I spoke the code to"* and on nothing stronger. Demanding a stronger proof to replace a
+pin than to create one is incoherent, and it buys nothing — someone who obtains a code can already
+pair fresh and be sent every future share, so letting them replace a pin adds no access. It adds
+detectability: the real clinician's next share stops opening and they phone.
+
+Three things carry that trade and none is optional.
+
+1. **Rotation always costs a fresh invitation.** Approving moves the invitation out of `PENDING`,
+   and every route that starts or answers a run demands `PENDING`, so the old invitation and its
+   code are dead by the time a second offer could exist. A touch against a spent invitation is
+   refused by status: no burn, no error, it simply never opens. Pinned in
+   `companion/server/src/test/kotlin/com/daymark/companion/PairingRelayRoutesTest.kt`.
+2. **It reaches nothing already sealed.** Rotation changes what is sealed from now on and nothing
+   else; whoever holds the device that carried the old keys can still open every share sent before.
+   The screen says so, in those words, at the point of the click — the same standing fact as
+   *"Revoking does not un-send what was already read."*
+3. **The record is insert-only.** A supersession is a NEW pin row; the old one stays as history and
+   seals target the newest (`companion/web/src/lib/share/pairing.ts`). The owner's record can say a
+   key changed and when, rather than quietly looking as though it never had.
+
+What the console still refuses on this route is keys it has already recorded for a DIFFERENT
+relationship — not a rotation but an ambiguity about who a share is for, which no amount of
+code-typing settles. And the OTHER key route is unchanged: keys the **server** hands over
+(`owner/therapistKeys.ts`, `acceptTherapistKeys`) still require the fingerprints read aloud, and the
+manual rotation screen still requires the SAS words, because on those channels nothing has replaced
+them.
+
+**A replacement pairing seals E2 too.** The re-key path above runs through the same approve, so a
+clinician who comes back with new keys leaves holding the owner's, proved by the code they just
+typed. The owner's identity is derived rather than generated, so what the replacement proves is the
+same identity the first pairing did — and the person being re-verified is the last one who should
+be left unable to verify back.
+
 ### 5.7 Recovery & revocation
 
 - **No server-side escrow.** Single lost device → optional self-held,
@@ -653,7 +714,8 @@ fetch, assignment/game-plan publish, session expiry) — never client-supplied.
   "actor": "therapist",           // "owner" | "therapist" — who performed the action
   "action": "share.open",         // auth.success | auth.fail | lockout | enrol.ok |
                                    //   share.open | gameplan.open | assignment.publish |
-                                   //   gameplan.publish | session.expired (extend as needed)
+                                   //   gameplan.publish | session.expired |
+                                   //   relationship.ended (extend as needed)
   "objectRef": "lin1:3",          // opaque channel-scoped id (lineage:version); never content
   "meta": { "credentialId": "…" },// small, fixed, non-content annotations only (optional)
   "entryHash": "<sha256 hex>"      // = SHA256(prevHash ‖ seq ‖ ts ‖ relRef ‖ actor ‖ action ‖ objectRef ‖ meta)
@@ -678,6 +740,76 @@ fetch, assignment/game-plan publish, session expiry) — never client-supplied.
   is now detectable; withholding is not. Full suppression-resistance still needs the
   originally-scoped signed client attestation, which has not shipped.
 
+---
+
+## 9a. Closing a credential without deleting one
+
+Issue #91 gave a clinician a way to end their own access. The security-relevant half of it is one
+row, and the shape of that row is the whole argument.
+
+### The table
+
+```sql
+CREATE TABLE IF NOT EXISTS relationship_endings (
+    rel_ref       TEXT    NOT NULL PRIMARY KEY,
+    credential_id TEXT    NOT NULL,
+    ended_at      INTEGER NOT NULL
+)
+```
+
+Written by `POST /v1/relations/{relRef}/ending` (therapist session cookie + `X-CSRF-Token`, and the
+session must be bound to that exact relationship — a session for another one is refused `403`,
+identically to every other cross-relationship request). Read on the sign-in path: `POST
+/v1/totp/verify` consults it after the code verifies and answers `410 Gone` instead of issuing a
+session. Read again on the owner's share publish, which is refused `410` before the body is read.
+
+### Why a separate table, and not a flag or a delete
+
+`totp` is insert-only, and both halves of that property are load-bearing here.
+
+- **A DELETE would be worse than doing nothing.** The `UNIQUE` index `idx_totp_rel_ref` is the only
+  thing stopping a second enrolment against a relationship. Removing the row would hand anyone still
+  holding the invitation link a way to enrol a *fresh* credential against a relationship somebody has
+  just left — turning an exit into an entrance.
+- **An UPDATE (`disabled=1`) would be an update path into the one table whose safety property is
+  that it has none.** Every other protection in that table rests on "a row, once written, is never
+  rewritten"; adding one mutable column adds one code path that can be reached by a bug, a stolen
+  session, or a later refactor that does not know why the rule existed.
+
+So the closure lives beside the credential rather than inside it, and `totp` is never touched by any
+of this. The same reasoning the `therapist_keys` and `owner_keys` tables already use: `rel_ref` is
+the PRIMARY KEY, the constraint refuses inside the `INSERT OR IGNORE` statement rather than in a
+check a second connection could slip past, and idempotence falls out of it for free.
+
+### Keyed on the relationship, not the credential
+
+`idx_totp_rel_ref` makes a TOTP credential per-relationship: `enrollTotp` refuses a second credential
+for a `rel_ref`, so closing one closes exactly one relationship and can reach no other patient's
+work. Keying the ending on the **relationship** puts that property in the schema rather than in a
+coincidence — and it means the ending survives any future re-enrolment path. A relationship that was
+ended stays ended; the way back is a fresh invitation, which is a fresh relationship, exactly as the
+clinician is told at the point of the click.
+
+### What it discloses, and to whom
+
+- The `410` on sign-in is reachable **only behind a correct code**. Every earlier refusal on that
+  route collapses into an identical `401`, so a caller holding only a credential id — which is a
+  therapist-typed username, not a secret — learns nothing. Behind the code, the only caller who can
+  reach the honest answer is the clinician themselves.
+- `GET /v1/relations/{relRef}/ending` answers the owner's bearer token with a timestamp and `404`
+  while the relationship is live. The credential id is deliberately **not** echoed: the owner has no
+  use for it, and a route that hands one back is a route that can be asked for one.
+- The audit line carries the event and the credential id as membership metadata — the same
+  annotation the sign-in lines already carry — and nothing about what was read, shared or written.
+  It is appended **once**, when the ending is recorded, never per call: the same rule as a lockout,
+  for the same reason. A log that grows a row per retry buries the row that matters.
+
+### Ordering, and what survives a crash
+
+The row is written **before** sessions are cut. If the process dies between them the surviving state
+is "ended, with a session alive until it times out" — bounded, and already closed to any new sign-in.
+The other order would leave "signed out, not ended", which looks exactly like a completed leave and
+is not one.
 ---
 
 ## 10. Hardening checklist (copy-paste)
