@@ -151,9 +151,17 @@ class LockedInviteAuditTest {
 
     @Test
     fun `a lockout armed through the report route is on the record too`() = testApplication {
-        // Redeem and report spend ONE shared fail counter, so the guess that crosses the
-        // threshold can land on either surface. If only the redeem route wrote the arming row, an
-        // attacker could do their guessing through report and the lockout would leave no trace.
+        /*
+         * The relay and report spend ONE shared fail counter, so the guess that crosses the
+         * threshold can land on either surface. If only the relay wrote the arming row, an attacker
+         * could do their guessing through report and the lockout would leave no trace — which is
+         * why this row survives the 2026-09-12 change that stopped report writing guess rows at
+         * all. A wrong report is no longer a line in the owner's log; a LOCKOUT still is, wherever
+         * it was armed, because a lockout nobody can see is a door closing in silence.
+         *
+         * The answers are flat now — every anonymous report is 204 — so what this test reads is
+         * the log and the store, which is the only place the difference exists at all.
+         */
         var now = 1_000_000L
         val dir = tmpDir()
         val cfg = config(dir)
@@ -165,19 +173,77 @@ class LockedInviteAuditTest {
             val r = client.post("/v1/invite/${minted.inviteId}/report") {
                 contentType(ContentType.Application.Json); setBody("""{"secret":"wrong-$i"}""")
             }
-            assertEquals(HttpStatusCode.Unauthorized, r.status)
+            assertEquals(HttpStatusCode.NoContent, r.status, "a report tells the caller nothing, right or wrong")
         }
         assertEquals(1, lockoutRows(s.audit), "the arming row is written on whichever surface armed it")
+        assertEquals(
+            0, s.audit.list(relRef, limit = 50).count { it.action == "pair.guess_failed" },
+            "and the guesses themselves are not rows here — only the lockout they armed",
+        )
 
-        // And probes at the locked report route stay silent the same way redeem's do.
+        // And probes at the locked report route stay silent the same way the relay's do. They are
+        // answered — a correct one would be honoured — but a WRONG one while the door is shut
+        // writes nothing at all.
         val rowsAfterArming = s.audit.list(relRef, limit = 50).size
         repeat(4) {
             val r = client.post("/v1/invite/${minted.inviteId}/report") {
                 contentType(ContentType.Application.Json); setBody("""{"secret":"whatever"}""")
             }
-            assertEquals(HttpStatusCode.TooManyRequests, r.status)
+            assertEquals(HttpStatusCode.NoContent, r.status)
         }
         assertEquals(1, lockoutRows(s.audit))
         assertEquals(rowsAfterArming, s.audit.list(relRef, limit = 50).size)
+        assertEquals("PENDING", s.auth.inviteStatusFor(minted.inviteId), "and none of them burned it")
+    }
+
+    @Test
+    fun `wrong reports at a locked invitation cannot ratchet the lockout`() = testApplication {
+        /*
+         * The hazard created by letting a report be answered while a lockout is in force: if a
+         * wrong one bumped the counter, an attacker could hold an invitation shut for as long as
+         * they cared to keep typing, and the capped backoff — which exists so a mistyped character
+         * is never fatal — would climb to its one-hour cap and stay there.
+         *
+         * So a wrong secret arriving at a locked invitation writes NOTHING, and the proof is that
+         * the lockout still ends when it was always going to end. The control is planted directly:
+         * the same invitation, at the same instant, is refused before the clock moves.
+         */
+        var now = 1_000_000L
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val s = stores(dir, cfg) { now }
+        application { module(cfg, null, null, s.rel, s.auth, s.audit) }
+        val minted = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
+
+        repeat(cfg.totpLockoutFails) { i ->
+            client.post("/v1/invite/${minted.inviteId}/pairing/fetch") {
+                contentType(ContentType.Application.Json); setBody("""{"secret":"wrong-$i"}""")
+            }
+        }
+        // An hour of lockout is armed (totpLockoutSeconds in this config). Twenty wrong reports
+        // arrive while it runs.
+        repeat(20) { i ->
+            val r = client.post("/v1/invite/${minted.inviteId}/report") {
+                contentType(ContentType.Application.Json); setBody("""{"secret":"still-wrong-$i"}""")
+            }
+            assertEquals(HttpStatusCode.NoContent, r.status)
+        }
+        // The planted control: the lock is genuinely still in force at this instant.
+        val stillLocked = client.post("/v1/invite/${minted.inviteId}/pairing/fetch") {
+            contentType(ContentType.Application.Json); setBody("""{"secret":"${minted.secret}"}""")
+        }
+        assertEquals(HttpStatusCode.TooManyRequests, stillLocked.status)
+
+        // Sit out exactly the lockout that was armed. If any of those twenty had counted, the
+        // backoff would have grown and this would still be refused.
+        now += cfg.totpLockoutSeconds * 1000 + 1_000
+        val healed = client.post("/v1/invite/${minted.inviteId}/pairing/fetch") {
+            contentType(ContentType.Application.Json); setBody("""{"secret":"${minted.secret}"}""")
+        }
+        assertEquals(
+            HttpStatusCode.Gone, healed.status,
+            "the lockout ended when it was always going to end (410 = secret accepted, nothing waiting)",
+        )
+        assertEquals(1, lockoutRows(s.audit), "and twenty probes were still one episode")
     }
 }

@@ -25,6 +25,8 @@ import {
   therapistAnswerPairing,
   therapistPairingStatus,
   channelIdentifier,
+  PairingPausedError,
+  retryAfterSeconds,
   type OwnerPairingState,
 } from './relay'
 import { initCpace, parseLv } from './cpace'
@@ -507,6 +509,70 @@ describe('the offer and the approval', () => {
     // The fetch happened (the offer needs the relRef it returns); the RESPOND did not, so no run
     // was spent and nothing malformed reached the wire.
     expect(recorded.map((r) => r.url)).toEqual([`/v1/invite/${INVITE_ID}/pairing/fetch`])
+  })
+
+  it('a 429 that names a time is the connection being paused, and it carries the time', async () => {
+    /*
+     * Two different 429s arrive on these routes and the screen has to tell them apart, because
+     * they are two different sentences: the CONNECTION's budget (this one, which says when it
+     * heals) and the INVITATION's lockout (which does not, and is somebody else's guessing). The
+     * header is the whole distinction, so it is what the client keys on.
+     */
+    const { doFetch } = relayServer()
+    const paused = (headers: Record<string, string>) =>
+      (async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).endsWith('/fetch')) {
+          return new Response(JSON.stringify({ error: 'rate limited' }), { status: 429, headers })
+        }
+        return doFetch(input, init)
+      }) as typeof fetch
+
+    const answer = (f: typeof fetch) =>
+      therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, makeOffer: async () => OFFER, code: CODE }, f)
+
+    await expect(answer(paused({ 'retry-after': '137' }))).rejects.toThrow(PairingPausedError)
+    await answer(paused({ 'retry-after': '137' })).catch((e) => {
+      expect(e).toBeInstanceOf(PairingPausedError)
+      expect((e as PairingPausedError).retryAfterSeconds).toBe(137)
+    })
+
+    // The control: the SAME status code without the header is not a pause. A lockout must not be
+    // rendered as "this connection is busy, come back at four" — it is not about the connection.
+    await expect(answer(paused({}))).rejects.toThrow(/refused \(429\)/)
+    await expect(answer(paused({}))).rejects.not.toThrow(PairingPausedError)
+  })
+
+  it('the respond touch reads a pause the same way the fetch does', async () => {
+    const { doFetch } = relayServer()
+    const throttleRespond = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/respond')) {
+        return new Response(JSON.stringify({ error: 'rate limited' }), { status: 429, headers: { 'retry-after': '42' } })
+      }
+      return doFetch(input, init)
+    }) as typeof fetch
+    await ownerOpenPairing({ relRef: REL_REF, inviteId: INVITE_ID, code: CODE, bearerToken: BEARER }, doFetch)
+    await therapistAnswerPairing(
+      { inviteId: INVITE_ID, secret: INVITE_SECRET, makeOffer: async () => OFFER, code: CODE },
+      throttleRespond,
+    ).catch((e) => {
+      expect(e).toBeInstanceOf(PairingPausedError)
+      expect((e as PairingPausedError).retryAfterSeconds).toBe(42)
+    })
+  })
+
+  it('only a plain number of seconds is trusted to build a sentence out of', () => {
+    // The screen says "paused until {time}". Anything this function cannot vouch for has to come
+    // back null so the caller falls back to a sentence with no time in it, rather than showing a
+    // person a clock time derived from a header nobody parsed.
+    expect(retryAfterSeconds('137')).toBe(137)
+    expect(retryAfterSeconds(' 137 ')).toBe(137)
+    expect(retryAfterSeconds(null)).toBeNull()
+    expect(retryAfterSeconds('')).toBeNull()
+    expect(retryAfterSeconds('0')).toBeNull()
+    expect(retryAfterSeconds('-5')).toBeNull()
+    expect(retryAfterSeconds('12.5')).toBeNull()
+    // The HTTP-date form, deliberately unread: it would have the client trusting its own clock.
+    expect(retryAfterSeconds('Wed, 21 Oct 2026 07:28:00 GMT')).toBeNull()
   })
 
   it('a 429 on the status poll is waiting, not an error', async () => {

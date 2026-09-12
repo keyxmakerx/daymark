@@ -50,6 +50,7 @@ import {
 import { zeroize, type TherapistKeys, type WrappedKeyBlob } from './keyStore'
 import {
   PAIRING_STATUS_POLL_MS,
+  PairingPausedError,
   therapistAnswerPairing,
   therapistPairingStatus,
   type TherapistStatusResult,
@@ -188,6 +189,27 @@ export interface PairingAcceptInput {
   host?: string
 }
 
+/**
+ * What the screen says when the server pauses this connection.
+ *
+ * THE WORDS ARE THE POINT, so they are here, once, rather than assembled at a call site. The server
+ * knows that an ADDRESS has been busy. It does not know that this PERSON has been doing anything —
+ * a clinic shares one connection, and the previous version of this budget was routinely spent by
+ * one clinician's ordinary waiting and then charged to the next one through the door. So the
+ * sentence says what is true (this connection, paused, until a time) and what the person actually
+ * needs to know (their invitation is untouched and will still open), and it does not say "too many
+ * attempts", which would be the server guessing at a story about them.
+ *
+ * The time comes from the server's `Retry-After` and is rounded UP to the minute it will be
+ * displayed as, so "until 4:07" is never a moment early — coming back to a second refusal would
+ * make a liar of the sentence at the one moment it is being trusted.
+ */
+export function pausedUntilText(retryAfterSeconds: number, now: Date = new Date()): string {
+  const untilMs = Math.ceil((now.getTime() + retryAfterSeconds * 1000) / 60_000) * 60_000
+  const time = new Date(untilMs).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  return `Pairing from this connection is paused until ${time}. Your invitation is unchanged and will still open then.`
+}
+
 /** Where an answered run stands while the owner decides. */
 export type PairingWait =
   | { state: 'waiting' }
@@ -290,6 +312,11 @@ export async function answerPairing(ports: PairingAcceptancePorts, input: Pairin
       zeroize(built.keys)
     }
     if (e instanceof AcceptError) throw e
+    // The connection's own budget, not this person's doing and not a dead invitation: the one
+    // refusal on this path that is a WAIT rather than a fault, and it is told as one.
+    if (e instanceof PairingPausedError) {
+      throw new AcceptError(pausedUntilText(e.retryAfterSeconds), 'paused')
+    }
     const because = e instanceof Error && e.message ? e.message : ''
     // A run somebody else answered first, or one the owner has already replaced, reads the same
     // from here: there is nothing to answer. The remedy is a new code, not a diagnosis.

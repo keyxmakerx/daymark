@@ -3,7 +3,9 @@ package com.daymark.companion
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.auth.PairingStore
 import com.daymark.companion.auth.Secrets
+import com.daymark.companion.routes.PAIRING_STATUS_BURST
 import com.daymark.companion.routes.PAIRING_STATUS_POLL_SECONDS
+import com.daymark.companion.routes.PAIRING_STATUS_REFILL_MS
 import com.daymark.companion.routes.PAIR_MAX_PER_WINDOW
 import com.daymark.companion.routes.PAIR_WINDOW_MS
 import com.daymark.companion.storage.AuditStore
@@ -429,7 +431,17 @@ class PairingRelayRoutesTest {
     }
 
     @Test
-    fun `the poll cadence fits the shared budget - fetch, respond and ten polls in one window, the next waits`() = testApplication {
+    fun `a therapist's waiting does not spend the pairing budget`() = testApplication {
+        /*
+         * The finding the 2026-09-12 split was made for. The status poll used to be charged to the
+         * same per-address window as fetch and respond, so an honest ceremony's own waiting ate the
+         * budget — about 6.7 polls out of twelve — and the surface then began refusing the touches
+         * that matter. Two clinicians on one clinic connection spent each other's.
+         *
+         * Polls are now metered per RUN. Here: one whole ceremony plus twenty polls inside a single
+         * window, and the pairing budget is still open afterwards. Under the old shape this was
+         * twenty-three charges against twelve.
+         */
         var now = 1_000_000L
         val dir = tmpDir()
         val cfg = config(dir)
@@ -438,20 +450,105 @@ class PairingRelayRoutesTest {
         val minted = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
         val exchangeId = exchangeIdOf(ownerOpen(minted.inviteId, sid(1), fakeMsg(1)).bodyAsText())
 
-        // The documented cadence is the arithmetic the client is written to.
-        val pollsPerWindow = PAIR_WINDOW_MS / (PAIRING_STATUS_POLL_SECONDS * 1000)
-        assertTrue(2 + pollsPerWindow <= PAIR_MAX_PER_WINDOW, "fetch + respond + $pollsPerWindow polls must fit $PAIR_MAX_PER_WINDOW")
-
         assertEquals(HttpStatusCode.OK, fetch(minted.inviteId, minted.secret).status)
         assertEquals(HttpStatusCode.NoContent, respond(minted.inviteId, minted.secret, exchangeId, fakeMsg(2)).status)
-        repeat(PAIR_MAX_PER_WINDOW - 2) {
+
+        // Twenty polls, all inside one PAIR_WINDOW_MS so the window cannot quietly roll and answer
+        // for the change under test.
+        repeat(20) {
+            now += 12_000
             assertEquals(HttpStatusCode.OK, status(minted.inviteId, minted.secret, exchangeId).status)
         }
-        // The budget is spent by allowed requests whatever their outcome, and a successful poll
-        // does not reset it (a resettable window would be a link-holder's to clear at will).
-        val over = status(minted.inviteId, minted.secret, exchangeId)
+        assertTrue(now - 1_000_000L < PAIR_WINDOW_MS, "the polling stayed inside one pairing window")
+
+        // 410 is the "secret accepted, nothing waiting" answer — this run has already been
+        // answered, so there is no open exchange to collect. What matters is that it is not a 429.
+        assertEquals(
+            HttpStatusCode.Gone, fetch(minted.inviteId, minted.secret).status,
+            "waiting is not spending: the touches that carry the ceremony are still available",
+        )
+
+        // The planted control: that budget is armed, not absent. Keep fetching and it does refuse.
+        var refused: HttpStatusCode? = null
+        repeat(PAIR_MAX_PER_WINDOW) {
+            val r = fetch(minted.inviteId, minted.secret)
+            if (r.status == HttpStatusCode.TooManyRequests) refused = r.status
+        }
+        assertEquals(HttpStatusCode.TooManyRequests, refused, "the per-address budget still exists and still bites")
+    }
+
+    @Test
+    fun `the poll allowance belongs to the run, so one ceremony cannot spend another's`() = testApplication {
+        /*
+         * The other half of the split, and the one that fixes the clinic NAT: two therapists behind
+         * one address are two RUNS. Exhausting the first run's allowance must leave the second's
+         * untouched, at the same instant, from the same address.
+         */
+        var now = 1_000_000L
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val s = stores(dir, cfg) { now }
+        application { module(cfg, null, null, s.rel, s.auth, s.audit, pairingStore = s.pairing) }
+
+        val first = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
+        val second = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
+        val runA = exchangeIdOf(ownerOpen(first.inviteId, sid(1), fakeMsg(1)).bodyAsText())
+        val runB = exchangeIdOf(ownerOpen(second.inviteId, sid(2), fakeMsg(2)).bodyAsText())
+        assertEquals(HttpStatusCode.NoContent, respond(first.inviteId, first.secret, runA, fakeMsg(3)).status)
+        assertEquals(HttpStatusCode.NoContent, respond(second.inviteId, second.secret, runB, fakeMsg(4)).status)
+
+        // Run A, polled as fast as a browser can manage: the burst is there for exactly this, and
+        // then it waits.
+        repeat(PAIRING_STATUS_BURST) {
+            assertEquals(HttpStatusCode.OK, status(first.inviteId, first.secret, runA).status)
+        }
+        val over = status(first.inviteId, first.secret, runA)
         assertEquals(HttpStatusCode.TooManyRequests, over.status)
         assertEquals("""{"error":"rate limited"}""", over.bodyAsText())
+        val retryAfter = assertNotNull(over.headers["Retry-After"], "a refusal has to say when it heals")
+        assertTrue(
+            retryAfter.toLong() in 1..(PAIRING_STATUS_REFILL_MS / 1000),
+            "and the time it names is the real one, not a whole window: got $retryAfter",
+        )
+
+        // The same address, the same instant, a different run: untouched.
+        assertEquals(
+            HttpStatusCode.OK, status(second.inviteId, second.secret, runB).status,
+            "one run's polling must never be charged to another's — this is the clinic NAT case",
+        )
+
+        // And the first run heals on its own, at the cadence the constant names.
+        now += PAIRING_STATUS_REFILL_MS
+        assertEquals(HttpStatusCode.OK, status(first.inviteId, first.secret, runA).status)
+    }
+
+    @Test
+    fun `the cadence the client keeps is never refused, however long the owner takes`() = testApplication {
+        // The product claim, as arithmetic and then as forty minutes of waiting. An owner may take
+        // a day to approve; a therapist who polls at the documented cadence must never be told
+        // anything at all until there is something to tell.
+        assertTrue(
+            PAIRING_STATUS_POLL_SECONDS * 1000 >= PAIRING_STATUS_REFILL_MS,
+            "the client's cadence must be slower than the refill, or an honest poller drains its own allowance",
+        )
+
+        var now = 1_000_000L
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val s = stores(dir, cfg) { now }
+        application { module(cfg, null, null, s.rel, s.auth, s.audit, pairingStore = s.pairing) }
+        val minted = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
+        val exchangeId = exchangeIdOf(ownerOpen(minted.inviteId, sid(1), fakeMsg(1)).bodyAsText())
+        assertEquals(HttpStatusCode.OK, fetch(minted.inviteId, minted.secret).status)
+        assertEquals(HttpStatusCode.NoContent, respond(minted.inviteId, minted.secret, exchangeId, fakeMsg(2)).status)
+
+        repeat(50) {
+            now += PAIRING_STATUS_POLL_SECONDS * 1000
+            assertEquals(
+                HttpStatusCode.OK, status(minted.inviteId, minted.secret, exchangeId).status,
+                "an honest poll is never refused",
+            )
+        }
     }
 
     @Test

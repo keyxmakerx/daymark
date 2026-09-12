@@ -511,6 +511,25 @@ class AuthStore(
      * as a wrong secret on redeem. Without that, this route would be a free oracle for guessing the
      * invite secret — unmetered attempts on a surface with no lockout of its own — and closing the
      * burn hole would have opened a guessing hole one route over.
+     *
+     * ## Why the secret is checked BEFORE the lockout, here and nowhere else
+     *
+     * Every other door asks "is this invitation locked?" first and answers a locked one without
+     * ever looking at the secret. That is right for the doors a lockout exists to shut: they hand
+     * something back — the owner's opening message, a state word — and what the lockout buys is
+     * that a guesser learns nothing while it is in force.
+     *
+     * A report hands nothing back. It is a person saying "this wasn't me" about a link they were
+     * sent, and the answer is the same flat acknowledgement whatever the truth of it (see the
+     * route). So the lockout has nothing to protect here, and putting it in front of the secret
+     * check bought exactly one outcome: the invitation somebody was guessing at — the one most
+     * likely to be in hostile hands — became the one invitation its real holder could not close.
+     *
+     * So: verify first, and honour a correct report whether or not a lockout is in force. A WRONG
+     * secret arriving while one is in force still writes NOTHING — no counter bump, no extension,
+     * no audit row — which is the locked-door rule kept exactly as it is everywhere else
+     * (`LockedInviteAuditTest`): a knock on a locked door is not a write, and a lockout must never
+     * be extendable by the volume an attacker chooses to send.
      */
     fun reportInvite(inviteId: String, secret: String, lockoutFails: Int, lockoutBaseMs: Long): ReportResult = synchronized(lock) {
         val now = clock()
@@ -520,12 +539,12 @@ class AuthStore(
             setInviteStatus(inviteId, "EXPIRED")
             return ReportResult(ReportStatus.GONE)
         }
-        if (row.lockedUntil > now) return ReportResult(ReportStatus.LOCKED, row.relRef)
-
         if (Secrets.verifySecret(secret, row.secretArgon2)) {
             killInviteLocked(inviteId)
             return ReportResult(ReportStatus.OK, row.relRef)
         }
+        // Wrong, and the door is already shut: the knock is not a write.
+        if (row.lockedUntil > now) return ReportResult(ReportStatus.LOCKED, row.relRef)
         val armed = applyWrongSecretBackoffLocked(inviteId, row, now, lockoutFails, lockoutBaseMs)
         return ReportResult(ReportStatus.WRONG_SECRET, row.relRef, lockoutArmed = armed)
     }
@@ -722,6 +741,24 @@ class AuthStore(
         // exactly as it was, which is what stops a refused attempt from extending its own lockout.
         if (existing == null) writeAttemptWindowLocked(scope, key, startedAt, count)
         return false
+    }
+
+    /**
+     * How long until this source's window rolls, so a refusal can carry a `Retry-After` naming a
+     * real time instead of the client assuming the server's window size.
+     *
+     * A source with no window on record is told the full window. That is the conservative
+     * direction: the only way to have no row is to have spent nothing, in which case the caller is
+     * not being refused by this budget at all and the number is never shown to anyone.
+     */
+    fun attemptRetryAfterMs(scope: String, source: String, windowMs: Long): Long = synchronized(lock) {
+        val startedAt = conn.prepareStatement(
+            "SELECT started_at FROM attempt_windows WHERE scope=? AND source_key=?",
+        ).use { ps ->
+            ps.setString(1, scope); ps.setString(2, Secrets.tokenHash(source))
+            ps.executeQuery().use { rs -> if (rs.next()) rs.getLong(1) else null }
+        } ?: return windowMs
+        return (startedAt + windowMs - clock()).coerceAtLeast(1L)
     }
 
     /** Clears a source's window — called on success, so legitimate use is never penalised. */

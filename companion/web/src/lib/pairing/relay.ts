@@ -79,13 +79,56 @@ type FetchLike = typeof fetch
 const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s)
 
 /**
- * How often the therapist's side asks whether the owner has decided. The server's shared
- * per-source budget allows twelve touches per five minutes and charges every one; fetch and
- * respond cost two. Forty-five seconds is six polls a window with room to spare; faster than
- * thirty locks an honest therapist out of their own ceremony. A 429 is treated as "still
- * waiting" for the same reason. Mirrors PAIRING_STATUS_POLL_SECONDS on the server.
+ * How often the therapist's side asks whether the owner has decided. The server meters this poll
+ * per PAIRING RUN rather than per address — a bucket that refills one poll every ten seconds — so
+ * forty-five seconds is never refused however long the owner takes, and one person's waiting can
+ * no longer spend another's on the same clinic connection. A 429 is still treated as "still
+ * waiting", because that is all a throttled poll means. Mirrors PAIRING_STATUS_POLL_SECONDS on
+ * the server.
  */
 export const PAIRING_STATUS_POLL_MS = 45_000
+
+/**
+ * The pairing surface refused this connection for a while, and said until when.
+ *
+ * It carries the `Retry-After` the server sent, in seconds, because the screen's sentence names a
+ * TIME — "paused until {time}. Your invitation is unchanged and will still open then" — and a
+ * sentence like that is only worth saying if the number behind it came from the thing doing the
+ * refusing.
+ *
+ * Only the CONNECTION's budget produces this. The other 429 on these routes is the invitation's
+ * own lockout, which carries no Retry-After on purpose: that one is a fact about the invitation
+ * and a different sentence, so a missing header is the signal rather than a gap to paper over.
+ */
+export class PairingPausedError extends Error {
+  constructor(readonly retryAfterSeconds: number) {
+    super('pairing paused')
+    this.name = 'PairingPausedError'
+  }
+}
+
+/**
+ * The `Retry-After` as a positive whole number of seconds, or null when the header is absent or
+ * is anything this code will not vouch for. Only the delta-seconds form is read: the HTTP-date
+ * form would have the client trusting its own clock against the server's, which is exactly the
+ * disagreement that makes a "come back at 4:05" message wrong for the person reading it.
+ */
+export function retryAfterSeconds(header: string | null): number | null {
+  if (header === null) return null
+  const trimmed = header.trim()
+  if (!/^\d+$/.test(trimmed)) return null
+  const seconds = Number(trimmed)
+  if (!Number.isFinite(seconds) || seconds <= 0) return null
+  return seconds
+}
+
+/** A 429 that named a time is the connection's pause; anything else stays what it was. */
+function throwIfPaused(res: Response, what: string): void {
+  if (res.status !== 429) return
+  const seconds = retryAfterSeconds(res.headers.get('retry-after'))
+  if (seconds !== null) throw new PairingPausedError(seconds)
+  throw new Error(`pairing ${what} refused (429)`)
+}
 
 /**
  * The code as PAKE bytes. Takes the branded type and STILL checks it: the brand keeps a typed
@@ -219,6 +262,7 @@ export async function therapistAnswerPairing(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ secret: args.secret }),
   })
+  throwIfPaused(fetchRes, 'fetch')
   if (fetchRes.status !== 200) throw new Error(`pairing fetch refused (${fetchRes.status})`)
   const body = (await fetchRes.json()) as {
     exchangeId?: unknown
@@ -248,6 +292,7 @@ export async function therapistAnswerPairing(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ secret: args.secret, msgBB64: b64.encode(responded.msgB), envB64: b64.encode(envelope) }),
   })
+  throwIfPaused(respondRes, 'respond')
   if (respondRes.status !== 204) throw new Error(`pairing respond refused (${respondRes.status})`)
   return { exchangeId: body.exchangeId, relRef: body.relRef, isk: responded.isk }
 }

@@ -181,7 +181,18 @@ export function defaultKeyStorage(): KeyRecordStorage | null {
   }
 }
 
-export type AcceptStep = 'redeem' | 'record' | 'wrap' | 'enrol' | 'login' | 'register' | 'code' | 'name' | 'pairing'
+export type AcceptStep =
+  | 'redeem'
+  | 'record'
+  | 'wrap'
+  | 'enrol'
+  | 'login'
+  | 'register'
+  | 'code'
+  | 'name'
+  | 'pairing'
+  /** Nothing is wrong and nothing was lost: the server has paused this connection for a while. */
+  | 'paused'
 
 /**
  * A refusal, carrying WHICH step refused.

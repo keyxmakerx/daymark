@@ -147,6 +147,15 @@
 
   let busy = $state(false)
   let error = $state('')
+  /**
+   * WHICH step refused, kept beside the message for one reason: a pause is not a failure.
+   *
+   * Every other refusal on this screen is something that went wrong and wants the alarm tone. A
+   * paused connection is the server saying "not just now" about an invitation that is still
+   * perfectly alive, and drawing that in the critical hue would tell a person their invitation is
+   * in trouble at the exact moment the words are telling them it is not.
+   */
+  let errorStep = $state<string | null>(null)
 
   /*
    * THE RESCUE PATH'S STATE, kept separate from the acceptance's rather than folded into it.
@@ -219,6 +228,7 @@
 
   function usePastedLink() {
     error = ''
+    errorStep = null
     const parsed = parseInviteLink(pasted)
     if (parsed.ok) {
       invite = parsed.invite
@@ -264,6 +274,7 @@
    */
   async function accept() {
     error = ''
+    errorStep = null
     gone = false
     problems = checkPassphrase(passphrase, confirmation)
     if (problems.length > 0 || !invite) return
@@ -303,6 +314,7 @@
       dropSpentFragment()
     } catch (e) {
       error = e instanceof Error ? e.message : 'This invitation could not be accepted.'
+      errorStep = e instanceof AcceptError ? e.step : null
       // Anything that got as far as enrolling has spent the invitation; anything earlier has not,
       // and the link has to keep working so a new code can be tried on this same page.
       if (e instanceof AcceptError && e.step === 'enrol') dropSpentFragment()
@@ -314,6 +326,7 @@
 
   async function finish() {
     error = ''
+    errorStep = null
     if (!enrolment) return
     busy = true
     try {
@@ -676,7 +689,7 @@
     </Card>
   {/if}
 
-  {#if error}<Callout tone="critical">{error}</Callout>{/if}
+  {#if error}<Callout tone={errorStep === 'paused' ? 'info' : 'critical'}>{error}</Callout>{/if}
 
   <!--
     THE WAY BACK IN. Offered beside the acceptance rather than hidden behind a failure, because the
