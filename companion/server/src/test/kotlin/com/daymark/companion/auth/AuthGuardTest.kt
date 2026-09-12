@@ -16,7 +16,7 @@ class AuthGuardTest {
      * `maxEntries` is injected so these run in milliseconds instead of minting 50 000 sources.
      */
     private fun floodGuard(now: () -> Long, maxEntries: Int = 4) =
-        AuthGuard("t", lockoutThreshold = 8, lockoutMillis = 1000, ratePerSecond = 5, clock = now, maxEntries = maxEntries)
+        AuthGuard(Secrets.tokenHash("t"), lockoutThreshold = 8, lockoutMillis = 1000, ratePerSecond = 5, clock = now, maxEntries = maxEntries)
 
     @Test
     fun `idle sources are evicted once the map is over the threshold`() {
@@ -100,11 +100,21 @@ class AuthGuardTest {
     }
 
     @Test
+    fun `authorize accepts the correct token and rejects a wrong one`() {
+        // The direct unit-level proof that hashing at both ends still lines up: the guard is
+        // constructed with a DIGEST (as OwnerAccountStore.currentTokenHash now hands it), and
+        // authorize is presented the PLAINTEXT (as it arrives over the wire).
+        val guard = AuthGuard(Secrets.tokenHash("correct-token"), lockoutThreshold = 8, lockoutMillis = 1000, ratePerSecond = 100)
+        assertEquals(AuthGuard.Result.OK, guard.authorize("peer", "correct-token"))
+        assertEquals(AuthGuard.Result.BAD_TOKEN, guard.authorize("other-peer", "wrong-token"))
+    }
+
+    @Test
     fun `rotate takes effect immediately and invalidates the old token`() {
-        val guard = AuthGuard("old-token", lockoutThreshold = 8, lockoutMillis = 1000, ratePerSecond = 100)
+        val guard = AuthGuard(Secrets.tokenHash("old-token"), lockoutThreshold = 8, lockoutMillis = 1000, ratePerSecond = 100)
         assertEquals(AuthGuard.Result.OK, guard.authorize("peer-a", "old-token"))
 
-        guard.rotate("new-token")
+        guard.rotate(Secrets.tokenHash("new-token"))
 
         assertEquals(AuthGuard.Result.BAD_TOKEN, guard.authorize("peer-b", "old-token"))
         assertEquals(AuthGuard.Result.OK, guard.authorize("peer-b", "new-token"))
@@ -113,13 +123,13 @@ class AuthGuardTest {
     @Test
     fun `rotate does not reset an in-progress lockout for a source`() {
         var now = 0L
-        val guard = AuthGuard("old-token", lockoutThreshold = 2, lockoutMillis = 60_000, ratePerSecond = 100, clock = { now })
+        val guard = AuthGuard(Secrets.tokenHash("old-token"), lockoutThreshold = 2, lockoutMillis = 60_000, ratePerSecond = 100, clock = { now })
         assertEquals(AuthGuard.Result.BAD_TOKEN, guard.authorize("peer", "wrong"))
         assertEquals(AuthGuard.Result.BAD_TOKEN, guard.authorize("peer", "wrong"))
         // Now locked out for "peer".
         assertEquals(AuthGuard.Result.LOCKED, guard.authorize("peer", "old-token"))
 
-        guard.rotate("new-token")
+        guard.rotate(Secrets.tokenHash("new-token"))
 
         // Rotation does not clear the pre-existing lockout for this source.
         assertEquals(AuthGuard.Result.LOCKED, guard.authorize("peer", "new-token"))
@@ -139,7 +149,7 @@ class AuthGuardTest {
     @Test
     fun `one failure per lockout window cannot hold a source out forever`() {
         var now = 0L
-        val guard = AuthGuard("good", lockoutThreshold = 2, lockoutMillis = 1_000, ratePerSecond = 100, clock = { now })
+        val guard = AuthGuard(Secrets.tokenHash("good"), lockoutThreshold = 2, lockoutMillis = 1_000, ratePerSecond = 100, clock = { now })
 
         assertEquals(AuthGuard.Result.BAD_TOKEN, guard.authorize("peer", "wrong"))
         assertEquals(AuthGuard.Result.BAD_TOKEN, guard.authorize("peer", "wrong"))
@@ -165,7 +175,7 @@ class AuthGuardTest {
     fun `escalation still holds for a source that keeps hammering`() {
         // The forgiveness must not become an amnesty: without pauses, nothing is forgiven.
         var now = 0L
-        val guard = AuthGuard("good", lockoutThreshold = 3, lockoutMillis = 10_000, ratePerSecond = 100, clock = { now })
+        val guard = AuthGuard(Secrets.tokenHash("good"), lockoutThreshold = 3, lockoutMillis = 10_000, ratePerSecond = 100, clock = { now })
         repeat(3) {
             now += 10
             guard.authorize("peer", "wrong")
@@ -187,7 +197,7 @@ class AuthGuardTest {
          * same unbounded-growth bug already fixed for `buckets`, left in place one line below it.
          */
         var now = 0L
-        val guard = AuthGuard("good", lockoutThreshold = 2, lockoutMillis = 1_000, ratePerSecond = 100, clock = { now }, maxEntries = 4)
+        val guard = AuthGuard(Secrets.tokenHash("good"), lockoutThreshold = 2, lockoutMillis = 1_000, ratePerSecond = 100, clock = { now }, maxEntries = 4)
 
         repeat(10) { i ->
             guard.authorize("flood-$i", "wrong")

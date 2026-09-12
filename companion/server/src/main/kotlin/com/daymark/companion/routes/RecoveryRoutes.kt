@@ -2,6 +2,7 @@ package com.daymark.companion.routes
 
 import com.daymark.companion.clientAddress
 import com.daymark.companion.auth.AuthGuard
+import com.daymark.companion.auth.Secrets
 import com.daymark.companion.mail.MailMessage
 import com.daymark.companion.mail.Mailer
 import com.daymark.companion.mail.OwnerAccountStore
@@ -126,7 +127,10 @@ fun Route.recoveryRoutes(
             // The rotation is applied to the live guard from *inside* confirmReissue's own lock,
             // atomically with persisting it — see OwnerAccountStore.confirmReissue's kdoc for why
             // applying it out here (after the lock is released) would race two concurrent confirms.
-            when (val result = accountStore.confirmReissue(req.confirmToken) { newToken -> ownerGuard.rotate(newToken) }) {
+            // The guard is handed the new token's DIGEST, matching what OwnerAccountStore now
+            // persists — newToken itself stays plaintext all the way to the HTTP response below,
+            // the one place it is delivered to the owner.
+            when (val result = accountStore.confirmReissue(req.confirmToken) { newToken -> ownerGuard.rotate(Secrets.tokenHash(newToken)) }) {
                 is ReissueConfirmOutcome.Rotated -> {
                     // Best-effort receipt; dispatched in the background so a slow SMTP server
                     // never delays handing the owner their new token.

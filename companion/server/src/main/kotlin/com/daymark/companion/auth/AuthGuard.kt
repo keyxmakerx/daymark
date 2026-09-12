@@ -19,9 +19,14 @@ import java.util.concurrent.atomic.AtomicLong
  * live server never needs a restart to accept it. `@Volatile` is sufficient (not a lock): the
  * whole array reference is swapped atomically, so a concurrent reader always sees a complete
  * old or new token, never a partial one.
+ *
+ * This class never holds the plaintext token. What it is constructed and [rotate]d with is
+ * [Secrets.tokenHash] of the accepted token — the same digest [com.daymark.companion.mail.OwnerAccountStore]
+ * persists — and [authorize] hashes the presented (wire) token before comparing. The comparison
+ * is still constant-time, now digest-to-digest rather than plaintext-to-plaintext.
  */
 class AuthGuard(
-    token: String,
+    tokenHash: String,
     private val lockoutThreshold: Int,
     private val lockoutMillis: Long,
     private val ratePerSecond: Int,
@@ -32,7 +37,7 @@ class AuthGuard(
     enum class Result { OK, BAD_TOKEN, LOCKED, RATE_LIMITED }
 
     @Volatile
-    private var tokenBytes = token.toByteArray(Charsets.UTF_8)
+    private var acceptedHashBytes = tokenHash.toByteArray(Charsets.UTF_8)
     private val failures = ConcurrentHashMap<String, FailState>()
     private val buckets = ConcurrentHashMap<String, Bucket>()
 
@@ -55,7 +60,9 @@ class AuthGuard(
         val fs = failures[sourceId]
         if (fs != null && fs.lockedUntil > clock()) return Result.LOCKED
 
-        if (presented != null && constantTimeEquals(tokenBytes, presented.toByteArray(Charsets.UTF_8))) {
+        if (presented != null &&
+            constantTimeEquals(acceptedHashBytes, Secrets.tokenHash(presented).toByteArray(Charsets.UTF_8))
+        ) {
             failures.remove(sourceId) // reset on success
             return Result.OK
         }
@@ -64,13 +71,16 @@ class AuthGuard(
     }
 
     /**
-     * Replace the accepted token, effective immediately for every subsequent [authorize] call.
-     * The old token stops working the instant this returns — there is no grace overlap. Callers
-     * are responsible for persisting the new token durably *before* calling this (so a crash
-     * between persist and rotate never strands the server on a token nobody has).
+     * Replace the accepted token's digest, effective immediately for every subsequent
+     * [authorize] call. The old token stops working the instant this returns — there is no
+     * grace overlap. Callers are responsible for persisting the new token's hash durably
+     * *before* calling this (so a crash between persist and rotate never strands the server on
+     * a token nobody has). [newTokenHash] is [Secrets.tokenHash] of the new plaintext token, not
+     * the plaintext itself — the plaintext is delivered to the owner once, out of band, and
+     * never lives here.
      */
-    fun rotate(newToken: String) {
-        tokenBytes = newToken.toByteArray(Charsets.UTF_8)
+    fun rotate(newTokenHash: String) {
+        acceptedHashBytes = newTokenHash.toByteArray(Charsets.UTF_8)
     }
 
     /**
