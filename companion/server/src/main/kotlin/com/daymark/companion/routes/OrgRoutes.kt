@@ -143,9 +143,10 @@ private const val STEP_UP_HEADER = "X-Stepup-Code"
  * oracle built out of two perfectly ordinary admin requests.
  *
  * **Removal ends a membership. It does not end an access.** It deletes the row, and for a member
- * who accepted, it cuts their live portal sessions. It does not disable their credential — no route
- * in this server does, and it would not be this practice's credential to disable — and it does not
- * touch a single grant, because grants are the patient's. Somebody removed at 09:00 who still holds
+ * who accepted, it cuts their live portal sessions. It does not disable their credential — the only
+ * route that closes a clinician's credential is the clinician's own self-leave
+ * (RelationshipEndingRoutes.kt), and it would not be this practice's credential to close — and it
+ * does not touch a single grant, because grants are the patient's. Somebody removed at 09:00 who still holds
  * their authenticator is signed back in at 09:01, reading exactly what a patient still lets them
  * read. That is not a gap to be closed here: closing it would mean an admin with authority in the
  * data plane, which is the one thing this design says an admin never has. It is a limit to state
