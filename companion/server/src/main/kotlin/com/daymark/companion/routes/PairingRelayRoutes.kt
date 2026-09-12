@@ -61,19 +61,36 @@ private fun auditSafely(block: () -> Unit) {
 @Serializable data class PairingRespondRequest(val secret: String, val msgBB64: String, val envB64: String)
 
 /**
- * The owner's approve carries the ticket the therapist chose, exactly as it came out of the
- * envelope. The server learns a 32-byte value to hash and compare later — never the code, never
- * the key, never who chose it.
+ * The owner's approve carries the ticket the therapist chose, exactly as it came out of their
+ * envelope, and the owner's own keys sealed back under the same run's key. The server learns a
+ * 32-byte value to hash and compare later, and a blob it has no key for — never the code, never a
+ * key, never who chose either.
+ *
+ * `envB64` is REQUIRED. The alternative — approve without it, so an old console still works — would
+ * silently produce exactly the relationship issue #101 is about: a clinician enrolled with no owner
+ * keys proved to them. A refusal is recoverable (reload the console, give them a new code); an
+ * enrolment at the wrong assurance is not.
  */
-@Serializable data class PairingApproveRequest(val enrolTicketB64: String)
+@Serializable data class PairingApproveRequest(val enrolTicketB64: String, val envB64: String)
 
 /**
  * What the therapist's status poll says: WAITING while the owner has not decided, APPROVED once
- * they have (with the scope the invitation grants, which the old redeem response used to carry).
- * Everything else — cancelled, retired, reported, expired, never existed — is one flat 410, so a
- * poll cannot tell a link-holder that the owner saw something worth stopping.
+ * they have (with the scope the invitation grants, which the old redeem response used to carry,
+ * and the owner's sealed keys). Everything else — cancelled, retired, reported, expired, never
+ * existed — is one flat 410, so a poll cannot tell a link-holder that the owner saw something
+ * worth stopping.
+ *
+ * `envB64` RIDES ON APPROVED AND ON NOTHING ELSE. It is written by the approval and served only to
+ * a caller who proved the invite secret against a CLOSED run, so a link-holder polling a run they
+ * answered without the code gets WAITING and a state word, exactly as before. It is a sealed blob
+ * either way — the server has no key for it — but serving it earlier would hand every link-holder
+ * a ciphertext to work on for nothing gained.
  */
-@Serializable data class PairingStatusResponse(val state: String, val scope: List<String>? = null)
+@Serializable data class PairingStatusResponse(
+    val state: String,
+    val scope: List<String>? = null,
+    val envB64: String? = null,
+)
 
 @Serializable data class LatestExchangeView(val exchangeId: String, val state: String)
 
@@ -103,11 +120,13 @@ private const val SID_BYTES = 16
 private const val MAX_MSG_BYTES = 200
 
 /**
- * The therapist's sealed offer: version(1) | nonce(24) | ciphertext(payload + 16-byte tag) over a
- * small JSON document — two 32-byte keys, a name of at most 64 characters, a 32-byte ticket. A
- * few hundred bytes in practice. 4 KiB is generous room for a future version of the payload and
- * still a hard "no" to anyone treating the column as storage; it is its own bound because the
- * CPace message bound above is deliberately tight and must stay so.
+ * A sealed envelope, in either direction: version(1) | nonce(24) | ciphertext(payload + 16-byte
+ * tag) over a small JSON document — the therapist's offer is two 32-byte keys, a name of at most 64
+ * characters and a 32-byte ticket; the owner's reply is two 32-byte keys. A few hundred bytes in
+ * practice. 4 KiB is generous room for a future version of either payload and still a hard "no" to
+ * anyone treating a column as storage; it is its own bound because the CPace message bound above is
+ * deliberately tight and must stay so. One bound for both directions on purpose: two numbers that
+ * must agree is a number that will not.
  */
 private const val MIN_ENV_BYTES = 41
 private const val MAX_ENV_BYTES = 4096
@@ -135,6 +154,14 @@ const val PAIRING_STATUS_POLL_SECONDS = 45L
  * this file treats the messages and the envelope as opaque bytes, sized but never parsed, and
  * nothing in any request or response carries the code in any form. The web client has the test
  * that PROVES no request ever contains it; this file's job is to have nowhere to put it.
+ *
+ * ONE SEALED PARCEL EACH WAY, AND THE SERVER HAS A KEY FOR NEITHER. The therapist's reply carries
+ * their offer (their keys, a name, a ticket); the owner's approval carries their own keys back.
+ * Each is written once, by the touch that is allowed to write it, and served once, to the party
+ * the other end is for: the offer on the owner's authenticated read, the owner's keys on a status
+ * poll of a CLOSED run. That second direction is what ended the hand-pasted owner key (issue #101)
+ * — until it existed, the clinician learned the owner's keys from whatever channel a base64 string
+ * had travelled on, while the owner learned theirs from the code.
  *
  * HOW A TICKET COMES TO EXIST. The therapist's reply carries, sealed under the key only a right
  * code derives, an enrolment ticket they chose. The owner's client opens it — or cannot, which is
@@ -262,6 +289,11 @@ fun Route.pairingRelayRoutes(
             if (!decodedSize(req.enrolTicketB64, ENROL_TICKET_BYTES, ENROL_TICKET_BYTES)) {
                 return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("enrol ticket must decode to 32 bytes"))
             }
+            // Refused BEFORE approveRedeem, so a malformed approval leaves the invitation PENDING
+            // and spends nothing: the shape checks are the cheap half and go first.
+            if (!decodedSize(req.envB64, MIN_ENV_BYTES, MAX_ENV_BYTES)) {
+                return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("implausible envelope size"))
+            }
             val exchange = pairingStore.exchangeFor(exchangeId, relRef)
                 ?: return@post call.respond(HttpStatusCode.Gone, ErrorDto("exchange unavailable"))
             if (exchange.state != PairingStore.State.RESPONDED) {
@@ -271,7 +303,7 @@ fun Route.pairingRelayRoutes(
             if (approved.status != AuthStore.ApproveStatus.OK) {
                 return@post call.respond(HttpStatusCode.Gone, ErrorDto("exchange unavailable"))
             }
-            when (pairingStore.approve(exchangeId, relRef)) {
+            when (pairingStore.approve(exchangeId, relRef, req.envB64)) {
                 PairingStore.TransitionStatus.OK -> {
                     call.respond(HttpStatusCode.NoContent)
                     auditSafely {
@@ -460,7 +492,10 @@ fun Route.pairingRelayRoutes(
             val exchange = pairingStore.exchangeForInvite(exchangeId, inviteId)
             when (exchange?.state) {
                 PairingStore.State.RESPONDED -> call.respond(PairingStatusResponse("WAITING"))
-                PairingStore.State.CLOSED -> call.respond(PairingStatusResponse("APPROVED", verdict.scope))
+                // The owner's sealed keys leave the shelf here and only here, and only once the
+                // run is CLOSED — which is to say only because the owner approved.
+                PairingStore.State.CLOSED ->
+                    call.respond(PairingStatusResponse("APPROVED", verdict.scope, exchange.envToTherapistB64))
                 // Cancelled, retired, never answered, not theirs, not there: one flat answer.
                 else -> call.respond(HttpStatusCode.Gone, ErrorDto("exchange unavailable"))
             }

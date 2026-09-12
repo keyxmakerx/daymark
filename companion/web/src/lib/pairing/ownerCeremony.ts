@@ -61,11 +61,21 @@ export interface OwnerCeremonyPorts {
     | { state: 'superseded' }
     | { state: 'complete'; isk: Uint8Array; offer: TherapistOffer | null }
   >
-  approveRun(exchangeId: string, enrolTicketB64: string): Promise<void>
+  approveRun(exchangeId: string, enrolTicketB64: string, envB64: string): Promise<void>
   cancelRun(exchangeId: string): Promise<boolean>
   reportInvite(inviteId: string): Promise<void>
   /** Pin the therapist's keys from the offer. Returns what the pin record did, or refuses. */
   pinOffer(offer: TherapistOffer): 'pinned-now' | 'already-pinned' | 'differs-from-pin' | 'unreadable'
+  /**
+   * Seal E2 — the owner's own public keys — under this run's key, for the clinician to open.
+   *
+   * A port rather than a call into relay.ts because what this module owns is the ORDER (pin, seal,
+   * forward) and because the two things the sealing needs are held elsewhere: the run's derived key
+   * lives in relay.ts's in-memory state, and the owner's identity lives in the unlocked console
+   * session. Throwing is the honest failure — a run with no key derived yet has nothing to seal
+   * with — and the order below makes a throw mean nothing was approved.
+   */
+  sealOwnerKeys(run: OwnerPairingState): string
   /** A fresh code. A port so a test can pin one; the real one is newPairingCode. */
   freshCode(): Promise<PairingCode>
   storage: OwnerRunStorage | null
@@ -176,13 +186,20 @@ export async function checkForReply(ports: OwnerCeremonyPorts, state: OwnerCerem
 }
 
 /**
- * Approve: pin the keys, then forward the ticket. In that order, and the order is the point.
+ * Approve: pin the keys, seal the owner's own keys back, then forward both. In that order, and the
+ * order is the point.
  *
  * Pinning is local and reversible by the owner; forwarding the ticket is neither, because it puts
  * the invitation into REDEEMING and lets a person enrol. If pinning refuses — this console already
  * holds a different key for them, which is the substitution the pin record exists to make visible —
  * nothing is forwarded and the ceremony stays where it was. The reverse order would have approved
  * an enrolment the console then declined to record keys for.
+ *
+ * SEALING SITS BETWEEN THEM, and before the request, for the same reason (issue #101). E2 is how
+ * the clinician comes to hold the owner's keys on the code's authority instead of on a base64
+ * string somebody pasted, so an approval that could not produce it would enrol a clinician who can
+ * verify nothing the owner later signs. A failure here leaves the invitation exactly where it was,
+ * with a fresh code as the remedy.
  */
 export async function approve(ports: OwnerCeremonyPorts, state: OwnerCeremony): Promise<OwnerCeremony> {
   if (state.phase !== 'answered') throw new CeremonyError('there is no answered pairing run to approve')
@@ -195,7 +212,15 @@ export async function approve(ports: OwnerCeremonyPorts, state: OwnerCeremony): 
   if (pin === 'unreadable') {
     throw new CeremonyError('The keys in that reply could not be read. Nothing was approved; give them a new code.')
   }
-  await ports.approveRun(state.run.exchangeId, state.offer.enrolTicketB64)
+  let envB64: string
+  try {
+    envB64 = ports.sealOwnerKeys(state.run)
+  } catch {
+    throw new CeremonyError(
+      'Your own keys could not be sealed for them, so nothing was approved and they cannot enrol yet. Unlock this console again and give them a new code.',
+    )
+  }
+  await ports.approveRun(state.run.exchangeId, state.offer.enrolTicketB64, envB64)
   forgetOwnerRun(ports.storage)
   return { phase: 'approved', invite: state.invite, run: state.run, offer: state.offer, pin }
 }

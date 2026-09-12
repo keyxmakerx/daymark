@@ -13,16 +13,17 @@ import java.sql.DriverManager
  * link, and the owner collects the reply next time they look. Three touches, none simultaneous.
  * This store is the parcel shelf between them, and a parcel shelf is ALL it is allowed to be:
  *
- *  - THE BLOBS ARE OPAQUE. `msg_a`, `msg_b` and `env_to_owner` are stored and returned
- *    byte-for-byte, never parsed, never validated beyond a size cap. The server cannot
+ *  - THE BLOBS ARE OPAQUE. `msg_a`, `msg_b`, `env_to_owner` and `env_to_therapist` are stored and
+ *    returned byte-for-byte, never parsed, never validated beyond a size cap. The server cannot
  *    participate in the exchange — it does not have the pairing code, and the code never reaches
  *    it in any form (§3.7.4) — so there is nothing it could legitimately do with the contents.
  *    A relay that started reading its parcels would learn nothing and become a thing worth
- *    compromising. The envelope is the therapist's offer (their public keys, a name, the enrol
- *    ticket they chose), sealed under the key only a right code derives; to this store it is a
- *    third opaque column that travels with the reply.
+ *    compromising. One envelope goes each way: the therapist's offer (their public keys, a name,
+ *    the enrol ticket they chose) travels with the reply, and the owner's own public keys travel
+ *    with the approval. Both are sealed under keys only a right code derives; to this store they
+ *    are two more opaque columns.
  *
- *  - ROWS ARE INSERT-ONLY; only `state`, `responded_at` and the reply columns ever change, along
+ *  - ROWS ARE INSERT-ONLY; only `state`, `responded_at` and the envelope columns ever change, along
  *    the one path OPEN → RESPONDED → CLOSED (the owner's approve), or → CANCELLED from any of
  *    those (the owner's cancel; from CLOSED it is an abandon, which also puts the invitation back),
  *    or OPEN → SUPERSEDED when the owner opens a fresh run. A wrong-code protocol run is retried
@@ -72,17 +73,23 @@ class PairingStore(
                     created_at   INTEGER NOT NULL,
                     responded_at INTEGER,
                     expiry       INTEGER NOT NULL,
-                    env_to_owner TEXT
+                    env_to_owner TEXT,
+                    env_to_therapist TEXT
                 )
                 """.trimIndent(),
             )
-            // Databases created before env_to_owner existed will not gain it from CREATE TABLE IF
-            // NOT EXISTS. SQLite has no ADD COLUMN IF NOT EXISTS and errors on a duplicate column,
-            // so the failure is swallowed deliberately: this is the additive-column idiom (see
-            // AuthStore), not a swallowed bug. A reply stored before the column existed reads back
-            // with no envelope, and the owner's client treats that as a reply without an offer.
+            // Databases created before these columns existed will not gain them from CREATE TABLE
+            // IF NOT EXISTS. SQLite has no ADD COLUMN IF NOT EXISTS and errors on a duplicate
+            // column, so the failure is swallowed deliberately: this is the additive-column idiom
+            // (see AuthStore), not a swallowed bug. A reply stored before env_to_owner existed
+            // reads back with no envelope, and the owner's client treats that as a reply without an
+            // offer; an approval stored before env_to_therapist existed reads back the same way,
+            // and the clinician's client treats it as an approval that proved no owner keys.
             runCatching {
                 st.execute("ALTER TABLE pairing_exchanges ADD COLUMN env_to_owner TEXT")
+            }
+            runCatching {
+                st.execute("ALTER TABLE pairing_exchanges ADD COLUMN env_to_therapist TEXT")
             }
             st.execute("CREATE INDEX IF NOT EXISTS idx_pairing_invite ON pairing_exchanges(invite_id, created_at)")
         }
@@ -99,6 +106,8 @@ class PairingStore(
         val msgBB64: String?,
         /** The therapist's sealed offer, therapist → owner. Null until answered, and null forever on rows older than the column. */
         val envToOwnerB64: String?,
+        /** The owner's sealed keys, owner → therapist. Null until approved, and null forever on rows older than the column. */
+        val envToTherapistB64: String?,
         val state: State,
         val createdAt: Long,
         val expiry: Long,
@@ -147,7 +156,8 @@ class PairingStore(
         OpenResult(OpenStatus.OK, exchangeId)
     }
 
-    private val columns = "exchange_id, invite_id, rel_ref, sid, msg_a, msg_b, env_to_owner, state, created_at, expiry"
+    private val columns =
+        "exchange_id, invite_id, rel_ref, sid, msg_a, msg_b, env_to_owner, env_to_therapist, state, created_at, expiry"
 
     /**
      * The live OPEN exchange for an invite — what a therapist fetch sees. There is at most one
@@ -224,11 +234,29 @@ class PairingStore(
     enum class TransitionStatus { OK, GONE }
 
     /**
-     * The owner approves the reply; RESPONDED → CLOSED. The invitation side of the same act
-     * (REDEEMING, the ticket) lives in AuthStore and the route sequences the two.
+     * The owner approves the reply; RESPONDED → CLOSED, and their sealed keys land in the same
+     * statement that closes the run. The invitation side of the same act (REDEEMING, the ticket)
+     * lives in AuthStore and the route sequences the two.
+     *
+     * ONE WRITE, so there is no instant where a run is CLOSED with no envelope behind it: the
+     * therapist's status poll is allowed to return the envelope precisely BECAUSE the run is
+     * closed, and a second UPDATE would open a window where that reasoning is false. The
+     * `state = RESPONDED` predicate keeps it once-only, as respond's does for the other direction:
+     * an approved run cannot have its envelope replaced by anything, including a second approval.
      */
-    fun approve(exchangeId: String, relRef: String): TransitionStatus =
-        transition(exchangeId, relRef, from = listOf(State.RESPONDED), to = State.CLOSED)
+    fun approve(exchangeId: String, relRef: String, envToTherapistB64: String?): TransitionStatus = synchronized(lock) {
+        val updated = conn.prepareStatement(
+            "UPDATE pairing_exchanges SET state=?, env_to_therapist=? WHERE exchange_id=? AND rel_ref=? AND state=?",
+        ).use { ps ->
+            ps.setString(1, State.CLOSED.name)
+            ps.setString(2, envToTherapistB64)
+            ps.setString(3, exchangeId)
+            ps.setString(4, relRef)
+            ps.setString(5, State.RESPONDED.name)
+            ps.executeUpdate()
+        }
+        if (updated == 1) TransitionStatus.OK else TransitionStatus.GONE
+    }
 
     /** Owner cancels; OPEN or RESPONDED → CANCELLED. The 4.0a owner Cancel. */
     fun cancel(exchangeId: String, relRef: String): TransitionStatus =
@@ -272,9 +300,10 @@ class PairingStore(
         msgAB64 = rs.getString(5),
         msgBB64 = rs.getString(6),
         envToOwnerB64 = rs.getString(7),
-        state = State.valueOf(rs.getString(8)),
-        createdAt = rs.getLong(9),
-        expiry = rs.getLong(10),
+        envToTherapistB64 = rs.getString(8),
+        state = State.valueOf(rs.getString(9)),
+        createdAt = rs.getLong(10),
+        expiry = rs.getLong(11),
     )
 
     override fun close() {

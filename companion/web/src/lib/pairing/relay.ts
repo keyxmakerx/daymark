@@ -5,11 +5,18 @@
  * Four touches, none simultaneous — this is store-and-forward, not a phone call:
  *
  *   owner:      ownerOpenPairing()       — derive MSGa from the code, post it, keep the scalar
- *   therapist:  therapistAnswerPairing() — fetch MSGa, derive MSGb + the key, seal their OFFER
+ *   therapist:  therapistAnswerPairing() — fetch MSGa, derive MSGb + the key, seal their OFFER (E1)
  *                                          under the key, post both
  *   owner:      ownerCollectPairing()    — fetch MSGb, derive the same key, open the offer
- *   owner:      ownerApprovePairing()    — hand the server the enrol ticket the offer carried
- *   therapist:  therapistPairingStatus() — learn that it happened, then enrol with that ticket
+ *   owner:      ownerApprovePairing()    — seal their OWN keys back (E2) and hand the server that
+ *                                          envelope plus the enrol ticket the offer carried
+ *   therapist:  therapistPairingStatus() — learn that it happened, take E2, then enrol
+ *
+ * BOTH DIRECTIONS REST ON THE CODE, since issue #101. E1 is what lets the owner pin the clinician;
+ * E2 is what lets the clinician pin the owner, and it replaced a form where the owner's keys were
+ * pasted in as base64 from wherever they happened to arrive. The two envelopes are sealed under
+ * different keys derived from the same ISK (envelope.ts's direction labels), so neither can be
+ * replayed as the other, and the server relays both without a key for either.
  *
  * THE CODE NEVER LEAVES THE DEVICE IT WAS TYPED ON. That is §3.7.4's hard invariant — a server
  * holding the code could run the exchange itself and sit in the middle — and in this module it
@@ -67,12 +74,20 @@ import {
   cpaceStart,
   cpaceRespond,
   cpaceFinish,
+  cpaceResumeRespond,
   lvCat,
   type CpaceStartResult,
 } from './cpace'
 import { initEnvelope, openEnvelope, sealEnvelope } from './envelope'
 import { isCanonicalPairingCode, type CanonicalPairingCode } from './pairingCode'
-import { decodeTherapistOffer, encodeTherapistOffer, type TherapistOffer } from './payloads'
+import {
+  decodeOwnerKeys,
+  decodeTherapistOffer,
+  encodeOwnerKeys,
+  encodeTherapistOffer,
+  type OwnerKeysPayload,
+  type TherapistOffer,
+} from './payloads'
 
 type FetchLike = typeof fetch
 
@@ -184,6 +199,52 @@ export interface TherapistPairingResult {
   relRef: string
   /** The 64-byte intermediate session key — same bytes the owner derives iff the codes matched. */
   isk: Uint8Array
+  /**
+   * The run's half of the CPace transcript, so the clinician's side can survive a reload the way
+   * the owner's does: the scalar is the one secret, the three messages are public bytes that were
+   * already on the wire, and together they re-derive the ISK with no code and no stored key
+   * (cpaceResumeRespond). A caller that persists any of this keeps it per tab and drops it when
+   * the run ends; therapist/pairingAccept.ts does.
+   */
+  sidB64: string
+  ybB64: string
+  msgAB64: string
+  msgBB64: string
+}
+
+/** What the clinician needs to open E2 later: the run's transcript, never the code and never the key. */
+export interface TherapistRunKeying {
+  sidB64: string
+  ybB64: string
+  msgAB64: string
+  msgBB64: string
+}
+
+/**
+ * The clinician's side of E2: re-derive this run's key from the transcript and open the owner's
+ * envelope with it. Null for every failure — a run that is not this one, a tampered envelope, a
+ * payload this build cannot read — because an AEAD failure is one bit and dressing it up would be
+ * an invented diagnosis, exactly as on the owner's side.
+ *
+ * Re-derives rather than taking an ISK, so the reload case and the unbroken case run the same code
+ * and there is one fewer place a key could be stored to save a multiplication.
+ */
+export function ownerKeysFromEnvelope(run: TherapistRunKeying, envB64: string): OwnerKeysPayload | null {
+  let isk: Uint8Array
+  let envelope: Uint8Array
+  try {
+    isk = cpaceResumeRespond(
+      { sid: b64.decode(run.sidB64) },
+      b64.decode(run.ybB64),
+      b64.decode(run.msgAB64),
+      b64.decode(run.msgBB64),
+    )
+    envelope = b64.decode(envB64)
+  } catch {
+    return null
+  }
+  const opened = openEnvelope(isk, run.sidB64, 'owner-to-therapist', envelope)
+  return opened ? decodeOwnerKeys(opened) : null
 }
 
 /**
@@ -249,7 +310,15 @@ export async function therapistAnswerPairing(
     body: JSON.stringify({ secret: args.secret, msgBB64: b64.encode(responded.msgB), envB64: b64.encode(envelope) }),
   })
   if (respondRes.status !== 204) throw new Error(`pairing respond refused (${respondRes.status})`)
-  return { exchangeId: body.exchangeId, relRef: body.relRef, isk: responded.isk }
+  return {
+    exchangeId: body.exchangeId,
+    relRef: body.relRef,
+    isk: responded.isk,
+    sidB64: body.sidB64,
+    ybB64: b64.encode(responded.yb),
+    msgAB64: body.msgAB64,
+    msgBB64: b64.encode(responded.msgB),
+  }
 }
 
 export type OwnerCollectResult =
@@ -333,12 +402,39 @@ export async function ownerCollectPairing(
 }
 
 /**
- * Owner touch 4: approve the reply, forwarding the enrol ticket the offer carried. The server
- * puts the invitation into REDEEMING and makes that ticket the one it will honour. The one
- * request in the whole ceremony that carries the ticket; no response ever does.
+ * Seal E2: the owner's own public keys, back down the same run, in the other direction.
+ *
+ * Sealed at APPROVE and nowhere earlier, because approving is the moment the owner has decided
+ * this is the person they meant. A run they abandon after a mismatch never carries their keys
+ * anywhere, which keeps "the owner said yes" and "the clinician learned the owner's keys" the same
+ * event rather than two.
+ *
+ * Takes the ISK the collect step derived — the same one that opened E1 — so a clinician who can
+ * open this envelope is by construction the clinician whose offer the owner just read.
+ */
+export function sealOwnerKeys(isk: Uint8Array, sidB64: string, keys: OwnerKeysPayload): string {
+  return b64.encode(sealEnvelope(isk, sidB64, 'owner-to-therapist', encodeOwnerKeys(keys)))
+}
+
+/**
+ * Owner touch 4: approve the reply, forwarding the enrol ticket the offer carried and the owner's
+ * own keys sealed for the clinician. The server puts the invitation into REDEEMING and makes that
+ * ticket the one it will honour, and holds the envelope until the clinician's next poll.
+ *
+ * The one request in the whole ceremony that carries the ticket; no response ever does. E2 travels
+ * here once and comes back out once, on a status poll of a CLOSED run, and the server has no key
+ * for it in between.
  */
 export async function ownerApprovePairing(
-  args: { relRef: string; bearerToken: string; exchangeId: string; enrolTicketB64: string; baseUrl?: string },
+  args: {
+    relRef: string
+    bearerToken: string
+    exchangeId: string
+    enrolTicketB64: string
+    /** E2, sealed by sealOwnerKeys under this run's key. Required: the server refuses an approval without it. */
+    envB64: string
+    baseUrl?: string
+  },
   doFetch: FetchLike = fetch.bind(globalThis),
 ): Promise<void> {
   const res = await doFetch(
@@ -346,7 +442,7 @@ export async function ownerApprovePairing(
     {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${args.bearerToken}` },
-      body: JSON.stringify({ enrolTicketB64: args.enrolTicketB64 }),
+      body: JSON.stringify({ enrolTicketB64: args.enrolTicketB64, envB64: args.envB64 }),
     },
   )
   if (res.status === 204) return
@@ -373,8 +469,13 @@ export async function ownerCancelPairing(
 
 export type TherapistStatusResult =
   | { state: 'waiting' }
-  /** The owner approved; enrol with the ticket that went into the offer. `scope` is what the invitation grants. */
-  | { state: 'approved'; scope: string[] }
+  /**
+   * The owner approved; enrol with the ticket that went into the offer. `scope` is what the
+   * invitation grants. `envB64` is E2 — the owner's keys, sealed under this run's key — and it is
+   * absent only when the owner's console approved before E2 existed, which reads as "no keys were
+   * proved to me" rather than as an error.
+   */
+  | { state: 'approved'; scope: string[]; envB64?: string }
   /** Cancelled, retired, reported, expired, or never this run: one answer, so ask for a new code. */
   | { state: 'gone' }
 
@@ -398,11 +499,13 @@ export async function therapistPairingStatus(
   if (res.status === 429) return { state: 'waiting' }
   if (res.status === 410) return { state: 'gone' }
   if (res.status !== 200) throw new Error(`pairing status refused (${res.status})`)
-  const body = (await res.json()) as { state?: unknown; scope?: unknown }
+  const body = (await res.json()) as { state?: unknown; scope?: unknown; envB64?: unknown }
   if (body.state === 'WAITING') return { state: 'waiting' }
   if (body.state === 'APPROVED') {
     const scope = Array.isArray(body.scope) ? body.scope.filter((s): s is string => typeof s === 'string') : []
-    return { state: 'approved', scope }
+    return typeof body.envB64 === 'string'
+      ? { state: 'approved', scope, envB64: body.envB64 }
+      : { state: 'approved', scope }
   }
   throw new Error('pairing status: malformed response')
 }

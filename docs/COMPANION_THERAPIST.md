@@ -277,6 +277,34 @@ Key points:
   key** — the UI makes verification mandatory and hard to skip. The pairing/key-exchange protocol is
   the **named deliverable [PAIRING.md](COMPANION_ARCHITECTURE.md)**, not "(out-of-band)" hand-waving.
 
+**As built, 2026-09-12: the sign-in no longer asks for the owner's keys.** The ceremony above has
+been replaced on the web by the code-based one (§5.6 of
+[COMPANION_SECURITY.md](COMPANION_SECURITY.md)), and both directions now rest on the code. The
+clinician's two public keys reach the owner sealed in the pairing reply; the **owner's two public
+keys reach the clinician sealed in the approval**, and this browser writes them into the record it
+made when it accepted the invitation — before the enrolment commits, so nobody is enrolled into a
+relationship whose owner they cannot verify.
+
+What changed on the screen a clinician actually meets:
+
+- **The two owner-key fields are gone from the sign-in form.** There is no longer any way to type an
+  owner key into this product. The fields were the weaker half of the pairing: a pasted key is worth
+  whatever the channel it arrived on was worth, and the code is worth more.
+- **The server's published owner keys are a cross-check, never a source.** They are still fetched at
+  sign-in and compared against what the ceremony pinned; a disagreement on **either** half refuses
+  the sign-in and says so — this server is publishing a different key from the one your pairing
+  proved, nothing has been signed in, check on a channel that is not this server. A server that
+  publishes nothing takes nothing away, and the screen says so in one line rather than treating the
+  absence as a fault.
+- **A clinician who enrolled before this** has a record with no ceremony pin, and nothing can
+  retroactively give it one. They sign in on the published copy, are told plainly that nothing
+  proved those keys to them and that this server does not vouch for them, and are told that
+  accepting a fresh invitation from the same person replaces it with keys the code proves. A record
+  that *does* carry a ceremony pin never sees that caveat.
+- **The fingerprint is still shown after unlock**, but what it is for now depends on the record: a
+  courtesy for a pinned one, and the only control there is for an unpinned one. The sentence under
+  it says which.
+
 **MFA at enrollment.** The primary credential is a **WebAuthn/passkey** (`residentKey: required`,
 `userVerification: required`) — itself two factors in one ceremony (possession of the authenticator +
 biometric/PIN), needing no IdP and no outbound message. The **WebAuthn-PRF** output is the

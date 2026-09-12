@@ -62,7 +62,12 @@ interface Harness {
   invites: InviteSummary[]
   pin: 'pinned-now' | 'already-pinned' | 'differs-from-pin' | 'unreadable'
   approveThrows: boolean
+  /** What the E2 sealing port does: a sealed blob, or a throw standing in for a run with no key. */
+  sealFails: boolean
 }
+
+/** Stands in for the owner's sealed keys. The real bytes are proved in relay.test.ts. */
+const SEALED_OWNER_KEYS = 'AQ-sealed-owner-keys'
 
 function harness(): Harness {
   const calls: string[] = []
@@ -77,6 +82,7 @@ function harness(): Harness {
     invites: [],
     pin: 'pinned-now',
     approveThrows: false,
+    sealFails: false,
     ports: {
       async mintInvite() {
         calls.push('mint')
@@ -95,8 +101,8 @@ function harness(): Harness {
         calls.push(`read:${run.exchangeId}`)
         return h.reply
       },
-      async approveRun(exchangeId, ticket) {
-        calls.push(`approve:${exchangeId}:${ticket}`)
+      async approveRun(exchangeId, ticket, envB64) {
+        calls.push(`approve:${exchangeId}:${ticket}:${envB64}`)
         if (h.approveThrows) throw new Error('server said no')
       },
       async cancelRun(exchangeId) {
@@ -109,6 +115,11 @@ function harness(): Harness {
       pinOffer() {
         calls.push('pin')
         return h.pin
+      },
+      sealOwnerKeys(run) {
+        calls.push(`seal:${run.exchangeId}`)
+        if (h.sealFails) throw new Error('this run has no key yet')
+        return SEALED_OWNER_KEYS
       },
       async freshCode() {
         const canonical = `CODE${String(codes.length).padStart(4, '0')}` as CanonicalPairingCode
@@ -208,16 +219,47 @@ describe('approval', () => {
     return checkForReply(h.ports, waiting)
   }
 
-  it('pins before it forwards the ticket, and forwards the ticket the offer carried', async () => {
+  it('pins, then seals its own keys, then forwards both — in that order', async () => {
     const answered = await toAnswered()
     const approved = await approve(h.ports, answered)
     expect(approved.phase).toBe('approved')
     const pinAt = h.calls.indexOf('pin')
+    const sealAt = h.calls.findIndex((c) => c.startsWith('seal:'))
     const approveAt = h.calls.findIndex((c) => c.startsWith('approve:'))
     expect(pinAt).toBeGreaterThanOrEqual(0)
-    expect(approveAt).toBeGreaterThan(pinAt)
-    expect(h.calls[approveAt]).toBe(`approve:${answered.phase === 'answered' ? answered.run.exchangeId : ''}:${OFFER.enrolTicketB64}`)
+    expect(sealAt).toBeGreaterThan(pinAt)
+    expect(approveAt).toBeGreaterThan(sealAt)
+    const exchangeId = answered.phase === 'answered' ? answered.run.exchangeId : ''
+    // The ticket the offer carried AND the owner's sealed keys travel in the one request.
+    expect(h.calls[approveAt]).toBe(`approve:${exchangeId}:${OFFER.enrolTicketB64}:${SEALED_OWNER_KEYS}`)
+    // Sealed for THIS run, not some other one the tab still remembers.
+    expect(h.calls[sealAt]).toBe(`seal:${exchangeId}`)
     expect(h.storage.data.get(OWNER_RUN_STORAGE_KEY)).toBeUndefined()
+  })
+
+  it('keys that cannot be sealed forward nothing, so nobody enrols unable to verify the owner', async () => {
+    const answered = await toAnswered()
+    h.sealFails = true
+    await expect(approve(h.ports, answered)).rejects.toThrow(/could not be sealed/)
+    expect(h.calls.some((c) => c.startsWith('approve:'))).toBe(false)
+    // The run is still there to try again with; nothing was spent.
+    expect(h.storage.data.get(OWNER_RUN_STORAGE_KEY)).toBeDefined()
+  })
+
+  it('nothing is sealed when the pin refuses, so a substitution never reaches the other side', async () => {
+    const answered = await toAnswered()
+    h.pin = 'differs-from-pin'
+    await expect(approve(h.ports, answered)).rejects.toThrow(/already has different keys/)
+    expect(h.calls.some((c) => c.startsWith('seal:'))).toBe(false)
+    // Control: the same detector sees the seal on the path that does reach it.
+    const ok = harness()
+    const okAnswered = await (async () => {
+      const waiting = await openRun(ok.ports, await startInvitation(ok.ports))
+      ok.reply = { state: 'complete', isk: new Uint8Array(64), offer: OFFER }
+      return checkForReply(ok.ports, waiting)
+    })()
+    await approve(ok.ports, okAnswered)
+    expect(ok.calls.some((c) => c.startsWith('seal:'))).toBe(true)
   })
 
   it('a key that differs from what this console already recorded forwards nothing', async () => {

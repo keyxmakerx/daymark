@@ -35,7 +35,10 @@
     ownerCancelPairing,
     ownerCollectPairing,
     ownerOpenPairing,
+    sealOwnerKeys,
+    type OwnerPairingState,
   } from '../../pairing/relay'
+  import { toBase64 } from '../../share/sharecrypto'
   import { defaultOwnerRunStorage } from '../../pairing/ownerRunStore'
   import { identityFromOffer, pinFromPairing, groupFingerprint } from '../../owner/therapistKeys'
   import { loadPins, savePins } from '../../therapist/pinStore'
@@ -49,6 +52,8 @@
     token,
     smtpEnabled,
     scope,
+    ownerSignPub,
+    ownerBoxPub,
     onpaired,
     ondone,
   }: {
@@ -58,6 +63,14 @@
     token: string
     smtpEnabled: boolean
     scope: string[]
+    /**
+     * The owner's own public keys, from the unlocked session — derived from their master key
+     * (owner/identity.ts), so the same two every session. They are sealed to the clinician at
+     * Approve and that is the whole of what E2 carries; the private halves never come near this
+     * component. Public bytes only, by type.
+     */
+    ownerSignPub: Uint8Array
+    ownerBoxPub: Uint8Array
     /** The offer's keys, once approved, so the console can fill in the pending entry. */
     onpaired?: (keys: { boxPub: Uint8Array; signPub: Uint8Array }) => void
     /** The owner is finished with this screen. The console stops holding it open. */
@@ -90,8 +103,24 @@
     openRun: async (inviteId, code) =>
       ownerOpenPairing({ relRef: await relRef(), inviteId, code: code.canonical, bearerToken: token, baseUrl }),
     readRun: async (run) => ownerCollectPairing({ relRef: await relRef(), bearerToken: token, pairing: run, baseUrl }),
-    approveRun: async (exchangeId, enrolTicketB64) =>
-      ownerApprovePairing({ relRef: await relRef(), bearerToken: token, exchangeId, enrolTicketB64, baseUrl }),
+    approveRun: async (exchangeId, enrolTicketB64, envB64) =>
+      ownerApprovePairing({ relRef: await relRef(), bearerToken: token, exchangeId, enrolTicketB64, envB64, baseUrl }),
+    /*
+     * E2: the owner's keys, sealed under the key this run derived when the reply was collected.
+     *
+     * The key is read out of the run rather than kept beside it, so there is exactly one copy and
+     * it lives where the ceremony already put it. A run with none has not been collected — no
+     * screen offers Approve there — and throwing is what ownerCeremony.approve turns into a
+     * refusal that forwards nothing.
+     */
+    sealOwnerKeys(run: OwnerPairingState) {
+      const isk = run.finished?.isk
+      if (!isk) throw new Error('this run has no key yet')
+      return sealOwnerKeys(isk, run.sidB64, {
+        signPubB64: toBase64(ownerSignPub),
+        boxPubB64: toBase64(ownerBoxPub),
+      })
+    },
     cancelRun: async (exchangeId) => ownerCancelPairing({ relRef: await relRef(), bearerToken: token, exchangeId, baseUrl }),
     reportInvite: async (inviteId) => {
       if (!client) throw new Error('No server configured.')

@@ -166,6 +166,12 @@ export interface CpaceStartResult {
 }
 
 export interface CpaceRespondResult {
+  /**
+   * Secret scalar. Returned for the same reason [CpaceStartResult] returns the initiator's: a
+   * responder who has to survive a page reload keeps this, not the code and not the key, and
+   * re-derives with [cpaceResumeRespond]. Discard it when the run ends.
+   */
+  yb: Uint8Array
   /** lv_cat(Yb, ADb) — the bytes to relay back. */
   msgB: Uint8Array
   /** The 64-byte intermediate session key. Equal on both sides iff PRS/CI/sid matched. */
@@ -214,7 +220,35 @@ export function cpaceRespond(
   // the identity — the draft's mandatory abort, not a condition we get to soften.
   const k = so.crypto_scalarmult_ristretto255(yb, Ya)
   const msgB = lvCat(Yb, adb)
-  return { msgB, isk: deriveIsk(inputs.sid, k, msgA, msgB) }
+  return { yb, msgB, isk: deriveIsk(inputs.sid, k, msgA, msgB) }
+}
+
+/**
+ * Party B, again: the same key from the same run, without the code.
+ *
+ * THE RESPONDER'S MIRROR OF cpaceFinish, and it exists for the same reason — a ceremony that spans
+ * a page reload must be finishable from what a device may keep, and what a device may keep never
+ * includes the code. The generator was spent in [cpaceRespond]; what is still needed is the scalar
+ * (secret, kept), and the two transcript messages and the sid (public, already on the wire). That
+ * is why the responder's persisted half can carry MSGb: recomputing it would need the generator,
+ * and the generator would need the code back.
+ *
+ * Given the same inputs it returns the same 64 bytes [cpaceRespond] did, so a resumed run and an
+ * unbroken one are indistinguishable to everything downstream. Throws on an invalid or identity
+ * point, exactly as the first pass does.
+ */
+export function cpaceResumeRespond(
+  inputs: Pick<CpaceInputs, 'sid'>,
+  yb: Uint8Array,
+  msgA: Uint8Array,
+  msgB: Uint8Array,
+): Uint8Array {
+  const so = s()
+  requireSid(inputs.sid)
+  const [Ya] = parseLv(msgA, 2)
+  if (Ya.length !== CPACE_POINT_BYTES) throw new Error('cpace: bad point length')
+  const k = so.crypto_scalarmult_ristretto255(yb, Ya)
+  return deriveIsk(inputs.sid, k, msgA, msgB)
 }
 
 /**
