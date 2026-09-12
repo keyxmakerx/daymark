@@ -166,7 +166,7 @@ fun Application.module(
         accountStore ?: OwnerAccountStore(config.dataDir, token)
     }
     val guard = account?.let {
-        AuthGuard(it.currentToken(), config.authLockoutFails, config.authLockoutSeconds * 1000, config.rateLimitRps)
+        AuthGuard(it.currentTokenHash(), config.authLockoutFails, config.authLockoutSeconds * 1000, config.rateLimitRps)
     }
 
     // Built once and DI'd to the invite/notification services. When SMTP is disabled this never

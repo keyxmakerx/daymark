@@ -25,13 +25,29 @@ sealed interface ReissueConfirmOutcome {
  * recovery-confirmation tokens. One SQLite file per data dir, independent of the therapist-portal
  * feature flag — the bearer token also gates the plain sync API, which does not need the portal.
  *
- * **Token storage is deliberately PLAINTEXT at rest.** This is the same class of secret as
- * `DAYMARK_AUTH_TOKEN` itself, which is already plaintext in an env var or a mounted file; see
- * COMPANION_SECURITY.md's "server auth token is not the E2EE key" note — it is a
- * network-enumeration/DoS guard, not a confidentiality boundary, and a DB leak here is no worse
- * than a leak of the operator's own secret file. The registered notification email is likewise
- * stored in plaintext by necessity (the server must read it to address an outbound message);
- * see the T2 security note added to COMPANION_SECURITY.md.
+ * **Token storage is a digest, not the token.** `owner_token.token` and `owner_token.bootstrap_token`
+ * hold [Secrets.tokenHash] of the bearer token, never the token itself;
+ * [com.daymark.companion.auth.AuthGuard] is handed the digest and hashes whatever a caller
+ * presents before comparing (see [currentTokenHash]).
+ *
+ * This used to be deliberately plaintext, on the reasoning that the token was "the same class of
+ * secret as `DAYMARK_AUTH_TOKEN` itself" — a network-enumeration/DoS guard, not a confidentiality
+ * boundary, so a DB leak here was no worse than a leak of the operator's own secret file. That
+ * stopped being true when `POST /v1/relations/{relRef}/pairing/{exchangeId}/approve` became the
+ * *only* path that mints a therapist enrolment ticket, authorised by this token alone: holding it
+ * now lets someone mint an invite, answer their own pairing exchange, approve it as the owner, and
+ * enrol a credential — over the network, no code to guess. (An investigation into issue #113
+ * established that a dump-holder still cannot read relationship *content* that way — every content
+ * route separately gates on the raw per-relationship inbox token, of which only a digest is stored
+ * — so the exposure is "can install a therapist" rather than "can read the journal". But the token
+ * being a confidentiality-adjacent, stored-in-the-clear credential was a needless class of risk,
+ * and hashing it is cheap.) `DAYMARK_AUTH_TOKEN` the env var is unaffected and out of scope here —
+ * it is the operator's own secret, already plaintext in their environment by design; only the
+ * *stored copy* changes.
+ *
+ * The registered notification email is likewise stored in plaintext, but by necessity (the server
+ * must read it to address an outbound message) rather than by the stale reasoning above; see the
+ * T2 security note in COMPANION_SECURITY.md.
  */
 class OwnerAccountStore(
     dataDir: String,
@@ -89,40 +105,65 @@ class OwnerAccountStore(
     // ---- Owner bearer token (sync/portal access) ----------------------------------
 
     /**
-     * Reconcile the stored token against the current `DAYMARK_AUTH_TOKEN[_FILE]` value at boot.
-     * - First boot ever (no row): seed both `token` and `bootstrap_token` from the env value.
+     * Reconcile the stored token digest against the current `DAYMARK_AUTH_TOKEN[_FILE]` value at
+     * boot. Both columns hold [Secrets.tokenHash] of a token, never a token.
+     * - First boot ever (no row): seed both `token` and `bootstrap_token` from the env value's
+     *   digest.
      * - Operator changed the env var since last boot (redeploy-with-a-new-secret-file, the
      *   rotation method already documented in COMPANION_DEPLOYMENT.md): the env value WINS,
      *   overwriting any since-rotated token — the operator's explicit action takes precedence.
      * - Env var unchanged since last boot: keep whatever is stored, including a token rotated at
      *   runtime via [rotateToken] (so the email-recovery flow survives a restart).
+     *
+     * **Migration note (issue #113):** a deployment upgraded from before this change has a
+     * *plaintext* value sitting in `bootstrap_token`. A digest can never equal that plaintext
+     * value (short of a hash preimage), so the comparison below reads as "the env var changed"
+     * on the first post-upgrade boot regardless of whether it actually did, and re-seeds both
+     * columns from the current env value's digest — exactly the re-hash-on-next-bootstrap
+     * behaviour this migration wants. This is safe, never a lockout: `DAYMARK_AUTH_TOKEN` is the
+     * operator's own secret and is unchanged by this deploy, so it still authorises after the
+     * reseed. The one side effect is that a token rotated at runtime (via the email-recovery
+     * flow) before the upgrade does not survive this specific boot — the server reverts to
+     * accepting the operator's env-var token, which the operator can always still present.
      */
     private fun bootstrapToken(envToken: String) {
+        val envHash = Secrets.tokenHash(envToken)
         val existing = conn.prepareStatement("SELECT token, bootstrap_token FROM owner_token WHERE id=1").use { ps ->
             ps.executeQuery().use { rs -> if (rs.next()) rs.getString(1) to rs.getString(2) else null }
         }
-        if (existing == null || existing.second != envToken) {
+        if (existing == null || existing.second != envHash) {
             conn.prepareStatement(
                 "INSERT INTO owner_token(id, token, bootstrap_token, updated_at) VALUES (1,?,?,?) " +
                     "ON CONFLICT(id) DO UPDATE SET token=excluded.token, bootstrap_token=excluded.bootstrap_token, updated_at=excluded.updated_at",
             ).use { ps ->
-                ps.setString(1, envToken); ps.setString(2, envToken); ps.setLong(3, clock()); ps.executeUpdate()
+                ps.setString(1, envHash); ps.setString(2, envHash); ps.setLong(3, clock()); ps.executeUpdate()
             }
         }
     }
 
-    /** The currently accepted owner/bearer token — what [rotate the guard][com.daymark.companion.auth.AuthGuard] with at boot. */
-    fun currentToken(): String = synchronized(lock) {
+    /**
+     * The digest of the currently accepted owner/bearer token — what
+     * [com.daymark.companion.auth.AuthGuard] is constructed and [rotated][com.daymark.companion.auth.AuthGuard.rotate]
+     * with at boot / on reissue. Never the plaintext token: only [Secrets.tokenHash] of it is
+     * ever persisted, so there is no plaintext here to return.
+     */
+    fun currentTokenHash(): String = synchronized(lock) {
         conn.prepareStatement("SELECT token FROM owner_token WHERE id=1").use { ps ->
             ps.executeQuery().use { rs -> rs.next(); rs.getString(1) }
         }
     }
 
-    /** Generate + persist a fresh token, keeping `bootstrap_token` (the env-var watermark) unchanged. */
+    /**
+     * Generate a fresh token, persist its digest (keeping `bootstrap_token` — the env-var
+     * watermark — unchanged), and return the plaintext. The plaintext is deliberately handed back
+     * to the caller here and nowhere else: this is the one moment it exists outside the owner's
+     * own head, on its way to the recovery-confirm HTTP response / the caller's `onRotated`
+     * callback, and it is never itself stored.
+     */
     fun rotateToken(): String = synchronized(lock) {
         val newToken = Secrets.newToken()
         conn.prepareStatement("UPDATE owner_token SET token=?, updated_at=? WHERE id=1").use { ps ->
-            ps.setString(1, newToken); ps.setLong(2, clock()); ps.executeUpdate()
+            ps.setString(1, Secrets.tokenHash(newToken)); ps.setLong(2, clock()); ps.executeUpdate()
         }
         newToken
     }

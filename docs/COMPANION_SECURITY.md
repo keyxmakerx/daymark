@@ -458,12 +458,22 @@ passphrase.
   loudly rather than glossed. It is comparable in sensitivity to the routing metadata
   already covered by §3 T1 (a leak reveals that a relationship/owner exists at this
   address, not any record content).
-- **The owner/bearer token (`DAYMARK_AUTH_TOKEN`) is likewise stored in plaintext**, now
-  in a small per-datadir store rather than only held in process memory from the env
-  var. This does not change its threat classification: it was already an
-  operator-plaintext secret (env var / mounted file), and remains a
-  network-enumeration/DoS guard, **not** a confidentiality boundary (§ above) — it
-  gates PUT/GET of opaque blobs and never decrypts anything.
+- **The owner/bearer token is stored as a digest**, in a small per-datadir store rather
+  than only held in process memory from the env var. It was originally kept plaintext
+  there on the reasoning that it was the same class of secret as `DAYMARK_AUTH_TOKEN`
+  itself (already an operator-plaintext secret in an env var / mounted file) and only a
+  network-enumeration/DoS guard, not a confidentiality boundary. That stopped being true
+  once `POST /v1/relations/{relRef}/pairing/{exchangeId}/approve` became the *only* path
+  that mints a therapist enrolment ticket, authorised by this token alone: holding it now
+  lets someone mint an invite, answer their own pairing exchange, approve it as the
+  owner, and enrol a credential, over the network, with no code to guess (issue #113).
+  An investigation found the resulting exposure is still bounded — every content route
+  separately gates on the raw per-relationship inbox token, of which only a digest is
+  stored, so a token-holder cannot read existing or future relationship *content* this
+  way — but the token being a confidentiality-adjacent credential kept in the clear was a
+  needless class of risk. The store now persists `Secrets.tokenHash(token)`, never the
+  token; `DAYMARK_AUTH_TOKEN` itself is unaffected and remains the operator's own
+  plaintext secret, by design, in their own environment.
 - **The access-token recovery request endpoint is unauthenticated by necessity** (that
   is the point of a recovery path) but is heavily rate-limited per source (with a
   bounded, evicted rate-limit table so an unauthenticated flood cannot grow it without
