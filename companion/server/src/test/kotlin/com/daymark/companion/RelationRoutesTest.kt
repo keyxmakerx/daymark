@@ -8,6 +8,7 @@ import com.daymark.companion.mail.MailerConfig
 import com.daymark.companion.storage.RelationStore
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsBytes
@@ -73,6 +74,82 @@ class RelationRoutesTest {
         assertEquals(
             HttpStatusCode.Unauthorized,
             client.get("/v1/rel/$relRef/grants") { header("X-Rel-Token", "not-the-token") }.status,
+        )
+    }
+
+    @Test
+    fun `the right inbox token with no identity reads nothing, on every relationship route`() = testApplication {
+        /*
+         * Issue #120. The audit there opens by calling the inbox token "the single secret standing
+         * between an attacker and a person's journal". It is not, and this is the test that says so.
+         *
+         * resolve() requires TWO things: the raw token must hash to the relRef in the path, AND
+         * resolveRole() must return OWNER (a valid owner bearer token) or THERAPIST (a session
+         * cookie bound to this same relRef). A caller holding a perfect inbox token and nothing else
+         * is refused by the second check on every route.
+         *
+         * The existing test above covers the mirror image -- no token, and a token that hashes
+         * elsewhere. Neither of those exercises this one, because both fail at the FIRST check and
+         * never reach the role. So the property that makes the token necessary-but-not-sufficient
+         * was, until now, enforced by code nothing asserted. One refactor that hoisted resolveRole
+         * into a caller, or made it default-allow when no credential is presented, would have
+         * turned every relationship channel into a read-with-one-secret and no test would have
+         * noticed.
+         *
+         * All six handlers, because "every route" is the claim and five out of six is a hole.
+         */
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val (blob, rel, auth) = stores(dir, cfg)
+        application { module(cfg, blob, null, rel, auth) }
+
+        // The owner puts something there first, so these are reads of content that really exists --
+        // a 401 over an empty store would pass for the wrong reason.
+        assertEquals(
+            HttpStatusCode.Created,
+            client.put("/v1/rel/$relRef/grants/g1/0") {
+                header("X-Rel-Token", inboxToken)
+                header(HttpHeaders.Authorization, "Bearer $ownerToken")
+                setBody(byteArrayOf(1, 2, 3))
+            }.status,
+        )
+
+        val reads = listOf(
+            "/v1/rel/$relRef/grants",
+            "/v1/rel/$relRef/grants/g1",
+            "/v1/rel/$relRef/grants/g1/current",
+            "/v1/rel/$relRef/grants/g1/0",
+        )
+        for (path in reads) {
+            val res = client.get(path) { header("X-Rel-Token", inboxToken) }
+            assertEquals(HttpStatusCode.Unauthorized, res.status, "token alone must not read $path")
+            // And nothing of the blob leaks in the refusal body.
+            assertTrue(!res.bodyAsText().contains("\u0001"), path)
+        }
+
+        // The two writes, which additionally require CSRF on the therapist path.
+        assertEquals(
+            HttpStatusCode.Unauthorized,
+            client.put("/v1/rel/$relRef/grants/g1/1") {
+                header("X-Rel-Token", inboxToken)
+                setBody(byteArrayOf(4, 5, 6))
+            }.status,
+            "token alone must not write",
+        )
+        assertEquals(
+            HttpStatusCode.Unauthorized,
+            client.post("/v1/rel/$relRef/shares/share/revoke") { header("X-Rel-Token", inboxToken) }.status,
+            "token alone must not revoke",
+        )
+
+        // Non-vacuity: the SAME token with a role attached does read, so the 401s above are about
+        // the missing identity and not about the token, the path, or an empty store.
+        assertEquals(
+            HttpStatusCode.OK,
+            client.get("/v1/rel/$relRef/grants/g1/0") {
+                header("X-Rel-Token", inboxToken)
+                header(HttpHeaders.Authorization, "Bearer $ownerToken")
+            }.status,
         )
     }
 
