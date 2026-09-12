@@ -52,7 +52,6 @@ private fun auditSafely(block: () -> Unit) {
  * required of the second caller.
  */
 @Serializable data class ReportRequest(val secret: String? = null)
-@Serializable data class RedeemResult(val relRef: String, val scope: List<String>, val enrollTicket: String)
 @Serializable data class TotpEnrollRequest(val enrollTicket: String, val credentialId: String, val secret: String)
 @Serializable data class TotpVerifyRequest(val credentialId: String, val code: String)
 @Serializable data class SessionInfo(val csrfToken: String, val absoluteExpiry: Long)

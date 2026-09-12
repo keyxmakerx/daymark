@@ -652,6 +652,19 @@ class AuthStore(
         }
     }
 
+    /**
+     * Test/inspection helper: the raw `ticket_hash` column of an invite's live enrollment ticket,
+     * or null if it has none. `ticket_hash` is the table's PRIMARY KEY (see the schema above) and
+     * is always [Secrets.tokenHash] of whatever ticket was minted — this exists so a test can
+     * check that directly, rather than trusting the property because nothing has ever measured it.
+     */
+    fun rawEnrollTicketHashFor(inviteId: String): String? = synchronized(lock) {
+        conn.prepareStatement("SELECT ticket_hash FROM enroll_tickets WHERE invite_id=?").use { ps ->
+            ps.setString(1, inviteId)
+            ps.executeQuery().use { rs -> if (rs.next()) rs.getString(1) else null }
+        }
+    }
+
     // ---- Durable per-source attempt windows ---------------------------------------
 
     /**

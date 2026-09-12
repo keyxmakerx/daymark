@@ -21,6 +21,7 @@ import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -176,6 +177,82 @@ class TherapistAuthTest {
         val ticket = Secrets.b64url(ByteArray(32) { (it + 1).toByte() })
         assertEquals(AuthStore.ApproveStatus.OK, auth.approveRedeem(minted.inviteId, ticket).status)
         return ticket
+    }
+
+    /*
+     * Both tests below close out issue #106. The property in each ("stored hashed", "row is
+     * gone") has been true by construction since the ticket table was built — the PRIMARY KEY is
+     * the hash, and the enrol path deletes the row on success — but nothing ever measured either
+     * one. Mutation confirmed it: storing the ticket in plaintext left all 383 server tests green,
+     * and removing the delete on the success path (below) also left all 383 green. These two
+     * tests are written to catch exactly those two mutations, and were checked against them.
+     */
+
+    @Test
+    fun `the enrolment ticket is stored hashed, never in plaintext`() = testApplication {
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val (auth, rel) = stores(dir, cfg)
+        application { module(cfg, null, null, rel, auth) }
+
+        // A real approve-then-enrol flow: the owner approves with a therapist-chosen ticket
+        // (never one the server mints itself), exactly as PairingRelayRoutes.approve forwards it.
+        val minted = auth.mintInvite(relRef, listOf("read.share"), 3600L)
+        val ticket = Secrets.b64url(ByteArray(32) { (it + 11).toByte() })
+        assertEquals(AuthStore.ApproveStatus.OK, auth.approveRedeem(minted.inviteId, ticket).status)
+
+        // Inspect the row BEFORE enrolling consumes it (that deletion is the second test's job).
+        val stored = auth.rawEnrollTicketHashFor(minted.inviteId)
+        assertNotNull(stored)
+        // What IS there: exactly the expected BLAKE2b-256 hash (Secrets.tokenHash), nothing looser.
+        assertEquals(Secrets.tokenHash(ticket), stored)
+        // What is NOT there: the plaintext ticket, whole or as a substring of whatever is stored.
+        assertNotEquals(ticket, stored)
+        assertFalse(stored.contains(ticket))
+
+        // Positive control: the containment check just above is not blind. Prove it actually
+        // fires when the plaintext genuinely is present, so a future edit that stops comparing
+        // the right two values (e.g. a typo'd variable) turns this test red instead of quietly
+        // passing regardless of what the server stores.
+        assertTrue("ticket_hash=$ticket".contains(ticket))
+
+        // Finish the real flow: the hash that got stored still authenticates the enrol (hashing
+        // isn't cosmetic -- the same ticket the owner approved is the one that works).
+        val secretB64 = Secrets.b64url(ByteArray(20) { (it + 7).toByte() })
+        val enroll = client.post("/v1/totp/enroll") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"enrollTicket":"$ticket","credentialId":"cred-hash-check","secret":"$secretB64"}""")
+        }
+        assertEquals(HttpStatusCode.NoContent, enroll.status)
+    }
+
+    @Test
+    fun `the enrolment ticket row is deleted on successful enrolment, not merely made unusable`() = testApplication {
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val (auth, rel) = stores(dir, cfg)
+        application { module(cfg, null, null, rel, auth) }
+
+        val minted = auth.mintInvite(relRef, listOf("read.share"), 3600L)
+        val ticket = Secrets.b64url(ByteArray(32) { (it + 13).toByte() })
+        assertEquals(AuthStore.ApproveStatus.OK, auth.approveRedeem(minted.inviteId, ticket).status)
+
+        // Before: the row genuinely exists. This is the positive control for the "gone" assertion
+        // below -- it proves enrollTicketCountFor can see a row at all, not just fail to see one.
+        assertEquals(1, auth.enrollTicketCountFor(minted.inviteId))
+
+        val secretB64 = Secrets.b64url(ByteArray(20) { (it + 2).toByte() })
+        val enroll = client.post("/v1/totp/enroll") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"enrollTicket":"$ticket","credentialId":"cred-row-gone","secret":"$secretB64"}""")
+        }
+        assertEquals(HttpStatusCode.NoContent, enroll.status)
+
+        // After: the ROW ITSELF is gone. Not "a replay is refused" -- that would still pass with
+        // the deletion removed, because the invite has separately moved to CONSUMED and a unique
+        // index on totp.rel_ref would independently reject a second credential. This asserts the
+        // one fact those defenses-in-depth do not: that enrolTotp's own delete actually ran.
+        assertEquals(0, auth.enrollTicketCountFor(minted.inviteId))
     }
 
     @Test
