@@ -107,8 +107,10 @@ class JournalEncryptionMigrationTest {
             return true
         }
 
-        override fun namesBesideTheDatabase(): List<String> =
-            present.filter { it.startsWith(mainName) }.sorted()
+        var directoryUnreadable = false
+
+        override fun namesBesideTheDatabase(): List<String>? =
+            if (directoryUnreadable) null else present.filter { it.startsWith(mainName) }.sorted()
 
         override fun deleteBeside(name: String): Boolean {
             log += "deleteBeside:$name"
@@ -429,6 +431,23 @@ class JournalEncryptionMigrationTest {
         // The journal itself is safe and encrypted; what failed is the claim that nothing plaintext
         // remains, which is exactly why this is not Migrated.
         assertTrue(DB in files.present)
+    }
+
+    /**
+     * A directory that cannot be listed is not an empty directory.
+     *
+     * `java.io.File.list()` returns null for a directory it cannot read, and the natural Kotlin
+     * spelling of that — `?: emptyList()` — would make the final check report success having looked
+     * at nothing. That is the exact shape of guard this whole class is arranged against, so it is
+     * exercised here rather than trusted.
+     */
+    @Test
+    fun `a directory that cannot be listed is not reported as success`() {
+        val (files, exporter) = world(DB, "$DB-wal")
+        files.directoryUnreadable = true
+        val outcome = migrate(files, exporter)
+        assertEquals(MigrationOutcome.LeftoverPlaintext(JournalEncryptionMigration.UNLISTABLE), outcome)
+        assertFalse("an unlistable directory reported success", outcome == MigrationOutcome.Migrated)
     }
 
     // ─── The two constants, which are load-bearing ─────────────────────────────────────────────

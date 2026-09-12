@@ -91,8 +91,13 @@ interface DatabaseFiles {
      * Every file in the database's directory whose name begins with [mainName], AS THE DIRECTORY
      * REPORTS IT — never as any list in this file believes it should be. This is what makes the
      * final check independent of the deletion, and it is the whole point of the interface.
+     *
+     * NULL when the directory could not be listed at all, which is NOT the same as "nothing is
+     * there". `java.io.File.list()` returns null for an unreadable directory, and an implementation
+     * that turned that into an empty list would make this check report success having looked at
+     * nothing — the exact shape of guard this whole file is arranged against.
      */
-    fun namesBesideTheDatabase(): List<String>
+    fun namesBesideTheDatabase(): List<String>?
 
     fun deleteBeside(name: String): Boolean
 }
@@ -223,8 +228,11 @@ class JournalEncryptionMigration(
     private fun finishSwap(): MigrationOutcome {
         if (!files.renameSiblingOverMain()) return MigrationOutcome.Failed(MigrationStep.RENAME)
 
-        for (name in leftovers()) files.deleteBeside(name)
-        val remaining = leftovers()
+        // A directory that cannot be listed is not an empty directory. Reporting success on the
+        // strength of a listing that failed would be the one thing this check exists to prevent.
+        val found = leftovers() ?: return MigrationOutcome.LeftoverPlaintext(UNLISTABLE)
+        for (name in found) files.deleteBeside(name)
+        val remaining = leftovers() ?: return MigrationOutcome.LeftoverPlaintext(UNLISTABLE)
         return if (remaining.isEmpty()) {
             MigrationOutcome.Migrated
         } else {
@@ -233,8 +241,8 @@ class JournalEncryptionMigration(
     }
 
     /** Whatever the DIRECTORY says is beside the database, minus the database itself. */
-    private fun leftovers(): List<String> =
-        files.namesBesideTheDatabase().filterNot { it == files.mainName }
+    private fun leftovers(): List<String>? =
+        files.namesBesideTheDatabase()?.filterNot { it == files.mainName }
 
     /** Tidy the half-built file away. The plaintext database has not been touched. */
     private fun giveUpWithoutDeleting(step: MigrationStep): MigrationOutcome {
@@ -268,5 +276,12 @@ class JournalEncryptionMigration(
 
         /** The name the encrypted file is built under, beside the database. */
         const val SIBLING_SUFFIX = "-encrypting"
+
+        /**
+         * What [MigrationOutcome.LeftoverPlaintext] carries when the directory could not be listed
+         * at all. Not a file name; a statement that the question went unanswered. Never shown to a
+         * person — the outcome is read by the code that decides whether to say anything at all.
+         */
+        val UNLISTABLE: List<String> = listOf("(the database directory could not be listed)")
     }
 }
