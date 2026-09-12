@@ -204,9 +204,12 @@ class PairingRelayRoutesTest {
         assertTrue(readBody.contains("\"msgBB64\":\"$msgB\""), "MSGb must come back byte-identical")
         assertTrue(readBody.contains("\"envB64\":\"$env\""), "the sealed offer must come back byte-identical")
 
-        // The waiting answer carries no envelope of the owner's: there is nothing to carry yet,
-        // and the run is not closed. This is the line that turns red if the route ever serves
-        // env_to_therapist before an approval.
+        // The waiting answer carries no envelope of the owner's. This line proves the ROUTE omits it
+        // while the run is RESPONDED; it cannot prove the route would refuse to serve one, because
+        // at this instant the column is null whatever the route does. The property that no run is
+        // ever RESPONDED with an owner envelope is held by PairingStore.approve writing the envelope
+        // and CLOSED in one statement, and is pinned at the store level in
+        // `no run is ever answered-but-unapproved with an owner envelope` below.
         assertFalse(waiting.bodyAsText().contains("envB64"), "no owner envelope before the approval")
 
         // The owner approves, forwarding the ticket the offer carried and their own keys sealed
@@ -996,5 +999,47 @@ class PairingRelayRoutesTest {
         // from not-configured.
         assertNotNull(r)
         assertTrue(r.status == HttpStatusCode.ServiceUnavailable || r.status == HttpStatusCode.NotFound)
+    }
+
+    @Test
+    fun `no run is ever answered-but-unapproved with an owner envelope`() {
+        // The invariant #101 rests on, asserted where it lives: the store, not the route. respond()
+        // has no owner-envelope parameter, and approve() writes env_to_therapist and CLOSED in one
+        // UPDATE predicated on RESPONDED, so there is no instant at which a RESPONDED row carries
+        // one. Read back through the store AND through raw SQL, so a second writer added later
+        // (a route, a migration, a repair) would be caught even if it bypassed the store's readers.
+        var now = 1_000_000L
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val s = stores(dir, cfg) { now }
+        val opened = s.pairing.open("inv-1", relRef, b64(ByteArray(16) { 9 }), fakeMsg(1), now + 86_400_000L)
+        val exchangeId = assertNotNull(opened.exchangeId)
+        assertEquals(PairingStore.RespondStatus.OK, s.pairing.respond(exchangeId, "inv-1", fakeMsg(2), fakeEnv(3)))
+        val waiting = assertNotNull(s.pairing.exchangeFor(exchangeId, relRef))
+        assertEquals(PairingStore.State.RESPONDED, waiting.state)
+        assertNull(waiting.envToTherapistB64, "answering writes nothing of the owner's")
+
+        val ownerEnv = fakeEnv(5, size = 120)
+        assertEquals(PairingStore.TransitionStatus.OK, s.pairing.approve(exchangeId, relRef, ownerEnv))
+        val closed = assertNotNull(s.pairing.exchangeFor(exchangeId, relRef))
+        assertEquals(PairingStore.State.CLOSED, closed.state)
+        assertEquals(ownerEnv, closed.envToTherapistB64, "approval writes the envelope and CLOSED together")
+        // A second approval finds no RESPONDED row and changes nothing.
+        assertEquals(PairingStore.TransitionStatus.GONE, s.pairing.approve(exchangeId, relRef, fakeEnv(6)))
+        assertEquals(ownerEnv, assertNotNull(s.pairing.exchangeFor(exchangeId, relRef)).envToTherapistB64)
+
+        // Raw SQL: across every row the store has ever written, an owner envelope sits only on a
+        // CLOSED row (or on a CANCELLED one that was abandoned after approval).
+        java.sql.DriverManager.getConnection("jdbc:sqlite:$dir/pairing.db").use { c ->
+            c.createStatement().use { st ->
+                st.executeQuery(
+                    "SELECT COUNT(*) FROM pairing_exchanges WHERE env_to_therapist IS NOT NULL AND state NOT IN ('CLOSED','CANCELLED')",
+                ).use { rs -> rs.next(); assertEquals(0, rs.getInt(1), "an owner envelope on a run that is not closed") }
+                // Positive control: the same query sees the envelope that IS there.
+                st.executeQuery("SELECT COUNT(*) FROM pairing_exchanges WHERE env_to_therapist IS NOT NULL").use { rs ->
+                    rs.next(); assertEquals(1, rs.getInt(1), "the control must see the one envelope written")
+                }
+            }
+        }
     }
 }

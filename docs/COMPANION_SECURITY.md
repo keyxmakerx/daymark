@@ -475,7 +475,11 @@ nothing can retroactively make their ceremony have proved one. They sign in on t
 alone, are told exactly that — nothing proved these keys to you, this server does not vouch for
 them, check the fingerprint on another channel — and are told that accepting a fresh invitation
 replaces it with keys the code proves (`OWNER_KEY_UNPINNED_CAVEAT`,
-`companion/web/src/lib/therapist/inviteAccept.ts`). There is no longer any way for a clinician to
+`companion/web/src/lib/therapist/inviteAccept.ts`). The same is true of the **manual sign-in path**
+— pasting a saved copy of the key record instead of using the one this browser holds: there is no
+stored record to compare against, so that path also signs in on the published copy behind the same
+caveat, and a substituted key is *named* there, not refused. The refusal is a property of the stored
+record a post-E2 pairing wrote, not of every sign-in. There is no longer any way for a clinician to
 type an owner key into this product, which is the point rather than a simplification: a field would
 be a way back to the weaker half.
 
