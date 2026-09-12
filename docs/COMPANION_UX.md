@@ -518,8 +518,46 @@ A thin band under the header that states, in plain words, the *current* assuranc
 | Phase-0 offline viewer | **caution (amber)** | *"This build is meant to run offline. A page can't prove that about itself — [verify this build's integrity] before unlocking an encrypted backup."* |
 | Phase-1 owner web viewer | caution (amber) | *"Decrypted in your browser. This is the convenience view — your phone app is the secure one."* |
 | Therapist share view | caution (amber) | *"Read-only · curated by {Client} · expires {date} · clears when you close this."* |
-| Active share (owner) | open (red-ish) | *"You're sharing real entries with a person. [Revoke]"* |
+| Active share (owner) | **chrome + 3px indigo rule** | *"SHARING · Sharing real entries with {name} since {date}. [Revoke]"* |
 | Decryption in progress | neutral | *"Unlocking… deliberately slow to protect your passphrase."* |
+
+**The active-share row changed on 2026-09-12 (issue #105), and the reason generalises.** It used to
+be painted in the alarm hue. A consented, ongoing share is none of clay's four meanings — needs a
+human, overdue, refused, destructive — and it is permanent by nature, so lighting the single alarm
+hue for it lights that hue forever. An alarm that is always on is not an alarm. The strip takes the
+chrome ground with an indigo rule; the word `SHARING` carries the meaning, and the ring glyph before
+it is `aria-hidden` and decorative.
+
+**Clay appears exactly once in the whole feature:** the confirm button that actually ends the share.
+The strip's own **Revoke** button is plain (`--border-strong`, `--ink-text`), because pressing it
+only opens a question.
+
+The strip is **persistent on every owner screen and not dismissable** — a share is not an event that
+happened once, and dismissal is forgetting. It is rendered per relationship above the tab content
+rather than on the sharing tab, so changing tab does not make a standing fact disappear.
+
+Clicking **Revoke** opens a confirm whose **first body line is the standing caveat**, directly above
+the buttons:
+
+```
+Revoke sharing with {name}?
+
+Revoking does not un-send what was already read.
+{name} stops receiving new entries as soon as you confirm.
+
+[ Keep sharing ]   [ Revoke ]
+```
+
+"Keep sharing", not "Cancel": *cancel* names the dialog, *keep sharing* names what not confirming
+actually does. After confirming, the strip collapses and nothing replaces it — unless the server
+marked the versions and could not delete every copy, which is said with the count rather than
+reported as a clean withdrawal.
+
+`{date}` is **the day sharing began**, not the day the share was accepted. Nothing in this product
+records acceptance: a clinician opening a share leaves a row in the relationship's audit log, which
+is a separate fetch, is not provably complete, and would cost a request on every owner screen for a
+strip that is always rendered. The day the owner first published to the share lineage is known from
+the versions already listed, and it is what the sentence says.
 
 ### 10.2 "What the server can / can't see" panel
 

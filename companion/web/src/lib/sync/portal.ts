@@ -219,6 +219,30 @@ export class PortalClient {
     if (!res.ok) throw new PortalError('could not end the invitation', res.status)
   }
 
+  /**
+   * Withdraw the share lineage for one relationship (issue #105).
+   *
+   * OWNER ONLY, and the server enforces that rather than trusting this client: the same route on
+   * the assignments or gameplans channel would hand a clinician an irreversible kill switch over
+   * the owner's own material, so it answers 404 for every channel but `shares` and 403 for every
+   * role but owner.
+   *
+   * `copiesNotRemoved` is the half worth carrying back. Revoking marks every version and then tries
+   * to delete the bytes; a delete can fail (a read-only mount, a file already gone). Those failures
+   * used to be swallowed, so an owner could be told a share was withdrawn while copies of it sat on
+   * disk. The count is returned so a screen can say so instead.
+   */
+  async revokeShare(inboxToken: string, lineage = 'share'): Promise<{ revokedVersions: number; copiesNotRemoved: number }> {
+    const relRef = await relRefOf(inboxToken)
+    const res = await this.req(this.relPath(relRef, 'shares', `/${encodeURIComponent(lineage)}/revoke`), {
+      method: 'POST',
+      headers: { 'X-Rel-Token': inboxToken },
+    })
+    if (!res.ok) throw new PortalError('could not withdraw the share', res.status)
+    const body = (await res.json()) as { revokedVersions?: number; copiesNotRemoved?: number }
+    return { revokedVersions: body.revokedVersions ?? 0, copiesNotRemoved: body.copiesNotRemoved ?? 0 }
+  }
+
   // --- the owner's own public keys (issue #121) ---
 
   /**

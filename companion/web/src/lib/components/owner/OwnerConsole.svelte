@@ -14,6 +14,7 @@
   import type { PinnedTherapist } from './session'
   import PairingPanel from './PairingPanel.svelte'
   import OwnerKeyPublish from './OwnerKeyPublish.svelte'
+  import SharingStrip from './SharingStrip.svelte'
   import { emptyGrant } from '../../assignments/grant'
   import { fingerprint } from '../../assignments/crypto'
   import { sasWords } from '../../share/pairing'
@@ -156,6 +157,17 @@
         {#if connectStatus}<span class="cstatus">{connectStatus}</span>{/if}
       </div>
     </details>
+
+    <!--
+      ABOVE THE TAB CONTENT, so it is on every owner screen rather than on the one screen about
+      sharing (issue #105). It is rendered per pinned relationship, not per selected one: the
+      Review, Notifications and Pinned-keys tabs have no selected therapist, and a standing notice
+      that disappears when you change tab is not standing. Each strip renders nothing at all unless
+      that relationship actually has a live share lineage.
+    -->
+    {#each session.pinned.filter((t) => t.inboxToken) as t (t.id)}
+      <SharingStrip name={t.displayName} inboxToken={t.inboxToken} {client} />
+    {/each}
 
     {#if sub === 'review'}
       {#if data}
