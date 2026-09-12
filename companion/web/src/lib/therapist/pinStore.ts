@@ -169,10 +169,11 @@ export function listPins(pins: PinStore): PinnedIdentity[] {
  * the record is half of what is being cleared, so writing an empty one would clear the wrong half.
  *
  * What it does NOT do, because someone deleting something needs to know how far the deletion
- * reaches: it does not touch the server, which never had this record; it does not reach the
- * therapist; and it does not unsend anything already sealed. It also re-arms trust-on-first-use —
- * the next seal records whatever key it is handed, with nothing left to compare against. That is
- * the honest cost of forgetting and the screen says it in those words.
+ * reaches: it does not touch the server, which never had this record, and it does not reach the
+ * therapist. Nor does it reach what was already sealed to them — REVOKE_CAVEAT (pairing/copy.ts)
+ * is the sentence for that, and PinRecord.svelte states it at the point of the click rather than
+ * this comment restating it. It also re-arms trust-on-first-use — the next seal records whatever
+ * key it is handed, with nothing left to compare against. That is the honest cost of forgetting.
  */
 export function forgetAllPins(storage: PinStorage | null = defaultPinStorage()): void {
   if (!storage || typeof storage.removeItem !== 'function') {

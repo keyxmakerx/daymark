@@ -3,6 +3,7 @@
   import { setCapability, signGrant, encodeSignedGrant } from '../../assignments/grant'
   import CapabilityRow from './CapabilityRow.svelte'
   import { Chip } from '../ui'
+  import { REVOKE_CAVEAT } from '../../pairing/copy'
   import type { OwnerSession, PinnedTherapist } from './session'
   import { PortalClient } from '../../sync/portal'
 
@@ -101,9 +102,8 @@
   </div>
 
   <p class="revoke-note faint">
-    Revoking (turning a grant off) stops <em>future</em> server-mediated delivery. It does not
-    claw back material already delivered — a true cutoff for past data is a re-key, which is a
-    separate step.
+    Revoking (turning a grant off) stops <em>future</em> server-mediated delivery. {REVOKE_CAVEAT} A
+    true cutoff for past data is a re-key, which is a separate step.
   </p>
 
   <div class="actions">
