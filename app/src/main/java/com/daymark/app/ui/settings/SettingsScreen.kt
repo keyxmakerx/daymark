@@ -116,52 +116,74 @@ fun SettingsScreen(
         Divider()
         SectionHeader("Privacy")
         /*
-         * WHY THIS ROW SAYS THAT THE PIN DOES NOT REACH THE FILE.
+         * WHAT THESE TWO ROWS SAY, AND WHY EACH SENTENCE IS THE ONE IT IS.
          *
-         * The lock is real. A PIN set here is verified against a PBKDF2-SHA256 hash with a per-PIN
-         * random salt, held in an AES-256 EncryptedSharedPreferences store and compared in constant
-         * time (PinManager). What it is not is a key. PinManager VERIFIES a PIN; it does not DERIVE
-         * anything from one. The Room database holding the journal, the assessments, the safety
-         * plan and the thought records is opened in AppModule with no openHelperFactory and no
-         * SQLCipher behind it, so those entries sit in a plaintext SQLite file in app-private
-         * storage. The lock is a door in front of the UI, not a lock on the data.
+         * For most of this app's life the lock row said "On", and the journal was a plaintext
+         * SQLite file. Both facts were true at once and nobody reading the first would have guessed
+         * the second — a person reading "app lock" on a mental-health journal infers that their
+         * entries are locked, and they were not. That gap was this app's largest undisclosed
+         * weakness, and it was closed in two steps: first by saying it out loud here, then by
+         * removing it.
          *
-         * "App lock (PIN)" over "On" stated that accurately and still misled, because a person
-         * reading the words "app lock" on a mental-health journal infers a stronger claim than the
-         * one being made. Nobody decided to hide the difference — it was simply never written down
-         * anywhere a user would look, which is how the gap between the inference and the truth
-         * became this app's largest undisclosed weakness. So it is said here, at the moment the
-         * setting is switched on and the inference is being formed, rather than in a document
-         * nobody opens.
+         * WHAT IS TRUE NOW. The database is encrypted with a random 32-byte key, made on first run
+         * for everybody, kept wrapped under a key that lives in the phone's hardware keystore and
+         * cannot be copied off the device (DataKeyStore, KeystoreAead). Room opens it through
+         * SQLCipher. An image of app-private storage therefore contains an encrypted journal and a
+         * wrap nothing in the image can open.
          *
-         * WHY THE SENTENCE IS THE ONE IT IS. Two clauses, no hedging and no reassurance. The first
-         * names what the PIN does do; the second names, in the concrete terms of an act somebody
-         * could perform, what it does not. It says "copy this phone's storage" rather than "an
-         * attacker with sufficient privileges" because the second is a sentence about threat
-         * models and the first is a sentence about a thing that happens to people.
+         * WHY THE FIRST ROW IS CONDITIONAL. A person whose migration has not succeeded — or whose
+         * device would not hold a key at all — still has a plaintext file, and the app still works,
+         * because refusing to open would cost them their journal over a problem that recovers
+         * itself. For them the encrypted sentence would be false, so it is not shown. The state is
+         * read off JournalEncryptionGate rather than assumed; see SettingsUiState.entriesEncrypted.
          *
-         * WHAT IS DELIBERATELY NOT SAID HERE. No "but Android encrypts storage anyway", no "your
-         * data is still safe on a healthy device". Both are true (android:allowBackup="false"
-         * closes the ADB and cloud-backup route, and file-based encryption plus the app sandbox
-         * hold on a locked, unrooted device) and both, placed under a sentence that has just
-         * admitted a real gap, read as the gap being talked down. The register the rest of this
-         * app uses is flat and factual: state the limit once, do not then argue with it.
-         * docs/PRIVACY.md carries the longer version for anyone who wants it.
+         * WHY THE PHOTOS CLAUSE IS THERE AND WHY IT IS NOT AN APOLOGY. Entry photos are ordinary
+         * JPEGs in filesDir/entry_photos (PhotoStore) and nothing in this work touched them. Saying
+         * "encrypted" over a journal whose pictures are sitting in the open would be exactly the
+         * inference this row exists to stop, so the exception is named in the same breath as the
+         * claim — one clause, flat, no warning, no promise about when.
          *
-         * THIS IS THE DISCLOSURE, NOT THE FIX. The fix is a random data key encrypting the
-         * database from first run, wrapped by the Android Keystore, by a PIN-derived key once a
-         * PIN is set, and by a written-down recovery code so that a forgotten PIN is not lost
-         * data. When that lands, this sentence becomes FALSE and must be REWRITTEN — to the copy
-         * in issue #109 under A, including the part about what a longer PIN buys — rather than
-         * deleted. A row that has stopped explaining itself is how this app got here the first
-         * time. Until then, do not quietly shorten it back to "On".
+         * WHAT IS DELIBERATELY NOT SAID. Nothing about exports. A backup, a CSV or a PDF is a plain
+         * file the person asked for and put where they chose; folding it into a sentence about what
+         * the app does to its own storage would either overclaim or turn a settings row into a
+         * lecture. The export rows say it where it belongs.
+         *
+         * WHY THE PIN ROW NO LONGER CLAIMS ANYTHING ABOUT THE FILE. It says what the PIN does — it
+         * guards the screen — and then the thing a person actually needs to know, which is that
+         * forgetting it does not lose their entries. The key is held by the phone, not made from
+         * the PIN.
+         *
+         * WHAT COMES NEXT, AND WHAT THIS ROW WILL HAVE TO SAY THEN. Issue #109 also specifies a PIN
+         * wrap and a written-down recovery code, at which point the key stops being available to the
+         * app without the person, and the copy becomes the issue's wording under A: "Your entries
+         * are locked with a key made from this PIN... If you forget the PIN, only your recovery code
+         * opens them." That sentence is FALSE TODAY and must not be written here until the wrap it
+         * describes is actually armed — and arming it is a decision about reminders and lost PINs
+         * that belongs to the maintainer, not to whoever next edits this file. Rewrite these
+         * sentences when that lands; do not quietly shorten either of them back to "On".
          */
+        ListItem(
+            headlineContent = { Text("Your entries on this device") },
+            supportingContent = {
+                Text(
+                    if (state.entriesEncrypted) {
+                        "Encrypted with a key only this phone holds, so copying its storage does " +
+                            "not read them. Photos attached to entries are not covered."
+                    } else {
+                        // The honest sentence for a device where the migration has not succeeded,
+                        // or where the keystore would not hold a key. The app works; the claim
+                        // above would be false, so it is not made.
+                        "Not encrypted on this device. Daymark tries again each time you open it."
+                    },
+                )
+            },
+        )
         ListItem(
             headlineContent = { Text("App lock (PIN)") },
             supportingContent = {
                 Text(
-                    "The PIN guards the screen, not the file. Anyone who can copy this phone's " +
-                        "storage can read your entries without it.",
+                    "The PIN guards the screen. It is not what your entries are encrypted with, " +
+                        "so forgetting it does not lose them.",
                 )
             },
             trailingContent = {

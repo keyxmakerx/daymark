@@ -69,6 +69,17 @@ class JournalEncryptionGate @Inject constructor(
     fun prepare(): JournalFileState = resolved ?: resolve().also { resolved = it }
 
     /**
+     * What [prepare] already found, or null if it has not run in this process. Runs nothing.
+     *
+     * This is what a screen reads when it needs to SAY something about the journal's state rather
+     * than open it. Settings uses it, so that the sentence under "Your entries on this device" is
+     * the truth about this phone rather than a claim the app would like to make — a migration that
+     * has not succeeded means the file is still plaintext, and the setting has to say so.
+     */
+    val settled: JournalFileState?
+        get() = resolved
+
+    /**
      * The key spelling Room's SQLCipher factory takes, or null when Room must open the file the old
      * way — or not at all.
      */

@@ -37,6 +37,14 @@ micro-journaling + wellbeing toolkit. A clean-room alternative to Daylio (no Day
   The privacy claim is *verifiable* because the app literally cannot reach the network.
 - 100% local: no backend, no accounts, no ads, no trackers, no telemetry. Data leaves the device
   only via user-initiated JSON/CSV/PDF export through the system file picker (SAF).
+- **The journal is encrypted at rest.** SQLCipher behind Room, keyed by a random 32-byte key made on
+  first run for every install — PIN or not — and kept wrapped under a key generated in the phone's
+  hardware keystore. An existing plaintext journal is migrated once by copy-verify-swap. The **PIN
+  guards the screen, not the file**: it is not what the key is made from, so a forgotten PIN costs
+  the way in and never the entries. **Photos are not covered** and exports are plain files by the
+  user's own act. The design, the rejected alternatives and the one decision still open — whether
+  setting a PIN should remove the keystore wrap, at the cost of reminders after a reboot — are in
+  `docs/DECISIONS_2026-08.md` §D7.
 
 ---
 

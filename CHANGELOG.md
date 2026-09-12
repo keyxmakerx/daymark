@@ -7,14 +7,30 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
-- **The app-lock setting now says what the PIN actually guards.** Underneath the switch it reads:
-  "The PIN guards the screen, not the file. Anyone who can copy this phone's storage can read your
-  entries without it." That has always been true — the PIN is checked and thrown away, and the
-  journal itself sits in an ordinary database file — but the words "app lock" invite a stronger
-  conclusion than the lock was ever making, and the difference had never been written anywhere you
-  would look. Nothing about how the lock works has changed; what changed is that you are told. The
-  encryption that makes the sentence untrue is the next thing being built, and when it lands this
-  line gets rewritten rather than removed.
+- **Your journal is now encrypted on your phone.** Daymark does this for everybody, from the first
+  time you open it — you don't switch it on and there is nothing to remember. The key is made on
+  your phone and kept in the phone's own secure hardware, where it can't be copied off, so someone
+  who took a copy of Daymark's storage would get a file they can't read. If you already have
+  entries, Daymark converts them once the next time you open it: it copies them into a new
+  encrypted file, checks that every single one arrived and that the file is sound, and only then
+  removes the old one. If any part of that doesn't work, the old file is left exactly as it was and
+  Daymark tries again next time. Nothing is ever deleted on a failure.
+
+  Two things this does **not** cover, said here rather than left for you to find out: **photos** you
+  attach to entries, which stay ordinary picture files; and **backups, CSV files and PDF reports you
+  make yourself**, which are plain files you asked for and put where you chose.
+
+  In the rare case where a phone loses the key — it happens after some firmware updates and security
+  resets — Daymark tells you the entries can't be opened, offers to leave them alone, and removes
+  them only if you choose that.
+- **The app-lock setting now says what the PIN actually guards, and what it doesn't cost you.** The
+  row used to say "On". It now says the PIN guards the screen and is not what your entries are
+  encrypted with — which means **forgetting your PIN does not lose your entries**. A person reading
+  the words "app lock" on a journal infers something stronger than the lock was ever making, and
+  the difference had never been written anywhere you would look.
+- **A new PIN is six to twelve digits.** Four was reasonable while the PIN only guarded a screen
+  behind a wait-after-wrong-guesses lockout. A PIN you already set keeps working at whatever length
+  it is — Daymark will not make you change it or interrupt you about it.
 - **Companion — your identity is now yours, instead of a new one every visit.** The owner console
   used to make a fresh pair of keys each time you opened it, which meant a clinician who carefully
   wrote down your fingerprint could not verify anything you sent them afterwards. It looked like
