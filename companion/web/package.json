@@ -18,7 +18,7 @@
     "push": "tsx src/cli/push.ts"
   },
   "dependencies": {
-    "libsodium-wrappers-sumo": "^0.7.15"
+    "libsodium-wrappers-sumo": "^0.8.4"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.3",

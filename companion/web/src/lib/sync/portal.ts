@@ -71,7 +71,7 @@ export class PortalError extends Error {
 /** relRef = base64url_nopad(BLAKE2b-256(inboxToken)) — must match server auth/Secrets.relRefOf. */
 export async function relRefOf(inboxToken: string): Promise<string> {
   await initCrypto()
-  const digest = _sodium.crypto_generichash(32, _sodium.from_string(inboxToken))
+  const digest = _sodium.crypto_generichash(32, _sodium.from_string(inboxToken), null)
   return _sodium.to_base64(digest, _sodium.base64_variants.URLSAFE_NO_PADDING)
 }
 

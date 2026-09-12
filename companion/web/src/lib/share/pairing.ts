@@ -74,8 +74,8 @@ export function sasWords(a: PublicIdentity, b: PublicIdentity, words = 6): strin
     off += k.length
   }
   // BLAKE2b digest, `words` bytes → one word each (index = byte value into a 256-word list).
-  const digest = _sodium.crypto_generichash(words, buf)
-  return Array.from(digest, (byte) => SAS_WORDLIST[byte])
+  const digest = _sodium.crypto_generichash(words, buf, null)
+  return Array.from(digest, (byte: number) => SAS_WORDLIST[byte])
 }
 
 function compareBytes(x: Uint8Array, y: Uint8Array): number {

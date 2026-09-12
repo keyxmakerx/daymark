@@ -43,7 +43,10 @@ export function newBoxKeyPair(): BoxKeyPair {
 
 /** Short, human-comparable fingerprint of a public key (for OOB pinning / display). */
 export function fingerprint(publicKey: Uint8Array): string {
-  return s().to_base64(s().crypto_generichash(16, publicKey), B())
+  // The null key is BLAKE2b's unkeyed mode, and is passed explicitly because
+  // libsodium-wrappers 0.8 made the parameter required. Verified byte-identical to the
+  // two-argument form it replaces, so every fingerprint ever shown or pinned is unchanged.
+  return s().to_base64(s().crypto_generichash(16, publicKey, null), B())
 }
 
 /**

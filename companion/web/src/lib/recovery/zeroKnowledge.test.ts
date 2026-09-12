@@ -174,7 +174,7 @@ beforeAll(async () => {
     afterRotation.recoveryCode.display,
   ]
 
-  const b = (bytes: Uint8Array) => _sodium.crypto_generichash(32, bytes)
+  const b = (bytes: Uint8Array) => _sodium.crypto_generichash(32, bytes, null)
   const everythingStored = new TextEncoder().encode(
     SERVER.blobs.map((s) => JSON.stringify(s.blob)).join(''),
   )
