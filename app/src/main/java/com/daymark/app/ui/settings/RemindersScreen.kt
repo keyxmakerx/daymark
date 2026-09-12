@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -34,16 +35,22 @@ import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.daymark.app.data.entity.Reminder
+import com.daymark.app.notifications.NotificationPermission
 import com.daymark.app.ui.components.PaperSurface
 import com.daymark.app.util.DateUtils
 import java.time.LocalDateTime
@@ -59,6 +66,21 @@ fun RemindersScreen(
 
     // Edit target: null = none, a Reminder = editing, Reminder(id=0) = adding a new one.
     var editing by remember { mutableStateOf<Reminder?>(null) }
+
+    // Whether Daymark's notifications will actually show. No stored flag — read live so it
+    // cannot go stale when someone flips this in system settings and comes back.
+    val context = LocalContext.current
+    var notificationsEnabled by remember { mutableStateOf(NotificationPermission.areEnabled(context)) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                notificationsEnabled = NotificationPermission.areEnabled(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val notifPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -108,6 +130,16 @@ fun RemindersScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                // App-wide, not per row — rows below are drawn exactly as when permission is on.
+                if (!notificationsEnabled) {
+                    item {
+                        NotificationsOffNote(
+                            onOpenSettings = {
+                                context.startActivity(NotificationPermission.settingsIntent(context))
+                            },
+                        )
+                    }
+                }
                 items(reminders, key = { it.id }) { reminder ->
                     ReminderRow(
                         reminder = reminder,
@@ -129,6 +161,30 @@ fun RemindersScreen(
                 else viewModel.update(target.copy(hour = hour, minute = minute, label = label.trim()))
                 editing = null
             },
+        )
+    }
+}
+
+/**
+ * The one note that stands in for a whole row of disabled toggles: permission is app-wide, so it
+ * is said once, here, rather than on every row. No icon, no colour — this is a setting the person
+ * chose, not an error, and words carry that on their own.
+ */
+@Composable
+private fun NotificationsOffNote(onOpenSettings: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            "Notifications are off for Daymark. Reminders are saved but won't show.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        TextButton(
+            onClick = onOpenSettings,
+            contentPadding = PaddingValues(vertical = 8.dp),
+        ) { Text("Open notification settings") }
+        HorizontalDivider(
+            color = MaterialTheme.colorScheme.outlineVariant,
+            modifier = Modifier.padding(top = 4.dp),
         )
     }
 }
