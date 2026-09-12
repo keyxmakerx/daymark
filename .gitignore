@@ -36,3 +36,8 @@ node_modules/
 # Companion deployment secrets and local env (never committed).
 companion/.env
 companion/secrets/
+
+# Isolated git worktrees the harness creates for parallel agents. Each is a full
+# checkout of this repository living inside it; committing one would nest the repo
+# in itself. They are temporary and agent-owned — ignore them, never track them.
+.claude/worktrees/
