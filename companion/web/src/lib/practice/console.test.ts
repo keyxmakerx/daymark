@@ -12,6 +12,7 @@ import {
   NO_PATIENT_LIST,
   PLACEHOLDERS,
   PLACEHOLDER_WORD,
+  REMOVAL_DOES_NOT_END_A_RELATIONSHIP,
   REMOVAL_ENDS_A_MEMBERSHIP,
   SEAT_IS_AN_OFFER,
   SESSIONS_CUT_MEANS,
@@ -92,6 +93,7 @@ const COPY = [
   CONSOLE_LEDE,
   CONSOLE_BUILD_STATE,
   MEMBERSHIP_IS_NOT_READ_ACCESS,
+  REMOVAL_DOES_NOT_END_A_RELATIONSHIP,
   REMOVAL_ENDS_A_MEMBERSHIP,
   SESSIONS_CUT_MEANS,
   SEAT_IS_AN_OFFER,
@@ -153,6 +155,28 @@ describe('(a) the console never implies that membership is access', () => {
   it('renders the removal sentence at the removal, not in a manual', () => {
     expect(codeOf('RosterPanel.svelte')).toContain('REMOVAL_ENDS_A_MEMBERSHIP')
     expect(codeOf('RosterPanel.svelte')).toContain('Confirm removal')
+  })
+
+  it('corrects the fired-clinician assumption at the same click (issue #91)', () => {
+    // Removal is most often reached for when somebody is being let go, and the assumption behind
+    // the click is that it cuts them off from the people they were seeing. A practice has no
+    // standing over a patient's relationship and no route here reaches one, so the sentence is the
+    // whole of what this console can offer — and it has to be at the click rather than in a doc.
+    expect(REMOVAL_DOES_NOT_END_A_RELATIONSHIP).toContain('ends their standing in this practice')
+    expect(REMOVAL_DOES_NOT_END_A_RELATIONSHIP).toContain('Only the patient can do that')
+    expect(REMOVAL_DOES_NOT_END_A_RELATIONSHIP).toContain('leaving the relationship')
+    const roster = codeOf('RosterPanel.svelte')
+    expect(roster).toContain('{REMOVAL_DOES_NOT_END_A_RELATIONSHIP}')
+    // It sits in the removal confirm, beside the sentence it extends — not somewhere else on the
+    // screen where a reader would meet it after deciding.
+    const confirmAt = roster.indexOf('{REMOVAL_ENDS_A_MEMBERSHIP}')
+    const firedAt = roster.indexOf('{REMOVAL_DOES_NOT_END_A_RELATIONSHIP}')
+    expect(firedAt).toBeGreaterThan(confirmAt)
+    expect(firedAt - confirmAt).toBeLessThan(600)
+    // And it does NOT offer the practice a control it must never have. Control first.
+    const OVERREACH = /end (their|the) relationship|remove (their|the) access|cut (them|their access) off/i
+    expect(OVERREACH.test('This will end their relationship with each patient.')).toBe(true)
+    expect(OVERREACH.test(REMOVAL_DOES_NOT_END_A_RELATIONSHIP)).toBe(false)
   })
 
   it('qualifies the session count where the number appears and nowhere else', () => {
