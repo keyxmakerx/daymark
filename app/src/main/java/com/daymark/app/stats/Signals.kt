@@ -29,8 +29,15 @@ object Signals {
     /** Where a signal is allowed to appear. */
     enum class Surface { Feed, Insights, Support }
 
-    /** The tone/intent of a card, used by the UI to style it (and to keep the feed calm). */
-    enum class Category { Support, Celebration, Insight, Nudge, Prompt }
+    /**
+     * The tone/intent of a card, used by the UI to style it (and to keep the feed calm).
+     *
+     * There used to be a fifth, `Celebration`, and it is gone rather than emptied. A category is a
+     * standing invitation to write the next card in it: leaving the name in place with no rules
+     * behind it would have made congratulating someone the obvious thing to do with the next idea
+     * that half-fitted. Nothing this product says to a person is a reward for having used it.
+     */
+    enum class Category { Support, Insight, Nudge, Prompt }
 
     /**
      * A suggested next step a card can offer. The UI maps these to navigation; the copy itself
@@ -89,16 +96,12 @@ object Signals {
         /** Today's mood level 1..5 if the person logged today, else null. */
         val moodTodayLevel: Int?,
         val loggedToday: Boolean,
-        val currentStreak: Int,
-        val longestStreak: Int,
         /** Strongest positive association past the sample gate, or null. */
         val topLift: FactorLift?,
         /** Strongest negative association past the sample gate, or null. */
         val topDrag: FactorLift?,
         /** This period's average mood vs the previous period, as a percent change, or null. */
         val monthDeltaPct: Double?,
-        /** Title of an achievement unlocked just now, or null. */
-        val newlyUnlockedAchievement: String?,
         /** Name of a self-check that's due (e.g. "WHO-5"), or null. */
         val dueCheckin: String?,
         /** A note written about this date a year ago, or null. */
@@ -109,9 +112,8 @@ object Signals {
     // appear when there's enough data to mean something.
     private const val LOW_MOOD_MAX = 2          // <= this today => offer support
     private const val LIFT_MIN_DELTA = 0.4      // min mood-delta for a factor to be worth surfacing
-    private const val MONTH_UP_PCT = 8.0        // >= this => "steadier month" celebration
+    private const val MONTH_UP_PCT = 8.0        // >= this => "a steadier stretch", an observation
     private const val MONTH_DOWN_PCT = -15.0    // <= this => gentle, Insights-only heads-up
-    private val STREAK_MILESTONES = setOf(3, 7, 14, 30, 50, 100, 200, 365)
 
     /**
      * Builds every eligible signal from [inputs], sorted by [Signal.score] descending (ties broken
@@ -155,40 +157,13 @@ object Signals {
             )
         }
 
-        // 3. Just unlocked an achievement -> a small celebration.
-        inputs.newlyUnlockedAchievement?.let { title ->
-            out.add(
-                Signal(
-                    kind = "achievement_unlocked",
-                    category = Category.Celebration,
-                    score = 72.0,
-                    title = "New milestone: $title",
-                    body = "A small marker for showing up. Nicely done.",
-                    action = null,
-                    dismissible = true,
-                    surfaces = setOf(Surface.Feed, Surface.Insights),
-                ),
-            )
-        }
-
-        // 4. Streak milestone (a named milestone, or matching your all-time best) -> celebration.
-        val streak = inputs.currentStreak
-        val milestone = streak in STREAK_MILESTONES || (streak >= 3 && streak == inputs.longestStreak)
-        if (milestone) {
-            out.add(
-                Signal(
-                    kind = "streak_milestone",
-                    category = Category.Celebration,
-                    score = 65.0,
-                    title = "$streak-day check-in streak",
-                    body = "Showing up is the whole thing. Keep it gentle.",
-                    action = null,
-                    dismissible = true,
-                    surfaces = setOf(Surface.Feed, Surface.Insights),
-                ),
-            )
-        }
-
+        // Rules 3 and 4 were `achievement_unlocked` (score 72) and `streak_milestone` (score 65).
+        // Both are deleted rather than reworded or moved to another category. The milestone rule
+        // could only fire while a run was unbroken, which makes it a breakable state however
+        // gently it is phrased, and the achievement rule fired on a catalogue that no longer
+        // exists. The numbering below is left as it was so that anyone reading this against the
+        // old file can see which two rules went.
+        //
         // 5. A self-check is due -> a quiet nudge (not a demand).
         inputs.dueCheckin?.let { name ->
             out.add(
@@ -240,14 +215,17 @@ object Signals {
             )
         }
 
-        // 8. Month-over-month movement. Up = a quiet celebration (both surfaces); a notable dip is
-        //    surfaced only on Insights and worded gently — never pushed at you on the feed.
+        // 8. Month-over-month movement. Up and down are the same kind of statement about the same
+        //    number, so they now carry the same category: the up card was the last Celebration in
+        //    the file, and calling a mood average going up an achievement would have made the
+        //    mirror card a report of failure. A notable dip is still surfaced only on Insights and
+        //    worded gently — never pushed at you on the feed.
         inputs.monthDeltaPct?.let { pct ->
             if (pct >= MONTH_UP_PCT) {
                 out.add(
                     Signal(
                         kind = "month_up",
-                        category = Category.Celebration,
+                        category = Category.Insight,
                         score = 58.0,
                         title = "A steadier stretch",
                         body = "Your average mood is up ${pct.roundToInt()}% from the period before.",

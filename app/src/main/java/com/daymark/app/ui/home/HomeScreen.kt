@@ -133,7 +133,6 @@ fun HomeScreen(
 
         item(key = "glance") {
             GlanceRow(
-                currentStreak = state.currentStreak,
                 totalEntries = state.totalEntries,
                 week = state.week,
                 daysLogged = state.daysLoggedThisWeek,
@@ -223,10 +222,15 @@ private fun CheckInCard(
 /**
  * The glance: one number worth knowing, and the shape of the last week. Both are plain counts of
  * the person's own entries — nothing inferred, nothing interpreted.
+ *
+ * The pill used to prefer a streak over the entry total whenever a run was alive, and nothing took
+ * its place when the streak came out. Home is the screen a person lands on after four days away,
+ * and a continuity figure *here* is a grade by placement whatever its wording — the same number is
+ * a fact on Stats, where you went looking for it, and a verdict on the first thing you see. The
+ * entry total that remains is a lifetime count with nothing to break.
  */
 @Composable
 private fun GlanceRow(
-    currentStreak: Int,
     totalEntries: Int,
     week: List<Double?>,
     daysLogged: Int,
@@ -238,12 +242,7 @@ private fun GlanceRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         GlancePill(
-            text = when {
-                currentStreak > 1 -> "$currentStreak-day streak"
-                currentStreak == 1 -> "1-day streak"
-                totalEntries == 1 -> "1 entry"
-                else -> "$totalEntries entries"
-            },
+            text = if (totalEntries == 1) "1 entry" else "$totalEntries entries",
             modifier = Modifier.weight(1f),
         )
         WeekGlance(week = week, daysLogged = daysLogged, modifier = Modifier.weight(1f))

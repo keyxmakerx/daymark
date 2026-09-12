@@ -20,7 +20,6 @@ import javax.inject.Inject
  */
 data class HomeUiState(
     val today: List<EntryWithActivities> = emptyList(),
-    val currentStreak: Int = 0,
     val totalEntries: Int = 0,
     /** Mean mood for each of the last [WEEK_DAYS] days, oldest first; null on unlogged days. */
     val week: List<Double?> = emptyList(),
@@ -48,7 +47,6 @@ class HomeViewModel @Inject constructor(
             val byDay = all.groupBy { DateUtils.toLocalDate(it.entry.dateTime) }
             HomeUiState(
                 today = byDay[today].orEmpty(),
-                currentStreak = MoodStats.currentStreak(byDay.keys, today),
                 totalEntries = all.size,
                 week = (WEEK_DAYS - 1 downTo 0).map { back ->
                     val levels = byDay[today.minusDays(back.toLong())]?.map { it.entry.moodLevel }

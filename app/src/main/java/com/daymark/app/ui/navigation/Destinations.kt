@@ -57,7 +57,6 @@ object Routes {
     fun screener(key: String) = "$SCREENER/$key"
     const val SCREENER_PATTERN = "$SCREENER/{screenerKey}"
     const val ASSESSMENTS = "assessments"
-    const val ACHIEVEMENTS = "achievements"
     const val ACTIVATION = "behavioral_activation"
     const val THOUGHT_RECORDS = "thought_records"
     const val THOUGHT_RECORD = "thought_record"

@@ -20,36 +20,29 @@ object MoodStats {
     }
 
     /**
-     * Number of consecutive days ending at [today] (or yesterday) that have at least
-     * one entry. A gap before today still counts the run that ends yesterday as broken.
+     * The length of the one continuity window this product has. Thirty days, everywhere — on Home,
+     * on Stats, in the period summary, and in the companion web console, so the phone and the
+     * browser never disagree about a number the person reads in both places.
      */
-    fun currentStreak(days: Set<LocalDate>, today: LocalDate): Int {
-        if (days.isEmpty()) return 0
-        // Allow the streak to "still be alive" if logged today or yesterday.
-        var cursor = when {
-            days.contains(today) -> today
-            days.contains(today.minusDays(1)) -> today.minusDays(1)
-            else -> return 0
-        }
-        var count = 0
-        while (days.contains(cursor)) {
-            count++
-            cursor = cursor.minusDays(1)
-        }
-        return count
-    }
+    const val WINDOW_DAYS = 30
 
-    /** Longest run of consecutive logged days anywhere in the history. */
-    fun longestStreak(days: Set<LocalDate>): Int {
-        if (days.isEmpty()) return 0
-        val sorted = days.sorted()
-        var best = 1
-        var run = 1
-        for (i in 1 until sorted.size) {
-            run = if (sorted[i - 1].plusDays(1) == sorted[i]) run + 1 else 1
-            if (run > best) best = run
-        }
-        return best
+    /**
+     * How many calendar days in the [WINDOW_DAYS]-day window ending on [today] have at least one
+     * entry. Replaces the two streak counts this object used to expose, and the difference is the
+     * entire point.
+     *
+     * A streak is a *breakable state*: the number on screen is also a verdict on the day the run
+     * ended, and the person most likely to be reading it is the one who just came back after a bad
+     * week. This count has no run to break. Four days away costs four days out of thirty and
+     * nothing else, and it can only be recovered by logging — never lost a second time.
+     *
+     * The window is a fixed thirty days ending today, not a calendar month. A month resets on the
+     * 1st, which reintroduces exactly the breakable state the change was made to remove, and not
+     * ninety days, whose larger denominator makes a short return look smaller than it is.
+     */
+    fun daysWithEntryInLast30(days: Set<LocalDate>, today: LocalDate): Int {
+        val from = today.minusDays((WINDOW_DAYS - 1).toLong())
+        return days.count { !it.isBefore(from) && !it.isAfter(today) }
     }
 
     /**

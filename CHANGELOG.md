@@ -6,6 +6,36 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Removed
+- **"Review my year" ends on two plain facts, and no longer offers to save a picture of your
+  year.** The last page used to show three numbers: your average mood, your brightest month, and
+  your longest streak. Each was a way of marking a year of your life out of something — an average
+  of a mood scale is a grade, and naming your brightest month tells anyone reading it that one of
+  the others was your darkest. They are replaced by two things that rank nothing: **Most often**,
+  the mood you chose on more days than any other, in your own word for it, and **First entry**, the
+  day you started. The heading is now just the year. The same two claims appeared as a small note
+  on the quarter pages, and that note has gone with them.
+  **"Save keepsake" is removed.** It wrote your year — every mood, and the timing of everything you
+  logged — into a single image in your gallery, which is the folder most likely to be quietly
+  backed up somewhere by software you have forgotten about; and it made the unlogged stretches
+  permanent. In its place the last page says: *This stays on your phone. You can come back to it
+  any time.* Nothing you have already saved is affected.
+- **Streaks are gone, and the Achievements screen with them.** A streak is a number you can lose:
+  miss one day and it goes back to nothing, which means it is at its lowest exactly when someone
+  has been away and has just come back. Every continuity number in Daymark is now the same one —
+  **days with an entry, "12 of the last 30"** — counted without needing the days to be in a row, so
+  a missed day costs one day and nothing else. It reads the same on your phone and in the companion
+  web console. On **Stats** it is a single card labelled *Days with an entry*; on **Home** there is
+  now nothing of the sort at all, because Home is the screen you land on after time away and a
+  count there is a mark on you however gently it is phrased. If there are no entries in the last
+  thirty days the card is simply not drawn — an empty stretch is not a nought to be shown.
+  The **Achievements** screen is deleted: the screen, the nine badges, the badge art, the stored
+  record of what you had earned, and the "Streaks and milestones" switch in Settings that used to
+  turn the notices off. The app says nothing about this to anyone who had earned badges — the only
+  sentence available would be one asking you to feel something about a thing we decided was bad for
+  you, which is the same move again. Nothing else in your data is touched, and an older backup that
+  still contains unlock times restores normally; the badges in it are just not brought back.
+
 ### Added
 - **Companion — your identity is now yours, instead of a new one every visit.** The owner console
   used to make a fresh pair of keys each time you opened it, which meant a clinician who carefully

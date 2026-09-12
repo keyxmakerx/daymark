@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { BackupData } from '../backup'
-  import { summarize, dailyMood, formatDate } from '../stats'
+  import { summarize, dailyMood, formatDate, WINDOW_DAYS } from '../stats'
   import { MOODS } from '../mood'
   import Sparkline from '../charts/Sparkline.svelte'
 
@@ -36,10 +36,18 @@
     <span class="num">{s.averageMood ? s.averageMood.toFixed(2) : '—'}</span>
     <span class="muted">average mood (1–5)</span>
   </div>
-  <div class="card stat">
-    <span class="num">{s.currentStreakDays}</span>
-    <span class="muted">day streak</span>
-  </div>
+  <!--
+    Was "{n} day streak". The caption now carries the denominator, so the number cannot be read as
+    a run that is currently alive, and at zero the card is not rendered at all: "0 of the last 30
+    days" would draw an absence as a figure on the landing screen, which is the one place a person
+    returning after a bad stretch is guaranteed to look.
+  -->
+  {#if s.daysWithEntryLast30 > 0}
+    <div class="card stat">
+      <span class="num">{s.daysWithEntryLast30}</span>
+      <span class="muted">of the last {WINDOW_DAYS} days</span>
+    </div>
+  {/if}
   <div class="card stat">
     <span class="num">{s.journalCount}</span>
     <span class="muted">journal entries</span>
