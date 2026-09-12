@@ -116,55 +116,52 @@ fun SettingsScreen(
         Divider()
         SectionHeader("Privacy")
         /*
-         * WHY THIS ROW SAYS MORE THAN "On".
+         * WHY THIS ROW SAYS THAT THE PIN DOES NOT REACH THE FILE.
          *
-         * The lock is real, and the one word underneath it was never false. A PIN set here is
-         * verified against a PBKDF2-SHA256 hash with a per-PIN random salt, held in an AES-256
-         * EncryptedSharedPreferences store and compared in constant time (PinManager). What it is
-         * not is a key. PinManager VERIFIES a PIN; it does not DERIVE anything from one. The Room
-         * database holding the journal, the assessments, the safety plan and the thought records
-         * is opened in AppModule with no openHelperFactory and no SQLCipher behind it, so those
-         * entries sit in a plaintext SQLite file in app-private storage. The lock is a door in
-         * front of the UI, not a lock on the data.
+         * The lock is real. A PIN set here is verified against a PBKDF2-SHA256 hash with a per-PIN
+         * random salt, held in an AES-256 EncryptedSharedPreferences store and compared in constant
+         * time (PinManager). What it is not is a key. PinManager VERIFIES a PIN; it does not DERIVE
+         * anything from one. The Room database holding the journal, the assessments, the safety
+         * plan and the thought records is opened in AppModule with no openHelperFactory and no
+         * SQLCipher behind it, so those entries sit in a plaintext SQLite file in app-private
+         * storage. The lock is a door in front of the UI, not a lock on the data.
          *
-         * "App lock (PIN)" over "On" states that accurately and still misleads, because a person
+         * "App lock (PIN)" over "On" stated that accurately and still misled, because a person
          * reading the words "app lock" on a mental-health journal infers a stronger claim than the
-         * one being made. Nobody decided to hide the difference — it was simply never written
-         * down anywhere a user would look, which is how the gap between the inference and the
-         * truth became this app's largest undisclosed weakness. So it is said here, at the moment
-         * the setting is switched on and the inference is being formed, rather than in a document
+         * one being made. Nobody decided to hide the difference — it was simply never written down
+         * anywhere a user would look, which is how the gap between the inference and the truth
+         * became this app's largest undisclosed weakness. So it is said here, at the moment the
+         * setting is switched on and the inference is being formed, rather than in a document
          * nobody opens.
          *
-         * WHY THE SECOND SENTENCE MATTERS AS MUCH AS THE FIRST. Disclosure that names only the
-         * hole is its own kind of dishonesty: it invites someone to conclude their journal is
-         * lying around in the open, and it is not. The manifest sets android:allowBackup="false",
-         * which closes the ADB and cloud-backup route off the device, and Android's file-based
-         * encryption plus app sandboxing protect app-private storage on a healthy device with a
-         * locked bootloader. Root, an unlocked bootloader, a forensic extraction or a privileged
-         * malicious app defeat all of it, and against those the app lock is decorative. Both
-         * halves therefore have to be present, and in the register the rest of this app uses:
-         * flat, factual, no warning banner and no alarm. Someone reading their own settings late
-         * at night should come away better informed and no more frightened than when they
-         * started.
+         * WHY THE SENTENCE IS THE ONE IT IS. Two clauses, no hedging and no reassurance. The first
+         * names what the PIN does do; the second names, in the concrete terms of an act somebody
+         * could perform, what it does not. It says "copy this phone's storage" rather than "an
+         * attacker with sufficient privileges" because the second is a sentence about threat
+         * models and the first is a sentence about a thing that happens to people.
          *
-         * This is the disclosure, not the fix. The fix is keying the database from the PIN or the
-         * sync passphrase, and it carries a real product decision inside it — a forgotten PIN
-         * would become lost data — so it wants its own design pass rather than being wedged in
-         * behind a settings toggle. Until that lands, this sentence is what stands between a
-         * reasonable inference and the truth, so do not quietly shorten it back to "On".
+         * WHAT IS DELIBERATELY NOT SAID HERE. No "but Android encrypts storage anyway", no "your
+         * data is still safe on a healthy device". Both are true (android:allowBackup="false"
+         * closes the ADB and cloud-backup route, and file-based encryption plus the app sandbox
+         * hold on a locked, unrooted device) and both, placed under a sentence that has just
+         * admitted a real gap, read as the gap being talked down. The register the rest of this
+         * app uses is flat and factual: state the limit once, do not then argue with it.
+         * docs/PRIVACY.md carries the longer version for anyone who wants it.
+         *
+         * THIS IS THE DISCLOSURE, NOT THE FIX. The fix is a random data key encrypting the
+         * database from first run, wrapped by the Android Keystore, by a PIN-derived key once a
+         * PIN is set, and by a written-down recovery code so that a forgotten PIN is not lost
+         * data. When that lands, this sentence becomes FALSE and must be REWRITTEN — to the copy
+         * in issue #109 under A, including the part about what a longer PIN buys — rather than
+         * deleted. A row that has stopped explaining itself is how this app got here the first
+         * time. Until then, do not quietly shorten it back to "On".
          */
         ListItem(
             headlineContent = { Text("App lock (PIN)") },
             supportingContent = {
                 Text(
-                    if (state.lockEnabled) {
-                        "On. Keeps someone who picks up your unlocked phone out of the app. " +
-                            "It does not encrypt your entries on this device, so it is not " +
-                            "protection against someone with full access to the phone itself; " +
-                            "Android's own storage encryption still applies."
-                    } else {
-                        "Off"
-                    },
+                    "The PIN guards the screen, not the file. Anyone who can copy this phone's " +
+                        "storage can read your entries without it.",
                 )
             },
             trailingContent = {

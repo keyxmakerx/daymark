@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **The app-lock setting now says what the PIN actually guards.** Underneath the switch it reads:
+  "The PIN guards the screen, not the file. Anyone who can copy this phone's storage can read your
+  entries without it." That has always been true — the PIN is checked and thrown away, and the
+  journal itself sits in an ordinary database file — but the words "app lock" invite a stronger
+  conclusion than the lock was ever making, and the difference had never been written anywhere you
+  would look. Nothing about how the lock works has changed; what changed is that you are told. The
+  encryption that makes the sentence untrue is the next thing being built, and when it lands this
+  line gets rewritten rather than removed.
 - **Companion — your identity is now yours, instead of a new one every visit.** The owner console
   used to make a fresh pair of keys each time you opened it, which meant a clinician who carefully
   wrote down your fingerprint could not verify anything you sent them afterwards. It looked like

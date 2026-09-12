@@ -35,6 +35,11 @@ scores, thought records, or movement logs — is ever sent anywhere by that buil
   key) is on the roadmap.
 - Your **PIN** (if you set one) is the exception: it is stored only as a PBKDF2 hash with a random
   salt inside an **AES-256 `EncryptedSharedPreferences`** store — never in plaintext.
+- **What the PIN does and does not do, said plainly.** The PIN guards the screen, not the file.
+  It is checked against that hash and then thrown away; nothing is unlocked by it and no key is
+  made from it. Anyone who can copy this phone's storage can read your entries without it. The
+  app-lock setting now says this underneath the switch, rather than leaving you to infer it from
+  the words "app lock".
 - **Photos** you attach to mood entries are copied (downscaled) into the same app-private storage
   and never leave your device. Daymark uses the **Android Photo Picker**, which lets you pick a
   single image **without granting any storage or media permission** — so adding photos requires no
