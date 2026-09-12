@@ -460,6 +460,74 @@ export function groupForReading(value: string, size = 4): string[] {
  * is not a check that fails safe; it is a check people route around. Both values are read aloud
  * here because both are pinned there.
  */
+/**
+ * What a clinician is told when the owner key the server publishes is not the one they entered.
+ *
+ * The old sign-in took the server's copy and OVERWROTE whatever the clinician had typed, silently
+ * and without comparing (issue #122). That was inert only because nothing had ever published an
+ * owner key; the moment the owner console gained a publish button it became live, and a server
+ * handing back a key it controls would have replaced the one the clinician verified by hand.
+ *
+ * It names no cause, because there are three and this console can tell them apart in none: a
+ * mistyped key, an owner who re-keyed, or a server substituting its own. It says what differs and
+ * that nothing happened. Choosing one of those for the reader would be the console asserting
+ * something it cannot know, on the one screen where being wrong is expensive.
+ */
+export const OWNER_KEY_MISMATCH =
+  'The owner key this server published is not the one you entered. That could be a mistyped key, a ' +
+  'key that has changed, or a server handing you a different one — this console cannot tell which, ' +
+  'and will not choose for you. Nothing has been signed in. Check the fingerprint with the person ' +
+  'who invited you, on a channel that is not this server.'
+
+/** A public key pair as it travels between the two sides: base64url strings, never bytes. */
+export interface OwnerPublicKeysB64 {
+  signPubB64: string
+  boxPubB64: string
+}
+
+export type OwnerKeyChoice =
+  | { ok: true; keys: OwnerPublicKeysB64; source: 'typed' | 'published' }
+  | { ok: false; reason: 'mismatch' | 'none' }
+
+/**
+ * Which owner keys a signing-in clinician should pin: the ones they typed, the ones the server
+ * published, or neither.
+ *
+ * A function rather than a branch inside LoginGate because the property worth proving is a
+ * precedence rule and a refusal, and neither can be asserted over markup in a node suite.
+ *
+ * THE RULE. Typed keys win whenever both halves are present, because those are the ones a human
+ * checked out of band; the server's copy is then only a cross-check, and a disagreement refuses the
+ * sign-in rather than picking a winner. The published copy is used only when nothing was typed —
+ * the honestly-weaker path, trust on first use with nothing to compare against — and when there is
+ * neither, that is a real state to explain rather than an error.
+ *
+ * WHAT IT REPLACES. LoginGate assigned the published keys over whatever had been typed, with no
+ * comparison and no notice (issue #122). That was inert only because nothing in the product had
+ * ever published an owner key; the moment the owner console gained a publish button, a server
+ * handing back a key it controlled would have silently replaced the one the clinician verified,
+ * and every forged share would then have verified against it.
+ *
+ * Both halves are compared. A record matching the signing key but not the encryption key is not a
+ * near-miss: it is a record this clinician did not verify.
+ */
+export function chooseOwnerKeys(
+  typed: { signPubB64: string; boxPubB64: string },
+  published: OwnerPublicKeysB64 | null,
+): OwnerKeyChoice {
+  const signPubB64 = typed.signPubB64.trim()
+  const boxPubB64 = typed.boxPubB64.trim()
+
+  if (signPubB64 && boxPubB64) {
+    if (published && (published.signPubB64 !== signPubB64 || published.boxPubB64 !== boxPubB64)) {
+      return { ok: false, reason: 'mismatch' }
+    }
+    return { ok: true, keys: { signPubB64, boxPubB64 }, source: 'typed' }
+  }
+  if (published) return { ok: true, keys: published, source: 'published' }
+  return { ok: false, reason: 'none' }
+}
+
 export const KEY_CHECK_COPY = {
   title: 'Your key fingerprints',
   lede:

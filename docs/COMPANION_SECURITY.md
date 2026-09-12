@@ -255,10 +255,12 @@ Each adversary lists **can**, **cannot (when defenses honored)**, and **defenses
 
 ```
 OWNER
-  passphrase ──Argon2id(salt)──▶ master ──crypto_kdf──┬─▶ SYNC_KEY  ──XChaCha20-Poly1305──▶ snapshot blobs
-                                                       ├─▶ manifest signing key (Ed25519 seed)
+  passphrase ──Argon2id(salt)──▶ master ──crypto_kdf──┬─▶ id 1  SYNC_KEY  ──XChaCha20-Poly1305──▶ snapshot blobs
+                                                       ├─▶ id 2  manifest signing key (Ed25519 seed)
+                                                       ├─▶ id 3  owner_x25519 seed   ┐  the pairing identity
+                                                       ├─▶ id 4  owner_ed25519 seed  ┘  (owner/identity.ts)
                                                        └─▶ device-label key
-  owner_x25519_priv / owner_ed25519_priv (on-phone, wrapped at rest)        [NEVER uploaded]
+  owner_x25519_priv / owner_ed25519_priv  DERIVED, never generated, never stored [NEVER uploaded]
       └─ owner_*_pub  ─────────────────────────────────────────▶ published (therapist pins via OOB SAS)
 
 THERAPIST
@@ -278,6 +280,33 @@ GAME PLAN  (therapist → owner)         [lands in NEW game_plans table, DB v13 
 SERVER holds: ciphertext blobs, wrapped CEKs, PUBLIC keys, hashed tokens, MINIMIZED routing
 metadata. NOTHING that decrypts, authenticates a party, or authors content.
 ```
+
+**The owner's pairing identity is derived from the master, not generated (issue #121).** It was
+generated per browser session until 2026-09-12, so a clinician who pinned the owner's fingerprint
+correctly could verify nothing the owner signed in any later session — and from their side a
+rotated owner key and a hostile server substituting one are indistinguishable. Deriving it makes
+the identity exist if and only if the journal is readable, so every way back into the data
+(passphrase slot, recovery-code slot, and the WebAuthn-PRF slot the blob format anticipates)
+covers the identity too, and neither a passphrase change nor a recovery-code rotation disturbs it.
+The consequence, accepted deliberately: **whoever holds the master can now sign as the owner, not
+only read.** The recovery code on paper is no longer read-only. Subkey ids 3 and 4 under context
+`dmsync01` are reserved for this on both platforms, and a pinned vector in the tests is the
+cross-platform contract for the phone side.
+
+**`owner_keys` is insert-only, and the owner can read it back.** The first key published for a
+relationship is that relationship's key permanently — no update path, no delete — because a table
+that could be updated would make a server swapping the owner's key indistinguishable from the
+owner rotating it. A second publish answers 409, which alone cannot say whether the frozen key is
+the owner's own (a harmless repeat) or one they can no longer produce; so the owner may GET the
+route with their bearer token and compare. Their own read is not audited: the audit log is what
+the owner reads to see what the *clinician* did.
+
+**The clinician compares the published key; it never overwrites what they pinned (issue #122).**
+A sign-in that supplies both owner public keys by hand uses those, and treats the server's copy as
+a cross-check only — a disagreement on either half refuses the sign-in rather than picking a
+winner, and names no cause, because a mistyped key, a re-key and a substituting server are
+indistinguishable from there. The published copy is used only when nothing was typed, which is the
+honestly-weaker trust-on-first-use path.
 
 **No escrow, anywhere (O6).** Lose the passphrase → snapshots unrecoverable
 (phone-local copy is the fallback). Lose the therapist key → owner re-invitation +

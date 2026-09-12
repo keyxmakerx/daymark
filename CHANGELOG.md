@@ -7,6 +7,38 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Companion — your identity is now yours, instead of a new one every visit.** The owner console
+  used to make a fresh pair of keys each time you opened it, which meant a clinician who carefully
+  wrote down your fingerprint could not verify anything you sent them afterwards. It looked like
+  nothing was wrong: a new key does everything a key should do, and it fails only against somebody
+  who checked. Your identity is now worked out from the key that opens your own data, so it is the
+  same identity every time, on every device. Opening the console is now an unlock rather than a
+  button: your key file and either your passphrase or your recovery code. Nothing is kept between
+  visits, and the screen says so rather than letting you find out by being asked again. The cost,
+  written down because it is real: whoever holds your recovery code can now send things to your
+  clinician as you, not only read your journal.
+- **Companion — sending your key to a clinician, and the sentence that says it is permanent.** The
+  server has always had a place for your public key and nothing ever put one there. Now the console
+  does, and it tells you first: once a key is sent it cannot be replaced, so if you lose both your
+  passphrase and your recovery code that connection ends and you would have to invite them again.
+  If a different key is already on file the console says so plainly instead of showing an error
+  code, because that means this clinician can no longer verify you and no button can fix it.
+
+### Fixed
+- **Companion — a clinician's hand-checked copy of your key is no longer silently replaced by the
+  server's.** Signing in used to take whatever the server said your keys were and write it over the
+  one the clinician had verified with you, without comparing them or mentioning it. It had never
+  done any harm only because nothing had ever published a key. Now the one they checked is the one
+  they keep, the server's copy is only a cross-check, and a disagreement stops the sign-in and says
+  so — naming no cause, because a typo, a changed key and a server handing over a different one
+  cannot be told apart from there.
+- **A recovery-code test that failed about one run in thirty-one, against code that was correct.**
+  It checked that a tampered code is refused, and tampered with it by replacing a whole group of
+  five characters. A check character is an error detector, not a signature: it catches every
+  single-character mistake and every swap, and a five-character change slips past it once in
+  thirty-one — measured at 97 in 3000. The test now changes one character, which is the error the
+  scheme actually guarantees to catch. Nothing was skipped, loosened or retried.
+
 - **Companion — the pairing key now carries something: the therapist's offer, and the owner's
   approval of it.** When a therapist answers a pairing code, their reply now travels with their
   public keys, a name, and an enrolment ticket they chose, sealed under the key that only the

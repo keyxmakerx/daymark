@@ -13,6 +13,7 @@
   import { withGrant, type OwnerSession } from './session'
   import type { PinnedTherapist } from './session'
   import PairingPanel from './PairingPanel.svelte'
+  import OwnerKeyPublish from './OwnerKeyPublish.svelte'
   import { emptyGrant } from '../../assignments/grant'
   import { fingerprint } from '../../assignments/crypto'
   import { sasWords } from '../../share/pairing'
@@ -190,6 +191,14 @@
       {:else if sub === 'published-keys'}
         <TherapistKeyIntake therapist={selected} {endpoint} onkeys={keysArrived} />
       {:else if sub === 'share'}
+        <!-- Above both, because the clinician can verify nothing until this key is with the server,
+             and that is as true for an established connection as for one being set up. -->
+        <OwnerKeyPublish
+          therapist={selected}
+          {client}
+          signPub={session.ownerSign.publicKey}
+          boxPub={session.ownerBox.publicKey}
+        />
         {#if selected.keysPending || pairingOpen}
           <!-- The invitation is mintable the moment a relationship has a token; sealing is not.
                ShareBuilder would offer both, so a pending clinician gets the half that exists. -->
