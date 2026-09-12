@@ -17,7 +17,13 @@ object PeriodReview {
         val bestDay: DayOfWeek?,
         val worstDay: DayOfWeek?,
         val topFactorUp: String?,
-        val currentStreak: Int,
+        /**
+         * Calendar days in the last [MoodStats.WINDOW_DAYS] with at least one entry, from
+         * [MoodStats.daysWithEntryInLast30]. Zero omits the sentence entirely — a summary that
+         * reported "0 of the last 30 days" would be drawing someone's absence as a figure, which
+         * is the failure the whole change exists to remove.
+         */
+        val daysWithEntryLast30: Int,
     )
 
     fun build(inputs: Inputs, locale: Locale = Locale.getDefault()): String {
@@ -36,8 +42,15 @@ object PeriodReview {
         inputs.topFactorUp?.let {
             parts.add("\"$it\" often showed up alongside your better days (association, not cause).")
         }
-        if (inputs.currentStreak >= 2) {
-            parts.add("You're on a ${inputs.currentStreak}-day logging streak — nice.")
+        // Was "You're on a 5-day logging streak — nice." Two things were wrong with that sentence
+        // and only one of them was the streak: "nice" is a congratulation on an act of
+        // self-monitoring, and the number was a run that the next missed day would take away. What
+        // replaces it states a count against a fixed window and stops there.
+        if (inputs.daysWithEntryLast30 > 0) {
+            parts.add(
+                "You have an entry on ${inputs.daysWithEntryLast30} of the last " +
+                    "${MoodStats.WINDOW_DAYS} days.",
+            )
         }
         return parts.joinToString(" ")
     }

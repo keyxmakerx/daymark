@@ -58,10 +58,18 @@ fun StatsScreen(
                 )
             }
         }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard("Current streak", "${state.currentStreak}d", Modifier.weight(1f))
-                StatCard("Longest streak", "${state.longestStreak}d", Modifier.weight(1f))
+        // One card where there were two streaks, and none at all at zero. The label says what is
+        // being counted and the value carries its own denominator, so the number cannot be read as
+        // a run that is currently alive. At zero there is nothing honest to draw: "0 of the last
+        // 30" is a gap rendered as a nought, which is the one thing this product does not do to a
+        // person who has been away.
+        if (state.daysWithEntryLast30 > 0) {
+            item {
+                StatCard(
+                    "Days with an entry",
+                    "${state.daysWithEntryLast30} of the last ${com.daymark.app.stats.MoodStats.WINDOW_DAYS}",
+                    Modifier.fillMaxWidth(),
+                )
             }
         }
         item { SectionCard("Mood over last 30 days") { TrendChart(state.trend) } }

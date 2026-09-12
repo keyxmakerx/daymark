@@ -209,8 +209,10 @@ data class BackupData(
     val moodColors: Map<Int, Int> = emptyMap(),
     // Added in v9.
     val assessments: List<BackupAssessment> = emptyList(),
-    // Added in v10: achievement unlock times (id -> epoch millis), kept in prefs.
-    val achievements: Map<String, Long> = emptyMap(),
+    // Added in v10, removed with the achievements themselves: this held the unlock times (id ->
+    // epoch millis). An older file still carrying an `achievements` object reads without error,
+    // because the reader is configured with `ignoreUnknownKeys` — the badges are not restored,
+    // which is the intent, and nothing about the restore fails or says so.
     // Added in v12.
     val thoughtRecords: List<BackupThoughtRecord> = emptyList(),
     // Added in v13: the safety plan. Local-only like the rest — this is the backup, not a share.
@@ -297,7 +299,6 @@ class BackupManager @Inject constructor(
     private val photoStore: com.daymark.app.data.PhotoStore,
     private val moodCustomization: com.daymark.app.data.MoodCustomizationStore,
     private val assessmentDao: com.daymark.app.data.dao.AssessmentDao,
-    private val achievementsStore: com.daymark.app.data.AchievementsStore,
     private val thoughtRecordDao: com.daymark.app.data.dao.ThoughtRecordDao,
     private val safetyPlanDao: com.daymark.app.data.dao.SafetyPlanDao,
     private val lifeEventDao: com.daymark.app.data.dao.LifeEventDao,
@@ -355,7 +356,6 @@ class BackupManager @Inject constructor(
             moodLabels = moodCustomization.labels(),
             moodColors = moodCustomization.colors(),
             assessments = assessmentDao.getAll().map { BackupAssessment(it.id, it.key, it.dateTime, it.score, it.bandLabel) },
-            achievements = achievementsStore.all(),
             thoughtRecords = thoughtRecordDao.getAll().map {
                 BackupThoughtRecord(it.id, it.dateTime, it.situation, it.automaticThought, it.evidenceFor,
                     it.evidenceAgainst, it.balancedThought, it.moodBefore, it.moodAfter, it.distortions)
@@ -418,7 +418,6 @@ class BackupManager @Inject constructor(
         if (mode == ImportMode.REPLACE) moodCustomization.reset()
         data.moodLabels.forEach { (lvl, label) -> moodCustomization.setLabel(lvl, label) }
         data.moodColors.forEach { (lvl, color) -> moodCustomization.setColor(lvl, color) }
-        achievementsStore.restore(data.achievements)
     }
 
     private suspend fun importReplace(data: BackupData) {

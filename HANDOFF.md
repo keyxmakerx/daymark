@@ -76,10 +76,10 @@ app/src/main/java/com/daymark/app/
     entity/        MoodEntry, ActivityEntity, Tracker, TrackerLog, Goal, JournalEntry,
                    AssessmentResult, ThoughtRecord, Reminder, SleepLog, Treatment, cross-refs
     dao/           one DAO per aggregate
-    *Store.kt      SharedPreferences-backed: Settings, MoodCustomization, Achievements, Screening,
+    *Store.kt      SharedPreferences-backed: Settings, MoodCustomization, Screening,
                    Crisis, SleepProfile, Photo
   stats/           PURE JVM domain (unit-tested): MoodStats, MoodCorrelations, MoodPatterns,
-                   PeriodReview, Achievements, GoalProgress, Signals, YearReview
+                   PeriodReview, GoalProgress, Signals, YearReview
   export/          PdfReportGenerator, QrEncoder, ReportData, PdfExportOptions, YearKeepsakeRenderer
   ui/<feature>/    Compose screens + HiltViewModels, grouped by feature (see list below)
   ui/components/    shared Compose: PaperSurface, MoodFaceIcon, YearInPixelsGrid, YearInStarsGrid,
@@ -93,11 +93,11 @@ docs/              DESIGN, ARCHITECTURE, PRIVACY, FEATURES, USER_GUIDE, ROADMAP,
                    SLEEP_FEATURE_PLAN, SUPPORT_FEATURE_PLAN, DOCKER_COMPANION, FAQ, ON_BODY_BREATHING…
 ```
 ui feature dirs: `home, foryou, history, entry, calendar, insights, journal, goals, activities,
-trackers, assessments, cbt, activation, movement, sleep, support, achievements, settings,
+trackers, assessments, cbt, activation, movement, sleep, support, settings,
 onboarding, search, lock, more, icon, theme, components, navigation`.
 
 **Home is the "daily loop", not the archive** (2026-07, per `docs/design/app-01-home-daily-loop`):
-greeting + date → one-tap check-in row → glance (streak + last-7-days bars) → **at most one**
+greeting + date → one-tap check-in row → glance (entry total + last-7-days bars) → **at most one**
 signal card → **today's** entries → two links out. The full day-grouped timeline lives in
 `ui/history/` ("All entries") and the rest of the ranked signals plus the "on this day" memories
 card live in `ui/foryou/` ("For you"). `ui/components/EntryRow.kt` holds the shared rows
@@ -140,7 +140,7 @@ Warm-stationery aesthetic. Tokens (in `ui/theme/`):
   in one transaction). Older backups still import. Also CSV export and a **PDF report**
   (`export/PdfReportGenerator`, platform `PdfDocument`+`Canvas`, selectable text, QR authenticity via
   `QrEncoder`).
-- Prefs stores hold non-Room state (settings, custom moods, achievement unlock times, screening
+- Prefs stores hold non-Room state (settings, custom moods, screening
   results, crisis resources, sleep profile). Photos live app-private via `PhotoStore` (path-traversal
   guarded).
 
@@ -153,13 +153,12 @@ meshes them into one experience **without AI**.
 
 `stats/Signals.kt` (pure, deterministic, **15 unit tests** in `SignalsTest`):
 - `Signals.build(inputs): List<Signal>` ranks candidate cards by fixed-threshold rules. Each
-  `Signal` has: `kind`, `category` (Support/Celebration/Insight/Nudge/Prompt), `score`, `title`,
+  `Signal` has: `kind`, `category` (Support/Insight/Nudge/Prompt), `score`, `title`,
   `body` (fixed templated copy), optional `action` (sealed `Action`), `dismissible`, and a
   `surfaces` set.
 - **Surfaces:** `Feed`, `Insights`, `Support`. `Signals.forSurface(list, surface, limit)` selects.
 - **Rules (thresholds = the rules; tuned conservative):** low-mood support offer (100, Feed),
-  prompt-to-log (85, Feed), achievement-unlocked (72), streak-milestone (65), month-up (58),
-  check-in-due (54), on-this-day (44, Feed), lift-factor→make-a-goal (40+), month-**down** (40,
+  prompt-to-log (85, Feed), month-up (58), check-in-due (54), on-this-day (44, Feed), lift-factor→make-a-goal (40+), month-**down** (40,
   **Insights-only**, gently worded), drag-factor (35+, Insights-only). `supportMenu(topLift)` returns
   the always-available "what might help" options (move/breathe/thought/journal/crisis), with movement
   rising + getting personalized copy when it's a known lift.
@@ -200,12 +199,10 @@ returns, and offers to end the snooze now.
   *recommend* — never flip a toggle.
 - `ui/insights/SignalsViewModel.kt` derives `Signals.Inputs` from repos (reusing `MoodStats`,
   `MoodCorrelations`, `MoodPatterns`). Notes:
-  - It **idempotently writes** newly-earned achievement unlock times (documented in its KDoc) — same
-    sticky write the Achievements screen does.
-  - **Achievement celebration only fires on a *single* fresh unlock** (`newly.size == 1`) so a
-    pre-existing user's first run (which records *many* old badges at once) is never falsely
-    celebrated.
-  - `supportSignals` is a **separate, side-effect-free** flow, always non-empty.
+  - It **writes nothing**. It used to stamp newly-earned achievement unlock times on the way past;
+    the achievements are gone and so is the write, so reading the Insights screen now stores
+    nothing at all.
+  - `supportSignals` is a **separate** flow, always non-empty.
 - `SignalCards` **hoists dismissal state** to the caller (`SignalDismissalSaver`,
   `visibleSignalCount(...)`), so a surface can drop the whole strip cleanly when everything's
   dismissed. Dismissals survive config changes.
@@ -258,7 +255,8 @@ ViewModel derivation) — never a model.**
 - **Evidence-based modules:** PHQ-9 / GAD-7 / WHO-5 check-ins (history + trend; PHQ-9 item-9 → offline
   crisis flow; only scores stored); behavioral activation; implementation-intention (if-then) goals;
   breathing presets; journal templates; CBT thought records.
-- **Gamification:** achievements (original badges), consistency heatmap.
+- **Consistency:** an entries-per-day heatmap, and a non-consecutive "days with an entry" count
+  (`12 of the last 30`). No badges, no streaks, no levels — see §D6.
 - **Move:** gentle yoga/stretch + bodyweight routines with **original Canvas pose figures**, haptic
   timer, per-session logging to a "Movement minutes" tracker.
 - **Sleep:** sleep log (Consensus-Sleep-Diary-style fields), license-clean screeners, sleep profile,

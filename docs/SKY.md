@@ -933,10 +933,16 @@ device.
 3. **The shipped foundation contradicts the plan's invariants in nine places** (§9), most sharply in
    `YearInStarsGrid`'s own docstring ("the amount of twinkle itself reads as how a stretch of life
    went") and in `ReviewYearScreen`'s finale, which shows **longest streak** and **brightest month**.
-   `stats/Achievements.kt` additionally ships a streak-based achievement catalogue
-   (`streak_7`, `streak_30`, `streak_100`). All of this predates
-   [D6](./DECISIONS_2026-08.md#d6-things-we-are-deliberately-not-building) and none of it was touched
-   by this work — it needs an owner and a decision.
+   ~~The `stats/` package additionally ships a streak-based achievement catalogue (`streak_7`,
+   `streak_30`, `streak_100`).~~
+   **Half-closed.** The streak half is done: every streak count in the product is now
+   `MoodStats.daysWithEntryInLast30` — thirty days ending today, non-consecutive, the same number on
+   the phone and in the web console, absent from Home entirely and omitted at zero — and the
+   achievements screen, its catalogue, its badge art, its stored unlock times, the `Celebration`
+   signal category and the settings toggle that governed it are deleted, not reworded. That answers
+   [D6](./DECISIONS_2026-08.md#d6-things-we-are-deliberately-not-building) for everything outside
+   this file's own subject. What remains open here is the Sky's own foundation: `YearInStarsGrid`'s
+   docstring and `ReviewYearScreen`'s finale still need an owner.
 4. **Performance is budgeted, not measured** (§8.3). Every number is still a target on a device. The
    one exception is the precompute step, which is now real: 5,393 records → 5,393 stars → 120 rows
    in 15–29 ms on a plain JVM. Frame time, cold open and peak heap remain unmeasured.

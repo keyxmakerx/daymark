@@ -54,12 +54,9 @@ class SuggestionControlsTest {
                 avgMood = 3.4,
                 moodTodayLevel = 1,
                 loggedToday = false,
-                currentStreak = 7,
-                longestStreak = 7,
                 topLift = Signals.FactorLift("Walk", 0.9, 12),
                 topDrag = Signals.FactorLift("Late night", -0.8, 11),
                 monthDeltaPct = 20.0,
-                newlyUnlockedAchievement = "First week",
                 dueCheckin = "WHO-5",
                 onThisDayNote = "a note",
             ),
@@ -72,8 +69,8 @@ class SuggestionControlsTest {
         val down = Signals.build(
             Signals.Inputs(
                 totalEntries = 40, avgMood = 3.0, moodTodayLevel = 3, loggedToday = true,
-                currentStreak = 1, longestStreak = 5, topLift = null, topDrag = null,
-                monthDeltaPct = -30.0, newlyUnlockedAchievement = null, dueCheckin = null,
+                topLift = null, topDrag = null,
+                monthDeltaPct = -30.0, dueCheckin = null,
                 onThisDayNote = null,
             ),
         )
@@ -90,19 +87,45 @@ class SuggestionControlsTest {
 
     @Test
     fun turnOffDropsEveryKindInTheGroup() {
+        // Was the "milestones" group, which covered two kinds. That group is gone with the signals
+        // it governed, so the two-kinds-one-switch property is asserted over "patterns" instead.
         val controls = SuggestionControls.Controls(
-            mapOf("milestones" to SuggestionControls.State(off = true)),
+            mapOf("patterns" to SuggestionControls.State(off = true)),
         )
         val out = SuggestionControls.filter(
             listOf(
-                signal("streak_milestone", 65.0),
-                signal("achievement_unlocked", 72.0),
+                signal("lift_factor", 58.0),
+                signal("drag_factor", 46.0),
                 signal("checkin_due", 54.0),
             ),
             controls,
             now,
         )
         assertEquals(listOf("checkin_due"), out.map { it.kind })
+    }
+
+    /**
+     * No switch in Settings is named after a reward, and no group governs a deleted signal.
+     *
+     * The "Streaks and milestones" group was not renamed to something softer — a control called
+     * "Continuity" would have kept a dial on a settings screen for a signal the product no longer
+     * emits, which is a switch that does nothing and a vocabulary that should not survive its
+     * subject. The control below proves the detector can fail.
+     */
+    @Test
+    fun noGroupIsNamedAfterARewardOrGovernsADeletedSignal() {
+        val reward = Regex("""streak|milestone|badge|achiev|award|reward|level""", RegexOption.IGNORE_CASE)
+        assertTrue(reward.containsMatchIn("Streaks and milestones"))
+
+        assertTrue(SuggestionControls.GROUPS.isNotEmpty())
+        SuggestionControls.GROUPS.forEach { group ->
+            assertFalse(group.title, reward.containsMatchIn(group.title))
+            group.subtitle?.let { assertFalse(it, reward.containsMatchIn(it)) }
+        }
+        assertNull(SuggestionControls.groupKeyOf("streak_milestone"))
+        assertNull(SuggestionControls.groupKeyOf("achievement_unlocked"))
+        // Control: a kind that IS still governed resolves to its group.
+        assertEquals("self_checks", SuggestionControls.groupKeyOf("checkin_due"))
     }
 
     @Test

@@ -298,7 +298,10 @@ too. Until that has happened, treat "the ledger is live" as *written and wired*,
 
 ### Known and deliberately deferred
 
-- The D6 "no streaks" rule holds in the report but not in the app: `MoodStats.currentStreak` still
-  drives Home (`HomeViewModel.kt:51`), Stats (`StatsViewModel.kt:71`) and the `streak_milestone`
-  signal (`stats/Signals.kt:180`). The report copy has been corrected so it no longer claims a
-  project-wide decision that has not been made.
+- ~~The D6 "no streaks" rule holds in the report but not in the app: `MoodStats.currentStreak`
+  still drives Home, Stats and the `streak_milestone` signal.~~ **Closed.** It now holds
+  everywhere. `MoodStats.currentStreak` and `MoodStats.longestStreak` are deleted; the one
+  continuity figure left in the product is `MoodStats.daysWithEntryInLast30` ("12 of the last
+  30"), which is absent from Home entirely and omitted at zero. The report still carries no
+  continuity figure at all, for the reason it always did — it reports adherence to the app rather
+  than anything about the person.

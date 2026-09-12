@@ -25,7 +25,7 @@ object SuggestionControls {
     )
 
     /**
-     * Every controllable suggestion. Two things are deliberately absent, and a switch is only
+     * Every controllable suggestion. Three things are deliberately absent, and a switch is only
      * listed here if flipping it visibly changes something — a dial that does nothing is worse
      * than no dial:
      *
@@ -33,6 +33,11 @@ object SuggestionControls {
      *    there is pushed at you. Crisis resources stay reachable whatever is set here.
      *  - Home's **check-in row** (`prompt_log_today`): that row is the app's primary way to log,
      *    on screen whether or not you've logged today, so it isn't a nudge to switch off.
+     *  - **"Streaks and milestones"**, which governed `streak_milestone` and
+     *    `achievement_unlocked`. Both signals are gone, so the switch is gone with them rather
+     *    than being renamed: a group whose kinds no longer exist is a dial that does nothing, and
+     *    a control called "Streaks" keeps reward vocabulary on a settings screen after the last
+     *    reward has been removed from the product.
      */
     val GROUPS: List<Group> = listOf(
         Group(
@@ -40,12 +45,6 @@ object SuggestionControls {
             title = "Support offers",
             subtitle = "after a hard day",
             kinds = setOf("support_offer"),
-        ),
-        Group(
-            key = "milestones",
-            title = "Streaks and milestones",
-            subtitle = null,
-            kinds = setOf("streak_milestone", "achievement_unlocked"),
         ),
         Group(
             key = "self_checks",

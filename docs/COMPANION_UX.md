@@ -158,7 +158,7 @@ A left rail (collapsible to icons on narrow widths), a top **Trust strip**, and 
 
 Top-level sections:
 
-- **Overview** — the dashboard landing: a compact "year in pixels/stars" thumbnail, headline counts (entries, average mood band, current streak — descriptive only), the latest check-in bands, and a *"For you"* strip rendered from the **same deterministic Signals rules** as the phone (no new model, ever). Cards link into deeper sections.
+- **Overview** — the dashboard landing: a compact "year in pixels/stars" thumbnail, headline counts (entries, average mood band, days with an entry — "12 of the last 30 days", non-consecutive and omitted at zero), the latest check-in bands, and a *"For you"* strip rendered from the **same deterministic Signals rules** as the phone (no new model, ever). Cards link into deeper sections.
 - **Year** — full-screen year overview (pixels + stars toggle), the "Review my year" walkthrough.
 - **Periods** — this-period-vs-last comparison with a Week/Month/Year scale toggle.
 - **Mood ↔ factors** — correlations ("lifts you up / weighs you down"), day-of-week and time-of-day, **always labeled association, never cause**, with the same ≥5-occurrence / ≥14-day sample gates as the app.

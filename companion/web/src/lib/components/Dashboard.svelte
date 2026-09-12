@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { BackupData } from '../backup'
-  import { summarize, dailyMoodInRange, activityAssociation, assessmentSeries, formatDate, type RangeDays } from '../stats'
+  import { summarize, dailyMoodInRange, activityAssociation, assessmentSeries, formatDate, WINDOW_DAYS, type RangeDays } from '../stats'
   import { MOODS } from '../mood'
   import Sparkline from '../charts/Sparkline.svelte'
   import JournalReader from './JournalReader.svelte'
@@ -46,7 +46,14 @@
   <details class="card" open>
     <summary>
       <span class="h">Mood over time</span>
-      <span class="sum faint">avg {s.averageMood?.toFixed(2) ?? '—'} · {s.currentStreakDays}-day streak</span>
+      <!--
+        Was "· {n}-day streak". The fragment disappears entirely at zero rather than reading
+        "0 of the last 30 days" — a summary line is the wrong place to hand someone a figure for
+        the time they were away.
+      -->
+      <span class="sum faint">avg {s.averageMood?.toFixed(2) ?? '—'}{s.daysWithEntryLast30 > 0
+          ? ` · ${s.daysWithEntryLast30} of the last ${WINDOW_DAYS} days`
+          : ''}</span>
     </summary>
     <div class="body">
       <div class="controls" role="group" aria-label="Time range">
