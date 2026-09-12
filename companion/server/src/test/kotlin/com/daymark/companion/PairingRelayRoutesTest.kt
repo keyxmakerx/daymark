@@ -347,6 +347,87 @@ class PairingRelayRoutesTest {
         assertTrue(s.audit.list(relRef, limit = 50).any { it.action == "pair.guess_failed" })
     }
 
+    /**
+     * RE-KEYING COSTS A FRESH INVITATION (issue #111).
+     *
+     * The owner console will now replace the keys it holds for a clinician when a reply opens under
+     * the code — the pin was recorded on that proof and nothing weaker, so requiring more to replace
+     * it than to create it buys nothing. That argument has a load-bearing premise the console cannot
+     * enforce and does not check: THE OLD INVITATION AND ITS CODE ARE ALREADY SPENT. If a consumed
+     * invitation could carry a second run, one code would replace a pinned key over and over for as
+     * long as the link survived, and anybody who ever held it could come back.
+     *
+     * The sibling test above pins the REDEEMING half (approved, not yet enrolled). This pins the end
+     * of the road: the clinician has enrolled, the invitation is CONSUMED, and there is no way back
+     * in through it from either side. It also pins the half that is easy to lose in a refactor — that
+     * refusing costs the invitation NOTHING. A spent link being tried again is not evidence of
+     * anything, so it must not burn, must not count as a guess, and must not write an audit row that
+     * would read to an owner as somebody attacking them.
+     */
+    @Test
+    fun `a spent invitation carries no second pairing run, and trying is not a burn`() = testApplication {
+        var now = 1_000_000L
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val s = stores(dir, cfg) { now }
+        application { module(cfg, null, null, s.rel, s.auth, s.audit, pairingStore = s.pairing) }
+        val minted = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
+        val chosen = ticket(1)
+        val exchangeId = exchangeIdOf(ownerOpen(minted.inviteId, sid(1), fakeMsg(1)).bodyAsText())
+        assertEquals(HttpStatusCode.NoContent, respond(minted.inviteId, minted.secret, exchangeId, fakeMsg(2)).status)
+        // A second run left OPEN beside the answered one, for the same reason the sibling test does
+        // it: with an empty shelf, "the invitation is spent" and "there was nothing waiting anyway"
+        // produce the identical 410, and every therapist-side assertion below would pass against a
+        // server with no status gate at all.
+        now += 1_000
+        val spare = exchangeIdOf(ownerOpen(minted.inviteId, sid(4), fakeMsg(7)).bodyAsText())
+        assertEquals(HttpStatusCode.NoContent, approve(exchangeId, chosen).status)
+        assertEquals(HttpStatusCode.NoContent, enrol(chosen, "cred-1").status)
+        assertEquals("CONSUMED", s.auth.inviteStatusFor(minted.inviteId))
+        assertEquals(PairingStore.State.OPEN, s.pairing.exchangeFor(spare, relRef)!!.state)
+        val auditBefore = s.audit.list(relRef, limit = 50).size
+
+        // The owner cannot open a second run against it — which is the whole of "rotation needs a
+        // fresh invitation", since the owner's side is where a run begins.
+        now += 1_000
+        val reopen = ownerOpen(minted.inviteId, sid(2), fakeMsg(3))
+        assertEquals(HttpStatusCode.NotFound, reopen.status)
+        assertEquals("""{"error":"no open invite"}""", reopen.bodyAsText())
+
+        // Nor can the holder of the link get back in from their side, with the right secret — even
+        // though there is an OPEN run sitting there that a server without the status gate would
+        // happily serve them.
+        val fetched = fetch(minted.inviteId, minted.secret)
+        assertEquals(HttpStatusCode.Gone, fetched.status)
+        assertEquals("""{"error":"invite unavailable"}""", fetched.bodyAsText())
+        assertEquals(HttpStatusCode.Gone, respond(minted.inviteId, minted.secret, spare, fakeMsg(4)).status)
+        assertNull(s.pairing.exchangeFor(spare, relRef)!!.msgBB64, "nothing was written into the spare run")
+
+        // AND NOTHING WAS SPENT BY REFUSING. The invitation is where it was, its guess counter has
+        // not moved, and the log gained no row — a spent link tried again is not a report and is
+        // not a wrong guess, and either word in front of an owner would be the product lying.
+        assertEquals("CONSUMED", s.auth.inviteStatusFor(minted.inviteId))
+        val listed = client.get("/v1/relations/$relRef/invites") { bearerAuth(ownerToken) }.bodyAsText()
+        assertTrue(listed.contains("\"inviteId\":\"${minted.inviteId}\",\"status\":\"CONSUMED\""), listed)
+        assertTrue(listed.contains("\"failCount\":0"), listed)
+        val after = s.audit.list(relRef, limit = 50)
+        assertEquals(auditBefore, after.size, "refusing a spent invitation wrote an audit row")
+        assertFalse(after.any { it.action == "invite.reported" })
+        assertFalse(after.any { it.action == "pair.guess_failed" })
+
+        // CONTROL: the refusals above are about the SPENT invitation, not about the relationship
+        // being finished with. A fresh invitation opens and answers exactly as the first one did —
+        // which is the route the owner console's replacement screen is reached through.
+        val second = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
+        val secondExchange = exchangeIdOf(ownerOpen(second.inviteId, sid(3), fakeMsg(5)).bodyAsText())
+        assertEquals(HttpStatusCode.OK, fetch(second.inviteId, second.secret).status)
+        assertEquals(HttpStatusCode.NoContent, respond(second.inviteId, second.secret, secondExchange, fakeMsg(6)).status)
+        assertEquals(HttpStatusCode.NoContent, approve(secondExchange, ticket(2)).status)
+        assertEquals("REDEEMING", s.auth.inviteStatusFor(second.inviteId))
+        // …and the spent one is still spent, so the second pairing did not revive it.
+        assertEquals("CONSUMED", s.auth.inviteStatusFor(minted.inviteId))
+    }
+
     @Test
     fun `the poll cadence fits the shared budget - fetch, respond and ten polls in one window, the next waits`() = testApplication {
         var now = 1_000_000L
