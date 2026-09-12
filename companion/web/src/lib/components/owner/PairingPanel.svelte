@@ -268,6 +268,9 @@
           </button>
           <button onclick={() => step(() => newCode(ports, ceremony))} disabled={busy}>{OWNER_COPY.newCodeLabel}</button>
         </div>
+        <!-- What "New code" costs, beside the button rather than on the screen a person reaches
+             after something has already gone wrong. -->
+        <p class="hint">{OWNER_COPY.newCodeHint}</p>
       {:else if ceremony.phase === 'resumed'}
         <p class="state">{OWNER_COPY.waitingReload}</p>
         <div class="row">
@@ -276,6 +279,7 @@
           </button>
           <button onclick={() => step(() => newCode(ports, ceremony))} disabled={busy}>{OWNER_COPY.newCodeLabel}</button>
         </div>
+        <p class="hint">{OWNER_COPY.newCodeHint}</p>
       {:else if ceremony.phase === 'mismatch'}
         <!--
           Issue #112. A notice on this screen and nothing else: no notification, because the owner's

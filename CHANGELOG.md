@@ -7,6 +7,22 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Companion — a clinician who has lost their keys can be invited back.** If a clinician lost the
+  browser or the passphrase holding their keys, there was no way back: their passphrase cannot be
+  reset, and the console refused to approve anyone whose keys were not the ones it already had. You
+  were left sending things to a key nobody could open. Now you send a fresh invitation and say a new
+  code, exactly as the first time, and approving the reply replaces the keys on file. Before you do,
+  the screen tells you what that reaches and what it does not: it changes what is sent from now on,
+  and it does not reach anything already sent — whoever has the old device can still open every
+  share you sent them before today. It also says that if the person did not ask for this, do not
+  approve. The choice is "Replace and approve" or "Not now", and "Not now" cancels nothing. The one
+  case still refused is keys already recorded for a different person, because then nothing can tell
+  which of the two a message was meant for.
+- **Companion — a key that changes is written down beside the old one instead of over it.** The
+  console's record of a clinician's keys used to be overwritten when a key changed, so the one
+  question anybody asks afterwards — what was on file before, and until when? — could no longer be
+  answered. The record now keeps both, and the newest is the one everything is sent to. Forgetting a
+  clinician still erases the whole of their record at once.
 - **Companion — your identity is now yours, instead of a new one every visit.** The owner console
   used to make a fresh pair of keys each time you opened it, which meant a clinician who carefully
   wrote down your fingerprint could not verify anything you sent them afterwards. It looked like
@@ -23,6 +39,17 @@ All notable changes to this project are documented here. The format is based on
   passphrase and your recovery code that connection ends and you would have to invite them again.
   If a different key is already on file the console says so plainly instead of showing an error
   code, because that means this clinician can no longer verify you and no button can fix it.
+
+### Changed
+- **Companion — a reply that will not open now asks you a question instead of guessing.** When
+  somebody answers your invitation and what comes back does not open with your code, the screen used
+  to offer a new code and a paragraph speculating about whether it was a typo. It now says "A reply
+  did not open with your code" and asks the only question that can be answered: keep this invitation
+  open and ask them whether they answered, or stop it and send a new link? The count of tries left
+  is untouched — a reply that did not open costs you nothing — and "Keep it open" ends nothing and
+  tells nobody. There is no pop-up notification, because this half of the product runs in a browser
+  tab and a closed tab cannot raise one reliably; the phone version, when it arrives, will raise one
+  quiet notice that names nobody and counts nothing.
 
 ### Fixed
 - **Companion — a clinician's hand-checked copy of your key is no longer silently replaced by the

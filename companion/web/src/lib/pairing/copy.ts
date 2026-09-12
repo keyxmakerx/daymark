@@ -158,6 +158,11 @@ export const OWNER_COPY = {
   newCodeLabel: 'New code',
   /** The one way to a new link: every fresh invitation starts from a stopped or spent one. */
   freshLabel: 'Send a fresh invitation',
+  /**
+   * Explains the "New code" button wherever it is offered. Rendered on the waiting screens; it used
+   * to appear on the mismatch screen too, until that screen became a question with two answers
+   * (#112) and a third piece of advice under it would have been a third answer.
+   */
   newCodeHint:
     'Same link, different code. Ends this attempt and starts another. If you no longer have the ' +
     'link, stop this invitation and send a fresh one.',
