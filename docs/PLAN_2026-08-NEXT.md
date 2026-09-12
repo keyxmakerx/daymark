@@ -68,7 +68,7 @@ justification for a clinical action in a clinician's report.
 a night sky on a fixed dark palette, held as three `internal val`s at
 [`YearInStarsGrid.kt:39-41`](../app/src/main/java/com/daymark/app/ui/components/YearInStarsGrid.kt):
 `NightBg #16150F`, `NightInk #EBE5D8`, `NightFaint #8E887A`. The same three values are repeated as
-canvas ints in [`YearKeepsakeRenderer.kt:126-128`](../app/src/main/java/com/daymark/app/export/YearKeepsakeRenderer.kt).
+constants in [`SkyPalette.kt`](../app/src/main/java/com/daymark/app/sky/SkyPalette.kt).
 The Sky is that idea promoted from a chart to a place.
 
 > **Correction.** An earlier version of this paragraph said the design system "reserves a fixed

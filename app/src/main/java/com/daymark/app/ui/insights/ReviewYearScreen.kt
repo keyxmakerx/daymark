@@ -1,8 +1,5 @@
 package com.daymark.app.ui.insights
 
-import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -38,8 +35,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -60,10 +55,13 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * "Review my year" — a calm, full-screen, swipe-or-tap walkthrough of a year as a night sky:
- * an intro, a page per quarter with that stretch's stars and a factual highlight, then a finale
- * with the year's honest numbers. Every word comes from [YearReview] (rules-based, descriptive,
- * no AI). Tap (or swipe) to move forward; skip anytime.
+ * "Review my year" — a calm, full-screen, swipe-or-tap walkthrough of a year as a night sky: an
+ * intro, a page per quarter with that stretch's stars, then a finale of two plain facts. Every word
+ * comes from [YearReview] (rules-based, descriptive, no AI). Tap (or swipe) to move forward; skip
+ * anytime.
+ *
+ * **There is no export.** The finale used to offer "Save keepsake", which wrote the year out as a
+ * PNG. See [ReviewYearViewModel] for why that is gone rather than restricted.
  */
 @Composable
 fun ReviewYearScreen(
@@ -76,21 +74,7 @@ fun ReviewYearScreen(
     val review = remember(state) {
         YearReview.build(state.year, state.dayMoods, { labels.forLevel(it) })
     }
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val moodArgb = remember(moods) { IntArray(5) { moods.forLevel(it + 1).toArgb() } }
-    val saveLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("image/png"),
-    ) { uri ->
-        if (uri != null) scope.launch {
-            val ok = viewModel.saveKeepsake(uri, review, moodArgb)
-            Toast.makeText(
-                context,
-                if (ok) "Keepsake saved" else "Couldn’t save keepsake",
-                Toast.LENGTH_SHORT,
-            ).show()
-        }
-    }
 
     Surface(color = NightBg, modifier = Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize()) {
@@ -121,10 +105,7 @@ fun ReviewYearScreen(
                 when (page) {
                     0 -> IntroPage(review, appear, tapModifier) { advance() }
                     // The finale is a place to dwell — a stray tap shouldn't close it; only "Done".
-                    pageCount - 1 -> FinalePage(
-                        review, appear, Modifier.fillMaxSize(), onDone,
-                        onSaveKeepsake = { saveLauncher.launch("daymark-${review.year}-keepsake.png") },
-                    )
+                    pageCount - 1 -> FinalePage(review, appear, Modifier.fillMaxSize(), onDone)
                     else -> ChapterPage(review.chapters[page - 1], moods, appear, page, tapModifier)
                 }
             }
@@ -196,27 +177,35 @@ private fun ChapterPage(
         }
         Spacer16()
         StarCluster(chapter.starLevels, moods, seed, modifier = Modifier.size(240.dp))
-        Spacer16()
-        chapter.highlight?.let {
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFF24221D))
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-            ) {
-                Text(it, style = MaterialTheme.typography.bodyMedium, color = NightInk, textAlign = TextAlign.Center)
-            }
-        }
+        // A chapter used to carry a "highlight" chip under the cluster, and it only ever held one
+        // of two sentences: "Longest streak began here · 4 days" or "Brightest month · July". Both
+        // are the finale's deleted tiles wearing a different shape one page earlier — a run that
+        // ended, and a rank of the person's own months against each other. The quarter's own
+        // summary above already says what was logged.
     }
 }
 
+/**
+ * The last page: the year, at most two facts, and the way out.
+ *
+ * The heading is the year and nothing else. It used to read "{n} stars. This was your year." — a
+ * count, and then a sentence telling someone what their year was.
+ *
+ * Two tiles where there were three, and neither of the survivors ranks anything. **Most often** is
+ * the mood the person chose on more days than any other, printed in their own word for it, and it
+ * is omitted rather than dashed out when no day that year carries a mood — a "–" in a tile is
+ * still a tile, and it invites the reader to wonder what should have been in it. **First entry**
+ * is the day they started; it is present whenever the year has anything in it at all.
+ *
+ * What went, and why, is in [YearReview]'s docstring. There is no "Save keepsake" button; the
+ * sentence that stands where it stood says what is true of everything on this screen.
+ */
 @Composable
 private fun FinalePage(
     review: YearReview.Review,
     appear: Float,
     modifier: Modifier,
     onDone: () -> Unit,
-    onSaveKeepsake: () -> Unit,
 ) {
     Column(
         modifier = modifier.padding(horizontal = 28.dp).alpha(appear),
@@ -224,33 +213,33 @@ private fun FinalePage(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            "${review.totalStars} stars.\nThis was your year.",
+            review.year.toString(),
             style = MaterialTheme.typography.headlineMedium,
             fontStyle = FontStyle.Italic,
             color = NightInk,
             textAlign = TextAlign.Center,
         )
         Spacer16()
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            review.mostOftenMoodLabel?.let {
+                Stat(it, "Most often", Modifier.weight(1f))
+            }
+            review.firstEntryLabel?.let {
+                Stat(it, "First entry", Modifier.weight(1f))
+            }
+        }
+        Spacer16()
         Text(
-            "Every one is a day you noticed how you felt. That’s the whole practice.",
+            "This stays on your phone. You can come back to it any time.",
             style = MaterialTheme.typography.bodyMedium,
             color = NightFaint,
             textAlign = TextAlign.Center,
         )
         Spacer16()
-        Row(
-            Modifier.fillMaxWidth().padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Stat(review.avgMoodLabel ?: "–", "avg mood", Modifier.weight(1f))
-            Stat(review.brightestMonthLabel ?: "–", "brightest month", Modifier.weight(1f))
-            Stat(review.longestStreak.toString(), "longest streak", Modifier.weight(1f))
-        }
-        Spacer16()
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            NightButton("Save keepsake", onSaveKeepsake)
-            TextButton(onClick = onDone) { Text("Done", color = NightInk) }
-        }
+        NightButton("Done", onDone)
     }
 }
 
@@ -291,6 +280,11 @@ private fun StarfieldBackground() {
     }
 }
 
+/**
+ * The empty year. The button stays, and it is not decoration: this screen is full-screen, has no
+ * year selector and no top bar, so "Done" is the only visible way back out of it. A dead end with
+ * a sentence about having no entries in it is the worst place in the product to strand somebody.
+ */
 @Composable
 private fun EmptyReview(year: Int, onDone: () -> Unit) {
     Column(

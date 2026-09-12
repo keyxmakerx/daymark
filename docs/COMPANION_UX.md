@@ -418,9 +418,9 @@ All dataviz reuses the flagship's analytical posture (descriptive, association-n
 
 ### 8.1 Year overview
 
-- Two views toggled: **Year in Pixels** (dense analysis grid, each day tinted by mood mean) and **Year in Stars** (the night-sky keepsake render, fixed dark palette regardless of theme — bg `#16150F`).
-- A **"Review my year"** horizontal walkthrough (intro → quarter chapters with star clusters → finale stats), all **factual** strings ("26 days · mostly Good"), never "you felt…."
-- Legend + summarizing text alternative for accessibility; a **"Save keepsake (PNG)"** export.
+- Two views toggled: **Year in Pixels** (dense analysis grid, each day tinted by mood mean) and **Year in Stars** (the night-sky render, fixed dark palette regardless of theme — bg `#16150F`).
+- A **"Review my year"** horizontal walkthrough (intro → quarter chapters with star clusters → a finale of two tiles, `Most often` and `First entry`), all **factual** strings ("26 days · mostly Good"), never "you felt…." No superlative and no average: the phone's finale dropped brightest month, longest streak and average mood, and a web one may not reintroduce them.
+- Legend + summarizing text alternative for accessibility. **No image export.** The phone had one and it was removed rather than restricted — see `docs/SKY.md` §11 question 2 — so a web console offering the same download would reintroduce the thing the phone gave up.
 
 ### 8.2 Period comparison
 

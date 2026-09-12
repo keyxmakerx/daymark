@@ -63,7 +63,7 @@ micro-journaling + wellbeing toolkit. A clean-room alternative to Daylio (no Day
 ### ⚠️ The no-emulator caveat (important)
 This environment can compile and run JVM unit tests but **cannot render Compose / `android.graphics`
 visually.** So all **Canvas / drawing code is logic-verified but NOT eyeballed**: Year-in-Stars,
-the Review-my-year star clusters, the keepsake PNG, the Movement pose figures, the PDF charts. These
+the Review-my-year star clusters, the Movement pose figures, the PDF charts. These
 **need a real device/emulator pass** before you trust their appearance.
 
 ---
@@ -80,7 +80,7 @@ app/src/main/java/com/daymark/app/
                    Crisis, SleepProfile, Photo
   stats/           PURE JVM domain (unit-tested): MoodStats, MoodCorrelations, MoodPatterns,
                    PeriodReview, GoalProgress, Signals, YearReview
-  export/          PdfReportGenerator, QrEncoder, ReportData, PdfExportOptions, YearKeepsakeRenderer
+  export/          PdfReportGenerator, QrEncoder, ReportData, PdfExportOptions
   ui/<feature>/    Compose screens + HiltViewModels, grouped by feature (see list below)
   ui/components/    shared Compose: PaperSurface, MoodFaceIcon, YearInPixelsGrid, YearInStarsGrid,
                    ConsistencyHeatmap, EntryPhoto, PoseFigure, SignalCards, TextFieldDefaults …
@@ -115,7 +115,7 @@ Warm-stationery aesthetic. Tokens (in `ui/theme/`):
   `LocalMoodColors`/`MaterialTheme.moodColors.forLevel(1..5)` and `LocalMoodLabels` so **custom mood
   palettes/labels carry through everywhere** — always use these, never hardcode mood colors in UI.
 - **Mood level 1..5 is the stable key** in the DB; custom labels/colors are a presentation layer.
-- **Night-sky surfaces** (Year in Stars, Review, keepsake) use a fixed dark palette regardless of
+- **Night-sky surfaces** (Year in Stars, Review) use a fixed dark palette regardless of
   theme: bg `#16150F`, ink `#EBE5D8`, faint `#8E887A` (see `YearInStarsGrid.kt` internals).
 - **Icons & art are all original** (hand-drawn vector `res/drawable/ic_*`, Canvas `MoodFaceIcon`,
   `PoseFigure`, the star renderer) → zero licensing concerns.
@@ -223,11 +223,11 @@ ViewModel derivation) — never a model.**
   `YearInPixelsGrid` stays for analysis). Has a real colour→mood legend + a summarising
   `contentDescription`.
 - `ui/insights/ReviewYearScreen.kt` + `ReviewYearViewModel.kt`: a full-screen `HorizontalPager`
-  walkthrough (intro → quarter chapters with star clusters → finale stats), tap/swipe to advance,
-  gentle per-page fade, "Skip" control. Route `REVIEW_YEAR` (year nav arg).
-- `export/YearKeepsakeRenderer.kt`: renders the year as a 1080×1350 PNG keepsake via
-  `android.graphics` (deterministic layout, custom mood ARGB passed in), saved via SAF from the
-  finale's "Save keepsake" button.
+  walkthrough (intro → quarter chapters with star clusters → a finale of two tiles, `Most often`
+  and `First entry`), tap/swipe to advance, gentle per-page fade, "Skip" control. Route
+  `REVIEW_YEAR` (year nav arg). **There is no image export**: the keepsake PNG and its renderer are
+  deleted — a year of one person's mood as a single file is the most identifying thing this
+  product can make, and it landed in the gallery.
 
 ---
 
@@ -262,7 +262,7 @@ ViewModel derivation) — never a model.**
 - **Sleep:** sleep log (Consensus-Sleep-Diary-style fields), license-clean screeners, sleep profile,
   treatments before/after, an on-body breathing-capture experiment. (Tiered sensor plan in
   `docs/SLEEP_FEATURE_PLAN.md`; advanced tiers are largely **planned**, not shipped.)
-- **Signals engine + 3 surfaces; Year in Stars + Review my year + keepsake; sentence
+- **Signals engine + 3 surfaces; Year in Stars + Review my year; sentence
   auto-capitalization in all free-text fields.**
 - **Home-screen widget** (Glance) — `widget/MoodWidget`.
 - **Onboarding** wizard; **Gentle support** ("take a moment") space.
@@ -275,7 +275,7 @@ ViewModel derivation) — never a model.**
 1. **Bundle fonts** — add Fraunces + Inter OFL TTFs to `res/font/`, wire into `ui/theme/Type.kt`,
    ship `OFL.txt` + a licenses row. (Currently using system fallback; the "paper" identity wants the
    serif wordmark.) Verify they're **bundled, not Downloadable Fonts**.
-2. **On-device visual pass** of all Canvas art (Year in Stars, keepsake, pose figures, PDF charts) —
+2. **On-device visual pass** of all Canvas art (Year in Stars, pose figures, PDF charts) —
    never been eyeballed here (see §2 caveat). Especially check star contrast on the dark bg.
 3. **Add a CI emulator job** for the instrumented `MigrationTest` + any androidTest; add `lint` to CI.
 
@@ -337,7 +337,7 @@ ViewModel derivation) — never a model.**
 
 ## 11. Known gaps / risks to watch
 
-- **Canvas art unverified visually** (fonts, stars, keepsake, poses, PDF) — do an on-device pass.
+- **Canvas art unverified visually** (fonts, stars, poses, PDF) — do an on-device pass.
 - **Fonts not bundled** — app looks more generic than the locked "paper" design until added.
 - **Release is still debug-signed** — must fix before any public distribution.
 - **Instrumented tests not in CI** — migrations are only locally/emulator-verified.

@@ -7,6 +7,19 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Removed
+- **"Review my year" ends on two plain facts, and no longer offers to save a picture of your
+  year.** The last page used to show three numbers: your average mood, your brightest month, and
+  your longest streak. Each was a way of marking a year of your life out of something — an average
+  of a mood scale is a grade, and naming your brightest month tells anyone reading it that one of
+  the others was your darkest. They are replaced by two things that rank nothing: **Most often**,
+  the mood you chose on more days than any other, in your own word for it, and **First entry**, the
+  day you started. The heading is now just the year. The same two claims appeared as a small note
+  on the quarter pages, and that note has gone with them.
+  **"Save keepsake" is removed.** It wrote your year — every mood, and the timing of everything you
+  logged — into a single image in your gallery, which is the folder most likely to be quietly
+  backed up somewhere by software you have forgotten about; and it made the unlogged stretches
+  permanent. In its place the last page says: *This stays on your phone. You can come back to it
+  any time.* Nothing you have already saved is affected.
 - **Streaks are gone, and the Achievements screen with them.** A streak is a number you can lose:
   miss one day and it goes back to nothing, which means it is at its lowest exactly when someone
   has been away and has just come back. Every continuity number in Daymark is now the same one —

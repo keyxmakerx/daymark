@@ -59,11 +59,12 @@ package com.daymark.app.sky
 object SkyPalette {
 
     // ---------------------------------------------------------------------------------------
-    // The night surface. These three values already exist twice in the tree — as `Color`s in
-    // `ui/components/YearInStarsGrid.kt:39-41` and as canvas ints in
-    // `export/YearKeepsakeRenderer.kt:126-128` — and `docs/SKY.md` records that duplication as
-    // unowned. This is a third copy, in the one package that can be unit-tested, and the renderer
-    // under `ui/sky/` should read them from here rather than making a fourth.
+    // The night surface. These three values already exist once elsewhere in the tree, as `Color`s
+    // in `ui/components/YearInStarsGrid.kt:39-41`, and `docs/SKY.md` records that duplication as
+    // unowned. (There was a third copy, as canvas ints in the year keepsake renderer; that file is
+    // gone with the export it served.) This is the second copy, in the one package that can be
+    // unit-tested, and the renderer under `ui/sky/` should read them from here rather than making
+    // a third.
     // ---------------------------------------------------------------------------------------
 
     /** The ground everything is drawn on. */

@@ -10,8 +10,9 @@ The foundation ships today: [`YearInStarsGrid.kt`](../app/src/main/java/com/daym
 draws a year as a night sky, and [`ReviewYearScreen.kt`](../app/src/main/java/com/daymark/app/ui/insights/ReviewYearScreen.kt)
 already walks a person through one. Its palette is three `internal val`s at
 [`YearInStarsGrid.kt:39-41`](../app/src/main/java/com/daymark/app/ui/components/YearInStarsGrid.kt) —
-`NightBg #16150F`, `NightInk #EBE5D8`, `NightFaint #8E887A` — repeated as canvas ints in
-[`YearKeepsakeRenderer.kt:126-128`](../app/src/main/java/com/daymark/app/export/YearKeepsakeRenderer.kt).
+`NightBg #16150F`, `NightInk #EBE5D8`, `NightFaint #8E887A` — and once more, as constants, in
+[`SkyPalette.kt`](../app/src/main/java/com/daymark/app/sky/SkyPalette.kt). (There was a third copy,
+as canvas ints in the year keepsake renderer; that file went with the export it served.)
 
 > **Correction, verified at HEAD.** This paragraph previously said "the design system reserves the
 > surface and its tokens (`--c-sky-bg` / `--c-sky-ink` / `--c-sky-faint`, 'night-sky parity')".
@@ -188,9 +189,9 @@ list below is the contract it is held to, not a plan.
 
 `ui/sky/` is a renderer and makes no decisions. Every number it needs is in `sky/`:
 
-- Read `NIGHT_BG` / `NIGHT_INK` / `NIGHT_FAINT` from `SkyPalette` rather than making a **fourth**
-  copy of the three values (they already exist in `YearInStarsGrid.kt:39-41` and
-  `YearKeepsakeRenderer.kt:126-128`, and that duplication is recorded as unowned).
+- Read `NIGHT_BG` / `NIGHT_INK` / `NIGHT_FAINT` from `SkyPalette` rather than making a **third**
+  copy of the three values (they already exist in `YearInStarsGrid.kt:39-41`, and that duplication
+  is recorded as unowned).
 - Pass the person's live palette from `MaterialTheme.moodColors` through
   `SkyPalette.equalisedRamp` — **the Sky must not hardcode mood hues** (§3.2), which is why nothing
   in `sky/` contains one.
@@ -902,16 +903,29 @@ before the test is run.
    is a thing the person walks past whether or not they meant to go there, and §6.5's point is that
    this is the surface that says the most about someone to anyone holding the phone. Reaching it is
    a deliberate act; it stays behind the app lock like everything else in More.
-2. **Does the export exist at all?** §6.4 specifies how it must behave *if* it exists. The safer
-   product may be no export. The shipped `ReviewYearScreen` already has "Save keepsake", so this is a
-   live question rather than a hypothetical.
+2. ~~**Does the export exist at all?** §6.4 specifies how it must behave *if* it exists. The safer
+   product may be no export.~~
+   **Resolved: it does not.** "Save keepsake" and its renderer are deleted; the finale now says
+   *"This stays on your phone. You can come back to it any time."* and offers only **Done**. §6.4's
+   rules stand as the specification for any future export, and nothing satisfies them today. The
+   decision follows §6.5 rather than §6.4: a year of one person's mood and activity timing, as a
+   single image, is the most identifying artefact this product can make, and the shipped export put
+   it in the gallery — the folder most reliably synced by software people have forgotten they
+   enabled. It also froze the unlogged stretches into a permanent picture of a void, which §6.3 and
+   §1.2 spend pages avoiding on screen.
 3. **Life events with a date range** — a bereavement is a day, a move is a fortnight. Ranges are
    specified as possible in §2.2 but not designed; a range star may need to be a different form.
 4. ~~**The mood-ramp contrast floor under custom palettes** (§7.1) — lift, reject, or warn.~~
    **Resolved: equalise.** None of the three offered options was right; see §0.3 finding 1.
-5. **How the Sky relates to "Review my year"** — the walkthrough is a curated sequence with
-   superlatives in it; the Sky forbids superlatives. Either the walkthrough changes, or the two
-   surfaces coexist with different rules, which is a coherence problem worth deciding deliberately.
+5. ~~**How the Sky relates to "Review my year"** — the walkthrough is a curated sequence with
+   superlatives in it; the Sky forbids superlatives.~~
+   **Resolved: the walkthrough changed.** Of the two options — change the walkthrough, or let two
+   surfaces coexist under different rules — the second was never really available: the rule the Sky
+   states is a rule about the person, not about a screen, and a product cannot forbid ranking
+   someone's own past in one place and do it in another. The finale's three tiles (average mood,
+   brightest month, longest streak) are gone, and so is the quarter pages' highlight chip, which
+   carried the same two claims one page earlier. What is left is two facts that rank nothing: the
+   mood chosen most often, in the person's own word, and the date they started.
 6. **What happens on a very small screen**, where a month row is a few hundred pixels and L2 cannot
    separate glyphs.
 
@@ -930,19 +944,21 @@ device.
 2. **There is no reduced-motion support in the Android app** (§7.4). A grep across
    `app/src/main/java` finds no handling of the platform reduced-motion signal anywhere. Whatever the
    Sky hooks into does not yet exist.
-3. **The shipped foundation contradicts the plan's invariants in nine places** (§9), most sharply in
-   `YearInStarsGrid`'s own docstring ("the amount of twinkle itself reads as how a stretch of life
-   went") and in `ReviewYearScreen`'s finale, which shows **longest streak** and **brightest month**.
-   ~~The `stats/` package additionally ships a streak-based achievement catalogue (`streak_7`,
-   `streak_30`, `streak_100`).~~
-   **Half-closed.** The streak half is done: every streak count in the product is now
-   `MoodStats.daysWithEntryInLast30` — thirty days ending today, non-consecutive, the same number on
-   the phone and in the web console, absent from Home entirely and omitted at zero — and the
-   achievements screen, its catalogue, its badge art, its stored unlock times, the `Celebration`
-   signal category and the settings toggle that governed it are deleted, not reworded. That answers
-   [D6](./DECISIONS_2026-08.md#d6-things-we-are-deliberately-not-building) for everything outside
-   this file's own subject. What remains open here is the Sky's own foundation: `YearInStarsGrid`'s
-   docstring and `ReviewYearScreen`'s finale still need an owner.
+3. ~~**The shipped foundation contradicts the plan's invariants in nine places** (§9), most sharply
+   in `YearInStarsGrid`'s own docstring ("the amount of twinkle itself reads as how a stretch of
+   life went") and in `ReviewYearScreen`'s finale, which shows **longest streak** and **brightest
+   month**. The `stats/` package additionally ships a streak-based achievement catalogue
+   (`streak_7`, `streak_30`, `streak_100`).~~
+   **Mostly closed; one contradiction is left and it is named.** Every streak count in the product
+   is now `MoodStats.daysWithEntryInLast30` — thirty days ending today, non-consecutive, the same
+   number on the phone and in the web console, absent from Home entirely and omitted at zero — and
+   the achievements screen, its catalogue, its badge art, its stored unlock times, the
+   `Celebration` signal category and the settings toggle that governed it are deleted, not
+   reworded. `ReviewYearScreen`'s finale now carries two facts that rank nothing (§11 question 5),
+   and the image export is gone (§11 question 2). That answers
+   [D6](./DECISIONS_2026-08.md#d6-things-we-are-deliberately-not-building) across the app.
+   **Still open:** `YearInStarsGrid` itself — its docstring, and the mood-varying core radius §9
+   objects to. That component is this file's own subject and still needs an owner.
 4. **Performance is budgeted, not measured** (§8.3). Every number is still a target on a device. The
    one exception is the precompute step, which is now real: 5,393 records → 5,393 stars → 120 rows
    in 15–29 ms on a plain JVM. Frame time, cold open and peak heap remain unmeasured.
