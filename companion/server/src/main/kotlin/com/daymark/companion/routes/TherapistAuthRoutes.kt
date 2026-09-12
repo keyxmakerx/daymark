@@ -63,20 +63,67 @@ private fun auditSafely(block: () -> Unit) {
 internal const val PAIR_ATTEMPT_SCOPE = "pair"
 
 /**
- * The pairing budget, per source, per window.
+ * The pairing budget: FETCH AND RESPOND, per client address, per window.
  *
- * Sized against the per-INVITE backoff rather than against expected traffic, because the two are
- * the same control seen from different ends. That one arms at `DAYMARK_TOTP_LOCKOUT_FAILS`, which
- * `Config.kt` defaults to **5** — an earlier version of this comment said 3 and drew the sizing
- * conclusion from it, which is the kind of confident-but-wrong number that gets copied into the next
- * decision. So: a source that has spent twelve attempts has been wrong about roughly two and a half
- * invitations' worth of secrets inside five minutes, which is still nobody's honest afternoon. An
- * honest therapist spends one: the secret arrives in the link and is not typed.
+ * ## What it counts now, and why the old number was the wrong shape rather than too small
+ *
+ * It used to cover every credential-free touch on the pairing surface — fetch, respond, the status
+ * poll and the report — at twelve per five minutes. The justification counted GUESSES; the budget
+ * counted REQUESTS, and those are not the same population. An honest ceremony spent about 8.7 of
+ * the twelve, of which two were proofs of the secret and roughly 6.7 were status polls that test
+ * no secret and reveal nothing. So the window was exhausted by honest waiting, and the first thing
+ * it then refused was the REPORT — the one call this product most needs to accept from someone it
+ * cannot identify. Two clinicians behind one clinic NAT tripped it between them. Against the
+ * attacker it was written for — someone who holds the link, from one address — it did nothing the
+ * per-invite lockout was not already doing.
+ *
+ * So the surface is split three ways and this constant now meters only the two touches that carry
+ * a secret and move a run along:
+ *
+ *  - **fetch and respond** — here. Twenty per five minutes. An honest ceremony spends TWO.
+ *  - **the status poll** — keyed on the pairing RUN, not the address, because a poll is a cadence
+ *    rather than a ration (`PairingRelayRoutes`).
+ *  - **the report** — in no budget at all, behind a raw flood guard only (see the route below).
+ *
+ * ## Why twenty, and why this is not the control that stops guessing
+ *
+ * Twenty is ten honest ceremonies from one address inside five minutes — a clinic's worth of
+ * afternoon, not one person's — and it is deliberately NOT sized against the guessing threshold,
+ * because it is not what bounds guessing. That is the per-INVITE lockout: five wrong secrets
+ * against one invitation, then a capped backoff out to an hour, durable, and shared by every door
+ * that verifies that secret. A per-invitation dimension here would add nothing to it and would
+ * make the NAT case worse, so there isn't one.
+ *
+ * Every allowed request is charged and a success NEVER resets the window: a limiter a link-holder
+ * can clear by succeeding is one they can clear at will.
  *
  * `internal` so a test can assert against the real production number instead of restating it.
  */
-internal const val PAIR_MAX_PER_WINDOW = 12
+internal const val PAIR_MAX_PER_WINDOW = 20
 internal const val PAIR_WINDOW_MS = 5 * 60_000L
+
+/**
+ * The raw flood guard over the anonymous REPORT route, per client address.
+ *
+ * Not a guessing budget and not sized like one — the point of the report route is that it is
+ * refused as rarely as the machinery allows. This is the "somebody is running a script" ceiling
+ * and nothing more: a person reporting a link they did not expect clicks once, a whole clinic
+ * behind one address clicks a handful of times a day, and thirty a minute is out of reach of both.
+ *
+ * It exists because the alternative is not "unmetered", it is "a 64 MiB Argon2id verification per
+ * anonymous request, unmetered" — the report route hashes on every call by construction, and after
+ * this change it hashes even while the invitation is locked, which is what makes a correct report
+ * possible while somebody is guessing at it. `DAYMARK_RATE_LIMIT_RPS` does not cover this: it is a
+ * parameter of [com.daymark.companion.auth.AuthGuard], so it meters the bearer-token surfaces and
+ * nothing else. Verified rather than assumed, and written down here because the deployment docs
+ * describe that knob as a per-source request limit, which it is not.
+ *
+ * In process memory on purpose ([com.daymark.companion.auth.AttemptBudget] sets out the test): it
+ * shapes volume rather than bounding guesses at a secret, so a restart returns one minute of flood
+ * and no secret becomes easier to guess.
+ */
+internal const val REPORT_MAX_PER_WINDOW = 30
+internal const val REPORT_WINDOW_MS = 60_000L
 
 /**
  * Therapist auth: single-use invites, TOTP enrol/verify, opaque server-side sessions, and
@@ -113,7 +160,15 @@ fun Route.therapistAuthRoutes(
     // of it and no secret becomes easier to guess.
     val totpSourceLimiter: AttemptBudget = AttemptLimiter(maxPerWindow = 20, windowMs = 5 * 60_000L)
 
-    // Per-SOURCE budget for the credential-free PAIRING surface — invite redeem and invite report —
+    // The raw flood guard described on REPORT_MAX_PER_WINDOW. The store's clock, not the wall
+    // clock, so a test that advances time advances this with it.
+    val reportFloodGuard: AttemptBudget = AttemptLimiter(
+        maxPerWindow = REPORT_MAX_PER_WINDOW,
+        windowMs = REPORT_WINDOW_MS,
+        clock = authStore::nowMs,
+    )
+
+    // Per-SOURCE budget for the credential-free PAIRING touches — the relay's fetch and respond —
     // and the one budget in this file that is DURABLE.
     //
     // Two reasons, and the first is the one that made this a blocker rather than a nicety. §3.7's
@@ -126,8 +181,9 @@ fun Route.therapistAuthRoutes(
     // restart and the other half not — the confusing kind of partial guarantee that reads as
     // protection in a review and is not.
     //
-    // Redeem and report share ONE scope deliberately. They verify the same invite secret, so
+    // Fetch and respond share ONE scope deliberately. They verify the same invite secret, so
     // separate budgets would let an attacker alternate routes and spend twice the attempts on it.
+    // The report route no longer shares it, and the status poll never did; see the constants.
     val pairSourceLimiter: AttemptBudget = PersistentAttemptLimiter(
         authStore,
         scope = PAIR_ATTEMPT_SCOPE,
@@ -175,21 +231,53 @@ fun Route.therapistAuthRoutes(
          * say so, and proves this path now answers as an unknown route.
          */
 
+        /*
+         * "This wasn't me." The one call this product most needs to accept from someone it cannot
+         * identify, and therefore the one with the least standing in its way.
+         *
+         * IT IS IN NO ATTEMPT BUDGET. It used to share the pairing surface's per-source window,
+         * which meant an honest ceremony's own waiting could spend the budget that a report then
+         * needed — the refusal landing on the person trying to close a link they did not expect,
+         * at the exact moment they had reason to be alarmed. Above it now there is only the raw
+         * flood guard (REPORT_MAX_PER_WINDOW), which a human cannot reach.
+         *
+         * EVERY ANONYMOUS CALL GETS THE SAME ANSWER: 204, always. Right secret, wrong secret, no
+         * secret, an invitation that is already reported, expired, consumed, or never existed —
+         * one flat acknowledgement. The route hands nothing back, so it has nothing to say, and
+         * saying nothing is what keeps it from being an oracle: a caller cannot learn from it
+         * whether an invitation exists, whether it is still live, whether it is locked, or whether
+         * the secret they hold is the right one. (What is left is timing — a live invitation costs
+         * an Argon2 verification and a dead one does not — and that is a distinction only reachable
+         * by someone who already holds a 256-bit invite id, which the relay's fetch route gives up
+         * just as readily. Written down rather than mitigated: a dummy verification would flatten
+         * it at the price of letting any caller spend 64 MiB of hashing on an id they made up.)
+         *
+         * A CORRECT REPORT IS HONOURED WHILE THE INVITATION IS LOCKED OUT. The lockout is there to
+         * stop information leaking to a guesser; this route leaks none, and the invitation somebody
+         * is guessing at is precisely the one its real holder most needs to be able to close. See
+         * AuthStore.reportInvite.
+         *
+         * THE BURN IS IDEMPOTENT. A second correct report on the same invitation finds it already
+         * REPORTED, writes nothing, and answers exactly as the first did.
+         *
+         * The OWNER path is unchanged and still speaks plainly (204 / 410): it is behind the bearer
+         * token, so there is no anonymous caller on it to keep anything from.
+         */
         post("/invite/{inviteId}/report") {
             call.response.header("Referrer-Policy", "no-referrer")
             val inviteId = call.parameters["inviteId"] ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("missing inviteId"))
-            // Which caller this is has to be decided before the budget is spent: the owner path is
+            // Which caller this is has to be decided before anything is spent: the owner path is
             // already metered by AuthGuard's own bucket, and making the owner share the anonymous
-            // pairing budget would let an attacker on the same address spend the owner's ability to
-            // kill an invite — handing the attacker the outcome this route exists to prevent.
+            // guard would let an attacker on the same address spend the owner's ability to kill an
+            // invite — handing the attacker the outcome this route exists to prevent.
             val presentingOwnerToken = call.request.headers[HttpHeaders.Authorization] != null
-            if (!presentingOwnerToken && !pairSourceLimiter.allow(call.clientAddress())) {
+            if (!presentingOwnerToken && !reportFloodGuard.allow(call.clientAddress())) {
                 call.respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited"))
                 return@post
             }
             // An owner reporting from a console button has nothing to put in a body, so an empty
             // one is a valid report rather than a malformed request. Only a non-empty body that is
-            // not JSON earns the 400.
+            // not JSON earns the 400 — a fact about the request, not about any invitation.
             val raw = call.readBodyCapped() ?: return@post
             val req = if (raw.isEmpty()) {
                 ReportRequest()
@@ -203,23 +291,10 @@ fun Route.therapistAuthRoutes(
                 }
             }
 
-            val result: AuthStore.ReportResult
-            val actor: AuditActor
             if (presentingOwnerToken) {
                 if (!call.ownerAuthorized(ownerGuard)) return@post
-                result = authStore.reportInviteByOwner(inviteId)
-                actor = AuditActor.OWNER
-            } else {
-                // No token and no secret is not a report, it is an anonymous request to destroy
-                // someone else's invitation. It gets the same 401 a wrong secret does.
-                val secret = req.secret
-                    ?: return@post call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized"))
-                result = authStore.reportInvite(inviteId, secret, totpLockoutFails, totpLockoutSeconds * 1000)
-                actor = AuditActor.THERAPIST
-            }
-
-            when (result.status) {
-                AuthStore.ReportStatus.OK -> {
+                val result = authStore.reportInviteByOwner(inviteId)
+                if (result.status == AuthStore.ReportStatus.OK) {
                     // Respond FIRST, then audit: the burn has already committed in the store, and a
                     // logging failure must never turn a successful report into an error the caller
                     // might read as "it didn't work". Same ordering as the enrol path below.
@@ -232,32 +307,48 @@ fun Route.therapistAuthRoutes(
                     // audit log, which is where the owner reads what their access control did.
                     call.respond(HttpStatusCode.NoContent)
                     auditSafely {
-                        auditStore.append(result.relRef!!, actor, AuditAction.INVITE_REPORTED, meta = auditMeta(auditSourceIp, call))
+                        auditStore.append(result.relRef!!, AuditActor.OWNER, AuditAction.INVITE_REPORTED, meta = auditMeta(auditSourceIp, call))
                     }
+                } else {
+                    call.respond(HttpStatusCode.Gone, ErrorDto("invite unavailable"))
                 }
-                AuthStore.ReportStatus.WRONG_SECRET -> {
-                    call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized"))
+                return@post
+            }
+
+            // The invited party. A body with no secret proves nothing and kills nothing; it takes
+            // the same flat answer as a wrong one rather than a 401, because a 401 here would say
+            // "there is something at this id worth authenticating to".
+            val result = req.secret?.let {
+                authStore.reportInvite(inviteId, it, totpLockoutFails, totpLockoutSeconds * 1000)
+            }
+            call.respond(HttpStatusCode.NoContent)
+            when (result?.status) {
+                AuthStore.ReportStatus.OK -> auditSafely {
+                    auditStore.append(result.relRef!!, AuditActor.THERAPIST, AuditAction.INVITE_REPORTED, meta = auditMeta(auditSourceIp, call))
+                }
+                // A wrong secret here writes NO guess row. On the relay a wrong secret is somebody
+                // working on the invitation and the owner should see it; on this route it is more
+                // often a person with an old link doing the right thing, the answer teaches the
+                // caller nothing either way, and this is the one anonymous surface with no attempt
+                // budget in front of it — so guess rows here would be volume an attacker chooses,
+                // written into a chain that never forgets, which is the finding LockedInviteAuditTest
+                // exists for.
+                //
+                // The LOCKOUT row is the exception, and it is not optional: report and the relay
+                // spend ONE shared fail counter, so the guess that arms a lockout can land here,
+                // and a lockout the owner never learns about would make this the surface an
+                // attacker chooses in order to arm them invisibly. One row per armed episode,
+                // wherever it is armed — the rule the rest of this file keeps.
+                AuthStore.ReportStatus.WRONG_SECRET -> if (result.lockoutArmed) {
                     result.relRef?.let { rel ->
                         auditSafely {
-                            auditStore.append(rel, AuditActor.THERAPIST, AuditAction.PAIR_GUESS_FAILED, meta = auditMeta(auditSourceIp, call))
-                        }
-                        // Redeem and report spend ONE shared fail counter (see the store), so
-                        // the guess that arms a lockout can land on either surface — and the
-                        // owner's single LOCKOUT row has to be written wherever that happens,
-                        // or a lockout armed through this route would leave no record at all.
-                        // The redeem route's LOCKED branch states why it is one row per armed
-                        // lockout rather than one per request refused by it; its own auditSafely
-                        // block for the same reason as there — the episode's only record must not
-                        // die with a throw in the routine append above.
-                        if (result.lockoutArmed) {
-                            auditSafely {
-                                auditStore.append(rel, AuditActor.THERAPIST, AuditAction.LOCKOUT, meta = auditMeta(auditSourceIp, call))
-                            }
+                            auditStore.append(rel, AuditActor.THERAPIST, AuditAction.LOCKOUT, meta = auditMeta(auditSourceIp, call))
                         }
                     }
                 }
-                AuthStore.ReportStatus.LOCKED -> call.respond(HttpStatusCode.TooManyRequests, ErrorDto("temporarily locked"))
-                AuthStore.ReportStatus.GONE -> call.respond(HttpStatusCode.Gone, ErrorDto("invite unavailable"))
+                // A knock on a locked door, a dead invitation, an id that never existed, or no
+                // secret at all: nothing happened, so nothing is written.
+                else -> Unit
             }
         }
 

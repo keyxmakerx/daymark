@@ -25,6 +25,24 @@ All notable changes to this project are documented here. The format is based on
   code, because that means this clinician can no longer verify you and no button can fix it.
 
 ### Fixed
+- **Companion — waiting for you to approve a pairing no longer uses up the clinician's allowance.**
+  The server gave each internet connection twelve pairing requests every five minutes, and counted
+  the "has she approved it yet?" checks against them — so a clinician who simply waited for you
+  spent most of their own allowance doing nothing, and two clinicians in the same practice, who
+  share one connection, spent each other's. What ran out first was the one thing that most needs to
+  work: **telling us an invitation was not expected**. That is now outside the allowance
+  altogether. The checks while waiting are counted per pairing instead of per connection, so nobody
+  waits on anybody else, and the requests that actually carry the ceremony get twenty per five
+  minutes rather than twelve. If a connection is genuinely busy, the clinician is told it is
+  **paused until** a time, and that their invitation is unchanged and will still open then —
+  because the server knows the connection was busy, not that they did anything wrong.
+- **Companion — "this wasn't me" is now accepted even while somebody is guessing at the
+  invitation.** If wrong codes were being tried against an invitation, it locked, and the lock
+  refused the invited person's report along with the guesses — so the invitation most likely to be
+  in the wrong hands was the one its real holder could not close. A report proving the right secret
+  is now honoured whether or not the invitation is locked. Reporting also gives the same answer to
+  everyone now, whatever the truth of it, so the button cannot be turned round and used to find out
+  which invitations exist; and reporting twice does the same thing once.
 - **Companion — a clinician's hand-checked copy of your key is no longer silently replaced by the
   server's.** Signing in used to take whatever the server said your keys were and write it over the
   one the clinician had verified with you, without comparing them or mentioning it. It had never
