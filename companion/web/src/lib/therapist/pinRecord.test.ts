@@ -241,7 +241,25 @@ describe('forgetting and rotating the pin record', () => {
     // But not word-blind: dropping one is a different phrase, and so is reordering.
     const words = newWords.split(' ')
     expect(sasWordsMatch(newWords, words.slice(0, 5).join(' '))).toBe(false)
-    expect(sasWordsMatch(newWords, [words[1], words[0], ...words.slice(2)].join(' '))).toBe(false)
+    /*
+     * Swap the first PAIR THAT ACTUALLY DIFFERS, not positions 0 and 1 unconditionally.
+     *
+     * Each SAS word is one byte of a BLAKE2b digest indexed into a 256-word list, so two adjacent
+     * words are identical about one draw in 256 — measured at 74 in 20,000, which is 0.370% against
+     * an expected 0.391%. When they collide the "swap" is a no-op, the phrase is unchanged,
+     * sasWordsMatch correctly returns true, and this line asserted that an identical phrase does not
+     * match. It failed roughly one run in 256, against behaviour that is right.
+     *
+     * Same defect as groups.test.ts and pairingAccept.test.ts: a mutation that is not guaranteed to
+     * be a mutation. groups.test.ts's transposition sweep already guards it with an explicit skip;
+     * this line predates that lesson.
+     */
+    const swapAt = words.findIndex((w, i) => i > 0 && w !== words[i - 1])
+    expect(swapAt, 'six words drawn from 256 cannot all be identical').toBeGreaterThan(0)
+    const reordered = [...words]
+    ;[reordered[swapAt - 1], reordered[swapAt]] = [reordered[swapAt], reordered[swapAt - 1]]
+    expect(reordered.join(' ')).not.toBe(newWords)
+    expect(sasWordsMatch(newWords, reordered.join(' '))).toBe(false)
     // And the floor holds regardless of what was typed back.
     expect(sasWordsMatch('', '')).toBe(false)
     expect(sasWordsMatch('one two three', 'one two three')).toBe(false)
