@@ -18,6 +18,9 @@ import type { TherapistOffer } from './payloads'
 import type { OwnerPairingState } from './relay'
 import type { InviteResponse } from '../sync/portal'
 import { type CanonicalPairingCode } from './pairingCode'
+import type { OfferCheck } from '../owner/therapistKeys'
+import type { PinWrite } from '../therapist/pinStore'
+import { OWNER_COPY } from './copy'
 
 /*
  * The ORDER of effects is what this file is for. Every port records its call, so a test can assert
@@ -60,7 +63,8 @@ interface Harness {
   codes: string[]
   reply: { state: 'waiting' } | { state: 'cancelled' } | { state: 'superseded' } | { state: 'complete'; isk: Uint8Array; offer: TherapistOffer | null }
   invites: InviteSummary[]
-  pin: 'pinned-now' | 'already-pinned' | 'differs-from-pin' | 'unreadable'
+  check: OfferCheck
+  pin: PinWrite | 'unreadable'
   approveThrows: boolean
 }
 
@@ -75,6 +79,7 @@ function harness(): Harness {
     codes,
     reply: { state: 'waiting' },
     invites: [],
+    check: { kind: 'first' },
     pin: 'pinned-now',
     approveThrows: false,
     ports: {
@@ -106,10 +111,15 @@ function harness(): Harness {
       async reportInvite(inviteId) {
         calls.push(`report:${inviteId}`)
       },
+      inspectOffer() {
+        calls.push('inspect')
+        return h.check
+      },
       pinOffer() {
         calls.push('pin')
         return h.pin
       },
+      displayName: 'Sam Reed',
       async freshCode() {
         const canonical = `CODE${String(codes.length).padStart(4, '0')}` as CanonicalPairingCode
         return { canonical, display: `${canonical.slice(0, 4)}-${canonical.slice(4)}` }
@@ -220,18 +230,14 @@ describe('approval', () => {
     expect(h.storage.data.get(OWNER_RUN_STORAGE_KEY)).toBeUndefined()
   })
 
-  it('a key that differs from what this console already recorded forwards nothing', async () => {
-    const answered = await toAnswered()
-    h.pin = 'differs-from-pin'
-    await expect(approve(h.ports, answered)).rejects.toThrow(/already has different keys/)
-    expect(h.calls.some((c) => c.startsWith('approve:'))).toBe(false)
-  })
-
   it('unreadable keys forward nothing either', async () => {
     const answered = await toAnswered()
     h.pin = 'unreadable'
     await expect(approve(h.ports, answered)).rejects.toThrow(/could not be read/)
     expect(h.calls.some((c) => c.startsWith('approve:'))).toBe(false)
+    // Control: the same run approves when the keys read, so the refusal above is about the keys.
+    h.pin = 'pinned-now'
+    expect((await approve(h.ports, answered)).phase).toBe('approved')
   })
 
   it('refuses to approve anything that is not an answered run', async () => {
@@ -251,6 +257,111 @@ describe('approval', () => {
     expect(back.attemptsLeft).toBe(MAX_EXCHANGES_PER_INVITE - 3)
     expect(back.failCount).toBe(2)
     expect(h.calls.filter((c) => c.startsWith('cancel:'))).toHaveLength(1)
+  })
+})
+
+/*
+ * ISSUE #111. A matching code on a FRESH invitation replaces the keys this console holds. The pin
+ * was recorded on exactly one proof — the code — so demanding a stronger one to replace it than to
+ * create it is incoherent, and buys nothing: a code-holder can already pair fresh and be sent
+ * shares. What the module owes in exchange is that nobody reaches the button without the screen
+ * having said what it does and does not reach, and that the ONE genuine ambiguity still refuses.
+ */
+describe('replacing keys this console already holds', () => {
+  async function answeredWith(check: OfferCheck): Promise<OwnerCeremony> {
+    const waiting = await toWaiting()
+    h.check = check
+    h.reply = { state: 'complete', isk: new Uint8Array(64), offer: OFFER }
+    return checkForReply(h.ports, waiting)
+  }
+
+  it('reads the offer against the record before anything is written or forwarded', async () => {
+    const answered = await answeredWith({ kind: 'supersedes' })
+    expect(answered.phase).toBe('answered')
+    if (answered.phase !== 'answered') return
+    // The screen can say what approving would do, because the answer is already in the state…
+    expect(answered.keys.kind).toBe('supersedes')
+    // …and getting it cost no write and no forward. This is the ordering the whole screen rests on.
+    expect(h.calls).toContain('inspect')
+    expect(h.calls).not.toContain('pin')
+    expect(h.calls.some((c) => c.startsWith('approve:'))).toBe(false)
+    // Control: 'pin' and 'approve:' DO appear once an approval happens, so the absences can fail.
+    await approve(h.ports, answered)
+    expect(h.calls).toContain('pin')
+    expect(h.calls.some((c) => c.startsWith('approve:'))).toBe(true)
+  })
+
+  it('approves, records the new keys, and says a replacement happened', async () => {
+    const answered = await answeredWith({ kind: 'supersedes' })
+    h.pin = 'superseded'
+    const approved = await approve(h.ports, answered)
+    expect(approved.phase).toBe('approved')
+    if (approved.phase !== 'approved') return
+    expect(approved.pin).toBe('superseded')
+    expect(approved.replaced).toBe(true)
+    // Still pin-then-forward, unchanged: the local, reversible act precedes the one that is neither.
+    expect(h.calls.indexOf('pin')).toBeLessThan(h.calls.findIndex((c) => c.startsWith('approve:')))
+  })
+
+  it('a clinician who re-keyed completely is a replacement to the owner, whatever the record calls it', async () => {
+    // Both keys new, so the pin record has never seen this identity and reports 'pinned-now'. To
+    // the OWNER it is still the same person's keys changing, and the screen must say so — which is
+    // why `replaced` comes from the check made against the relationship, not from the write.
+    const answered = await answeredWith({ kind: 'supersedes' })
+    h.pin = 'pinned-now'
+    const approved = await approve(h.ports, answered)
+    expect(approved.phase === 'approved' && approved.replaced).toBe(true)
+    // Control: an ordinary first pairing, same 'pinned-now' write, is NOT reported as a
+    // replacement — so the flag is following the check and not the write.
+    h = harness()
+    const first = await answeredWith({ kind: 'first' })
+    h.pin = 'pinned-now'
+    const plain = await approve(h.ports, first)
+    expect(plain.phase === 'approved' && plain.replaced).toBe(false)
+  })
+
+  it('keys already recorded for a DIFFERENT person are refused, and nothing is written or forwarded', async () => {
+    const answered = await answeredWith({ kind: 'other-person', displayName: 'Dr Okafor' })
+    await expect(approve(h.ports, answered)).rejects.toThrow(/has recorded for/)
+    await expect(approve(h.ports, answered)).rejects.toThrow(/Nothing was approved and nothing was recorded/)
+    // The refusal names both people and a consequence, and neither name is the one the offer chose.
+    await expect(approve(h.ports, answered)).rejects.toThrow(/Dr Okafor/)
+    await expect(approve(h.ports, answered)).rejects.toThrow(/Sam Reed/)
+    expect(h.calls).not.toContain('pin')
+    expect(h.calls.some((c) => c.startsWith('approve:'))).toBe(false)
+    // And it is not a burn: the invitation was neither reported nor cancelled by the refusal.
+    expect(h.calls.some((c) => c.startsWith('report:') || c.startsWith('cancel:'))).toBe(false)
+  })
+
+  it('the refusal is the copy module’s sentence, not one written at the throw site', async () => {
+    const answered = await answeredWith({ kind: 'other-person', displayName: 'Dr Okafor' })
+    await expect(approve(h.ports, answered)).rejects.toThrow(OWNER_COPY.sameKeysAsOther('Sam Reed', 'Dr Okafor'))
+  })
+
+  it('the name in the replacement sentences is the owner’s, never the one the offer carried', () => {
+    // OFFER.displayName is typed by whoever answered. If it reached these sentences, the party
+    // being checked would be choosing the words of the check.
+    expect(OFFER.displayName).toBe('Dr Example')
+    const words = [
+      OWNER_COPY.replaceAtMint('Sam Reed'),
+      OWNER_COPY.replaceTitle('Sam Reed'),
+      ...OWNER_COPY.replaceBody('Sam Reed'),
+      OWNER_COPY.sameKeysAsOther('Sam Reed', 'Dr Okafor'),
+    ].join(' ')
+    expect(words).toContain('Sam Reed')
+    expect(words).not.toContain('Dr Example')
+    // Control: the detector finds the offer's name when it is planted.
+    expect(`${words} ${OFFER.displayName}`).toContain('Dr Example')
+  })
+
+  it('says what a replacement does not reach, in the same terms as every other take-back', () => {
+    const body = OWNER_COPY.replaceBody('Sam Reed').join(' ')
+    expect(body).toMatch(/does not reach what was already sealed/i)
+    expect(body).toMatch(/can still open every share sent to Sam Reed before now/i)
+    // Not a contradiction of the standing sentence about revoking; the same fact, at a new click.
+    expect(body).not.toMatch(/un-send|undo|recall/i)
+    expect(body).toMatch(/do not approve/i)
+    expect(OWNER_COPY.replaceDeclineLabel).toBe('Not now')
   })
 })
 

@@ -97,9 +97,72 @@ describe('what the screen says', () => {
     expect(OWNER_COPY.stoppedBody).toMatch(/nobody has been told/i)
   })
 
+  /*
+   * ISSUE #111. Replacing keys the console already holds is approvable, so what stands between an
+   * owner and that click is entirely these sentences. Each of the five is here because it says
+   * something a person cannot find out afterwards.
+   */
+  it('warns at mint, while there is still nothing to undo', () => {
+    expect(MARKUP).toContain('OWNER_COPY.replaceAtMint(therapist.displayName)')
+    const line = OWNER_COPY.replaceAtMint('Sam Reed')
+    expect(line).toMatch(/already holds keys for Sam Reed/)
+    expect(line).toMatch(/will replace them/)
+    expect(line).toMatch(/nothing changes/i)
+    // And it is dropped once the decision is made: "until then, nothing changes" is false after it.
+    const guard = MARKUP.slice(MARKUP.indexOf('replaceAtMint') - 300, MARKUP.indexOf('replaceAtMint'))
+    expect(guard).toContain("ceremony.phase !== 'approved'")
+    expect(guard).toContain("ceremony.phase !== 'answered'")
+  })
+
+  it('states, at the click, what replacing does not reach', () => {
+    expect(MARKUP).toContain('OWNER_COPY.replaceTitle(therapist.displayName)')
+    expect(MARKUP).toContain('OWNER_COPY.replaceBody(therapist.displayName)')
+    const body = OWNER_COPY.replaceBody('Sam Reed')
+    expect(body).toHaveLength(5)
+    const joined = body.join(' ')
+    expect(joined).toMatch(/opened under the code you gave Sam Reed/)
+    expect(joined).toMatch(/Nothing further is sealed to the old ones/)
+    expect(joined).toMatch(/does not reach what was already sealed to the old keys/)
+    expect(joined).toMatch(/the code already did that job/)
+    expect(joined).toMatch(/If Sam Reed did not ask for this, do not approve/)
+    // It must not read as an accusation any more than the mismatch does.
+    expect(joined).not.toMatch(/attack|intrud|breach|suspicious|threat|danger/i)
+    expect('An intruder is here').toMatch(/attack|intrud|breach|suspicious|threat|danger/i)
+  })
+
+  it('offers a replacement and a dismissal, and the dismissal ends nothing', () => {
+    expect(MARKUP).toContain('OWNER_COPY.replaceApproveLabel')
+    expect(MARKUP).toContain('OWNER_COPY.replaceDeclineLabel')
+    // The decline button's handler. It must not stop, cancel or re-code the invitation: a wrong
+    // moment is not a burn, and the person may well come back to this in ten minutes.
+    const decline = MARKUP.slice(
+      MARKUP.lastIndexOf('<button', MARKUP.indexOf('OWNER_COPY.replaceDeclineLabel')),
+      MARKUP.indexOf('OWNER_COPY.replaceDeclineLabel'),
+    )
+    expect(decline).toContain('ondone?.()')
+    for (const verb of ['stopInvitation', 'newCode', 'reportInvite', 'cancelRun']) {
+      expect(decline.includes(verb), `the dismissal calls ${verb}`).toBe(false)
+    }
+    // Control: the detector does see those names when one is present.
+    expect('onclick={() => step(() => stopInvitation(ports, ceremony))}'.includes('stopInvitation')).toBe(true)
+  })
+
   it('nothing in the copy reads as a score, a streak, or a congratulation', () => {
     for (const [key, value] of Object.entries(OWNER_COPY)) {
       if (typeof value !== 'string') continue
+      expect(value, key).not.toMatch(/\b(success|verified|secure|congratulat|well done|streak|score|perfect)\b/i)
+      expect(value, key).not.toContain('!')
+    }
+    // The sentences that take a name are functions, which the loop above skips — and the loop
+    // skipping them silently is exactly how a rule stops applying to the newest copy. Checked here
+    // by calling them, so adding a name-bearing sentence cannot slip past the register rules.
+    const named: [string, string][] = [
+      ['replaceAtMint', OWNER_COPY.replaceAtMint('Sam Reed')],
+      ['replaceTitle', OWNER_COPY.replaceTitle('Sam Reed')],
+      ['sameKeysAsOther', OWNER_COPY.sameKeysAsOther('Sam Reed', 'Dr Okafor')],
+      ...OWNER_COPY.replaceBody('Sam Reed').map((p, i): [string, string] => [`replaceBody[${i}]`, p]),
+    ]
+    for (const [key, value] of named) {
       expect(value, key).not.toMatch(/\b(success|verified|secure|congratulat|well done|streak|score|perfect)\b/i)
       expect(value, key).not.toContain('!')
     }

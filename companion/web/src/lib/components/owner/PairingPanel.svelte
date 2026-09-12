@@ -37,13 +37,14 @@
     ownerOpenPairing,
   } from '../../pairing/relay'
   import { defaultOwnerRunStorage } from '../../pairing/ownerRunStore'
-  import { identityFromOffer, pinFromPairing, groupFingerprint } from '../../owner/therapistKeys'
+  import { checkOffer, identityFromOffer, pinFromPairing, groupFingerprint } from '../../owner/therapistKeys'
   import { loadPins, savePins } from '../../therapist/pinStore'
   import { fingerprint } from '../../assignments/crypto'
   import type { TherapistOffer } from '../../pairing/payloads'
 
   let {
     therapist,
+    others = [],
     client,
     baseUrl,
     token,
@@ -53,6 +54,12 @@
     ondone,
   }: {
     therapist: PinnedTherapist
+    /**
+     * The console's OTHER relationships, so an offer carrying keys already recorded for one of them
+     * can be refused. That is the one ambiguity a pairing code cannot settle: two people filed
+     * under one key means a share meant for either can be opened by the other.
+     */
+    others?: PinnedTherapist[]
     client: PortalClient | null
     baseUrl: string
     token: string
@@ -74,6 +81,23 @@
   async function relRef(): Promise<string> {
     return relRefOf(therapist.inboxToken)
   }
+
+  /**
+   * What this console holds for THIS relationship right now, or null while it holds nothing.
+   *
+   * A pending entry carries empty key arrays rather than absent ones, so "has this person got keys
+   * on file" is `keysPending`, never a truthiness check on the bytes.
+   */
+  const held = $derived(
+    therapist.keysPending ? null : { boxPub: therapist.boxPub, signPub: therapist.signPub },
+  )
+
+  /** The same question for everyone else, with the owner's own name for each of them attached. */
+  const otherHeld = $derived(
+    others
+      .filter((t) => !t.keysPending && t.id !== therapist.id)
+      .map((t) => ({ displayName: t.displayName, boxPub: t.boxPub, signPub: t.signPub })),
+  )
 
   const ports: OwnerCeremonyPorts = {
     async mintInvite(): Promise<InviteResponse> {
@@ -97,15 +121,20 @@
       if (!client) throw new Error('No server configured.')
       await client.reportInvite(inviteId)
     },
+    inspectOffer: (offer: TherapistOffer) => checkOffer(offer, held, otherHeld),
     pinOffer(offer: TherapistOffer) {
       const peer = identityFromOffer(offer)
       if (!peer) return 'unreadable'
       const pins = loadPins()
       const outcome = pinFromPairing(pins, peer)
-      if (outcome !== 'differs-from-pin') savePins(pins)
+      // Nothing to write when the record already says exactly this; every other outcome appended.
+      if (outcome !== 'already-pinned') savePins(pins)
       return outcome
     },
     freshCode: defaultFreshCode,
+    get displayName() {
+      return therapist.displayName
+    },
     storage: defaultOwnerRunStorage(),
     now: () => Date.now(),
   }
@@ -206,6 +235,16 @@
 
       <p class="two-channels">{OWNER_COPY.twoChannels}</p>
 
+      <!--
+        Said at MINT, while there is still nothing to undo, rather than only at the moment of the
+        click: someone sending this link should know before they send it that whoever answers with
+        the code takes the place of the keys already on file. Dropped once the decision has been
+        made either way — "until then, nothing changes" is false after an approval.
+      -->
+      {#if held && ceremony.phase !== 'answered' && ceremony.phase !== 'approved' && ceremony.phase !== 'ended'}
+        <Callout tone="info">{OWNER_COPY.replaceAtMint(therapist.displayName)}</Callout>
+      {/if}
+
       {#if ceremony.phase === 'invited'}
         <button class="primary" onclick={() => step(() => openRun(ports, ceremony))} disabled={busy}>
           {busy ? 'Making a code…' : 'Make a code'}
@@ -245,8 +284,22 @@
         </div>
         <p class="hint">{OWNER_COPY.newCodeHint}</p>
       {:else if ceremony.phase === 'answered'}
-        <h5>{OWNER_COPY.answeredTitle}</h5>
-        <p class="state">{OWNER_COPY.answeredBody}</p>
+        {#if ceremony.keys.kind === 'supersedes'}
+          <!--
+            The replacement. Every sentence of it is in copy.ts and none is optional: what it does,
+            what it does NOT reach, that no reading-aloud is needed, and what to do if the person
+            never asked for this. The refusal it replaced said "reach them another way" and stopped,
+            which was a stronger demand than the one that recorded the keys in the first place.
+          -->
+          <Callout tone="warn" title={OWNER_COPY.replaceTitle(therapist.displayName)}>
+            {#each OWNER_COPY.replaceBody(therapist.displayName) as line (line)}
+              <p class="state">{line}</p>
+            {/each}
+          </Callout>
+        {:else}
+          <h5>{OWNER_COPY.answeredTitle}</h5>
+          <p class="state">{OWNER_COPY.answeredBody}</p>
+        {/if}
         <dl class="offer">
           <dt>{OWNER_COPY.nameLabel}</dt>
           <dd class="name">{ceremony.offer.displayName}</dd>
@@ -260,13 +313,27 @@
             </dd>
           {/if}
         </dl>
-        <p class="hint">{OWNER_COPY.fingerprintsHint}</p>
+        {#if ceremony.keys.kind !== 'supersedes'}
+          <!-- The replacement copy says this same sentence in its own words; twice would read as
+               two different instructions about the same fingerprints. -->
+          <p class="hint">{OWNER_COPY.fingerprintsHint}</p>
+        {/if}
         <div class="row">
-          <button class="primary" onclick={approveNow} disabled={busy}>{busy ? 'Approving…' : 'Approve'}</button>
-          <button onclick={() => step(() => newCode(ports, ceremony))} disabled={busy}>{OWNER_COPY.newCodeLabel}</button>
+          {#if ceremony.keys.kind === 'supersedes'}
+            <button class="primary" onclick={approveNow} disabled={busy}>
+              {busy ? 'Approving…' : OWNER_COPY.replaceApproveLabel}
+            </button>
+            <!-- A dismissal. It calls nothing: no cancel, no report, no new code — the invitation
+                 and the run are exactly as they were, and the keys on file are untouched. -->
+            <button onclick={() => ondone?.()} disabled={busy}>{OWNER_COPY.replaceDeclineLabel}</button>
+          {:else}
+            <button class="primary" onclick={approveNow} disabled={busy}>{busy ? 'Approving…' : 'Approve'}</button>
+            <button onclick={() => step(() => newCode(ports, ceremony))} disabled={busy}>{OWNER_COPY.newCodeLabel}</button>
+          {/if}
         </div>
       {:else if ceremony.phase === 'approved'}
         <h5>{OWNER_COPY.approvedTitle}</h5>
+        {#if ceremony.replaced}<p class="state">{OWNER_COPY.replacedBody}</p>{/if}
         <p class="state">{OWNER_COPY.approvedBody}</p>
         <div class="row">
           <button class="primary" onclick={() => ondone?.()}>Done</button>
