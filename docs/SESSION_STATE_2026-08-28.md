@@ -234,7 +234,9 @@ What is true: the KDoc's reasoning is stale (the token now alone authorises the 
 
 **The consequence worth carrying forward: the inbox token is now the load-bearing secret in the whole design, and nobody has audited how it is created, delivered or stored on the clients.** That is #120.
 
-`owner_keys` stores public halves only and owner console keys are ephemeral per browser session — so there is no durable owner identity, which means what a therapist pins by hand is not stable across sessions (#101). That finding was **not** adversarially verified before the run was stopped; a `/challenge` is in flight.
+`owner_keys` stores public halves only and owner console keys are ephemeral per browser session. That was then verified adversarially, and **the verification found a live defect**, now #121: because the owner's signing key is regenerated every browser session, every grant and share the owner produces after their first session **fails verification** for a therapist who pinned correctly — demonstrated by a test, not inferred. Publishing owner keys to the existing route would not fix it and would make it permanent (`registerOwnerKeys` is `INSERT OR IGNORE`, tested to refuse a second publish), so the fix has to change `OwnerUnlock`, not the route. A second finding, #122: the clinician's hand-typed owner key is **silently overwritten** by whatever the server reports, with no comparison and no notice — inert today only because nothing publishes, which is luck rather than design.
+
+The claim also narrowed. "No durable owner key anywhere" is false: the sync path derives a durable owner Ed25519 manifest-signing identity from the sync passphrase (`sync-crypto`'s class is named `OwnerKeys`) and the server stores its KDF salt beside every snapshot — so a dump-holder has an offline passphrase-guessing oracle for that identity. And `owner_keys` is insert-only only because the SQL says `INSERT OR IGNORE`; anyone with **write** access to the file can update it.
 
 ### Open, in the order they are worth doing
 
