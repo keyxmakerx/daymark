@@ -1,6 +1,5 @@
 package com.daymark.app.ui.settings
 
-import com.daymark.app.ui.components.SentenceCaps
 
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -43,15 +42,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.daymark.app.data.entity.Reminder
 import com.daymark.app.notifications.NotificationPermission
 import com.daymark.app.ui.components.PaperSurface
+import com.daymark.app.ui.components.SentenceCaps
 import com.daymark.app.util.DateUtils
 import java.time.LocalDateTime
 import java.time.ZoneId
