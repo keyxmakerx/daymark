@@ -14,6 +14,7 @@ import com.daymark.companion.routes.orgRoutes
 import com.daymark.companion.routes.pairingRelayRoutes
 import com.daymark.companion.routes.recoveryRoutes
 import com.daymark.companion.routes.relationRoutes
+import com.daymark.companion.routes.relationshipEndingRoutes
 import com.daymark.companion.routes.syncRoutes
 import com.daymark.companion.routes.therapistAuthRoutes
 import com.daymark.companion.routes.ownerKeyRoutes
@@ -288,6 +289,17 @@ fun Application.module(
             )
 
             ownerKeyRoutes(
+                authStore = auth,
+                ownerGuard = guard,
+                sessionIdleSeconds = config.sessionIdleSeconds,
+                auditStore = audit,
+                auditSourceIp = config.auditSourceIpEnabled,
+            )
+
+            // A clinician ending their own access, and the owner reading back that it ended. Same
+            // feature gate as the rest of the portal: an ending is a fact about a relationship, and
+            // relationships only exist when the portal is on. See routes/RelationshipEndingRoutes.kt.
+            relationshipEndingRoutes(
                 authStore = auth,
                 ownerGuard = guard,
                 sessionIdleSeconds = config.sessionIdleSeconds,

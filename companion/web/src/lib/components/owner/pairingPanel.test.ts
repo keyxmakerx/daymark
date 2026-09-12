@@ -81,14 +81,52 @@ describe('what the screen says', () => {
     expect(OWNER_COPY.browserCaveat).not.toMatch(/phone|app|secure/i)
   })
 
+  /*
+   * ISSUE #112. One notice on this screen when a reply does not open — and deliberately nothing
+   * else: no notification, because the owner's half is a browser tab and a closed tab cannot raise
+   * one honestly. The phone's version of this is a contract in COMPANION_PHONE_2B.md §4, not code
+   * improvised here.
+   */
   it('renders a mismatch as a question with two human choices, never as an attack', () => {
     expect(MARKUP).toContain('OWNER_COPY.mismatchTitle')
-    const words = `${OWNER_COPY.mismatchTitle} ${OWNER_COPY.mismatchBody}`
-    expect(words).toMatch(/mistyping/i)
-    expect(words).toMatch(/stop this invitation/i)
+    expect(MARKUP).toContain('OWNER_COPY.mismatchBody(therapist.displayName)')
+    const words = `${OWNER_COPY.mismatchTitle} ${OWNER_COPY.mismatchBody('Sam Reed')}`
+    expect(words).toMatch(/did not open with your code/i)
+    expect(words).toMatch(/ask Sam Reed whether they answered/i)
+    expect(words).toMatch(/stop it and send a new link/i)
     expect(words).not.toMatch(/attack|intrud|breach|suspicious|threat|danger/i)
     // Control: the pattern fires on the sentence it is meant to catch.
     expect('An attack was detected').toMatch(/attack|intrud|breach|suspicious|threat|danger/i)
+  })
+
+  it('offers keeping it open beside the stop button that was already there, and the count stays', () => {
+    const branch = MARKUP.slice(MARKUP.indexOf("ceremony.phase === 'mismatch'"), MARKUP.indexOf("ceremony.phase === 'answered'"))
+    expect(branch).toContain('OWNER_COPY.keepOpenLabel')
+    expect(branch).toContain('keepInvitation(ceremony)')
+    // Two choices, not three: the branch itself adds one button, and "Stop this invitation" is the
+    // shared one below, which the mismatch phase does not opt out of.
+    expect((branch.match(/<button/g) ?? []).length).toBe(1)
+    expect(MARKUP).toContain('OWNER_COPY.stopLabel')
+    expect(MARKUP).toContain('OWNER_COPY.attemptsLeft(ceremony.attemptsLeft)')
+    const shared = MARKUP.slice(MARKUP.indexOf('OWNER_COPY.attemptsLeft') - 400, MARKUP.indexOf('OWNER_COPY.attemptsLeft'))
+    expect(shared, 'the count is hidden on the mismatch screen').not.toContain("ceremony.phase !== 'mismatch'")
+  })
+
+  it('checking is a click before a failed open and after one — no timer appears either side of it', () => {
+    // The cadence rule (#112): a device that polled faster after a reply failed to open would have
+    // told the server the code was wrong. The module has no scheduler at all (pinned in
+    // ownerCeremony.test.ts); this is the screen's half — nothing here starts one.
+    const script = SOURCE.slice(0, SOURCE.indexOf('</script>'))
+    for (const scheduler of ['setInterval', 'requestAnimationFrame', 'queueMicrotask', 'requestIdleCallback']) {
+      expect(script.includes(scheduler), `the panel schedules with ${scheduler}`).toBe(false)
+    }
+    // The one setTimeout is the copied-to-clipboard flag, which spends nothing and calls no port.
+    const timers = script.match(/setTimeout\(/g) ?? []
+    expect(timers).toHaveLength(1)
+    const at = script.indexOf('setTimeout(')
+    expect(script.slice(at, at + 60)).toContain('copied')
+    // Control: the detector sees a planted scheduler.
+    expect('setInterval(check, 5000)'.includes('setInterval')).toBe(true)
   })
 
   it('says what ending an invitation does and what it does not', () => {
@@ -97,9 +135,73 @@ describe('what the screen says', () => {
     expect(OWNER_COPY.stoppedBody).toMatch(/nobody has been told/i)
   })
 
+  /*
+   * ISSUE #111. Replacing keys the console already holds is approvable, so what stands between an
+   * owner and that click is entirely these sentences. Each of the five is here because it says
+   * something a person cannot find out afterwards.
+   */
+  it('warns at mint, while there is still nothing to undo', () => {
+    expect(MARKUP).toContain('OWNER_COPY.replaceAtMint(therapist.displayName)')
+    const line = OWNER_COPY.replaceAtMint('Sam Reed')
+    expect(line).toMatch(/already holds keys for Sam Reed/)
+    expect(line).toMatch(/will replace them/)
+    expect(line).toMatch(/nothing changes/i)
+    // And it is dropped once the decision is made: "until then, nothing changes" is false after it.
+    const guard = MARKUP.slice(MARKUP.indexOf('replaceAtMint') - 300, MARKUP.indexOf('replaceAtMint'))
+    expect(guard).toContain("ceremony.phase !== 'approved'")
+    expect(guard).toContain("ceremony.phase !== 'answered'")
+  })
+
+  it('states, at the click, what replacing does not reach', () => {
+    expect(MARKUP).toContain('OWNER_COPY.replaceTitle(therapist.displayName)')
+    expect(MARKUP).toContain('OWNER_COPY.replaceBody(therapist.displayName)')
+    const body = OWNER_COPY.replaceBody('Sam Reed')
+    expect(body).toHaveLength(5)
+    const joined = body.join(' ')
+    expect(joined).toMatch(/opened under the code you gave Sam Reed/)
+    expect(joined).toMatch(/Nothing further is sealed to the old ones/)
+    expect(joined).toMatch(/does not reach what was already sealed to the old keys/)
+    expect(joined).toMatch(/the code already did that job/)
+    expect(joined).toMatch(/If Sam Reed did not ask for this, do not approve/)
+    // It must not read as an accusation any more than the mismatch does.
+    expect(joined).not.toMatch(/attack|intrud|breach|suspicious|threat|danger/i)
+    expect('An intruder is here').toMatch(/attack|intrud|breach|suspicious|threat|danger/i)
+  })
+
+  it('offers a replacement and a dismissal, and the dismissal ends nothing', () => {
+    expect(MARKUP).toContain('OWNER_COPY.replaceApproveLabel')
+    expect(MARKUP).toContain('OWNER_COPY.replaceDeclineLabel')
+    // The decline button's handler. It must not stop, cancel or re-code the invitation: a wrong
+    // moment is not a burn, and the person may well come back to this in ten minutes.
+    const decline = MARKUP.slice(
+      MARKUP.lastIndexOf('<button', MARKUP.indexOf('OWNER_COPY.replaceDeclineLabel')),
+      MARKUP.indexOf('OWNER_COPY.replaceDeclineLabel'),
+    )
+    expect(decline).toContain('ondone?.()')
+    for (const verb of ['stopInvitation', 'newCode', 'reportInvite', 'cancelRun']) {
+      expect(decline.includes(verb), `the dismissal calls ${verb}`).toBe(false)
+    }
+    // Control: the detector does see those names when one is present.
+    expect('onclick={() => step(() => stopInvitation(ports, ceremony))}'.includes('stopInvitation')).toBe(true)
+  })
+
   it('nothing in the copy reads as a score, a streak, or a congratulation', () => {
     for (const [key, value] of Object.entries(OWNER_COPY)) {
       if (typeof value !== 'string') continue
+      expect(value, key).not.toMatch(/\b(success|verified|secure|congratulat|well done|streak|score|perfect)\b/i)
+      expect(value, key).not.toContain('!')
+    }
+    // The sentences that take a name are functions, which the loop above skips — and the loop
+    // skipping them silently is exactly how a rule stops applying to the newest copy. Checked here
+    // by calling them, so adding a name-bearing sentence cannot slip past the register rules.
+    const named: [string, string][] = [
+      ['replaceAtMint', OWNER_COPY.replaceAtMint('Sam Reed')],
+      ['replaceTitle', OWNER_COPY.replaceTitle('Sam Reed')],
+      ['sameKeysAsOther', OWNER_COPY.sameKeysAsOther('Sam Reed', 'Dr Okafor')],
+      ...OWNER_COPY.replaceBody('Sam Reed').map((p, i): [string, string] => [`replaceBody[${i}]`, p]),
+      ['mismatchBody', OWNER_COPY.mismatchBody('Sam Reed')],
+    ]
+    for (const [key, value] of named) {
       expect(value, key).not.toMatch(/\b(success|verified|secure|congratulat|well done|streak|score|perfect)\b/i)
       expect(value, key).not.toContain('!')
     }

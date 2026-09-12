@@ -244,11 +244,34 @@ describe('the order the module checks in is the order the form is drawn in', () 
     const end = GATE_MARKUP.indexOf('</details>', start)
     expect(end).toBeGreaterThan(start)
     const drawn = idsIn(GATE_MARKUP.slice(start, end))
-    // The control: the disclosure holds more than the module checks (the two owner keys are
-    // optional and judged after the fetch that usually supplies them), so filtering is doing work.
-    expect(drawn.length).toBeGreaterThan(FALLBACK_ORDER.length)
     expect(drawn.filter((id) => (FALLBACK_ORDER as readonly string[]).includes(id))).toEqual([
       ...FALLBACK_ORDER,
     ])
+    /*
+     * The control the line above needs, now that it is an identity rather than a filter.
+     *
+     * The disclosure used to hold two fields the module does not check — the owner's two public
+     * keys, typed in by hand — and their presence was what proved the filter was doing work. Those
+     * fields are gone (issue #101: the pairing seals the owner's keys back, so there is nothing to
+     * type), and an assertion whose filter removes nothing would pass just as happily over a form
+     * that had drifted. So one is planted, and the filter is shown to drop it.
+     */
+    const planted = idsIn(
+      `${GATE_MARKUP.slice(start, end)}<input id="f-somethingElse" type="text" />`,
+    )
+    expect(planted).toContain('somethingElse')
+    expect(planted.filter((id) => (FALLBACK_ORDER as readonly string[]).includes(id))).toEqual([
+      ...FALLBACK_ORDER,
+    ])
+  })
+
+  it('the disclosure asks for nothing the module cannot name a problem with', () => {
+    // The other half of the same claim. A field on the form that firstProblem has no entry for is
+    // a field that can be empty and silently stop a sign-in with a message about something else —
+    // which is exactly what the two owner-key fields did before they were removed.
+    const start = GATE_MARKUP.indexOf('<details')
+    const end = GATE_MARKUP.indexOf('</details>', start)
+    const drawn = idsIn(GATE_MARKUP.slice(start, end))
+    expect(drawn).toEqual([...FALLBACK_ORDER])
   })
 })

@@ -18,6 +18,7 @@ import { resolve } from 'node:path'
 const read = (rel: string) => readFileSync(resolve(process.cwd(), rel), 'utf8')
 
 const PORTAL = read('src/lib/components/therapist/TherapistPortal.svelte')
+const ACCEPTANCE = read('src/lib/components/therapist/InviteAcceptance.svelte')
 const GATE = read('src/lib/components/therapist/LoginGate.svelte')
 const SHARED_VIEW = read('src/lib/components/therapist/SharedDataView.svelte')
 const SCREEN = read('src/lib/components/therapist/SignInScreen.svelte')
@@ -231,5 +232,36 @@ describe('the sign-in screen sits where the other surfaces sit', () => {
     expect(SCREEN_MARKUP).not.toContain('<details')
     // The control: the same search finds the disclosure the gate does have.
     expect(GATE_MARKUP).toContain('<details')
+  })
+})
+
+describe('a paused connection is not drawn as a failure', () => {
+  /*
+   * The acceptance screen has one place it puts refusals, and until the pairing budgets were split
+   * everything that reached it was a fault: a dead link, a wrap that would not reopen, an
+   * enrolment the server refused. A CONNECTION PAUSE is not one of those. The invitation is alive,
+   * nothing has been spent, and the only thing to do is come back in a few minutes — so it must
+   * not arrive in the alarm hue, which would contradict the words inside it.
+   *
+   * Structural, because the property lives in the markup: the callout's tone is chosen from which
+   * step refused.
+   */
+  it('chooses the tone from the step, so the paused message is not critical', () => {
+    const markup = markupOf(ACCEPTANCE)
+    expect(markup).toContain("errorStep === 'paused' ? 'info' : 'critical'")
+    // The control: the search would see a hard-coded critical tone if one came back, and there is
+    // exactly one error callout to find.
+    expect(markup).not.toMatch(/\{#if error\}<Callout tone="critical"/)
+    expect((markup.match(/\{#if error\}<Callout/g) ?? []).length).toBe(1)
+  })
+
+  it('the step that names it is set from the refusal rather than guessed', () => {
+    const code = codeOnly(ACCEPTANCE)
+    expect(code).toContain('errorStep = e instanceof AcceptError ? e.step : null')
+    // And it is cleared when a flow starts, so one screen's pause cannot colour the next
+    // screen's failure. Three handlers clear the message; all three must clear the step with it.
+    const cleared = (code.match(/error = ''\n\s*errorStep = null/g) ?? []).length
+    expect(cleared).toBe((code.match(/\berror = ''/g) ?? []).length)
+    expect(cleared).toBeGreaterThan(0)
   })
 })

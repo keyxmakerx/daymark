@@ -25,9 +25,10 @@ and no tracking. Because there's no backend, the app is free for everyone, forev
 - 📷 **Photo attachments** — optionally attach a photo to a mood entry via the Android Photo
   Picker (needs **no** storage permission); it's downscaled, stored app-private, shown as a
   thumbnail on All entries and Day Detail, and included in JSON backups.
-- 🌤️ **Home, the daily loop** — a greeting, a one-tap check-in row, a small glance (streak +
-  the last seven days), one gentle suggestion, and today's entries. The full archive is one tap
-  away under **All entries**.
+- 🌤️ **Home, the daily loop** — a greeting, a one-tap check-in row, a small glance (your entry
+  total + the last seven days), one gentle suggestion, and today's entries. The full archive is one
+  tap away under **All entries**. Home carries no continuity figure of any kind: it is the screen
+  you land on after time away, and a count there reads as a mark however it is worded.
 - 🎚️ **Suggestions on a dial** — not right now · show less · remind me later · hide · turn off,
   per card and remembered, with one screen under **Settings → Suggestions** to turn any of them
   back on.
@@ -43,9 +44,10 @@ and no tracking. Because there's no backend, the app is free for everyone, forev
 
 ### Insights
 - 📊 **Dynamic Insights tab** — one screen that merges statistics, the mood calendar, and
-  Year in Pixels, with a **Week / Month / Year** toggle. See your mood trend, current & longest
-  streaks, mood distribution, and average mood per activity, plus the month grid tinted by mood
-  and the whole year at a glance.
+  Year in Pixels, with a **Week / Month / Year** toggle. See your mood trend, **days with an
+  entry** ("12 of the last 30" — non-consecutive, so a missed day costs one day and not a run),
+  mood distribution, and average mood per activity, plus the month grid tinted by mood and the
+  whole year at a glance.
 - 🔗 **What goes with your mood** — on-device correlations between your mood and the activities
   and trackers you log, ranked into "lifts you up / weighs you down". Computed locally with a
   minimum-sample gate, and always labeled **association, not cause**.
@@ -53,7 +55,7 @@ and no tracking. Because there's no backend, the app is free for everyone, forev
   afternoon / evening / night.
 - ↔️ **This period vs. last** — a simple comparison that follows the Week / Month / Year toggle.
 - 📰 **"In review" summary** — a short, rules-based recap (entries, average, best/worst weekday,
-  top mood-lifting factor, current streak), also rendered in the PDF report. Worded as
+  top mood-lifting factor, days with an entry), also rendered in the PDF report. Worded as
   association, never cause.
 - 🔥 **Logging-consistency heatmap** — a GitHub-style entries-per-day grid showing how
   consistently you've checked in.
@@ -86,9 +88,6 @@ and no tracking. Because there's no backend, the app is free for everyone, forev
   PHQ-9 surfaces the offline crisis flow if the self-harm item is non-zero — never a verdict.
   PHQ-9/GAD-7 are free to reproduce (Pfizer); WHO-5 is © WHO, free for non-commercial use. See
   [docs/INSTRUMENTS.md](docs/INSTRUMENTS.md).
-- 🏅 **Achievements** — gentle milestones for showing up (first entry, entry counts, longest
-  streaks, activity variety, first check-in), **More → Achievements**. No streak-shaming; earned
-  badges are sticky.
 - 🧠 **Thought records (CBT)** — a guided record: situation → automatic thought → optional
   thinking-trap tags → evidence for/against → a balanced thought, with mood before/after. Framed
   as reflection, not a verdict (**More → Thought records**).

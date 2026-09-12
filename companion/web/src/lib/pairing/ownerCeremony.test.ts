@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import {
   MAX_EXCHANGES_PER_INVITE,
   abandonApproval,
   approve,
   checkForReply,
+  keepInvitation,
   newCode,
   openRun,
   restore,
@@ -18,6 +21,9 @@ import type { TherapistOffer } from './payloads'
 import type { OwnerPairingState } from './relay'
 import type { InviteResponse } from '../sync/portal'
 import { type CanonicalPairingCode } from './pairingCode'
+import type { OfferCheck } from '../owner/therapistKeys'
+import type { PinWrite } from '../therapist/pinStore'
+import { OWNER_COPY } from './copy'
 
 /*
  * The ORDER of effects is what this file is for. Every port records its call, so a test can assert
@@ -60,9 +66,15 @@ interface Harness {
   codes: string[]
   reply: { state: 'waiting' } | { state: 'cancelled' } | { state: 'superseded' } | { state: 'complete'; isk: Uint8Array; offer: TherapistOffer | null }
   invites: InviteSummary[]
-  pin: 'pinned-now' | 'already-pinned' | 'differs-from-pin' | 'unreadable'
+  check: OfferCheck
+  pin: PinWrite | 'unreadable'
   approveThrows: boolean
+  /** What the E2 sealing port does: a sealed blob, or a throw standing in for a run with no key. */
+  sealFails: boolean
 }
+
+/** Stands in for the owner's sealed keys. The real bytes are proved in relay.test.ts. */
+const SEALED_OWNER_KEYS = 'AQ-sealed-owner-keys'
 
 function harness(): Harness {
   const calls: string[] = []
@@ -75,8 +87,10 @@ function harness(): Harness {
     codes,
     reply: { state: 'waiting' },
     invites: [],
+    check: { kind: 'first' },
     pin: 'pinned-now',
     approveThrows: false,
+    sealFails: false,
     ports: {
       async mintInvite() {
         calls.push('mint')
@@ -95,8 +109,8 @@ function harness(): Harness {
         calls.push(`read:${run.exchangeId}`)
         return h.reply
       },
-      async approveRun(exchangeId, ticket) {
-        calls.push(`approve:${exchangeId}:${ticket}`)
+      async approveRun(exchangeId, ticket, envB64) {
+        calls.push(`approve:${exchangeId}:${ticket}:${envB64}`)
         if (h.approveThrows) throw new Error('server said no')
       },
       async cancelRun(exchangeId) {
@@ -106,10 +120,20 @@ function harness(): Harness {
       async reportInvite(inviteId) {
         calls.push(`report:${inviteId}`)
       },
+      inspectOffer() {
+        calls.push('inspect')
+        return h.check
+      },
       pinOffer() {
         calls.push('pin')
         return h.pin
       },
+      sealOwnerKeys(run) {
+        calls.push(`seal:${run.exchangeId}`)
+        if (h.sealFails) throw new Error('this run has no key yet')
+        return SEALED_OWNER_KEYS
+      },
+      displayName: 'Sam Reed',
       async freshCode() {
         const canonical = `CODE${String(codes.length).padStart(4, '0')}` as CanonicalPairingCode
         return { canonical, display: `${canonical.slice(0, 4)}-${canonical.slice(4)}` }
@@ -208,30 +232,90 @@ describe('approval', () => {
     return checkForReply(h.ports, waiting)
   }
 
-  it('pins before it forwards the ticket, and forwards the ticket the offer carried', async () => {
+  it('pins, then seals its own keys, then forwards both — in that order', async () => {
     const answered = await toAnswered()
     const approved = await approve(h.ports, answered)
     expect(approved.phase).toBe('approved')
     const pinAt = h.calls.indexOf('pin')
+    const sealAt = h.calls.findIndex((c) => c.startsWith('seal:'))
     const approveAt = h.calls.findIndex((c) => c.startsWith('approve:'))
     expect(pinAt).toBeGreaterThanOrEqual(0)
-    expect(approveAt).toBeGreaterThan(pinAt)
-    expect(h.calls[approveAt]).toBe(`approve:${answered.phase === 'answered' ? answered.run.exchangeId : ''}:${OFFER.enrolTicketB64}`)
+    expect(sealAt).toBeGreaterThan(pinAt)
+    expect(approveAt).toBeGreaterThan(sealAt)
+    const exchangeId = answered.phase === 'answered' ? answered.run.exchangeId : ''
+    // The ticket the offer carried AND the owner's sealed keys travel in the one request.
+    expect(h.calls[approveAt]).toBe(`approve:${exchangeId}:${OFFER.enrolTicketB64}:${SEALED_OWNER_KEYS}`)
+    // Sealed for THIS run, not some other one the tab still remembers.
+    expect(h.calls[sealAt]).toBe(`seal:${exchangeId}`)
     expect(h.storage.data.get(OWNER_RUN_STORAGE_KEY)).toBeUndefined()
   })
 
-  it('a key that differs from what this console already recorded forwards nothing', async () => {
+  it('keys that cannot be sealed forward nothing, so nobody enrols unable to verify the owner', async () => {
     const answered = await toAnswered()
-    h.pin = 'differs-from-pin'
-    await expect(approve(h.ports, answered)).rejects.toThrow(/already has different keys/)
+    h.sealFails = true
+    await expect(approve(h.ports, answered)).rejects.toThrow(/could not be sealed/)
     expect(h.calls.some((c) => c.startsWith('approve:'))).toBe(false)
+    // The run is still there to try again with; nothing was spent.
+    expect(h.storage.data.get(OWNER_RUN_STORAGE_KEY)).toBeDefined()
   })
+
+  it('a re-key is sealed like any other approval — the person being re-verified can verify back', async () => {
+    /*
+     * Where issues #111 and #101 meet. A clinician may come back with new keys (#111), and every
+     * clinician leaves holding the owner's (#101). The owner's identity is derived, so a
+     * replacement pairing proves the same identity the first one did — and the one person who must
+     * not be sent away unable to verify is the one whose own keys just changed.
+     */
+    h.check = { kind: 'supersedes' }
+    h.pin = 'superseded'
+    const answered = await toAnswered()
+    const approved = await approve(h.ports, answered)
+    expect(approved.phase === 'approved' && approved.replaced).toBe(true)
+    const exchangeId = answered.phase === 'answered' ? answered.run.exchangeId : ''
+    expect(h.calls).toContain(`seal:${exchangeId}`)
+    expect(h.calls).toContain(`approve:${exchangeId}:${OFFER.enrolTicketB64}:${SEALED_OWNER_KEYS}`)
+    // Control: the envelope is the same one the first-pairing path sends. Nothing about their keys
+    // changing changes the owner's, so a re-key must not be a second, weaker shape of approval.
+    const first = harness()
+    const firstAnswered = await (async () => {
+      const waiting = await openRun(first.ports, await startInvitation(first.ports))
+      first.reply = { state: 'complete', isk: new Uint8Array(64), offer: OFFER }
+      return checkForReply(first.ports, waiting)
+    })()
+    await approve(first.ports, firstAnswered)
+    const envOf = (calls: string[]) => calls.find((c) => c.startsWith('approve:'))!.split(':').pop()
+    expect(envOf(h.calls)).toBe(envOf(first.calls))
+  })
+
+  it('nothing is sealed when the approval refuses, so a substitution never reaches the other side', async () => {
+    // The one genuinely ambiguous case (#111): these keys are on file for somebody ELSE in this
+    // console. Nothing is recorded, nothing is sealed, and nothing is forwarded. The check is read
+    // at checkForReply, so it has to be in place before the run is answered.
+    h.check = { kind: 'other-person', displayName: 'Dr Other' }
+    const answered = await toAnswered()
+    await expect(approve(h.ports, answered)).rejects.toThrow()
+    expect(h.calls.some((c) => c.startsWith('seal:'))).toBe(false)
+    expect(h.calls.some((c) => c.startsWith('approve:'))).toBe(false)
+    // Control: the same detector sees the seal on the path that does reach it.
+    const ok = harness()
+    const okAnswered = await (async () => {
+      const waiting = await openRun(ok.ports, await startInvitation(ok.ports))
+      ok.reply = { state: 'complete', isk: new Uint8Array(64), offer: OFFER }
+      return checkForReply(ok.ports, waiting)
+    })()
+    await approve(ok.ports, okAnswered)
+    expect(ok.calls.some((c) => c.startsWith('seal:'))).toBe(true)
+  })
+
 
   it('unreadable keys forward nothing either', async () => {
     const answered = await toAnswered()
     h.pin = 'unreadable'
     await expect(approve(h.ports, answered)).rejects.toThrow(/could not be read/)
     expect(h.calls.some((c) => c.startsWith('approve:'))).toBe(false)
+    // Control: the same run approves when the keys read, so the refusal above is about the keys.
+    h.pin = 'pinned-now'
+    expect((await approve(h.ports, answered)).phase).toBe('approved')
   })
 
   it('refuses to approve anything that is not an answered run', async () => {
@@ -251,6 +335,213 @@ describe('approval', () => {
     expect(back.attemptsLeft).toBe(MAX_EXCHANGES_PER_INVITE - 3)
     expect(back.failCount).toBe(2)
     expect(h.calls.filter((c) => c.startsWith('cancel:'))).toHaveLength(1)
+  })
+})
+
+/*
+ * ISSUE #111. A matching code on a FRESH invitation replaces the keys this console holds. The pin
+ * was recorded on exactly one proof — the code — so demanding a stronger one to replace it than to
+ * create it is incoherent, and buys nothing: a code-holder can already pair fresh and be sent
+ * shares. What the module owes in exchange is that nobody reaches the button without the screen
+ * having said what it does and does not reach, and that the ONE genuine ambiguity still refuses.
+ */
+describe('replacing keys this console already holds', () => {
+  async function answeredWith(check: OfferCheck): Promise<OwnerCeremony> {
+    const waiting = await toWaiting()
+    h.check = check
+    h.reply = { state: 'complete', isk: new Uint8Array(64), offer: OFFER }
+    return checkForReply(h.ports, waiting)
+  }
+
+  it('reads the offer against the record before anything is written or forwarded', async () => {
+    const answered = await answeredWith({ kind: 'supersedes' })
+    expect(answered.phase).toBe('answered')
+    if (answered.phase !== 'answered') return
+    // The screen can say what approving would do, because the answer is already in the state…
+    expect(answered.keys.kind).toBe('supersedes')
+    // …and getting it cost no write and no forward. This is the ordering the whole screen rests on.
+    expect(h.calls).toContain('inspect')
+    expect(h.calls).not.toContain('pin')
+    expect(h.calls.some((c) => c.startsWith('approve:'))).toBe(false)
+    // Control: 'pin' and 'approve:' DO appear once an approval happens, so the absences can fail.
+    await approve(h.ports, answered)
+    expect(h.calls).toContain('pin')
+    expect(h.calls.some((c) => c.startsWith('approve:'))).toBe(true)
+  })
+
+  it('approves, records the new keys, and says a replacement happened', async () => {
+    const answered = await answeredWith({ kind: 'supersedes' })
+    h.pin = 'superseded'
+    const approved = await approve(h.ports, answered)
+    expect(approved.phase).toBe('approved')
+    if (approved.phase !== 'approved') return
+    expect(approved.pin).toBe('superseded')
+    expect(approved.replaced).toBe(true)
+    // Still pin-then-forward, unchanged: the local, reversible act precedes the one that is neither.
+    expect(h.calls.indexOf('pin')).toBeLessThan(h.calls.findIndex((c) => c.startsWith('approve:')))
+  })
+
+  it('a clinician who re-keyed completely is a replacement to the owner, whatever the record calls it', async () => {
+    // Both keys new, so the pin record has never seen this identity and reports 'pinned-now'. To
+    // the OWNER it is still the same person's keys changing, and the screen must say so — which is
+    // why `replaced` comes from the check made against the relationship, not from the write.
+    const answered = await answeredWith({ kind: 'supersedes' })
+    h.pin = 'pinned-now'
+    const approved = await approve(h.ports, answered)
+    expect(approved.phase === 'approved' && approved.replaced).toBe(true)
+    // Control: an ordinary first pairing, same 'pinned-now' write, is NOT reported as a
+    // replacement — so the flag is following the check and not the write.
+    h = harness()
+    const first = await answeredWith({ kind: 'first' })
+    h.pin = 'pinned-now'
+    const plain = await approve(h.ports, first)
+    expect(plain.phase === 'approved' && plain.replaced).toBe(false)
+  })
+
+  it('keys already recorded for a DIFFERENT person are refused, and nothing is written or forwarded', async () => {
+    const answered = await answeredWith({ kind: 'other-person', displayName: 'Dr Okafor' })
+    await expect(approve(h.ports, answered)).rejects.toThrow(/has recorded for/)
+    await expect(approve(h.ports, answered)).rejects.toThrow(/Nothing was approved and nothing was recorded/)
+    // The refusal names both people and a consequence, and neither name is the one the offer chose.
+    await expect(approve(h.ports, answered)).rejects.toThrow(/Dr Okafor/)
+    await expect(approve(h.ports, answered)).rejects.toThrow(/Sam Reed/)
+    expect(h.calls).not.toContain('pin')
+    expect(h.calls.some((c) => c.startsWith('approve:'))).toBe(false)
+    // And it is not a burn: the invitation was neither reported nor cancelled by the refusal.
+    expect(h.calls.some((c) => c.startsWith('report:') || c.startsWith('cancel:'))).toBe(false)
+  })
+
+  it('the refusal is the copy module’s sentence, not one written at the throw site', async () => {
+    const answered = await answeredWith({ kind: 'other-person', displayName: 'Dr Okafor' })
+    await expect(approve(h.ports, answered)).rejects.toThrow(OWNER_COPY.sameKeysAsOther('Sam Reed', 'Dr Okafor'))
+  })
+
+  it('the name in the replacement sentences is the owner’s, never the one the offer carried', () => {
+    // OFFER.displayName is typed by whoever answered. If it reached these sentences, the party
+    // being checked would be choosing the words of the check.
+    expect(OFFER.displayName).toBe('Dr Example')
+    const words = [
+      OWNER_COPY.replaceAtMint('Sam Reed'),
+      OWNER_COPY.replaceTitle('Sam Reed'),
+      ...OWNER_COPY.replaceBody('Sam Reed'),
+      OWNER_COPY.sameKeysAsOther('Sam Reed', 'Dr Okafor'),
+    ].join(' ')
+    expect(words).toContain('Sam Reed')
+    expect(words).not.toContain('Dr Example')
+    // Control: the detector finds the offer's name when it is planted.
+    expect(`${words} ${OFFER.displayName}`).toContain('Dr Example')
+  })
+
+  it('says what a replacement does not reach, in the same terms as every other take-back', () => {
+    const body = OWNER_COPY.replaceBody('Sam Reed').join(' ')
+    expect(body).toMatch(/does not reach what was already sealed/i)
+    expect(body).toMatch(/can still open every share sent to Sam Reed before now/i)
+    // Not a contradiction of the standing sentence about revoking; the same fact, at a new click.
+    expect(body).not.toMatch(/un-send|undo|recall/i)
+    expect(body).toMatch(/do not approve/i)
+    expect(OWNER_COPY.replaceDeclineLabel).toBe('Not now')
+  })
+})
+
+/*
+ * ISSUE #112. A reply that did not open is one sentence on the owner's screen, and the device asks
+ * the server for nothing differently afterwards.
+ *
+ * THE CADENCE IS THE SECURITY PROPERTY, not a performance detail. The server must not be able to
+ * tell a wrong code from a right one, and traffic is a channel like any other: a client that starts
+ * polling faster — or slower, or once more, or not at all — after an envelope fails to open has
+ * told the server what happened inside the owner's browser. So the assertion is that the calls a
+ * poll makes are IDENTICAL before and after, and that nothing in the module schedules anything.
+ */
+describe('a reply that did not open changes nothing about how the device behaves', () => {
+  async function toMismatch(): Promise<OwnerCeremony> {
+    const waiting = await toWaiting()
+    h.reply = { state: 'complete', isk: new Uint8Array(64), offer: null }
+    return checkForReply(h.ports, waiting)
+  }
+
+  it('polls exactly the same way after a failed open as before it', async () => {
+    const waiting = await toWaiting()
+    const runId = waiting.phase === 'waiting' ? waiting.run.exchangeId : ''
+
+    // Three polls with nobody having answered.
+    let state = waiting
+    for (let i = 0; i < 3; i++) state = await checkForReply(h.ports, state)
+    const before = h.calls.filter((c) => c.startsWith('read:'))
+    const otherBefore = h.calls.filter((c) => !c.startsWith('read:'))
+
+    // The reply lands and does not open.
+    h.reply = { state: 'complete', isk: new Uint8Array(64), offer: null }
+    const mismatch = await checkForReply(h.ports, state)
+    expect(mismatch.phase).toBe('mismatch')
+
+    // Three more polls from the mismatch state, with nothing further arriving.
+    h.reply = { state: 'waiting' }
+    h.calls.length = 0
+    let after = mismatch
+    for (let i = 0; i < 3; i++) after = await checkForReply(h.ports, after)
+
+    // One read per poll, against the same run, and NOTHING else — no extra read, no re-open, no
+    // cancel, no report. Byte for byte the same sequence of calls as the three polls before.
+    expect(h.calls).toEqual([`read:${runId}`, `read:${runId}`, `read:${runId}`])
+    expect(before).toEqual([`read:${runId}`, `read:${runId}`, `read:${runId}`])
+    expect(otherBefore.filter((c) => c !== 'mint' && !c.startsWith('open:'))).toEqual([])
+    // Control: the comparison can fail — an extra call would show up in exactly this list.
+    await newCode(h.ports, after)
+    expect(h.calls.length).toBeGreaterThan(3)
+  })
+
+  it('the mismatch state carries nothing a caller could read a new cadence out of', async () => {
+    const mismatch = await toMismatch()
+    expect(Object.keys(mismatch).sort()).toEqual(
+      ['attemptsLeft', 'failCount', 'invite', 'phase', 'run'].sort(),
+    )
+    for (const key of Object.keys(mismatch)) {
+      expect(key, 'a timing field leaked into the mismatch state').not.toMatch(
+        /interval|backoff|delay|retry|after|next|deadline|poll/i,
+      )
+    }
+    // Control: the pattern does fire on the names it is looking for.
+    expect('retryAfter').toMatch(/interval|backoff|delay|retry|after|next|deadline|poll/i)
+  })
+
+  it('nothing in the module schedules anything, before a failure or after one', () => {
+    const src = readFileSync(fileURLToPath(new URL('./ownerCeremony.ts', import.meta.url)), 'utf8')
+    expect(src.length).toBeGreaterThan(2000)
+    for (const scheduler of ['setTimeout', 'setInterval', 'requestAnimationFrame', 'queueMicrotask', 'requestIdleCallback']) {
+      expect(src.includes(scheduler), `the module schedules with ${scheduler}`).toBe(false)
+    }
+    // Control: the detector sees a planted one.
+    expect('setTimeout(check, 1000)'.includes('setTimeout')).toBe(true)
+  })
+
+  it('keeping the invitation asks the server for nothing and ends nothing', async () => {
+    const mismatch = await toMismatch()
+    h.calls.length = 0
+    const kept = keepInvitation(mismatch)
+    expect(kept.phase).toBe('invited')
+    if (kept.phase !== 'invited') return
+    // The count is exactly what it was: a reply that did not open spends no try.
+    expect(kept.attemptsLeft).toBe(mismatch.phase === 'mismatch' ? mismatch.attemptsLeft : -1)
+    expect(kept.failCount).toBe(mismatch.phase === 'mismatch' ? mismatch.failCount : -1)
+    // And not one request was made — no cancel, no report, no new run, no read.
+    expect(h.calls).toEqual([])
+    // Control: the recorder is working; the other option on this screen does make calls.
+    await stopInvitation(h.ports, mismatch)
+    expect(h.calls).toEqual([`report:${INVITE.inviteId}`])
+  })
+
+  it('says what did not happen and asks a question, naming the person', () => {
+    expect(OWNER_COPY.mismatchTitle).toBe('A reply did not open with your code')
+    expect(OWNER_COPY.mismatchBody('Sam Reed')).toBe(
+      'Keep this invitation open and ask Sam Reed whether they answered, or stop it and send a new link?',
+    )
+    // A question, never a verdict, and never an accusation.
+    expect(OWNER_COPY.mismatchBody('Sam Reed')).toContain('?')
+    expect(`${OWNER_COPY.mismatchTitle} ${OWNER_COPY.mismatchBody('Sam Reed')}`).not.toMatch(
+      /attack|intrud|breach|suspicious|threat|danger|wrong code|you typed/i,
+    )
+    expect('you typed it wrong').toMatch(/attack|intrud|breach|suspicious|threat|danger|wrong code|you typed/i)
   })
 })
 

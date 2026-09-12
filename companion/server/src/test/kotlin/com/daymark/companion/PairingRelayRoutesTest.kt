@@ -3,7 +3,9 @@ package com.daymark.companion
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.auth.PairingStore
 import com.daymark.companion.auth.Secrets
+import com.daymark.companion.routes.PAIRING_STATUS_BURST
 import com.daymark.companion.routes.PAIRING_STATUS_POLL_SECONDS
+import com.daymark.companion.routes.PAIRING_STATUS_REFILL_MS
 import com.daymark.companion.routes.PAIR_MAX_PER_WINDOW
 import com.daymark.companion.routes.PAIR_WINDOW_MS
 import com.daymark.companion.storage.AuditStore
@@ -128,7 +130,20 @@ class PairingRelayRoutesTest {
             setBody("""{"secret":"$secret"}""")
         }
 
-    private suspend fun ApplicationTestBuilder.approve(exchangeId: String, enrolTicket: String): HttpResponse =
+    /** The owner's approval: the ticket the offer carried, and their own keys sealed back (E2). */
+    private suspend fun ApplicationTestBuilder.approve(
+        exchangeId: String,
+        enrolTicket: String,
+        env: String = fakeEnv(11),
+    ): HttpResponse =
+        client.post("/v1/relations/$relRef/pairing/$exchangeId/approve") {
+            bearerAuth(ownerToken)
+            contentType(ContentType.Application.Json)
+            setBody("""{"enrolTicketB64":"$enrolTicket","envB64":"$env"}""")
+        }
+
+    /** An approval with no envelope at all — what an owner console from before issue #101 would send. */
+    private suspend fun ApplicationTestBuilder.approveWithNoEnvelope(exchangeId: String, enrolTicket: String): HttpResponse =
         client.post("/v1/relations/$relRef/pairing/$exchangeId/approve") {
             bearerAuth(ownerToken)
             contentType(ContentType.Application.Json)
@@ -189,17 +204,31 @@ class PairingRelayRoutesTest {
         assertTrue(readBody.contains("\"msgBB64\":\"$msgB\""), "MSGb must come back byte-identical")
         assertTrue(readBody.contains("\"envB64\":\"$env\""), "the sealed offer must come back byte-identical")
 
-        // The owner approves, forwarding the ticket the offer carried.
-        assertEquals(HttpStatusCode.NoContent, approve(exchangeId, chosen).status)
+        // The waiting answer carries no envelope of the owner's: there is nothing to carry yet,
+        // and the run is not closed. This is the line that turns red if the route ever serves
+        // env_to_therapist before an approval.
+        assertFalse(waiting.bodyAsText().contains("envB64"), "no owner envelope before the approval")
+
+        // The owner approves, forwarding the ticket the offer carried and their own keys sealed
+        // back under the same run's key (E2 — issue #101).
+        val ownerEnv = fakeEnv(5, size = 120)
+        assertEquals(HttpStatusCode.NoContent, approve(exchangeId, chosen, ownerEnv).status)
         val after = client.get("/v1/relations/$relRef/pairing/$exchangeId") { bearerAuth(ownerToken) }
         assertTrue(after.bodyAsText().contains("\"state\":\"CLOSED\""))
         assertEquals("REDEEMING", s.auth.inviteStatusFor(minted.inviteId))
         assertEquals(1, s.auth.enrollTicketCountFor(minted.inviteId))
+        // The owner's own read does not echo it back at them — it is the therapist's parcel, and
+        // the owner is the party that just posted it.
+        assertFalse(after.bodyAsText().contains(ownerEnv), "the owner's envelope is not served back to the owner")
 
-        // The therapist learns of it on the next poll, with the scope the invitation grants...
+        // The therapist learns of it on the next poll, with the scope the invitation grants and
+        // the owner's envelope, byte-identical...
         val approved = status(minted.inviteId, minted.secret, exchangeId)
         assertEquals(HttpStatusCode.OK, approved.status)
-        assertEquals("""{"state":"APPROVED","scope":["read.share"]}""", approved.bodyAsText())
+        assertEquals(
+            """{"state":"APPROVED","scope":["read.share"],"envB64":"$ownerEnv"}""",
+            approved.bodyAsText(),
+        )
         // ...and enrols with the ticket they chose, which only they and the owner ever held.
         assertEquals(HttpStatusCode.NoContent, enrol(chosen, "cred-1").status)
         assertEquals("CONSUMED", s.auth.inviteStatusFor(minted.inviteId))
@@ -347,8 +376,99 @@ class PairingRelayRoutesTest {
         assertTrue(s.audit.list(relRef, limit = 50).any { it.action == "pair.guess_failed" })
     }
 
+    /**
+     * RE-KEYING COSTS A FRESH INVITATION (issue #111).
+     *
+     * The owner console will now replace the keys it holds for a clinician when a reply opens under
+     * the code — the pin was recorded on that proof and nothing weaker, so requiring more to replace
+     * it than to create it buys nothing. That argument has a load-bearing premise the console cannot
+     * enforce and does not check: THE OLD INVITATION AND ITS CODE ARE ALREADY SPENT. If a consumed
+     * invitation could carry a second run, one code would replace a pinned key over and over for as
+     * long as the link survived, and anybody who ever held it could come back.
+     *
+     * The sibling test above pins the REDEEMING half (approved, not yet enrolled). This pins the end
+     * of the road: the clinician has enrolled, the invitation is CONSUMED, and there is no way back
+     * in through it from either side. It also pins the half that is easy to lose in a refactor — that
+     * refusing costs the invitation NOTHING. A spent link being tried again is not evidence of
+     * anything, so it must not burn, must not count as a guess, and must not write an audit row that
+     * would read to an owner as somebody attacking them.
+     */
     @Test
-    fun `the poll cadence fits the shared budget - fetch, respond and ten polls in one window, the next waits`() = testApplication {
+    fun `a spent invitation carries no second pairing run, and trying is not a burn`() = testApplication {
+        var now = 1_000_000L
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val s = stores(dir, cfg) { now }
+        application { module(cfg, null, null, s.rel, s.auth, s.audit, pairingStore = s.pairing) }
+        val minted = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
+        val chosen = ticket(1)
+        val exchangeId = exchangeIdOf(ownerOpen(minted.inviteId, sid(1), fakeMsg(1)).bodyAsText())
+        assertEquals(HttpStatusCode.NoContent, respond(minted.inviteId, minted.secret, exchangeId, fakeMsg(2)).status)
+        // A second run left OPEN beside the answered one, for the same reason the sibling test does
+        // it: with an empty shelf, "the invitation is spent" and "there was nothing waiting anyway"
+        // produce the identical 410, and every therapist-side assertion below would pass against a
+        // server with no status gate at all.
+        now += 1_000
+        val spare = exchangeIdOf(ownerOpen(minted.inviteId, sid(4), fakeMsg(7)).bodyAsText())
+        assertEquals(HttpStatusCode.NoContent, approve(exchangeId, chosen).status)
+        assertEquals(HttpStatusCode.NoContent, enrol(chosen, "cred-1").status)
+        assertEquals("CONSUMED", s.auth.inviteStatusFor(minted.inviteId))
+        assertEquals(PairingStore.State.OPEN, s.pairing.exchangeFor(spare, relRef)!!.state)
+        val auditBefore = s.audit.list(relRef, limit = 50).size
+
+        // The owner cannot open a second run against it — which is the whole of "rotation needs a
+        // fresh invitation", since the owner's side is where a run begins.
+        now += 1_000
+        val reopen = ownerOpen(minted.inviteId, sid(2), fakeMsg(3))
+        assertEquals(HttpStatusCode.NotFound, reopen.status)
+        assertEquals("""{"error":"no open invite"}""", reopen.bodyAsText())
+
+        // Nor can the holder of the link get back in from their side, with the right secret — even
+        // though there is an OPEN run sitting there that a server without the status gate would
+        // happily serve them.
+        val fetched = fetch(minted.inviteId, minted.secret)
+        assertEquals(HttpStatusCode.Gone, fetched.status)
+        assertEquals("""{"error":"invite unavailable"}""", fetched.bodyAsText())
+        assertEquals(HttpStatusCode.Gone, respond(minted.inviteId, minted.secret, spare, fakeMsg(4)).status)
+        assertNull(s.pairing.exchangeFor(spare, relRef)!!.msgBB64, "nothing was written into the spare run")
+
+        // AND NOTHING WAS SPENT BY REFUSING. The invitation is where it was, its guess counter has
+        // not moved, and the log gained no row — a spent link tried again is not a report and is
+        // not a wrong guess, and either word in front of an owner would be the product lying.
+        assertEquals("CONSUMED", s.auth.inviteStatusFor(minted.inviteId))
+        val listed = client.get("/v1/relations/$relRef/invites") { bearerAuth(ownerToken) }.bodyAsText()
+        assertTrue(listed.contains("\"inviteId\":\"${minted.inviteId}\",\"status\":\"CONSUMED\""), listed)
+        assertTrue(listed.contains("\"failCount\":0"), listed)
+        val after = s.audit.list(relRef, limit = 50)
+        assertEquals(auditBefore, after.size, "refusing a spent invitation wrote an audit row")
+        assertFalse(after.any { it.action == "invite.reported" })
+        assertFalse(after.any { it.action == "pair.guess_failed" })
+
+        // CONTROL: the refusals above are about the SPENT invitation, not about the relationship
+        // being finished with. A fresh invitation opens and answers exactly as the first one did —
+        // which is the route the owner console's replacement screen is reached through.
+        val second = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
+        val secondExchange = exchangeIdOf(ownerOpen(second.inviteId, sid(3), fakeMsg(5)).bodyAsText())
+        assertEquals(HttpStatusCode.OK, fetch(second.inviteId, second.secret).status)
+        assertEquals(HttpStatusCode.NoContent, respond(second.inviteId, second.secret, secondExchange, fakeMsg(6)).status)
+        assertEquals(HttpStatusCode.NoContent, approve(secondExchange, ticket(2)).status)
+        assertEquals("REDEEMING", s.auth.inviteStatusFor(second.inviteId))
+        // …and the spent one is still spent, so the second pairing did not revive it.
+        assertEquals("CONSUMED", s.auth.inviteStatusFor(minted.inviteId))
+    }
+
+    @Test
+    fun `a therapist's waiting does not spend the pairing budget`() = testApplication {
+        /*
+         * The finding the 2026-09-12 split was made for. The status poll used to be charged to the
+         * same per-address window as fetch and respond, so an honest ceremony's own waiting ate the
+         * budget — about 6.7 polls out of twelve — and the surface then began refusing the touches
+         * that matter. Two clinicians on one clinic connection spent each other's.
+         *
+         * Polls are now metered per RUN. Here: one whole ceremony plus twenty polls inside a single
+         * window, and the pairing budget is still open afterwards. Under the old shape this was
+         * twenty-three charges against twelve.
+         */
         var now = 1_000_000L
         val dir = tmpDir()
         val cfg = config(dir)
@@ -357,20 +477,105 @@ class PairingRelayRoutesTest {
         val minted = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
         val exchangeId = exchangeIdOf(ownerOpen(minted.inviteId, sid(1), fakeMsg(1)).bodyAsText())
 
-        // The documented cadence is the arithmetic the client is written to.
-        val pollsPerWindow = PAIR_WINDOW_MS / (PAIRING_STATUS_POLL_SECONDS * 1000)
-        assertTrue(2 + pollsPerWindow <= PAIR_MAX_PER_WINDOW, "fetch + respond + $pollsPerWindow polls must fit $PAIR_MAX_PER_WINDOW")
-
         assertEquals(HttpStatusCode.OK, fetch(minted.inviteId, minted.secret).status)
         assertEquals(HttpStatusCode.NoContent, respond(minted.inviteId, minted.secret, exchangeId, fakeMsg(2)).status)
-        repeat(PAIR_MAX_PER_WINDOW - 2) {
+
+        // Twenty polls, all inside one PAIR_WINDOW_MS so the window cannot quietly roll and answer
+        // for the change under test.
+        repeat(20) {
+            now += 12_000
             assertEquals(HttpStatusCode.OK, status(minted.inviteId, minted.secret, exchangeId).status)
         }
-        // The budget is spent by allowed requests whatever their outcome, and a successful poll
-        // does not reset it (a resettable window would be a link-holder's to clear at will).
-        val over = status(minted.inviteId, minted.secret, exchangeId)
+        assertTrue(now - 1_000_000L < PAIR_WINDOW_MS, "the polling stayed inside one pairing window")
+
+        // 410 is the "secret accepted, nothing waiting" answer — this run has already been
+        // answered, so there is no open exchange to collect. What matters is that it is not a 429.
+        assertEquals(
+            HttpStatusCode.Gone, fetch(minted.inviteId, minted.secret).status,
+            "waiting is not spending: the touches that carry the ceremony are still available",
+        )
+
+        // The planted control: that budget is armed, not absent. Keep fetching and it does refuse.
+        var refused: HttpStatusCode? = null
+        repeat(PAIR_MAX_PER_WINDOW) {
+            val r = fetch(minted.inviteId, minted.secret)
+            if (r.status == HttpStatusCode.TooManyRequests) refused = r.status
+        }
+        assertEquals(HttpStatusCode.TooManyRequests, refused, "the per-address budget still exists and still bites")
+    }
+
+    @Test
+    fun `the poll allowance belongs to the run, so one ceremony cannot spend another's`() = testApplication {
+        /*
+         * The other half of the split, and the one that fixes the clinic NAT: two therapists behind
+         * one address are two RUNS. Exhausting the first run's allowance must leave the second's
+         * untouched, at the same instant, from the same address.
+         */
+        var now = 1_000_000L
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val s = stores(dir, cfg) { now }
+        application { module(cfg, null, null, s.rel, s.auth, s.audit, pairingStore = s.pairing) }
+
+        val first = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
+        val second = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
+        val runA = exchangeIdOf(ownerOpen(first.inviteId, sid(1), fakeMsg(1)).bodyAsText())
+        val runB = exchangeIdOf(ownerOpen(second.inviteId, sid(2), fakeMsg(2)).bodyAsText())
+        assertEquals(HttpStatusCode.NoContent, respond(first.inviteId, first.secret, runA, fakeMsg(3)).status)
+        assertEquals(HttpStatusCode.NoContent, respond(second.inviteId, second.secret, runB, fakeMsg(4)).status)
+
+        // Run A, polled as fast as a browser can manage: the burst is there for exactly this, and
+        // then it waits.
+        repeat(PAIRING_STATUS_BURST) {
+            assertEquals(HttpStatusCode.OK, status(first.inviteId, first.secret, runA).status)
+        }
+        val over = status(first.inviteId, first.secret, runA)
         assertEquals(HttpStatusCode.TooManyRequests, over.status)
         assertEquals("""{"error":"rate limited"}""", over.bodyAsText())
+        val retryAfter = assertNotNull(over.headers["Retry-After"], "a refusal has to say when it heals")
+        assertTrue(
+            retryAfter.toLong() in 1..(PAIRING_STATUS_REFILL_MS / 1000),
+            "and the time it names is the real one, not a whole window: got $retryAfter",
+        )
+
+        // The same address, the same instant, a different run: untouched.
+        assertEquals(
+            HttpStatusCode.OK, status(second.inviteId, second.secret, runB).status,
+            "one run's polling must never be charged to another's — this is the clinic NAT case",
+        )
+
+        // And the first run heals on its own, at the cadence the constant names.
+        now += PAIRING_STATUS_REFILL_MS
+        assertEquals(HttpStatusCode.OK, status(first.inviteId, first.secret, runA).status)
+    }
+
+    @Test
+    fun `the cadence the client keeps is never refused, however long the owner takes`() = testApplication {
+        // The product claim, as arithmetic and then as forty minutes of waiting. An owner may take
+        // a day to approve; a therapist who polls at the documented cadence must never be told
+        // anything at all until there is something to tell.
+        assertTrue(
+            PAIRING_STATUS_POLL_SECONDS * 1000 >= PAIRING_STATUS_REFILL_MS,
+            "the client's cadence must be slower than the refill, or an honest poller drains its own allowance",
+        )
+
+        var now = 1_000_000L
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val s = stores(dir, cfg) { now }
+        application { module(cfg, null, null, s.rel, s.auth, s.audit, pairingStore = s.pairing) }
+        val minted = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
+        val exchangeId = exchangeIdOf(ownerOpen(minted.inviteId, sid(1), fakeMsg(1)).bodyAsText())
+        assertEquals(HttpStatusCode.OK, fetch(minted.inviteId, minted.secret).status)
+        assertEquals(HttpStatusCode.NoContent, respond(minted.inviteId, minted.secret, exchangeId, fakeMsg(2)).status)
+
+        repeat(50) {
+            now += PAIRING_STATUS_POLL_SECONDS * 1000
+            assertEquals(
+                HttpStatusCode.OK, status(minted.inviteId, minted.secret, exchangeId).status,
+                "an honest poll is never refused",
+            )
+        }
     }
 
     @Test
@@ -406,6 +611,81 @@ class PairingRelayRoutesTest {
         val later = client.get("/v1/relations/$relRef/invites") { bearerAuth(ownerToken) }.bodyAsText()
         assertEquals(2, Regex("\"status\":\"EXPIRED\"").findAll(later).count())
         assertEquals("PENDING", s.auth.inviteStatusFor(quiet.inviteId), "a listing is not a side effect")
+    }
+
+    @Test
+    fun `an approval must carry the owner's keys, and they leave the shelf only once the run is closed`() = testApplication {
+        /*
+         * ISSUE #101, ON THE WIRE. The clinician used to learn the owner's keys by having them
+         * pasted into a form; they now come out of an envelope the owner seals at approval. Two
+         * properties keep that honest here, and each is written so that removing the rule reddens
+         * this test rather than some distant one:
+         *
+         *  1. An approval WITHOUT the envelope is refused, and refused before anything is spent.
+         *     Accepting it would enrol a clinician who can verify nothing the owner later signs,
+         *     and there is no route that repairs that afterwards.
+         *  2. The envelope is served on a CLOSED run and never before. A link-holder who answered
+         *     a run without knowing the code polls the same route and must get a state word.
+         */
+        var now = 1_000_000L
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val s = stores(dir, cfg) { now }
+        application { module(cfg, null, null, s.rel, s.auth, s.audit, pairingStore = s.pairing) }
+        val minted = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
+        val exchangeId = exchangeIdOf(ownerOpen(minted.inviteId, sid(1), fakeMsg(1)).bodyAsText())
+        assertEquals(HttpStatusCode.NoContent, respond(minted.inviteId, minted.secret, exchangeId, fakeMsg(2)).status)
+
+        // (1) No envelope: 400, and NOTHING is spent — the run is still answered and waiting, the
+        // invitation is still PENDING, and no ticket exists. The owner can reload and approve.
+        assertEquals(HttpStatusCode.BadRequest, approveWithNoEnvelope(exchangeId, ticket(1)).status)
+        assertEquals(PairingStore.State.RESPONDED, s.pairing.exchangeFor(exchangeId, relRef)!!.state)
+        assertEquals("PENDING", s.auth.inviteStatusFor(minted.inviteId))
+        assertEquals(0, s.auth.enrollTicketCountFor(minted.inviteId))
+
+        // The same for an envelope of an implausible size, in both directions.
+        assertEquals(HttpStatusCode.BadRequest, approve(exchangeId, ticket(1), b64(ByteArray(8))).status)
+        assertEquals(HttpStatusCode.BadRequest, approve(exchangeId, ticket(1), fakeEnv(6, size = 4097)).status)
+        assertEquals("PENDING", s.auth.inviteStatusFor(minted.inviteId))
+
+        // (2) Before the approval the therapist's poll is a state word and nothing else.
+        val waiting = status(minted.inviteId, minted.secret, exchangeId)
+        assertEquals("""{"state":"WAITING"}""", waiting.bodyAsText())
+
+        val ownerEnv = fakeEnv(7, size = 200)
+        assertEquals(HttpStatusCode.NoContent, approve(exchangeId, ticket(1), ownerEnv).status)
+        val approved = status(minted.inviteId, minted.secret, exchangeId)
+        assertTrue(approved.bodyAsText().contains("\"envB64\":\"$ownerEnv\""), "byte-identical after the approval")
+        // Control for the absence above: the same detector, on the same route, sees it when it is
+        // there — so "no envelope while waiting" is a refusal rather than a blind assertion.
+        assertFalse(waiting.bodyAsText().contains(ownerEnv))
+        assertTrue(approved.bodyAsText().contains(ownerEnv))
+
+        // The envelope is written once. A second approval cannot replace it, because the run has
+        // moved off RESPONDED — the same once-only rule the therapist's reply has.
+        assertEquals(HttpStatusCode.Gone, approve(exchangeId, ticket(2), fakeEnv(9)).status)
+        assertEquals(ownerEnv, s.pairing.exchangeFor(exchangeId, relRef)!!.envToTherapistB64)
+    }
+
+    @Test
+    fun `an approval stored before the owner's envelope existed reads back without one`() = testApplication {
+        // The additive-column case from the other side: a row closed by the previous build has no
+        // env_to_therapist, and the clinician's client reads that as "this approval proved no
+        // keys" rather than as a malformed response.
+        var now = 1_000_000L
+        val dir = tmpDir()
+        val cfg = config(dir)
+        val s = stores(dir, cfg) { now }
+        application { module(cfg, null, null, s.rel, s.auth, s.audit, pairingStore = s.pairing) }
+        val minted = s.auth.mintInvite(relRef, listOf("read.share"), 86_400L)
+        val exchangeId = exchangeIdOf(ownerOpen(minted.inviteId, sid(1), fakeMsg(1)).bodyAsText())
+        assertEquals(PairingStore.RespondStatus.OK, s.pairing.respond(exchangeId, minted.inviteId, fakeMsg(2), fakeEnv(3)))
+        // Through the store, as the previous build's approval would have left it.
+        assertEquals(PairingStore.TransitionStatus.OK, s.pairing.approve(exchangeId, relRef, null))
+        assertTrue(s.auth.approveRedeem(minted.inviteId, ticket(1)).status == AuthStore.ApproveStatus.OK)
+        val polled = status(minted.inviteId, minted.secret, exchangeId).bodyAsText()
+        assertTrue(polled.contains("\"state\":\"APPROVED\""))
+        assertFalse(polled.contains("envB64"), "no envelope must not be rendered as one")
     }
 
     @Test
@@ -543,7 +823,7 @@ class PairingRelayRoutesTest {
             HttpStatusCode.Unauthorized,
             client.post("/v1/relations/$relRef/pairing/$exchangeId/approve") {
                 contentType(ContentType.Application.Json)
-                setBody("""{"enrolTicketB64":"${ticket(1)}"}""")
+                setBody("""{"enrolTicketB64":"${ticket(1)}","envB64":"${fakeEnv(1)}"}""")
             }.status,
         )
 
@@ -559,7 +839,7 @@ class PairingRelayRoutesTest {
         val crossApprove = client.post("/v1/relations/$otherRelRef/pairing/$exchangeId/approve") {
             bearerAuth(ownerToken)
             contentType(ContentType.Application.Json)
-            setBody("""{"enrolTicketB64":"${ticket(1)}"}""")
+            setBody("""{"enrolTicketB64":"${ticket(1)}","envB64":"${fakeEnv(1)}"}""")
         }
         assertEquals(HttpStatusCode.Gone, crossApprove.status)
         assertEquals(0, s.auth.enrollTicketCountFor(minted.inviteId))
@@ -683,10 +963,18 @@ class PairingRelayRoutesTest {
         assertEquals(PairingStore.State.OPEN, s.pairing.exchangeFor(exchangeId, relRef)!!.state)
         assertEquals(HttpStatusCode.NoContent, respond(minted.inviteId, minted.secret, exchangeId, fakeMsg(2), fakeEnv(1, size = 4096)).status)
 
-        // The ticket the owner forwards must be exactly what the therapist could have chosen.
+        // The ticket the owner forwards must be exactly what the therapist could have chosen, and
+        // their own envelope has the same bounds the therapist's does — one constant for both
+        // directions, so the two cannot drift apart.
         assertEquals(HttpStatusCode.BadRequest, approve(exchangeId, b64(ByteArray(31))).status)
         assertEquals(HttpStatusCode.BadRequest, approve(exchangeId, "nope").status)
+        assertEquals(HttpStatusCode.BadRequest, approve(exchangeId, ticket(1), fakeEnv(2, size = 40)).status)
+        assertEquals(HttpStatusCode.BadRequest, approve(exchangeId, ticket(1), "not/base64url!").status)
         assertEquals(0, s.auth.enrollTicketCountFor(minted.inviteId))
+        // Control: the same approval with an envelope of an honest size goes through, so the
+        // refusals above are about the shapes rather than about the route being shut.
+        assertEquals(HttpStatusCode.NoContent, approve(exchangeId, ticket(1), fakeEnv(2, size = 4096)).status)
+        assertEquals(1, s.auth.enrollTicketCountFor(minted.inviteId))
 
         // The invite must be this relationship's AND alive: an expired one is refused.
         val expiring = s.auth.mintInvite(relRef, listOf("read.share"), 10L)

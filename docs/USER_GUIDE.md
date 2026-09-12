@@ -53,8 +53,9 @@ Home is the daily loop, not an archive. Top to bottom:
 
 - **A greeting and today's date.**
 - **The check-in row** — *"How are you, right now?"* Tap a face to log in one tap.
-- **A glance** — your current streak, and the last seven days as seven small bars
-  (an unlogged day shows as a faint stub; a week is allowed to have holes in it).
+- **A glance** — how many entries you've written, and the last seven days as seven
+  small bars (an unlogged day shows as a faint stub; a week is allowed to have holes
+  in it). Home doesn't keep a count of how recently you've been here.
 - **One suggestion**, at most — the rest are under **More for you**, along with
   your *"on this day"* memories. Every card can be dismissed.
 - **Today** — the entries you've logged today.
@@ -212,8 +213,9 @@ Days with no entry simply stay blank.
 The **Stats** tab turns your entries into a few friendly summaries:
 
 - **Average mood** — your overall mood score.
-- **Current streak** and **Longest streak** — how many days in a row you've
-  logged.
+- **Days with an entry** — e.g. *12 of the last 30*. The days don't have to be in
+  a row, so missing one costs you that day and nothing else. If there are none in
+  the last thirty days, the card simply isn't there.
 - **Mood over the last 30 days** — a trend line of how things have been going.
 - **Mood distribution** — how often each mood level shows up.
 - **Average mood by activity** — which activities tend to accompany your better
@@ -339,12 +341,6 @@ a card on Home; nothing in the app decides from your mood that you need it.
 > simply doesn't prompt for that.
 
 Everything stays on your phone and is included in your backups.
-
-### Achievements
-
-**More → Achievements** marks gentle milestones for showing up — your first
-entry, entry counts, longest streaks, activity variety, and your first check-in.
-There's no streak-shaming, and once a badge is earned it stays earned.
 
 ---
 
@@ -479,9 +475,9 @@ backup file goes using your phone's file picker.
 
 This writes a single JSON file containing **everything** — moods, notes,
 activities, journal entries, goals (including any "when X, I will Y" plan),
-your reminders, **check-in scores**, **achievements**, **thought records**,
-movement and other tracker logs, and any **photos** you've attached (embedded in
-the file, so it stays one portable backup).
+your reminders, **check-in scores**, **thought records**, movement and other
+tracker logs, and any **photos** you've attached (embedded in the file, so it
+stays one portable backup).
 
 ### Restore a backup (Replace vs. Merge)
 

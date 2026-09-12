@@ -21,6 +21,7 @@
     approve,
     checkForReply,
     defaultFreshCode,
+    keepInvitation,
     newCode,
     openRun,
     restore,
@@ -35,29 +36,49 @@
     ownerCancelPairing,
     ownerCollectPairing,
     ownerOpenPairing,
+    sealOwnerKeys,
+    type OwnerPairingState,
   } from '../../pairing/relay'
+  import { toBase64 } from '../../share/sharecrypto'
   import { defaultOwnerRunStorage } from '../../pairing/ownerRunStore'
-  import { identityFromOffer, pinFromPairing, groupFingerprint } from '../../owner/therapistKeys'
+  import { checkOffer, identityFromOffer, pinFromPairing, groupFingerprint } from '../../owner/therapistKeys'
   import { loadPins, savePins } from '../../therapist/pinStore'
   import { fingerprint } from '../../assignments/crypto'
   import type { TherapistOffer } from '../../pairing/payloads'
 
   let {
     therapist,
+    others = [],
     client,
     baseUrl,
     token,
     smtpEnabled,
     scope,
+    ownerSignPub,
+    ownerBoxPub,
     onpaired,
     ondone,
   }: {
     therapist: PinnedTherapist
+    /**
+     * The console's OTHER relationships, so an offer carrying keys already recorded for one of them
+     * can be refused. That is the one ambiguity a pairing code cannot settle: two people filed
+     * under one key means a share meant for either can be opened by the other.
+     */
+    others?: PinnedTherapist[]
     client: PortalClient | null
     baseUrl: string
     token: string
     smtpEnabled: boolean
     scope: string[]
+    /**
+     * The owner's own public keys, from the unlocked session — derived from their master key
+     * (owner/identity.ts), so the same two every session. They are sealed to the clinician at
+     * Approve and that is the whole of what E2 carries; the private halves never come near this
+     * component. Public bytes only, by type.
+     */
+    ownerSignPub: Uint8Array
+    ownerBoxPub: Uint8Array
     /** The offer's keys, once approved, so the console can fill in the pending entry. */
     onpaired?: (keys: { boxPub: Uint8Array; signPub: Uint8Array }) => void
     /** The owner is finished with this screen. The console stops holding it open. */
@@ -75,6 +96,23 @@
     return relRefOf(therapist.inboxToken)
   }
 
+  /**
+   * What this console holds for THIS relationship right now, or null while it holds nothing.
+   *
+   * A pending entry carries empty key arrays rather than absent ones, so "has this person got keys
+   * on file" is `keysPending`, never a truthiness check on the bytes.
+   */
+  const held = $derived(
+    therapist.keysPending ? null : { boxPub: therapist.boxPub, signPub: therapist.signPub },
+  )
+
+  /** The same question for everyone else, with the owner's own name for each of them attached. */
+  const otherHeld = $derived(
+    others
+      .filter((t) => !t.keysPending && t.id !== therapist.id)
+      .map((t) => ({ displayName: t.displayName, boxPub: t.boxPub, signPub: t.signPub })),
+  )
+
   const ports: OwnerCeremonyPorts = {
     async mintInvite(): Promise<InviteResponse> {
       if (!client) throw new Error('No server configured.')
@@ -90,22 +128,43 @@
     openRun: async (inviteId, code) =>
       ownerOpenPairing({ relRef: await relRef(), inviteId, code: code.canonical, bearerToken: token, baseUrl }),
     readRun: async (run) => ownerCollectPairing({ relRef: await relRef(), bearerToken: token, pairing: run, baseUrl }),
-    approveRun: async (exchangeId, enrolTicketB64) =>
-      ownerApprovePairing({ relRef: await relRef(), bearerToken: token, exchangeId, enrolTicketB64, baseUrl }),
+    approveRun: async (exchangeId, enrolTicketB64, envB64) =>
+      ownerApprovePairing({ relRef: await relRef(), bearerToken: token, exchangeId, enrolTicketB64, envB64, baseUrl }),
+    /*
+     * E2: the owner's keys, sealed under the key this run derived when the reply was collected.
+     *
+     * The key is read out of the run rather than kept beside it, so there is exactly one copy and
+     * it lives where the ceremony already put it. A run with none has not been collected — no
+     * screen offers Approve there — and throwing is what ownerCeremony.approve turns into a
+     * refusal that forwards nothing.
+     */
+    sealOwnerKeys(run: OwnerPairingState) {
+      const isk = run.finished?.isk
+      if (!isk) throw new Error('this run has no key yet')
+      return sealOwnerKeys(isk, run.sidB64, {
+        signPubB64: toBase64(ownerSignPub),
+        boxPubB64: toBase64(ownerBoxPub),
+      })
+    },
     cancelRun: async (exchangeId) => ownerCancelPairing({ relRef: await relRef(), bearerToken: token, exchangeId, baseUrl }),
     reportInvite: async (inviteId) => {
       if (!client) throw new Error('No server configured.')
       await client.reportInvite(inviteId)
     },
+    inspectOffer: (offer: TherapistOffer) => checkOffer(offer, held, otherHeld),
     pinOffer(offer: TherapistOffer) {
       const peer = identityFromOffer(offer)
       if (!peer) return 'unreadable'
       const pins = loadPins()
       const outcome = pinFromPairing(pins, peer)
-      if (outcome !== 'differs-from-pin') savePins(pins)
+      // Nothing to write when the record already says exactly this; every other outcome appended.
+      if (outcome !== 'already-pinned') savePins(pins)
       return outcome
     },
     freshCode: defaultFreshCode,
+    get displayName() {
+      return therapist.displayName
+    },
     storage: defaultOwnerRunStorage(),
     now: () => Date.now(),
   }
@@ -206,6 +265,16 @@
 
       <p class="two-channels">{OWNER_COPY.twoChannels}</p>
 
+      <!--
+        Said at MINT, while there is still nothing to undo, rather than only at the moment of the
+        click: someone sending this link should know before they send it that whoever answers with
+        the code takes the place of the keys already on file. Dropped once the decision has been
+        made either way — "until then, nothing changes" is false after an approval.
+      -->
+      {#if held && ceremony.phase !== 'answered' && ceremony.phase !== 'approved' && ceremony.phase !== 'ended'}
+        <Callout tone="info">{OWNER_COPY.replaceAtMint(therapist.displayName)}</Callout>
+      {/if}
+
       {#if ceremony.phase === 'invited'}
         <button class="primary" onclick={() => step(() => openRun(ports, ceremony))} disabled={busy}>
           {busy ? 'Making a code…' : 'Make a code'}
@@ -228,6 +297,9 @@
           </button>
           <button onclick={() => step(() => newCode(ports, ceremony))} disabled={busy}>{OWNER_COPY.newCodeLabel}</button>
         </div>
+        <!-- What "New code" costs, beside the button rather than on the screen a person reaches
+             after something has already gone wrong. -->
+        <p class="hint">{OWNER_COPY.newCodeHint}</p>
       {:else if ceremony.phase === 'resumed'}
         <p class="state">{OWNER_COPY.waitingReload}</p>
         <div class="row">
@@ -236,17 +308,43 @@
           </button>
           <button onclick={() => step(() => newCode(ports, ceremony))} disabled={busy}>{OWNER_COPY.newCodeLabel}</button>
         </div>
+        <p class="hint">{OWNER_COPY.newCodeHint}</p>
       {:else if ceremony.phase === 'mismatch'}
-        <Callout tone="warn" title={OWNER_COPY.mismatchTitle}>{OWNER_COPY.mismatchBody}</Callout>
+        <!--
+          Issue #112. A notice on this screen and nothing else: no notification, because the owner's
+          half is a browser tab and a closed tab cannot raise one honestly. It sits above the count
+          and the stop button, which are both in the shared block below and both stay as they were —
+          a reply that did not open changes nothing about how many tries are left.
+
+          "Keep it open" asks the server for nothing at all (ownerCeremony.keepInvitation), which is
+          also why there is no timer here: a device that started checking more often after a failed
+          open would have told the server the code was wrong.
+        -->
+        <Callout tone="warn" title={OWNER_COPY.mismatchTitle}>
+          {OWNER_COPY.mismatchBody(therapist.displayName)}
+        </Callout>
         <div class="row">
-          <button class="primary" onclick={() => step(() => newCode(ports, ceremony))} disabled={busy}>
-            {OWNER_COPY.newCodeLabel}
+          <button class="primary" onclick={() => step(async () => keepInvitation(ceremony))} disabled={busy}>
+            {OWNER_COPY.keepOpenLabel}
           </button>
         </div>
-        <p class="hint">{OWNER_COPY.newCodeHint}</p>
       {:else if ceremony.phase === 'answered'}
-        <h5>{OWNER_COPY.answeredTitle}</h5>
-        <p class="state">{OWNER_COPY.answeredBody}</p>
+        {#if ceremony.keys.kind === 'supersedes'}
+          <!--
+            The replacement. Every sentence of it is in copy.ts and none is optional: what it does,
+            what it does NOT reach, that no reading-aloud is needed, and what to do if the person
+            never asked for this. The refusal it replaced said "reach them another way" and stopped,
+            which was a stronger demand than the one that recorded the keys in the first place.
+          -->
+          <Callout tone="warn" title={OWNER_COPY.replaceTitle(therapist.displayName)}>
+            {#each OWNER_COPY.replaceBody(therapist.displayName) as line (line)}
+              <p class="state">{line}</p>
+            {/each}
+          </Callout>
+        {:else}
+          <h5>{OWNER_COPY.answeredTitle}</h5>
+          <p class="state">{OWNER_COPY.answeredBody}</p>
+        {/if}
         <dl class="offer">
           <dt>{OWNER_COPY.nameLabel}</dt>
           <dd class="name">{ceremony.offer.displayName}</dd>
@@ -260,13 +358,27 @@
             </dd>
           {/if}
         </dl>
-        <p class="hint">{OWNER_COPY.fingerprintsHint}</p>
+        {#if ceremony.keys.kind !== 'supersedes'}
+          <!-- The replacement copy says this same sentence in its own words; twice would read as
+               two different instructions about the same fingerprints. -->
+          <p class="hint">{OWNER_COPY.fingerprintsHint}</p>
+        {/if}
         <div class="row">
-          <button class="primary" onclick={approveNow} disabled={busy}>{busy ? 'Approving…' : 'Approve'}</button>
-          <button onclick={() => step(() => newCode(ports, ceremony))} disabled={busy}>{OWNER_COPY.newCodeLabel}</button>
+          {#if ceremony.keys.kind === 'supersedes'}
+            <button class="primary" onclick={approveNow} disabled={busy}>
+              {busy ? 'Approving…' : OWNER_COPY.replaceApproveLabel}
+            </button>
+            <!-- A dismissal. It calls nothing: no cancel, no report, no new code — the invitation
+                 and the run are exactly as they were, and the keys on file are untouched. -->
+            <button onclick={() => ondone?.()} disabled={busy}>{OWNER_COPY.replaceDeclineLabel}</button>
+          {:else}
+            <button class="primary" onclick={approveNow} disabled={busy}>{busy ? 'Approving…' : 'Approve'}</button>
+            <button onclick={() => step(() => newCode(ports, ceremony))} disabled={busy}>{OWNER_COPY.newCodeLabel}</button>
+          {/if}
         </div>
       {:else if ceremony.phase === 'approved'}
         <h5>{OWNER_COPY.approvedTitle}</h5>
+        {#if ceremony.replaced}<p class="state">{OWNER_COPY.replacedBody}</p>{/if}
         <p class="state">{OWNER_COPY.approvedBody}</p>
         <div class="row">
           <button class="primary" onclick={() => ondone?.()}>Done</button>

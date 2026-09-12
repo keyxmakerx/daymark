@@ -2,15 +2,26 @@
  * What travels inside the pairing envelope (plan §3.7.3, "the derived key encrypts the rest of
  * the negotiation"), pinned down to bytes.
  *
- * ONE MESSAGE, ONE DIRECTION. The therapist's OFFER goes therapist → owner, sealed under the key
- * only a matching code derives: their two public keys, a name to show the owner, and the
- * enrolment ticket they chose. Nothing sealed travels back. The owner, on Approve, hands that
+ * TWO MESSAGES, ONE EACH WAY, AND THE CODE IS THE AUTHORITY FOR BOTH.
+ *
+ * E1, therapist → owner, sealed under the key only a matching code derives: their two public keys,
+ * a name to show the owner, and the enrolment ticket they chose. The owner, on Approve, hands that
  * ticket to the server in the clear (the server is the party that will honour it; it never sees
- * the code or the key), and the therapist already holds it. That is the whole negotiation, and
- * it is why there is no second payload type here: an owner → therapist message would carry the
- * owner's keys, and the owner has no durable keys yet (OwnerUnlock.svelte). When it does, a v2
- * of this file adds one; the version byte on the envelope and the `v` field here exist so that
- * day is a refusal to open old bytes, not a misreading of them.
+ * the code or the key), and the therapist already holds it.
+ *
+ * E2, owner → therapist, sealed at Approve under the same run's key in the OTHER direction: the
+ * owner's two public keys, and nothing else. This file used to say there could be no second
+ * payload, because the owner had no durable keys to put in one — OwnerUnlock.svelte minted a fresh
+ * pair every visit. owner/identity.ts ended that: the owner's identity is derived from their master
+ * key and is the same identity every session, so the second direction can rest on the code exactly
+ * as the first does. That is what retires issue #101's hand-pasted owner keys. What a clinician
+ * pins is no longer as good as the channel a base64 string arrived on; it is as good as the code
+ * the owner spoke.
+ *
+ * THE TWO NEVER MIX. The envelope's AAD carries the direction (envelope.ts), so a reflected E1 does
+ * not open as an E2 under any key, and each decoder below refuses the other's shape field for
+ * field. The `v` inside each payload is its own, so a future third thing is a refusal to open old
+ * bytes rather than a misreading of them.
  *
  * THE OFFER IS AUTHENTICATED BY OPENING, NOT BY ANYTHING INSIDE IT. If the envelope opens, the
  * bytes were sealed by someone holding the ISK, which means someone who typed the code. The
@@ -107,6 +118,72 @@ export function decodeTherapistOffer(bytes: Uint8Array): TherapistOffer | null {
     displayName: rest.displayName,
     enrolTicketB64: rest.enrolTicketB64,
   }
+}
+
+/**
+ * The owner's identity, as the clinician sees it after E2 opens.
+ *
+ * PUBLIC HALVES ONLY, and deliberately nothing else — no name, no relationship reference, no
+ * timestamp. The clinician learned the relationship from the fetch, and every field that is not a
+ * key is a field a later reader might be tempted to trust. What this payload is FOR is one claim:
+ * these two keys belong to whoever spoke the code.
+ *
+ * AUTHENTICATED BY OPENING, exactly as the offer is. If the envelope opens under this run's key in
+ * the owner → therapist direction, the bytes were sealed by someone holding the ISK, which means
+ * the person the clinician typed the code with. No signature inside could add to that.
+ */
+export interface OwnerKeysPayload {
+  /** X25519 public key, base64url, 32 bytes. What the owner's shares are sealed to. */
+  boxPubB64: string
+  /** Ed25519 public key, base64url, 32 bytes. What proves a grant or a share came from the owner. */
+  signPubB64: string
+}
+
+export const OWNER_KEYS_VERSION = 1
+
+/** Both fields, both lengths, and no others. The reason decodeOwnerKeys can return null. */
+export function validOwnerKeys(keys: unknown): keys is OwnerKeysPayload {
+  if (typeof keys !== 'object' || keys === null) return false
+  const o = keys as Record<string, unknown>
+  if (Object.keys(o).sort().join(',') !== 'boxPubB64,signPubB64') return false
+  if (typeof o.boxPubB64 !== 'string' || decodedLength(o.boxPubB64) !== KEY_BYTES) return false
+  if (typeof o.signPubB64 !== 'string' || decodedLength(o.signPubB64) !== KEY_BYTES) return false
+  return true
+}
+
+/** The bytes to seal. Throws on anything this module would refuse to decode: nothing invalid is sent. */
+export function encodeOwnerKeys(keys: OwnerKeysPayload): Uint8Array {
+  if (!validOwnerKeys(keys)) throw new Error('pairing: refusing to encode invalid owner keys')
+  return new TextEncoder().encode(
+    JSON.stringify({
+      v: OWNER_KEYS_VERSION,
+      boxPubB64: keys.boxPubB64,
+      signPubB64: keys.signPubB64,
+    }),
+  )
+}
+
+/**
+ * The owner's keys, or null for anything that is not exactly a v1 owner-keys payload.
+ *
+ * Null is a refusal and not a diagnosis, for the same reason decodeTherapistOffer's is. By the time
+ * these bytes exist the envelope has already opened, so the remaining ways to be here holding
+ * something unreadable are a version this build does not know and a bug. Both mean "do not pin",
+ * and the screen says that without inventing which.
+ */
+export function decodeOwnerKeys(bytes: Uint8Array): OwnerKeysPayload | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))
+  } catch {
+    return null
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null
+  const p = parsed as Record<string, unknown>
+  if (p.v !== OWNER_KEYS_VERSION) return null
+  const { v: _v, ...rest } = p
+  if (!validOwnerKeys(rest)) return null
+  return { boxPubB64: rest.boxPubB64, signPubB64: rest.signPubB64 }
 }
 
 /**

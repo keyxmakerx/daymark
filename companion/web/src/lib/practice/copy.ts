@@ -83,6 +83,31 @@ export const REMOVAL_ENDS_A_MEMBERSHIP =
   'can change that, from their own device.'
 
 /**
+ * The case an administrator will not think of, said at the moment they are about to be wrong.
+ *
+ * Removal is most often reached for when somebody is being let go, and the assumption behind the
+ * click is that it cuts them off from the people they were seeing. It does not, and cannot. A
+ * relationship is between a clinician and a PATIENT, created by that patient's invitation; this
+ * server's relationship tables carry no practice id at all, so a practice has no standing over one
+ * and no route here reaches it. There is also, deliberately, no list of a practice's patients — a
+ * roster that grew one would be a register of who is in therapy where — so the practice cannot even
+ * tell them.
+ *
+ * This is the honest consequence of a design that is right: the patient is the root of consent and
+ * the practice is an addressing convenience. But an administrator who believes Remove ended a
+ * clinician's access to somebody's journal will stop there, when the thing that ends it is the
+ * patient revoking, and the thing that ends the clinician's standing entirely is the clinician's
+ * own Leave. Both of those are somebody else's to do.
+ *
+ * Stated flatly, and with no instruction attached: what a practice does about a clinician who
+ * should not still be reading is a professional judgement and not something a console can script.
+ */
+export const REMOVAL_DOES_NOT_END_A_RELATIONSHIP =
+  'Removal ends their standing in this practice. It does not end any patient’s relationship ' +
+  'with them. Only the patient can do that, from their own console — or the clinician ' +
+  'themselves, by leaving the relationship from theirs.'
+
+/**
  * What the session count on a removal is, and is not.
  *
  * Shown beside the number the server returns, because a bare "3 sessions ended" invites the reading

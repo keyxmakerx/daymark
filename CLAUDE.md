@@ -77,6 +77,26 @@ product's point of view` — see `git log` for the register.
   written against an assumption goes green when the assumption stops holding.
 - **Mutation-test anything load-bearing** before calling it proof: break the property on purpose and
   confirm exactly the test that names it turns red.
+- **A mutation that might not be a mutation is a flaky test.** This repository's second most common
+  bug shape, found four times on 2026-09-12 alone. A test draws a random value, changes it at a
+  fixed position, and asserts the result is refused — but the "change" is a no-op whenever the
+  drawn value already held the new one there, and the test then asserts that something valid is
+  invalid. It fails at exactly the collision rate and reproduces for nobody:
+
+  | Where | The change | Failed |
+  | --- | --- | --- |
+  | `components/recovery/groups.test.ts` | a whole 5-symbol group replaced with a fixed string | 1 in 31 |
+  | `therapist/pairingAccept.test.ts` | a literal `'Z'` appended as the check symbol | 1 in 31 |
+  | `therapist/pinRecord.test.ts` | SAS words 0 and 1 swapped | 1 in 256 |
+
+  **Derive the mutation from the value, never write it as a literal**: `x === 'Z' ? 'Y' : 'Z'`, or
+  find the first position that actually differs, or skip the case (`groups.test.ts`'s transposition
+  sweep does the last). Then assert the mutated value really is different before asserting it is
+  refused — one line, and it converts a mystery into a clear failure.
+
+  Related: know what the primitive actually guarantees. A check symbol catches every SINGLE-symbol
+  substitution and every adjacent transposition; it catches a multi-symbol change only 30 times in
+  31. Asserting the stronger property is asserting something untrue.
 - Web tests run in node with no DOM. Component properties are asserted **structurally over the
   `.svelte` source**; sequencing lives in ports-and-transitions modules (see
   `companion/web/src/lib/pairing/ownerCeremony.ts`) so ORDER is a node test.

@@ -158,7 +158,7 @@ A left rail (collapsible to icons on narrow widths), a top **Trust strip**, and 
 
 Top-level sections:
 
-- **Overview** — the dashboard landing: a compact "year in pixels/stars" thumbnail, headline counts (entries, average mood band, current streak — descriptive only), the latest check-in bands, and a *"For you"* strip rendered from the **same deterministic Signals rules** as the phone (no new model, ever). Cards link into deeper sections.
+- **Overview** — the dashboard landing: a compact "year in pixels/stars" thumbnail, headline counts (entries, average mood band, days with an entry — "12 of the last 30 days", non-consecutive and omitted at zero), the latest check-in bands, and a *"For you"* strip rendered from the **same deterministic Signals rules** as the phone (no new model, ever). Cards link into deeper sections.
 - **Year** — full-screen year overview (pixels + stars toggle), the "Review my year" walkthrough.
 - **Periods** — this-period-vs-last comparison with a Week/Month/Year scale toggle.
 - **Mood ↔ factors** — correlations ("lifts you up / weighs you down"), day-of-week and time-of-day, **always labeled association, never cause**, with the same ≥5-occurrence / ≥14-day sample gates as the app.
@@ -410,6 +410,58 @@ The hardest concept (TOFU + mutual SAS) is presented as a **"read these words to
 4. For **real future-data revocation**, offer **"Re-pair with a new key"**: *"For the strongest protection, re-verify your therapist with a new key. Future shares use the new key; the old one can't read new data."* (This is the only colluding-server-proof primitive; the UI says so honestly.)
 5. **Access** section logs a `REVOKED` event (owner-readable, metadata-only).
 
+### 7.7 Leaving a relationship (clinician)
+
+The mirror of §7.6, and deliberately not its twin — the two acts differ in what they reach and
+therefore in what they may claim. Issue #91.
+
+1. **Allowed tab ▸ foot of the panel → "Leave this relationship"** — a plain hairline control, on
+   chrome. Not beside **Log out**: two adjacent controls that both end a session, one of them
+   permanently, is a misclick with no recovery. No passphrase re-entry — the passphrase protects the
+   key record, and the record is exactly what is being put down.
+2. A confirm, whose **order is the decision**:
+
+   | # | Says | Why here |
+   |---|---|---|
+   | 1 | *"Your sign-in for this person closes as soon as you confirm, on every device, and it cannot be reopened. There is no way back in without a fresh invitation from them."* | The load-bearing fact, and the one a clinician may not have. |
+   | 2 | *"Nothing of theirs changes. Their entries, what they shared, and their record of sharing it all stay exactly as they are."* | Reassurance, and therefore second: no clinician expects leaving to delete a patient's journal, so leading with it answers a question they were not asking. |
+   | 3 | *"It does not reach copies. Anything you exported, printed or wrote down — including a saved copy of your key record, and anything you already opened — is still wherever you put it."* | The product hands out that record on purpose, so "cannot be opened again" holds only if no copy exists. |
+   | 4 | *"If they do not know yet, tell them yourself: nothing here will send them a message."* | Professional conduct. A reminder, never an instruction. |
+
+3. **Keep access** / **Leave**. Leave is the only clay element on the surface: pressing the control
+   in step 1 only opens a question. Nothing anywhere reads as failure, alarm, congratulation or
+   punishment — putting down access is an ordinary professional act.
+4. The person lands on the sign-in screen with one flat sentence saying what happened. If the
+   sign-out could not be confirmed it says that instead, without alarm: the door is already shut.
+5. It **names nobody**. This console does not hold the patient's name and there is no route that
+   would carry one; the confirm says "them" throughout.
+
+**`REVOKE_CAVEAT` is not on this surface**, and this is the one place in the product where turning
+access off does not carry it. From this side there is no reader being cut off and nothing is being
+un-sent; row 3 above is the honest mirror. The exemption is checked, with its reason, in
+`companion/web/src/lib/components/owner/revokeCaveat.test.ts`.
+
+### 7.8 The owner's side of somebody else leaving
+
+No message is sent. Three surfaces carry the fact where it can still be acted on:
+
+| Surface | Copy | Treatment |
+|---|---|---|
+| Sharing strip (every owner screen) | *"{Name} ended their access on {date}. Nothing you send now would be read."* under an **ACCESS ENDED** label | Chrome with the same indigo rule as the live strip — never clay. A clinician's ordinary decision is not one of clay's four meanings, and painting it as an alarm would read as an accusation nobody made. It **replaces** the "Sharing real entries with…" line rather than sitting beside it: both cannot be true at once. |
+| Seal & publish share | *"Nothing was sealed or sent. {Name} ended their access on {date}, so nothing sent now would be read. You can revoke what is still published to them, or invite them again if they are coming back."* | A refusal, so clay — and checked before anything is sealed, which is what makes the first sentence literally true. It names the consequence and the two ways out, and no cause the server cannot know. |
+| Access log | *Your therapist · Ended their access to what you share* | A line, like any other. Not "left" (a story about why, which nothing here knows) and not "revoked" (the owner's own word for their own act). |
+
+### 7.9 Removing a member from a practice (admin)
+
+Unchanged mechanically, but the confirm now corrects the assumption behind the click: *"Removal ends
+their standing in this practice. It does not end any patient's relationship with them. Only the
+patient can do that, from their own console — or the clinician themselves, by leaving the
+relationship from theirs."*
+
+That is the fired-clinician case, and it is copy rather than mechanism on purpose. A practice has no
+standing over a patient's relationship and giving it one would be the practice reaching into the
+thing the access model refuses. `docs/COMPANION_THERAPIST.md` §9a states it in full.
+
 ---
 
 ## 8. Report & dataviz UX
@@ -418,9 +470,9 @@ All dataviz reuses the flagship's analytical posture (descriptive, association-n
 
 ### 8.1 Year overview
 
-- Two views toggled: **Year in Pixels** (dense analysis grid, each day tinted by mood mean) and **Year in Stars** (the night-sky keepsake render, fixed dark palette regardless of theme — bg `#16150F`).
-- A **"Review my year"** horizontal walkthrough (intro → quarter chapters with star clusters → finale stats), all **factual** strings ("26 days · mostly Good"), never "you felt…."
-- Legend + summarizing text alternative for accessibility; a **"Save keepsake (PNG)"** export.
+- Two views toggled: **Year in Pixels** (dense analysis grid, each day tinted by mood mean) and **Year in Stars** (the night-sky render, fixed dark palette regardless of theme — bg `#16150F`).
+- A **"Review my year"** horizontal walkthrough (intro → quarter chapters with star clusters → a finale of two tiles, `Most often` and `First entry`), all **factual** strings ("26 days · mostly Good"), never "you felt…." No superlative and no average: the phone's finale dropped brightest month, longest streak and average mood, and a web one may not reintroduce them.
+- Legend + summarizing text alternative for accessibility. **No image export.** The phone had one and it was removed rather than restricted — see `docs/SKY.md` §11 question 2 — so a web console offering the same download would reintroduce the thing the phone gave up.
 
 ### 8.2 Period comparison
 
@@ -598,6 +650,8 @@ Plus the four **plain-language honest limits** (each links to the relevant doc s
 | **Error — wrong passphrase** | Owner | *"That passphrase didn't unlock this backup. It's case-sensitive. We can't reset it — there's no recovery by design."* (generic, non-enumerating, no lockout-leak) |
 | **Error — signature failed** | Therapist (share) / Owner (plan) | Refuse to render. *"We couldn't confirm this came from {the other party}. For safety, nothing is shown."* |
 | **Error — expired/revoked** | Therapist | *"This share has ended. Ask {Client} to share again if you still need it."* (403, no detail leak) |
+| **Refused — you left this relationship** | Therapist (sign-in) | *"This relationship was ended."* (410, and reachable only behind a correct code — every other refusal on that route is one non-enumerating 401, so nobody learns it by guessing a username) |
+| **Refused — they left** | Owner (seal & publish) | *"Nothing was sealed or sent. {Name} ended their access on {date}…"* — see §7.8. Checked before anything is sealed, so the first sentence is literally true |
 | **Error — fingerprint changed** | Either | Loud banner: *"The other person's security key looks different than before. Stop and re-verify in person — someone may be intercepting."* |
 | **Error — server unreachable** | Owner web | *"Can't reach your Companion server. Your phone still has all your data."* (reassert phone-as-source-of-truth) |
 | **Integrity not verified (Phase-0)** | Owner | A persistent caution prompt: *"You haven't verified this build's hash. You can browse a plaintext file, but verify the build before unlocking an encrypted backup."* (No false claim that the page can self-detect tampering.) |

@@ -119,7 +119,8 @@ class InsightsExtrasViewModel @Inject constructor(
 
         // --- Consistency heatmap + period review ---
         val entriesByDay = entries.groupingBy { DateUtils.toLocalDate(it.entry.dateTime) }.eachCount()
-        val streak = com.daymark.app.stats.MoodStats.currentStreak(entriesByDay.keys, today)
+        val daysWithEntry = com.daymark.app.stats.MoodStats
+            .daysWithEntryInLast30(entriesByDay.keys, today)
         val upRows = rows(up)
         val review = com.daymark.app.stats.PeriodReview.build(
             com.daymark.app.stats.PeriodReview.Inputs(
@@ -128,7 +129,7 @@ class InsightsExtrasViewModel @Inject constructor(
                 bestDay = dow.maxByOrNull { it.value }?.key,
                 worstDay = dow.minByOrNull { it.value }?.key,
                 topFactorUp = upRows.firstOrNull()?.name,
-                currentStreak = streak,
+                daysWithEntryLast30 = daysWithEntry,
             ),
         )
 

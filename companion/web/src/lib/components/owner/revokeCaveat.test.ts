@@ -21,6 +21,25 @@ import { REVOKE_CAVEAT } from '../../pairing/copy'
  * the caveat to be about. Its own copy (OWNER_COPY.stopBody, checked in pairingPanel.test.ts)
  * already states the correct, different fact for that moment — nothing has been shared yet.
  *
+ * ─── THE ONE SURFACE THAT TURNS ACCESS OFF AND IS EXEMPT ───────────────────────────────────────
+ *
+ * The clinician's own "Leave this relationship" (issue #91) turns access off and does NOT carry
+ * this sentence. That is a decision, not an oversight, and the exemption is written here rather
+ * than left to be rediscovered — see EXEMPT_SURFACES at the foot of this file, where it is checked
+ * rather than only described.
+ *
+ * The reason: "Revoking does not un-send what was already read" is the OWNER's sentence. It is
+ * about a reader who already holds something, and the point of saying it at the moment of the click
+ * is that the owner is about to believe revoking reaches backwards. From the clinician's side there
+ * is no such reader — they are the reader, and they are not un-sending anything. The same words
+ * would be describing a different act, which is the failure this whole file exists to stop, just
+ * the other way round. That surface asserts its own mirror constant instead.
+ *
+ * The detector is not weakened for it. Nothing here scans the tree, so a new revoking screen is not
+ * caught automatically by this file either way; what is enforced is that every surface named below
+ * carries the constant, and that the exempt one carries the mirror. Both lists are checked against
+ * the tree, so an entry that stops being true fails rather than going quiet.
+ *
  * Every presence check below is paired with a fixture proving it can fail: a component whose
  * revoke paragraph was replaced with some other sentence does not satisfy the same assertion, per
  * this repo's rule that a check which cannot see a planted example proves only that it is blind.
@@ -73,6 +92,41 @@ describe('the revoke caveat is the shared constant, not a rewording of it', () =
     // this same check — so passing it means the name is actually there, not that the topic is.
     const reworded = source.replace(/REVOKE_CAVEAT/g, 'the usual caveat')
     expect(reworded).not.toContain('REVOKE_CAVEAT')
+  })
+
+  /*
+   * The exemption, as a checked list rather than a paragraph.
+   *
+   * An exemption nobody verifies is how a rule quietly stops applying: the file says a surface is
+   * exempt, the surface is later rewritten or deleted, and the sentence in the header goes on
+   * claiming a decision about something that no longer exists. So each entry has to be a real file
+   * that really does turn access off, and that really does say the mirror thing instead.
+   */
+  const EXEMPT_SURFACES = [
+    {
+      path: '../../components/therapist/LeaveRelationship.svelte',
+      /** Why this surface may omit the caveat. */
+      because: 'from the clinician’s side there is no reader being cut off, and they un-send nothing',
+      /** What it must say in its place. */
+      mirror: 'LEAVE_DOES_NOT_REACH_COPIES',
+    },
+  ]
+
+  it('the exempt surface is real, does turn access off, and says the mirror thing instead', () => {
+    for (const { path, because, mirror } of EXEMPT_SURFACES) {
+      const source = readFileSync(new URL(path, import.meta.url), 'utf8')
+      expect(because.length, `${path}: an exemption needs a reason`).toBeGreaterThan(0)
+      // It really is a surface that turns access off — otherwise the exemption guards nothing.
+      expect(source, path).toContain('leaveRelationship')
+      // And it really does carry the mirror constant in its place.
+      expect(source, path).toContain(`{${mirror}}`)
+      // It genuinely does not use the caveat, which is the thing being exempted.
+      expect(source, path).not.toContain('REVOKE_CAVEAT')
+    }
+    // Control: the same three checks do NOT pass on a stand-in that turns access off and says
+    // neither thing — so an exemption cannot be satisfied by a file that simply stays quiet.
+    const planted = '<p>Leaving ends your access.</p>'
+    expect(planted).not.toContain('{LEAVE_DOES_NOT_REACH_COPIES}')
   })
 
   it('the constant is one plain sentence, stated flatly, never softened', () => {

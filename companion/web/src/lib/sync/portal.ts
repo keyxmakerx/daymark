@@ -288,6 +288,26 @@ export class PortalClient {
     return (await res.json()) as OwnerKeyRecord
   }
 
+  /**
+   * When the clinician ended this relationship, or null while it is live (issue #91).
+   *
+   * `null` IS THE ORDINARY ANSWER and is not an error: almost every relationship is live, and this
+   * is read by a strip that sits on every owner screen, so drawing an absence as a failure would put
+   * a permanent alarm in front of people whose relationships are perfectly fine.
+   *
+   * A FAILURE TO READ IS ALSO NOT AN ENDING. This throws rather than returning null on an
+   * unreachable server, for the same reason the sharing strip refuses to render a timeout as "not
+   * sharing": an answer that never arrived says nothing about whether somebody has access, and
+   * quietly deciding it means "still live" would let the owner go on publishing to a reader who is
+   * gone. The caller decides what to say about not knowing.
+   */
+  async relationshipEnding(relRef: string): Promise<{ endedAt: number } | null> {
+    const res = await this.req(`/v1/relations/${encodeURIComponent(relRef)}/ending`)
+    if (res.status === 404) return null
+    if (!res.ok) throw new PortalError('could not check whether this relationship has ended', res.status)
+    return (await res.json()) as { endedAt: number }
+  }
+
   // --- owner notification-email registration (Track T2) ---
 
   async getNotificationSettings(): Promise<NotificationSettings> {

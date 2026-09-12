@@ -45,7 +45,7 @@ import _sodium from 'libsodium-wrappers-sumo'
 import { fingerprint } from '../assignments/crypto'
 import { initShareCrypto, type PublicIdentity, type PinStore } from '../share/pairing'
 import { fromBase64 } from '../share/sharecrypto'
-import { pinOnFirstUse, pendingRotation } from '../therapist/pinStore'
+import { pinOnFirstUse, pendingRotation, recordPin, type PinWrite } from '../therapist/pinStore'
 
 /** Both keys are raw 32-byte public keys — X25519 for sealing, Ed25519 for signing. */
 export const PUBLIC_KEY_BYTES = 32
@@ -381,8 +381,104 @@ export function identityFromOffer(offer: { boxPubB64: string; signPubB64: string
   }
 }
 
+/** The two public keys this console currently holds for one relationship. */
+export interface HeldKeys {
+  boxPub: Uint8Array
+  signPub: Uint8Array
+}
+
+/** One other relationship this console holds keys for, with the owner's own name for them. */
+export interface NamedKeys extends HeldKeys {
+  displayName: string
+}
+
 /**
- * Pin keys that arrived through the pairing channel.
+ * What an offer's keys are, set against what this console already holds.
+ *
+ * FIVE ANSWERS BECAUSE THERE ARE FIVE DIFFERENT THINGS TO SAY TO A PERSON, and collapsing any two
+ * would mean lying on one of them. In particular 'supersedes' is NOT a refusal: see [checkOffer].
+ */
+export type OfferCheck =
+  /** Nothing is on file for this relationship. The offer's keys become its first record. */
+  | { kind: 'first' }
+  /** The offer carries exactly the keys already held. Approving records nothing new. */
+  | { kind: 'unchanged' }
+  /** Different keys are held for this person. Approving supersedes them, and says so first. */
+  | { kind: 'supersedes' }
+  /** These keys are the ones recorded for SOMEBODY ELSE in this console. Genuinely ambiguous. */
+  | { kind: 'other-person'; displayName: string }
+  /** The bytes in the offer are not two public keys. Nothing to compare and nothing to record. */
+  | { kind: 'unreadable' }
+
+/** Both keys present and the right length. A pending relationship has neither and must not match. */
+function usable(keys: HeldKeys | null | undefined): keys is HeldKeys {
+  return (
+    !!keys &&
+    keys.boxPub?.length === PUBLIC_KEY_BYTES &&
+    keys.signPub?.length === PUBLIC_KEY_BYTES
+  )
+}
+
+function fpsOf(keys: HeldKeys): { x25519Fp: string; ed25519Fp: string } {
+  return { x25519Fp: fingerprint(keys.boxPub), ed25519Fp: fingerprint(keys.signPub) }
+}
+
+/**
+ * Read an offer against this console's record, WITHOUT writing anything.
+ *
+ * WHY A MATCHING CODE ON A FRESH INVITATION IS ALLOWED TO REPLACE A PINNED KEY (issue #111). The
+ * pin's authority IS the code. The existing pin was recorded on exactly one proof — "the party that
+ * sealed this envelope is the party I spoke the code to" — so demanding a STRONGER proof to replace
+ * it than was needed to create it is incoherent. It also buys nothing: someone who obtains a code
+ * can already pair fresh and be sent shares, so letting them replace a pin adds no access they did
+ * not have. What it adds is detectability — the real clinician's next share stops opening, and they
+ * pick up the phone.
+ *
+ * Two things make that safe rather than merely arguable, and neither is optional:
+ *   - THE OLD INVITATION AND CODE ARE ALREADY DEAD. Approving moves the invitation out of PENDING,
+ *     and every route that starts or answers a run demands PENDING, so a rotation always costs a
+ *     FRESH invitation and a FRESH code (companion/server, PairingRelayRoutes.kt; pinned by
+ *     PairingRelayRoutesTest).
+ *   - IT REACHES NOTHING ALREADY SEALED. Rotation changes what is sealed from now on and nothing
+ *     else; whoever holds the old device can still open every share sent before. The screen says
+ *     so, in those words, at the point of the click.
+ *
+ * THE ONE REFUSAL KEPT is 'other-person': these exact keys are the ones this console has recorded
+ * for a DIFFERENT relationship. That is not a rotation, it is an ambiguity about who a share is
+ * for, and no amount of code-typing resolves it.
+ *
+ * `others` must be the relationships whose keys are actually known; a pending entry carries empty
+ * arrays, and matching two of those against each other would report every first pairing as a
+ * collision. [usable] refuses them here as well, so a caller that forgets is not silently wrong.
+ */
+export function checkOffer(
+  offer: { boxPubB64: string; signPubB64: string },
+  held: HeldKeys | null,
+  others: NamedKeys[] = [],
+): OfferCheck {
+  const peer = identityFromOffer(offer)
+  if (!peer) return { kind: 'unreadable' }
+  const offered = { x25519Fp: fingerprint(peer.x25519Pub), ed25519Fp: fingerprint(peer.ed25519Pub) }
+  for (const other of others) {
+    if (!usable(other)) continue
+    const theirs = fpsOf(other)
+    // Either key matching is enough. A signing key shared with another relationship makes the
+    // console file two people under one identity; an encryption key shared with one means a share
+    // meant for either can be opened by the other. Both are the same question: which person is this?
+    if (theirs.ed25519Fp === offered.ed25519Fp || theirs.x25519Fp === offered.x25519Fp) {
+      return { kind: 'other-person', displayName: other.displayName }
+    }
+  }
+  if (!usable(held)) return { kind: 'first' }
+  const mine = fpsOf(held)
+  if (mine.ed25519Fp === offered.ed25519Fp && mine.x25519Fp === offered.x25519Fp) {
+    return { kind: 'unchanged' }
+  }
+  return { kind: 'supersedes' }
+}
+
+/**
+ * Record keys that arrived through the pairing channel.
  *
  * WHY THIS EXISTS ALONGSIDE [acceptTherapistKeys] RATHER THAN CALLING IT. That function's whole
  * argument is that a caller must not be able to supply both the expected and the typed
@@ -390,12 +486,18 @@ export function identityFromOffer(offer: { boxPubB64: string; signPubB64: string
  * the very record being pinned would be exactly that tautology, dressed as a call — so this is a
  * separate door with its own stated authority (the envelope), not a bypass of that one.
  *
- * WHAT IT KEEPS FROM THE OTHER PATH. The rotation check, unchanged and for the same reason: if this
- * console already holds a different key for this person, pinning quietly over it would hide the
- * substitution the record exists to make visible. A rotation is refused here as it is there, and
- * the owner is told to reach them another way. Nothing is persisted until the caller saves.
+ * IT NO LONGER REFUSES A KEY THAT DIFFERS FROM THE ONE ON FILE, and that is issue #111 rather than
+ * an omission: see [checkOffer] for why the code is authority enough to replace what the code
+ * recorded. What it keeps is the insert-only rule — `recordPin` appends, so the row being superseded
+ * stays on file — and the rule that a refusal has to happen BEFORE a write, which is why the
+ * decision lives in [checkOffer] and this function only writes. Nothing is persisted until the
+ * caller saves.
+ *
+ * NOTE what is deliberately NOT here: the SAS words. The manual rotation route (pinStore.ts
+ * `rotatePin`, PinRecord.svelte) still asks for them, because there it is the only thing the server
+ * cannot supply. On this route the code already did that job, and asking twice would teach an owner
+ * that one of the two checks is decoration.
  */
-export function pinFromPairing(pins: PinStore, peer: PublicIdentity, now: number = Date.now()): KeyAcceptance {
-  if (pendingRotation(pins, peer) !== null) return 'differs-from-pin'
-  return pinOnFirstUse(pins, peer, now) === 'pinned-now' ? 'pinned-now' : 'already-pinned'
+export function pinFromPairing(pins: PinStore, peer: PublicIdentity, now: number = Date.now()): PinWrite {
+  return recordPin(pins, peer, now)
 }

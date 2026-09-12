@@ -6,6 +6,36 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Removed
+- **"Review my year" ends on two plain facts, and no longer offers to save a picture of your
+  year.** The last page used to show three numbers: your average mood, your brightest month, and
+  your longest streak. Each was a way of marking a year of your life out of something — an average
+  of a mood scale is a grade, and naming your brightest month tells anyone reading it that one of
+  the others was your darkest. They are replaced by two things that rank nothing: **Most often**,
+  the mood you chose on more days than any other, in your own word for it, and **First entry**, the
+  day you started. The heading is now just the year. The same two claims appeared as a small note
+  on the quarter pages, and that note has gone with them.
+  **"Save keepsake" is removed.** It wrote your year — every mood, and the timing of everything you
+  logged — into a single image in your gallery, which is the folder most likely to be quietly
+  backed up somewhere by software you have forgotten about; and it made the unlogged stretches
+  permanent. In its place the last page says: *This stays on your phone. You can come back to it
+  any time.* Nothing you have already saved is affected.
+- **Streaks are gone, and the Achievements screen with them.** A streak is a number you can lose:
+  miss one day and it goes back to nothing, which means it is at its lowest exactly when someone
+  has been away and has just come back. Every continuity number in Daymark is now the same one —
+  **days with an entry, "12 of the last 30"** — counted without needing the days to be in a row, so
+  a missed day costs one day and nothing else. It reads the same on your phone and in the companion
+  web console. On **Stats** it is a single card labelled *Days with an entry*; on **Home** there is
+  now nothing of the sort at all, because Home is the screen you land on after time away and a
+  count there is a mark on you however gently it is phrased. If there are no entries in the last
+  thirty days the card is simply not drawn — an empty stretch is not a nought to be shown.
+  The **Achievements** screen is deleted: the screen, the nine badges, the badge art, the stored
+  record of what you had earned, and the "Streaks and milestones" switch in Settings that used to
+  turn the notices off. The app says nothing about this to anyone who had earned badges — the only
+  sentence available would be one asking you to feel something about a thing we decided was bad for
+  you, which is the same move again. Nothing else in your data is touched, and an older backup that
+  still contains unlock times restores normally; the badges in it are just not brought back.
+
 ### Added
 - **Your journal is now encrypted on your phone.** Daymark does this for everybody, from the first
   time you open it — you don't switch it on and there is nothing to remember. The key is made on
@@ -31,6 +61,59 @@ All notable changes to this project are documented here. The format is based on
 - **A new PIN is six to twelve digits.** Four was reasonable while the PIN only guarded a screen
   behind a wait-after-wrong-guesses lockout. A PIN you already set keeps working at whatever length
   it is — Daymark will not make you change it or interrupt you about it.
+- **Companion — a clinician who has lost their keys can be invited back.** If a clinician lost the
+  browser or the passphrase holding their keys, there was no way back: their passphrase cannot be
+  reset, and the console refused to approve anyone whose keys were not the ones it already had. You
+  were left sending things to a key nobody could open. Now you send a fresh invitation and say a new
+  code, exactly as the first time, and approving the reply replaces the keys on file. Before you do,
+  the screen tells you what that reaches and what it does not: it changes what is sent from now on,
+  and it does not reach anything already sent — whoever has the old device can still open every
+  share you sent them before today. It also says that if the person did not ask for this, do not
+  approve. The choice is "Replace and approve" or "Not now", and "Not now" cancels nothing. The one
+  case still refused is keys already recorded for a different person, because then nothing can tell
+  which of the two a message was meant for.
+- **Companion — a key that changes is written down beside the old one instead of over it.** The
+  console's record of a clinician's keys used to be overwritten when a key changed, so the one
+  question anybody asks afterwards — what was on file before, and until when? — could no longer be
+  answered. The record now keeps both, and the newest is the one everything is sent to. Forgetting a
+  clinician still erases the whole of their record at once.
+- **Companion — a clinician can now end their own access, and it really ends it.** Until now only
+  the person sharing could end a connection; a clinician who left a practice, retired, or simply
+  should not be holding it any longer had no way to put it down. There is now a plain "Leave this
+  relationship" at the foot of their console. It closes their sign-in for that person on every
+  device, not just the browser they clicked it in, and there is no way back without a fresh
+  invitation.
+
+  What it does not do is the point of it. It touches nothing belonging to the person who invited
+  them: no entry is deleted, nothing is un-shared, and the record of what was shared is exactly as
+  it was. It also cannot reach copies — anything the clinician already opened, printed or saved is
+  still wherever they put it, and the screen says so rather than implying otherwise. Nothing about
+  the act reads as failure or punishment; putting down access is an ordinary professional thing to
+  do.
+
+  Under the surface, ending it writes one permanent line rather than deleting anything. The
+  clinician's sign-in credential is never removed, because removing it would let anyone still
+  holding the old invitation link set up a brand-new one against a connection somebody had just
+  ended.
+
+- **Companion — you find out when a clinician ends their access, without being messaged about it.**
+  Three places, all of them somewhere you were already looking. The strip at the top of every screen
+  stops saying somebody is reading your entries and says they ended their access, with the date. The
+  next time you try to send them something, it is refused before anything is sealed, and says why
+  and what you can do — take back what is still published to them, or invite them again. And the
+  access log for that connection carries a line.
+
+  **No email is sent, and that is deliberate but not settled.** An email saying a therapy connection
+  has ended could land in an inbox somebody else reads. Whether to offer one is a decision about
+  your users' safety and is left open rather than guessed at.
+
+- **Companion — the practice console now says what removing somebody does, and what it does not.**
+  Removing a member ends their standing in the practice. It does not end any patient's relationship
+  with them: the relationship belongs to the patient, was made by the patient's invitation, and only
+  the patient can end it — or the clinician themselves, now that they can. An administrator letting
+  somebody go will assume the button did more than it did, so the confirmation says so at the moment
+  they are about to press it. No new power was given to a practice over a patient's connection, and
+  none should be.
 - **Companion — your identity is now yours, instead of a new one every visit.** The owner console
   used to make a fresh pair of keys each time you opened it, which meant a clinician who carefully
   wrote down your fingerprint could not verify anything you sent them afterwards. It looked like
@@ -48,7 +131,78 @@ All notable changes to this project are documented here. The format is based on
   If a different key is already on file the console says so plainly instead of showing an error
   code, because that means this clinician can no longer verify you and no button can fix it.
 
+- **Companion — your clinician now learns your keys from the code you spoke, and stops typing them
+  in by hand.** The short code you read out to a clinician has always proved *their* keys to *you*:
+  what they send back can only be opened by someone who heard it, so nobody who merely got hold of
+  the invitation link can be approved. The other direction was not like that. Your keys reached them
+  as a long line of characters they pasted into a form, and what that proved depended entirely on
+  how the characters got to them — an email anyone could have sent, a message anyone could have
+  changed. That was the direction your journal travels along.
+  <br><br>
+  When you approve a clinician now, your console seals your own two keys with the same code and
+  sends them back through the same exchange. Their browser opens them and writes them down before it
+  finishes setting them up, so a clinician is never signed up unable to check that what arrives is
+  really from you. The two fields where they used to paste your keys are gone from the sign-in
+  screen, and there is no longer any way to type one in.
+  <br><br>
+  The copy of your key that sits on the server has not gone away and still does a job: when your
+  clinician signs in, it is compared with the one the code proved. If the two disagree the sign-in
+  stops and says so — it does not choose one. If you have not sent your key to the server at all,
+  nothing is missing; the screen says there was nothing to compare and carries on with the one the
+  code proved. A clinician who was set up before today has no proved copy, signs in on the server's,
+  and is told plainly that nothing proved those keys to them and that a fresh invitation from you
+  fixes it. Nothing about this asks anything new of you: it is the same code, spoken once, doing
+  both jobs.
+
+### Changed
+- **Companion — a reply that will not open now asks you a question instead of guessing.** When
+  somebody answers your invitation and what comes back does not open with your code, the screen used
+  to offer a new code and a paragraph speculating about whether it was a typo. It now says "A reply
+  did not open with your code" and asks the only question that can be answered: keep this invitation
+  open and ask them whether they answered, or stop it and send a new link? The count of tries left
+  is untouched — a reply that did not open costs you nothing — and "Keep it open" ends nothing and
+  tells nobody. There is no pop-up notification, because this half of the product runs in a browser
+  tab and a closed tab cannot raise one reliably; the phone version, when it arrives, will raise one
+  quiet notice that names nobody and counts nothing.
+
 ### Fixed
+- **Companion — the secret that guards your journal is now made by the console, not typed into a
+  box.** Every request a clinician makes for your material carries a token, and the token is what
+  makes a copy of the server's database useless to whoever took it. Nothing in Daymark made one.
+  The console asked you to type it, accepted anything at all, and a single letter worked — while
+  the security document described it as 256 random bits. The console now makes a real one when you
+  add a clinician and shows it once, with no box to type your own into. Two things follow. Nobody
+  can hand two clinicians the same token by accident any more, which used to put them in each
+  other's material with nothing on screen to show it. And the help text on the clinician's side has
+  stopped telling them to look in the invitation for it: the token has never been in the
+  invitation, cannot be put there, and has to reach them another way — said out loud, sent by text,
+  handed over. Losing it is not a dead end: adding that clinician again makes a new one, and what
+  was already shared stays as it was.
+- **Companion — a clinician no longer retypes forty-three characters at every single visit.** The
+  sign-in screen was meant to remember that token after the first time, and the code that
+  remembered it failed every time it ran, silently, from the day it was written. Nobody was told
+  and nothing looked broken — it just asked again, forever. It is remembered now, for as long as
+  that tab stays open, and deliberately not for longer: it is not kept next to their stored keys,
+  because a copy of their browser would then carry both halves of what the server asks for. Closing
+  the tab means being asked once more, and the screen says so where the question used to be.
+- **Companion — waiting for you to approve a pairing no longer uses up the clinician's allowance.**
+  The server gave each internet connection twelve pairing requests every five minutes, and counted
+  the "has she approved it yet?" checks against them — so a clinician who simply waited for you
+  spent most of their own allowance doing nothing, and two clinicians in the same practice, who
+  share one connection, spent each other's. What ran out first was the one thing that most needs to
+  work: **telling us an invitation was not expected**. That is now outside the allowance
+  altogether. The checks while waiting are counted per pairing instead of per connection, so nobody
+  waits on anybody else, and the requests that actually carry the ceremony get twenty per five
+  minutes rather than twelve. If a connection is genuinely busy, the clinician is told it is
+  **paused until** a time, and that their invitation is unchanged and will still open then —
+  because the server knows the connection was busy, not that they did anything wrong.
+- **Companion — "this wasn't me" is now accepted even while somebody is guessing at the
+  invitation.** If wrong codes were being tried against an invitation, it locked, and the lock
+  refused the invited person's report along with the guesses — so the invitation most likely to be
+  in the wrong hands was the one its real holder could not close. A report proving the right secret
+  is now honoured whether or not the invitation is locked. Reporting also gives the same answer to
+  everyone now, whatever the truth of it, so the button cannot be turned round and used to find out
+  which invitations exist; and reporting twice does the same thing once.
 - **Companion — a clinician's hand-checked copy of your key is no longer silently replaced by the
   server's.** Signing in used to take whatever the server said your keys were and write it over the
   one the clinician had verified with you, without comparing them or mentioning it. It had never

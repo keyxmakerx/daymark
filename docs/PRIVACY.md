@@ -22,9 +22,9 @@ scores, thought records, or movement logs — is ever sent anywhere by that buil
 ## Where your data lives
 
 - Mood entries, activities, journal entries, goals, custom trackers, sleep logs, treatments,
-  self-check results, **wellbeing check-in scores**, **achievement unlock times**, **thought
-  records**, **movement and behavioral-activation logs**, and settings are stored in a local
-  **SQLite (Room) database** in the app's private storage (`/data/data/com.daymark.app/`), which the
+  self-check results, **wellbeing check-in scores**, **thought records**, **movement and
+  behavioral-activation logs**, and settings are stored in a local **SQLite (Room) database** in
+  the app's private storage (`/data/data/com.daymark.app/`), which the
   Android sandbox isolates from other apps.
 - **Check-ins store scores only.** For the PHQ-9 / GAD-7 / WHO-5 wellbeing check-ins, only the
   **score and band** are saved — never your individual item answers. In particular, the PHQ-9
@@ -78,9 +78,9 @@ Daymark requests only these permissions, all for on-device features:
 
 There is no `INTERNET`, `RECORD_AUDIO`, location, or contacts permission. Recent features — photo
 attachments (via the Android Photo Picker), multiple reminders, the wellbeing **check-ins**,
-**achievements**, **thought records**, **breathing presets**, journal **writing templates**,
-**behavioral activation**, **implementation intentions**, and **Move** routines — add **no new
-permission**. The check-ins, thought records, and movement logs are pure on-device data; Move's
+**thought records**, **breathing presets**, journal **writing templates**, **behavioral
+activation**, **implementation intentions**, and **Move** routines — add **no new permission**.
+The check-ins, thought records, and movement logs are pure on-device data; Move's
 haptic timer and the breathing pacer use the already-declared `VIBRATE`; behavioral-activation
 reminders reuse the already-declared reminder permissions; and the Photo Picker needs none.
 
@@ -95,11 +95,10 @@ not an apnea test.
 
 JSON backups, CSV exports, and PDF reports are **plaintext** files written to a location **you**
 choose via the system file picker. A JSON backup includes everything stored locally — including
-your **check-in scores** (scores only, never item answers), **achievement unlock times**,
-**thought records**, and **movement / behavioral-activation logs** — and embeds any **photos** you
-attached to entries (base64-encoded, so the backup stays a single portable file). Once exported, a
-file is outside Daymark's protection — store it somewhere safe and treat it as sensitive. Encrypted
-export is on the roadmap.
+your **check-in scores** (scores only, never item answers), **thought records**, and **movement /
+behavioral-activation logs** — and embeds any **photos** you attached to entries (base64-encoded,
+so the backup stays a single portable file). Once exported, a file is outside Daymark's
+protection — store it somewhere safe and treat it as sensitive. Encrypted export is on the roadmap.
 
 ## Not a medical device
 

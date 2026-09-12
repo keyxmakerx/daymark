@@ -227,6 +227,35 @@ export class PortalClient {
   }
 
   /**
+   * End this relationship: the clinician putting down their own access (issue #91).
+   *
+   * One call, and the server does the rest — writes the insert-only ending row, closes this
+   * clinician's sign-in for the relationship so no later code opens it, and cuts every session the
+   * credential holds. It is what makes leaving an off switch rather than one browser's housekeeping.
+   *
+   * THE relRef COMES FROM THE SESSION, for the same reason registerTherapistKeys has no relRef
+   * parameter: the server derives its own from the cookie and answers 403 to a path that disagrees,
+   * so there is no caller-supplied value here for a bug or a tampered page to point at somebody
+   * else's relationship.
+   *
+   * IDEMPOTENT, AND A SECOND CALL IS NOT AN ERROR. The server writes the row once and answers 204
+   * either way. This matters on a flaky connection more than it looks: an answer that never arrives
+   * is indistinguishable from a request that never landed, and a retry has to be safe.
+   *
+   * IT THROWS RATHER THAN RETURNING A VALUE, and that is the whole contract the sequencing depends
+   * on. This is the first of the three things leaving does; if it did not happen, nothing else may.
+   * See therapist/leave.ts.
+   */
+  async leaveRelationship(session: SessionInfo): Promise<void> {
+    const res = await this.req(`/v1/relations/${encodeURIComponent(session.relRef)}/ending`, {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': session.csrf },
+    })
+    if (res.status === 204) return
+    throw new PortalError('could not end this relationship', res.status)
+  }
+
+  /**
    * The owner's published public keys for this relationship.
    *
    * This is what replaces two of the sign-in form's nine fields. The clinician used to paste the
