@@ -78,7 +78,7 @@
     </summary>
     <div class="body">
       {#if assoc.length === 0}
-        <p class="faint">No tagged activities in this data yet.</p>
+        <p class="faint">No tagged activities in this data.</p>
       {:else}
         <p class="faint">Average mood on days with each activity, relative to your overall average. This shows association, <strong>not causation</strong>.</p>
         <ul class="assoc">

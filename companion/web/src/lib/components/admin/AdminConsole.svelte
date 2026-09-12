@@ -345,11 +345,11 @@
           {/snippet}
 
           {#if readings.length === 0}
-            <EmptyState title="No readings yet">
+            <EmptyState title="No readings">
               {#if fetchImpl}
                 <p class="para">
-                  The probes have not answered yet. This panel fills in as each of the three
-                  endpoints responds, and re-reads every {Math.round(pollMs / 1000)} seconds.
+                  The probes have not answered. This panel is drawn from the three
+                  endpoints as each responds, and re-reads every {Math.round(pollMs / 1000)} seconds.
                 </p>
               {:else}
                 <p class="para">

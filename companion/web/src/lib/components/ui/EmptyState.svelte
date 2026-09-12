@@ -11,11 +11,23 @@
    *
    * WHY THE COPY MUST NOT SCOLD. An empty week is a normal week. Someone who did not journal
    * for six days has not failed, and a tool that greets that with "No entries yet!" and a
-   * button has decided, on no evidence, that more logging is better. So the register here is
-   * flat and declarative — it states what this space holds and when something will appear in
-   * it, and stops. Call sites should write copy that would read as fair if the person whose
-   * data is missing were reading over the clinician's shoulder, because sooner or later they
-   * are. No exclamation marks, no "yet" used as a nudge, no streak language.
+   * button has decided, on no evidence, that more logging is better. Call sites should write
+   * copy that would read as fair if the person whose data is missing were reading over the
+   * clinician's shoulder, because sooner or later they are.
+   *
+   * THE RULE, stated so it is checkable rather than adjudicated (issue #103):
+   *
+   *   No exclamation marks. No "yet" — it presupposes the person will do
+   *   something and dates their not having done it. No quantities, deadlines or
+   *   promised outcomes ("log a few", "come back", "fills in over time"). An
+   *   imperative is allowed only to point at a control on this screen ("Log one
+   *   above"). State the absence as a count or a plain "No X." and, if the screen
+   *   needs it, one sentence about what the screen is drawn from — a sentence
+   *   that stays true with the person removed from it.
+   *
+   * "Yet" is a word ban rather than a judgement call on purpose: an adjudicated rule survives
+   * exactly as long as the next person to write a string agrees with the last one, and a word
+   * ban is a test. emptyState.test.ts is that test, on both surfaces.
    *
    * WHY IT IS QUIET. No illustration, no icon, no colour. An empty state is the lowest-value
    * thing on any screen; giving it a graphic would make absence the loudest object in the

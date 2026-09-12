@@ -77,7 +77,7 @@ export type UnlockResult = { ok: true; identity: Identity } | { ok: false; fault
 export const UNLOCK_FAULT_TEXT: Record<UnlockFault, string> = {
   ...WRAPPED_KEY_FILE_FAULT_TEXT,
   ...RECOVERY_FAULT_TEXT,
-  noFile: 'No key file has been chosen yet.',
+  noFile: 'No key file has been chosen.',
   noSecret: 'Nothing was entered.',
   noSlotOfThatKind: 'That file does not carry a copy of the key opened this way.',
   didNotOpen: 'That did not open this key. It is worth checking both the file you chose and what you typed.',

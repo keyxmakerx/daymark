@@ -117,7 +117,7 @@ fun LifeEventsScreen(
             if (events.isEmpty()) {
                 PaperSurface(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        "Nothing marked yet. Add one whenever you decide it belongs here — " +
+                        "Nothing marked. Add one whenever you decide it belongs here — " +
                             "including something from years ago.",
                         style = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.padding(16.dp),

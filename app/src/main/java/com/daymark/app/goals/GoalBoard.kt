@@ -48,7 +48,7 @@ object GoalBoard {
     enum class StepState(val key: String, val columnTitle: String, val emptyNote: String) {
         TO_DO("todo", "To do", "Nothing here."),
         DOING("doing", "Doing", "Nothing here."),
-        DONE("done", "Done", "Nothing here yet."),
+        DONE("done", "Done", "Nothing here."),
         ;
 
         companion object {
@@ -184,7 +184,7 @@ object GoalBoard {
          */
         val summary: String
             get() = when {
-                total == 0 -> "No steps yet"
+                total == 0 -> "No steps"
                 total == 1 -> "$done of 1 step done"
                 else -> "$done of $total steps done"
             }

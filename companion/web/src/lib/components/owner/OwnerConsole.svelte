@@ -181,7 +181,7 @@
           three tabs into grey mysteries.
         -->
         <p class="empty faint">
-          {selected.displayName} has not published keys yet. Send the invitation from the Share tab;
+          {selected.displayName} has not published keys. Send the invitation from the Share tab;
           once they accept, their keys appear under Published keys for you to check and record.
         </p>
       {:else if sub === 'grants'}

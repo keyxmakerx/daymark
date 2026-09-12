@@ -173,9 +173,17 @@ describe('answering a run', () => {
   })
 
   it('a mistyped code is refused on this device, before anything is sent', async () => {
-    await expect(answerPairing(h.ports, { ...input(), typedCode: code.canonical.slice(0, 7) + 'Z' })).rejects.toThrow(
-      /does not match the rest of the code/,
-    )
+    /*
+     * The wrong check symbol is derived from the right one, never fixed. This line used to append a
+     * literal 'Z' to the seven payload symbols — which IS the correct code one time in thirty-one,
+     * because 'Z' is one of the thirty-one symbols the check character can be. The test then
+     * asserted that a valid code is refused, and failed for no reason anyone could reproduce.
+     * Measured elsewhere in this repository at 97 in 3000, which is 1/31 to two decimal places.
+     */
+    const wrongCheck = code.canonical[7] === 'Z' ? 'Y' : 'Z'
+    await expect(
+      answerPairing(h.ports, { ...input(), typedCode: code.canonical.slice(0, 7) + wrongCheck }),
+    ).rejects.toThrow(/does not match the rest of the code/)
     expect(h.calls).toHaveLength(0)
     await expect(answerPairing(h.ports, { ...input(), typedCode: 'nope' })).rejects.toThrow()
     expect(h.calls).toHaveLength(0)

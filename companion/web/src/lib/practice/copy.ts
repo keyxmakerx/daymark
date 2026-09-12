@@ -260,12 +260,12 @@ export const PLACEHOLDERS: readonly PlaceholderNote[] = [
  * something appears in it, and stops. An empty roster is not a problem to be nudged about, and a
  * practice with one member is a practice.
  */
-export const EMPTY_ROSTER_TITLE = 'No roster read yet'
+export const EMPTY_ROSTER_TITLE = 'No roster read'
 export const EMPTY_ROSTER_BODY =
   'Read the roster and its members appear here. This list is read fresh from the server every ' +
   'time; nothing is remembered by this page.'
 
-export const EMPTY_AUDIT_TITLE = 'No entries read yet'
+export const EMPTY_AUDIT_TITLE = 'No entries read'
 export const EMPTY_AUDIT_BODY =
   'The practice’s log fills in when it is read. Reading it needs a role that carries audit review.'
 

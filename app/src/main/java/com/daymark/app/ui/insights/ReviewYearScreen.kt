@@ -299,14 +299,14 @@ private fun EmptyReview(year: Int, onDone: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            "Nothing to review for $year yet.",
+            "No entries for $year.",
             style = MaterialTheme.typography.titleLarge,
             color = NightInk,
             textAlign = TextAlign.Center,
         )
         Spacer16()
         Text(
-            "Log a few days and come back — your sky fills in over time.",
+            "No days logged. Each logged day is drawn here.",
             style = MaterialTheme.typography.bodyMedium,
             color = NightFaint,
             textAlign = TextAlign.Center,

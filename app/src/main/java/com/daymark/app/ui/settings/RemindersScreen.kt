@@ -117,7 +117,7 @@ fun RemindersScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
             ) {
-                Text("No reminders yet", style = MaterialTheme.typography.titleMedium)
+                Text("No reminders", style = MaterialTheme.typography.titleMedium)
                 Text(
                     "Add a daily nudge to check in. Tap a reminder to log straight from the notification.",
                     style = MaterialTheme.typography.bodyMedium,

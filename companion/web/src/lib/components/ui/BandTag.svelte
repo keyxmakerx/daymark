@@ -24,7 +24,7 @@
    * zero, an empty ramp position, or a low band — all of which would be the interface
    * inventing data on a person's behalf and putting it in front of a clinician. So it gets its
    * own neutral fill (--border-strong, which is not on the ramp and never will be), a faint
-   * label, and the words "not shared yet" in the accessible name. Absence looks like absence.
+   * label, and the words "not shared" in the accessible name. Absence looks like absence.
    *
    * WHY THE BAND IS NEVER A SCORE. This product bands descriptively and has no clinical
    * cutoff, no positive/negative flag and no diagnostic threshold (see instruments/types.ts).
@@ -55,7 +55,7 @@
      nothing at all — no stray comma, no empty slot a screen reader has to read past. */
   let description = $derived.by(() => {
     const parts: string[] = [label]
-    if (level === null) parts.push('not shared yet')
+    if (level === null) parts.push('not shared')
     if (trend) parts.push(trend)
     return parts.join(', ')
   })

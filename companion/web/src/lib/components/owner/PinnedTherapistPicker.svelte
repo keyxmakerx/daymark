@@ -14,7 +14,7 @@
 
 {#if therapists.length === 0}
   <p class="none faint">
-    No pinned therapists yet. Pin a therapist (verify their fingerprint out-of-band) before you
+    No pinned therapists. Pin a therapist (verify their fingerprint out-of-band) before you
     can grant capabilities or share data — the console refuses to seal to an unpinned key.
   </p>
 {:else}

@@ -344,7 +344,7 @@ function scheduledStep(draft: LifecycleDraft): StepBody {
       'Whether their device has fetched it. There is no read receipt on this channel.',
       'When it will be fetched. This portal cannot reach their device — the device pulls, on its own schedule.',
     ],
-    ownerCan: ['Nothing yet. It is not on their device.'],
+    ownerCan: ['Nothing. It is not on their device.'],
   }
 }
 

@@ -97,7 +97,7 @@ fun InsightsScreen(
 
     if (stats.totalEntries == 0) {
         Box(modifier = modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-            Text("Log a few entries to see your insights.", style = MaterialTheme.typography.bodyLarge)
+            Text("No entries. Insights are drawn from entries.", style = MaterialTheme.typography.bodyLarge)
         }
         return
     }
@@ -292,7 +292,7 @@ private fun PeriodCompareCard(periodName: String, c: com.daymark.app.stats.MoodP
     SectionCard("This $periodName vs last") {
         val cur = c.currentAvg
         if (cur == null) {
-            Text("Not enough entries yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Not enough entries.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             return@SectionCard
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {

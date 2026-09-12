@@ -229,7 +229,7 @@
         throw new Error(
           choice.reason === 'mismatch'
             ? OWNER_KEY_MISMATCH
-            : 'This server has no owner keys published for the relationship yet, and none were entered. ' +
+            : 'This server has no owner keys published for the relationship, and none were entered. ' +
               'Ask the person who invited you to publish them from their console.',
         )
       }

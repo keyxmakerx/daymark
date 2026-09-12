@@ -108,7 +108,7 @@ fun TrackerDetailScreen(
             } else {
                 item {
                     Text(
-                        "No values yet — log one above.",
+                        "No values. Log one above.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

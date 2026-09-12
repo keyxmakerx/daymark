@@ -92,7 +92,7 @@
       {/each}
     </ul>
   {:else}
-    <p class="faint empty">No items yet. Add goals, exercises, tasks, or notes above.</p>
+    <p class="faint empty">No items. Add goals, exercises, tasks, or notes above.</p>
   {/if}
 
   <div class="review">
