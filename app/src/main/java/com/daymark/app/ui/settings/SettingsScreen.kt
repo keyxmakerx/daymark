@@ -330,27 +330,39 @@ fun SettingsScreen(
     }
 }
 
+/**
+ * The two length rules in this dialog used to be the literal `3..8`, written out here and again in
+ * the onboarding step, connected to nothing. Both are now [com.daymark.app.security.PinPolicy], and
+ * `PinManager.setChosenPin` refuses anything the policy rejects — so this dialog is a courtesy to
+ * the person, not the enforcement.
+ */
 @Composable
 private fun PinDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var pin by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
-    val valid = pin.length in 3..8 && pin == confirm
+    val valid = com.daymark.app.security.PinPolicy.accepts(pin) && pin == confirm
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Set a PIN") },
         text = {
             Column {
+                Text(
+                    com.daymark.app.security.PinPolicy.HELP,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 OutlinedTextField(
                     value = pin,
-                    onValueChange = { if (it.all(Char::isDigit) && it.length <= 8) pin = it },
-                    label = { Text("PIN (3–8 digits, 4 recommended)") },
+                    onValueChange = { if (com.daymark.app.security.PinPolicy.stillTypeable(it)) pin = it },
+                    label = { Text(com.daymark.app.security.PinPolicy.LABEL) },
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    modifier = Modifier.padding(top = 8.dp),
                 )
                 OutlinedTextField(
                     value = confirm,
-                    onValueChange = { if (it.all(Char::isDigit) && it.length <= 8) confirm = it },
+                    onValueChange = { if (com.daymark.app.security.PinPolicy.stillTypeable(it)) confirm = it },
                     label = { Text("Confirm PIN") },
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.NumberPassword),

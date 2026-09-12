@@ -76,10 +76,16 @@ class SettingsViewModel @Inject constructor(
     }
 
     // --- App lock ---
-    fun setPin(pin: String) {
-        pinManager.setPin(pin)
+    /**
+     * Returns false, and changes nothing at all, for a PIN `PinPolicy` does not accept. The dialog
+     * disables its own button too; this is the backstop, so the rule cannot be bypassed by a screen
+     * that forgets it.
+     */
+    fun setPin(pin: String): Boolean {
+        if (!pinManager.setChosenPin(pin)) return false
         settings.lockEnabled = true
         refresh()
+        return true
     }
 
     fun disableLock() {
