@@ -15,6 +15,7 @@ import { FIELD_HELP, FIELD_IDS, helpPanelId, type FieldId } from './fieldHelp'
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8')
 const LOGIN_GATE = read('../components/therapist/LoginGate.svelte')
 const FIELD_HELP_COMPONENT = read('../components/ui/FieldHelp.svelte')
+const INVITE_ACCEPTANCE = read('../components/therapist/InviteAcceptance.svelte')
 
 describe('every field on the sign-in form can be explained', () => {
   it('every FieldHelp in LoginGate names an id this module defines', () => {
@@ -125,6 +126,57 @@ describe('the copy', () => {
       if (!tag) continue // not on this form; other screens are checked where they are added
       expect(tag, `${id} is marked secret but is not a password input`).toContain('type="password"')
     }
+  })
+
+  it('does not send the clinician to the invitation for the one value that is not in it', () => {
+    /*
+     * Issue #126. This entry pointed at the shared FROM_INVITE sentence — "it was in the invitation
+     * the person whose data this is sent you" — and that was never true and cannot become true: the
+     * mail message has no field for the token, and the mint API is handed its digest, so the server
+     * has never held a value it could send. The sentence matters because of when it is read: a
+     * clinician opens this help while the other person is on the phone asking what to send, and
+     * "look in the email" is how the token ends up travelling by the one channel the arrangement
+     * depends on it avoiding.
+     *
+     * The detector is shown catching the exact sentence that used to be here, so this is a fact
+     * about the copy rather than a regex that matches nothing.
+     */
+    const LOCATOR = /\b(?:in|from|on) (?:the|your|that) (?:invitation|invite|email|message)\b/gi
+    const NEGATED = /\b(?:not|never|nor|other than|apart from)\b[^.]{0,40}$/i
+    /** Does this text tell a reader the value can be FOUND in the invitation? */
+    const sendsThemToTheEmail = (text: string): boolean =>
+      [...text.matchAll(LOCATOR)].some((m) => !NEGATED.test(text.slice(0, m.index)))
+
+    for (const planted of [
+      'It was in the invitation the person whose data this is sent you. Everything except your ' +
+        'authenticator code and your reading passphrase comes from that one message.',
+      'Look in the email they sent you.',
+      'It is on the invitation, near the top.',
+    ]) {
+      expect(sendsThemToTheEmail(planted), `the detector missed: ${planted}`).toBe(true)
+    }
+    // ...and it is not merely allergic to the word "invitation": a sentence that names the
+    // invitation in order to rule it out has to pass, or the check would forbid saying the truth.
+    expect(sendsThemToTheEmail('It is not in the invitation; ask them for it.')).toBe(false)
+
+    const where = FIELD_HELP.inboxToken.where
+    expect(sendsThemToTheEmail(where), `inboxToken.where still points at the email: ${where}`)
+      .toBe(false)
+    expect(where).toMatch(/not in the invitation/i)
+    // And it says who to ask, because "not in the invitation" alone leaves a person nowhere.
+    expect(where).toMatch(/ask them/i)
+  })
+
+  it('agrees with the acceptance screen about where the token comes from', () => {
+    /*
+     * Two screens, one fact, and they disagreed for months — InviteAcceptance said only the other
+     * person can give you the token while this module said it was in the email. A person who meets
+     * both learns that one of them is wrong and has no way to tell which. Held together here rather
+     * than by hoping the next editor opens both files.
+     */
+    expect(INVITE_ACCEPTANCE, 'the acceptance screen no longer mentions the inbox token')
+      .toMatch(/inbox token/i)
+    expect(INVITE_ACCEPTANCE).toMatch(/only they can give you those/i)
   })
 
   it('does not lead with jargon a reader would have to already know', () => {

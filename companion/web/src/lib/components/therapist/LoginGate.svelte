@@ -49,11 +49,15 @@
     chooseOwnerKeys,
     groupForReading,
     loadKeyRecords,
-    saveKeyRecord,
     OWNER_KEY_MISMATCH,
     OWNER_KEY_PASTE_CAVEAT,
     type KeyRecord,
   } from '../../therapist/inviteAccept'
+  import {
+    defaultInboxTokenStorage,
+    recallInboxToken,
+    rememberInboxToken,
+  } from '../../therapist/inboxTokenStore'
   import { firstProblem, WRAPPED_KEY_UNREADABLE, type UnlockFieldId } from '../../therapist/loginGate'
 
   let {
@@ -124,8 +128,24 @@
   let invalidField = $state<UnlockFieldId | null>(null)
   const errorId = $props.id()
 
-  /** The stored path is missing its inbox token, so that one field is asked for. */
-  const askInboxToken = $derived(!manual && !!chosen && !chosen.inboxToken)
+  /*
+   * What this TAB already knows, as opposed to what this BROWSER does.
+   *
+   * The inbox token is the one value nothing here can derive: its digest is the relationship
+   * reference, so a server able to hand it back would be giving away the thing it authenticates.
+   * It used to be asked for at every single visit — a KeyRecord field was meant to remember it and
+   * the write that filled it in threw every time, silently (issue #125). It is remembered per tab
+   * now, and deliberately not beside the wrapped keys: therapist/inboxTokenStore.ts has the
+   * reasoning. Read through $derived rather than once at mount because the relationship picker can
+   * change which record is in play.
+   */
+  const tokenPort = defaultInboxTokenStorage()
+  const rememberedToken = $derived(
+    manual || !chosen ? null : recallInboxToken(tokenPort, chosen.relRef),
+  )
+
+  /** This tab has no token for the chosen relationship, so that one field is asked for. */
+  const askInboxToken = $derived(!manual && !!chosen && !rememberedToken)
 
   function describedBy(field: UnlockFieldId): string | undefined {
     return invalidField === field ? errorId : undefined
@@ -200,9 +220,9 @@
       if (!login.ok || !login.session) throw new Error(login.error ?? 'Login failed.')
 
       // 3. Bind the relationship routing into the session. The inbox token is a second factor on
-      //    the relationship channels, so it is remembered per relationship once given rather than
-      //    re-typed every visit — it is not a secret this page can derive.
-      const token = rec ? (rec.inboxToken ?? inboxToken) : inboxToken
+      //    the relationship channels, so this tab reuses the one it is already holding rather than
+      //    asking again — it is not a secret this page can derive.
+      const token = rememberedToken ?? inboxToken
       const session: SessionInfo = { ...login.session, relRef: relationship, inboxToken: token }
 
       /*
@@ -247,16 +267,21 @@
        */
       ownerFpGroups = groupForReading(pinnedOwnerSigningFp)
 
-      // Remember what made this sign-in work, so the next one asks for less. Only ever additive:
-      // the token is the one value a stored record can be missing.
-      if (rec && token && !rec.inboxToken) {
-        try {
-          saveKeyRecord({ ...rec, inboxToken: token })
-        } catch {
-          // A browser refusing storage costs one re-typed token next time. It must never cost a
-          // sign-in that has already succeeded.
-        }
-      }
+      /*
+       * Remember what made this sign-in work, so a reload in this tab asks for less.
+       *
+       * HERE, AND NOT EARLIER. The token is written only once the owner's published keys have come
+       * back, which the relationship routes will not return without it — so what is remembered is
+       * always a token the server has just accepted, and there is no way for a wrong value to get
+       * stuck in a tab with no field on screen to correct it.
+       *
+       * WHAT THIS REPLACES. `saveKeyRecord({ ...rec, inboxToken: token })`, which threw on every
+       * sign-in this product has ever completed — insert-only storage, a record already stored —
+       * into a catch written for a different failure (issue #125). The store below fails open by
+       * construction rather than by hoping: a browser that refuses costs one re-typed token, and it
+       * must never cost a sign-in that has already succeeded.
+       */
+      if (rec) rememberInboxToken(tokenPort, relationship, token)
 
       onunlock({ client, session, keys, pinnedOwnerSignPub, pinnedOwnerSigningFp, ownerBoxPub, therapistFp })
     } catch (e) {
@@ -311,8 +336,7 @@
     {#if askInboxToken}
       <!--
         The one value nothing can supply. Its digest IS the relationship id, so a server that
-        could hand it back would be giving away the thing it authenticates. Asked once, then
-        remembered.
+        could hand it back would be giving away the thing it authenticates. Asked once per tab.
       -->
       <div class="known">
         <div class="field">
@@ -320,6 +344,17 @@
           <input id="f-inboxToken" type="password" bind:value={inboxToken} placeholder={FIELD_HELP.inboxToken.placeholder} autocomplete="off" aria-invalid={invalidField === 'inboxToken' || undefined} aria-describedby={describedBy('inboxToken')} />
         </div>
       </div>
+    {:else if rememberedToken}
+      <!--
+        Said rather than left to be noticed. A field that was there last time and is not there now
+        reads as something having gone wrong unless the screen accounts for it — and the accounting
+        has to be exact, because the difference between "this tab" and "this browser" is the whole
+        decision behind where the token is kept.
+      -->
+      <p class="faint note">
+        Your inbox token is remembered for this tab. It is not kept alongside your keys, so closing
+        the tab means the next sign-in asks for it again.
+      </p>
     {/if}
 
     {#if manual}
