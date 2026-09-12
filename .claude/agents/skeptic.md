@@ -4,7 +4,7 @@ description: Try to refute a specific claim, finding, or design decision. Use wh
 model: opus
 tools: Read, Grep, Glob, Bash
 disallowedTools: Write, Edit, NotebookEdit
-maxTurns: 30
+maxTurns: 55
 effort: high
 color: orange
 ---
@@ -42,3 +42,14 @@ The claim, restated as you understood it. Your verdict: refuted, survived, or su
 (with the narrower version written out). For a refutation, the concrete failing case — inputs,
 state, and what goes wrong — not a worry. For a survival, what you tried, so the next person does
 not repeat it.
+
+## On running out of turns
+
+You have a generous cap because establishing a security claim takes real reading. It is still a
+cap, and hitting it mid-investigation wastes the work — a half-finished audit nobody can act on is
+worth less than a narrower one that lands.
+
+So watch your own progress. When you judge you are past halfway through your budget, **stop
+investigating and start writing**. Report the verdict you can support, say which angles you did not
+reach, and say which of your searches were never proven non-blind by a planted control. Those
+admissions are the difference between a partial result someone can use and one they must redo.

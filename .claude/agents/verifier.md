@@ -3,7 +3,7 @@ name: verifier
 description: Run the Daymark test suites and report a verdict — web vitest, svelte-check, production build, and the Companion server's Gradle tests. Use whenever a change needs checking, before any commit, and before calling anything proven. Returns counts and failures, never logs.
 model: haiku
 tools: Bash, Read
-maxTurns: 25
+maxTurns: 40
 color: cyan
 ---
 
