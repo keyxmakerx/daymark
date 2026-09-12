@@ -45,6 +45,7 @@
     type PinRotation,
   } from '../../therapist/pinStore'
   import { Card, Callout } from '../ui'
+  import { REVOKE_CAVEAT } from '../../pairing/copy'
   import type { OwnerSession, PinnedTherapist } from './session'
 
   let { session }: { session: OwnerSession } = $props()
@@ -298,8 +299,8 @@
         <div class="forget-body">
           <p>
             This erases the list above from this browser: the fingerprints, and the dates they were
-            first written down. It does not reach the server, which has never held this record. It
-            does not reach your therapists, and it does not unsend anything you have already shared.
+            first written down. It does not reach the server, which has never held this record, and
+            it does not reach your therapists. {REVOKE_CAVEAT}
           </p>
           <p>
             It also gives up what the record was for. With nothing on file, the next share you seal

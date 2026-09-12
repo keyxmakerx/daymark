@@ -15,6 +15,18 @@
  * guess the code cannot support, and "you typed it wrong" is a guess that blames the wrong person.
  */
 
+/**
+ * The sentence CLAUDE.md §4 requires verbatim at every point where a person revokes, forgets, or
+ * turns off access.
+ *
+ * A CONSTANT, NOT A PARAPHRASE. Three call sites each wrote their own version of this one fact
+ * before there was anywhere to import it from — GrantManager.svelte, PinRecord.svelte and
+ * pinStore.ts each phrased it differently, none of them in these exact words. The rule says
+ * verbatim so a person meets the same sentence everywhere and learns it once; without a shared
+ * constant to import, that drift was not a risk, it was what already happened.
+ */
+export const REVOKE_CAVEAT = 'Revoking does not un-send what was already read.'
+
 export const OWNER_COPY = {
   title: 'Invite someone',
 
