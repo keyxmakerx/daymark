@@ -123,7 +123,8 @@ export interface WrappedKeyFile {
 export const FILE_NOTE =
   'Two locked copies of one key, and no secret. Neither a passphrase nor a recovery code is in ' +
   'this file or derivable from it. This format is a stand-in used by the recovery screen while ' +
-  'there is no storage for a wrapped key; no server accepts it.'
+  'there is no storage for a wrapped key, and it is what the owner console is opened with; no ' +
+  'server accepts it.'
 
 /** The saved file's text. Indented, because a person may well open it and look. */
 export function encodeWrappedKeyFile(blob: RecoverableDataKey): string {
