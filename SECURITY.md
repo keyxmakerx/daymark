@@ -15,14 +15,26 @@ vulnerability.
 
 ## Scope
 
-Because Daymark is local-only and has no backend, the relevant surface is **on-device**:
+Daymark has two build flavors, and their surfaces are different.
+
+**The `foss` build is the only build that has been released, and it is local-only.** It declares
+no `INTERNET` permission, so it cannot open a network connection, and there is nothing for it to
+connect to. Its surface is on-device:
 
 - The app-lock (PIN/biometric) and how the PIN hash is stored.
 - Handling of backup/export files and imported data.
 - Local data-at-rest protections and exported Android components (activity, receivers, widget).
 
-Out of scope: there is no server, so there is no server-side surface. The standard sideloading
-"unknown app" warning is an Android behavior, not a vulnerability.
+**The `sync` build and the Companion are in scope, and are unreleased.** The `sync` flavor is a
+separate, opt-in build with its own application id (`.sync` suffix); a `foss` install can never
+be updated into it. It talks to a Companion server (`companion/server`) and web consoles
+(`companion/web`) in this repository. No `sync` build has been tagged, so fixes for this surface
+target `main` only, and reports against it are welcome now. The design assumes the server is
+untrusted: it must never see journal content, its logs must never carry content, and it vouches
+for no key it relays. A report showing any of those does not hold is the one we most want.
+
+Out of scope: the standard sideloading "unknown app" warning is an Android behavior, not a
+vulnerability.
 
 ## What we already do
 
@@ -30,5 +42,5 @@ Out of scope: there is no server, so there is no server-side surface. The standa
   failed-attempt lockout/backoff and constant-time comparison.
 - `FLAG_SECURE` while the app lock is enabled (keeps content out of screenshots/recents).
 - Strong (Class 3) biometrics only.
-- No `INTERNET` permission; `allowBackup="false"`.
+- No `INTERNET` permission in the `foss` build; `allowBackup="false"`.
 - R8 minification, immutable `PendingIntent`s, and Gradle wrapper validation in CI.

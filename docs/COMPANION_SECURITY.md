@@ -657,7 +657,7 @@ fetch, assignment/game-plan publish, session expiry) — never client-supplied.
 
 **Product boundary**
 - [ ] Therapist viewer + game-plan UI carry the same "self-check, not a diagnosis; scores are not clinical thresholds" framing as the app.
-- [ ] PRIVACY.md/SECURITY.md retract "no server, so no server-side surface" for the Sync flavor; flagship F-Droid build remains provably network-free (no `INTERNET`).
+- [x] PRIVACY.md/SECURITY.md retract "no server, so no server-side surface" for the Sync flavor; flagship F-Droid build remains provably network-free (no `INTERNET`).
 
 ---
 
