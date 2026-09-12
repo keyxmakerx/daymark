@@ -190,4 +190,72 @@ class OwnerKeyRoutesTest {
         }
         assertEquals(HttpStatusCode.NotFound, res.status)
     }
+
+    @Test
+    fun `the owner reads back their own published key with the bearer token`() = testApplication {
+        val now = 1_700_000_000_000L
+        val f = fixture(now)
+        application { module(f.cfg, null, null, f.rel, f.auth, f.audit) }
+
+        assertEquals(HttpStatusCode.NoContent, client.publish(relRefA, ownerToken).status)
+
+        val read = client.get("/v1/relations/$relRefA/owner-keys") {
+            header(HttpHeaders.Authorization, "Bearer $ownerToken")
+        }
+        assertEquals(HttpStatusCode.OK, read.status)
+        val text = read.bodyAsText()
+        assertTrue(text.contains("\"signPubB64\":\"$signPub\""), text)
+        assertTrue(text.contains("\"boxPubB64\":\"$boxPub\""), text)
+
+        // NOT audited. The audit log is what the owner reads to see what the CLINICIAN did; a row
+        // for every console visit would bury the rows that matter. Exactly one fetch event should
+        // exist after a clinician also reads, and none before.
+        assertTrue(f.audit.list(relRefA).none { it.action == "owner_key.fetched" }, "owner reads are not audited")
+
+        val session = f.auth.createSession("cred", relRefA, f.cfg.sessionIdleSeconds, f.cfg.sessionAbsoluteSeconds)
+        client.get("/v1/relations/$relRefA/owner-keys") {
+            header(HttpHeaders.Cookie, "daymark_session=${session.sessionId}")
+        }
+        assertEquals(1, f.audit.list(relRefA).count { it.action == "owner_key.fetched" }, "the clinician's read still is")
+    }
+
+    @Test
+    fun `the read-back is what makes a refused second publish legible`() = testApplication {
+        val f = fixture()
+        application { module(f.cfg, null, null, f.rel, f.auth, f.audit) }
+
+        assertEquals(HttpStatusCode.NoContent, client.publish(relRefA, ownerToken).status)
+
+        // A DIFFERENT key -- the shape of an owner who lost their key file and made a new one. The
+        // table is insert-only, so this is refused, and the 409 alone cannot tell them whether the
+        // frozen key is theirs or a stranger's.
+        val other = Secrets.b64url(ByteArray(32) { (it + 77).toByte() })
+        assertEquals(HttpStatusCode.Conflict, client.publish(relRefA, ownerToken, sign = other).status)
+
+        // The read-back answers it. The console compares this against what it just derived and can
+        // then say which of the two happened instead of showing a status code.
+        val read = client.get("/v1/relations/$relRefA/owner-keys") {
+            header(HttpHeaders.Authorization, "Bearer $ownerToken")
+        }
+        assertEquals(HttpStatusCode.OK, read.status)
+        assertTrue(read.bodyAsText().contains("\"signPubB64\":\"$signPub\""), "the FIRST key is what stands")
+        assertTrue(!read.bodyAsText().contains(other), "the refused key never reached the store")
+    }
+
+    @Test
+    fun `a wrong bearer token is refused rather than falling through to the session path`() = testApplication {
+        val f = fixture()
+        application { module(f.cfg, null, null, f.rel, f.auth, f.audit) }
+        assertEquals(HttpStatusCode.NoContent, client.publish(relRefA, ownerToken).status)
+
+        // Presenting BOTH a bogus bearer token and a valid session cookie. The bearer branch is
+        // taken because the header is present, and it must refuse -- falling back to the cookie
+        // would let a clinician's browser reach any relationship by adding a junk header.
+        val session = f.auth.createSession("cred", relRefB, f.cfg.sessionIdleSeconds, f.cfg.sessionAbsoluteSeconds)
+        val res = client.get("/v1/relations/$relRefA/owner-keys") {
+            header(HttpHeaders.Authorization, "Bearer not-the-owner-token")
+            header(HttpHeaders.Cookie, "daymark_session=${session.sessionId}")
+        }
+        assertEquals(HttpStatusCode.Unauthorized, res.status)
+    }
 }

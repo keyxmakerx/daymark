@@ -288,7 +288,7 @@ export function rotatePin(
     throw new PairingError(
       pins.isPinned(ed25519Fp)
         ? 'the key on file for this therapist is already the one you are holding — nothing to rotate'
-        : 'nothing is pinned for this therapist yet, so there is nothing to rotate — the first share you seal records their key',
+        : 'nothing is pinned for this therapist, so there is nothing to rotate — the first share you seal records their key',
     )
   }
   if (normalizeWords(confirmation.expectedWords).split(' ').length < 4) {

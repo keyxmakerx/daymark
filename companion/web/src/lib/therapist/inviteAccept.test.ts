@@ -29,6 +29,7 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import {
   AcceptError,
   KEY_CHECK_COPY,
+  PASSPHRASE_NO_RESET,
   MIN_PASSPHRASE_CHARS,
   base32,
   checkPassphrase,
@@ -556,6 +557,40 @@ describe('the fingerprint is read out, not compared on screen', () => {
     expect(KEY_CHECK_COPY.mismatch).toMatch(/stop/i)
     // Control: the detector still fires on the instruction it used to match.
     expect('Read them aloud rather than sending them.').toMatch(/(^|[.!?]\s+)Read (it|this|them|these|both)/i)
+  })
+
+  it('names the three people who cannot reset the reading passphrase', () => {
+    /*
+     * Issue #100. The screen used to say "nobody can reset it for you", which is true and which a
+     * clinician working in a clinic will not read as including their own administrator: every other
+     * system they use has an admin who can reset things, so "nobody" arrives pre-qualified. The
+     * three are therefore named, and the practice is named second because that is the one the
+     * reader is silently making an exception for.
+     */
+    expect(PASSPHRASE_NO_RESET).toMatch(/not the person who invited you/i)
+    expect(PASSPHRASE_NO_RESET).toMatch(/administrator at your practice/i)
+    expect(PASSPHRASE_NO_RESET).toMatch(/whoever runs this server/i)
+    // Ordered, because a list that buries the practice in the middle of a clause is a list that
+    // gets skimmed past. It is second: after the obvious one, before the abstract one.
+    const invited = PASSPHRASE_NO_RESET.indexOf('invited you')
+    const practice = PASSPHRASE_NO_RESET.indexOf('at your practice')
+    const operator = PASSPHRASE_NO_RESET.indexOf('runs this server')
+    expect(invited).toBeLessThan(practice)
+    expect(practice).toBeLessThan(operator)
+  })
+
+  it('states the consequence rather than warning about it', () => {
+    // Register: what would have to happen, which a person can plan around — not an instruction to
+    // be careful, which they cannot act on and will resent afterwards.
+    expect(PASSPHRASE_NO_RESET).toMatch(/would have to invite you afresh/i)
+    const FORBIDDEN = [
+      { name: 'an instruction', pattern: /\b(be careful|make sure|don't lose|remember to|write it down)\b/i, planted: "Be careful — don't lose it." },
+      { name: 'a scare', pattern: /\b(permanently|forever|gone for good|disaster)\b/i, planted: 'Your data is gone forever.' },
+    ]
+    for (const { name, pattern, planted } of FORBIDDEN) {
+      expect(pattern.test(planted), name).toBe(true)
+      expect(pattern.test(PASSPHRASE_NO_RESET), name).toBe(false)
+    }
   })
 
   it('and asks for both keys, because the console at the other end will not pin on one', () => {

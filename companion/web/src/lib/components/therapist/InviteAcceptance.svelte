@@ -64,6 +64,7 @@
   import {
     AcceptError,
     KEY_CHECK_COPY,
+    PASSPHRASE_NO_RESET,
     MIN_PASSPHRASE_CHARS,
     checkPassphrase,
     completeAcceptance,
@@ -529,10 +530,9 @@
       <div class="stack">
         <p>
           This passphrase unwraps your keys in this browser, every time you sign in. It is not your
-          authenticator, it is not your password to anything else, and the server never receives it —
-          which also means nobody can reset it for you. If you lose it, what has been shared with you
-          cannot be opened again by anyone.
+          authenticator, and it is not your password to anything else.
         </p>
+        <p>{PASSPHRASE_NO_RESET}</p>
         <p class="hint">
           At least {MIN_PASSPHRASE_CHARS} characters. A few unrelated words you will still recognise in
           six months is the easiest way to get there.

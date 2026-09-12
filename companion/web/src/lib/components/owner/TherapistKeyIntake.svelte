@@ -227,7 +227,7 @@
       {/if}
 
       {#if nothingPublished}
-        <Callout tone="info" title="Nothing published yet">
+        <Callout tone="info" title="Nothing published">
           {therapist.displayName} has not published keys for this relationship. That is the ordinary
           state between sending an invite and their finishing enrolment — there is nothing to fix and
           nothing to pin, and this console will not seal anything to a key it has not been given.

@@ -22,7 +22,7 @@ object PeriodReview {
 
     fun build(inputs: Inputs, locale: Locale = Locale.getDefault()): String {
         if (inputs.totalEntries == 0 || inputs.avgMood == null) {
-            return "Log a few entries to see your summary."
+            return "No entries. The summary is drawn from entries."
         }
         val parts = ArrayList<String>()
         parts.add("You logged ${inputs.totalEntries} ${if (inputs.totalEntries == 1) "entry" else "entries"}, " +

@@ -197,7 +197,7 @@
         <Callout tone="critical" title="The stored record could not be read">{loadError}</Callout>
       {:else if rows.length === 0}
         <p class="empty faint">
-          Nothing recorded yet. The first share you seal to a therapist writes their fingerprints here.
+          Nothing recorded. The first share you seal to a therapist writes their fingerprints here.
         </p>
       {/if}
 
@@ -288,7 +288,7 @@
 
       {#if notYetRecorded.length > 0}
         <p class="hint">
-          Not recorded yet: {notYetRecorded.map((t) => t.displayName).join(', ')}. The first share you
+          Not recorded: {notYetRecorded.map((t) => t.displayName).join(', ')}. The first share you
           seal to them writes their fingerprints down, and there is nothing to compare that first one
           against — check the words with them before you send it.
         </p>

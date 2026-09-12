@@ -194,7 +194,7 @@ private object Copy {
      */
     const val NOT_RECORDED_YET =
         "These sections are part of the report's design; this build does not record the data behind " +
-            "them yet. Nothing has been filtered out."
+            "them. Nothing has been filtered out."
 
     const val DECLINES_SHOWN =
         "Declines are shown here because this is the person's own export — they chose to include it. " +

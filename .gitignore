@@ -41,3 +41,10 @@ companion/secrets/
 # checkout of this repository living inside it; committing one would nest the repo
 # in itself. They are temporary and agent-owned — ignore them, never track them.
 .claude/worktrees/
+
+# Vite writes a temporary ESM copy of its config next to it while loading, named
+# vite.config.ts.timestamp-<epoch>-<hex>.mjs, and deletes it when the process ends.
+# A run that overlaps a `git add -A` gets one committed and then immediately shows
+# as deleted — which is exactly how one reached a commit on 2026-09-12. Build
+# scratch, never source.
+companion/web/vite.config.ts.timestamp-*.mjs

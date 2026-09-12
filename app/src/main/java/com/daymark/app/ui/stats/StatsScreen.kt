@@ -38,7 +38,7 @@ fun StatsScreen(
 
     if (state.totalEntries == 0) {
         Box(modifier = modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-            Text("Log a few entries to see your stats.", style = MaterialTheme.typography.bodyLarge)
+            Text("No entries. Stats are drawn from entries.", style = MaterialTheme.typography.bodyLarge)
         }
         return
     }

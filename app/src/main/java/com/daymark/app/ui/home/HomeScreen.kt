@@ -332,7 +332,7 @@ private fun TodaySheet(
             )
             if (entries.isEmpty()) {
                 Text(
-                    text = "Nothing logged today yet.",
+                    text = "Nothing logged today.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),

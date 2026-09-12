@@ -54,7 +54,7 @@ fun GoalsScreen(
     if (goals.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("No goals yet", style = MaterialTheme.typography.titleMedium)
+                Text("No goals", style = MaterialTheme.typography.titleMedium)
                 Text(
                     "Tap + for a weekly habit, or a project with steps.",
                     style = MaterialTheme.typography.bodyMedium,

@@ -66,7 +66,7 @@ fun ThoughtRecordListScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
             ) {
-                Text("No thought records yet", style = MaterialTheme.typography.titleMedium)
+                Text("No thought records", style = MaterialTheme.typography.titleMedium)
                 Text(
                     "A CBT exercise to examine a tough thought and find a more balanced view.",
                     style = MaterialTheme.typography.bodyMedium,

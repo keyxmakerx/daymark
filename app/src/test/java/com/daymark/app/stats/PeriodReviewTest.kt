@@ -14,7 +14,7 @@ class PeriodReviewTest {
             PeriodReview.Inputs(0, null, null, null, null, 0),
             Locale.US,
         )
-        assertEquals("Log a few entries to see your summary.", text)
+        assertEquals("No entries. The summary is drawn from entries.", text)
     }
 
     @Test

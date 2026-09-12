@@ -41,7 +41,7 @@
     try {
       const bundle = await fetchShare(ctx.client, ctx.session, ctx.keys.box, ctx.pinnedOwnerSignPub, ctx.pinnedOwnerSigningFp)
       if (!bundle) {
-        error = 'No share has been published for you yet.'
+        error = 'No share has been published for you.'
       } else {
         data = bundleToBackupData(bundle)
       }

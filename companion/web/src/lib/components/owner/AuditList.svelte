@@ -76,7 +76,7 @@
   {#if !loaded && !busy}
     <EmptyState title="Refresh to fetch this therapist's access log." />
   {:else if loaded && events.length === 0}
-    <EmptyState title="No access events recorded yet." />
+    <EmptyState title="No access events recorded." />
   {:else}
     <ul class="entries">
       {#each events as ev (ev.seq)}

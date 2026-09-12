@@ -107,6 +107,48 @@ class OrgModelTest {
     }
 
     @Test
+    fun `nothing in the role catalog names a key, a passphrase, or a reset`() {
+        /*
+         * Issue #100, written into the code rather than left to be inherited by accident.
+         *
+         * The question the plan held the Practice shape on was: who can reset a forgotten
+         * passphrase in a clinic? The answer is NOBODY -- not the clinician, not the practice
+         * admin, not whoever runs the server. A forgotten passphrase means that clinician's keys
+         * are gone and every relationship is re-paired with a fresh invitation from the patient.
+         *
+         * The reason is the product's reason to exist. An escrow that lets a practice admin recover
+         * a clinician's keys is an escrow that lets the practice read its patients' journals, and
+         * the clinical deployment is the MOST sensitive one, not the least. "Admin reset with an
+         * audit row" was considered and refused: it still puts a person in the practice one click
+         * from every patient's content, and an audit row is a receipt, not a lock.
+         *
+         * The plane assertion above already proves no capability is in the data plane. This one is
+         * narrower and blunter, and it is here because the next person to add a capability will be
+         * reaching for a NAME before they reach for a plane: an entry called RESET_PASSPHRASE would
+         * have to be given a plane, and CONTROL is exactly what someone would pick for it.
+         */
+        val forbidden = listOf("KEY", "PASSPHRASE", "SECRET", "RESET", "RECOVER", "ESCROW", "UNLOCK", "DECRYPT", "UNWRAP")
+
+        // The detector, shown catching what it is for. Four plausible entries somebody might add
+        // in good faith, each of which would be a hole in the product's one promise.
+        val planted = listOf("RESET_PASSPHRASE", "ISSUE_RECOVERY_KEY", "ESCROW_CLINICIAN_KEYS", "UNLOCK_MEMBER_ACCOUNT")
+        for (name in planted) {
+            assertTrue(forbidden.any { name.contains(it) }, "the detector missed a planted \"$name\"")
+        }
+        // And not firing on what is actually there, or the assertion below could never hold.
+        assertFalse(forbidden.any { "VIEW_ROSTER".contains(it) })
+
+        val named = buildList {
+            for (action in OrgAction.entries) add(action.name)
+            for (role in OrgRole.entries) { add(role.name); add(role.wire.uppercase()) }
+        }
+        for (name in named) {
+            val hit = forbidden.firstOrNull { name.contains(it) }
+            assertNull(hit, "$name names \"$hit\" -- no practice role may touch keys or passphrases (issue #100)")
+        }
+    }
+
+    @Test
     fun `a membership record has nowhere to put a key`() {
         // A structural guard on the type an admin's roster read is built from. It is made of an
         // identifier, a role name, two pieces of provenance and one fact about the person's own

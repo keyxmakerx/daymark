@@ -47,6 +47,7 @@
     CONSOLE_BUILD_STATE,
     CONSOLE_LEDE,
     CONSOLE_TITLE,
+    ADMIN_CANNOT_RESET_A_PASSPHRASE,
     NO_PATIENT_LIST,
     PLACEHOLDERS,
   } from '../../practice/copy'
@@ -202,6 +203,7 @@
 
       <Card title="Absent by design">
         <p class="para">{NO_PATIENT_LIST}</p>
+        <p class="para">{ADMIN_CANNOT_RESET_A_PASSPHRASE}</p>
         <p class="para">
           There is no screen here for reading anybody's material, and no request this page can make
           would return any. The one thing in the whole role catalog that can authorize a person to

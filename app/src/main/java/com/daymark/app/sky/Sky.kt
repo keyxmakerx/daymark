@@ -557,7 +557,7 @@ class SkyLayout(
          * congratulate anyone for arriving — the empty state is an ordinary state of this surface
          * and not a gap to be filled.
          */
-        const val EMPTY_LINE = "This is the sky. Nothing of yours is in it yet."
+        const val EMPTY_LINE = "This is the sky. Nothing of yours is in it."
     }
 }
 

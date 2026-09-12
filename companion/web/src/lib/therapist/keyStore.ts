@@ -1,10 +1,21 @@
 /*
  * Therapist TOTP-path KEY CUSTODY (the honestly-weaker path — see LowerAssuranceBanner).
  *
- * The therapist's long-term X25519 (box) + Ed25519 (sign) SECRET keys are stored server-side as an
- * Argon2id-wrapped blob and unwrapped IN THE BROWSER under a client-set reading passphrase that is
- * DISTINCT from the TOTP login secret. The server never sees the passphrase, the keys, or any
- * plaintext — it holds only the opaque wrapped blob.
+ * The therapist's long-term X25519 (box) + Ed25519 (sign) SECRET keys are wrapped under a
+ * client-set reading passphrase that is DISTINCT from the TOTP login secret, and unwrapped IN THE
+ * BROWSER. The server never sees the passphrase, the keys, or any plaintext.
+ *
+ * CORRECTED 2026-09-12: this paragraph said the wrapped blob is "stored server-side" and that the
+ * server "holds only the opaque wrapped blob". It does not hold it at all. Nothing sends the blob
+ * anywhere — the only persistence is this browser's localStorage, under
+ * `daymark.therapist.keys.v1` (see inviteAccept.ts KeyRecord, which documents it correctly and has
+ * always said so). Two headers in one directory disagreed, and this was the wrong one.
+ *
+ * The difference is not cosmetic, and it points the opposite way to how it read. Server-side
+ * custody would mean a clinician could sign in on a new machine and recover their keys with their
+ * passphrase. Browser-only custody means A CLEARED CACHE IS PERMANENT KEY LOSS, and that every
+ * device holding an exported copy of the record is an independent, untracked way in — which is why
+ * a clinician "leaving" by forgetting the record in one browser is not leaving (issue #91).
  *
  *   master     = Argon2id(passphrase, salt, mem≥256MiB, ops≥3)          // floor reused from sync/crypto
  *   plaintext  = box.priv(32) || box.pub(32) || sign.priv(64) || sign.pub(32)   // 160 bytes, fixed layout

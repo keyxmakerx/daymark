@@ -275,8 +275,10 @@ export const HANDOFF_IS_A_STAND_IN =
 
 export const FILE_IS_A_STAND_IN =
   'Saving the wrapped key to a file is the same stand-in written to disk, so both flows can be tried ' +
-  'across a reload. It is not a wire format, and no server would accept it. The file holds two ' +
-  'locked boxes and no secret: neither your passphrase nor your code is in it or derivable from it.'
+  'across a reload. It is also what the owner console opens with: that screen asks for this file and ' +
+  'one of these two secrets every visit, because it keeps nothing between them. It is not a wire ' +
+  'format, and no server would accept it. The file holds two locked boxes and no secret: neither ' +
+  'your passphrase nor your code is in it or derivable from it.'
 
 export const NOTHING_TO_OPEN =
   'There is no wrapped key in this page to open. Nothing fetches one, because no endpoint serves ' +

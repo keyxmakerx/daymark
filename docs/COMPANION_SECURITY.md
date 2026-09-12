@@ -255,10 +255,12 @@ Each adversary lists **can**, **cannot (when defenses honored)**, and **defenses
 
 ```
 OWNER
-  passphrase ──Argon2id(salt)──▶ master ──crypto_kdf──┬─▶ SYNC_KEY  ──XChaCha20-Poly1305──▶ snapshot blobs
-                                                       ├─▶ manifest signing key (Ed25519 seed)
+  passphrase ──Argon2id(salt)──▶ master ──crypto_kdf──┬─▶ id 1  SYNC_KEY  ──XChaCha20-Poly1305──▶ snapshot blobs
+                                                       ├─▶ id 2  manifest signing key (Ed25519 seed)
+                                                       ├─▶ id 3  owner_x25519 seed   ┐  the pairing identity
+                                                       ├─▶ id 4  owner_ed25519 seed  ┘  (owner/identity.ts)
                                                        └─▶ device-label key
-  owner_x25519_priv / owner_ed25519_priv (on-phone, wrapped at rest)        [NEVER uploaded]
+  owner_x25519_priv / owner_ed25519_priv  DERIVED, never generated, never stored [NEVER uploaded]
       └─ owner_*_pub  ─────────────────────────────────────────▶ published (therapist pins via OOB SAS)
 
 THERAPIST
@@ -278,6 +280,36 @@ GAME PLAN  (therapist → owner)         [lands in NEW game_plans table, DB v13 
 SERVER holds: ciphertext blobs, wrapped CEKs, PUBLIC keys, hashed tokens, MINIMIZED routing
 metadata. NOTHING that decrypts, authenticates a party, or authors content.
 ```
+
+**The owner's pairing identity is derived from the master, not generated (issue #121).** It was
+generated per browser session until 2026-09-12, so a clinician who pinned the owner's fingerprint
+correctly could verify nothing the owner signed in any later session — and from their side a
+rotated owner key and a hostile server substituting one are indistinguishable. Deriving it makes
+the identity exist if and only if the journal is readable, so every way back into the data
+(passphrase slot, recovery-code slot, and the WebAuthn-PRF slot the blob format anticipates)
+covers the identity too, and neither a passphrase change nor a recovery-code rotation disturbs it.
+The consequence, accepted deliberately: **whoever holds the master can now sign as the owner, not
+only read.** The recovery code on paper is no longer read-only. Subkey ids 3 and 4 under context
+`dmsync01` are reserved for this on both platforms, and a pinned vector in the tests is the
+cross-platform contract for the phone side.
+
+**`owner_keys` is insert-only, and the owner can read it back.** The first key published for a
+relationship is that relationship's key permanently — the store's only writer is
+`INSERT OR IGNORE`, with no update path and no delete — because a route that could overwrite would
+make a server swapping the owner's key indistinguishable from the owner rotating it. **That is a
+property of the application, not of the file.** There is no trigger and no constraint behind it, so
+anyone with WRITE access to the database can `UPDATE` the row; read-only dumps are unaffected, and
+"insert-only" must not be inherited as a property that holds against someone holding the disk. A second publish answers 409, which alone cannot say whether the frozen key is
+the owner's own (a harmless repeat) or one they can no longer produce; so the owner may GET the
+route with their bearer token and compare. Their own read is not audited: the audit log is what
+the owner reads to see what the *clinician* did.
+
+**The clinician compares the published key; it never overwrites what they pinned (issue #122).**
+A sign-in that supplies both owner public keys by hand uses those, and treats the server's copy as
+a cross-check only — a disagreement on either half refuses the sign-in rather than picking a
+winner, and names no cause, because a mistyped key, a re-key and a substituting server are
+indistinguishable from there. The published copy is used only when nothing was typed, which is the
+honestly-weaker trust-on-first-use path.
 
 **No escrow, anywhere (O6).** Lose the passphrase → snapshots unrecoverable
 (phone-local copy is the fallback). Lose the therapist key → owner re-invitation +
@@ -389,6 +421,27 @@ never in a request body, a header, a query string, or a log line, on either side
 is not an error and never burns an invitation; only a human report does (§3.9.1 of the plan).
 The SAS words remain as a fingerprint the connections screen can show; they stop being a
 blocking step once the code-based ceremony has a screen.
+
+**What is true in each direction, 2026-09-12 (issue #101).** The two directions are NOT at the same
+assurance and the consoles must not imply they are.
+
+| Direction | How the key is learned | Assurance |
+| --- | --- | --- |
+| Owner learns the clinician's keys | Sealed in the pairing envelope, openable only by deriving the ISK from the code | **Ceremony.** A link-holder who answers first produces something the owner cannot open. |
+| Clinician learns the owner's keys | Typed into the sign-in form by hand, or read from the server's published copy when nothing is typed | **Whatever the channel was.** Nothing proves a pasted key came from the owner; the published copy is trust-on-first-use against a server that could hand back anything. |
+
+Two things changed on 2026-09-12 and neither closes the gap. The owner's identity is now derived
+rather than generated (§4), so the value a clinician pins is at least *stable* — before that it
+changed every owner session, which made the pin not weak but meaningless (#121). And a typed key is
+no longer silently overwritten by the server's copy (#122): typed wins, the published copy is a
+cross-check, and a disagreement refuses the sign-in.
+
+**The remaining fix is now unblocked and is not 4.0b.** This gap was previously deferred to the
+phone because there was no durable owner identity to carry. There is one now, so the owner's public
+keys can travel to the clinician the same way the clinician's travel to the owner: a second
+envelope in the pairing exchange, owner → clinician, under a new payload version. Until that ships,
+the manual fields carry a caveat naming the consequence
+(`OWNER_KEY_PASTE_CAVEAT`, `companion/web/src/lib/therapist/inviteAccept.ts`).
 
 ### 5.7 Recovery & revocation
 

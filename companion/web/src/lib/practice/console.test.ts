@@ -8,6 +8,7 @@ import {
   CREATE_USES_THE_SERVER_TOKEN,
   CONSOLE_LEDE,
   MEMBERSHIP_IS_NOT_READ_ACCESS,
+  ADMIN_CANNOT_RESET_A_PASSPHRASE,
   NO_PATIENT_LIST,
   PLACEHOLDERS,
   PLACEHOLDER_WORD,
@@ -169,6 +170,35 @@ describe('(a) the console never implies that membership is access', () => {
     // its way, which is the opposite of what the design says.
     expect(PLACEHOLDERS.map((p) => p.body).join(' ')).not.toContain('patients')
     expect(codeOf('PracticeConsole.svelte')).toContain('NO_PATIENT_LIST')
+  })
+
+  it('says an administrator cannot reset a clinician’s passphrase, on the screen not just in a doc', () => {
+    /*
+     * Issue #100. This is the console where somebody would come looking for the button, and every
+     * other staff system an administrator has used has a password reset — so the absence has to be
+     * an explicit sentence, not an empty screen.
+     */
+    expect(ADMIN_CANNOT_RESET_A_PASSPHRASE).toContain('cannot reset')
+    expect(ADMIN_CANNOT_RESET_A_PASSPHRASE).toContain('neither can anyone else')
+    // The reason, not just the rule: an administrator who is told "no" without being told why will
+    // reasonably read it as a missing feature and ask for it.
+    expect(ADMIN_CANNOT_RESET_A_PASSPHRASE).toContain('read its patients’ journals')
+    // And what happens instead, which is the part they can actually plan around.
+    expect(ADMIN_CANNOT_RESET_A_PASSPHRASE).toMatch(/invites them again|sharing starts over/)
+    expect(codeOf('PracticeConsole.svelte')).toContain('ADMIN_CANNOT_RESET_A_PASSPHRASE')
+    // Absent by design, never a placeholder — calling it "not built yet" would promise it is coming.
+    expect(PLACEHOLDERS.map((pl) => `${pl.title} ${pl.body}`).join(' ')).not.toMatch(/passphrase/i)
+  })
+
+  it('does not tell an administrator to be careful instead of telling them what happens', () => {
+    const FORBIDDEN = [
+      { name: 'an instruction to be careful', pattern: /\b(be careful|make sure|don't forget|remember to)\b/i, planted: 'Make sure clinicians keep their passphrase safe.' },
+      { name: 'a reassurance', pattern: /\b(don't worry|no need to worry|safely)\b/i, planted: "Don't worry, this is handled." },
+    ]
+    for (const { name, pattern, planted } of FORBIDDEN) {
+      expect(pattern.test(planted), name).toBe(true)
+      expect(pattern.test(ADMIN_CANNOT_RESET_A_PASSPHRASE), name).toBe(false)
+    }
   })
 })
 

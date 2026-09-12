@@ -46,7 +46,7 @@
 </script>
 
 {#if points.length === 0}
-  <p class="faint">No mood entries to chart yet.</p>
+  <p class="faint">No mood entries to chart.</p>
 {:else}
   <figure class="spark" role="group" aria-label={label}>
     <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">

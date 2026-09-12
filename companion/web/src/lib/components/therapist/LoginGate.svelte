@@ -45,7 +45,15 @@
   import LowerAssuranceBanner from './LowerAssuranceBanner.svelte'
   import { Callout, FieldHelp } from '../ui'
   import { FIELD_HELP } from '../../onboarding/fieldHelp'
-  import { loadKeyRecords, saveKeyRecord, groupForReading, type KeyRecord } from '../../therapist/inviteAccept'
+  import {
+    chooseOwnerKeys,
+    groupForReading,
+    loadKeyRecords,
+    saveKeyRecord,
+    OWNER_KEY_MISMATCH,
+    OWNER_KEY_PASTE_CAVEAT,
+    type KeyRecord,
+  } from '../../therapist/inviteAccept'
   import { firstProblem, WRAPPED_KEY_UNREADABLE, type UnlockFieldId } from '../../therapist/loginGate'
 
   let {
@@ -198,23 +206,35 @@
       const session: SessionInfo = { ...login.session, relRef: relationship, inboxToken: token }
 
       /*
-       * 4. The owner's keys. Fetched now that there is a session to fetch them with, and falling
-       *    back to whatever was typed — a browser signing in manually may be talking to a server
-       *    whose owner has not published yet, and that must not be a dead end.
+       * 4. The owner's keys.
+       *
+       * THE SERVER'S COPY IS A CROSS-CHECK, NEVER AN OVERRIDE. This used to assign the published
+       * keys over whatever had been typed, with no comparison and no notice (issue #122) — so a
+       * server that handed back a key it controlled would have quietly replaced the one this
+       * clinician had verified out of band, and every forged share would then have verified.
+       * session.ts's own header says the caller must pin on first use and refuse a change; this is
+       * the caller doing it.
+       *
+       * Typed keys win when both are present, because those are the ones a human checked. The
+       * server's copy is used only when nothing was typed, which is the honestly-weaker path a
+       * manual sign-in takes against a server whose owner has published — and a dead end otherwise,
+       * which is a real state rather than an error.
        */
-      let signB64 = pinnedOwnerSignPubB64
-      let boxB64 = ownerBoxPubB64
       const published = await client.ownerKeys(session).catch(() => null)
-      if (published) {
-        signB64 = published.signPubB64
-        boxB64 = published.boxPubB64
-      }
-      if (!signB64 || !boxB64) {
+      const choice = chooseOwnerKeys(
+        { signPubB64: pinnedOwnerSignPubB64, boxPubB64: ownerBoxPubB64 },
+        published,
+      )
+      if (!choice.ok) {
         throw new Error(
-          'This server has no owner keys published for the relationship yet, and none were entered. ' +
-            'Ask the person who invited you to publish them from their console.',
+          choice.reason === 'mismatch'
+            ? OWNER_KEY_MISMATCH
+            : 'This server has no owner keys published for the relationship, and none were entered. ' +
+              'Ask the person who invited you to publish them from their console.',
         )
       }
+      const signB64 = choice.keys.signPubB64
+      const boxB64 = choice.keys.boxPubB64
       const pinnedOwnerSignPub = so.from_base64(signB64, b)
       const ownerBoxPub = so.from_base64(boxB64, b)
       const pinnedOwnerSigningFp = fingerprint(pinnedOwnerSignPub)
@@ -331,6 +351,11 @@
           <div class="field">
             <label for="f-credentialId"><span>{FIELD_HELP.credentialId.label}</span></label><FieldHelp field="credentialId" />
             <input id="f-credentialId" type="text" bind:value={credentialId} placeholder={FIELD_HELP.credentialId.placeholder} autocomplete="off" aria-invalid={invalidField === 'credentialId' || undefined} aria-describedby={describedBy('credentialId')} />
+          </div>
+          <div class="field wide">
+            <!-- Issue #101: the pairing code is the authority in the OTHER direction only. Said
+                 here, beside the fields, rather than in a banner someone has already scrolled past. -->
+            <Callout tone="warn" title="The weaker half">{OWNER_KEY_PASTE_CAVEAT}</Callout>
           </div>
           <div class="field">
             <label for="f-pinnedOwnerSignPub"><span>{FIELD_HELP.pinnedOwnerSignPub.label}</span></label><FieldHelp field="pinnedOwnerSignPub" />

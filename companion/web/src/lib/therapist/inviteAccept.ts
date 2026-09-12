@@ -460,6 +460,113 @@ export function groupForReading(value: string, size = 4): string[] {
  * is not a check that fails safe; it is a check people route around. Both values are read aloud
  * here because both are pinned there.
  */
+/**
+ * What a clinician is told when the owner key the server publishes is not the one they entered.
+ *
+ * The old sign-in took the server's copy and OVERWROTE whatever the clinician had typed, silently
+ * and without comparing (issue #122). That was inert only because nothing had ever published an
+ * owner key; the moment the owner console gained a publish button it became live, and a server
+ * handing back a key it controls would have replaced the one the clinician verified by hand.
+ *
+ * It names no cause, because there are three and this console can tell them apart in none: a
+ * mistyped key, an owner who re-keyed, or a server substituting its own. It says what differs and
+ * that nothing happened. Choosing one of those for the reader would be the console asserting
+ * something it cannot know, on the one screen where being wrong is expensive.
+ */
+export const OWNER_KEY_MISMATCH =
+  'The owner key this server published is not the one you entered. That could be a mistyped key, a ' +
+  'key that has changed, or a server handing you a different one — this console cannot tell which, ' +
+  'and will not choose for you. Nothing has been signed in. Check the fingerprint with the person ' +
+  'who invited you, on a channel that is not this server.'
+
+/**
+ * What "nobody can reset it" means when the reader works in a practice (issue #100).
+ *
+ * The old sentence said nobody, which was true and which a clinician in a clinic will not read as
+ * including their own administrator — every other system they use has an admin who can reset
+ * things, so "nobody" arrives pre-qualified. The three are therefore named.
+ *
+ * The decision behind it: an escrow that lets a practice admin recover a clinician's keys is an
+ * escrow that lets the practice read its patients' journals, and the clinical deployment is the
+ * MOST sensitive one rather than the least. The cost is real -- re-pairing after a lost passphrase
+ * is tedious -- and it is the same cost the solo shape already charges.
+ *
+ * Register: a consequence stated plainly, not a warning. It says what would have to happen, which
+ * is a thing a person can plan around, rather than telling them to be careful.
+ */
+export const PASSPHRASE_NO_RESET =
+  'The server never receives it, which also means nobody can reset it for you: not the person who ' +
+  'invited you, not an administrator at your practice, and not whoever runs this server. If you ' +
+  'lose it, what has been shared with you cannot be opened again, and everyone who shared with you ' +
+  'would have to invite you afresh.'
+
+/**
+ * The caveat beside the manual owner-key fields (issue #101).
+ *
+ * The rebuilt pairing makes the code load-bearing in ONE direction: the owner learns the
+ * clinician's keys from an envelope only a code-holder could seal. Typing the owner's keys into
+ * this form is the other direction, and it is not the same thing — nothing about a pasted key
+ * proves it came from the owner. It is as good as the channel it arrived on and no better.
+ *
+ * Said in the consequence rather than the mechanism, and NOT in reassuring words. A caveat that
+ * makes someone feel covered is worse than no caveat, because it spends the one moment they were
+ * going to think about it.
+ */
+export const OWNER_KEY_PASTE_CAVEAT =
+  'Typing these is the weaker half of the pairing. The code you were given proves your keys to the ' +
+  'person who invited you; nothing here proves theirs to you. These are only as trustworthy as ' +
+  'wherever you copied them from, so check the fingerprint with them directly before you read ' +
+  'anything they send.'
+
+/** A public key pair as it travels between the two sides: base64url strings, never bytes. */
+export interface OwnerPublicKeysB64 {
+  signPubB64: string
+  boxPubB64: string
+}
+
+export type OwnerKeyChoice =
+  | { ok: true; keys: OwnerPublicKeysB64; source: 'typed' | 'published' }
+  | { ok: false; reason: 'mismatch' | 'none' }
+
+/**
+ * Which owner keys a signing-in clinician should pin: the ones they typed, the ones the server
+ * published, or neither.
+ *
+ * A function rather than a branch inside LoginGate because the property worth proving is a
+ * precedence rule and a refusal, and neither can be asserted over markup in a node suite.
+ *
+ * THE RULE. Typed keys win whenever both halves are present, because those are the ones a human
+ * checked out of band; the server's copy is then only a cross-check, and a disagreement refuses the
+ * sign-in rather than picking a winner. The published copy is used only when nothing was typed —
+ * the honestly-weaker path, trust on first use with nothing to compare against — and when there is
+ * neither, that is a real state to explain rather than an error.
+ *
+ * WHAT IT REPLACES. LoginGate assigned the published keys over whatever had been typed, with no
+ * comparison and no notice (issue #122). That was inert only because nothing in the product had
+ * ever published an owner key; the moment the owner console gained a publish button, a server
+ * handing back a key it controlled would have silently replaced the one the clinician verified,
+ * and every forged share would then have verified against it.
+ *
+ * Both halves are compared. A record matching the signing key but not the encryption key is not a
+ * near-miss: it is a record this clinician did not verify.
+ */
+export function chooseOwnerKeys(
+  typed: { signPubB64: string; boxPubB64: string },
+  published: OwnerPublicKeysB64 | null,
+): OwnerKeyChoice {
+  const signPubB64 = typed.signPubB64.trim()
+  const boxPubB64 = typed.boxPubB64.trim()
+
+  if (signPubB64 && boxPubB64) {
+    if (published && (published.signPubB64 !== signPubB64 || published.boxPubB64 !== boxPubB64)) {
+      return { ok: false, reason: 'mismatch' }
+    }
+    return { ok: true, keys: { signPubB64, boxPubB64 }, source: 'typed' }
+  }
+  if (published) return { ok: true, keys: published, source: 'published' }
+  return { ok: false, reason: 'none' }
+}
+
 export const KEY_CHECK_COPY = {
   title: 'Your key fingerprints',
   lede:

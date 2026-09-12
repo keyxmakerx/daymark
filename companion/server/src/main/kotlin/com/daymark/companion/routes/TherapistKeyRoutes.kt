@@ -8,6 +8,7 @@ import com.daymark.companion.clientAddress
 import com.daymark.companion.storage.AuditAction
 import com.daymark.companion.storage.AuditActor
 import com.daymark.companion.storage.AuditStore
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respond
@@ -272,6 +273,17 @@ fun Route.therapistKeyRoutes(
  * The GET takes its relRef from the SESSION, never the path, for the same reason the POST above
  * does. A clinician's session reaches exactly one relationship; a request naming a different one is
  * not a confused client, and it is refused rather than quietly served the session's own value.
+ *
+ * THE OWNER MAY ALSO READ, with their bearer token, and that is not a convenience. `owner_keys` is
+ * insert-only by primary key, so the POST answers 409 for a second publish — and a 409 alone cannot
+ * tell the owner whether the frozen key is the one they are holding (a harmless repeat) or a
+ * different one (their connection is pinned to a key they can no longer produce). Without a
+ * read-back the console could only show them the status code, which names nothing they can act on.
+ * With it, the console compares and says which of the two happened.
+ *
+ * The owner's own read is deliberately NOT audited. The audit log exists to show the owner what the
+ * CLINICIAN did with their relationship; their own reads are not news to them, and a row per
+ * console visit would bury the rows that matter.
  */
 fun Route.ownerKeyRoutes(
     authStore: AuthStore,
@@ -321,8 +333,25 @@ fun Route.ownerKeyRoutes(
             }
         }
 
-        /** The clinician reads them. Session cookie; no CSRF token, because this changes nothing. */
+        /**
+         * The clinician reads them with their session cookie; the owner reads their own with the
+         * bearer token. No CSRF token on either, because this changes nothing.
+         *
+         * The bearer branch is taken only when an Authorization header is actually present, so a
+         * clinician's ordinary request is unaffected. Sending a bogus one gains nothing — it is
+         * answered 401 by the same guard that protects every other owner route — and sending a
+         * valid one means being the owner, who already writes here.
+         */
         get {
+            if (call.request.headers[HttpHeaders.Authorization] != null) {
+                if (!call.ownerAuthorized(ownerGuard)) return@get
+                val relRef = call.parameters["relRef"]
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, ErrorDto("missing relRef"))
+                val published = authStore.ownerKeys(relRef)
+                    ?: return@get call.respond(HttpStatusCode.NotFound, ErrorDto("no keys registered"))
+                return@get call.respond(OwnerKeyRecord(published.signPubB64, published.boxPubB64, published.registeredAt))
+            }
+
             val sessionId = call.request.cookies["daymark_session"]
                 ?: return@get call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized"))
             val validation = authStore.validateSession(sessionId, sessionIdleSeconds, requireCsrf = null)

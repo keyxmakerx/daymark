@@ -13,6 +13,8 @@
   import { withGrant, type OwnerSession } from './session'
   import type { PinnedTherapist } from './session'
   import PairingPanel from './PairingPanel.svelte'
+  import OwnerKeyPublish from './OwnerKeyPublish.svelte'
+  import SharingStrip from './SharingStrip.svelte'
   import { emptyGrant } from '../../assignments/grant'
   import { fingerprint } from '../../assignments/crypto'
   import { sasWords } from '../../share/pairing'
@@ -156,6 +158,17 @@
       </div>
     </details>
 
+    <!--
+      ABOVE THE TAB CONTENT, so it is on every owner screen rather than on the one screen about
+      sharing (issue #105). It is rendered per pinned relationship, not per selected one: the
+      Review, Notifications and Pinned-keys tabs have no selected therapist, and a standing notice
+      that disappears when you change tab is not standing. Each strip renders nothing at all unless
+      that relationship actually has a live share lineage.
+    -->
+    {#each session.pinned.filter((t) => t.inboxToken) as t (t.id)}
+      <SharingStrip name={t.displayName} inboxToken={t.inboxToken} {client} />
+    {/each}
+
     {#if sub === 'review'}
       {#if data}
         <Dashboard {data} />
@@ -180,7 +193,7 @@
           three tabs into grey mysteries.
         -->
         <p class="empty faint">
-          {selected.displayName} has not published keys yet. Send the invitation from the Share tab;
+          {selected.displayName} has not published keys. Send the invitation from the Share tab;
           once they accept, their keys appear under Published keys for you to check and record.
         </p>
       {:else if sub === 'grants'}
@@ -190,6 +203,14 @@
       {:else if sub === 'published-keys'}
         <TherapistKeyIntake therapist={selected} {endpoint} onkeys={keysArrived} />
       {:else if sub === 'share'}
+        <!-- Above both, because the clinician can verify nothing until this key is with the server,
+             and that is as true for an established connection as for one being set up. -->
+        <OwnerKeyPublish
+          therapist={selected}
+          {client}
+          signPub={session.ownerSign.publicKey}
+          boxPub={session.ownerBox.publicKey}
+        />
         {#if selected.keysPending || pairingOpen}
           <!-- The invitation is mintable the moment a relationship has a token; sealing is not.
                ShareBuilder would offer both, so a pending clinician gets the half that exists. -->

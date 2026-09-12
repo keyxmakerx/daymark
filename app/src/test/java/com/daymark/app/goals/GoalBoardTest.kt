@@ -282,7 +282,7 @@ class GoalBoardTest {
         assertTrue(shames("This project is overdue"))
         assertTrue(shames("You missed a day"))
         assertFalse("the fact itself must pass", shames("3 of 7 steps done"))
-        assertFalse(shames("No steps yet"))
+        assertFalse(shames("No steps"))
     }
 
     @Test
@@ -304,7 +304,7 @@ class GoalBoardTest {
 
     @Test
     fun the_summary_reads_as_a_plain_fact_at_every_boundary() {
-        assertEquals("No steps yet", GoalBoard.Progress(0, 0).summary)
+        assertEquals("No steps", GoalBoard.Progress(0, 0).summary)
         assertEquals("0 of 1 step done", GoalBoard.Progress(0, 1).summary)
         assertEquals("1 of 1 step done", GoalBoard.Progress(1, 1).summary)
         assertEquals("3 of 7 steps done", GoalBoard.Progress(3, 7).summary)

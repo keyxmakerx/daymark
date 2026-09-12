@@ -83,7 +83,7 @@
 
   <div class="summary" role="group" aria-label="Currently granted">
     {#if grantedList.length === 0}
-      <span class="none">Nothing granted yet.</span>
+      <span class="none">Nothing granted.</span>
     {:else}
       {#each grantedList as cap (cap)}
         <Chip tone="accent">{cap}{draft.capabilities[cap]?.apply === 'auto' ? ' · auto' : ''}</Chip>

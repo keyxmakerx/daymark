@@ -75,6 +75,13 @@ export async function relRefOf(inboxToken: string): Promise<string> {
   return _sodium.to_base64(digest, _sodium.base64_variants.URLSAFE_NO_PADDING)
 }
 
+/** The owner's published public keys, as the server relays them. Vouched for by nobody. */
+export interface OwnerKeyRecord {
+  signPubB64: string
+  boxPubB64: string
+  registeredAt: number
+}
+
 export class PortalClient {
   private readonly base: string
   constructor(
@@ -210,6 +217,75 @@ export class PortalClient {
   async reportInvite(inviteId: string): Promise<void> {
     const res = await this.req(`/v1/invite/${encodeURIComponent(inviteId)}/report`, { method: 'POST' })
     if (!res.ok) throw new PortalError('could not end the invitation', res.status)
+  }
+
+  /**
+   * Withdraw the share lineage for one relationship (issue #105).
+   *
+   * OWNER ONLY, and the server enforces that rather than trusting this client: the same route on
+   * the assignments or gameplans channel would hand a clinician an irreversible kill switch over
+   * the owner's own material, so it answers 404 for every channel but `shares` and 403 for every
+   * role but owner.
+   *
+   * `copiesNotRemoved` is the half worth carrying back. Revoking marks every version and then tries
+   * to delete the bytes; a delete can fail (a read-only mount, a file already gone). Those failures
+   * used to be swallowed, so an owner could be told a share was withdrawn while copies of it sat on
+   * disk. The count is returned so a screen can say so instead.
+   */
+  async revokeShare(inboxToken: string, lineage = 'share'): Promise<{ revokedVersions: number; copiesNotRemoved: number }> {
+    const relRef = await relRefOf(inboxToken)
+    const res = await this.req(this.relPath(relRef, 'shares', `/${encodeURIComponent(lineage)}/revoke`), {
+      method: 'POST',
+      headers: { 'X-Rel-Token': inboxToken },
+    })
+    if (!res.ok) throw new PortalError('could not withdraw the share', res.status)
+    const body = (await res.json()) as { revokedVersions?: number; copiesNotRemoved?: number }
+    return { revokedVersions: body.revokedVersions ?? 0, copiesNotRemoved: body.copiesNotRemoved ?? 0 }
+  }
+
+  // --- the owner's own public keys (issue #121) ---
+
+  /**
+   * Publish the owner's two public keys for one relationship.
+   *
+   * `owner_keys` is INSERT-ONLY by primary key: the first key published for a relationship is the
+   * key forever, and the server answers 409 for any second attempt. That is deliberate — a clinician
+   * pins this key, and a table that could be updated would make a server substituting its own key
+   * indistinguishable from the owner rotating theirs.
+   *
+   * So 409 is a RESULT, not an error, and it is returned rather than thrown: the caller has to read
+   * back what is actually published and compare, because "already published" covers both a harmless
+   * repeat of the same key and the serious case where the frozen key is one the owner can no longer
+   * produce. Those need different things said to a person, and a thrown error erases the
+   * difference.
+   */
+  async publishOwnerKeys(
+    relRef: string,
+    signPubB64: string,
+    boxPubB64: string,
+  ): Promise<'published' | 'alreadyPublished'> {
+    const res = await this.req(`/v1/relations/${encodeURIComponent(relRef)}/owner-keys`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ signPubB64, boxPubB64 }),
+    })
+    if (res.status === 409) return 'alreadyPublished'
+    if (!res.ok) throw new PortalError('could not publish your keys', res.status)
+    return 'published'
+  }
+
+  /**
+   * What is actually published for this relationship, read with the owner's own token.
+   *
+   * `null` when nothing has been published, which is an ordinary state rather than an error: it is
+   * what every relationship looks like before the owner has sent their key, and drawing it as a
+   * failure would be drawing an absence as one.
+   */
+  async publishedOwnerKeys(relRef: string): Promise<OwnerKeyRecord | null> {
+    const res = await this.req(`/v1/relations/${encodeURIComponent(relRef)}/owner-keys`)
+    if (res.status === 404) return null
+    if (!res.ok) throw new PortalError('could not read the published keys', res.status)
+    return (await res.json()) as OwnerKeyRecord
   }
 
   // --- owner notification-email registration (Track T2) ---

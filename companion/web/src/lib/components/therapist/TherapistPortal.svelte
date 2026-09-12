@@ -67,7 +67,7 @@
     try {
       const current = await c.client.getCurrent(c.session, 'grants', 'grant')
       if (!current) {
-        grantError = 'No grant has been published for you yet — ask the owner to grant capabilities.'
+        grantError = 'No grant has been published for you. The owner grants capabilities from their console.'
         return
       }
       grant = verifyGrantBlob(current.bytes, c.pinnedOwnerSignPub)
@@ -231,7 +231,7 @@
     opened in this session yet, and opening it is a deliberate act rather than something navigating
     to a tab should do behind the person's back.
   -->
-  <Callout title="No shared data open yet">
+  <Callout title="No shared data open">
     <p>
       Open the share on the <strong>Shared data</strong> tab and this surface will have something to
       draw. Nothing is fetched by moving between tabs.
