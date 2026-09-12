@@ -207,3 +207,41 @@ and which oracle works where, the recurring copy/security/process rules, the tes
 and a pointer table saying which single document answers which question. It exists because sessions
 kept spending their context re-deriving all of that. Keep it short; when it grows, move the detail
 into the document the table points at.
+
+## Addendum 2026-09-12 — the pairing work merged, and the repository learned to work without a person watching
+
+`main` is at the merge of #119. Everything below is **on `main`**, not on a branch.
+
+### What landed
+
+**The pairing feature** (#92). The audited CPace stack had zero call sites; it now has screens, and `POST /v1/invite/{id}/redeem` is gone. A therapist reaches a working portal by typing a code the owner said out loud; the emailed link alone is no longer enough, and a test asserts it — mutation-checked, so re-adding a redeem handler turns exactly that test red. Also #93: the Dependabot rule meant to hold back AGP 9 named `com.android.tools.build:gradle`, a coordinate this project never uses; it is a version-catalog plugin, and Dependabot's own PR title said so.
+
+**Four fixes from the first unattended run** (#116, #117, #118, #119): the enrolment ticket's hashing and single-use are now *tested* rather than merely true; `SECURITY.md` no longer tells researchers the server does not exist; the revoke sentence is one constant used verbatim at every point of the click; and denying the notification permission no longer lands on "You're all set" with a reminder that can never fire.
+
+### The working setup, which is the durable part
+
+`CLAUDE.md` at the root carries the rules that kept being re-derived. `.claude/agents` holds five specialists with the model matched to the shape of the job — Fable decides (`designer`, `adviser`, `Read` and nothing else so a decision cannot become an investigation), Opus investigates, Haiku counts, Sonnet drives the product. `.claude/skills` holds what a person types: `/tests`, `/ux`, `/challenge`, `/walkthrough`, `/wrapup`, `/next`.
+
+`/next` is the unattended loop: take the lowest-numbered open issue labelled `claude-ready`, do it, push to a branch, comment in plain English, drop the label, then start a fresh session for the next item or go quiet. **The list is the budget** — dropping the label is how an item leaves the queue and only a person can add one back, so nothing can extend its own runway or spin twice on the same issue. A Routine fires Mon/Wed/Fri 14:00 UTC to start the chain. Push to a branch and stop: no pull request, no merge, unless the maintainer asks.
+
+**Three things learned the hard way, recorded so they are not relearned.** Agent definitions are not picked up when the `.claude/agents` directory is first created — a later edit wakes the watcher. A bundled skill owns the name `/verify` and wins the invocation, which is why the suite runner is `/tests`. Parallel agents each get a git worktree under `.claude/worktrees/`, inside the repository they are checkouts of; these are now ignored, because the obvious response to four untracked directories is the wrong one.
+
+### The security question, answered
+
+#113 asked whether a stolen database plus the plaintext owner bearer token lets an attacker read a journal. **It does not**, and the reason is a control nobody had credited: every route serving relationship content requires the raw inbox token in `X-Rel-Token`, of which only a `BLAKE2b-256` digest is stored. Existing shares are sealed to one specific therapist key with no re-seal path anywhere; future shares are addressed on the owner's device from local pins; and a relationship that already has an enrolled therapist is immune outright, because `enrollTotp` refuses on `rel_ref` and nothing deletes a credential.
+
+What is true: the KDoc's reasoning is stale (the token now alone authorises the ticket-minting approve), `bootstrap_token` duplicates the secret until first rotation, and `totp.secret_b64` is a plaintext seed by TOTP's nature. Severity is medium, and the fix — hash it at rest — is in flight.
+
+**The consequence worth carrying forward: the inbox token is now the load-bearing secret in the whole design, and nobody has audited how it is created, delivered or stored on the clients.** That is #120.
+
+`owner_keys` stores public halves only and owner console keys are ephemeral per browser session — so there is no durable owner identity, which means what a therapist pins by hand is not stable across sessions (#101). That finding was **not** adversarially verified before the run was stopped; a `/challenge` is in flight.
+
+### Open, in the order they are worth doing
+
+#113 (hash the token, in flight) · #120 (audit the inbox token — the new load-bearing secret) · #115 (a crypto test failed once in three runs; reproduce before repairing, and do not silence it) · #101 (interim copy: stop claiming mutual authentication until 4.0b) · #100 (a practice can never reset a clinician's passphrase — the gate was crossed, write the answer in) · #90, #91, #99–#112 as labelled.
+
+Deliberately **not** labelled `claude-ready`, because each deletes or changes something a person should read first: #107 (streaks and the Achievements screen), #108 (the year review's superlatives and its image export), #109 (journal encryption at rest, with a recovery code — refuses lost-PIN-means-lost-data), #110 (the pairing rate limit refuses the one call that kills a fraudulent invitation), #111 (a fresh code is sufficient authority to replace a pinned key), #112 (one notice when a reply does not open).
+
+### A caution about the corpus
+
+Two independent surveys hit `⚠️ STATUS: DESIGN ONLY — NO CODE EXISTS YET` banners over features that are substantially shipped, and one reported the pairing code's shape as undecided the day after it shipped. The plan documents also still claim no org/tenant code exists while `companion/server/.../org/OrgStore.kt` and `companion/web/practice.html` are on `main`. **Stale documentation here manufactures false findings**, and the next survey will hit the same rocks.
