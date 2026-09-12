@@ -55,14 +55,26 @@ export const OWNER_COPY = {
     'fresh one.',
 
   /**
-   * The mismatch. A question, not a verdict: a typo and a stranger holding the link produce the
-   * same silence, and the person in front of the screen is the only one who can tell them apart.
+   * The mismatch (issue #112). A question, not a verdict: a typo and a stranger holding the link
+   * produce the same silence, and the person in front of the screen is the only one who can tell
+   * them apart. So the screen asks them to go and find out — from the person, on the channel the
+   * code went down — rather than offering a diagnosis it does not have.
+   *
+   * ONE NOTICE, ON THIS SCREEN, AND NO NOTIFICATION. The owner's half runs in a browser tab today,
+   * and a closed tab cannot raise a notification honestly: it would arrive late, or not at all, and
+   * either way the person would learn to treat it as unreliable. The phone half (4.0b) can do it
+   * properly and the contract for that is written down in COMPANION_PHONE_2B.md §4 rather than
+   * improvised here.
+   *
+   * The count stays where it was, below this, and stays a count. Nothing about a reply that did not
+   * open changes how often anything is asked of the server — see ownerCeremony.ts, checkForReply.
    */
-  mismatchTitle: 'That reply did not match this code',
-  mismatchBody:
-    'Someone answered, and what came back does not open with the code you gave. If it was your ' +
-    'therapist mistyping, give them a new code and try again. If you were not expecting anyone ' +
-    'to answer yet, stop this invitation instead.',
+  mismatchTitle: 'A reply did not open with your code',
+  mismatchBody: (name: string): string =>
+    `Keep this invitation open and ask ${name} whether they answered, or stop it and send a new ` +
+    `link?`,
+  /** The dismissal. It ends nothing, spends nothing, and asks the server for nothing. */
+  keepOpenLabel: 'Keep it open',
 
   /*
    * REPLACING KEYS THIS CONSOLE ALREADY HOLDS (issue #111).

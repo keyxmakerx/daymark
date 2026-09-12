@@ -175,6 +175,13 @@ export async function openRun(ports: OwnerCeremonyPorts, state: OwnerCeremony): 
  * The failure of the envelope is NOT an error here: it returns the mismatch phase, and the screen
  * renders a question. An error would be this module claiming to know which of a typo and a stranger
  * it was looking at, which is precisely the thing the design refuses to guess.
+ *
+ * AND THE CADENCE DOES NOT CHANGE AFTER ONE (issue #112). A device that starts asking more often
+ * once a reply failed to open has told the server, in traffic, that the code was wrong — and the
+ * server is the one party the pairing design refuses to tell. So this function does exactly one
+ * read per call whatever state it is called from, schedules nothing, and returns a mismatch state
+ * carrying no interval, no backoff and no deadline for anything to read. There is no timer in this
+ * module at all: every check is a person clicking, before a failure and after it alike.
  */
 export async function checkForReply(ports: OwnerCeremonyPorts, state: OwnerCeremony): Promise<OwnerCeremony> {
   if (state.phase !== 'waiting' && state.phase !== 'resumed' && state.phase !== 'mismatch') {
@@ -254,6 +261,23 @@ export async function newCode(ports: OwnerCeremonyPorts, state: OwnerCeremony): 
   await ports.cancelRun(state.run.exchangeId)
   forgetOwnerRun(ports.storage)
   return openRun(ports, { phase: 'invited', invite: state.invite, attemptsLeft: state.attemptsLeft, failCount: state.failCount })
+}
+
+/**
+ * Keep the invitation after a reply did not open (issue #112). The dismissal beside "stop it".
+ *
+ * IT TOUCHES NOTHING. No cancel, no report, no new run, no request of any kind — it moves this tab
+ * back to the invitation screen and that is all. That is the whole point of offering it: a reply
+ * that did not open is not something to act on until a person has asked the other person whether
+ * they answered, and every act available here spends something a person might want back.
+ *
+ * The stale run is left where it is rather than cancelled. Opening the next run retires it server-
+ * side anyway, and cancelling here would write a `pairing.cancelled` line into the owner's log for
+ * a decision they have explicitly not made yet.
+ */
+export function keepInvitation(state: OwnerCeremony): OwnerCeremony {
+  if (state.phase !== 'mismatch') throw new CeremonyError('there is no unopened reply to put aside')
+  return { phase: 'invited', invite: state.invite, attemptsLeft: state.attemptsLeft, failCount: state.failCount }
 }
 
 /**

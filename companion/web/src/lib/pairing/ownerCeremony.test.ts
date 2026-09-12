@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import {
   MAX_EXCHANGES_PER_INVITE,
   abandonApproval,
   approve,
   checkForReply,
+  keepInvitation,
   newCode,
   openRun,
   restore,
@@ -362,6 +365,108 @@ describe('replacing keys this console already holds', () => {
     expect(body).not.toMatch(/un-send|undo|recall/i)
     expect(body).toMatch(/do not approve/i)
     expect(OWNER_COPY.replaceDeclineLabel).toBe('Not now')
+  })
+})
+
+/*
+ * ISSUE #112. A reply that did not open is one sentence on the owner's screen, and the device asks
+ * the server for nothing differently afterwards.
+ *
+ * THE CADENCE IS THE SECURITY PROPERTY, not a performance detail. The server must not be able to
+ * tell a wrong code from a right one, and traffic is a channel like any other: a client that starts
+ * polling faster — or slower, or once more, or not at all — after an envelope fails to open has
+ * told the server what happened inside the owner's browser. So the assertion is that the calls a
+ * poll makes are IDENTICAL before and after, and that nothing in the module schedules anything.
+ */
+describe('a reply that did not open changes nothing about how the device behaves', () => {
+  async function toMismatch(): Promise<OwnerCeremony> {
+    const waiting = await toWaiting()
+    h.reply = { state: 'complete', isk: new Uint8Array(64), offer: null }
+    return checkForReply(h.ports, waiting)
+  }
+
+  it('polls exactly the same way after a failed open as before it', async () => {
+    const waiting = await toWaiting()
+    const runId = waiting.phase === 'waiting' ? waiting.run.exchangeId : ''
+
+    // Three polls with nobody having answered.
+    let state = waiting
+    for (let i = 0; i < 3; i++) state = await checkForReply(h.ports, state)
+    const before = h.calls.filter((c) => c.startsWith('read:'))
+    const otherBefore = h.calls.filter((c) => !c.startsWith('read:'))
+
+    // The reply lands and does not open.
+    h.reply = { state: 'complete', isk: new Uint8Array(64), offer: null }
+    const mismatch = await checkForReply(h.ports, state)
+    expect(mismatch.phase).toBe('mismatch')
+
+    // Three more polls from the mismatch state, with nothing further arriving.
+    h.reply = { state: 'waiting' }
+    h.calls.length = 0
+    let after = mismatch
+    for (let i = 0; i < 3; i++) after = await checkForReply(h.ports, after)
+
+    // One read per poll, against the same run, and NOTHING else — no extra read, no re-open, no
+    // cancel, no report. Byte for byte the same sequence of calls as the three polls before.
+    expect(h.calls).toEqual([`read:${runId}`, `read:${runId}`, `read:${runId}`])
+    expect(before).toEqual([`read:${runId}`, `read:${runId}`, `read:${runId}`])
+    expect(otherBefore.filter((c) => c !== 'mint' && !c.startsWith('open:'))).toEqual([])
+    // Control: the comparison can fail — an extra call would show up in exactly this list.
+    await newCode(h.ports, after)
+    expect(h.calls.length).toBeGreaterThan(3)
+  })
+
+  it('the mismatch state carries nothing a caller could read a new cadence out of', async () => {
+    const mismatch = await toMismatch()
+    expect(Object.keys(mismatch).sort()).toEqual(
+      ['attemptsLeft', 'failCount', 'invite', 'phase', 'run'].sort(),
+    )
+    for (const key of Object.keys(mismatch)) {
+      expect(key, 'a timing field leaked into the mismatch state').not.toMatch(
+        /interval|backoff|delay|retry|after|next|deadline|poll/i,
+      )
+    }
+    // Control: the pattern does fire on the names it is looking for.
+    expect('retryAfter').toMatch(/interval|backoff|delay|retry|after|next|deadline|poll/i)
+  })
+
+  it('nothing in the module schedules anything, before a failure or after one', () => {
+    const src = readFileSync(fileURLToPath(new URL('./ownerCeremony.ts', import.meta.url)), 'utf8')
+    expect(src.length).toBeGreaterThan(2000)
+    for (const scheduler of ['setTimeout', 'setInterval', 'requestAnimationFrame', 'queueMicrotask', 'requestIdleCallback']) {
+      expect(src.includes(scheduler), `the module schedules with ${scheduler}`).toBe(false)
+    }
+    // Control: the detector sees a planted one.
+    expect('setTimeout(check, 1000)'.includes('setTimeout')).toBe(true)
+  })
+
+  it('keeping the invitation asks the server for nothing and ends nothing', async () => {
+    const mismatch = await toMismatch()
+    h.calls.length = 0
+    const kept = keepInvitation(mismatch)
+    expect(kept.phase).toBe('invited')
+    if (kept.phase !== 'invited') return
+    // The count is exactly what it was: a reply that did not open spends no try.
+    expect(kept.attemptsLeft).toBe(mismatch.phase === 'mismatch' ? mismatch.attemptsLeft : -1)
+    expect(kept.failCount).toBe(mismatch.phase === 'mismatch' ? mismatch.failCount : -1)
+    // And not one request was made — no cancel, no report, no new run, no read.
+    expect(h.calls).toEqual([])
+    // Control: the recorder is working; the other option on this screen does make calls.
+    await stopInvitation(h.ports, mismatch)
+    expect(h.calls).toEqual([`report:${INVITE.inviteId}`])
+  })
+
+  it('says what did not happen and asks a question, naming the person', () => {
+    expect(OWNER_COPY.mismatchTitle).toBe('A reply did not open with your code')
+    expect(OWNER_COPY.mismatchBody('Sam Reed')).toBe(
+      'Keep this invitation open and ask Sam Reed whether they answered, or stop it and send a new link?',
+    )
+    // A question, never a verdict, and never an accusation.
+    expect(OWNER_COPY.mismatchBody('Sam Reed')).toContain('?')
+    expect(`${OWNER_COPY.mismatchTitle} ${OWNER_COPY.mismatchBody('Sam Reed')}`).not.toMatch(
+      /attack|intrud|breach|suspicious|threat|danger|wrong code|you typed/i,
+    )
+    expect('you typed it wrong').toMatch(/attack|intrud|breach|suspicious|threat|danger|wrong code|you typed/i)
   })
 })
 

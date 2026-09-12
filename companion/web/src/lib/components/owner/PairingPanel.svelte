@@ -21,6 +21,7 @@
     approve,
     checkForReply,
     defaultFreshCode,
+    keepInvitation,
     newCode,
     openRun,
     restore,
@@ -276,13 +277,24 @@
           <button onclick={() => step(() => newCode(ports, ceremony))} disabled={busy}>{OWNER_COPY.newCodeLabel}</button>
         </div>
       {:else if ceremony.phase === 'mismatch'}
-        <Callout tone="warn" title={OWNER_COPY.mismatchTitle}>{OWNER_COPY.mismatchBody}</Callout>
+        <!--
+          Issue #112. A notice on this screen and nothing else: no notification, because the owner's
+          half is a browser tab and a closed tab cannot raise one honestly. It sits above the count
+          and the stop button, which are both in the shared block below and both stay as they were —
+          a reply that did not open changes nothing about how many tries are left.
+
+          "Keep it open" asks the server for nothing at all (ownerCeremony.keepInvitation), which is
+          also why there is no timer here: a device that started checking more often after a failed
+          open would have told the server the code was wrong.
+        -->
+        <Callout tone="warn" title={OWNER_COPY.mismatchTitle}>
+          {OWNER_COPY.mismatchBody(therapist.displayName)}
+        </Callout>
         <div class="row">
-          <button class="primary" onclick={() => step(() => newCode(ports, ceremony))} disabled={busy}>
-            {OWNER_COPY.newCodeLabel}
+          <button class="primary" onclick={() => step(async () => keepInvitation(ceremony))} disabled={busy}>
+            {OWNER_COPY.keepOpenLabel}
           </button>
         </div>
-        <p class="hint">{OWNER_COPY.newCodeHint}</p>
       {:else if ceremony.phase === 'answered'}
         {#if ceremony.keys.kind === 'supersedes'}
           <!--

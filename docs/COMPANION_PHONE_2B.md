@@ -103,6 +103,21 @@ therapist via a **mutual out-of-band short-authentication-string** (the `share/p
 wordlist + SAS), and pins the therapist's keys. The owner then issues the signed **Grant**
 (capabilities + apply modes) and can build/send **shares** (curated, scores/bands only).
 
+**When a reply does not open (4.0b contract, issue #112).** The web console shows one notice on the
+invitation screen and raises no notification, because the owner's half is a browser tab there and a
+closed tab cannot raise one honestly (`companion/web/src/lib/pairing/copy.ts`, `mismatchTitle` /
+`mismatchBody`). The phone can, and this is the whole of what it may do: **one local notification
+per invitation**, reading *"A reply to your invitation needs a look."* — lock-screen visible, naming
+nobody and counting nothing, so a phone on a table says only that the owner has something to open.
+It is raised from the device's own knowledge, at the moment the envelope fails to open on the
+device, and it is **raised once per invitation**: a second failed reply against the same invitation
+adds nothing, because the thing being reported is "go and look", which does not become truer twice.
+It **burns nothing and writes nothing to the server** — no report, no counter, no request of any
+kind — and it must not change the polling cadence, on either side of the failure. A device that
+started polling faster after a reply failed to open would have told the server, in traffic, that the
+code was wrong; the server is the one party the pairing design refuses to tell. The notification is
+a local read of a local fact, and nothing about it is visible from outside the phone.
+
 ## 5. What is CI-only verifiable / open
 
 - Everything here needs an **Android build + instrumented tests** (emulator) — add a
