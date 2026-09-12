@@ -2,16 +2,22 @@
 
 Daymark is built so that **your data never leaves your device** unless you explicitly export it.
 
+This describes the `foss` build, which is the only build released. A separate, opt-in `sync` build
+that can share data with a Companion server is in development and unreleased; it has its own
+application id, is never installed by updating the `foss` build, and will ship with its own
+privacy statement before it is released.
+
 ## What we collect
 
-Nothing. Daymark has **no analytics, no crash reporting, no advertising, and no third-party
-trackers**. There are no accounts and no servers operated by this project.
+Nothing, in the released `foss` build. Daymark has **no analytics, no crash reporting, no
+advertising, and no third-party trackers**. There are no accounts, and the `foss` build talks to
+no servers.
 
 ## Network
 
-The app declares **no `INTERNET` permission** and makes no network connections. Nothing you log —
-moods, journal entries, sleep logs, trackers, self-check answers, wellbeing check-in scores,
-thought records, or movement logs — is ever sent anywhere.
+The `foss` build declares **no `INTERNET` permission** and makes no network connections. Nothing
+you log — moods, journal entries, sleep logs, trackers, self-check answers, wellbeing check-in
+scores, thought records, or movement logs — is ever sent anywhere by that build.
 
 ## Where your data lives
 
