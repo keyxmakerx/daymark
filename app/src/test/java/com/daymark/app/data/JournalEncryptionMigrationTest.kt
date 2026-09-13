@@ -51,6 +51,10 @@ class JournalEncryptionMigrationTest {
             if (firstDestructive < 0) return true
             return lastVerification in 0 until firstDestructive
         }
+
+        /** True when the run never even tried to remove anything. */
+        fun noDestructiveCall(log: List<String>): Boolean =
+            log.none { entry -> DESTRUCTIVE.any { entry.startsWith(it) } }
     }
 
     // ─── Fakes ─────────────────────────────────────────────────────────────────────────────────
@@ -250,6 +254,28 @@ class JournalEncryptionMigrationTest {
         assertTrue("the ordering check rejected a correct log", destructionComesAfterVerification(correct))
     }
 
+    /**
+     * The positive control for the other half of [assertGaveUpBeforeDeleting].
+     *
+     * "The run never tried to remove anything" is an absence claim over the log, so the predicate is
+     * shown each of the three destructive calls in turn and must report every one. Without this, a
+     * predicate that always returned true would pass seven refusal tests for ever.
+     */
+    @Test
+    fun `the give-up check can see each kind of deletion`() {
+        val gaveUp = listOf("plaintextTableCounts", "plaintextUserVersion", "exportToSibling", "deleteSibling")
+        assertTrue("a log with no deletion in it was reported as having one", noDestructiveCall(gaveUp))
+        // deleteSibling is deliberately NOT destructive here: the sibling is the half-built copy,
+        // and tidying it away is what a refusal is supposed to do.
+        for (destructive in listOf("deleteMain", "deleteSidecar-wal", "deleteBeside:daymark.db-journal2")) {
+            assertFalse(
+                "the give-up check is blind to \"$destructive\", so its clean report on a refusal " +
+                    "proves nothing",
+                noDestructiveCall(gaveUp + destructive),
+            )
+        }
+    }
+
     @Test
     fun `every sidecar is removed, not only the one that happened to exist`() {
         val (files, exporter) = world(DB, "$DB-wal", "$DB-shm", "$DB-journal")
@@ -262,6 +288,14 @@ class JournalEncryptionMigrationTest {
 
     // ─── Refusals: the plaintext must survive every one of them ────────────────────────────────
 
+    /**
+     * Nothing was removed: the plaintext database and both sidecars are exactly where they were.
+     *
+     * This is the property every failure path owes, including the one where the deletion IS reached
+     * and the filesystem refuses it. It says nothing about whether a delete was attempted — see
+     * [assertGaveUpBeforeDeleting] for that, and the note there for why the two were once one
+     * assertion and should not be again.
+     */
     private fun assertNothingWasDestroyed(files: FakeFiles) {
         assertEquals(
             "the original database or a sidecar was destroyed by a run that failed",
@@ -269,8 +303,28 @@ class JournalEncryptionMigrationTest {
             files.present,
         )
         assertTrue(
-            "a run that failed still destroyed something: $log",
-            destructionComesAfterVerification(log) && log.none { it == "deleteMain" },
+            "something was destroyed before the copy had been verified: $log",
+            destructionComesAfterVerification(log),
+        )
+    }
+
+    /**
+     * ...and the run never reached the deletion at all.
+     *
+     * THE TWO WERE ONE ASSERTION AND IT WAS WRONG. `assertNothingWasDestroyed` used to also require
+     * that "deleteMain" never appear in the log, which is right for the six refusals that give up
+     * before the delete step and false for the seventh, where the delete is reached and the
+     * filesystem says no. Attempting a delete that removes nothing destroys nothing; conflating the
+     * two made a correct refusal look like a violation.
+     *
+     * This half is also STRICTER than the clause it replaces, which named `deleteMain` alone and
+     * would have watched a run reach `deleteSidecar` or `deleteBeside` without comment.
+     */
+    private fun assertGaveUpBeforeDeleting(files: FakeFiles) {
+        assertNothingWasDestroyed(files)
+        assertTrue(
+            "a refusal that should have given up before the deletion reached it anyway: $log",
+            noDestructiveCall(log),
         )
     }
 
@@ -280,7 +334,7 @@ class JournalEncryptionMigrationTest {
         // One entry short. This is the failure the whole copy-verify-swap order exists for.
         exporter.siblingCounts = COUNTS + ("entries" to 411L)
         assertEquals(MigrationOutcome.Failed(MigrationStep.ROW_COUNTS), migrate(files, exporter))
-        assertNothingWasDestroyed(files)
+        assertGaveUpBeforeDeleting(files)
     }
 
     @Test
@@ -288,7 +342,7 @@ class JournalEncryptionMigrationTest {
         val (files, exporter) = world(DB, "$DB-wal", "$DB-shm")
         exporter.siblingCounts = COUNTS - "assessments"
         assertEquals(MigrationOutcome.Failed(MigrationStep.ROW_COUNTS), migrate(files, exporter))
-        assertNothingWasDestroyed(files)
+        assertGaveUpBeforeDeleting(files)
     }
 
     @Test
@@ -296,7 +350,7 @@ class JournalEncryptionMigrationTest {
         val (files, exporter) = world(DB, "$DB-wal", "$DB-shm")
         exporter.integrityOk = false
         assertEquals(MigrationOutcome.Failed(MigrationStep.INTEGRITY), migrate(files, exporter))
-        assertNothingWasDestroyed(files)
+        assertGaveUpBeforeDeleting(files)
     }
 
     @Test
@@ -306,7 +360,7 @@ class JournalEncryptionMigrationTest {
         // migrations to run, so a zero here would re-run every migration this app has ever had.
         exporter.siblingVersion = 0
         assertEquals(MigrationOutcome.Failed(MigrationStep.SCHEMA_VERSION), migrate(files, exporter))
-        assertNothingWasDestroyed(files)
+        assertGaveUpBeforeDeleting(files)
     }
 
     @Test
@@ -314,7 +368,7 @@ class JournalEncryptionMigrationTest {
         val (files, exporter) = world(DB, "$DB-wal", "$DB-shm")
         exporter.exportSucceeds = false
         assertEquals(MigrationOutcome.Failed(MigrationStep.EXPORT), migrate(files, exporter))
-        assertNothingWasDestroyed(files)
+        assertGaveUpBeforeDeleting(files)
     }
 
     @Test
@@ -322,7 +376,7 @@ class JournalEncryptionMigrationTest {
         val (files, exporter) = world(DB, "$DB-wal", "$DB-shm")
         exporter.plaintextCounts = null
         assertEquals(MigrationOutcome.Failed(MigrationStep.READ_PLAINTEXT), migrate(files, exporter))
-        assertNothingWasDestroyed(files)
+        assertGaveUpBeforeDeleting(files)
     }
 
     @Test
@@ -333,7 +387,7 @@ class JournalEncryptionMigrationTest {
         exporter.plaintextCounts = emptyMap()
         exporter.siblingCounts = emptyMap()
         assertEquals(MigrationOutcome.Failed(MigrationStep.READ_PLAINTEXT), migrate(files, exporter))
-        assertNothingWasDestroyed(files)
+        assertGaveUpBeforeDeleting(files)
     }
 
     @Test
@@ -353,7 +407,11 @@ class JournalEncryptionMigrationTest {
         val (files, exporter) = world(DB, "$DB-wal", "$DB-shm")
         files.deleteMainFails = true
         assertEquals(MigrationOutcome.Failed(MigrationStep.DELETE), migrate(files, exporter))
+        // The weaker helper on purpose: this is the one refusal that DOES reach the deletion. The
+        // delete is attempted, the filesystem says no, and nothing is removed — which is what
+        // "destroys nothing" means here.
         assertNothingWasDestroyed(files)
+        assertTrue("the delete was never attempted at all", log.contains("deleteMain"))
         assertTrue("the swap went ahead over a database that was still there", log.none { it == "rename" })
     }
 
