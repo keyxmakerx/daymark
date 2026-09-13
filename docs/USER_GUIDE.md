@@ -385,15 +385,49 @@ you picked, and re-schedules them all automatically after you restart your phone
 
 ---
 
+## Your entries on this device
+
+Daymark encrypts your journal on your phone. It does this for everyone, from the
+first time you open the app — you don't turn it on and there is nothing to
+remember. The key is made on your phone and kept in the phone's own secure
+hardware, where it can't be copied off. Someone who took a copy of Daymark's
+storage would get a file they can't read.
+
+Two things that are **not** covered, said plainly rather than left for you to
+find out:
+
+- **Photos** you attach to entries. They sit in Daymark's storage as ordinary
+  picture files.
+- **Backups, CSV files and PDF reports you make yourself.** Those are plain
+  files you asked for and put where you chose. See *Backing up & restoring*.
+
+If your phone ever loses that key — it's rare, and it happens after some
+firmware updates or a security reset — Daymark will tell you that the entries
+can't be opened and will offer to leave them alone or to start a new journal.
+It will never remove them on its own.
+
+Settings shows which of these is true on your phone, under **Your entries on
+this device**.
+
+---
+
 ## App lock (PIN + biometrics)
 
 If you'd like to keep your entries private from anyone else who picks up your
 phone, you can lock the app.
 
+**The PIN guards the screen, not the file.** It's a door in front of Daymark, and
+it's a good one. It is *not* the key your entries are encrypted with — which
+means **forgetting your PIN does not lose your entries**; you just can't get past
+the lock screen until you remember it.
+
 **To set a PIN:**
 
 1. Go to **Settings → App lock (PIN)** and switch it on.
-2. Enter a **4–8 digit PIN** and confirm it.
+2. Enter a **6–12 digit PIN** and confirm it. Six is the shortest Daymark will
+   take, and a longer one takes longer for someone else to guess. A PIN you set
+   in an older version still works, however long it is — Daymark won't make you
+   change it.
 
 **To also unlock with biometrics:**
 
@@ -423,6 +457,8 @@ phone, you can lock the app.
 
 > **Important:** there is no "forgot PIN" reset and no backdoor — that's the
 > point of a private, offline app. See the FAQ for what to do if you forget it.
+> Your **entries are not lost** if you forget it: the PIN is not what they are
+> encrypted with. What you lose is the way past the lock screen.
 
 ---
 

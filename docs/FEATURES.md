@@ -144,10 +144,20 @@ diagnosis, and nothing leaves your device.
 - **Reminders + quick-log** — set up multiple daily reminders, each with its own time, on/off
   toggle, and optional label, managed under **Settings → Reminders**. Tapping a reminder
   notification (or its **Log now** action) opens a fresh entry straight away.
-- **App lock** — a PIN (PBKDF2, encrypted at rest, with failed-attempt lockout) plus optional
-  strong (Class 3) biometrics; contents are hidden from the recents thumbnail when locked. An
-  **auto-lock timeout** lets you re-lock immediately (default) or after 1 / 5 / 15 minutes in the
-  background.
+- **The journal is encrypted on the device** — SQLCipher behind Room, with a random 32-byte key
+  made on first run **for everybody**, PIN or not, and kept wrapped under a key held in the phone's
+  hardware keystore. Copying app-private storage off the phone yields a file that cannot be read.
+  An existing journal is migrated once, by copy-verify-swap, with `-wal` / `-shm` / `-journal`
+  verified gone afterwards. **Photos are not covered** (they are ordinary JPEGs in
+  `filesDir/entry_photos`), and exports you make are plain files by your own act. If the phone's
+  keystore ever loses the key, the app says so and offers to leave the entries alone or start a new
+  journal; it never removes them on its own.
+- **App lock** — a PIN of 6–12 digits (PBKDF2 hash, itself encrypted at rest, with failed-attempt
+  lockout) plus optional strong (Class 3) biometrics; contents are hidden from the recents
+  thumbnail when locked. An **auto-lock timeout** lets you re-lock immediately (default) or after
+  1 / 5 / 15 minutes in the background. The PIN guards the SCREEN: it is not what the journal is
+  encrypted with, so forgetting it costs the way in, not the entries. PINs set by older versions
+  keep working at whatever length they are.
 - **Backup & export** — JSON export/import (replace **or** merge, with entry photos embedded as
   base64 in a single portable file), CSV export of entries, and a printable PDF report.
 - **Home-screen widget** — tap a mood to log it in one step.

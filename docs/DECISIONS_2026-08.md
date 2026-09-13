@@ -345,6 +345,90 @@ Recorded so they do not get re-proposed as obvious wins.
 | **Any signal that makes the arbiter ask *more*** | See D1a. The response function is monotonic and one-directional by design, so the component cannot be retuned into an engagement optimiser. |
 
 ---
+---
+
+## D7. The journal is encrypted at rest, with the key held by the phone
+
+**Decision.** A random 32-byte data key encrypts the Room database **from first run, for everybody**,
+whether or not they ever set a PIN. It is kept wrapped under a key generated in the phone's hardware
+keystore, so the database file is bound to the device. Nothing is asked of the person: no PIN, no
+code to write down, nothing that can be forgotten.
+
+**Why the key is not made from the PIN.** Two reasons, and the second is the one that decides it.
+Changing a PIN would mean re-encrypting a year of somebody's journal at the moment they are standing
+in a settings screen, with a half-converted file on disk if the battery runs out. And a forgotten PIN
+would mean the entries are gone, permanently, with nothing anybody could do — a person in distress
+forgetting six digits and losing a year of their journal is a harm the product would be *creating*.
+So there is one key, made once and never derived from anything, and what changes is the small set of
+wrapped copies of it.
+
+**Why the migration is copy-verify-swap.** The plaintext database is the only copy of somebody's
+journal: `android:allowBackup="false"` means the OS has not kept one either. So the sequence is
+export into a new file, verify every table's row count and the schema version and SQLite's own
+integrity check, and only then delete anything. A failure before the delete leaves the original
+untouched and retries next launch. A crash in the one window between the delete and the rename is not
+guarded against but *recovered*: it is the only way for the database to be absent while the encrypted
+copy is present, so the next launch recognises it and finishes the rename.
+
+**Why the final check lists the directory.** `-wal`, `-shm` and `-journal` hold recently written rows
+in the clear. Deleting three known suffixes and then confirming those three suffixes are gone asks
+the same list twice and would agree with itself; the check reads the directory instead.
+
+### What was rejected
+
+| Rejected | Why |
+|---|---|
+| **Keying SQLCipher from the PIN** | A forgotten PIN becomes lost data, and changing a PIN becomes re-encrypting the whole journal. |
+| **Encrypting only once a PIN is set** | Forces a migration at an arbitrary moment in the person's hands, and leaves everybody who never sets a PIN with a plaintext file — which is most people. |
+| **A recovery path through a server or an email** | The product's central claim is that nobody else can read this. An escrow that can restore a journal is an escrow that can read one. |
+| **`setUserAuthenticationRequired(true)` on the keystore key** | Ties the key to the phone's screen lock. Changing or removing that lock invalidates it on most devices and the journal can then never be opened — caused by an unrelated settings change nobody would connect to this app. |
+| **`setIsStrongBoxBacked(true)`** | Throws on every device without a StrongBox chip, which is most of them. The TEE-backed key is not weaker against the threat that matters here, which is an image of the storage. |
+| **Refusing to open when a migration fails** | The original file is intact at that point. Stopping somebody's journal over a problem that recovers itself is a worse outcome than a launch that is still plaintext. |
+
+### Built, and what it does not cover
+
+Shipped: the data key, the keystore wrap, SQLCipher behind Room, the copy-verify-swap migration, and
+the two screens for a phone whose keystore has lost the key — which say what cannot be done, offer
+leaving the entries alone first, and destroy something only if a person chooses to.
+
+**Photos are not covered.** Entry photos are ordinary JPEGs in `filesDir/entry_photos` and nothing in
+this work touched them. The settings copy says so in the same breath as the claim.
+
+**Exports are not covered and are deliberately out of the claim.** A backup, a CSV or a PDF is a
+plain file the person asked for and put where they chose.
+
+### Open — and this one belongs to the maintainer
+
+Issue #109 also specifies a **PIN wrap** and a **written-down recovery code**: setting a PIN of six
+or more digits would wrap the data key under a key derived from it, wrap it again under a 21-symbol
+recovery code shown once, and **remove the keystore wrap** — after which the journal genuinely cannot
+be opened without one of the two. Both wraps and the recovery code are built and tested
+(`security/DataKeyWraps.kt`, `security/RecoveryCode.kt`). Neither is armed, because arming them costs
+something the issue does not mention:
+
+> **A journal that will not open without a PIN is a journal the reminder alarms cannot read.**
+> `BootReceiver` re-arms every reminder from the database after a restart and `ReminderReceiver` reads
+> the reminder's row when its alarm fires — both from a cold process, with nobody having typed
+> anything. Daily reminders would quietly stop for everybody who sets a PIN, until they next opened
+> the app. On a mental-health tool that is a real loss for a real person.
+
+Three ways forward, none of them chosen here:
+
+1. **Arm it as specified and accept it.** A PIN means a locked journal, and reminders resume when the
+   app is opened. Simplest, and it makes the issue's copy under A true as written.
+2. **Keep the reminder schedule outside the journal** — in the keystore-backed preference store the
+   PIN hash already lives in — so alarms survive a locked journal. Costs a second copy of that state,
+   and means reminder times are readable without the PIN, which is a smaller disclosure than the
+   journal but is still one.
+3. **Leave it as it is.** The file is encrypted and device-bound for everybody, which is most of the
+   value; the PIN keeps guarding the screen; a lost PIN never costs anybody their entries.
+
+Also open, and smaller: the PIN wrap's work factor (420,000 PBKDF2 iterations) **has never been timed
+on a phone** — nothing in this project's CI runs on a device — so it is a starting point to measure
+and tune, not a settled number. Raising it later is safe: every wrap carries the count it was made
+with.
+
+---
 
 ## Open
 

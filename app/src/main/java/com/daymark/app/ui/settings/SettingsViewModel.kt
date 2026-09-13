@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.daymark.app.backup.BackupManager
+import com.daymark.app.data.JournalEncryptionGate
+import com.daymark.app.data.JournalFileState
 import com.daymark.app.data.SettingsRepository
 import com.daymark.app.export.PdfExportOptions
 import com.daymark.app.export.PdfReportGenerator
@@ -32,6 +34,15 @@ data class SettingsUiState(
     val biometricEnabled: Boolean = false,
     val autoLockTimeoutMinutes: Int = 0,
     val dynamicColor: Boolean = true,
+    /**
+     * Whether the journal file on THIS phone is actually encrypted.
+     *
+     * Read off the gate rather than assumed, because a migration that has not succeeded leaves the
+     * file plaintext and the app carries on working — so the sentence in Settings would otherwise be
+     * a claim the app would like to make rather than the truth about this device. Defaults to false:
+     * a screen that has not been told anything says the weaker thing, never the stronger.
+     */
+    val entriesEncrypted: Boolean = false,
 )
 
 @HiltViewModel
@@ -44,6 +55,7 @@ class SettingsViewModel @Inject constructor(
     private val reportDataBuilder: ReportDataBuilder,
     private val pdfReportGenerator: PdfReportGenerator,
     private val autoLock: AutoLockController,
+    private val journalEncryption: JournalEncryptionGate,
 ) : ViewModel() {
 
     /** Call right before opening a file picker so returning doesn't trigger the app lock. */
@@ -69,6 +81,10 @@ class SettingsViewModel @Inject constructor(
         biometricEnabled = settings.biometricEnabled,
         autoLockTimeoutMinutes = settings.autoLockTimeoutMinutes,
         dynamicColor = settings.dynamicColor,
+        // `settled`, not `prepare()`. This runs on the main thread while a settings screen is being
+        // built, and prepare() can copy a database. By the time anybody reaches Settings the answer
+        // is already cached; if it somehow is not, the screen says the weaker thing.
+        entriesEncrypted = journalEncryption.settled == JournalFileState.ENCRYPTED,
     )
 
     private fun refresh() = _uiState.update {
@@ -76,10 +92,16 @@ class SettingsViewModel @Inject constructor(
     }
 
     // --- App lock ---
-    fun setPin(pin: String) {
-        pinManager.setPin(pin)
+    /**
+     * Returns false, and changes nothing at all, for a PIN `PinPolicy` does not accept. The dialog
+     * disables its own button too; this is the backstop, so the rule cannot be bypassed by a screen
+     * that forgets it.
+     */
+    fun setPin(pin: String): Boolean {
+        if (!pinManager.setChosenPin(pin)) return false
         settings.lockEnabled = true
         refresh()
+        return true
     }
 
     fun disableLock() {

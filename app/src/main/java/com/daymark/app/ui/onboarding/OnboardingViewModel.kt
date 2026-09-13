@@ -22,9 +22,11 @@ class OnboardingViewModel @Inject constructor(
         viewModelScope.launch { reminderRepository.add(hour, minute) }
     }
 
-    fun setPin(pin: String) {
-        pinManager.setPin(pin)
+    /** False, changing nothing, for a PIN `PinPolicy` does not accept. See SettingsViewModel. */
+    fun setPin(pin: String): Boolean {
+        if (!pinManager.setChosenPin(pin)) return false
         settings.lockEnabled = true
+        return true
     }
 
     fun complete() {

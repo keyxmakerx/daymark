@@ -25,6 +25,10 @@ class BootReceiver : BroadcastReceiver() {
         scope.launch {
             try {
                 repository.rescheduleAll()
+            } catch (_: RuntimeException) {
+                // Same reason as ReminderReceiver: a journal this phone can no longer open must
+                // not crash a boot receiver. The reminders are re-armed when the app is next
+                // opened, which is also when the person is told what happened.
             } finally {
                 pending.finish()
             }

@@ -116,55 +116,74 @@ fun SettingsScreen(
         Divider()
         SectionHeader("Privacy")
         /*
-         * WHY THIS ROW SAYS MORE THAN "On".
+         * WHAT THESE TWO ROWS SAY, AND WHY EACH SENTENCE IS THE ONE IT IS.
          *
-         * The lock is real, and the one word underneath it was never false. A PIN set here is
-         * verified against a PBKDF2-SHA256 hash with a per-PIN random salt, held in an AES-256
-         * EncryptedSharedPreferences store and compared in constant time (PinManager). What it is
-         * not is a key. PinManager VERIFIES a PIN; it does not DERIVE anything from one. The Room
-         * database holding the journal, the assessments, the safety plan and the thought records
-         * is opened in AppModule with no openHelperFactory and no SQLCipher behind it, so those
-         * entries sit in a plaintext SQLite file in app-private storage. The lock is a door in
-         * front of the UI, not a lock on the data.
+         * For most of this app's life the lock row said "On", and the journal was a plaintext
+         * SQLite file. Both facts were true at once and nobody reading the first would have guessed
+         * the second — a person reading "app lock" on a mental-health journal infers that their
+         * entries are locked, and they were not. That gap was this app's largest undisclosed
+         * weakness, and it was closed in two steps: first by saying it out loud here, then by
+         * removing it.
          *
-         * "App lock (PIN)" over "On" states that accurately and still misleads, because a person
-         * reading the words "app lock" on a mental-health journal infers a stronger claim than the
-         * one being made. Nobody decided to hide the difference — it was simply never written
-         * down anywhere a user would look, which is how the gap between the inference and the
-         * truth became this app's largest undisclosed weakness. So it is said here, at the moment
-         * the setting is switched on and the inference is being formed, rather than in a document
-         * nobody opens.
+         * WHAT IS TRUE NOW. The database is encrypted with a random 32-byte key, made on first run
+         * for everybody, kept wrapped under a key that lives in the phone's hardware keystore and
+         * cannot be copied off the device (DataKeyStore, KeystoreAead). Room opens it through
+         * SQLCipher. An image of app-private storage therefore contains an encrypted journal and a
+         * wrap nothing in the image can open.
          *
-         * WHY THE SECOND SENTENCE MATTERS AS MUCH AS THE FIRST. Disclosure that names only the
-         * hole is its own kind of dishonesty: it invites someone to conclude their journal is
-         * lying around in the open, and it is not. The manifest sets android:allowBackup="false",
-         * which closes the ADB and cloud-backup route off the device, and Android's file-based
-         * encryption plus app sandboxing protect app-private storage on a healthy device with a
-         * locked bootloader. Root, an unlocked bootloader, a forensic extraction or a privileged
-         * malicious app defeat all of it, and against those the app lock is decorative. Both
-         * halves therefore have to be present, and in the register the rest of this app uses:
-         * flat, factual, no warning banner and no alarm. Someone reading their own settings late
-         * at night should come away better informed and no more frightened than when they
-         * started.
+         * WHY THE FIRST ROW IS CONDITIONAL. A person whose migration has not succeeded — or whose
+         * device would not hold a key at all — still has a plaintext file, and the app still works,
+         * because refusing to open would cost them their journal over a problem that recovers
+         * itself. For them the encrypted sentence would be false, so it is not shown. The state is
+         * read off JournalEncryptionGate rather than assumed; see SettingsUiState.entriesEncrypted.
          *
-         * This is the disclosure, not the fix. The fix is keying the database from the PIN or the
-         * sync passphrase, and it carries a real product decision inside it — a forgotten PIN
-         * would become lost data — so it wants its own design pass rather than being wedged in
-         * behind a settings toggle. Until that lands, this sentence is what stands between a
-         * reasonable inference and the truth, so do not quietly shorten it back to "On".
+         * WHY THE PHOTOS CLAUSE IS THERE AND WHY IT IS NOT AN APOLOGY. Entry photos are ordinary
+         * JPEGs in filesDir/entry_photos (PhotoStore) and nothing in this work touched them. Saying
+         * "encrypted" over a journal whose pictures are sitting in the open would be exactly the
+         * inference this row exists to stop, so the exception is named in the same breath as the
+         * claim — one clause, flat, no warning, no promise about when.
+         *
+         * WHAT IS DELIBERATELY NOT SAID. Nothing about exports. A backup, a CSV or a PDF is a plain
+         * file the person asked for and put where they chose; folding it into a sentence about what
+         * the app does to its own storage would either overclaim or turn a settings row into a
+         * lecture. The export rows say it where it belongs.
+         *
+         * WHY THE PIN ROW NO LONGER CLAIMS ANYTHING ABOUT THE FILE. It says what the PIN does — it
+         * guards the screen — and then the thing a person actually needs to know, which is that
+         * forgetting it does not lose their entries. The key is held by the phone, not made from
+         * the PIN.
+         *
+         * WHAT COMES NEXT, AND WHAT THIS ROW WILL HAVE TO SAY THEN. Issue #109 also specifies a PIN
+         * wrap and a written-down recovery code, at which point the key stops being available to the
+         * app without the person, and the copy becomes the issue's wording under A: "Your entries
+         * are locked with a key made from this PIN... If you forget the PIN, only your recovery code
+         * opens them." That sentence is FALSE TODAY and must not be written here until the wrap it
+         * describes is actually armed — and arming it is a decision about reminders and lost PINs
+         * that belongs to the maintainer, not to whoever next edits this file. Rewrite these
+         * sentences when that lands; do not quietly shorten either of them back to "On".
          */
+        ListItem(
+            headlineContent = { Text("Your entries on this device") },
+            supportingContent = {
+                Text(
+                    if (state.entriesEncrypted) {
+                        "Encrypted with a key only this phone holds, so copying its storage does " +
+                            "not read them. Photos attached to entries are not covered."
+                    } else {
+                        // The honest sentence for a device where the migration has not succeeded,
+                        // or where the keystore would not hold a key. The app works; the claim
+                        // above would be false, so it is not made.
+                        "Not encrypted on this device. Daymark tries again each time you open it."
+                    },
+                )
+            },
+        )
         ListItem(
             headlineContent = { Text("App lock (PIN)") },
             supportingContent = {
                 Text(
-                    if (state.lockEnabled) {
-                        "On. Keeps someone who picks up your unlocked phone out of the app. " +
-                            "It does not encrypt your entries on this device, so it is not " +
-                            "protection against someone with full access to the phone itself; " +
-                            "Android's own storage encryption still applies."
-                    } else {
-                        "Off"
-                    },
+                    "The PIN guards the screen. It is not what your entries are encrypted with, " +
+                        "so forgetting it does not lose them.",
                 )
             },
             trailingContent = {
@@ -333,27 +352,39 @@ fun SettingsScreen(
     }
 }
 
+/**
+ * The two length rules in this dialog used to be the literal `3..8`, written out here and again in
+ * the onboarding step, connected to nothing. Both are now [com.daymark.app.security.PinPolicy], and
+ * `PinManager.setChosenPin` refuses anything the policy rejects — so this dialog is a courtesy to
+ * the person, not the enforcement.
+ */
 @Composable
 private fun PinDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var pin by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
-    val valid = pin.length in 3..8 && pin == confirm
+    val valid = com.daymark.app.security.PinPolicy.accepts(pin) && pin == confirm
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Set a PIN") },
         text = {
             Column {
+                Text(
+                    com.daymark.app.security.PinPolicy.HELP,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 OutlinedTextField(
                     value = pin,
-                    onValueChange = { if (it.all(Char::isDigit) && it.length <= 8) pin = it },
-                    label = { Text("PIN (3–8 digits, 4 recommended)") },
+                    onValueChange = { if (com.daymark.app.security.PinPolicy.stillTypeable(it)) pin = it },
+                    label = { Text(com.daymark.app.security.PinPolicy.LABEL) },
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    modifier = Modifier.padding(top = 8.dp),
                 )
                 OutlinedTextField(
                     value = confirm,
-                    onValueChange = { if (it.all(Char::isDigit) && it.length <= 8) confirm = it },
+                    onValueChange = { if (com.daymark.app.security.PinPolicy.stillTypeable(it)) confirm = it },
                     label = { Text("Confirm PIN") },
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
