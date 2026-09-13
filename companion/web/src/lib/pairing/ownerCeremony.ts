@@ -22,6 +22,9 @@ import type { InviteResponse } from '../sync/portal'
 import { newPairingCode, type PairingCode } from './pairingCode'
 import type { OwnerPairingState } from './relay'
 import type { TherapistOffer } from './payloads'
+import type { OfferCheck } from '../owner/therapistKeys'
+import type { PinWrite } from '../therapist/pinStore'
+import { OWNER_COPY } from './copy'
 import {
   forgetOwnerRun,
   loadOwnerRun,
@@ -61,13 +64,42 @@ export interface OwnerCeremonyPorts {
     | { state: 'superseded' }
     | { state: 'complete'; isk: Uint8Array; offer: TherapistOffer | null }
   >
-  approveRun(exchangeId: string, enrolTicketB64: string): Promise<void>
+  approveRun(exchangeId: string, enrolTicketB64: string, envB64: string): Promise<void>
   cancelRun(exchangeId: string): Promise<boolean>
   reportInvite(inviteId: string): Promise<void>
-  /** Pin the therapist's keys from the offer. Returns what the pin record did, or refuses. */
-  pinOffer(offer: TherapistOffer): 'pinned-now' | 'already-pinned' | 'differs-from-pin' | 'unreadable'
+  /**
+   * Read the offer's keys against this console's record. WRITES NOTHING — the screen has to be
+   * able to say what approving would do before anybody approves, and a check that recorded as it
+   * looked would have made the telling pointless.
+   */
+  inspectOffer(offer: TherapistOffer): OfferCheck
+  /** Record the offer's keys. Insert-only: a supersession is a new row beside the old, never over. */
+  pinOffer(offer: TherapistOffer): PinWrite | 'unreadable'
+  /**
+   * Seal E2 — the owner's own public keys — under this run's key, for the clinician to open.
+   *
+   * A port rather than a call into relay.ts because what this module owns is the ORDER (pin, seal,
+   * forward) and because the two things the sealing needs are held elsewhere: the run's derived key
+   * lives in relay.ts's in-memory state, and the owner's identity lives in the unlocked console
+   * session. Throwing is the honest failure — a run with no key derived yet has nothing to seal
+   * with — and the order below makes a throw mean nothing was approved.
+   *
+   * EVERY approval seals it, the re-key included. A clinician coming back with new keys is
+   * enrolling afresh, and the identity they must be able to verify is the same one — the owner's
+   * is derived, not generated (owner/identity.ts), so a replacement pairing proves exactly the
+   * keys the first one did. An approval path that skipped this would quietly re-create the gap
+   * issue #101 closed, for precisely the person being re-verified.
+   */
+  sealOwnerKeys(run: OwnerPairingState): string
   /** A fresh code. A port so a test can pin one; the real one is newPairingCode. */
   freshCode(): Promise<PairingCode>
+  /**
+   * The owner's own name for this relationship, for the sentences that name a person.
+   *
+   * NOT the offer's `displayName`, ever. That one is typed by whoever answered, so using it in
+   * "replace the keys held for X" would let the party being checked choose the words of the check.
+   */
+  displayName: string
   storage: OwnerRunStorage | null
   now(): number
 }
@@ -92,10 +124,16 @@ export type OwnerCeremony =
   | { phase: 'resumed'; invite: InviteResponse; run: OwnerPairingState; attemptsLeft: number; failCount: number }
   /** Someone answered, and what they sealed did not open. No diagnosis exists; the person decides. */
   | { phase: 'mismatch'; invite: InviteResponse; run: OwnerPairingState; attemptsLeft: number; failCount: number }
-  /** The offer opened. This is the moment the read-aloud used to be. */
-  | { phase: 'answered'; invite: InviteResponse; run: OwnerPairingState; offer: TherapistOffer; failCount: number }
+  /**
+   * The offer opened. This is the moment the read-aloud used to be.
+   *
+   * `keys` is what approving WOULD do to the record, worked out before anything is written, so the
+   * screen can say it first. A 'supersedes' here is an approvable state with its own words, not a
+   * refusal — see owner/therapistKeys.ts, checkOffer, for why the code is authority enough.
+   */
+  | { phase: 'answered'; invite: InviteResponse; run: OwnerPairingState; offer: TherapistOffer; keys: OfferCheck; failCount: number }
   /** Approved; the ticket is with the server and the therapist has still to finish. */
-  | { phase: 'approved'; invite: InviteResponse; run: OwnerPairingState; offer: TherapistOffer; pin: 'pinned-now' | 'already-pinned' }
+  | { phase: 'approved'; invite: InviteResponse; run: OwnerPairingState; offer: TherapistOffer; pin: PinWrite; replaced: boolean }
   /** The owner cancelled, or opened a newer run, or the invitation died. Terminal for this run. */
   | { phase: 'ended'; invite: InviteResponse; reason: 'cancelled' | 'superseded' | 'expired' | 'reported' | 'capped' }
 
@@ -153,6 +191,13 @@ export async function openRun(ports: OwnerCeremonyPorts, state: OwnerCeremony): 
  * The failure of the envelope is NOT an error here: it returns the mismatch phase, and the screen
  * renders a question. An error would be this module claiming to know which of a typo and a stranger
  * it was looking at, which is precisely the thing the design refuses to guess.
+ *
+ * AND THE CADENCE DOES NOT CHANGE AFTER ONE (issue #112). A device that starts asking more often
+ * once a reply failed to open has told the server, in traffic, that the code was wrong — and the
+ * server is the one party the pairing design refuses to tell. So this function does exactly one
+ * read per call whatever state it is called from, schedules nothing, and returns a mismatch state
+ * carrying no interval, no backoff and no deadline for anything to read. There is no timer in this
+ * module at all: every check is a person clicking, before a failure and after it alike.
  */
 export async function checkForReply(ports: OwnerCeremonyPorts, state: OwnerCeremony): Promise<OwnerCeremony> {
   if (state.phase !== 'waiting' && state.phase !== 'resumed' && state.phase !== 'mismatch') {
@@ -172,32 +217,74 @@ export async function checkForReply(ports: OwnerCeremonyPorts, state: OwnerCerem
   // The run is answered either way; keep the persisted copy so the pin it carries survives a reload.
   saveOwnerRun(ports.storage, ownerRunFromState(run.inviteId, run, ports.now()))
   if (!read.offer) return { phase: 'mismatch', invite, run, attemptsLeft, failCount }
-  return { phase: 'answered', invite, run, offer: read.offer, failCount }
+  // Read the keys against the record HERE, where nothing has been written and nothing forwarded, so
+  // the answered screen can state what approving would do before it is an option.
+  return { phase: 'answered', invite, run, offer: read.offer, keys: ports.inspectOffer(read.offer), failCount }
 }
 
 /**
- * Approve: pin the keys, then forward the ticket. In that order, and the order is the point.
+ * Approve: record the keys, seal the owner's own keys back, then forward both. In that order, and
+ * the order is the point.
  *
- * Pinning is local and reversible by the owner; forwarding the ticket is neither, because it puts
- * the invitation into REDEEMING and lets a person enrol. If pinning refuses — this console already
- * holds a different key for them, which is the substitution the pin record exists to make visible —
- * nothing is forwarded and the ceremony stays where it was. The reverse order would have approved
- * an enrolment the console then declined to record keys for.
+ * Recording is local and reversible by the owner; forwarding the ticket is neither, because it puts
+ * the invitation into REDEEMING and lets a person enrol. If the record refuses, nothing is forwarded
+ * and the ceremony stays where it was. The reverse order would have approved an enrolment the
+ * console then declined to record keys for.
+ *
+ * KEYS THAT DIFFER FROM THE ONES ON FILE ARE APPROVABLE (issue #111), which is the change from the
+ * version of this function that refused them. The argument is owner/therapistKeys.ts's, in
+ * checkOffer's header, and rests on two facts that are not this module's to assume: that the old
+ * invitation is spent by the time a second one can be answered (the server's PENDING gate), and
+ * that replacing a key reaches nothing already sealed. The screen states the second one before the
+ * button; this function's part is to refuse the one case that IS ambiguous — keys already recorded
+ * for a different person — and to leave everything else to the person who typed the code.
+ *
+ * SEALING SITS BETWEEN THE RECORD AND THE REQUEST, for the same reason the record does (issue
+ * #101). E2 is how the clinician comes to hold the owner's keys on the code's authority instead of
+ * on a base64 string somebody pasted, so an approval that could not produce it would enrol a
+ * clinician who can verify nothing the owner later signs. A failure here leaves the invitation
+ * exactly where it was, with a fresh code as the remedy.
+ *
+ * A RE-KEY IS SEALED LIKE ANY OTHER APPROVAL, and there is no branch here that could omit it. The
+ * two changes meet on exactly this line: #111 says a clinician may come back with new keys, and
+ * #101 says every clinician leaves with the owner's — so the person being re-verified is the last
+ * one who should be sent away unable to verify back. The owner's identity is derived rather than
+ * generated (owner/identity.ts), so what the replacement pairing proves is the same identity the
+ * first one did; nothing about their side changing changes the owner's.
  */
 export async function approve(ports: OwnerCeremonyPorts, state: OwnerCeremony): Promise<OwnerCeremony> {
   if (state.phase !== 'answered') throw new CeremonyError('there is no answered pairing run to approve')
-  const pin = ports.pinOffer(state.offer)
-  if (pin === 'differs-from-pin') {
-    throw new CeremonyError(
-      'This console already has different keys recorded for them. Nothing was approved. Reach them on a channel that is not this server before going further.',
-    )
+  if (state.keys.kind === 'other-person') {
+    throw new CeremonyError(OWNER_COPY.sameKeysAsOther(ports.displayName, state.keys.displayName))
   }
+  if (state.keys.kind === 'unreadable') {
+    throw new CeremonyError('The keys in that reply could not be read. Nothing was approved; give them a new code.')
+  }
+  const pin = ports.pinOffer(state.offer)
   if (pin === 'unreadable') {
     throw new CeremonyError('The keys in that reply could not be read. Nothing was approved; give them a new code.')
   }
-  await ports.approveRun(state.run.exchangeId, state.offer.enrolTicketB64)
+  let envB64: string
+  try {
+    envB64 = ports.sealOwnerKeys(state.run)
+  } catch {
+    throw new CeremonyError(
+      'Your own keys could not be sealed for them, so nothing was approved and they cannot enrol yet. Unlock this console again and give them a new code.',
+    )
+  }
+  await ports.approveRun(state.run.exchangeId, state.offer.enrolTicketB64, envB64)
   forgetOwnerRun(ports.storage)
-  return { phase: 'approved', invite: state.invite, run: state.run, offer: state.offer, pin }
+  // `replaced` comes from the check made BEFORE the write, not from what the write returned: a
+  // clinician who re-keyed completely is a brand-new identity to the pin record ('pinned-now')
+  // while being, to the owner, the same person whose keys have just changed.
+  return {
+    phase: 'approved',
+    invite: state.invite,
+    run: state.run,
+    offer: state.offer,
+    pin,
+    replaced: state.keys.kind === 'supersedes',
+  }
 }
 
 /**
@@ -212,6 +299,23 @@ export async function newCode(ports: OwnerCeremonyPorts, state: OwnerCeremony): 
   await ports.cancelRun(state.run.exchangeId)
   forgetOwnerRun(ports.storage)
   return openRun(ports, { phase: 'invited', invite: state.invite, attemptsLeft: state.attemptsLeft, failCount: state.failCount })
+}
+
+/**
+ * Keep the invitation after a reply did not open (issue #112). The dismissal beside "stop it".
+ *
+ * IT TOUCHES NOTHING. No cancel, no report, no new run, no request of any kind — it moves this tab
+ * back to the invitation screen and that is all. That is the whole point of offering it: a reply
+ * that did not open is not something to act on until a person has asked the other person whether
+ * they answered, and every act available here spends something a person might want back.
+ *
+ * The stale run is left where it is rather than cancelled. Opening the next run retires it server-
+ * side anyway, and cancelling here would write a `pairing.cancelled` line into the owner's log for
+ * a decision they have explicitly not made yet.
+ */
+export function keepInvitation(state: OwnerCeremony): OwnerCeremony {
+  if (state.phase !== 'mismatch') throw new CeremonyError('there is no unopened reply to put aside')
+  return { phase: 'invited', invite: state.invite, attemptsLeft: state.attemptsLeft, failCount: state.failCount }
 }
 
 /**

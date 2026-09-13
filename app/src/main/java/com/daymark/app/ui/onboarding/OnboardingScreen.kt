@@ -235,7 +235,9 @@ private fun ReminderStep(onEnable: (Int, Int) -> Unit, onSkip: () -> Unit) {
 private fun LockStep(onSetPin: (String) -> Unit, onSkip: () -> Unit) {
     var pin by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
-    val valid = pin.length in 3..8 && pin == confirm
+    // The literal `3..8` used to live here and again in the settings dialog, connected to nothing.
+    // Both are now PinPolicy, and PinManager.setChosenPin refuses what it rejects.
+    val valid = com.daymark.app.security.PinPolicy.accepts(pin) && pin == confirm
 
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Text("Lock your journal", style = MaterialTheme.typography.headlineSmall)
@@ -245,11 +247,17 @@ private fun LockStep(onSetPin: (String) -> Unit, onSkip: () -> Unit) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Spacer(8.dp)
+        Text(
+            com.daymark.app.security.PinPolicy.HELP,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Spacer(16.dp)
         OutlinedTextField(
             value = pin,
-            onValueChange = { if (it.all(Char::isDigit) && it.length <= 8) pin = it },
-            label = { Text("PIN (3–8 digits, 4 recommended)") },
+            onValueChange = { if (com.daymark.app.security.PinPolicy.stillTypeable(it)) pin = it },
+            label = { Text(com.daymark.app.security.PinPolicy.LABEL) },
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
             modifier = Modifier.fillMaxWidth(),
@@ -257,7 +265,7 @@ private fun LockStep(onSetPin: (String) -> Unit, onSkip: () -> Unit) {
         Spacer(8.dp)
         OutlinedTextField(
             value = confirm,
-            onValueChange = { if (it.all(Char::isDigit) && it.length <= 8) confirm = it },
+            onValueChange = { if (com.daymark.app.security.PinPolicy.stillTypeable(it)) confirm = it },
             label = { Text("Confirm PIN") },
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),

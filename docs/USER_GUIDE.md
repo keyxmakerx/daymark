@@ -53,8 +53,9 @@ Home is the daily loop, not an archive. Top to bottom:
 
 - **A greeting and today's date.**
 - **The check-in row** — *"How are you, right now?"* Tap a face to log in one tap.
-- **A glance** — your current streak, and the last seven days as seven small bars
-  (an unlogged day shows as a faint stub; a week is allowed to have holes in it).
+- **A glance** — how many entries you've written, and the last seven days as seven
+  small bars (an unlogged day shows as a faint stub; a week is allowed to have holes
+  in it). Home doesn't keep a count of how recently you've been here.
 - **One suggestion**, at most — the rest are under **More for you**, along with
   your *"on this day"* memories. Every card can be dismissed.
 - **Today** — the entries you've logged today.
@@ -212,8 +213,9 @@ Days with no entry simply stay blank.
 The **Stats** tab turns your entries into a few friendly summaries:
 
 - **Average mood** — your overall mood score.
-- **Current streak** and **Longest streak** — how many days in a row you've
-  logged.
+- **Days with an entry** — e.g. *12 of the last 30*. The days don't have to be in
+  a row, so missing one costs you that day and nothing else. If there are none in
+  the last thirty days, the card simply isn't there.
 - **Mood over the last 30 days** — a trend line of how things have been going.
 - **Mood distribution** — how often each mood level shows up.
 - **Average mood by activity** — which activities tend to accompany your better
@@ -340,12 +342,6 @@ a card on Home; nothing in the app decides from your mood that you need it.
 
 Everything stays on your phone and is included in your backups.
 
-### Achievements
-
-**More → Achievements** marks gentle milestones for showing up — your first
-entry, entry counts, longest streaks, activity variety, and your first check-in.
-There's no streak-shaming, and once a badge is earned it stays earned.
-
 ---
 
 ## Breathing pacer presets
@@ -389,15 +385,49 @@ you picked, and re-schedules them all automatically after you restart your phone
 
 ---
 
+## Your entries on this device
+
+Daymark encrypts your journal on your phone. It does this for everyone, from the
+first time you open the app — you don't turn it on and there is nothing to
+remember. The key is made on your phone and kept in the phone's own secure
+hardware, where it can't be copied off. Someone who took a copy of Daymark's
+storage would get a file they can't read.
+
+Two things that are **not** covered, said plainly rather than left for you to
+find out:
+
+- **Photos** you attach to entries. They sit in Daymark's storage as ordinary
+  picture files.
+- **Backups, CSV files and PDF reports you make yourself.** Those are plain
+  files you asked for and put where you chose. See *Backing up & restoring*.
+
+If your phone ever loses that key — it's rare, and it happens after some
+firmware updates or a security reset — Daymark will tell you that the entries
+can't be opened and will offer to leave them alone or to start a new journal.
+It will never remove them on its own.
+
+Settings shows which of these is true on your phone, under **Your entries on
+this device**.
+
+---
+
 ## App lock (PIN + biometrics)
 
 If you'd like to keep your entries private from anyone else who picks up your
 phone, you can lock the app.
 
+**The PIN guards the screen, not the file.** It's a door in front of Daymark, and
+it's a good one. It is *not* the key your entries are encrypted with — which
+means **forgetting your PIN does not lose your entries**; you just can't get past
+the lock screen until you remember it.
+
 **To set a PIN:**
 
 1. Go to **Settings → App lock (PIN)** and switch it on.
-2. Enter a **4–8 digit PIN** and confirm it.
+2. Enter a **6–12 digit PIN** and confirm it. Six is the shortest Daymark will
+   take, and a longer one takes longer for someone else to guess. A PIN you set
+   in an older version still works, however long it is — Daymark won't make you
+   change it.
 
 **To also unlock with biometrics:**
 
@@ -427,6 +457,8 @@ phone, you can lock the app.
 
 > **Important:** there is no "forgot PIN" reset and no backdoor — that's the
 > point of a private, offline app. See the FAQ for what to do if you forget it.
+> Your **entries are not lost** if you forget it: the PIN is not what they are
+> encrypted with. What you lose is the way past the lock screen.
 
 ---
 
@@ -443,9 +475,9 @@ backup file goes using your phone's file picker.
 
 This writes a single JSON file containing **everything** — moods, notes,
 activities, journal entries, goals (including any "when X, I will Y" plan),
-your reminders, **check-in scores**, **achievements**, **thought records**,
-movement and other tracker logs, and any **photos** you've attached (embedded in
-the file, so it stays one portable backup).
+your reminders, **check-in scores**, **thought records**, movement and other
+tracker logs, and any **photos** you've attached (embedded in the file, so it
+stays one portable backup).
 
 ### Restore a backup (Replace vs. Merge)
 

@@ -52,6 +52,21 @@ interface AttemptBudget {
 
     /** Clears a source's budget — called on success, so legitimate use is never penalised. */
     fun reset(source: String)
+
+    /**
+     * Milliseconds until [source] is back in budget, for the `Retry-After` on a refusal.
+     *
+     * It exists so a refusal can name a TIME rather than a rule. The therapist's screen says
+     * "paused until {time}. Your invitation is unchanged and will still open then", and that
+     * sentence is only true — and only kind — if the number behind it is the real one; a limiter
+     * that could not say when it heals would have left the client guessing, or hard-coding the
+     * server's window, which is the same bug written on the other side of the wire.
+     *
+     * Never zero and never negative: a caller is being refused right now, so the honest answer is
+     * always at least a moment away. A source that is not over budget at all still gets a positive
+     * number rather than an exception, because "when could I retry" is a fair question at any time.
+     */
+    fun retryAfterMs(source: String): Long
 }
 
 /**
@@ -106,6 +121,12 @@ class AttemptLimiter(
     }
 
     override fun reset(source: String) = synchronized(lock) { windows.remove(source); Unit }
+
+    /** What is left of this source's window; a full window when it has none open. */
+    override fun retryAfterMs(source: String): Long = synchronized(lock) {
+        val w = windows[source] ?: return windowMs
+        return (w.startedAt + windowMs - clock()).coerceAtLeast(1L)
+    }
 
     /**
      * Drops expired windows so the map cannot grow without bound. Only runs once the map is big

@@ -34,6 +34,7 @@
 - [7. Reverse-proxy / trusted-proxy hardening](#7-reverse-proxy--trusted-proxy-hardening)
 - [8. Anti-rollback & integrity (client-anchored)](#8-anti-rollback--integrity-client-anchored)
 - [9. Audit-logging posture](#9-audit-logging-posture)
+- [9a. Closing a credential without deleting one](#9a-closing-a-credential-without-deleting-one)
 - [10. Hardening checklist (copy-paste)](#10-hardening-checklist-copy-paste)
 - [11. Out of scope / honest limits](#11-out-of-scope--honest-limits)
 - [Related documents](#related-documents)
@@ -249,7 +250,29 @@ Each adversary lists **can**, **cannot (when defenses honored)**, and **defenses
 | Signing / authorship | **Ed25519** | **Owner** signs every share bundle *and* verifies game plans. **Therapist** signs every game plan *and* signed attestations. Owner identity is a first-class pinned trust anchor, symmetric with the therapist's. |
 | Fingerprints / SAS | **BLAKE2b** over the raw pubkey | Rendered as a 4–6 word code / QR for **bidirectional** OOB verification (§5.6). |
 | Therapist key custody at rest | wrapped under **WebAuthn-PRF**-derived KUK (else Argon2id passphrase) | Private key never leaves the client; server stores only the public key + WebAuthn credential public key. **`prfSalt` is rotatable (R5).** |
-| Capability / inbox token | 256-bit CSPRNG, stored **hashed** (BLAKE2b) | Per-relationship; never logged in plaintext; **bound to the authenticated WebAuthn credential at first fetch** (§5.5). |
+| Capability / inbox token | 256-bit CSPRNG, stored **hashed** (BLAKE2b) | Per-relationship; minted by the owner console since 2026-09-12 (see below); never logged in plaintext; **bound to the authenticated WebAuthn credential at first fetch** (§5.5). |
+
+**The inbox token became a 256-bit CSPRNG value on 2026-09-12 (issue #126). Before that date the row
+above described an intention, not the code.** Nothing in this repository generated one. The only way
+a token entered the system was a text box on the owner console whose entire validation was
+"not empty", so a single character produced a perfectly valid relationship reference — while the
+server's own `Secrets.newToken()`, a real `SecureRandom`, was never called for this value at all.
+The owner console now takes 32 bytes from libsodium's CSPRNG when a clinician is added
+(`companion/web/src/lib/owner/inboxToken.ts`), shows the result once, and has no field to type one
+into: a hand-chosen token is the defect, so the generate path replaces the input rather than
+guarding it. Two consequences worth stating. The token is now 43 characters of base64url, which is
+what makes a stolen database useless — the property this design leans on and the typed path quietly
+removed. And two clinicians can no longer be given one token by accident, which used to hand them a
+shared relationship reference and each other's shares, grants, assignments and audit log; the
+console could not have shown it, because its pending id embedded the first eight characters of the
+token followed by the list index, so one token rendered as two different-looking rows.
+
+**The token has never been deliverable by the invitation, and still is not.** The mail message has no
+field for it, and the mint API is handed the digest rather than the value, so the server has never
+held a token it could put in one. "Out of band" is therefore the only channel this value has ever
+had. Until 2026-09-12 one screen said otherwise — `companion/web/src/lib/onboarding/fieldHelp.ts`
+told the clinician the token "was in the invitation", which is the sentence they read while the
+other person is on the phone asking what to send. Both consoles now say the same true thing.
 
 ### Key hierarchy
 
@@ -422,26 +445,81 @@ is not an error and never burns an invitation; only a human report does (§3.9.1
 The SAS words remain as a fingerprint the connections screen can show; they stop being a
 blocking step once the code-based ceremony has a screen.
 
-**What is true in each direction, 2026-09-12 (issue #101).** The two directions are NOT at the same
-assurance and the consoles must not imply they are.
+**What each direction rests on, 2026-09-12 (issue #101 — closed).** Both directions now rest on the
+short code, and neither rests on a channel the server can reach.
 
-| Direction | How the key is learned | Assurance |
+| Direction | How the key is learned | What it rests on |
 | --- | --- | --- |
-| Owner learns the clinician's keys | Sealed in the pairing envelope, openable only by deriving the ISK from the code | **Ceremony.** A link-holder who answers first produces something the owner cannot open. |
-| Clinician learns the owner's keys | Typed into the sign-in form by hand, or read from the server's published copy when nothing is typed | **Whatever the channel was.** Nothing proves a pasted key came from the owner; the published copy is trust-on-first-use against a server that could hand back anything. |
+| Owner learns the clinician's keys | **E1**, sealed by the clinician into the pairing reply and opened only by deriving the ISK from the code | The code. A link-holder who answers first produces something the owner cannot open, so nothing of theirs is ever pinned or approved. |
+| Clinician learns the owner's keys | **E2**, sealed by the owner at Approve under the same run's key in the other direction, and served to the clinician on the status poll of a closed run | The code. An envelope that opens was sealed by the person who spoke it, and one that does not is a null — not a diagnosis. |
 
-Two things changed on 2026-09-12 and neither closes the gap. The owner's identity is now derived
-rather than generated (§4), so the value a clinician pins is at least *stable* — before that it
-changed every owner session, which made the pin not weak but meaningless (#121). And a typed key is
-no longer silently overwritten by the server's copy (#122): typed wins, the published copy is a
-cross-check, and a disagreement refuses the sign-in.
+The two envelopes are sealed under **different** keys derived from the same ISK (the direction is in
+the key label and in the AAD), so neither can be reflected back and opened as the other, and each
+payload decoder refuses the other's shape field for field. The server relays both and holds a key
+for neither. E2 travels in exactly one request (the owner's approve) and comes back in exactly one
+response (a status poll of a `CLOSED` run); E1 the same, one request and one response the other way.
+An approval that carries no E2 is **refused** rather than closed — the recoverable failure is a
+reload and a fresh code, the unrecoverable one is a clinician enrolled with no owner keys proved to
+them.
 
-**The remaining fix is now unblocked and is not 4.0b.** This gap was previously deferred to the
-phone because there was no durable owner identity to carry. There is one now, so the owner's public
-keys can travel to the clinician the same way the clinician's travel to the owner: a second
-envelope in the pairing exchange, owner → clinician, under a new payload version. Until that ships,
-the manual fields carry a caveat naming the consequence
-(`OWNER_KEY_PASTE_CAVEAT`, `companion/web/src/lib/therapist/inviteAccept.ts`).
+**What the server-published owner key is still for.** The owner publishes their two public keys to
+the server (`/v1/relations/{relRef}/owner-keys`), and that copy has not gone away. It is now the
+**cross-check and never the source**: at sign-in the clinician's console compares it against what the
+ceremony pinned, a disagreement on either half refuses the sign-in naming the consequence, and a
+server that publishes nothing takes nothing away, because the pin is the stronger value and is
+already in hand. This is the mirror of what `TherapistKeyIntake` does on the owner's side with the
+server-registered clinician keys.
+
+**Records that predate E2.** A clinician who enrolled before this existed has no ceremony pin, and
+nothing can retroactively make their ceremony have proved one. They sign in on the published copy
+alone, are told exactly that — nothing proved these keys to you, this server does not vouch for
+them, check the fingerprint on another channel — and are told that accepting a fresh invitation
+replaces it with keys the code proves (`OWNER_KEY_UNPINNED_CAVEAT`,
+`companion/web/src/lib/therapist/inviteAccept.ts`). The same is true of the **manual sign-in path**
+— pasting a saved copy of the key record instead of using the one this browser holds: there is no
+stored record to compare against, so that path also signs in on the published copy behind the same
+caveat, and a substituted key is *named* there, not refused. The refusal is a property of the stored
+record a post-E2 pairing wrote, not of every sign-in. There is no longer any way for a clinician to
+type an owner key into this product, which is the point rather than a simplification: a field would
+be a way back to the weaker half.
+
+**A matching code on a FRESH invitation replaces a pinned key (issue #111, 2026-09-12).** The owner
+console used to refuse to approve a reply whose keys were not the ones it already held, and told the
+owner to reach the clinician another way. That refusal is retracted, and the reasoning is worth
+stating because it is the same shape as several arguments in this document. The pin's authority IS
+the code: the existing pin was recorded on exactly the proof *"the party that sealed this envelope
+is the party I spoke the code to"* and on nothing stronger. Demanding a stronger proof to replace a
+pin than to create one is incoherent, and it buys nothing — someone who obtains a code can already
+pair fresh and be sent every future share, so letting them replace a pin adds no access. It adds
+detectability: the real clinician's next share stops opening and they phone.
+
+Three things carry that trade and none is optional.
+
+1. **Rotation always costs a fresh invitation.** Approving moves the invitation out of `PENDING`,
+   and every route that starts or answers a run demands `PENDING`, so the old invitation and its
+   code are dead by the time a second offer could exist. A touch against a spent invitation is
+   refused by status: no burn, no error, it simply never opens. Pinned in
+   `companion/server/src/test/kotlin/com/daymark/companion/PairingRelayRoutesTest.kt`.
+2. **It reaches nothing already sealed.** Rotation changes what is sealed from now on and nothing
+   else; whoever holds the device that carried the old keys can still open every share sent before.
+   The screen says so, in those words, at the point of the click — the same standing fact as
+   *"Revoking does not un-send what was already read."*
+3. **The record is insert-only.** A supersession is a NEW pin row; the old one stays as history and
+   seals target the newest (`companion/web/src/lib/share/pairing.ts`). The owner's record can say a
+   key changed and when, rather than quietly looking as though it never had.
+
+What the console still refuses on this route is keys it has already recorded for a DIFFERENT
+relationship — not a rotation but an ambiguity about who a share is for, which no amount of
+code-typing settles. And the OTHER key route is unchanged: keys the **server** hands over
+(`owner/therapistKeys.ts`, `acceptTherapistKeys`) still require the fingerprints read aloud, and the
+manual rotation screen still requires the SAS words, because on those channels nothing has replaced
+them.
+
+**A replacement pairing seals E2 too.** The re-key path above runs through the same approve, so a
+clinician who comes back with new keys leaves holding the owner's, proved by the code they just
+typed. The owner's identity is derived rather than generated, so what the replacement proves is the
+same identity the first pairing did — and the person being re-verified is the last one who should
+be left unable to verify back.
 
 ### 5.7 Recovery & revocation
 
@@ -640,7 +718,8 @@ fetch, assignment/game-plan publish, session expiry) — never client-supplied.
   "actor": "therapist",           // "owner" | "therapist" — who performed the action
   "action": "share.open",         // auth.success | auth.fail | lockout | enrol.ok |
                                    //   share.open | gameplan.open | assignment.publish |
-                                   //   gameplan.publish | session.expired (extend as needed)
+                                   //   gameplan.publish | session.expired |
+                                   //   relationship.ended (extend as needed)
   "objectRef": "lin1:3",          // opaque channel-scoped id (lineage:version); never content
   "meta": { "credentialId": "…" },// small, fixed, non-content annotations only (optional)
   "entryHash": "<sha256 hex>"      // = SHA256(prevHash ‖ seq ‖ ts ‖ relRef ‖ actor ‖ action ‖ objectRef ‖ meta)
@@ -665,6 +744,76 @@ fetch, assignment/game-plan publish, session expiry) — never client-supplied.
   is now detectable; withholding is not. Full suppression-resistance still needs the
   originally-scoped signed client attestation, which has not shipped.
 
+---
+
+## 9a. Closing a credential without deleting one
+
+Issue #91 gave a clinician a way to end their own access. The security-relevant half of it is one
+row, and the shape of that row is the whole argument.
+
+### The table
+
+```sql
+CREATE TABLE IF NOT EXISTS relationship_endings (
+    rel_ref       TEXT    NOT NULL PRIMARY KEY,
+    credential_id TEXT    NOT NULL,
+    ended_at      INTEGER NOT NULL
+)
+```
+
+Written by `POST /v1/relations/{relRef}/ending` (therapist session cookie + `X-CSRF-Token`, and the
+session must be bound to that exact relationship — a session for another one is refused `403`,
+identically to every other cross-relationship request). Read on the sign-in path: `POST
+/v1/totp/verify` consults it after the code verifies and answers `410 Gone` instead of issuing a
+session. Read again on the owner's share publish, which is refused `410` before the body is read.
+
+### Why a separate table, and not a flag or a delete
+
+`totp` is insert-only, and both halves of that property are load-bearing here.
+
+- **A DELETE would be worse than doing nothing.** The `UNIQUE` index `idx_totp_rel_ref` is the only
+  thing stopping a second enrolment against a relationship. Removing the row would hand anyone still
+  holding the invitation link a way to enrol a *fresh* credential against a relationship somebody has
+  just left — turning an exit into an entrance.
+- **An UPDATE (`disabled=1`) would be an update path into the one table whose safety property is
+  that it has none.** Every other protection in that table rests on "a row, once written, is never
+  rewritten"; adding one mutable column adds one code path that can be reached by a bug, a stolen
+  session, or a later refactor that does not know why the rule existed.
+
+So the closure lives beside the credential rather than inside it, and `totp` is never touched by any
+of this. The same reasoning the `therapist_keys` and `owner_keys` tables already use: `rel_ref` is
+the PRIMARY KEY, the constraint refuses inside the `INSERT OR IGNORE` statement rather than in a
+check a second connection could slip past, and idempotence falls out of it for free.
+
+### Keyed on the relationship, not the credential
+
+`idx_totp_rel_ref` makes a TOTP credential per-relationship: `enrollTotp` refuses a second credential
+for a `rel_ref`, so closing one closes exactly one relationship and can reach no other patient's
+work. Keying the ending on the **relationship** puts that property in the schema rather than in a
+coincidence — and it means the ending survives any future re-enrolment path. A relationship that was
+ended stays ended; the way back is a fresh invitation, which is a fresh relationship, exactly as the
+clinician is told at the point of the click.
+
+### What it discloses, and to whom
+
+- The `410` on sign-in is reachable **only behind a correct code**. Every earlier refusal on that
+  route collapses into an identical `401`, so a caller holding only a credential id — which is a
+  therapist-typed username, not a secret — learns nothing. Behind the code, the only caller who can
+  reach the honest answer is the clinician themselves.
+- `GET /v1/relations/{relRef}/ending` answers the owner's bearer token with a timestamp and `404`
+  while the relationship is live. The credential id is deliberately **not** echoed: the owner has no
+  use for it, and a route that hands one back is a route that can be asked for one.
+- The audit line carries the event and the credential id as membership metadata — the same
+  annotation the sign-in lines already carry — and nothing about what was read, shared or written.
+  It is appended **once**, when the ending is recorded, never per call: the same rule as a lockout,
+  for the same reason. A log that grows a row per retry buries the row that matters.
+
+### Ordering, and what survives a crash
+
+The row is written **before** sessions are cut. If the process dies between them the surviving state
+is "ended, with a session alive until it times out" — bounded, and already closed to any new sign-in.
+The other order would leave "signed out, not ended", which looks exactly like a completed leave and
+is not one.
 ---
 
 ## 10. Hardening checklist (copy-paste)

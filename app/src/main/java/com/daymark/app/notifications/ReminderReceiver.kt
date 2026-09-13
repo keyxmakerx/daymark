@@ -30,6 +30,12 @@ class ReminderReceiver : BroadcastReceiver() {
                     scheduler.showNotification(reminder)
                     scheduler.schedule(reminder) // re-arm (exact alarms are one-shot)
                 }
+            } catch (_: RuntimeException) {
+                // The journal is encrypted at rest, and a phone whose keystore has lost the key
+                // cannot open it — the app says so when somebody opens it. From a broadcast
+                // receiver there is nothing useful to do and nothing honest to say, and an
+                // uncaught exception here is a crash dialog at whatever time of day this person
+                // chose for their reminder. Every SQLite failure arrives as a RuntimeException.
             } finally {
                 pending.finish()
             }

@@ -28,6 +28,24 @@ class PinManager @Inject constructor(
         get() = !securePrefs.getString(KEY_HASH, null).isNullOrEmpty() ||
             !settings.pinHash.isNullOrEmpty()
 
+    /**
+     * Set a PIN somebody has just chosen. The only door the screens may use.
+     *
+     * Returns false, changing nothing, for anything [PinPolicy] does not accept. The dialogs also
+     * disable their own buttons, but a length rule that lives only in a Compose file is a rule that
+     * the next screen to ask for a PIN will not have — which is exactly how this app ended up with
+     * `pin.length in 3..8` written out twice and connected to nothing.
+     *
+     * [setPin] stays open beside it because the legacy-hash upgrade in [verify] has to re-store a
+     * PIN that was chosen years ago under the old rules. Refusing there would leave somebody on the
+     * weaker hash for ever, which is the opposite of what this is for.
+     */
+    fun setChosenPin(pin: String): Boolean {
+        if (!PinPolicy.accepts(pin)) return false
+        setPin(pin)
+        return true
+    }
+
     fun setPin(pin: String) {
         val salt = ByteArray(SALT_BYTES).also { SecureRandom().nextBytes(it) }
         val hash = pbkdf2(pin, salt)

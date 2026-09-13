@@ -5,11 +5,14 @@ import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.auth.PairingStore
 import com.daymark.companion.auth.PersistentAttemptLimiter
+import com.daymark.companion.auth.TokenBucketLimiter
 import com.daymark.companion.clientAddress
 import com.daymark.companion.storage.AuditAction
 import com.daymark.companion.storage.AuditActor
 import com.daymark.companion.storage.AuditStore
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -61,19 +64,36 @@ private fun auditSafely(block: () -> Unit) {
 @Serializable data class PairingRespondRequest(val secret: String, val msgBB64: String, val envB64: String)
 
 /**
- * The owner's approve carries the ticket the therapist chose, exactly as it came out of the
- * envelope. The server learns a 32-byte value to hash and compare later — never the code, never
- * the key, never who chose it.
+ * The owner's approve carries the ticket the therapist chose, exactly as it came out of their
+ * envelope, and the owner's own keys sealed back under the same run's key. The server learns a
+ * 32-byte value to hash and compare later, and a blob it has no key for — never the code, never a
+ * key, never who chose either.
+ *
+ * `envB64` is REQUIRED. The alternative — approve without it, so an old console still works — would
+ * silently produce exactly the relationship issue #101 is about: a clinician enrolled with no owner
+ * keys proved to them. A refusal is recoverable (reload the console, give them a new code); an
+ * enrolment at the wrong assurance is not.
  */
-@Serializable data class PairingApproveRequest(val enrolTicketB64: String)
+@Serializable data class PairingApproveRequest(val enrolTicketB64: String, val envB64: String)
 
 /**
  * What the therapist's status poll says: WAITING while the owner has not decided, APPROVED once
- * they have (with the scope the invitation grants, which the old redeem response used to carry).
- * Everything else — cancelled, retired, reported, expired, never existed — is one flat 410, so a
- * poll cannot tell a link-holder that the owner saw something worth stopping.
+ * they have (with the scope the invitation grants, which the old redeem response used to carry,
+ * and the owner's sealed keys). Everything else — cancelled, retired, reported, expired, never
+ * existed — is one flat 410, so a poll cannot tell a link-holder that the owner saw something
+ * worth stopping.
+ *
+ * `envB64` RIDES ON APPROVED AND ON NOTHING ELSE. It is written by the approval and served only to
+ * a caller who proved the invite secret against a CLOSED run, so a link-holder polling a run they
+ * answered without the code gets WAITING and a state word, exactly as before. It is a sealed blob
+ * either way — the server has no key for it — but serving it earlier would hand every link-holder
+ * a ciphertext to work on for nothing gained.
  */
-@Serializable data class PairingStatusResponse(val state: String, val scope: List<String>? = null)
+@Serializable data class PairingStatusResponse(
+    val state: String,
+    val scope: List<String>? = null,
+    val envB64: String? = null,
+)
 
 @Serializable data class LatestExchangeView(val exchangeId: String, val state: String)
 
@@ -103,11 +123,13 @@ private const val SID_BYTES = 16
 private const val MAX_MSG_BYTES = 200
 
 /**
- * The therapist's sealed offer: version(1) | nonce(24) | ciphertext(payload + 16-byte tag) over a
- * small JSON document — two 32-byte keys, a name of at most 64 characters, a 32-byte ticket. A
- * few hundred bytes in practice. 4 KiB is generous room for a future version of the payload and
- * still a hard "no" to anyone treating the column as storage; it is its own bound because the
- * CPace message bound above is deliberately tight and must stay so.
+ * A sealed envelope, in either direction: version(1) | nonce(24) | ciphertext(payload + 16-byte
+ * tag) over a small JSON document — the therapist's offer is two 32-byte keys, a name of at most 64
+ * characters and a 32-byte ticket; the owner's reply is two 32-byte keys. A few hundred bytes in
+ * practice. 4 KiB is generous room for a future version of either payload and still a hard "no" to
+ * anyone treating a column as storage; it is its own bound because the CPace message bound above is
+ * deliberately tight and must stay so. One bound for both directions on purpose: two numbers that
+ * must agree is a number that will not.
  */
 private const val MIN_ENV_BYTES = 41
 private const val MAX_ENV_BYTES = 4096
@@ -116,11 +138,45 @@ private const val MAX_ENV_BYTES = 4096
 private const val ENROL_TICKET_BYTES = 32
 
 /**
- * How often a therapist may poll the status route without spending their own budget: the shared
- * per-source window allows [PAIR_MAX_PER_WINDOW] touches per [PAIR_WINDOW_MS], fetch and respond
- * cost two, and every allowed request is charged. At 45 seconds, five minutes hold six polls with
- * room to spare; anything under 30 seconds locks an honest therapist out of their own ceremony.
- * The client is written to this number and treats a 429 as "still waiting".
+ * The status poll's allowance, KEYED ON THE PAIRING RUN rather than on the address.
+ *
+ * ## Why the run and not the address
+ *
+ * A poll asks one question — has the owner decided? — and proves the same secret every time. It
+ * tests nothing, moves nothing, and reveals nothing beyond a state word the caller already had to
+ * prove the secret to reach. Metering it per address charged the wrong party: two clinicians behind
+ * one clinic NAT spent each other's allowance, while the attacker it was supposedly aimed at holds
+ * one link and one address and was never troubled by it.
+ *
+ * The run is the honest unit. A run is opened by the owner and its id is handed out in exactly one
+ * place — the fetch response, which requires the invite secret — so an allowance attached to it is
+ * an allowance attached to one ceremony, and one person's waiting cannot cost another's.
+ *
+ * ## The numbers
+ *
+ * One every ten seconds, sustained, with six in hand for the honest interruptions: a reload, a tab
+ * restored, a laptop waking up and firing the poll it owed. [PAIRING_STATUS_POLL_SECONDS] is the
+ * cadence the client actually keeps and is far slower than the refill, so an honest poller is never
+ * refused however long the owner takes — which matters, because they may take a day.
+ *
+ * Over the allowance the answer is 429 with `Retry-After`, and the client renders NOTHING new: a
+ * throttled poll is "still waiting", the same as any other poll that found no decision yet. The
+ * person waiting is told nothing, because nothing has happened.
+ *
+ * WHO CAN SPEND IT is worth stating plainly: the budget is charged before the secret is verified,
+ * so anyone who knows a run's id — the owner, or whoever has already proved the secret on this
+ * invitation — can spend that run's polls. That is deliberate. Charging after the verify would
+ * leave an anonymous route running a 64 MiB Argon2id verification per request with nothing in
+ * front of it, and the cost of the choice is small in the other direction: a run whose polls are
+ * being spent is a run whose therapist learns of an approval a little later, never one that fails.
+ */
+internal const val PAIRING_STATUS_BURST = 6
+internal const val PAIRING_STATUS_REFILL_MS = 10_000L
+
+/**
+ * How often the therapist's side polls, and the number the client is written to. Comfortably
+ * slower than PAIRING_STATUS_REFILL_MS, so the honest cadence never meets the allowance at all;
+ * a 429 is treated as "still waiting" either way.
  */
 const val PAIRING_STATUS_POLL_SECONDS = 45L
 
@@ -135,6 +191,14 @@ const val PAIRING_STATUS_POLL_SECONDS = 45L
  * this file treats the messages and the envelope as opaque bytes, sized but never parsed, and
  * nothing in any request or response carries the code in any form. The web client has the test
  * that PROVES no request ever contains it; this file's job is to have nowhere to put it.
+ *
+ * ONE SEALED PARCEL EACH WAY, AND THE SERVER HAS A KEY FOR NEITHER. The therapist's reply carries
+ * their offer (their keys, a name, a ticket); the owner's approval carries their own keys back.
+ * Each is written once, by the touch that is allowed to write it, and served once, to the party
+ * the other end is for: the offer on the owner's authenticated read, the owner's keys on a status
+ * poll of a CLOSED run. That second direction is what ended the hand-pasted owner key (issue #101)
+ * — until it existed, the clinician learned the owner's keys from whatever channel a base64 string
+ * had travelled on, while the owner learned theirs from the code.
  *
  * HOW A TICKET COMES TO EXIST. The therapist's reply carries, sealed under the key only a right
  * code derives, an enrolment ticket they chose. The owner's client opens it — or cannot, which is
@@ -154,13 +218,16 @@ const val PAIRING_STATUS_POLL_SECONDS = 45L
  * invitation. The status poll is the one touch allowed against a REDEEMING invite, and it yields
  * a state word and nothing else.
  *
- * WHY THE PER-SOURCE BUDGET IS THE SAME SCOPE AS REDEEM'S. The relay verifies the same secret
- * redeem verifies, so a separate budget would hand an attacker double the guesses by
- * alternating surfaces. [PersistentAttemptLimiter] keeps its state in the attempt_windows
- * table keyed by scope, so a second instance over the same scope IS the same budget — shared
- * durable state by construction, not by careful wiring. It is never reset by a relay success:
- * a status poll succeeds repeatedly, and a reset on success would let a link-holder clear the
- * window at will.
+ * WHAT IS METERED, AND BY WHAT. Fetch and respond share ONE per-address window with each other
+ * (PAIR_MAX_PER_WINDOW) because they verify the same secret, and a separate budget per surface
+ * would hand an attacker double the attempts by alternating routes. [PersistentAttemptLimiter]
+ * keeps that window in the attempt_windows table keyed by scope, so a second instance over the
+ * same scope IS the same budget — shared durable state by construction, not by careful wiring —
+ * and it is never reset by a success, because a limiter a link-holder can clear by succeeding is
+ * one they can clear at will. The STATUS POLL is not in that window: it is metered per RUN, at a
+ * cadence rather than a ration (PAIRING_STATUS_BURST / PAIRING_STATUS_REFILL_MS), because polling
+ * is what honest waiting looks like and charging it to the address made an honest ceremony pay
+ * for itself.
  *
  * THE FAILURE ANSWERS ARE DELIBERATELY FLAT. A wrong secret, a right secret against an invite
  * with no open exchange, and a right secret against an invite that never existed must not be
@@ -185,7 +252,38 @@ fun Route.pairingRelayRoutes(
         maxPerWindow = PAIR_MAX_PER_WINDOW,
         windowMs = PAIR_WINDOW_MS,
     ),
+    /**
+     * The status poll's per-RUN allowance. In process memory, unlike the budget above, and the
+     * difference is the one [com.daymark.companion.auth.AttemptBudget] names: that one bounds
+     * guessing at a secret and must survive a restart, this one shapes the volume of a question
+     * that tests nothing, so a restart returns at most one burst per run and no secret becomes
+     * easier to guess. The store's clock, so a test that advances time advances this too.
+     */
+    statusRunLimiter: AttemptBudget = TokenBucketLimiter(
+        burst = PAIRING_STATUS_BURST,
+        refillIntervalMs = PAIRING_STATUS_REFILL_MS,
+        clock = authStore::nowMs,
+    ),
 ) {
+    /**
+     * The throttled answer, with `Retry-After` in seconds.
+     *
+     * The header is the whole point of the refusal being worth anything to a person: the
+     * therapist's screen says "paused until {time}. Your invitation is unchanged and will still
+     * open then", and it can only say a time because the server sent one. Rounded UP, so the
+     * client never comes back a second early and meets the same wall; never below one second.
+     *
+     * Note what carries no Retry-After: the invitation's own LOCKOUT, whose 429 comes from
+     * checkInviteSecret. That is deliberate and the client depends on it — a lockout is a fact
+     * about the invitation, this is a fact about the connection, and they are two different
+     * sentences to read.
+     */
+    suspend fun ApplicationCall.refuseThrottled(budget: AttemptBudget, key: String) {
+        val seconds = ((budget.retryAfterMs(key) + 999) / 1000).coerceAtLeast(1L)
+        response.header(HttpHeaders.RetryAfter, seconds.toString())
+        respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited"))
+    }
+
     /** Decode-and-size check; the relay checks shape, never meaning. */
     fun decodedSize(b64: String, min: Int, max: Int): Boolean {
         val bytes = try {
@@ -262,6 +360,11 @@ fun Route.pairingRelayRoutes(
             if (!decodedSize(req.enrolTicketB64, ENROL_TICKET_BYTES, ENROL_TICKET_BYTES)) {
                 return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("enrol ticket must decode to 32 bytes"))
             }
+            // Refused BEFORE approveRedeem, so a malformed approval leaves the invitation PENDING
+            // and spends nothing: the shape checks are the cheap half and go first.
+            if (!decodedSize(req.envB64, MIN_ENV_BYTES, MAX_ENV_BYTES)) {
+                return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("implausible envelope size"))
+            }
             val exchange = pairingStore.exchangeFor(exchangeId, relRef)
                 ?: return@post call.respond(HttpStatusCode.Gone, ErrorDto("exchange unavailable"))
             if (exchange.state != PairingStore.State.RESPONDED) {
@@ -271,7 +374,7 @@ fun Route.pairingRelayRoutes(
             if (approved.status != AuthStore.ApproveStatus.OK) {
                 return@post call.respond(HttpStatusCode.Gone, ErrorDto("exchange unavailable"))
             }
-            when (pairingStore.approve(exchangeId, relRef)) {
+            when (pairingStore.approve(exchangeId, relRef, req.envB64)) {
                 PairingStore.TransitionStatus.OK -> {
                     call.respond(HttpStatusCode.NoContent)
                     auditSafely {
@@ -404,7 +507,7 @@ fun Route.pairingRelayRoutes(
         post("/fetch") {
             call.response.header("Referrer-Policy", "no-referrer")
             if (!pairSourceLimiter.allow(call.clientAddress())) {
-                return@post call.respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited"))
+                return@post call.refuseThrottled(pairSourceLimiter, call.clientAddress())
             }
             val req = call.receiveCappedJson<PairingFetchRequest>() ?: return@post
             call.relayAuthorized(req.secret) ?: return@post
@@ -421,7 +524,7 @@ fun Route.pairingRelayRoutes(
         post("/{exchangeId}/respond") {
             call.response.header("Referrer-Policy", "no-referrer")
             if (!pairSourceLimiter.allow(call.clientAddress())) {
-                return@post call.respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited"))
+                return@post call.refuseThrottled(pairSourceLimiter, call.clientAddress())
             }
             val req = call.receiveCappedJson<PairingRespondRequest>() ?: return@post
             if (!decodedSize(req.msgBB64, 34, MAX_MSG_BYTES)) {
@@ -450,17 +553,21 @@ fun Route.pairingRelayRoutes(
         // is a question, and the answer is a state word.
         post("/{exchangeId}/status") {
             call.response.header("Referrer-Policy", "no-referrer")
-            if (!pairSourceLimiter.allow(call.clientAddress())) {
-                return@post call.respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited"))
+            val exchangeId = call.parameters["exchangeId"] ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("missing exchangeId"))
+            // Per RUN, not per address, and spent before the secret is read — see the constants.
+            if (!statusRunLimiter.allow(exchangeId)) {
+                return@post call.refuseThrottled(statusRunLimiter, exchangeId)
             }
             val req = call.receiveCappedJson<PairingFetchRequest>() ?: return@post
             val verdict = call.relayAuthorized(req.secret, allowRedeeming = true) ?: return@post
             val inviteId = call.parameters["inviteId"]!!
-            val exchangeId = call.parameters["exchangeId"] ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorDto("missing exchangeId"))
             val exchange = pairingStore.exchangeForInvite(exchangeId, inviteId)
             when (exchange?.state) {
                 PairingStore.State.RESPONDED -> call.respond(PairingStatusResponse("WAITING"))
-                PairingStore.State.CLOSED -> call.respond(PairingStatusResponse("APPROVED", verdict.scope))
+                // The owner's sealed keys leave the shelf here and only here, and only once the
+                // run is CLOSED — which is to say only because the owner approved.
+                PairingStore.State.CLOSED ->
+                    call.respond(PairingStatusResponse("APPROVED", verdict.scope, exchange.envToTherapistB64))
                 // Cancelled, retired, never answered, not theirs, not there: one flat answer.
                 else -> call.respond(HttpStatusCode.Gone, ErrorDto("exchange unavailable"))
             }

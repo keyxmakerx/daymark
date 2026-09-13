@@ -40,8 +40,6 @@ export type FieldId =
   | 'inboxToken'
   | 'relRef'
   | 'credentialId'
-  | 'pinnedOwnerSignPub'
-  | 'ownerBoxPub'
   | 'wrappedKey'
   | 'totpCode'
   | 'readingPassphrase'
@@ -83,13 +81,30 @@ export const FIELD_HELP: Record<FieldId, FieldHelp> = {
     secret: false,
   },
 
+  /*
+   * THE ONE FIELD THE INVITATION DOES NOT ANSWER, and this said the opposite for months.
+   *
+   * It used to point at FROM_INVITE — "it was in the invitation the person whose data this is sent
+   * you" — which was never true and could not become true: the invitation message has no field for
+   * this value, and the server is handed a digest of it rather than the value itself, so it has
+   * never held one to send (issue #126). InviteAcceptance.svelte said the honest thing on the
+   * screen before this one; the two now agree.
+   *
+   * The correction matters because of WHEN this sentence is read: a clinician opens the help while
+   * the other person is on the phone asking what to send. Telling them to look in the email ends
+   * with the email being searched, then the token being emailed, which is exactly the channel the
+   * whole arrangement depends on it not using.
+   */
   inboxToken: {
     label: 'Inbox token',
-    placeholder: 'inbox_XXXXXXXXXXXXXXXXXXXXXXXX',
+    placeholder: 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
     what:
       'Routes your requests to the one relationship you were invited to, and to nothing else on ' +
       'that server.',
-    where: FROM_INVITE,
+    where:
+      'It is the one thing that is not in the invitation. The person whose data this is has it: ' +
+      'their console made it when they added you, and it can only reach you some way other than ' +
+      'the invitation — said out loud, sent by text, handed over. Ask them for it.',
     secret: true,
   },
 
@@ -111,23 +126,13 @@ export const FIELD_HELP: Record<FieldId, FieldHelp> = {
     secret: false,
   },
 
-  pinnedOwnerSignPub: {
-    label: 'Owner signing key',
-    placeholder: 'base64url, about 43 characters',
-    what:
-      'The key that proves a share really came from the person who invited you. Anything not ' +
-      'signed by it is refused rather than shown.',
-    where: FROM_INVITE,
-    secret: false,
-  },
-
-  ownerBoxPub: {
-    label: 'Owner encryption key',
-    placeholder: 'base64url, about 43 characters',
-    what: 'The key anything you send back is sealed to, so only they can open it.',
-    where: FROM_INVITE,
-    secret: false,
-  },
+  /*
+   * THE OWNER'S TWO KEYS USED TO BE FIELDS HERE, and they are gone rather than hidden (issue #101).
+   * A clinician typed them in as base64 and pinned something worth whatever the channel it arrived
+   * on was worth. The pairing now seals the owner's keys back to the clinician under the same code
+   * that proves the clinician's keys to the owner, so there is nothing left to type and no help
+   * text to write. Leaving the entries behind would leave the field one import away.
+   */
 
   wrappedKey: {
     label: 'Your wrapped reading key',

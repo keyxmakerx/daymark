@@ -183,6 +183,57 @@ class AuthStore(
                 )
                 """.trimIndent(),
             )
+            /*
+             * THE CLINICIAN PUT THIS RELATIONSHIP DOWN (issue #91).
+             *
+             * One row per ended relationship, and the row is the whole mechanism. It does two jobs
+             * that look separate and are not:
+             *
+             *   1. It CLOSES THE CREDENTIAL. The TOTP verify path asks this table before it issues
+             *      a session, so a clinician who left cannot sign in again from anywhere — not from
+             *      a second browser, not from a saved copy of their key record, not with the
+             *      authenticator still on their phone. That is what makes leaving an off switch
+             *      rather than a per-browser act.
+             *   2. It TELLS THE OWNER, in the only two places the fact can actually help them: a
+             *      line in this relationship's access log, and a refusal the next time they try to
+             *      share here. The owner is never messaged; see COMPANION_THERAPIST.md.
+             *
+             * WHY IT IS A ROW HERE RATHER THAN A DELETE OR AN UPDATE ON `totp`. The credential table
+             * is insert-only by design — its whole safety property is that a row, once written, is
+             * never removed or rewritten, so no bug and no stolen session can substitute a
+             * credential for a relationship that already has one. A "disabled" column on `totp`
+             * would be an UPDATE path into exactly that table, and a DELETE would be worse: the
+             * unique index on `rel_ref` is what stops a second enrolment, and removing the row would
+             * hand an attacker who holds the invitation link a way to enrol a fresh credential
+             * against a relationship somebody has already left. So the closure is a SEPARATE
+             * insert-only table, read on the way in, and `totp` is never touched by any of this.
+             *
+             * `rel_ref` IS THE PRIMARY KEY, which is the entire enforcement of insert-only and of
+             * idempotence at once: a second leave writes nothing, reports that it wrote nothing, and
+             * the audit line is therefore appended once — on the ending, not once per probe.
+             *
+             * KEYED ON THE RELATIONSHIP RATHER THAN THE CREDENTIAL, and the two are the same thing
+             * here: `idx_totp_rel_ref` makes a credential per-relationship, so closing one closes
+             * exactly one relationship and reaches no other work the clinician holds. Keying on the
+             * relationship is what makes that a property of the schema rather than a coincidence a
+             * later change could break. It also means the ending survives any future re-enrolment
+             * path: a relationship that was ended stays ended, and the way back is a fresh
+             * invitation — which is a fresh relationship — exactly as the clinician was told.
+             *
+             * `credential_id` is stored because the leave route needs it to cut the clinician's
+             * live sessions, and because a later reader asking "which credential was this" should
+             * not have to join through a table that may by then have been pruned. It is a
+             * therapist-typed username, not a secret, and nothing here is a key.
+             */
+            st.execute(
+                """
+                CREATE TABLE IF NOT EXISTS relationship_endings (
+                    rel_ref       TEXT    NOT NULL PRIMARY KEY,
+                    credential_id TEXT    NOT NULL,
+                    ended_at      INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
             st.execute(
                 """
                 CREATE TABLE IF NOT EXISTS sessions (
@@ -511,6 +562,25 @@ class AuthStore(
      * as a wrong secret on redeem. Without that, this route would be a free oracle for guessing the
      * invite secret — unmetered attempts on a surface with no lockout of its own — and closing the
      * burn hole would have opened a guessing hole one route over.
+     *
+     * ## Why the secret is checked BEFORE the lockout, here and nowhere else
+     *
+     * Every other door asks "is this invitation locked?" first and answers a locked one without
+     * ever looking at the secret. That is right for the doors a lockout exists to shut: they hand
+     * something back — the owner's opening message, a state word — and what the lockout buys is
+     * that a guesser learns nothing while it is in force.
+     *
+     * A report hands nothing back. It is a person saying "this wasn't me" about a link they were
+     * sent, and the answer is the same flat acknowledgement whatever the truth of it (see the
+     * route). So the lockout has nothing to protect here, and putting it in front of the secret
+     * check bought exactly one outcome: the invitation somebody was guessing at — the one most
+     * likely to be in hostile hands — became the one invitation its real holder could not close.
+     *
+     * So: verify first, and honour a correct report whether or not a lockout is in force. A WRONG
+     * secret arriving while one is in force still writes NOTHING — no counter bump, no extension,
+     * no audit row — which is the locked-door rule kept exactly as it is everywhere else
+     * (`LockedInviteAuditTest`): a knock on a locked door is not a write, and a lockout must never
+     * be extendable by the volume an attacker chooses to send.
      */
     fun reportInvite(inviteId: String, secret: String, lockoutFails: Int, lockoutBaseMs: Long): ReportResult = synchronized(lock) {
         val now = clock()
@@ -520,12 +590,12 @@ class AuthStore(
             setInviteStatus(inviteId, "EXPIRED")
             return ReportResult(ReportStatus.GONE)
         }
-        if (row.lockedUntil > now) return ReportResult(ReportStatus.LOCKED, row.relRef)
-
         if (Secrets.verifySecret(secret, row.secretArgon2)) {
             killInviteLocked(inviteId)
             return ReportResult(ReportStatus.OK, row.relRef)
         }
+        // Wrong, and the door is already shut: the knock is not a write.
+        if (row.lockedUntil > now) return ReportResult(ReportStatus.LOCKED, row.relRef)
         val armed = applyWrongSecretBackoffLocked(inviteId, row, now, lockoutFails, lockoutBaseMs)
         return ReportResult(ReportStatus.WRONG_SECRET, row.relRef, lockoutArmed = armed)
     }
@@ -722,6 +792,24 @@ class AuthStore(
         // exactly as it was, which is what stops a refused attempt from extending its own lockout.
         if (existing == null) writeAttemptWindowLocked(scope, key, startedAt, count)
         return false
+    }
+
+    /**
+     * How long until this source's window rolls, so a refusal can carry a `Retry-After` naming a
+     * real time instead of the client assuming the server's window size.
+     *
+     * A source with no window on record is told the full window. That is the conservative
+     * direction: the only way to have no row is to have spent nothing, in which case the caller is
+     * not being refused by this budget at all and the number is never shown to anyone.
+     */
+    fun attemptRetryAfterMs(scope: String, source: String, windowMs: Long): Long = synchronized(lock) {
+        val startedAt = conn.prepareStatement(
+            "SELECT started_at FROM attempt_windows WHERE scope=? AND source_key=?",
+        ).use { ps ->
+            ps.setString(1, scope); ps.setString(2, Secrets.tokenHash(source))
+            ps.executeQuery().use { rs -> if (rs.next()) rs.getLong(1) else null }
+        } ?: return windowMs
+        return (startedAt + windowMs - clock()).coerceAtLeast(1L)
     }
 
     /** Clears a source's window — called on success, so legitimate use is never penalised. */
@@ -1185,6 +1273,63 @@ class AuthStore(
         conn.prepareStatement("DELETE FROM sessions WHERE credential_id=?").use { ps ->
             ps.setString(1, credentialId)
             return ps.executeUpdate()
+        }
+    }
+
+    // ---- A clinician ending their own access (issue #91) -------------------------
+
+    data class RelationshipEnding(val relRef: String, val credentialId: String, val endedAt: Long)
+
+    /** Whether this call is the one that ended it, or whether it was already over. */
+    enum class EndingWrite { RECORDED, ALREADY_ENDED }
+
+    /**
+     * Record that the clinician holding [credentialId] ended relationship [relRef].
+     *
+     * INSERT-ONLY by primary key, by the same OR IGNORE argument set out on [registerTherapistKeys]:
+     * the constraint refuses inside the statement rather than in a check a second connection could
+     * slip past, and a zero row count can mean only "already ended" because every column is NOT NULL
+     * and every value is a non-null parameter.
+     *
+     * The return value is not decoration. A second call must do the same thing as the first — the
+     * route is idempotent on purpose, because a clinician who clicks twice, or whose browser retries
+     * a request whose answer never arrived, must not meet an error for an act that already
+     * succeeded. But the AUDIT line must be written once, on the ending itself, not once per call:
+     * this is the same rule the lockout path follows, and for the same reason. An audit row per
+     * probe is how the one row that matters gets buried.
+     *
+     * WHAT THIS DOES NOT DO, said here because the function name is broader than the act. It writes
+     * one row. It touches no key, no blob, no grant, and nothing at all belonging to the owner —
+     * their entries, the material they shared, and their record of having shared it are exactly as
+     * they were. It does not delete the clinician's credential either; see the table's header for
+     * why closing it and deleting it are opposites rather than degrees of the same thing.
+     */
+    fun endRelationship(relRef: String, credentialId: String): EndingWrite = synchronized(lock) {
+        conn.prepareStatement(
+            "INSERT OR IGNORE INTO relationship_endings(rel_ref, credential_id, ended_at) VALUES (?,?,?)",
+        ).use { ps ->
+            ps.setString(1, relRef)
+            ps.setString(2, credentialId)
+            ps.setLong(3, clock())
+            return if (ps.executeUpdate() > 0) EndingWrite.RECORDED else EndingWrite.ALREADY_ENDED
+        }
+    }
+
+    /**
+     * The ending for a relationship, or null while it is live.
+     *
+     * Read on the sign-in path, so it is one indexed lookup by primary key. Null is the ordinary
+     * answer and is not an error: almost every relationship is live.
+     */
+    fun relationshipEnding(relRef: String): RelationshipEnding? = synchronized(lock) {
+        conn.prepareStatement(
+            "SELECT rel_ref, credential_id, ended_at FROM relationship_endings WHERE rel_ref=?",
+        ).use { ps ->
+            ps.setString(1, relRef)
+            ps.executeQuery().use { rs ->
+                if (!rs.next()) return null
+                RelationshipEnding(rs.getString(1), rs.getString(2), rs.getLong(3))
+            }
         }
     }
 

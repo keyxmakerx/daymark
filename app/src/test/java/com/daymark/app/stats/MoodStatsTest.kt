@@ -27,35 +27,50 @@ class MoodStatsTest {
     }
 
     @Test
-    fun currentStreak_countsConsecutiveEndingToday() {
-        val today = LocalDate.of(2026, 1, 10)
-        val days = setOf(today, today.minusDays(1), today.minusDays(2))
-        assertEquals(3, MoodStats.currentStreak(days, today))
+    fun daysWithEntry_countsInsideTheWindowRegardlessOfOrderOrRepeats() {
+        val today = LocalDate.of(2026, 1, 30)
+        val days = setOf(today, today.minusDays(5), today.minusDays(29))
+        assertEquals(3, MoodStats.daysWithEntryInLast30(days, today))
     }
 
     @Test
-    fun currentStreak_aliveIfLoggedYesterday() {
-        val today = LocalDate.of(2026, 1, 10)
-        val days = setOf(today.minusDays(1), today.minusDays(2))
-        assertEquals(2, MoodStats.currentStreak(days, today))
+    fun daysWithEntry_bothEdgesOfTheWindowAreInside() {
+        // The window is thirty days INCLUSIVE of today, so today and today-29 both count and
+        // today-30 does not. An off-by-one here would silently change the number on two screens.
+        val today = LocalDate.of(2026, 1, 30)
+        assertEquals(1, MoodStats.daysWithEntryInLast30(setOf(today), today))
+        assertEquals(1, MoodStats.daysWithEntryInLast30(setOf(today.minusDays(29)), today))
+        assertEquals(0, MoodStats.daysWithEntryInLast30(setOf(today.minusDays(30)), today))
+    }
+
+    /**
+     * The property the whole change is for: a gap costs the days it covers and nothing more.
+     *
+     * The old `currentStreak` returned 0 for this history — one missed day in the middle wiped
+     * every day before it. The positive control is the same set with the gap filled: if the count
+     * ever stops moving with the data, that assertion is what goes red.
+     */
+    @Test
+    fun daysWithEntry_aGapCostsOnlyTheDaysItCovers() {
+        val today = LocalDate.of(2026, 1, 30)
+        val withGap = (0L..9L).filter { it != 3L }.map { today.minusDays(it) }.toSet()
+        assertEquals(9, MoodStats.daysWithEntryInLast30(withGap, today))
+        val filled = withGap + today.minusDays(3)
+        assertEquals(10, MoodStats.daysWithEntryInLast30(filled, today))
     }
 
     @Test
-    fun currentStreak_brokenWhenGap() {
-        val today = LocalDate.of(2026, 1, 10)
-        val days = setOf(today.minusDays(3), today.minusDays(4))
-        assertEquals(0, MoodStats.currentStreak(days, today))
+    fun daysWithEntry_ignoresEverythingOlderThanTheWindowAndTheFuture() {
+        val today = LocalDate.of(2026, 1, 30)
+        val days = setOf(today.minusDays(60), today.minusDays(31), today.plusDays(1))
+        assertEquals(0, MoodStats.daysWithEntryInLast30(days, today))
+        // Positive control: the same call does see a day that is inside the window.
+        assertEquals(1, MoodStats.daysWithEntryInLast30(days + today.minusDays(2), today))
     }
 
     @Test
-    fun longestStreak_findsBestRun() {
-        val base = LocalDate.of(2026, 1, 1)
-        val days = setOf(
-            base, base.plusDays(1), base.plusDays(2), // run of 3
-            base.plusDays(5),                          // isolated
-            base.plusDays(7), base.plusDays(8),        // run of 2
-        )
-        assertEquals(3, MoodStats.longestStreak(days))
+    fun daysWithEntry_emptyHistoryIsZero() {
+        assertEquals(0, MoodStats.daysWithEntryInLast30(emptySet(), LocalDate.of(2026, 1, 30)))
     }
 
     @Test

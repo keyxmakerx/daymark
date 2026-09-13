@@ -207,6 +207,17 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     ksp(libs.androidx.room.compiler)
 
+    // The encrypted SQLite Room opens through, in BOTH flavours — see the note in the version
+    // catalog. Deliberately NOT `fossImplementation`/`syncImplementation`: the offline-only
+    // flagship is the build that most needs the journal not to be a plaintext file, and a
+    // flavour-scoped crypto dependency is how you end up with two different at-rest stories and
+    // one sentence in Settings that is true in only one of them.
+    //
+    // The AAR ships its own consumer ProGuard rules (keep net.zetetic.database.**, keep native
+    // methods), so the R8 release builds need nothing added here. CI builds both release variants
+    // precisely so a missing keep rule fails there rather than at a tag push.
+    implementation(libs.sqlcipher.android)
+
     implementation(libs.androidx.biometric)
     implementation(libs.androidx.security.crypto)
     implementation(libs.androidx.lifecycle.process)

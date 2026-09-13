@@ -24,8 +24,9 @@ network, nothing leaves your device. See [PRIVACY.md](PRIVACY.md) for the privac
   check-in row and the "what might help" support menu aren't controllable (they're how you log and
   a screen you open deliberately), and crisis resources stay reachable regardless.
 - **Home — the daily loop** — Home asks one question ("how are you, right now?") with a one-tap
-  check-in row, shows a small glance (your streak and the last seven days), at most **one**
-  suggestion card, and **today's** entries. The full archive lives one tap away under **All
+  check-in row, shows a small glance (your entry total and the last seven days), at most **one**
+  suggestion card, and **today's** entries. There is no continuity figure on Home at all — it is
+  the screen you land on after time away, and a count there is a mark by placement. The full archive lives one tap away under **All
   entries**, and the rest of the suggestions under **More for you**.
 - **Deliberate delete + undo** — the swipe never deletes on its own. A steady drag past most of the
   row turns the background and reads "Release to delete"; then a dialog confirms; and a 5-second
@@ -50,8 +51,9 @@ network, nothing leaves your device. See [PRIVACY.md](PRIVACY.md) for the privac
 
 - A single **Insights** tab that merges the former Stats, Calendar, and Year-in-Pixels screens,
   with a **Week / Month / Year** scale toggle:
-  - **Stats** — mood trend, current & longest streaks, mood distribution, average mood per
-    activity.
+  - **Stats** — mood trend, **days with an entry** ("12 of the last 30"), mood distribution,
+    average mood per activity. The continuity figure counts non-consecutively and is omitted
+    entirely when it would be zero.
   - **Month** — a calendar grid where each day is tinted by its mood.
   - **Year** — the whole year as a grid of mood-colored squares (Year in Pixels).
 - **What goes with your mood** — per-factor correlations between your mood and the activities and
@@ -63,7 +65,7 @@ network, nothing leaves your device. See [PRIVACY.md](PRIVACY.md) for the privac
 - **This period vs. last** — a comparison of the current period against the previous one, which
   follows the Week / Month / Year toggle.
 - **"In review"** — a short, rules-based recap (entries, average, best/worst weekday, top
-  mood-lifting factor, current streak), worded as association rather than cause. The same summary
+  mood-lifting factor, days with an entry), worded as association rather than cause. The same summary
   is rendered as an "In review" section in the PDF report.
 - **Logging consistency** — a GitHub-style entries-per-day heatmap (a single accent hue, distinct
   from the mood-tinted Year in Pixels) showing how consistently you've been checking in.
@@ -91,9 +93,6 @@ diagnosis, and nothing leaves your device.
   percentage. PHQ-9 and GAD-7 are **free to reproduce (Pfizer)**; WHO-5 is **© WHO, free for
   non-commercial use** (cited in-app). See [INSTRUMENTS.md](INSTRUMENTS.md) for the license
   ledger.
-- **Achievements** — gentle milestones for showing up: first entry, entry counts, longest
-  streaks, activity variety, first check-in (**More → Achievements**), shown with original
-  hand-drawn badge art. Gentle by design — no streak-shaming, and earned badges are sticky.
 - **Thought records (CBT)** — a guided record (**More → Thought records**): situation → automatic
   thought → optional **thinking-trap** tags → evidence for/against → a **balanced thought**, with
   **mood before/after** to gauge any shift. The cognitive-distortion list is **self-authored** (our
@@ -145,10 +144,20 @@ diagnosis, and nothing leaves your device.
 - **Reminders + quick-log** — set up multiple daily reminders, each with its own time, on/off
   toggle, and optional label, managed under **Settings → Reminders**. Tapping a reminder
   notification (or its **Log now** action) opens a fresh entry straight away.
-- **App lock** — a PIN (PBKDF2, encrypted at rest, with failed-attempt lockout) plus optional
-  strong (Class 3) biometrics; contents are hidden from the recents thumbnail when locked. An
-  **auto-lock timeout** lets you re-lock immediately (default) or after 1 / 5 / 15 minutes in the
-  background.
+- **The journal is encrypted on the device** — SQLCipher behind Room, with a random 32-byte key
+  made on first run **for everybody**, PIN or not, and kept wrapped under a key held in the phone's
+  hardware keystore. Copying app-private storage off the phone yields a file that cannot be read.
+  An existing journal is migrated once, by copy-verify-swap, with `-wal` / `-shm` / `-journal`
+  verified gone afterwards. **Photos are not covered** (they are ordinary JPEGs in
+  `filesDir/entry_photos`), and exports you make are plain files by your own act. If the phone's
+  keystore ever loses the key, the app says so and offers to leave the entries alone or start a new
+  journal; it never removes them on its own.
+- **App lock** — a PIN of 6–12 digits (PBKDF2 hash, itself encrypted at rest, with failed-attempt
+  lockout) plus optional strong (Class 3) biometrics; contents are hidden from the recents
+  thumbnail when locked. An **auto-lock timeout** lets you re-lock immediately (default) or after
+  1 / 5 / 15 minutes in the background. The PIN guards the SCREEN: it is not what the journal is
+  encrypted with, so forgetting it costs the way in, not the entries. PINs set by older versions
+  keep working at whatever length they are.
 - **Backup & export** — JSON export/import (replace **or** merge, with entry photos embedded as
   base64 in a single portable file), CSV export of entries, and a printable PDF report.
 - **Home-screen widget** — tap a mood to log it in one step.

@@ -99,10 +99,26 @@ describe('the stored run', () => {
   })
 
   it('has no field for the code or the key: the record type cannot hold them', () => {
-    const record = ownerRunFromState('rel-1', { ...state, finished: { msgBB64: 'r', isk: new Uint8Array(64).fill(7) } }, 1)
+    const isk = new Uint8Array(64).fill(7)
+    const record = ownerRunFromState('rel-1', { ...state, finished: { msgBB64: 'r', isk } }, 1)
     const keys = Object.keys(record).sort()
     expect(keys).toEqual(['createdAt', 'exchangeId', 'inviteId', 'msgAB64', 'relRef', 'sidB64', 'v', 'yaB64'])
-    expect(JSON.stringify(record)).not.toContain(Buffer.from(new Uint8Array(64).fill(7)).toString('base64url'))
+    const stored = JSON.stringify(record)
+    /*
+     * THE KEY IS NOT STORED EITHER, and it matters more now than when this test was written: the
+     * same key that opens the therapist's offer is the one the owner seals their OWN keys under at
+     * approve (relay.ts, sealOwnerKeys). It is re-derived from the scalar, which is why storing it
+     * would widen exposure for nothing.
+     */
+    for (const encoding of [
+      Buffer.from(isk).toString('base64url'),
+      Buffer.from(isk).toString('base64'),
+      Buffer.from(isk).toString('hex'),
+    ]) {
+      expect(stored.includes(encoding), `key stored as: ${encoding}`).toBe(false)
+      // Control, per encoding: the detector sees a planted one.
+      expect((stored + encoding).includes(encoding)).toBe(true)
+    }
   })
 })
 

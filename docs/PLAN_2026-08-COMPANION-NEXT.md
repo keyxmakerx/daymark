@@ -1542,17 +1542,38 @@ exactly these fields and no others: `v` = 1, `boxPubB64` (X25519, 32 bytes), `si
 (Ed25519, 32 bytes), `displayName` (at most 64 code points, no control, format or bidi
 characters), `enrolTicketB64` (32 random bytes the therapist chose). The owner's device opens it
 or gets nothing — that null is the whole signal for a wrong code — and on Approve posts
-`{ "enrolTicketB64" }` to `POST /v1/relations/{relRef}/pairing/{exchangeId}/approve` (bearer; the
-run must be RESPONDED; the invitation goes to REDEEMING and the ticket is honoured until the
-invitation expires). The therapist polls `POST /v1/invite/{inviteId}/pairing/{exchangeId}/status`
+`{ "enrolTicketB64", "envB64" }` to `POST /v1/relations/{relRef}/pairing/{exchangeId}/approve`
+(bearer; the run must be RESPONDED; the invitation goes to REDEEMING and the ticket is honoured
+until the invitation expires). The therapist polls
+`POST /v1/invite/{inviteId}/pairing/{exchangeId}/status`
 with `{ "secret" }` no more often than every 45 seconds (the shared per-source budget charges
 every allowed request; a 429 means wait) and receives `{ "state": "WAITING" }`,
-`{ "state": "APPROVED", "scope": [...] }`, or a flat 410 for everything else, then enrols with
-the ticket as before. The owner lists invitations at `GET /v1/relations/{relRef}/invites`
+`{ "state": "APPROVED", "scope": [...], "envB64": "…" }`, or a flat 410 for everything else, then
+enrols with the ticket as before. The owner lists invitations at `GET /v1/relations/{relRef}/invites`
 (bearer): status, `failCount`, `exchangeCount`, and the newest run's state. `close` no longer
 exists; cancel on a CLOSED run is the abandon that puts the invitation back to PENDING.
 `companion/web/src/lib/pairing/payloads.ts` and `relay.test.ts` are the reference; the phone
 reproduces those bytes or the owner's device refuses the offer.
+
+REVISED 2026-09-12 — **the second envelope exists, so the paragraph above has two extra fields.**
+This paragraph used to say the negotiation was one message in one direction, and that an
+owner → therapist envelope could be added under a new payload version once the owner had durable
+keys to put in one. The owner's identity is now derived from their master key
+(`companion/web/src/lib/owner/identity.ts`, subkey ids 3 and 4 under context `"dmsync01"`), so it
+has been added, and issue #101's hand-pasted owner keys are gone from the clinician's sign-in.
+
+**E2, owner → therapist**, sealed at Approve under the SAME ISK in the other direction — envelope
+direction `owner-to-therapist`, AAD `daymark/pairing/env/v1|<sidB64>|owner-to-therapist`, the same
+`version(1)=0x01 | nonce(24) | ciphertext` wire shape. Its plaintext is UTF-8 JSON with exactly
+these fields and no others: `v` = 1, `boxPubB64` (X25519, 32 bytes), `signPubB64` (Ed25519, 32
+bytes). It rides in `envB64` on the approve, which the server now **refuses without** (400, and the
+run stays RESPONDED so nothing is spent), and comes back to the therapist in the status response —
+**only** once the run is CLOSED, and in no earlier poll. The therapist's side re-derives the ISK
+from its own CPace scalar plus the transcript (`cpaceResumeRespond`), so a reload between answering
+and approval does not lose the ability to open it; it stores the scalar and the three public
+messages, and never the code and never the key. On the phone, 4.0b's owner half seals the same
+payload with the same derived identity at the same moment. A device that skips it enrols clinicians
+who can verify nothing the owner later signs.
 
 **4.0b — the phone becomes the owner's pairing device.** §3.7.6 + §3.6.5 layer 1. A separate stage,
 not a separate design: the protocol is identical, only the device running the owner's half changes.

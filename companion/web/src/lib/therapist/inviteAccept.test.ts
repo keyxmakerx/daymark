@@ -38,6 +38,7 @@ import {
   groupForReading,
   loadKeyRecords,
   otpauthUri,
+  pinOwnerKeysOnRecord,
   resumeAcceptance,
   unfinishedKeyRecords,
   type AcceptancePorts,
@@ -52,6 +53,10 @@ import { PortalError, type LoginResult } from './session'
 
 const RELREF = 'rel-ref-opaque-0001'
 const PASSPHRASE = 'seven brass lanterns humming'
+
+/** E2 as the approval carries it, and the owner keys a matching code gets out of it (issue #101). */
+const OWNER_ENV = 'AQ-owner-sealed-keys'
+const OWNER_PUBLIC_KEYS = { signPubB64: 'OWNER-SIGN-PUB', boxPubB64: 'OWNER-BOX-PUB' }
 
 /* ── A storage that behaves like the browser's, and one that refuses to ──────────────────── */
 
@@ -192,9 +197,20 @@ async function acceptViaPairing(
   const pairing: PairingAcceptancePorts = {
     answer: async (args) => {
       await args.makeOffer(RELREF)
-      return { exchangeId: 'ex-1', relRef: RELREF }
+      return {
+        exchangeId: 'ex-1',
+        relRef: RELREF,
+        sidB64: 'c2lk',
+        ybB64: 'eWI',
+        msgAB64: 'bXNnYQ',
+        msgBB64: 'bXNnYg',
+      }
     },
-    status: async () => ({ state: 'approved', scope: ['read.share'] }),
+    status: async () => ({ state: 'approved', scope: ['read.share'], envB64: OWNER_ENV }),
+    // The owner's keys, as the approval's envelope yields them. Stubbed here — the real opening is
+    // proved in pairing/relay.test.ts — so that this file stays about the enrolment ordering.
+    ownerKeysFrom: () => OWNER_PUBLIC_KEYS,
+    pinOwnerKeys: (relRef, keys) => pinOwnerKeysOnRecord(relRef, keys, ports.storage),
     accept: ports,
     runStorage: null,
     wait: async () => {},
@@ -207,7 +223,7 @@ async function acceptViaPairing(
     displayName: input.displayName ?? 'Dr Example',
     host: input.host,
   })
-  return enrolAfterApproval(pairing, run, ['read.share'], input.host)
+  return enrolAfterApproval(pairing, run, ['read.share'], input.host, OWNER_ENV)
 }
 
 
@@ -766,13 +782,84 @@ describe('a browser that died before the last step can still finish', () => {
 })
 
 describe('nothing durable holds a secret', () => {
-  it('the stored record is the wrapped blob and two opaque identifiers', async () => {
+  it('the stored record is the wrapped blob, two opaque identifiers, and two public owner keys', async () => {
     const h = harness()
     await acceptViaPairing(h.ports, { passphrase: PASSPHRASE })
     const raw = h.storage.raw()!
     expect(raw).not.toContain(PASSPHRASE)
     expect(raw).not.toContain('the-invite-secret')
     const record = JSON.parse(raw)[0] as Record<string, unknown>
-    expect(Object.keys(record).sort()).toEqual(['createdAt', 'credentialId', 'relRef', 'v', 'wrapped'])
+    // The owner's two PUBLIC keys join the record at pairing (issue #101). Nothing secret does:
+    // they are the same two values the owner publishes to the server in the clear.
+    expect(Object.keys(record).sort()).toEqual([
+      'createdAt',
+      'credentialId',
+      'ownerBoxPubB64',
+      'pinnedOwnerSignPubB64',
+      'relRef',
+      'v',
+      'wrapped',
+    ])
+    expect(record.pinnedOwnerSignPubB64).toBe(OWNER_PUBLIC_KEYS.signPubB64)
+    expect(record.ownerBoxPubB64).toBe(OWNER_PUBLIC_KEYS.boxPubB64)
+  })
+})
+
+describe('the owner’s keys are written into the record once, and never quietly changed', () => {
+  const base = () => ({
+    v: 1 as const,
+    relRef: RELREF,
+    credentialId: 'cred-1',
+    wrapped: { v: 1, salt: 's', nonce: 'n', ct: 'c' } as unknown as WrappedKeyBlob,
+    createdAt: 1,
+  })
+
+  it('writes both halves on a record that has neither', () => {
+    const storage = memoryStorage(JSON.stringify([base()]))
+    expect(pinOwnerKeysOnRecord(RELREF, OWNER_PUBLIC_KEYS, storage)).toBe('pinned-now')
+    const record = findKeyRecord(RELREF, storage)!
+    expect(record.pinnedOwnerSignPubB64).toBe(OWNER_PUBLIC_KEYS.signPubB64)
+    expect(record.ownerBoxPubB64).toBe(OWNER_PUBLIC_KEYS.boxPubB64)
+    // Writing the same pair again is the same pairing, not a change.
+    expect(pinOwnerKeysOnRecord(RELREF, OWNER_PUBLIC_KEYS, storage)).toBe('already-pinned')
+  })
+
+  it('refuses a different key rather than replacing one — either half', () => {
+    // The substitution the pin exists to make visible. Both halves are load-bearing: the signing
+    // key proves authorship, the encryption key is what shares are sealed to.
+    for (const differing of [
+      { ...OWNER_PUBLIC_KEYS, signPubB64: 'SOMETHING-ELSE' },
+      { ...OWNER_PUBLIC_KEYS, boxPubB64: 'SOMETHING-ELSE' },
+    ]) {
+      const storage = memoryStorage(
+        JSON.stringify([
+          {
+            ...base(),
+            pinnedOwnerSignPubB64: OWNER_PUBLIC_KEYS.signPubB64,
+            ownerBoxPubB64: OWNER_PUBLIC_KEYS.boxPubB64,
+          },
+        ]),
+      )
+      expect(pinOwnerKeysOnRecord(RELREF, differing, storage)).toBe('differs-from-pin')
+      // And nothing moved.
+      expect(findKeyRecord(RELREF, storage)!.pinnedOwnerSignPubB64).toBe(OWNER_PUBLIC_KEYS.signPubB64)
+      expect(findKeyRecord(RELREF, storage)!.ownerBoxPubB64).toBe(OWNER_PUBLIC_KEYS.boxPubB64)
+    }
+  })
+
+  it('says so when there is no record and when there is no storage', () => {
+    expect(pinOwnerKeysOnRecord('rel-nobody-has', OWNER_PUBLIC_KEYS, memoryStorage(JSON.stringify([base()])))).toBe(
+      'no-record',
+    )
+    expect(pinOwnerKeysOnRecord(RELREF, OWNER_PUBLIC_KEYS, null)).toBe('no-record')
+  })
+
+  it('leaves every other relationship’s record alone', () => {
+    const other = { ...base(), relRef: 'rel-other', credentialId: 'cred-2' }
+    const storage = memoryStorage(JSON.stringify([base(), other]))
+    pinOwnerKeysOnRecord(RELREF, OWNER_PUBLIC_KEYS, storage)
+    const records = loadKeyRecords(storage)
+    expect(records).toHaveLength(2)
+    expect(records.find((r) => r.relRef === 'rel-other')!.pinnedOwnerSignPubB64).toBeUndefined()
   })
 })

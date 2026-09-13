@@ -15,6 +15,7 @@
   import type { UnlockedContext } from '../../therapist/context'
   import LoginGate from './LoginGate.svelte'
   import AllowedPanel from './AllowedPanel.svelte'
+  import LeaveRelationship from './LeaveRelationship.svelte'
   import AssignSurface from './AssignSurface.svelte'
   import GamePlanAuthor from './GamePlanAuthor.svelte'
   import SharedDataView from './SharedDataView.svelte'
@@ -63,6 +64,9 @@
     ctx = c
     grant = null
     grantError = ''
+    // Whatever the last leave said is stale the moment somebody signs in again — on this machine
+    // that is a different relationship, since the one that was left cannot be signed into at all.
+    leftNotice = ''
     // Fetch + verify the owner-signed grant before rendering any granted UI.
     try {
       const current = await c.client.getCurrent(c.session, 'grants', 'grant')
@@ -90,6 +94,30 @@
     // The decrypted bundle goes with the session. Leaving it behind would keep a person's records
     // in memory on a machine whose therapist has just said they were finished with it.
     shared = null
+  }
+
+  /*
+   * The clinician ended the relationship (issue #91), and this is what happens to the screen.
+   *
+   * Everything logout() does, minus the network call: the leave module has already signed out, and
+   * a second attempt on a session the server deleted would be a request that can only fail. The
+   * keys are still zeroized, because they are in memory here and their owner has just said they are
+   * finished with them.
+   *
+   * THE NOTICE SURVIVES THE TEARDOWN, which is the reason this is not just logout(). Dropping `ctx`
+   * unmounts the panel the sentence was rendered in, so a clinician would confirm something
+   * irreversible and land on a blank sign-in screen. It is carried out here and rendered on the
+   * screen they arrive at instead.
+   */
+  let leftNotice = $state('')
+  function onLeft(notice: string) {
+    if (ctx) zeroize(ctx.keys)
+    ctx = null
+    grant = null
+    grantError = ''
+    tab = 'allowed'
+    shared = null
+    leftNotice = notice
   }
 
   const canAssign = $derived(
@@ -169,6 +197,14 @@
     part of the contract, and its own headings — the gate should add neither a second copy of the
     notice nor a third "sign in" heading.
   -->
+  {#if leftNotice}
+    <!--
+      What just happened, on the screen the clinician lands on. A statement, not a confirmation:
+      no tone, no tick, no colour. Nothing went wrong and nothing is being celebrated — they asked
+      for something and this is what it did.
+    -->
+    <p class="left-notice" role="status">{leftNotice}</p>
+  {/if}
   <SignInScreen>
     {#snippet credentials()}
       <LoginGate onunlock={onUnlock} standalone={false} />
@@ -208,6 +244,12 @@
     {#if grant}
       {#if tab === 'allowed'}
         <AllowedPanel {grant} ownerSigningFp={ctx.pinnedOwnerSigningFp} therapistFp={ctx.therapistFp} />
+        <!--
+          At the FOOT of this tab, and deliberately not up in the topline beside Log out: two
+          adjacent controls that both end a session, one of them permanently, is a misclick with no
+          recovery. See LeaveRelationship.svelte for the rest of the reasoning.
+        -->
+        <LeaveRelationship {ctx} onleft={onLeft} />
       {:else if tab === 'assign'}
         <AssignSurface {ctx} {grant} ownerBoxPub={ctx.ownerBoxPub} />
       {:else if tab === 'gameplan'}
@@ -249,6 +291,14 @@
     max-width: var(--maxw);
     margin: 0 auto;
     padding: var(--space-5) var(--space-4) var(--space-8);
+  }
+  .left-notice {
+    max-width: var(--maxw);
+    margin: var(--space-5) auto 0;
+    padding: 0 var(--space-4);
+    color: var(--ink-text);
+    font-size: 0.9rem;
+    line-height: 1.55;
   }
   .topline { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
   .tabs { display: flex; gap: var(--space-2); flex-wrap: wrap; }

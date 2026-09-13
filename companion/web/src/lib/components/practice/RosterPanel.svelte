@@ -53,6 +53,7 @@
     EMPTY_ROSTER_BODY,
     EMPTY_ROSTER_TITLE,
     MEMBERSHIP_IS_NOT_READ_ACCESS,
+    REMOVAL_DOES_NOT_END_A_RELATIONSHIP,
     REMOVAL_ENDS_A_MEMBERSHIP,
     SESSIONS_CUT_MEANS,
     WHY_SOME_ACTS_COST_MORE,
@@ -342,6 +343,13 @@
   {#if confirming}
     <Callout tone="warn" title="Removing {confirming} from this practice">
       <p class="para">{REMOVAL_ENDS_A_MEMBERSHIP}</p>
+      <!--
+        The case this button is most often pressed for, and the one it does least about: somebody
+        being let go. A practice has no standing over a patient's relationship and no route here
+        reaches one, so the sentence is the whole of what this console can offer. See the copy
+        module for why that is the right design and still a surprise.
+      -->
+      <p class="para">{REMOVAL_DOES_NOT_END_A_RELATIONSHIP}</p>
     </Callout>
   {/if}
 

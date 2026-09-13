@@ -13,13 +13,16 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import {
+  ENDED_LABEL,
   KEEP_SHARING,
   REVOKE_ACTION,
   SHARING_LABEL,
   UNNAMED_RECIPIENT,
   copiesNotRemoved,
+  endedLine,
   revokeConsequence,
   revokeTitle,
+  shareRefusedBecauseEnded,
   sharingLine,
   sharingStateFrom,
 } from './sharing'
@@ -175,5 +178,94 @@ describe('(c) the strip', () => {
     // vanished on a timeout would be the one element whose absence reads as reassurance.
     expect(code).toContain('could not check whether sharing is active')
     expect(code).not.toMatch(/catch[\s\S]{0,60}versions = \[\]/)
+  })
+})
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   (d) When the clinician ended it themselves (issue #91).
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+describe('(d) the ended state', () => {
+  const stripSource = readFileSync(
+    fileURLToPath(new URL('../components/owner/SharingStrip.svelte', import.meta.url)),
+    'utf8',
+  )
+  const stripCode = stripSource.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
+
+  it('the label is a noun for the state, like the live one', () => {
+    expect(ENDED_LABEL).toBe('ACCESS ENDED')
+    // Not an instruction, not an accusation, not a verb aimed at the reader.
+    expect(ENDED_LABEL).not.toMatch(/you|check|warning|action/i)
+  })
+
+  it('says what and when, and names no reason it cannot know', () => {
+    const line = endedLine('Dr Okafor', '3 March 2026')
+    expect(line).toContain('Dr Okafor ended their access on 3 March 2026')
+    expect(line).toContain('Nothing you send now would be read')
+    // The server knows the relationship ended and nothing whatever about why. A console that
+    // guessed would be narrating somebody's professional life to a patient.
+    const NARRATION = /left the practice|retired|no longer works|was removed|dismissed/i
+    expect(NARRATION.test('Dr Okafor left the practice.')).toBe(true)
+    expect(NARRATION.test(line)).toBe(false)
+  })
+
+  it('drops the date rather than guessing when there is not one', () => {
+    expect(endedLine('Dr Okafor', null)).toBe(
+      'Dr Okafor ended their access. Nothing you send now would be read.',
+    )
+    expect(endedLine('  ', null)).toContain(UNNAMED_RECIPIENT)
+  })
+
+  it('reads as a fact, never as a failure or an alarm', () => {
+    const both = endedLine('Dr Okafor', '3 March 2026') + ' ' + ENDED_LABEL
+    const ALARMING = /error|problem|lost|failed|warning|urgent/i
+    expect(ALARMING.test('Error: sharing failed.')).toBe(true)
+    expect(ALARMING.test(both)).toBe(false)
+  })
+
+  it('the refusal at the point of sharing names the consequence and the two ways out', () => {
+    const r = shareRefusedBecauseEnded('Dr Okafor', '3 March 2026')
+    // Literally true, and it has to be: the check runs before anything is sealed.
+    expect(r).toContain('Nothing was sealed or sent')
+    expect(r).toContain('ended their access on 3 March 2026')
+    expect(r).toContain('nothing sent now would be read')
+    expect(r).toContain('revoke what is still published')
+    expect(r).toContain('invite them again')
+    // No cause. The server knows the ending, not the reason.
+    expect(r).not.toMatch(/because they|since they left|due to/i)
+  })
+
+  it('the strip replaces the sharing line rather than sitting beside it', () => {
+    // Both cannot be true at once. A strip that still said somebody had standing access would be
+    // the one permanently visible element whose words read as reassurance that notes were landing.
+    const ended = stripCode.indexOf('{#if loaded && endedAt}')
+    const live = stripCode.indexOf('{:else if loaded && sharing.active}')
+    expect(ended).toBeGreaterThan(-1)
+    // The ended branch comes FIRST and the live one is its else, so they can never both render.
+    expect(live).toBeGreaterThan(ended)
+    expect(stripCode.slice(ended, live)).not.toContain('{sharingLine(')
+    // Control: the same search finds the live sentence in the branch that does carry it.
+    expect(stripCode.slice(live)).toContain('{sharingLine(')
+  })
+
+  it('the ended strip is chrome, and clay is still spent only on the confirm', () => {
+    // One confirm, shared by both strips as a snippet — so the caveat cannot drift into two
+    // almost-identical copies, which is how a verbatim requirement quietly stops being verbatim.
+    expect(stripCode.match(/\{@render confirmRevoke\(\)\}/g)).toHaveLength(2)
+    expect(stripCode.match(/\{REVOKE_CAVEAT\}/g)).toHaveLength(1)
+    expect(stripCode.match(/class="destructive"/g)).toHaveLength(1)
+  })
+
+  it('does not read a failed ending check as "they left"', () => {
+    // An unreachable server says nothing about whether the clinician ended anything, and a console
+    // that answered "they left" on a timeout would stop somebody sharing with a therapist who is
+    // still there. The strip falls back to the live state; the seal falls through to the server.
+    expect(stripSource).toContain('endedAt = null')
+    const builder = readFileSync(
+      fileURLToPath(new URL('../components/owner/ShareBuilder.svelte', import.meta.url)),
+      'utf8',
+    )
+    expect(builder).toContain('.catch(() => null)')
+    expect(builder).toContain('shareRefusedBecauseEnded')
   })
 })

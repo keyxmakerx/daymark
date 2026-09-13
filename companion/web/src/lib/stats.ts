@@ -10,10 +10,23 @@ export interface Summary {
   lastEntry: number | null
   averageMood: number | null
   distribution: number[] // index 0..4 => mood level 1..5 counts
-  currentStreakDays: number
+  /**
+   * Calendar days in the last WINDOW_DAYS with at least one entry. Zero means the card and the
+   * summary fragment are not drawn at all — absence is drawn as nothing, never as a nought.
+   */
+  daysWithEntryLast30: number
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * The one continuity window this product has, matching `MoodStats.WINDOW_DAYS` on the phone.
+ *
+ * The phone and this console are two views of the same backup, so a person who opens both must see
+ * the same number. That is why this is thirty here as well, and why neither side is free to widen
+ * it locally: the number would then depend on which screen you happened to be looking at.
+ */
+export const WINDOW_DAYS = 30
 
 function startOfLocalDay(ms: number): number {
   const d = new Date(ms)
@@ -37,25 +50,34 @@ export function summarize(data: BackupData): Summary {
     lastEntry: entries.length ? entries[entries.length - 1].dateTime : null,
     averageMood: entries.length ? moodSum / entries.length : null,
     distribution,
-    currentStreakDays: currentStreak(entries),
+    daysWithEntryLast30: daysWithEntryInWindow(entries),
   }
 }
 
-/** Consecutive days (ending today or the most recent logged day) with >=1 entry. */
-function currentStreak(sortedEntries: BackupEntry[]): number {
+/**
+ * Calendar days in the WINDOW_DAYS-day window ending today that carry at least one entry.
+ *
+ * This replaced a consecutive-day count, and the replacement is the point rather than a tidy-up. A
+ * streak is a breakable state: one missed day took every day before it with it, so the figure was
+ * at its lowest exactly when someone had been away and had come back. Counting non-consecutively
+ * has no run to break — a gap costs the days it covers and nothing else.
+ */
+function daysWithEntryInWindow(sortedEntries: BackupEntry[]): number {
   if (!sortedEntries.length) return 0
-  const days = new Set(sortedEntries.map((e) => startOfLocalDay(e.dateTime)))
   const today = startOfLocalDay(Date.now())
-  let cursor = days.has(today) ? today : today - DAY_MS
-  // If the most recent entry is older than yesterday, the streak is 0.
-  const mostRecent = startOfLocalDay(sortedEntries[sortedEntries.length - 1].dateTime)
-  if (mostRecent < cursor) return 0
-  let streak = 0
-  while (days.has(cursor)) {
-    streak++
-    cursor -= DAY_MS
+  // Stepped back by calendar days rather than by WINDOW_DAYS * DAY_MS, because a clock change
+  // inside the window makes those two different: subtracting milliseconds lands an hour either
+  // side of midnight and quietly includes or drops the oldest day of the window.
+  const start = new Date(today)
+  start.setDate(start.getDate() - (WINDOW_DAYS - 1))
+  start.setHours(0, 0, 0, 0)
+  const from = start.getTime()
+  const days = new Set<number>()
+  for (const e of sortedEntries) {
+    const day = startOfLocalDay(e.dateTime)
+    if (day >= from && day <= today) days.add(day)
   }
-  return streak
+  return days.size
 }
 
 export interface DailyMood {

@@ -65,8 +65,15 @@
  * WHAT IS NEVER STORED, ANYWHERE. The passphrase and the unwrapped secret keys. The passphrase is
  * used to derive the wrapping key and is then the caller's to drop; the keys live in memory for the
  * length of the ceremony and are zeroized by the screen when it goes away. What persists in this
- * browser is the WRAPPED blob and two opaque identifiers — see KeyRecord for the honest accounting
- * of what that record still discloses about the person holding it.
+ * browser is the WRAPPED blob, two opaque identifiers and two timestamps — see KeyRecord for the
+ * honest accounting of what that record still discloses about the person holding it.
+ *
+ * AND WHAT PERSISTS SOMEWHERE ELSE, BECAUSE THIS PARAGRAPH USED TO BE WRONG. The relationship's
+ * inbox token is NOT in that record. It used to have a field here — dead, because the write that
+ * would have filled it in always threw and the throw was swallowed (issue #125) — and the sentence
+ * above went on claiming a record that carried nothing else while a field for a bare credential sat
+ * ten lines below it. The token now lives in sessionStorage, for the life of one tab, in
+ * therapist/inboxTokenStore.ts, which says why that and not this file.
  *
  * NO SVELTE, NO DOM, NO CLOCK OF ITS OWN. `now` is a port, `storage` is a port, and every network
  * call is a port, so the whole ceremony — including its ordering — is testable in the node
@@ -115,19 +122,23 @@ export interface KeyRecord {
   /** Argon2id-wrapped X25519 + Ed25519 secret keys. Opens only under the reading passphrase. */
   wrapped: WrappedKeyBlob
   createdAt: number
-  /**
-   * The relationship's inbox token, remembered after the first sign-in that supplied one.
+  /*
+   * THERE IS NO INBOX TOKEN HERE, AND THERE WAS NEVER ONE IN PRACTICE.
    *
-   * OPTIONAL, and it is the one value the acceptance ceremony cannot produce. The token is a second
-   * factor on the relationship channels and its digest IS the relRef, so the server cannot hand it
-   * back without giving away the thing it authenticates. It arrives with the invitation, out of
-   * band, like the invitation secret itself.
+   * This record used to declare an optional `inboxToken`, with a doc saying it was kept "so a
+   * clinician types it once rather than every visit". LoginGate tried to fill it in after each
+   * successful sign-in, and that write threw every single time: saveKeyRecord is insert-only, and
+   * the record it was updating had by construction just been read out of storage. The throw landed
+   * in a catch written for a browser refusing storage and was swallowed, so the feature was dead
+   * and silent from the day it shipped, and every clinician retyped forty-three characters at every
+   * visit (issue #125).
    *
-   * Kept here so a clinician types it once rather than every visit. Absent on records written
-   * before this existed and on any that have never been signed in with — both read as "ask for it",
-   * which is the harmless direction.
+   * It is not repaired here. Fixing the write would have put a bare journal credential in
+   * localStorage, in the clear, beside the wrapped keys and permanently — the passphrase would not
+   * protect it, since it is not inside the blob — which is a larger decision than the bug that
+   * exposed it. therapist/inboxTokenStore.ts holds it in sessionStorage for the life of one tab
+   * instead: a clinician who reloads is not asked again, and nothing survives the tab closing.
    */
-  inboxToken?: string
   /**
    * When this browser last saw the server confirm it holds THESE public keys for the relationship,
    * in epoch milliseconds. ABSENT means the ceremony never got that far.
@@ -151,6 +162,29 @@ export interface KeyRecord {
    * rescue.
    */
   registeredAt?: number
+  /**
+   * The owner's two public keys as the PAIRING proved them: taken out of the envelope the owner
+   * sealed at Approve under the key only the shared code derives (issue #101).
+   *
+   * WHY THEY LIVE IN THE RECORD AND NOT IN A FIELD ON THE FORM. Until this existed, a returning
+   * clinician typed the owner's keys in as base64, and what they pinned was worth whatever the
+   * channel that string arrived on was worth — while the owner, in the same ceremony, learned the
+   * clinician's keys from an envelope no one without the code could have sealed. One direction at
+   * ceremony assurance and the other at paste assurance, with the clinical content flowing along
+   * the weak one. Written here at the moment the pairing proves them, before enrolment, they are
+   * simply what this browser knows about the owner from then on.
+   *
+   * BOTH OR NEITHER. They are written together, out of one payload, because half a pinned owner is
+   * not a near-miss: the encryption key is what shares are sealed to and the signing key is what
+   * proves authorship, and a record holding one verified key beside one unverified one would read
+   * as verified.
+   *
+   * OPTIONAL, because a record written before this change has neither — that clinician enrolled
+   * when the ceremony could not prove them, and nothing can retroactively make it have done. Their
+   * sign-in says so and says a fresh invitation upgrades it (see [OWNER_KEY_UNPINNED_CAVEAT]).
+   */
+  pinnedOwnerSignPubB64?: string
+  ownerBoxPubB64?: string
 }
 
 /** The slice of the Storage API this needs. Lets tests pass a plain object; Node has no DOM. */
@@ -170,7 +204,18 @@ export function defaultKeyStorage(): KeyRecordStorage | null {
   }
 }
 
-export type AcceptStep = 'redeem' | 'record' | 'wrap' | 'enrol' | 'login' | 'register' | 'code' | 'name' | 'pairing'
+export type AcceptStep =
+  | 'redeem'
+  | 'record'
+  | 'wrap'
+  | 'enrol'
+  | 'login'
+  | 'register'
+  | 'code'
+  | 'name'
+  | 'pairing'
+  /** Nothing is wrong and nothing was lost: the server has paused this connection for a while. */
+  | 'paused'
 
 /**
  * A refusal, carrying WHICH step refused.
@@ -307,6 +352,45 @@ export function markKeysRegistered(
     // Including the throw from loadKeyRecords when the store is unreadable. Nothing downstream of
     // the ceremony depends on this flag; it only decides whether a screen offers a second chance.
   }
+}
+
+/**
+ * Write the owner's keys into this relationship's record, as the pairing just proved them.
+ *
+ * INSERT-ONLY, LIKE EVERY OTHER KEY WRITE IN THIS PRODUCT. A record that already carries a
+ * different owner key is not updated and not repaired: that is the substitution the pin exists to
+ * make visible, and the caller refuses to go on rather than choosing a winner. Writing the same
+ * keys again is `already-pinned`, which is what a second run of an unchanged ceremony looks like.
+ *
+ * Returns rather than throws, because the caller is mid-ceremony and the four answers lead to four
+ * different sentences — and because 'no-record' means the relationship's record has gone from under
+ * this tab, which is worth saying plainly instead of as a storage error.
+ */
+export function pinOwnerKeysOnRecord(
+  relRef: string,
+  keys: OwnerPublicKeysB64,
+  storage: KeyRecordStorage | null = defaultKeyStorage(),
+): 'pinned-now' | 'already-pinned' | 'differs-from-pin' | 'no-record' {
+  if (!storage) return 'no-record'
+  const records = loadKeyRecords(storage)
+  const existing = records.find((r) => r.relRef === relRef)
+  if (!existing) return 'no-record'
+  if (existing.pinnedOwnerSignPubB64 !== undefined || existing.ownerBoxPubB64 !== undefined) {
+    return existing.pinnedOwnerSignPubB64 === keys.signPubB64 && existing.ownerBoxPubB64 === keys.boxPubB64
+      ? 'already-pinned'
+      : 'differs-from-pin'
+  }
+  storage.setItem(
+    KEY_RECORD_STORAGE_KEY,
+    JSON.stringify(
+      records.map((r) =>
+        r.relRef === relRef
+          ? { ...r, pinnedOwnerSignPubB64: keys.signPubB64, ownerBoxPubB64: keys.boxPubB64 }
+          : r,
+      ),
+    ),
+  )
+  return 'pinned-now'
 }
 
 /**
@@ -474,10 +558,10 @@ export function groupForReading(value: string, size = 4): string[] {
  * something it cannot know, on the one screen where being wrong is expensive.
  */
 export const OWNER_KEY_MISMATCH =
-  'The owner key this server published is not the one you entered. That could be a mistyped key, a ' +
-  'key that has changed, or a server handing you a different one — this console cannot tell which, ' +
-  'and will not choose for you. Nothing has been signed in. Check the fingerprint with the person ' +
-  'who invited you, on a channel that is not this server.'
+  'This server is publishing a different owner key from the one your pairing proved. That could be ' +
+  'a key that has changed since you paired, or a server handing you one of its own — this console ' +
+  'cannot tell which, and will not choose for you. Nothing has been signed in. Do not go on until ' +
+  'you have checked with the person who invited you, on a channel that is not this server.'
 
 /**
  * What "nobody can reset it" means when the reader works in a practice (issue #100).
@@ -501,22 +585,36 @@ export const PASSPHRASE_NO_RESET =
   'would have to invite you afresh.'
 
 /**
- * The caveat beside the manual owner-key fields (issue #101).
+ * What a clinician whose record predates the owner → clinician envelope is told (issue #101).
  *
- * The rebuilt pairing makes the code load-bearing in ONE direction: the owner learns the
- * clinician's keys from an envelope only a code-holder could seal. Typing the owner's keys into
- * this form is the other direction, and it is not the same thing — nothing about a pasted key
- * proves it came from the owner. It is as good as the channel it arrived on and no better.
+ * This screen used to carry a caveat beside two fields a clinician typed the owner's keys into, and
+ * the caveat was honest: the code proved their keys to the owner, and nothing on the form proved
+ * the owner's keys to them. The fields are gone — the pairing now seals the owner's keys back under
+ * the same code — but a clinician who paired BEFORE that has a record with no such pin, and nothing
+ * can retroactively make their ceremony have proved it. So they sign in on the copy this server
+ * publishes, and they are told exactly that, plus the one thing that fixes it.
  *
- * Said in the consequence rather than the mechanism, and NOT in reassuring words. A caveat that
- * makes someone feel covered is worse than no caveat, because it spends the one moment they were
- * going to think about it.
+ * Said as the consequence and NOT in reassuring words. A caveat that leaves someone feeling covered
+ * is worse than none, because it spends the moment they were going to think about it. It names the
+ * remedy because there is one, which the old paste caveat could not say.
  */
-export const OWNER_KEY_PASTE_CAVEAT =
-  'Typing these is the weaker half of the pairing. The code you were given proves your keys to the ' +
-  'person who invited you; nothing here proves theirs to you. These are only as trustworthy as ' +
-  'wherever you copied them from, so check the fingerprint with them directly before you read ' +
-  'anything they send.'
+export const OWNER_KEY_UNPINNED_CAVEAT =
+  'Your pairing never proved this person’s keys to you — it happened before this browser could ' +
+  'learn them from the code. What you are signing in with is the copy this server publishes, and ' +
+  'this server does not vouch for it. Check the fingerprint with them on a channel that is not ' +
+  'this server before you read anything they send. Accepting a fresh invitation from them replaces ' +
+  'this with keys the code proves.'
+
+/**
+ * What is said when the pairing proved the owner's keys and this server publishes none.
+ *
+ * Not a warning, and deliberately one line: nothing is missing that the clinician needs. The pin is
+ * the stronger of the two values and it is present; the published copy was only ever the
+ * cross-check. Saying so stops the absence reading as a fault the clinician should act on.
+ */
+export const OWNER_KEY_NO_PUBLISHED_COPY =
+  'This server publishes no owner keys for the relationship, so there was nothing to compare — ' +
+  'signing in with the keys your pairing code proved.'
 
 /** A public key pair as it travels between the two sides: base64url strings, never bytes. */
 export interface OwnerPublicKeysB64 {
@@ -525,46 +623,68 @@ export interface OwnerPublicKeysB64 {
 }
 
 export type OwnerKeyChoice =
-  | { ok: true; keys: OwnerPublicKeysB64; source: 'typed' | 'published' }
+  | {
+      ok: true
+      keys: OwnerPublicKeysB64
+      /** 'pinned' — proved by the pairing code. 'published' — the server's copy, the weaker path. */
+      source: 'pinned' | 'published'
+      /** True when the pin stood alone because this server publishes nothing to compare it against. */
+      nothingToCompare?: boolean
+    }
   | { ok: false; reason: 'mismatch' | 'none' }
 
 /**
- * Which owner keys a signing-in clinician should pin: the ones they typed, the ones the server
- * published, or neither.
+ * Which owner keys a signing-in clinician uses: the ones their pairing proved, or the ones this
+ * server publishes.
  *
  * A function rather than a branch inside LoginGate because the property worth proving is a
  * precedence rule and a refusal, and neither can be asserted over markup in a node suite.
  *
- * THE RULE. Typed keys win whenever both halves are present, because those are the ones a human
- * checked out of band; the server's copy is then only a cross-check, and a disagreement refuses the
- * sign-in rather than picking a winner. The published copy is used only when nothing was typed —
- * the honestly-weaker path, trust on first use with nothing to compare against — and when there is
- * neither, that is a real state to explain rather than an error.
+ * THE RULE. The ceremony pin wins, always, because it is the only one of the two values anything
+ * proved: it came out of an envelope sealed under a key that exists only if the owner and the
+ * clinician held the same short code (pairing/payloads.ts). The server's published copy is a
+ * CROSS-CHECK and never an override — a disagreement on either half refuses the sign-in rather than
+ * picking a winner, and a server that publishes nothing takes nothing away, because the pin is the
+ * stronger value and it is already here.
  *
- * WHAT IT REPLACES. LoginGate assigned the published keys over whatever had been typed, with no
- * comparison and no notice (issue #122). That was inert only because nothing in the product had
- * ever published an owner key; the moment the owner console gained a publish button, a server
- * handing back a key it controlled would have silently replaced the one the clinician verified,
- * and every forged share would then have verified against it.
+ * The published copy is used ALONE only for a record with no pin: a clinician who enrolled before
+ * the owner → clinician envelope existed. That is the honestly weaker path — trust in a value the
+ * server hands over and does not vouch for — and it says so (OWNER_KEY_UNPINNED_CAVEAT), with the
+ * remedy, rather than passing for the same thing.
  *
- * Both halves are compared. A record matching the signing key but not the encryption key is not a
- * near-miss: it is a record this clinician did not verify.
+ * WHAT IT REPLACES, TWICE OVER. First, LoginGate assigned the published keys over whatever had been
+ * typed, with no comparison and no notice (issue #122) — so a server handing back a key it
+ * controlled silently replaced the one the clinician had verified. Then the typed keys themselves
+ * went (issue #101): a pasted key is worth the channel it arrived on, and what replaced it is worth
+ * the code. There is no longer any way for a clinician to type an owner key into this product, and
+ * that is the point rather than a simplification.
+ *
+ * BOTH HALVES ARE COMPARED. A copy matching the signing key but not the encryption key is not a
+ * near-miss. The encryption key is what the owner's shares are sealed to and the signing key is
+ * what proves authorship; agreeing about one while differing about the other is a disagreement.
  */
 export function chooseOwnerKeys(
-  typed: { signPubB64: string; boxPubB64: string },
+  pinned: OwnerPublicKeysB64 | null,
   published: OwnerPublicKeysB64 | null,
 ): OwnerKeyChoice {
-  const signPubB64 = typed.signPubB64.trim()
-  const boxPubB64 = typed.boxPubB64.trim()
-
-  if (signPubB64 && boxPubB64) {
-    if (published && (published.signPubB64 !== signPubB64 || published.boxPubB64 !== boxPubB64)) {
+  if (pinned) {
+    if (published && (published.signPubB64 !== pinned.signPubB64 || published.boxPubB64 !== pinned.boxPubB64)) {
       return { ok: false, reason: 'mismatch' }
     }
-    return { ok: true, keys: { signPubB64, boxPubB64 }, source: 'typed' }
+    return published
+      ? { ok: true, keys: pinned, source: 'pinned' }
+      : { ok: true, keys: pinned, source: 'pinned', nothingToCompare: true }
   }
   if (published) return { ok: true, keys: published, source: 'published' }
   return { ok: false, reason: 'none' }
+}
+
+/** The ceremony-pinned owner keys on a record, or null when it has neither half. Both or nothing. */
+export function pinnedOwnerKeysOf(record: Pick<KeyRecord, 'pinnedOwnerSignPubB64' | 'ownerBoxPubB64'>): OwnerPublicKeysB64 | null {
+  const signPubB64 = record.pinnedOwnerSignPubB64
+  const boxPubB64 = record.ownerBoxPubB64
+  if (typeof signPubB64 !== 'string' || typeof boxPubB64 !== 'string' || !signPubB64 || !boxPubB64) return null
+  return { signPubB64, boxPubB64 }
 }
 
 export const KEY_CHECK_COPY = {

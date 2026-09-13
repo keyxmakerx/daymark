@@ -170,3 +170,95 @@ describe('(d) the words', () => {
     expect(unlockCopy.UNLOCK_ACTION.toLowerCase()).not.toContain('generate')
   })
 })
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   (e) The inbox token is minted here, and there is nowhere to type one.
+
+   Issue #126's headline finding. The token is the second factor on every route that serves
+   relationship content, and until 2026-09-12 the only way one entered the system was a text box on
+   this screen whose entire validation was "not empty". The properties below are what replaced it.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+describe('(e) the inbox token', () => {
+  it('has no field to be typed into', () => {
+    /*
+     * The absence this whole issue is about, with the deleted markup as its control. A screen that
+     * mints a token AND still accepts a typed one has fixed nothing: the weak path is the one a
+     * hurried person takes.
+     */
+    const TYPED = /bind:value=\{tInboxToken\}|\btInboxToken\b/
+    expect(TYPED.test('<label><span>Inbox token (OOB)</span><input bind:value={tInboxToken} /></label>'))
+      .toBe(true)
+    expect(TYPED.test(code)).toBe(false)
+    // And no other password field crept in to take its place — the form asks for a name and two
+    // public keys, none of which is a secret.
+    const passwordInputs = (code.match(/<input[^>]*type="password"[^>]*>/g) ?? []).filter(
+      (tag) => !tag.includes('passphrase'),
+    )
+    expect(passwordInputs).toEqual([])
+  })
+
+  it('gets the token from the minting module and from nowhere else', () => {
+    expect(code).toContain('mintInboxToken()')
+    // One assignment into the pinned entry, and it is the minted value.
+    const assigned = code.match(/inboxToken:\s*[^\n,]+/g) ?? []
+    expect(assigned).toEqual(['inboxToken: token'])
+  })
+
+  it('puts no part of the token into the pending id, or into a grant', () => {
+    /*
+     * The latent hazard in the issue's last section. `emptyGrant(id).therapistFingerprint` is
+     * emitted by encodeSignedGrant as plain JSON — signed, not encrypted — and stored under the
+     * token's own digest, which would make it an offline oracle for the rest of the token. Nothing
+     * reaches it today only because the Grants tab is replaced by a message while an entry is
+     * pending. The id no longer carries the token, so the tab condition is no longer what is
+     * holding the leak shut.
+     */
+    const PREFIXED = /slice\(\s*0\s*,\s*8\s*\)/
+    expect(PREFIXED.test('id: `pending:${tInboxToken.trim().slice(0, 8)}:${pinned.length}`')).toBe(true)
+    expect(PREFIXED.test(code)).toBe(false)
+
+    // Every id built for a pending entry, and what goes into it. A counter, and nothing else.
+    const pendingIds = code.match(/`pending:[^`]*`/g) ?? []
+    expect(pendingIds).toEqual(['`pending:${++pendingSeq}`'])
+
+    // The grant is handed the id, never a value derived from the token.
+    expect(code.match(/emptyGrant\([^)]*\)/g) ?? []).toEqual(['emptyGrant(id)'])
+  })
+
+  it('shows it as an output rather than a form control, and never in a refusal', () => {
+    // Same choice PairingPanel makes for the pairing code: a form control is something a browser
+    // saves and an autofill carries into the next form that looks like this one.
+    expect(code).toMatch(/<output[^>]*>\{mintedToken\}<\/output>/)
+    expect(code).not.toMatch(/<input[^>]*\bmintedToken\b/)
+
+    const IN_A_MESSAGE = /error = [^\n]*\$\{[^\n]*(token|mintedToken)/
+    expect(IN_A_MESSAGE.test('error = `That token is taken: ${token}`')).toBe(true)
+    expect(IN_A_MESSAGE.test(code)).toBe(false)
+  })
+
+  it('says it is the only sighting, and which channel it must not travel by', () => {
+    for (const name of ['ADDING_MINTS_A_TOKEN', 'INBOX_TOKEN_TWO_CHANNELS', 'INBOX_TOKEN_SHOWN_ONCE']) {
+      expect(code, name).toContain(`{${name}}`)
+    }
+    // The correction the audit asked for, in the words a person actually reads.
+    expect(unlockCopy.INBOX_TOKEN_TWO_CHANNELS).toMatch(/not in the invitation/i)
+    expect(unlockCopy.INBOX_TOKEN_SHOWN_ONCE).toMatch(/here and nowhere else/i)
+    // "Shown once" without a way forward reads as a threat, so it names what to do instead.
+    expect(unlockCopy.INBOX_TOKEN_SHOWN_ONCE).toMatch(/adding this clinician again/i)
+  })
+
+  it('refuses without naming a cause it cannot know', () => {
+    /*
+     * CLAUDE.md §4: a refusal names a consequence. "libsodium is not ready" or "your browser
+     * blocked randomness" are guesses this screen cannot support; "this clinician has not been
+     * added" is the fact the owner needs.
+     */
+    const refusals = code.match(/error = '[^']*'/g) ?? []
+    expect(refusals.length).toBeGreaterThan(2)
+    const BLAME = /\b(you typed|your fault|invalid input|try harder|browser is broken)\b/i
+    expect(BLAME.test("error = 'Invalid input — you typed it wrong.'")).toBe(true)
+    for (const r of refusals) expect(BLAME.test(r), r).toBe(false)
+    expect(refusals).toContain("error = 'No token could be made, so this clinician has not been added.'")
+  })
+})

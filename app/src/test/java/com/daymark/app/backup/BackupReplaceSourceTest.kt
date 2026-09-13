@@ -39,8 +39,8 @@ internal fun repoFile(rel: String): File {
  * ## Why this is a source test
  *
  * The honest test constructs a [BackupManager] and asserts the ledger is empty afterwards. Its
- * sixteen collaborators include four final classes (`PhotoStore`, `MoodCustomizationStore`,
- * `AchievementsStore`, `ReminderRepository`) and its photo path calls `android.util.Base64`; this
+ * sixteen collaborators include three final classes (`PhotoStore`, `MoodCustomizationStore`,
+ * `ReminderRepository`) and its photo path calls `android.util.Base64`; this
  * module's unit tests have no mocking framework and no Robolectric, so that test cannot be written
  * here — it would need an instrumented run, and nothing in CI runs those. A source assertion that
  * actually executes is worth more than an instrumented one that does not.
@@ -85,8 +85,8 @@ class BackupReplaceSourceTest {
 
     /**
      * Everything the REPLACE path runs: `importFromJson` down to (not including) `importMerge`,
-     * which is `importReplace` plus the mode-independent tail that clears mood overrides and
-     * achievements. MERGE-only code lives below the cut.
+     * which is `importReplace` plus the mode-independent tail that clears mood overrides.
+     * MERGE-only code lives below the cut.
      */
     private fun replacePath(src: String): String =
         src.substringAfter("suspend fun importFromJson").substringBefore("private suspend fun importMerge")

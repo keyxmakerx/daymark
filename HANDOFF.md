@@ -37,6 +37,14 @@ micro-journaling + wellbeing toolkit. A clean-room alternative to Daylio (no Day
   The privacy claim is *verifiable* because the app literally cannot reach the network.
 - 100% local: no backend, no accounts, no ads, no trackers, no telemetry. Data leaves the device
   only via user-initiated JSON/CSV/PDF export through the system file picker (SAF).
+- **The journal is encrypted at rest.** SQLCipher behind Room, keyed by a random 32-byte key made on
+  first run for every install — PIN or not — and kept wrapped under a key generated in the phone's
+  hardware keystore. An existing plaintext journal is migrated once by copy-verify-swap. The **PIN
+  guards the screen, not the file**: it is not what the key is made from, so a forgotten PIN costs
+  the way in and never the entries. **Photos are not covered** and exports are plain files by the
+  user's own act. The design, the rejected alternatives and the one decision still open — whether
+  setting a PIN should remove the keystore wrap, at the cost of reminders after a reboot — are in
+  `docs/DECISIONS_2026-08.md` §D7.
 
 ---
 
@@ -63,7 +71,7 @@ micro-journaling + wellbeing toolkit. A clean-room alternative to Daylio (no Day
 ### ⚠️ The no-emulator caveat (important)
 This environment can compile and run JVM unit tests but **cannot render Compose / `android.graphics`
 visually.** So all **Canvas / drawing code is logic-verified but NOT eyeballed**: Year-in-Stars,
-the Review-my-year star clusters, the keepsake PNG, the Movement pose figures, the PDF charts. These
+the Review-my-year star clusters, the Movement pose figures, the PDF charts. These
 **need a real device/emulator pass** before you trust their appearance.
 
 ---
@@ -76,11 +84,11 @@ app/src/main/java/com/daymark/app/
     entity/        MoodEntry, ActivityEntity, Tracker, TrackerLog, Goal, JournalEntry,
                    AssessmentResult, ThoughtRecord, Reminder, SleepLog, Treatment, cross-refs
     dao/           one DAO per aggregate
-    *Store.kt      SharedPreferences-backed: Settings, MoodCustomization, Achievements, Screening,
+    *Store.kt      SharedPreferences-backed: Settings, MoodCustomization, Screening,
                    Crisis, SleepProfile, Photo
   stats/           PURE JVM domain (unit-tested): MoodStats, MoodCorrelations, MoodPatterns,
-                   PeriodReview, Achievements, GoalProgress, Signals, YearReview
-  export/          PdfReportGenerator, QrEncoder, ReportData, PdfExportOptions, YearKeepsakeRenderer
+                   PeriodReview, GoalProgress, Signals, YearReview
+  export/          PdfReportGenerator, QrEncoder, ReportData, PdfExportOptions
   ui/<feature>/    Compose screens + HiltViewModels, grouped by feature (see list below)
   ui/components/    shared Compose: PaperSurface, MoodFaceIcon, YearInPixelsGrid, YearInStarsGrid,
                    ConsistencyHeatmap, EntryPhoto, PoseFigure, SignalCards, TextFieldDefaults …
@@ -93,11 +101,11 @@ docs/              DESIGN, ARCHITECTURE, PRIVACY, FEATURES, USER_GUIDE, ROADMAP,
                    SLEEP_FEATURE_PLAN, SUPPORT_FEATURE_PLAN, DOCKER_COMPANION, FAQ, ON_BODY_BREATHING…
 ```
 ui feature dirs: `home, foryou, history, entry, calendar, insights, journal, goals, activities,
-trackers, assessments, cbt, activation, movement, sleep, support, achievements, settings,
+trackers, assessments, cbt, activation, movement, sleep, support, settings,
 onboarding, search, lock, more, icon, theme, components, navigation`.
 
 **Home is the "daily loop", not the archive** (2026-07, per `docs/design/app-01-home-daily-loop`):
-greeting + date → one-tap check-in row → glance (streak + last-7-days bars) → **at most one**
+greeting + date → one-tap check-in row → glance (entry total + last-7-days bars) → **at most one**
 signal card → **today's** entries → two links out. The full day-grouped timeline lives in
 `ui/history/` ("All entries") and the rest of the ranked signals plus the "on this day" memories
 card live in `ui/foryou/` ("For you"). `ui/components/EntryRow.kt` holds the shared rows
@@ -115,7 +123,7 @@ Warm-stationery aesthetic. Tokens (in `ui/theme/`):
   `LocalMoodColors`/`MaterialTheme.moodColors.forLevel(1..5)` and `LocalMoodLabels` so **custom mood
   palettes/labels carry through everywhere** — always use these, never hardcode mood colors in UI.
 - **Mood level 1..5 is the stable key** in the DB; custom labels/colors are a presentation layer.
-- **Night-sky surfaces** (Year in Stars, Review, keepsake) use a fixed dark palette regardless of
+- **Night-sky surfaces** (Year in Stars, Review) use a fixed dark palette regardless of
   theme: bg `#16150F`, ink `#EBE5D8`, faint `#8E887A` (see `YearInStarsGrid.kt` internals).
 - **Icons & art are all original** (hand-drawn vector `res/drawable/ic_*`, Canvas `MoodFaceIcon`,
   `PoseFigure`, the star renderer) → zero licensing concerns.
@@ -140,7 +148,7 @@ Warm-stationery aesthetic. Tokens (in `ui/theme/`):
   in one transaction). Older backups still import. Also CSV export and a **PDF report**
   (`export/PdfReportGenerator`, platform `PdfDocument`+`Canvas`, selectable text, QR authenticity via
   `QrEncoder`).
-- Prefs stores hold non-Room state (settings, custom moods, achievement unlock times, screening
+- Prefs stores hold non-Room state (settings, custom moods, screening
   results, crisis resources, sleep profile). Photos live app-private via `PhotoStore` (path-traversal
   guarded).
 
@@ -153,13 +161,12 @@ meshes them into one experience **without AI**.
 
 `stats/Signals.kt` (pure, deterministic, **15 unit tests** in `SignalsTest`):
 - `Signals.build(inputs): List<Signal>` ranks candidate cards by fixed-threshold rules. Each
-  `Signal` has: `kind`, `category` (Support/Celebration/Insight/Nudge/Prompt), `score`, `title`,
+  `Signal` has: `kind`, `category` (Support/Insight/Nudge/Prompt), `score`, `title`,
   `body` (fixed templated copy), optional `action` (sealed `Action`), `dismissible`, and a
   `surfaces` set.
 - **Surfaces:** `Feed`, `Insights`, `Support`. `Signals.forSurface(list, surface, limit)` selects.
 - **Rules (thresholds = the rules; tuned conservative):** low-mood support offer (100, Feed),
-  prompt-to-log (85, Feed), achievement-unlocked (72), streak-milestone (65), month-up (58),
-  check-in-due (54), on-this-day (44, Feed), lift-factor→make-a-goal (40+), month-**down** (40,
+  prompt-to-log (85, Feed), month-up (58), check-in-due (54), on-this-day (44, Feed), lift-factor→make-a-goal (40+), month-**down** (40,
   **Insights-only**, gently worded), drag-factor (35+, Insights-only). `supportMenu(topLift)` returns
   the always-available "what might help" options (move/breathe/thought/journal/crisis), with movement
   rising + getting personalized copy when it's a known lift.
@@ -200,12 +207,10 @@ returns, and offers to end the snooze now.
   *recommend* — never flip a toggle.
 - `ui/insights/SignalsViewModel.kt` derives `Signals.Inputs` from repos (reusing `MoodStats`,
   `MoodCorrelations`, `MoodPatterns`). Notes:
-  - It **idempotently writes** newly-earned achievement unlock times (documented in its KDoc) — same
-    sticky write the Achievements screen does.
-  - **Achievement celebration only fires on a *single* fresh unlock** (`newly.size == 1`) so a
-    pre-existing user's first run (which records *many* old badges at once) is never falsely
-    celebrated.
-  - `supportSignals` is a **separate, side-effect-free** flow, always non-empty.
+  - It **writes nothing**. It used to stamp newly-earned achievement unlock times on the way past;
+    the achievements are gone and so is the write, so reading the Insights screen now stores
+    nothing at all.
+  - `supportSignals` is a **separate** flow, always non-empty.
 - `SignalCards` **hoists dismissal state** to the caller (`SignalDismissalSaver`,
   `visibleSignalCount(...)`), so a surface can drop the whole strip cleanly when everything's
   dismissed. Dismissals survive config changes.
@@ -226,11 +231,11 @@ ViewModel derivation) — never a model.**
   `YearInPixelsGrid` stays for analysis). Has a real colour→mood legend + a summarising
   `contentDescription`.
 - `ui/insights/ReviewYearScreen.kt` + `ReviewYearViewModel.kt`: a full-screen `HorizontalPager`
-  walkthrough (intro → quarter chapters with star clusters → finale stats), tap/swipe to advance,
-  gentle per-page fade, "Skip" control. Route `REVIEW_YEAR` (year nav arg).
-- `export/YearKeepsakeRenderer.kt`: renders the year as a 1080×1350 PNG keepsake via
-  `android.graphics` (deterministic layout, custom mood ARGB passed in), saved via SAF from the
-  finale's "Save keepsake" button.
+  walkthrough (intro → quarter chapters with star clusters → a finale of two tiles, `Most often`
+  and `First entry`), tap/swipe to advance, gentle per-page fade, "Skip" control. Route
+  `REVIEW_YEAR` (year nav arg). **There is no image export**: the keepsake PNG and its renderer are
+  deleted — a year of one person's mood as a single file is the most identifying thing this
+  product can make, and it landed in the gallery.
 
 ---
 
@@ -258,13 +263,14 @@ ViewModel derivation) — never a model.**
 - **Evidence-based modules:** PHQ-9 / GAD-7 / WHO-5 check-ins (history + trend; PHQ-9 item-9 → offline
   crisis flow; only scores stored); behavioral activation; implementation-intention (if-then) goals;
   breathing presets; journal templates; CBT thought records.
-- **Gamification:** achievements (original badges), consistency heatmap.
+- **Consistency:** an entries-per-day heatmap, and a non-consecutive "days with an entry" count
+  (`12 of the last 30`). No badges, no streaks, no levels — see §D6.
 - **Move:** gentle yoga/stretch + bodyweight routines with **original Canvas pose figures**, haptic
   timer, per-session logging to a "Movement minutes" tracker.
 - **Sleep:** sleep log (Consensus-Sleep-Diary-style fields), license-clean screeners, sleep profile,
   treatments before/after, an on-body breathing-capture experiment. (Tiered sensor plan in
   `docs/SLEEP_FEATURE_PLAN.md`; advanced tiers are largely **planned**, not shipped.)
-- **Signals engine + 3 surfaces; Year in Stars + Review my year + keepsake; sentence
+- **Signals engine + 3 surfaces; Year in Stars + Review my year; sentence
   auto-capitalization in all free-text fields.**
 - **Home-screen widget** (Glance) — `widget/MoodWidget`.
 - **Onboarding** wizard; **Gentle support** ("take a moment") space.
@@ -277,7 +283,7 @@ ViewModel derivation) — never a model.**
 1. **Bundle fonts** — add Fraunces + Inter OFL TTFs to `res/font/`, wire into `ui/theme/Type.kt`,
    ship `OFL.txt` + a licenses row. (Currently using system fallback; the "paper" identity wants the
    serif wordmark.) Verify they're **bundled, not Downloadable Fonts**.
-2. **On-device visual pass** of all Canvas art (Year in Stars, keepsake, pose figures, PDF charts) —
+2. **On-device visual pass** of all Canvas art (Year in Stars, pose figures, PDF charts) —
    never been eyeballed here (see §2 caveat). Especially check star contrast on the dark bg.
 3. **Add a CI emulator job** for the instrumented `MigrationTest` + any androidTest; add `lint` to CI.
 
@@ -339,7 +345,7 @@ ViewModel derivation) — never a model.**
 
 ## 11. Known gaps / risks to watch
 
-- **Canvas art unverified visually** (fonts, stars, keepsake, poses, PDF) — do an on-device pass.
+- **Canvas art unverified visually** (fonts, stars, poses, PDF) — do an on-device pass.
 - **Fonts not bundled** — app looks more generic than the locked "paper" design until added.
 - **Release is still debug-signed** — must fix before any public distribution.
 - **Instrumented tests not in CI** — migrations are only locally/emulator-verified.

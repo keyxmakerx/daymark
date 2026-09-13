@@ -47,7 +47,6 @@ fun MoreHubScreen(
     onTrackers: () -> Unit,
     onGentleSupport: () -> Unit,
     onCheckins: () -> Unit,
-    onAchievements: () -> Unit,
     onActivation: () -> Unit,
     onThoughtRecords: () -> Unit,
     onMovement: () -> Unit,
@@ -171,25 +170,17 @@ fun MoreHubScreen(
                 modifier = Modifier.weight(1f),
             )
         }
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        // Settings is full width because it is now alone on this row: "Achievements" sat beside it
+        // and has been removed from the product, badges and all. The card is not replaced — there
+        // is nothing the hub should offer in the shape of a place to go and be told how you are
+        // doing.
+        HubCard(
+            icon = R.drawable.ic_ui_more,
+            title = "Settings",
+            subtitle = "Reminders, lock, backup",
+            onClick = onSettings,
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-        ) {
-            HubCard(
-                icon = R.drawable.ic_act_star,
-                title = "Achievements",
-                subtitle = "Milestones for showing up",
-                onClick = onAchievements,
-                modifier = Modifier.weight(1f),
-            )
-            HubCard(
-                icon = R.drawable.ic_ui_more,
-                title = "Settings",
-                subtitle = "Reminders, lock, backup",
-                onClick = onSettings,
-                modifier = Modifier.weight(1f),
-            )
-        }
+        )
     }
 }
 

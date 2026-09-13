@@ -131,6 +131,27 @@ enum class AuditAction(val wire: String) {
     INVITE_REPORTED("invite.reported"),
 
     /**
+     * The clinician ended this relationship from their own console.
+     *
+     * The counterpart to [SHARE_REVOKE], pointing the other way, and the one line in this log the
+     * owner did not cause. It is here because the alternative is an owner who goes on publishing to
+     * a reader who is gone: their sharing strip would keep saying somebody has standing access, and
+     * it would be true that ciphertext was being delivered and false that anyone would open it.
+     *
+     * Read it for exactly what it says. It records that the clinician's sign-in for this
+     * relationship is closed and cannot be reopened. It says nothing about what they already read,
+     * which is theirs permanently and beyond the reach of anything this server can write, and it is
+     * not an accusation: putting down access is an ordinary professional act. The owner's own
+     * material is untouched — no share was withdrawn, no grant altered, nothing removed — which is
+     * why this is its own action rather than a [SHARE_REVOKE] with a different actor.
+     *
+     * Written ONCE, when the ending is recorded, never again. The leave route is idempotent and a
+     * second call writes nothing, for the same reason the lockout is recorded on arming rather than
+     * per probe: a log that grows a row per retry buries the row that matters.
+     */
+    RELATIONSHIP_ENDED("relationship.ended"),
+
+    /**
      * The therapist published their public keys for this relationship, and the server took them.
      *
      * Read the wording carefully, because the natural reading of an audit line is that the server

@@ -216,16 +216,37 @@
                ShareBuilder would offer both, so a pending clinician gets the half that exists. -->
           <PairingPanel
             therapist={selected}
+            others={session.pinned}
             {client}
             baseUrl={serverUrl}
             {token}
             {smtpEnabled}
             scope={['read.share']}
+            ownerSignPub={session.ownerSign.publicKey}
+            ownerBoxPub={session.ownerBox.publicKey}
             onpaired={(keys) => { pairingOpen = true; keysArrived(keys) }}
             ondone={() => (pairingOpen = false)}
           />
         {:else}
           <ShareBuilder {session} therapist={selected} {data} {client} {smtpEnabled} />
+          <!--
+            THE WAY BACK INTO PAIRING for a relationship that already has keys, which until now had
+            none: the panel appeared only while a clinician was pending, so a clinician who lost the
+            browser holding their keys left the owner with a console that could seal to a key nobody
+            could open and no screen offering to fix it. A fresh invitation is the fix (their
+            passphrase cannot be reset, and the old invitation is spent), and issue #111 is what
+            happens at the end of it — approving the reply replaces the keys on file.
+
+            A button, not an automatic offer: nothing here can tell a lost key from a quiet month.
+          -->
+          <div class="repair">
+            <p class="faint">
+              If {selected.displayName} can no longer open what you send — a new browser, a lost
+              passphrase — send them a fresh invitation. Approving the reply replaces the keys this
+              console holds for them. Nothing changes until you do.
+            </p>
+            <button onclick={() => (pairingOpen = true)}>Send a fresh invitation</button>
+          </div>
         {/if}
       {:else if sub === 'access-log'}
         <AuditList therapist={selected} {client} />
@@ -253,4 +274,6 @@
   .cstatus { font-size: 0.8rem; color: var(--ink-soft); }
   .who { padding-bottom: var(--space-2); }
   .empty { margin: 0; }
+  .repair { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); border-top: 1px solid var(--hairline); padding-top: var(--space-3); }
+  .repair p { margin: 0; font-size: 0.85rem; }
 </style>

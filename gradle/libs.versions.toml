@@ -26,6 +26,22 @@ hilt = "2.52"
 hiltNavigationCompose = "1.2.0"
 biometric = "1.1.0"
 securityCrypto = "1.1.0"
+# SQLCipher for Android (BSD), the encrypted SQLite that Room opens through. BOTH flavours — the
+# journal is encrypted in the offline-only flagship too, which is the whole point of issue #109.
+# It carries no network code and adds no permission; the foss INTERNET check in CI still passes.
+#
+# 4.17.0, NOT the latest 4.19.0, and the reason is the same toolchain block docs/TOOLCHAIN.md
+# describes. 4.18.0 added `org.jetbrains.kotlin:kotlin-stdlib:2.2.10` to its POM and started
+# shipping Kotlin classes; this project compiles with Kotlin 2.0.21, which refuses class files
+# carrying 2.2 metadata. 4.17.0 is the newest release that is still pure Java — verified by
+# unpacking the AAR: no kotlin-stdlib in its POM, no Kotlin metadata in classes.jar — and its only
+# dependency is androidx.sqlite 2.6.2, the same artifact Room already resolves. It moves when
+# Kotlin does.
+#
+# Size, stated because it is real and nothing else in this app costs this much: the AAR is ~4 MB
+# and carries libsqlcipher.so for all four ABIs. There are no ABI splits configured, so every APK
+# grows by roughly that. That is the price of the journal not being a plaintext file.
+sqlcipher = "4.17.0"
 kotlinxSerialization = "1.7.3"
 glance = "1.1.0"
 qrcodegen = "1.8.0"
@@ -74,6 +90,7 @@ hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", v
 androidx-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
+sqlcipher-android = { group = "net.zetetic", name = "sqlcipher-android", version.ref = "sqlcipher" }
 androidx-lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycle" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "glance" }

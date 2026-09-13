@@ -55,14 +55,73 @@ export const OWNER_COPY = {
     'fresh one.',
 
   /**
-   * The mismatch. A question, not a verdict: a typo and a stranger holding the link produce the
-   * same silence, and the person in front of the screen is the only one who can tell them apart.
+   * The mismatch (issue #112). A question, not a verdict: a typo and a stranger holding the link
+   * produce the same silence, and the person in front of the screen is the only one who can tell
+   * them apart. So the screen asks them to go and find out — from the person, on the channel the
+   * code went down — rather than offering a diagnosis it does not have.
+   *
+   * ONE NOTICE, ON THIS SCREEN, AND NO NOTIFICATION. The owner's half runs in a browser tab today,
+   * and a closed tab cannot raise a notification honestly: it would arrive late, or not at all, and
+   * either way the person would learn to treat it as unreliable. The phone half (4.0b) can do it
+   * properly and the contract for that is written down in COMPANION_PHONE_2B.md §4 rather than
+   * improvised here.
+   *
+   * The count stays where it was, below this, and stays a count. Nothing about a reply that did not
+   * open changes how often anything is asked of the server — see ownerCeremony.ts, checkForReply.
    */
-  mismatchTitle: 'That reply did not match this code',
-  mismatchBody:
-    'Someone answered, and what came back does not open with the code you gave. If it was your ' +
-    'therapist mistyping, give them a new code and try again. If you were not expecting anyone ' +
-    'to answer yet, stop this invitation instead.',
+  mismatchTitle: 'A reply did not open with your code',
+  mismatchBody: (name: string): string =>
+    `Keep this invitation open and ask ${name} whether they answered, or stop it and send a new ` +
+    `link?`,
+  /** The dismissal. It ends nothing, spends nothing, and asks the server for nothing. */
+  keepOpenLabel: 'Keep it open',
+
+  /*
+   * REPLACING KEYS THIS CONSOLE ALREADY HOLDS (issue #111).
+   *
+   * The decision these sentences carry: a matching code on a FRESH invitation is authority enough
+   * to replace a pinned key, because the pin was recorded on that same proof and nothing weaker.
+   * Demanding more to replace a pin than to create one buys nothing — someone holding a code can
+   * already pair fresh and be sent shares — so the screen's job is not to obstruct, it is to make
+   * sure nobody walks through this without being told the two things they cannot find out later:
+   * what it does NOT reach, and that they should stop if the person did not ask for it.
+   */
+  replaceAtMint: (name: string): string =>
+    `This console already holds keys for ${name}. Approving whoever opens this invitation with ` +
+    `the code will replace them. Until then, nothing changes.`,
+
+  replaceTitle: (name: string): string => `Replace the keys held for ${name}`,
+
+  /**
+   * One paragraph per element, in order. The third is the standing fact that
+   * [REVOKE_CAVEAT] states everywhere else a person takes something away: replacing a key changes
+   * what is sealed from now on and reaches nothing that was already read.
+   */
+  replaceBody: (name: string): readonly string[] => [
+    `The offer opened under the code you gave ${name}. Its keys are not the ones this console ` +
+      `holds for them.`,
+    'Approving records the new keys. Nothing further is sealed to the old ones.',
+    `This does not reach what was already sealed to the old keys. Anyone holding the device that ` +
+      `carried them can still open every share sent to ${name} before now.`,
+    'You do not need to read these out: the code already did that job.',
+    `If ${name} did not ask for this, do not approve.`,
+  ],
+  replaceApproveLabel: 'Replace and approve',
+  /** A dismissal, not a burn: it ends nothing, reports nothing and spends nothing. */
+  replaceDeclineLabel: 'Not now',
+  replacedBody:
+    'The new keys are recorded. Nothing further is sealed to the old ones, and what was already ' +
+    'sealed to them is unchanged.',
+
+  /**
+   * The one refusal kept on this route. Names the consequence rather than a verdict about anyone:
+   * the console cannot tell which of two people a share would be for, so it seals to neither.
+   */
+  sameKeysAsOther: (name: string, other: string): string =>
+    `Those are the keys this console has recorded for ${other}. Nothing was approved and nothing ` +
+    `was recorded: if they were also recorded for ${name}, a share meant for one of them could be ` +
+    `opened by the other. Check with ${name} on a channel that is not this server before going ` +
+    `further.`,
 
   answeredTitle: 'They typed the code',
   answeredBody:
@@ -99,6 +158,11 @@ export const OWNER_COPY = {
   newCodeLabel: 'New code',
   /** The one way to a new link: every fresh invitation starts from a stopped or spent one. */
   freshLabel: 'Send a fresh invitation',
+  /**
+   * Explains the "New code" button wherever it is offered. Rendered on the waiting screens; it used
+   * to appear on the mismatch screen too, until that screen became a question with two answers
+   * (#112) and a third piece of advice under it would have been a third answer.
+   */
   newCodeHint:
     'Same link, different code. Ends this attempt and starts another. If you no longer have the ' +
     'link, stop this invitation and send a fresh one.',

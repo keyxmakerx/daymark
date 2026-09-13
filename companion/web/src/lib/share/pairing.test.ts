@@ -95,4 +95,59 @@ describe('pairing — fingerprints + SAS + TOFU pin store', () => {
   it('PinStore.load rejects malformed entries', () => {
     expect(() => PinStore.load(JSON.stringify([{ foo: 'bar' }]))).toThrow(PairingError)
   })
+
+  /*
+   * INSERT-ONLY. The store used to be a Map keyed by the Ed25519 fingerprint, so a second pin for
+   * one identity overwrote the first and the record could not say what had been on file before.
+   * These assert the three halves of the replacement: the old row survives, the NEW row is what
+   * every check answers from, and the old key is refused exactly as an unknown key would be.
+   */
+  it('a changed key appends a row and leaves the one it supersedes in place', () => {
+    const store = new PinStore()
+    const ther = newIdentity()
+    const before = publicOf(ther)
+    const after = { x25519Pub: publicOf(newIdentity()).x25519Pub, ed25519Pub: ther.ed25519.publicKey }
+    const { ed25519Fp } = fingerprints(before)
+
+    store.pin(before, 1000)
+    store.pin(after, 2000)
+
+    // Two rows, oldest first, and the old fingerprint is still readable from the record.
+    const history = store.history(ed25519Fp)
+    expect(history).toHaveLength(2)
+    expect(history.map((r) => r.x25519Fp)).toEqual([
+      fingerprints(before).x25519Fp,
+      fingerprints(after).x25519Fp,
+    ])
+    expect(history.map((r) => r.pinnedAt)).toEqual([1000, 2000])
+    // Control: a store that had overwritten would have one row, so the length check can fail.
+    expect(new PinStore().history(ed25519Fp)).toHaveLength(0)
+
+    // …while every CHECK answers from the newest row alone.
+    expect(store.pinnedX25519Fp(ed25519Fp)).toBe(fingerprints(after).x25519Fp)
+    expect(store.assertPinned(ed25519Fp).pinnedAt).toBe(2000)
+    expect(store.current()).toHaveLength(1)
+    expect(store.current()[0].x25519Fp).toBe(fingerprints(after).x25519Fp)
+    // "It was pinned once" is not a way past "it is not pinned now": the superseded key is only in
+    // the history, never in an answer a seal would act on.
+    expect(store.rows()).toHaveLength(2)
+    expect(store.pinnedX25519Fp(ed25519Fp)).not.toBe(fingerprints(before).x25519Fp)
+
+    // And it round-trips as history, not as a snapshot.
+    const reloaded = PinStore.load(store.serialize())
+    expect(reloaded.history(ed25519Fp)).toHaveLength(2)
+    expect(reloaded.serialize()).toBe(store.serialize())
+  })
+
+  it('re-pinning the identical keys still writes a row — the callers are the ones that check', () => {
+    // Stated rather than assumed: PinStore.pin is a raw append with no opinion, and the no-duplicate
+    // rule lives in pinOnFirstUse/recordPin. A test that assumed idempotence here would be testing
+    // a guarantee nothing provides.
+    const store = new PinStore()
+    const ther = publicOf(newIdentity())
+    store.pin(ther, 1)
+    store.pin(ther, 2)
+    expect(store.rows()).toHaveLength(2)
+    expect(store.current()).toHaveLength(1)
+  })
 })

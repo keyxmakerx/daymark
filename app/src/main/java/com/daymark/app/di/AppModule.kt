@@ -7,7 +7,10 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import javax.inject.Named
 import com.daymark.app.data.AppDatabase
+import com.daymark.app.data.JournalEncryptionGate
+import com.daymark.app.data.SqlCipherLibrary
 import com.daymark.app.data.dao.ActivityDao
+import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 import com.daymark.app.data.dao.EntryDao
 import com.daymark.app.data.dao.GoalDao
 import com.daymark.app.data.dao.JournalDao
@@ -22,10 +25,40 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
+    /**
+     * THE ONE PLACE THE JOURNAL IS OPENED, AND THE ONE PLACE IT IS DECIDED HOW.
+     *
+     * [JournalEncryptionGate.rawKeyForRoom] does three things before this line is reached: it gets
+     * or makes the data key, it runs the plaintext-to-encrypted migration if one is owed, and it
+     * says what the file on disk actually is now. Only when the answer is "encrypted" does Room get
+     * the SQLCipher factory.
+     *
+     * WHY THE NULL BRANCH OPENS THE FILE THE OLD WAY RATHER THAN REFUSING. A migration that failed
+     * left the plaintext database exactly where it was, and handing that file to a factory holding a
+     * key produces "file is not a database" — the app would stop working over a problem that has
+     * already been recovered from. So a failed migration means the app carries on as it always did
+     * and tries again on the next launch. The person loses nothing, and the settings copy is the
+     * thing that has to be honest about it.
+     *
+     * NOTHING HERE HAS EVER RUN. There is no Android SDK on the development machine and no device
+     * in CI, so this compiles and stops. First phone, backup first.
+     */
     @Provides
     @Singleton
-    fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
+    fun provideDatabase(
+        @ApplicationContext context: Context,
+        journalEncryption: JournalEncryptionGate,
+    ): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.NAME)
+            .apply {
+                journalEncryption.rawKeyForRoom()?.let { rawKey ->
+                    SqlCipherLibrary.ensureLoaded()
+                    // The bytes are the ASCII of x'<64 hex>', which is what SQLCipher recognises as
+                    // a RAW key. Any other spelling and it runs its own PBKDF2 over them on every
+                    // single open. See DataKeyWraps.rawKeySpelling.
+                    openHelperFactory(SupportOpenHelperFactory(rawKey))
+                }
+            }
             .addCallback(AppDatabase.SeedCallback())
             .addMigrations(
                 AppDatabase.MIGRATION_1_2,

@@ -2,16 +2,13 @@ package com.daymark.app.ui.insights
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.daymark.app.data.AchievementsStore
 import com.daymark.app.data.AssessmentRepository
 import com.daymark.app.data.EntryRepository
 import com.daymark.app.data.SuggestionControlsStore
 import com.daymark.app.data.entity.AssessmentResult
 import com.daymark.app.data.entity.EntryWithActivities
-import com.daymark.app.stats.Achievements
 import com.daymark.app.stats.MoodCorrelations
 import com.daymark.app.stats.MoodPatterns
-import com.daymark.app.stats.MoodStats
 import com.daymark.app.stats.Signals
 import com.daymark.app.stats.SuggestionControls
 import com.daymark.app.ui.assessments.Assessments
@@ -36,15 +33,14 @@ import kotlin.math.roundToInt
  * Like the other view-models it owns Room and the time zone, and hands the pure engine
  * already-computed facts.
  *
- * Note: deriving the achievement signal also idempotently records newly-earned achievement unlock
- * times (the same sticky write the Achievements screen performs) so a genuine new unlock can be
- * celebrated app-wide. It never writes anything else and nothing leaves the device.
+ * Deriving the signals used to have a side effect: it stamped newly-earned achievement unlock
+ * times on the way past, so that a fresh unlock could be celebrated from whichever surface noticed
+ * it first. The achievements are gone and so is the write. Reading this screen now stores nothing.
  */
 @HiltViewModel
 class SignalsViewModel @Inject constructor(
     entryRepository: EntryRepository,
     assessmentRepository: AssessmentRepository,
-    private val achievementsStore: AchievementsStore,
     private val suggestionControlsStore: SuggestionControlsStore,
 ) : ViewModel() {
 
@@ -72,8 +68,8 @@ class SignalsViewModel @Inject constructor(
 
     /**
      * The "what might help" support menu, ordered & lightly personalised (movement rises when it's
-     * a known lift). Deliberately separate from [signals]: it has no side effects (no achievement
-     * write) and is always available even with no history, so the support space is never empty.
+     * a known lift). Deliberately separate from [signals]: it is always available even with no
+     * history, so the support space is never empty.
      */
     val supportSignals: StateFlow<List<Signals.Signal>> = entryRepository.observeAll()
         .map { entries -> Signals.supportMenu(topFactors(entries).first) }
@@ -102,16 +98,14 @@ class SignalsViewModel @Inject constructor(
         if (entries.isEmpty()) {
             return Signals.Inputs(
                 totalEntries = 0, avgMood = null, moodTodayLevel = null, loggedToday = false,
-                currentStreak = 0, longestStreak = 0,
                 topLift = null, topDrag = null, monthDeltaPct = null,
-                newlyUnlockedAchievement = null, dueCheckin = null, onThisDayNote = null,
+                dueCheckin = null, onThisDayNote = null,
             )
         }
         val today = LocalDate.now()
         val levels = entries.map { it.entry.moodLevel }
         val byDay = entries.groupBy { DateUtils.toLocalDate(it.entry.dateTime) }
         val days = byDay.keys
-        val longestStreak = MoodStats.longestStreak(days)
 
         val todayLevels = byDay[today]?.map { it.entry.moodLevel }
         val moodTodayLevel = todayLevels?.average()?.roundToInt()?.coerceIn(1, 5)
@@ -124,12 +118,9 @@ class SignalsViewModel @Inject constructor(
             avgMood = levels.average(),
             moodTodayLevel = moodTodayLevel,
             loggedToday = days.contains(today),
-            currentStreak = MoodStats.currentStreak(days, today),
-            longestStreak = longestStreak,
             topLift = topLift,
             topDrag = topDrag,
             monthDeltaPct = periodDeltaPct(entries, today, 30),
-            newlyUnlockedAchievement = recentlyUnlockedAchievement(entries, assessments, longestStreak, nowMillis),
             dueCheckin = dueCheckin(entries.size, assessments, nowMillis),
             onThisDayNote = onThisDayNote(byDay, today),
         )
@@ -152,30 +143,6 @@ class SignalsViewModel @Inject constructor(
         val cmp = MoodPatterns.periodCompare(cur, prev)
         if (cmp.currentCount < MIN_PERIOD_ENTRIES || cmp.previousCount < MIN_PERIOD_ENTRIES) return null
         return cmp.deltaPct
-    }
-
-    /**
-     * Marks any newly-earned achievements as unlocked (sticky, idempotent — same as the
-     * Achievements screen) and, only when **exactly one** was earned by this call, returns its title
-     * to celebrate. The single-crossing rule is deliberate: a genuine milestone is crossed one at a
-     * time, whereas the first run for a pre-existing user records *many* already-earned badges at
-     * once — those must be stamped but never surprise-celebrated as "new". Returns null otherwise.
-     */
-    private fun recentlyUnlockedAchievement(
-        entries: List<EntryWithActivities>,
-        assessments: List<AssessmentResult>,
-        longestStreak: Int,
-        nowMillis: Long,
-    ): String? {
-        val inputs = Achievements.Inputs(
-            totalEntries = entries.size,
-            longestStreak = longestStreak,
-            distinctActivities = entries.flatMap { it.activities.map { a -> a.id } }.distinct().size,
-            checkInsTaken = assessments.size,
-        )
-        val justUnlocked = achievementsStore.markUnlocked(Achievements.evaluate(inputs), nowMillis)
-        val singleNew = justUnlocked.singleOrNull() ?: return null
-        return Achievements.CATALOG.firstOrNull { it.id == singleNew }?.title
     }
 
     /**
