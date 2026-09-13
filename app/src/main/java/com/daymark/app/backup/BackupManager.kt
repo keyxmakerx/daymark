@@ -1,5 +1,6 @@
 package com.daymark.app.backup
 
+import androidx.room.withTransaction
 import com.daymark.app.data.dao.ActivityDao
 import com.daymark.app.data.dao.EntryDao
 import com.daymark.app.data.dao.GoalDao
@@ -306,7 +307,7 @@ class BackupManager @Inject constructor(
     // Deliberately the repository and not `OfferRecordDao`: the repository is the seam that decides
     // what may be read out of that table, and a backup path has no business reading rows at all.
     private val offerLedger: com.daymark.app.data.OfferLedgerRepository,
-    database: com.daymark.app.data.AppDatabase,
+    private val database: com.daymark.app.data.AppDatabase,
 ) {
     /**
      * Taken off the database rather than injected, the same way `GoalRepository` takes it.
@@ -409,7 +410,13 @@ class BackupManager @Inject constructor(
             "This backup was made by a newer version of Daymark (v${data.version}). Please update the app."
         }
         when (mode) {
-            ImportMode.REPLACE -> importReplace(data)
+            // One transaction, because importReplace empties thirteen tables before it writes
+            // anything back. Without this, an insert that throws part-way — an older file whose
+            // cross-refs name an activity it no longer carries, a process killed during a long
+            // restore — left every delete standing and put nothing in their place: an empty
+            // journal, and the entries only in the file that had just failed to load. The deletes
+            // now roll back with the inserts, so a failed restore leaves what was already there.
+            ImportMode.REPLACE -> database.withTransaction { importReplace(data) }
             ImportMode.MERGE -> importMerge(data)
         }
         // Re-arm alarms for whatever reminder set we now hold.

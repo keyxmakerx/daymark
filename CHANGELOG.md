@@ -170,6 +170,18 @@ All notable changes to this project are documented here. The format is based on
   quiet notice that names nobody and counts nothing.
 
 ### Fixed
+- **Restoring a backup no longer empties the journal when it fails part-way.** "Replace all
+  current data" deleted thirteen tables and then wrote the backup back, and the two halves were not
+  tied together. If anything threw between them — an older file whose activity links name something
+  it no longer carries, or the app being killed during a long restore — every deletion stood and
+  nothing took its place. The person was left with an empty journal, an "Import failed" message,
+  and their entries only in the file that had just failed to load. The deletions and the writes are
+  now one operation: either the backup is in place, or nothing was touched.
+- **"Backup exported" is no longer shown when nothing was written.** If the file could not be
+  opened, the failure was swallowed and the app reported success over a zero-byte file. It now says
+  the export failed, which is the whole point of the one file people are told to make before
+  installing a new version. The PDF export already did this correctly; the backup and the
+  spreadsheet did not.
 - **A PIN longer than eight digits can be typed back in.** Settings and the first-run setup both
   offer a PIN of six to twelve digits, and the note under the field says a longer one takes longer
   for someone else to guess. The unlock screen, meanwhile, stopped accepting keystrokes at the
