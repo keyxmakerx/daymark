@@ -35,8 +35,8 @@ android {
         // Stays 35, and stays EXPLICIT. AGP 9 defaults targetSdk to compileSdk when unset, so an
         // implicit value would silently become 36 and opt the app into new runtime behaviour.
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

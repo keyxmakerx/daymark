@@ -82,6 +82,10 @@ class PinPolicyTest {
     private val sites = listOf(
         "app/src/main/java/com/daymark/app/ui/settings/SettingsScreen.kt",
         "app/src/main/java/com/daymark/app/ui/onboarding/OnboardingScreen.kt",
+        // The unlock screen decides how long a PIN may be TYPED BACK, which is the same rule seen
+        // from the other end. It was left off this list and drifted: it capped input at eight while
+        // the policy accepted twelve, so a PIN the app invited you to choose could not be entered.
+        "app/src/main/java/com/daymark/app/ui/lock/LockScreen.kt",
     )
 
     private fun codeOf(rel: String): String = repoFile(rel).readText()
