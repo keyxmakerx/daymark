@@ -44,6 +44,7 @@ cd companion/web && pnpm test && pnpm check && pnpm build    # vitest, svelte-ch
 cd companion/server && ./gradlew test                        # works in this container
 tools/jvm-tests.sh sky      # the import-free Android packages, on a plain JVM, in ~2s
 tools/jvm-tests.sh stats
+tools/jvm-source-tests.sh   # the data/ schema tests, which read source as text
 ```
 
 - **The root `./gradlew` does not run in this container.** Anything with an Android import —
@@ -53,6 +54,11 @@ tools/jvm-tests.sh stats
   the Kotlin compiler already inside Gradle's own distribution. Seconds instead of a twelve-minute
   round trip. It names every file it had to skip rather than covering less in silence. Green there
   means the package is internally consistent, never that the app builds.
+- **So do the schema tests, even though they live in `data/`.** `PeopleSchemaTest` and
+  `TimedOfferSchemaTest` read source as text and import no Room type, so `tools/jvm-source-tests.sh`
+  runs them from a hand-listed set of files. Its header says what that bought: the obvious repair to
+  a merged migration made the test named for a forbidden back-fill blind to the back-fill, and CI
+  would have gone green over it.
 - **Sum the XML results; never trust a Gradle banner.** "BUILD SUCCESSFUL" has been printed over a
   test task that ran nothing.
 - CI: `.github/workflows/build.yml` builds Android on every push to every branch (push-only — a PR
