@@ -655,13 +655,18 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
 /**
  * Where a star hands off to, or null when there is nowhere for it to go.
  *
+ * A check-in goes to [Routes.ENTRY_VIEW], the page that reads an entry, and **not** to the editor.
+ * Every other place an entry is tapped now lands there; the Sky landing somewhere else would make
+ * the same tap mean two different things depending on which screen it happened on, and the one it
+ * happened on here is a surface people open to look at rather than to change anything.
+ *
  * A project step is identified by its own row id and its screen is the goal editor, which is keyed
  * by `goalId` — the Sky's layout carries no goal id and must not start carrying one just for this.
  * A life event has a list rather than a per-row screen, and the Sky reaches it by its own control.
  * Both cases return null and the Sky shows no action, rather than a control that refuses.
  */
 private fun skyRecordRoute(kind: SkyKind, id: Long): String? = when (kind) {
-    SkyKind.CHECK_IN -> Routes.entry(id)
+    SkyKind.CHECK_IN -> Routes.entryView(id)
     SkyKind.JOURNAL -> Routes.journalEntry(id)
     SkyKind.PRACTICE -> Routes.thoughtRecord(id)
     SkyKind.GOAL_REACHED -> Routes.goal(id)
