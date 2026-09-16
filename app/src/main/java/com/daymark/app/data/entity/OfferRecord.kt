@@ -72,7 +72,11 @@ data class OfferRecord(
     @ColumnInfo(defaultValue = "-1") val offeredWeekday: Int = UNRECORDED,
     /**
      * Whether a response arrived — `true` the person was there and did something, `false` the app
-     * asked and nothing came back, `null` this row predates the distinction.
+     * asked and nothing came back, `null` nothing recorded either way.
+     *
+     * `null` covers two cases that amount to the same thing: a row written before this column
+     * existed, and a row written by a feature that asks and then has no way of learning the answer
+     * before the line has to go in. Both are "not known", and neither is `false`.
      *
      * **Why this is a separate column and not another [OfferOutcome].** [outcome] is what the
      * *budget* spends, and there a silence and a dismissal are worth exactly the same: both mean
@@ -89,8 +93,10 @@ data class OfferRecord(
      *
      * **`null` is not `false`.** "We do not know" must never be read as "nobody was there": that is
      * the direction that gives up an hour on evidence nothing recorded. Only a stored `false` says
-     * a response did not arrive, and every other value — including an unrecognised one — reads as
-     * an answer, which keeps the app asking.
+     * a response did not arrive, and every other value reads as an answer, which keeps the app
+     * asking. That is also why `OfferLedgerRepository.record` defaults this to `null` rather than
+     * to `true`: the two behave identically downstream, and only one of them is honest about a
+     * caller who was never told.
      *
      * It says nothing about *why* nothing came back. Asleep, at work, out of battery and having a
      * terrible week are indistinguishable here and get the same response, which is the property

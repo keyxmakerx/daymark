@@ -93,14 +93,22 @@ class OfferLedgerRepository @Inject constructor(
      * move. Which outcome fits is the calling feature's judgement, not this class's — it knows what
      * it showed and this class deliberately does not.
      *
-     * **[responded] is the narrower fact, and it defaults to `true`.** The outcome says what became
-     * of the offer and is what the budget spends; [responded] says only whether anybody was there,
-     * and it is the whole of placement's input. It defaults to `true` because that is the direction
-     * a mistake has to fail in: a caller that forgets it leaves the hour reading as answered and
-     * the app keeps asking there, whereas a default of `false` would let one un-updated call site
-     * quietly talk the app out of an hour somebody uses. See
+     * **[responded] is the narrower fact, and it defaults to "not recorded".** The outcome says what
+     * became of the offer and is what the budget spends; [responded] says only whether anybody was
+     * there, and it is the whole of placement's input. See
      * [com.daymark.app.data.entity.OfferRecord.responded] for why this is a column rather than a
      * fifth [OfferOutcome].
+     *
+     * The default is `null` and not `true`, because `null` is the only one of the three that is
+     * true of a caller who has not been told. A feature writes its row at the moment it asks, which
+     * for most of them is *before* any answer could have arrived — claiming `true` there would be
+     * the same mistake as a `NOT NULL DEFAULT 0` on a column nobody filled in, and this table's
+     * whole discipline is that it never records what it does not know.
+     *
+     * Nothing is lost by being honest about it: [timedOffers] nulls an outcome only on a stored
+     * `false`, so `null` and `true` reach placement identically — as an answered hour, which keeps
+     * the app asking. A forgotten argument therefore fails in the only direction this system may
+     * move, and it fails without lying.
      *
      * The caller supplies the clock, as everywhere else in this layer, so the behaviour is testable
      * without one. [zone] is a parameter for the same reason and defaults to the phone's, which is
@@ -110,7 +118,7 @@ class OfferLedgerRepository @Inject constructor(
         kind: OfferKind,
         outcome: OfferOutcome,
         offeredAtMillis: Long,
-        responded: Boolean = true,
+        responded: Boolean? = null,
         zone: ZoneId = ZoneId.systemDefault(),
     ): Long =
         dao.insert(

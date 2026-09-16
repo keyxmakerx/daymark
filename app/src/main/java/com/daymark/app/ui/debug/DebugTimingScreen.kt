@@ -200,6 +200,11 @@ private fun FeatureCard(row: DebugFeature) {
         Spacer(Modifier.height(Spacing.lg))
         SubHeading("Hours it may use")
         HoursStrip(feature.placement)
+        Spacer(Modifier.height(Spacing.sm))
+        // The strip and the grid below it share three fills but answer different questions, so each
+        // says in words what its own fills mean. A colour that has to be remembered from another
+        // section is a colour that states nothing.
+        HoursStripLegend()
 
         Spacer(Modifier.height(Spacing.lg))
         SubHeading("Asks by hour and weekday")
@@ -244,18 +249,17 @@ private fun HoursStrip(placement: TimingGrid.Placement) {
         Row {
             Spacer(Modifier.width(WEEKDAY_LABEL_WIDTH))
             placement.readings.forEach { reading ->
-                Cell(
-                    fill = when {
-                        reading.placed -> MaterialTheme.colorScheme.primary
-                        reading.candidate -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.30f)
-                        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                    },
-                    description = clockLabel(reading.hour) + ", " + when {
-                        reading.placed -> "used"
-                        reading.candidate -> "not used"
-                        else -> "outside the hours this feature considers"
-                    },
-                )
+                val standing = when {
+                    reading.placed -> "an hour it may ask in"
+                    reading.candidate -> "an hour it could use and is not using"
+                    else -> "an hour it does not consider"
+                }
+                val fill = when {
+                    reading.placed -> MaterialTheme.colorScheme.primary
+                    reading.candidate -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.30f)
+                    else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                }
+                Cell(fill = fill, description = clockLabel(reading.hour) + ", " + standing)
             }
         }
         HourRuler()
@@ -285,19 +289,34 @@ private fun WeekGrid(grid: TimingGrid.Grid) {
                     val cell = grid.cell(weekday, hour)
                     val asks = cell?.asks ?: 0
                     val answered = cell?.answered ?: 0
-                    Cell(
-                        fill = when {
-                            asks == 0 -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                            answered > 0 -> MaterialTheme.colorScheme.primary
-                            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.30f)
-                        },
-                        description = weekdayName(weekday) + " " + clockLabel(hour) + ", " +
-                            askCountLabel(asks) + ", " + answered + " answered",
-                    )
+                    val fill = when {
+                        asks == 0 -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                        answered > 0 -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.30f)
+                    }
+                    val description = weekdayName(weekday) + " " + clockLabel(hour) + ", " +
+                        askCountLabel(asks) + ", " + answered + " answered"
+                    Cell(fill = fill, description = description)
                 }
             }
         }
         HourRuler()
+    }
+}
+
+/** The three fills the hours strip uses, said in words. */
+@Composable
+private fun HoursStripLegend() {
+    Column {
+        LegendRow(MaterialTheme.colorScheme.primary, "An hour this feature may ask in")
+        LegendRow(
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.30f),
+            "An hour it could use and is not using",
+        )
+        LegendRow(
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+            "An hour it does not consider at all",
+        )
     }
 }
 
@@ -374,12 +393,14 @@ private fun OpenersCard(band: PhrasePool.Band, openers: List<String>) {
     PanelCard {
         Text("The openers", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(Spacing.xs))
+        val why = when (band) {
+            PhrasePool.Band.Morning -> "the day is still ahead, so these."
+            PhrasePool.Band.Evening -> "the day is behind, so these."
+        }
         Text(
             text = "Fixed lines, written by a person, rotated in order. Which pool is decided by " +
-                "the clock alone — " + when (band) {
-                    PhrasePool.Band.Morning -> "the day is still ahead, so these."
-                    PhrasePool.Band.Evening -> "the day is behind, so these."
-                } + " Nothing about how you seemed reaches this choice.",
+                "the clock alone — " + why +
+                " Nothing about how you seemed reaches this choice.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

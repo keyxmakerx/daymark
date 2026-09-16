@@ -215,6 +215,58 @@ class TimedOfferSchemaTest {
     }
 
     /**
+     * The slicer stops at the next migration, shown on a source that has one.
+     *
+     * The assertion below it cannot demonstrate this today: v18 is the newest migration, so
+     * "stop at the next migration" and "stop at the end of the companion object" take the same
+     * slice, and a mutation between them changes nothing. The day that stops being true is the day
+     * the difference matters, so the case is built here instead of waited for.
+     */
+    @Test
+    fun `the slicer stops at a later migration when there is one`() {
+        val source = """
+            val MIGRATION_17_18 = object : Migration(17, 18) {
+                db.execSQL("ALTER TABLE offer_records ADD COLUMN offeredHour INTEGER NOT NULL DEFAULT -1")
+            }
+            val MIGRATION_18_19 = object : Migration(18, 19) {
+                db.execSQL("UPDATE offer_records SET offeredHour = 9")
+            }
+            val DEFAULT_ACTIVITIES = listOf("Work")
+        """.trimIndent()
+
+        val body = sliceMigration(source, "val MIGRATION_17_18")
+
+        assertTrue("the slice lost the migration it is about", body.contains("ADD COLUMN offeredHour"))
+        assertFalse("the slice ran into the next migration", body.contains("UPDATE"))
+        assertEquals("the slice took more than this migration's statements", 1, body.split("execSQL").size - 1)
+
+        // The control: the naive slice this replaced really does take both, so the case is a real
+        // difference and not a distinction the test invented.
+        val naive = source.substringAfter("val MIGRATION_17_18").substringBefore("val DEFAULT_ACTIVITIES")
+        assertTrue("the control did not reproduce the old behaviour", naive.contains("UPDATE"))
+        assertEquals(2, naive.split("execSQL").size - 1)
+    }
+
+    /**
+     * The slice reads one migration, not the companion object from here down.
+     *
+     * Without this, the absence assertions below are claims about however much of the file the
+     * slice happened to take, and they get weaker rather than louder as the file grows.
+     */
+    @Test
+    fun `the migration slice stops at the end of this migration`() {
+        val body = migrationBody()
+
+        assertTrue("the slice missed the statements it is about", body.contains("ADD COLUMN offeredHour"))
+        assertEquals("the slice runs past this migration", 3, body.split("execSQL").size - 1)
+        assertFalse("the slice swallowed a later migration", body.contains("val MIGRATION_"))
+
+        // Positive control: the slice does end, and it ends before the rest of the companion object.
+        assertFalse("the slice ran to the end of the companion object", body.contains("DEFAULT_ACTIVITIES"))
+        assertTrue("the file has more after this migration", database.contains("val DEFAULT_ACTIVITIES"))
+    }
+
+    /**
      * The one thing this migration must never do.
      *
      * A slot derived from `offeredAt` under the phone's *current* zone is a fact about the person's
@@ -395,11 +447,13 @@ class TimedOfferSchemaTest {
         assertTrue("record no longer stamps the weekday", record.contains("offeredWeekday = weekdayIn("))
         assertTrue("record cannot be given a zone", record.contains("zone: ZoneId"))
 
-        // Defaulting to true is the direction a forgotten argument has to fail in: the hour keeps
-        // reading as answered and the app keeps asking there. A default of false would let one
-        // un-updated call site talk the app out of an hour somebody uses.
-        assertTrue("responded no longer fails safe", record.contains("responded: Boolean = true"))
+        // "Not recorded" is the only default that is true of a caller who has not been told, and it
+        // reaches placement exactly as `true` does — as an answered hour, which keeps the app
+        // asking. A default of `false` would let one un-updated call site talk the app out of an
+        // hour somebody uses; a default of `true` would write a claim nobody checked.
+        assertTrue("responded no longer defaults to 'not recorded'", record.contains("responded: Boolean? = null"))
         assertFalse("responded now fails towards giving up an hour", record.contains("responded: Boolean = false"))
+        assertFalse("responded now claims an answer nobody reported", record.contains("responded: Boolean = true"))
 
         // The carry-forward row the sweep writes is a preference, not an ask. Giving it a real slot
         // would inject a phantom ask at whatever hour the app was next opened.
@@ -459,8 +513,26 @@ class TimedOfferSchemaTest {
         .filterNot { it.trimStart().startsWith("//") }
         .joinToString("\n")
 
-    private fun migrationBody(): String =
-        database.substringAfter("val MIGRATION_17_18").substringBefore("val DEFAULT_ACTIVITIES")
+    /**
+     * The v18 migration's body — from its declaration to whatever comes next, which is the migration
+     * after it or the end of the companion object.
+     *
+     * Not `substringBefore("val DEFAULT_ACTIVITIES")`. That is the same slice only while this is the
+     * newest migration, and `GoalReachedSchemaTest` had exactly that and broke the day it stopped
+     * being true: v18's statements landed inside v17's slice and its "exactly one `execSQL`"
+     * assertions started describing two migrations at once. Written this way, a v19 cannot do the
+     * same to this file.
+     */
+    private fun migrationBody(): String = sliceMigration(database, "val MIGRATION_17_18")
+
+    /** [migrationBody] with its input passed in, so it can be tested on a source that has a v19. */
+    private fun sliceMigration(source: String, marker: String): String {
+        val after = source.substringAfter(marker)
+        val ends = listOf("val MIGRATION_", "val DEFAULT_ACTIVITIES")
+            .map { after.indexOf(it) }
+            .filter { it >= 0 }
+        return if (ends.isEmpty()) after else after.substring(0, ends.min())
+    }
 
     /** The SQL of the `@Query` immediately above [function] on the DAO. */
     private fun daoQueryFor(function: String): String =
