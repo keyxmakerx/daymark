@@ -22,6 +22,12 @@ import org.junit.Test
  * `assembleDebug` and never `connectedAndroidTest`. So nothing executes it here.
  * [LifeEventSchemaTest] says the same thing at greater length and this file follows its shape.
  *
+ * **v18 is shared.** The reception ledger's three `offer_records` columns were written against the
+ * same version in parallel and merged into one migration, so the body this file slices contains
+ * nine statements and not six. [statements] takes the people half by what a statement *is*, and
+ * [theRestOfVersionEighteen] names the remainder exactly, so the pair is still a closed account of
+ * what v18 does. [TimedOfferSchemaTest] makes the mirror-image claim.
+ *
  * **The v18 schema JSON is deliberately absent from this branch.** It has to be Room's own export,
  * `identityHash` included, and there is no Android SDK on the machine this was written on. CI's
  * drift check regenerates it and prints it in full; it is committed from there. A hand-written one
@@ -253,7 +259,7 @@ class PeopleSchemaTest {
                 statement.startsWith("CREATE TABLE IF NOT EXISTS ") || statement.startsWith("CREATE INDEX IF NOT EXISTS "),
             )
         }
-        assertEquals("the migration runs a different number of statements", 6, migrationBody().split("db.execSQL").size - 1)
+        assertEquals("the people half runs a different number of statements", 6, statements().size)
 
         // The detector: a seeded row and a backfill are both statements this would reject.
         for (bad in listOf(
@@ -268,6 +274,52 @@ class PeopleSchemaTest {
         // ...and it does accept the statements that are really there, so it is not rejecting
         // everything.
         assertTrue("detector is too greedy", statements().first().startsWith("CREATE TABLE IF NOT EXISTS "))
+    }
+
+    /**
+     * v18 is shared with the reception ledger, and this is the rest of it.
+     *
+     * Two features wrote a version 18 in parallel and neither had shipped, so they were merged into
+     * one migration rather than left as v18 and v19: a version is a state a database can actually be
+     * in, and no phone anywhere holds a v18 with the people tables but not the ledger columns.
+     *
+     * The cost of that decision is that the tests on either side now read a body containing the
+     * other side's statements, which is how four assertions in this file went red at once. The fix
+     * is not to loosen them. [statements] selects the people half by what it is, and this names the
+     * remainder exactly — so the two halves still account for every statement v18 runs, and a third
+     * feature joining this migration turns this red on the line that says what it added, rather than
+     * silently widening what "the people migration" means.
+     *
+     * [TimedOfferSchemaTest] makes the mirror-image claim from the other side.
+     */
+    @Test
+    fun theRestOfVersionEighteen() {
+        assertEquals(
+            listOf(
+                "ALTER TABLE offer_records ADD COLUMN offeredHour INTEGER NOT NULL DEFAULT -1",
+                "ALTER TABLE offer_records ADD COLUMN offeredWeekday INTEGER NOT NULL DEFAULT -1",
+                "ALTER TABLE offer_records ADD COLUMN responded INTEGER",
+            ),
+            allStatements() - statements().toSet(),
+        )
+
+        // The two halves are the whole, with nothing counted twice and nothing left over.
+        assertEquals(9, allStatements().size)
+        assertEquals(allStatements().size, statements().size + (allStatements() - statements().toSet()).size)
+
+        // The detector: a statement belonging to neither half really is left over by this split, so
+        // the emptiness of the remainder above is a fact about v18 and not about the arithmetic.
+        val intruder = "DROP TABLE people"
+        val withIntruder = allStatements() + intruder
+        assertEquals(
+            listOf(intruder),
+            withIntruder - withIntruder.filter { it.startsWith("CREATE ") }.toSet() -
+                listOf(
+                    "ALTER TABLE offer_records ADD COLUMN offeredHour INTEGER NOT NULL DEFAULT -1",
+                    "ALTER TABLE offer_records ADD COLUMN offeredWeekday INTEGER NOT NULL DEFAULT -1",
+                    "ALTER TABLE offer_records ADD COLUMN responded INTEGER",
+                ).toSet(),
+        )
     }
 
     // ----------------------------------------------------------------------------------------
@@ -422,16 +474,27 @@ class PeopleSchemaTest {
             .substringBefore("val MIGRATION_")
 
     /**
-     * One entry per `db.execSQL(...)`, each being that call's string literals concatenated — the SQL
-     * as the migration builds it.
+     * Every statement v18 runs, people's and the reception ledger's alike, in source order.
      *
-     * Per statement rather than one blob, because the claims above are about which table gets which
-     * clause, and a blob cannot tell a foreign key on `person_notes` from one on `entry_people`.
+     * One entry per `db.execSQL(...)`, each being that call's string literals concatenated — the SQL
+     * as the migration builds it. Per statement rather than one blob, because the claims above are
+     * about which table gets which clause, and a blob cannot tell a foreign key on `person_notes`
+     * from one on `entry_people`.
      */
-    private fun statements(): List<String> =
+    private fun allStatements(): List<String> =
         migrationBody().split("db.execSQL(").drop(1).map { chunk ->
             Regex("\"([^\"]*)\"").findAll(chunk).joinToString("") { it.groupValues[1] }
         }
+
+    /**
+     * The half of v18 this file is about: the statements that build the people tables.
+     *
+     * Selected by what they are — a `CREATE` — rather than by where they sit, because position is
+     * exactly what a sixth feature joining this migration would change. [theRestOfVersionEighteen]
+     * names the other half, so the two together are still a closed account of what v18 does and a
+     * statement belonging to neither turns this file red.
+     */
+    private fun statements(): List<String> = allStatements().filter { it.startsWith("CREATE ") }
 
     /**
      * The definitions inside `CREATE TABLE ... ( ... )`, split on top-level commas only.

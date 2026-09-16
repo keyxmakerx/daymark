@@ -27,6 +27,16 @@ import java.io.File
  * sentinel's whole job is to be a value [TimingGrid] refuses to place, and that is asserted by
  * calling [TimingGrid] with it.
  *
+ * ## v18 is shared
+ *
+ * The people and communities tables were written against the same version in parallel and merged
+ * into one migration, so the body sliced here runs nine statements and not three.
+ * [ledgerStatements] takes this feature's half by what a statement is, and
+ * [theRestOfVersionEighteen] accounts for the rest — the pair is still a closed description of v18.
+ * One assertion changed shape rather than scope because of it, and says so at its own definition:
+ * the back-fill scan reads this feature's statements, because `ON UPDATE NO ACTION` in the people
+ * half is a legitimate `UPDATE`.
+ *
  * ## The failures this is aimed at
  *
  * 1. **A migration that back-fills a slot from `offeredAt`.** An epoch millisecond only becomes an
@@ -199,9 +209,10 @@ class TimedOfferSchemaTest {
 
     @Test
     fun `the migration adds three columns and nothing else`() {
-        val body = migrationBody()
+        val ledger = ledgerStatements()
+        val body = ledger.joinToString("\n")
 
-        assertEquals("the migration runs a different number of statements", 3, body.split("execSQL").size - 1)
+        assertEquals("the ledger half runs a different number of statements", 3, ledger.size)
         assertTrue(body.contains("ADD COLUMN offeredHour INTEGER NOT NULL DEFAULT -1"))
         assertTrue(body.contains("ADD COLUMN offeredWeekday INTEGER NOT NULL DEFAULT -1"))
 
@@ -212,6 +223,47 @@ class TimedOfferSchemaTest {
             body.contains("ADD COLUMN responded INTEGER NOT NULL"),
         )
         assertFalse(body.contains("ADD COLUMN responded INTEGER DEFAULT"))
+    }
+
+    /**
+     * v18 is shared with the people tables, and this is the rest of it.
+     *
+     * Two features wrote a version 18 in parallel and neither had shipped, so they were merged into
+     * one migration rather than left as v18 and v19: a version is a state a database can actually be
+     * in, and no phone anywhere holds a v18 with the ledger columns but not the people tables.
+     *
+     * The cost is that the tests on either side now slice a body containing the other side's
+     * statements, which is how three assertions in this file went red at once. The fix is not to
+     * loosen them. [ledgerStatements] takes this feature's half by what a statement is, and this
+     * counts the remainder — so the two halves still account for every statement v18 runs, and a
+     * third feature joining it turns this red rather than quietly widening what "this migration"
+     * means. `PeopleSchemaTest.theRestOfVersionEighteen` makes the mirror-image claim and names the
+     * other half statement for statement; it is not repeated here, because two copies of the same
+     * list drift and the one that is not read is the one that goes stale.
+     */
+    @Test
+    fun theRestOfVersionEighteen() {
+        val others = allStatements() - ledgerStatements().toSet()
+
+        assertEquals("v18 runs a different number of statements", 9, allStatements().size)
+        assertEquals(6, others.size)
+        for (statement in others) {
+            assertTrue(
+                "v18 gained a statement that is neither a ledger column nor a people table: $statement",
+                statement.startsWith("CREATE TABLE IF NOT EXISTS ") || statement.startsWith("CREATE INDEX IF NOT EXISTS "),
+            )
+        }
+
+        // The detector: a statement belonging to neither half is not absorbed by either filter, so
+        // the account above is a fact about v18 and not about the arithmetic.
+        val intruder = "DROP TABLE offer_records"
+        assertFalse("detector is broken", intruder.startsWith("ALTER TABLE offer_records "))
+        assertFalse(
+            "detector is broken",
+            intruder.startsWith("CREATE TABLE IF NOT EXISTS ") || intruder.startsWith("CREATE INDEX IF NOT EXISTS "),
+        )
+        // ...and it does accept the statements really there, so it is not rejecting everything.
+        assertTrue("detector is too greedy", ledgerStatements().first().startsWith("ALTER TABLE offer_records "))
     }
 
     /**
@@ -258,7 +310,10 @@ class TimedOfferSchemaTest {
         val body = migrationBody()
 
         assertTrue("the slice missed the statements it is about", body.contains("ADD COLUMN offeredHour"))
-        assertEquals("the slice runs past this migration", 3, body.split("execSQL").size - 1)
+        // Nine, not three: v18 is shared with the people tables, and the slice is bounded by the
+        // migration rather than by this feature. [theRestOfVersionEighteen] is what says the other
+        // six are the people tables and nothing else; this line only says the slice stopped.
+        assertEquals("the slice runs past this migration", 9, body.split("execSQL").size - 1)
         assertFalse("the slice swallowed a later migration", body.contains("val MIGRATION_"))
 
         // Positive control: the slice does end, and it ends before the rest of the companion object.
@@ -273,10 +328,21 @@ class TimedOfferSchemaTest {
      * day that nothing recorded, and placement would then act on it. Every read below has a
      * detector, because an absence assertion that cannot see a planted example proves only that it
      * is blind.
+     *
+     * Scanned over [notThePeopleTables] and not over the whole v18 body, for a reason worth stating:
+     * the word `UPDATE` is not absent from v18. `ON UPDATE NO ACTION` is part of the foreign-key
+     * clause Room writes for `person_notes`, so the whole-body form of this test fails on correct
+     * SQL — which is exactly what it did when the two migrations were merged. Narrowing the scan to
+     * the statements this feature owns is the honest fix; widening the allowed words would have let
+     * a real `UPDATE` through on this side too.
+     *
+     * And it is [notThePeopleTables] rather than [ledgerStatements] because a back-fill is not an
+     * `ALTER`: the narrower filter would drop the forbidden statement before reading it, and this
+     * test would pass on a migration doing the one thing it names. See that helper.
      */
     @Test
     fun `the migration does not derive a slot from offeredAt or from anything else`() {
-        val body = migrationBody()
+        val body = notThePeopleTables().joinToString("\n")
 
         assertFalse("the migration reads `offeredAt`", body.contains("offeredAt"))
         assertFalse("the migration writes rows", body.contains("UPDATE"))
@@ -285,13 +351,17 @@ class TimedOfferSchemaTest {
         assertFalse("the migration reaches for a clock", body.contains("datetime("))
 
         // The detector: the same reads do fire on the back-fill this forbids.
-        val backfilled = body + "db.execSQL(\"UPDATE offer_records SET offeredHour = CAST(" +
-            "strftime('%H', datetime(offeredAt / 1000, 'unixepoch', 'localtime')) AS INTEGER)\")"
+        val backfilled = body + "\nUPDATE offer_records SET offeredHour = CAST(" +
+            "strftime('%H', datetime(offeredAt / 1000, 'unixepoch', 'localtime')) AS INTEGER)"
         assertTrue("detector is broken", backfilled.contains("offeredAt"))
         assertTrue("detector is broken", backfilled.contains("UPDATE"))
         assertTrue("detector is broken", backfilled.contains("strftime"))
         assertTrue("detector is broken", backfilled.contains("datetime("))
-        assertEquals("detector is broken", 4, backfilled.split("execSQL").size - 1)
+        // ...and it scanned the statements really there, not an empty string. Three today, and the
+        // assertion is `>=` because this scan's job is to grow when v18 does: a fourth statement
+        // outside the people tables must be judged by the reads above, not excluded by a count.
+        assertTrue("nothing was scanned", body.lines().size >= 3)
+        assertEquals("the ledger statements are not all being scanned", 3, ledgerStatements().size)
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -524,6 +594,43 @@ class TimedOfferSchemaTest {
      * same to this file.
      */
     private fun migrationBody(): String = sliceMigration(database, "val MIGRATION_17_18")
+
+    /**
+     * Every statement v18 runs, this feature's and the people tables' alike, in source order.
+     *
+     * One entry per `db.execSQL(...)`, each being that call's string literals concatenated.
+     */
+    private fun allStatements(): List<String> =
+        migrationBody().split("db.execSQL(").drop(1).map { chunk ->
+            Regex("\"([^\"]*)\"").findAll(chunk).joinToString("") { it.groupValues[1] }
+        }
+
+    /**
+     * The half of v18 this file is about: the three columns added to `offer_records`.
+     *
+     * Selected by what a statement *is* rather than by where it sits, because position is exactly
+     * what another feature joining this migration would change — which is what happened. See
+     * [theRestOfVersionEighteen] for the other half and for why the two are asserted as a pair.
+     */
+    private fun ledgerStatements(): List<String> =
+        allStatements().filter { it.startsWith("ALTER TABLE offer_records ") }
+
+    /**
+     * Everything v18 does that is not one of the people tables' `CREATE`s.
+     *
+     * Deliberately wider than [ledgerStatements], and the difference is the whole point. A filter
+     * that keeps only `ALTER TABLE offer_records ...` cannot see a statement that is neither that
+     * nor a `CREATE` — which is exactly the shape of the back-fill this file exists to forbid. Try
+     * it: plant `UPDATE offer_records SET offeredHour = ...` into the migration, scan
+     * [ledgerStatements], and the test named for the back-fill stays green while the counting tests
+     * go red for the wrong reason. Found that way, in the change that merged the two v18s.
+     *
+     * So the back-fill scan reads this instead. It excludes the people half by what a statement is,
+     * which is what keeps `ON UPDATE NO ACTION` — real, legitimate, inside a `CREATE TABLE` — out of
+     * a scan that forbids the word `UPDATE`, and it lets everything else through to be judged.
+     */
+    private fun notThePeopleTables(): List<String> =
+        allStatements().filterNot { it.startsWith("CREATE ") }
 
     /** [migrationBody] with its input passed in, so it can be tested on a source that has a v19. */
     private fun sliceMigration(source: String, marker: String): String {
