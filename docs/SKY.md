@@ -67,18 +67,24 @@ a scratch copy and each was caught (§0.3).
 
 ### 0.2 What is designed only
 
-- **`ui/sky/` is empty. Nothing renders.** Compose cannot be compiled in this environment, and a
-  file in the main source set that does not compile breaks the build for everyone. The renderer is
-  specified in §0.5 and is not written.
-- **The life-event record (§2.2) does not exist.** `SkyKind.LIFE_EVENT` is defined and laid out; the
-  table, the DAO and the migration are not written.
-- **Nothing is wired.** No DAO projection, no repository, no view model, no navigation entry. §0.4
-  lists exactly what is needed, all of it outside `sky/`.
-- **§4's zoom interaction, §5's accretion flags, §6.4's export, §7.3's semantics, §7.5's list *UI*.**
-  The list's *data* is built (`Sky.list`); the surface that presents it is not.
-- **Every number in §8 is still a budget.** The one thing now measured is the layout pass itself:
-  5,393 records became 5,393 stars across 120 month rows in **15–29 ms** on a plain JVM. That is the
-  precompute step of §8.2 rule 1, not the frame budget.
+**Revised 2026-09-16.** Most of what this section used to list as unwritten has since shipped, and a
+"what is designed only" list that names built things is worse than no list, because the one thing a
+reader wants from it is to know what they cannot rely on.
+
+**Built since this was written**, on `claude/pairing-stack-audit-suak0v`: `ui/sky/` renders
+(`SkyScreen`, `SkySurface`, `SkySprite`, `SkyPresentation`); the life-event record exists, with its
+table, DAO and migration; the whole thing is wired, from DAO projection through view model to a route
+off the More hub; §7.3's semantics and §7.5's list UI are built; and §4's zoom interaction is built
+in the reduced form §4 now describes.
+
+**Still designed only:**
+
+- **§5's accretion flags** and **§6.4's export**.
+- **§1's sparser, smaller, fainter field at low zoom.** `SkyField` is untouched: the field is as
+  dense and as bright at every zoom, now on a darker ground.
+- **Every number in §8 is still a budget.** The one thing measured is the layout pass itself:
+  5,393 records became 5,393 stars in **15–29 ms** on a plain JVM. That is the precompute step of
+  §8.2 rule 1, not the frame budget.
 
 ### 0.3 What building it caught
 
@@ -355,46 +361,66 @@ picture of the thing they already know.
 
 ## 3. How a star is placed, and what varies
 
-### 3.1 Placement — time is the sky's geography
+### 3.1 Placement — the sky is scattered, and time is not its geography
 
-The layout generalises the shipped component rather than replacing it: **one row per month**, days
-running left to right within a row, months stacking downward, unbounded in both directions of the
-person's history.
+> **Rewritten 2026-09-16, reversing the original.** This section used to open "time is the sky's
+> geography" and specify one row per month with days running left to right. That is no longer what
+> is built. The rows are gone. The rejected-constellations note below survives the change and is
+> kept.
+
+**A star is scattered at random across one open field, and *when* it is from is carried entirely by
+its colour and its brightness** (§3.2). There are no rows, no months on the surface, and no position
+that means a date.
 
 ```
-             ┌─────────────────────────────────────────────┐
-     2024    │  ·   *      ·        *   ·      ·    *      │  ← a month = a row
-      Nov    │      ·   *       ·          *        ·   *  │
-             ├─────────────────────────────────────────────┤
-      Dec    │   *      ·   *  ·      *        ·           │
-             └─────────────────────────────────────────────┘
-               ← earlier in the month        later in the month →
+hx = hash(kind, anchor record id)          in [0, 1)
+hy = hash(kind, anchor record id)          in [0, 1), independently salted
+x  = warp(hx, hy, sky seed)                clustered, still in [0, 1)
+y  = warp(hx, hy, sky seed)
 ```
 
-Two coordinates, two pure functions:
+**Why this reversed.** The original was written when position was the only thing that could say
+*when*. Once age became the redshift and the fade, a star says it by being blue-white or deep red,
+bright or faint, and position was free to be sky. The reason to take that freedom is §1's rule
+rather than taste: **a row per month draws a hard month as a visibly empty band.** That is the
+reading this whole surface exists to prevent, and the uniform field (§3.5) exists largely to soften
+it. When position encodes nothing, there is no region that can be empty, and the problem is gone
+rather than masked.
 
-- **x = f(timestamp)** — monotonic in time within the row. Same day, same column, forever.
-- **y = g(kind, record id)** — a stable hash, so several stars on one day scatter vertically instead
-  of stacking, and the field looks organic rather than gridded. This is the `hash(month, day)` jitter
-  in the shipped component, promoted to key off the record's identity so it is stable per *star*,
-  not per *day*.
+**What it costs, accepted knowingly.** You cannot find a date by looking. The text equivalent
+(§7.5) keeps its month headings and is now the only way to reach a particular day, so it is
+load-bearing rather than a companion. Two records from one day are nowhere near each other, so
+there is no "lean in to a day".
 
-**Three properties this buys, all of which the "place" framing depends on:**
+**The properties that survive, and one that is new:**
 
-1. **A star never moves.** Position depends only on the record's own timestamp and id — not on how
-   many other stars exist, not on the viewport, not on the zoom level. Adding today's check-in does
-   not reflow 2019. A place whose furniture rearranges is not a place, and an artefact described as
-   "a unique ID of who you were" cannot be one if it is different every time it is opened.
-2. **Zoom is a transform, not a relayout.** Every zoom level is the same coordinates at a different
-   scale. Nothing reflows, nothing is recomputed, and the eye can follow a star through a zoom.
-3. **Visible range is a contiguous index range.** Monotonic x + time-ordered data means culling is a
-   binary search, not a scan (§11).
+1. **A star never moves.** Position is a hash of the record's own kind and id and of nothing else —
+   not the index, not the count, not the date, not the mood. Adding today's check-in reflows
+   nothing. This is unchanged and is still the property everything else rests on.
+2. **Zoom is a transform, not a relayout.** Unchanged.
+3. **Culling is a bounds check per star, not an index range.** This one is *worse* than before and
+   the trade is deliberate: no ordering of the arrays corresponds to any ordering on screen, so the
+   binary search the old model allowed is gone. Draw order stays array order, which is time order,
+   so newer stars land on top of older ones.
+4. **The clumping carries nothing.** Uniform scatter reads as machine-made, so positions are warped
+   through a lumpy value-noise field seeded by the sky's own seed. `SkyWarp`'s signature takes a
+   position and a seed and **cannot see a record**, the same guarantee `SkyField` keeps and for the
+   same reason. Measured index of dispersion 5.14 against a uniform 1.0.
+
+**The mirror, and why the axes are now measured.** The original implementation salted *after* the
+mixer, and `SkyRandom.unit` keeps only the top 24 bits, in which the y salt's bits were all ones —
+so y came out as exactly `1 − x`, at Pearson r = −1.0. Every month was thirty-one parallel diagonal
+streaks rather than a scatter, and no test saw it, because range, distinctness and stability are all
+satisfied by a perfect mirror. Salts now go into the mixer's *input*, and there is a decorrelation
+test with a real bound: measured r = 0.0055 before the warp and −0.0533 after it.
 
 **Rejected: constellation clustering.** Grouping related stars into figures is the prettiest version
 of this and it is out, on the grounds that a cluster asserts a relationship. Either the software
 picked the grouping — which is inference — or the person did, which is a feature nobody asked for.
 The one linkage that survives is the project thread (§3.4, kind 5), because the person authored the
-project and the linkage is therefore *declared*, not detected.
+project and the linkage is therefore *declared*, not detected. The `SkyWarp` clumping above is not a
+counter-example: it groups stars by where they happen to land, knows nothing about them, and
+therefore asserts nothing.
 
 ### 3.2 Colour — the mood ramp, and only the mood ramp
 
@@ -483,9 +509,30 @@ creates.
 
 ## 4. Zoom and focus — overview to a single star
 
-Five levels. Zoom is continuous (pinch, double-tap, or the platform accessibility zoom gesture); the
-levels are thresholds at which detail appears, not discrete screens. **Nothing reflows across a zoom**
-(§3.1), so a star can be followed from L0 to L4 by eye.
+**Revised 2026-09-16, by §1.0 of `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md`.** The five levels below
+were written for a field ruled into month rows, and three of them named things that placement being
+random deleted: a gutter with month names in it, "one month row across the width", and a day's stars
+spread apart with leader lines. None of that exists. No part of the surface is a date, so no level
+can be described as an amount of time on screen.
+
+What is built is three levels, thresholds on a plain zoom factor, in `SkyDetail`:
+
+| | Level | Shows | Detail that appears |
+|---|---|---|---|
+| **FAR** | below 2.5× | the whole sky at once | Points only, no kind marks, no threads. The ambient view, the one you leave open. |
+| **NEAR** | 2.5× to 7× | leaning in | Kind marks begin to resolve. Stars become individually focusable. |
+| **CLOSE** | above 7× | close | Full glyphs and project threads. |
+
+There is no level for one star: a star's detail is reached by activating it, not by zooming to it.
+Zoom is continuous — pinch, or the platform accessibility zoom gesture. **A pinch magnifies the point
+under the fingers** (`SkyPresentation.panForZoomAbout`), which matters more here than on an ordinary
+map because there are no labels to navigate back by. Once zoomed, a control appears in the corner
+that fits the whole sky again; it is deliberately not a double-tap, because Compose must wait out the
+double-tap window before it can report a single tap, and tapping a star is the thing people come here
+to do. **Nothing reflows across a zoom** (§3.1), so a star can be followed from FAR to CLOSE by eye.
+
+The superseded five-level table is kept below for the reasoning in the paragraphs after it, which is
+still about focus and damping and still applies. Read the levels as FAR / NEAR / CLOSE.
 
 | | Level | Shows | Detail that appears |
 |---|---|---|---|

@@ -1,10 +1,61 @@
 # Plan 2026-09 — the Sky, people and communities, the timing layer
 
-Agreed 2026-09-16. Nothing here is built. Order: **Sky → entry page with people → debug screen.**
-Where this revises an earlier document it says so; otherwise `docs/SKY.md` and
-`docs/DECISIONS_2026-08.md` still govern.
+Agreed 2026-09-16, and **built the same day** on `claude/pairing-stack-audit-suak0v`. Where this
+revises an earlier document it says so; otherwise `docs/SKY.md` and `docs/DECISIONS_2026-08.md`
+still govern.
+
+**What is not built, so nobody has to find out by reading code.** §1's sparser, smaller, fainter
+field at low zoom, and its *Today* control — the second of which §1.0 arguably deletes along with the
+geography, since position carries no time and there is no present to return to. §2's clinician-facing
+half: the sharing switches store a decision that no export, report or sync path reads yet, so the
+verbatim *"with one person, not shared"* has nothing to render in, and the two allowed prompts about
+people do not exist. §4's placement rule decides nothing yet, for a reason worth reading before
+wiring it: a reminder is at a time the person chose and rationing it overrides them, and the support
+offer is made while they are already in the app, so neither is the kind of ask an hour should be
+picked for. The phrase pool is listed on the debug screen and never spoken, and nothing persists a
+rotation. §5's per-decision history is one reading of the current moment, not a log.
 
 ## 1. The Sky
+
+### 1.0 Placement is random — revised 2026-09-16, and it replaces the geography
+
+**Decided by the maintainer, and it reverses `docs/SKY.md` §3.1 ("Placement — time is the sky's
+geography").** There are no month rows. A star is scattered at random and time is carried entirely
+by colour and brightness.
+
+This became possible only because of the redshift below. §3.1 was written when position was the
+only thing that could say *when*; now a star says it by being blue-white or deep red, bright or
+faint. Position is therefore free to be sky.
+
+What it buys, and this is the reason to prefer it: **an empty stretch is no longer anywhere.** A
+row per month draws a hard month as a visibly empty band, which is the exact reading this surface
+exists to prevent — the uniform field exists almost entirely to soften it. When position encodes
+nothing, there is no region that can be empty, and the problem is gone at the root rather than
+masked.
+
+What it costs, accepted knowingly: **you cannot find a date by looking.** The text list is the way
+to reach a particular day, and it keeps its month headings. Two records from the same day are
+nowhere near each other, so leaning in to a day is gone with the rows.
+
+The rules placement must keep:
+
+- **A star's position is a hash of its own identity and nothing else** — its kind and its anchor
+  record id, exactly as before. Never the index, never the count, never the date, never the mood.
+  This is what keeps "a star never moves" true, and it is the property the whole surface rests on.
+- **Normalised `[0,1)` in both axes.** The renderer maps that to the canvas, so a new sky with five
+  stars spreads across the screen and a ten-year sky is dense, without any position ever changing.
+- **Clusters, carrying nothing.** Uniform scatter reads as machine-made. Warp the position through
+  a fixed lumpy field seeded by the sky seed, so the sky clumps like a real one. The warp is a pure
+  function of position and seed and cannot see the record — same discipline as `SkyField`, and for
+  the same reason.
+- **Overlap is accepted, never resolved.** Nudging a star apart from its neighbour would make its
+  position depend on other records. Zoom separates them; a tap resolves to the nearest; the list
+  reaches anything.
+
+Consequently deleted: month rows, `rowStart`, the visible-months zoom model, the day spread with
+leader lines, and the per-year nebula (years no longer occupy regions). `epochDay` stays on the
+layout, because age is what colour is computed from.
+
 
 - **Ground** goes near-black, not pure black. The star contrast target rises with it, so stars
   get brighter, not dimmer (they are pinned to a ratio against the ground).

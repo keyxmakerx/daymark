@@ -47,7 +47,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.daymark.app.BuildConfig
 import com.daymark.app.R
+import com.daymark.app.ui.debug.DebugTimingScreen
 import com.daymark.app.ui.activities.ActivitiesScreen
 import com.daymark.app.ui.activities.ActivityLibraryScreen
 import com.daymark.app.ui.calendar.CalendarScreen
@@ -58,6 +60,10 @@ import com.daymark.app.ui.goals.GoalsScreen
 import com.daymark.app.data.entity.EntryWithActivities
 import com.daymark.app.ui.entry.EntryActionsViewModel
 import com.daymark.app.ui.entry.EntryEditorScreen
+import com.daymark.app.ui.entry.EntryViewScreen
+import com.daymark.app.ui.people.PeopleScreen
+import com.daymark.app.ui.people.PeopleSharingScreen
+import com.daymark.app.ui.people.PersonScreen
 import com.daymark.app.ui.components.RaisedCenterNavBar
 import com.daymark.app.ui.foryou.ForYouScreen
 import com.daymark.app.ui.history.HistoryScreen
@@ -270,7 +276,10 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
         ) {
             composable(Routes.HOME) {
                 HomeScreen(
-                    onEntryClick = { id -> navController.navigate(Routes.entry(id)) },
+                    // Tapping a past entry opens the entry *page*, not the editor: it is a record
+                    // being read, and the editor — with its delete button in the corner — is one
+                    // deliberate tap further on. `Routes.ENTRY_VIEW` carries the argument.
+                    onEntryClick = { id -> navController.navigate(Routes.entryView(id)) },
                     onQuickCheckIn = { level -> navController.navigate(Routes.entry(mood = level)) },
                     onSignalAction = { action -> navController.navigate(signalActionRoute(action)) },
                     onOpenForYou = { navController.navigate(Routes.FOR_YOU) },
@@ -282,7 +291,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
             composable(Routes.HISTORY, enterTransition = zEnter, popExitTransition = zPopExit) {
                 HistoryScreen(
                     onBack = { navController.popBackStack() },
-                    onEntryClick = { id -> navController.navigate(Routes.entry(id)) },
+                    onEntryClick = { id -> navController.navigate(Routes.entryView(id)) },
                     onDeleteEntry = deleteEntryWithUndo,
                 )
             }
@@ -290,7 +299,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                 ForYouScreen(
                     onBack = { navController.popBackStack() },
                     onSignalAction = { action -> navController.navigate(signalActionRoute(action)) },
-                    onEntryClick = { id -> navController.navigate(Routes.entry(id)) },
+                    onEntryClick = { id -> navController.navigate(Routes.entryView(id)) },
                 )
             }
             composable(Routes.INSIGHTS) {
@@ -317,13 +326,13 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
             ) {
                 DayDetailScreen(
                     onBack = { navController.popBackStack() },
-                    onEditEntry = { id -> navController.navigate(Routes.entry(id)) },
+                    onEditEntry = { id -> navController.navigate(Routes.entryView(id)) },
                 )
             }
             composable(Routes.SEARCH, enterTransition = zEnter, popExitTransition = zPopExit) {
                 SearchScreen(
                     onBack = { navController.popBackStack() },
-                    onEditEntry = { id -> navController.navigate(Routes.entry(id)) },
+                    onEditEntry = { id -> navController.navigate(Routes.entryView(id)) },
                 )
             }
             composable(Routes.TRACKERS, enterTransition = zEnter, popExitTransition = zPopExit) {
@@ -363,6 +372,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                 MoreHubScreen(
                     onGoals = { navController.navigate(Routes.GOALS) },
                     onSky = { navController.navigate(Routes.SKY) },
+                    onPeople = { navController.navigate(Routes.PEOPLE) },
                     onActivities = { navController.navigate(Routes.ACTIVITIES) },
                     onYearPixels = { navController.navigate(Routes.YEAR_PIXELS) },
                     onSleep = { navController.navigate(Routes.SLEEP) },
@@ -491,9 +501,24 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                     onManageReminders = { navController.navigate(Routes.REMINDERS) },
                     onCustomizeMoods = { navController.navigate(Routes.CUSTOMIZE_MOODS) },
                     onManageSuggestions = { navController.navigate(Routes.SUGGESTIONS) },
+                    // Gated too, so no mention of the debug route in this graph sits outside a
+                    // `BuildConfig.DEBUG` check — including the one that would still be a live
+                    // navigation if the Settings row below it ever lost its own.
+                    onOpenTimingDebug = {
+                        if (BuildConfig.DEBUG) { navController.navigate(Routes.DEBUG_TIMING) }
+                    },
                     onShowMessage = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                     modifier = Modifier.padding(padding),
                 )
+            }
+            // The timing debug screen exists only in a debug build. This `if` means the release
+            // graph has no such destination at all, so the route cannot be reached by a deep link
+            // or by anything that navigates by string; the screen re-checks the same flag itself,
+            // and so does the Settings row that points here. Any one of the three is enough.
+            if (BuildConfig.DEBUG) {
+                composable(Routes.DEBUG_TIMING, enterTransition = zEnter, popExitTransition = zPopExit) {
+                    DebugTimingScreen(onBack = { navController.popBackStack() })
+                }
             }
             composable(Routes.SUGGESTIONS, enterTransition = zEnter, popExitTransition = zPopExit) {
                 SuggestionsScreen(onBack = { navController.popBackStack() })
@@ -571,6 +596,46 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                     onTakeAMoment = { navController.navigate(Routes.SUPPORT) },
                 )
             }
+            composable(
+                Routes.ENTRY_VIEW_PATTERN,
+                arguments = listOf(navArgument("entryId") { type = NavType.StringType }),
+                enterTransition = zEnter,
+                popExitTransition = zPopExit,
+            ) {
+                EntryViewScreen(
+                    onBack = { navController.popBackStack() },
+                    // Editing replaces this page rather than stacking on top of it, so Back from
+                    // the editor returns to wherever the entry was tapped instead of to a stale
+                    // copy of the page that was just changed.
+                    onEdit = { id ->
+                        navController.popBackStack()
+                        navController.navigate(Routes.entry(id))
+                    },
+                    onOpenPerson = { id -> navController.navigate(Routes.person(id)) },
+                )
+            }
+            composable(Routes.PEOPLE, enterTransition = zEnter, popExitTransition = zPopExit) {
+                PeopleScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenPerson = { id -> navController.navigate(Routes.person(id)) },
+                    onOpenSharing = { navController.navigate(Routes.PEOPLE_SHARING) },
+                )
+            }
+            composable(
+                Routes.PERSON_PATTERN,
+                arguments = listOf(navArgument("personId") { type = NavType.StringType }),
+                enterTransition = zEnter,
+                popExitTransition = zPopExit,
+            ) {
+                PersonScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenEntry = { id -> navController.navigate(Routes.entryView(id)) },
+                    onOpenSharing = { navController.navigate(Routes.PEOPLE_SHARING) },
+                )
+            }
+            composable(Routes.PEOPLE_SHARING, enterTransition = zEnter, popExitTransition = zPopExit) {
+                PeopleSharingScreen(onBack = { navController.popBackStack() })
+            }
             composable(Routes.ACTIVITIES, enterTransition = zEnter, popExitTransition = zPopExit) {
                 ActivitiesScreen(
                     onBack = { navController.popBackStack() },
@@ -590,13 +655,18 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
 /**
  * Where a star hands off to, or null when there is nowhere for it to go.
  *
+ * A check-in goes to [Routes.ENTRY_VIEW], the page that reads an entry, and **not** to the editor.
+ * Every other place an entry is tapped now lands there; the Sky landing somewhere else would make
+ * the same tap mean two different things depending on which screen it happened on, and the one it
+ * happened on here is a surface people open to look at rather than to change anything.
+ *
  * A project step is identified by its own row id and its screen is the goal editor, which is keyed
  * by `goalId` — the Sky's layout carries no goal id and must not start carrying one just for this.
  * A life event has a list rather than a per-row screen, and the Sky reaches it by its own control.
  * Both cases return null and the Sky shows no action, rather than a control that refuses.
  */
 private fun skyRecordRoute(kind: SkyKind, id: Long): String? = when (kind) {
-    SkyKind.CHECK_IN -> Routes.entry(id)
+    SkyKind.CHECK_IN -> Routes.entryView(id)
     SkyKind.JOURNAL -> Routes.journalEntry(id)
     SkyKind.PRACTICE -> Routes.thoughtRecord(id)
     SkyKind.GOAL_REACHED -> Routes.goal(id)

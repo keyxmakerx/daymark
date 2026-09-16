@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.daymark.app.stats.YearReview
+import com.daymark.app.sky.SkyField
 import com.daymark.app.ui.components.NightBg
 import com.daymark.app.ui.components.NightFaint
 import com.daymark.app.ui.components.NightInk
@@ -50,6 +51,7 @@ import com.daymark.app.ui.components.drawMoodStar
 import com.daymark.app.ui.theme.moodColors
 import com.daymark.app.ui.theme.moodLabels
 import kotlinx.coroutines.launch
+import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -267,18 +269,44 @@ private fun StarCluster(
 
 @Composable
 private fun StarfieldBackground() {
+    // The Sky's own field, not a second one.
+    //
+    // This used to be seventy specks from a hash written out here, at alphas up to 0.28 — nearly
+    // twice what the Sky calls a field, on a screen that sits beside it in the same product. Two
+    // night skies that do not match read as two different apps, and the brighter of them is the one
+    // whose specks can be mistaken for somebody's stars. `SkyField` is the generator that takes a
+    // seed and a tile and *nothing else* (see its header: that signature is what makes the field
+    // unable to encode data), so reusing it here is also the cheapest way to be sure this backdrop
+    // never starts meaning something.
     Canvas(Modifier.fillMaxSize().clearAndSetSemantics {}) {
-        for (i in 0 until 70) {
-            // Deterministic faint specks.
-            var h = i * 374761393
-            h = (h xor (h ushr 13)) * 1274126177
-            val x = ((h ushr 8) and 0xFFFF) / 65536f * size.width
-            val y = ((h ushr 16) and 0xFFFF) / 65536f * size.height
-            val a = 0.10f + ((h ushr 4) and 0x7) / 7f * 0.18f
-            drawCircle(NightInk.copy(alpha = a), radius = (1f + (i % 3)) , center = Offset(x, y))
+        val tilePx = 220f
+        val across = ceil(size.width / tilePx).toInt()
+        val down = ceil(size.height / tilePx).toInt()
+        for (ty in 0..down) {
+            for (tx in 0..across) {
+                val tile = SkyField.tile(YEAR_FIELD_SEED, tx, ty)
+                for (i in 0 until tile.size) {
+                    drawCircle(
+                        color = NightInk.copy(alpha = tile.alpha[i]),
+                        radius = 1f,
+                        center = Offset(
+                            (tx + tile.x[i]) * tilePx,
+                            (ty + tile.y[i]) * tilePx,
+                        ),
+                    )
+                }
+            }
         }
     }
 }
+
+/**
+ * The backdrop's seed. Fixed, and deliberately not the person's Sky seed.
+ *
+ * The review is a different surface; giving it the same field as somebody's own Sky would invite
+ * the reading that these specks are their history seen from further away, which they are not.
+ */
+private const val YEAR_FIELD_SEED = 0x59454152L
 
 /**
  * The empty year. The button stays, and it is not decoration: this screen is full-screen, has no

@@ -8,9 +8,27 @@ package com.daymark.app.sky
  * `goals/GoalBoard.kt` and `data/ImageStrip.kt` already keep. No Room types, no `LocalDate`, no
  * clock, no `Context`. [SkyRecord] is a plain mirror of whatever row produced it — exactly as
  * `InterruptionBudget.Offer` mirrors an `offer_records` row — so the data layer maps onto this and
- * the dependency runs one way. `docs/SKY.md` is the design; this file is the part of it that has
- * been built, and it is built here rather than in the Compose layer because every rule below is one
- * a unit test has to be able to execute.
+ * the dependency runs one way. `docs/SKY.md` is the older design and
+ * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1 revises it; this file is the part of it that has been
+ * built, and it is built here rather than in the Compose layer because every rule below is one a
+ * unit test has to be able to execute.
+ *
+ * ## There is no timeline, and that is the point
+ *
+ * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1.0 **reverses `docs/SKY.md` §3.1**. There are no month
+ * rows and no axis of any kind. A star is scattered across one open field, and *when* it is from is
+ * carried entirely by its colour and its brightness — [SkyAge]'s redshift and fade.
+ *
+ * That became possible only once colour carried time, and it is worth doing for one reason: a row
+ * per month draws a hard month as a visibly empty band, which is the exact reading this whole
+ * surface exists to prevent. The uniform field ([SkyField]) existed mostly to soften that band.
+ * **When position encodes nothing, there is no region that can be empty**, and the problem is gone
+ * at the root instead of masked.
+ *
+ * Two costs come with it and both are accepted knowingly rather than engineered around: you cannot
+ * find a date by looking, and two records from the same day are nowhere near each other. The text
+ * list ([list]) is how a particular day is reached, which makes it matter more than it did before,
+ * not less.
  *
  * ## Determinism, which is the feature and not a property of it
  *
@@ -19,16 +37,21 @@ package com.daymark.app.sky
  *
  *  1. **Nothing here reads a clock or a random source.** There is no `now`, no `Math.random()`, no
  *     `java.util.Random`. [SkyRandom] is a hash, written out.
- *  2. **A star's position is a hash of that star's own identity** — its kind and its row id — and of
- *     nothing else. Not of its index, not of how many stars exist, not of the viewport. So
- *     inserting a record in 2019 moves nothing, and adding today's check-in does not reflow the
- *     past. This is the property the whole "a place, not a chart" framing rests on (§3.1), and it
- *     is why the placement is a hash rather than a seeded stream.
+ *  2. **A star's position is a hash of that star's own identity** — its kind and its anchor record
+ *     id — and of nothing else. Not of its index, not of how many stars exist, not of the date, not
+ *     of the mood, not of the viewport. So inserting a record in 2019 moves nothing, and adding
+ *     today's check-in does not reflow the past. **A star never moves** is the property the whole
+ *     surface rests on, and it is why the placement is a hash rather than a seeded stream.
  *  3. **The order records arrive in does not matter.** The layout sorts, so a `Flow` that emits
  *     rows in a different order produces the same arrays.
  *
  * A one-record difference produces a different sky, because that record is a star that the other
  * sky does not have. Both halves are asserted in `SkyTest`.
+ *
+ * The `seed` [layout] takes is the sky's own seed ([SkySeed]): derived once from the person's first
+ * record, persisted, and never re-derived. It seeds the cluster warp ([SkyWarp]) and nothing else.
+ * It is a constant of the sky and never a property of a record, so point 2 still holds exactly —
+ * within one person's sky the seed cannot change, and nothing they log afterwards can move a star.
  *
  * ## The rule the layout is shaped around
  *
@@ -45,16 +68,15 @@ package com.daymark.app.sky
  *    branch anywhere that emits a marker for an empty date. This is why the layout iterates
  *    *records* and never iterates *dates*: there is no loop here that could visit an empty day, so
  *    there is nowhere for a placeholder to be added later by someone being helpful.
- *  - **No ruler.** No per-day cell geometry, no 31-slot rows, no gridlines, no tick marks. The day
- *    is a *unit of the map* from date to position (see [Sky.layout]) and never a cell that is drawn
- *    or that anything snaps to — stars are scattered continuously inside it, so there is no column
- *    structure to count the gaps between.
+ *  - **No ruler, and now not even an axis.** No per-day cell geometry, no rows, no gridlines, no
+ *    tick marks, and no region of the field that belongs to any stretch of time. There is no
+ *    direction in which a gap in someone's history could show up as a gap on the surface.
  *  - **Equal presence.** [SkyGlyph] holds core radius and core alpha constant across every mood and
  *    every kind, and [SkyPalette] equalises the ramp's contrast so that constancy means what it
  *    says. The layout carries a mood level and never a rank.
  *
  * The fourth, the uniform decorative field, is [SkyField] — separate so its generator cannot see
- * data even by accident.
+ * data even by accident. [SkyWarp] is separate for the same reason and keeps the same discipline.
  *
  * ## What it never says
  *
@@ -84,15 +106,15 @@ object Sky {
      * decision (§8.3).
      *
      * So this is a cap on *drawn positions*, not on records. Above it, records of the same kind on
-     * the same day fold together: the star keeps every id it covers ([recordIdsAt]), stays
-     * individually openable, stays in the text list, and is drawn at exactly the same size as a
-     * star holding one record. Nothing is discarded and nothing is hidden — some marks are
+     * the same day fold together: the star keeps every id it covers ([SkyLayout.recordIdsAt]),
+     * stays individually openable, stays in the text list, and is drawn at exactly the same size as
+     * a star holding one record. Nothing is discarded and nothing is hidden — some marks are
      * co-located.
      *
      * Sixteen, because it is far outside ordinary use and only bites degenerate input. The design's
      * heaviest profile is two check-ins a day plus other kinds; sixteen acts recorded against one
-     * date is a bulk import or a day someone spent in the app, and drawing forty overlapping discs
-     * inside one day's width is not more truthful than drawing sixteen, it is only less legible.
+     * date is a bulk import or a day someone spent in the app, and drawing forty marks for one day
+     * is not more truthful than drawing sixteen, it is only more work.
      *
      * The cost is stated rather than hidden: on a day that exceeds the cap, adding a record can
      * change the fold boundaries and move that day's stars. Position stability holds absolutely for
@@ -100,43 +122,29 @@ object Sky {
      */
     const val MAX_STARS_PER_DAY = 16
 
-    /**
-     * The structural bound the cap buys, and the reason no other bound is needed.
-     *
-     * A month row can hold at most 31 × [MAX_STARS_PER_DAY] stars whatever the person's history, so
-     * the number of full glyphs on screen at [SkyDetail.MONTH] is bounded by the layout rather than
-     * by how much anyone has logged. Ten years is 120 rows; forty years is 480; rows cost three
-     * integers each, so the span is never the problem. Culling is a contiguous index range
-     * ([rowRange]) because x is monotonic in time and the arrays are in time order — an array slice
-     * rather than a scan or a search.
-     */
-    const val MAX_STARS_PER_ROW = 31 * MAX_STARS_PER_DAY
-
     // -------------------------------------------------------------------------------------------
-    // Placement constants.
+    // Placement.
     // -------------------------------------------------------------------------------------------
 
     /**
-     * How far into its own day a star may sit, as a fraction of a day's width.
-     *
-     * Wide enough that stars fill the day almost edge to edge and there is no visible column
-     * rhythm, and stopping short of the edges so that a star on the 5th can never land to the right
-     * of a star on the 6th. Time within the row stays monotonic; time *within* a day does not
-     * appear at all, because encoding time-of-day spatially would draw the person's sleep pattern
-     * across the whole surface (§2.3).
+     * Kinds are spaced [KIND_SALT] apart in the mixer's *input*, and the two axis salts below are
+     * smaller than that gap, so no (kind, axis) pair can land on another's hash input.
      */
-    private const val DAY_JITTER_LO = 0.08f
-    private const val DAY_JITTER_HI = 0.92f
-
-    /** Vertical band a star may occupy inside its row, so nothing clips the row's edges. */
-    private const val ROW_JITTER_LO = 0.10f
-    private const val ROW_JITTER_HI = 0.90f
-
-    /** Keeps a kind's stars from hashing onto the same coordinates as another kind's. */
     private const val KIND_SALT = 0x2F1B3C5DL
 
-    private const val X_SALT = 0x51E1A9C7L
-    private const val Y_SALT = -0x3D0A77B1L
+    /**
+     * The two axes are drawn from two separately mixed hashes, and the salt goes into the mixer's
+     * **input** rather than onto its output.
+     *
+     * This is a real trap and not a style preference; `SkyTwinkle`'s header describes the same one.
+     * Salting afterwards — `mix(kind, id) xor SALT` — looks equivalent and is not, because
+     * [SkyRandom.unit] keeps only the top 24 bits of the hash: a salt whose own top 24 bits are
+     * zero changes nothing at all, and one whose top 24 bits are set produces exactly `1 - x`. The
+     * layout did that until 2026-09-16 and every star in the app sat on the anti-diagonal, at a
+     * measured Pearson correlation of -1.0. `SkyTest`'s decorrelation test is the guard.
+     */
+    private const val X_SALT = 0x0A17C3E5L
+    private const val Y_SALT = 0x1B29D4F6L
 
     // -------------------------------------------------------------------------------------------
 
@@ -147,32 +155,36 @@ object Sky {
      * are laid out as two stars rather than silently merged, because quietly dropping one of a
      * person's records is the worse failure.
      *
-     * The map from date to position, stated once:
+     * [seed] is the sky's persisted seed ([SkySeed]). It seeds the cluster warp and nothing else —
+     * it decides how the sky clumps, never which stars exist or which one is where relative to the
+     * others.
+     *
+     * Placement, stated once:
      *
      * ```
-     * row = epochMonth(day) - epochMonth(earliest day)
-     * x   = (day - first day of that month + jitter) / length of that month     in [0, 1)
-     * y   = jitter                                                              in [0, 1)
+     * hx = hash(kind, anchor id, X_SALT)   in [0, 1)
+     * hy = hash(kind, anchor id, Y_SALT)   in [0, 1)
+     * x  = SkyWarp.warpedX(hx, hy, seed)
+     * y  = SkyWarp.warpedY(hx, hy, seed)
      * ```
      *
-     * Both jitters come from `hash(kind, first record id)`, so they are fixed for the life of the
-     * record. `x` is a continuous function of the date: the day is the unit the map is written in,
-     * not a cell — nothing snaps to it, nothing is drawn at its boundaries, and two stars on one day
-     * do not share an `x`.
+     * Nothing else is consulted. The date does not appear, and neither does the record's place in
+     * the list, the size of the list, or the mood.
+     *
+     * **Overlap is accepted and never resolved.** Two stars that hash near each other stay near each
+     * other: nudging one away would make its position depend on the other records in the sky, which
+     * is exactly the property being protected. Zoom separates them, a tap takes the nearest, and the
+     * list reaches anything.
      */
-    fun layout(records: List<SkyRecord>): SkyLayout {
+    fun layout(records: List<SkyRecord>, seed: Long): SkyLayout {
         if (records.isEmpty()) return SkyLayout.EMPTY
 
         val sorted = records.sortedWith(
             compareBy<SkyRecord> { it.epochDay }.thenBy { it.kind.ordinal }.thenBy { it.id },
         )
-        val firstMonth = SkyCalendar.epochMonth(sorted.first().epochDay)
-        val lastMonth = SkyCalendar.epochMonth(sorted.last().epochDay)
-        val rowCount = lastMonth - firstMonth + 1
 
         val starX = ArrayList<Float>(sorted.size)
         val starY = ArrayList<Float>(sorted.size)
-        val starRow = ArrayList<Int>(sorted.size)
         val starKind = ArrayList<Int>(sorted.size)
         val starMood = ArrayList<Int>(sorted.size)
         val starDay = ArrayList<Long>(sorted.size)
@@ -185,12 +197,6 @@ object Sky {
             var dayEnd = cursor
             val day = sorted[cursor].epochDay
             while (dayEnd < sorted.size && sorted[dayEnd].epochDay == day) dayEnd++
-
-            val month = SkyCalendar.epochMonth(day)
-            val row = month - firstMonth
-            val monthStart = SkyCalendar.firstEpochDayOfMonth(month)
-            val monthLength = SkyCalendar.lengthOfMonth(month)
-            val dayIndex = (day - monthStart).toInt()
 
             // Fold the day down to at most MAX_STARS_PER_DAY drawn positions, within kinds.
             val drawn = drawnPerKind(sorted, cursor, dayEnd)
@@ -209,7 +215,6 @@ object Sky {
                     val from = kindStart + (recordCount * s) / starCount
                     val to = kindStart + (recordCount * (s + 1)) / starCount
                     val anchorId = sorted[from].id
-                    val hash = SkyRandom.mix(kind.ordinal.toLong() * KIND_SALT, anchorId)
 
                     idStart.add(idCursor)
                     for (r in from until to) {
@@ -217,12 +222,10 @@ object Sky {
                         idCursor++
                     }
 
-                    starX.add(
-                        (dayIndex + SkyRandom.between(hash xor X_SALT, DAY_JITTER_LO, DAY_JITTER_HI)) /
-                            monthLength,
-                    )
-                    starY.add(SkyRandom.between(hash xor Y_SALT, ROW_JITTER_LO, ROW_JITTER_HI))
-                    starRow.add(row)
+                    val hx = unwarpedX(kind, anchorId)
+                    val hy = unwarpedY(kind, anchorId)
+                    starX.add(SkyWarp.warpedX(hx, hy, seed))
+                    starY.add(SkyWarp.warpedY(hx, hy, seed))
                     starKind.add(kind.ordinal)
                     starMood.add(moodOf(sorted, from, to))
                     starDay.add(day)
@@ -234,17 +237,9 @@ object Sky {
         idStart.add(idCursor)
 
         val starCount = starX.size
-        val rowStart = IntArray(rowCount + 1)
-        for (i in 0 until starCount) rowStart[starRow[i] + 1]++
-        for (r in 1..rowCount) rowStart[r] += rowStart[r - 1]
-
         return SkyLayout(
-            firstEpochMonth = firstMonth,
-            rowCount = rowCount,
-            rowStart = rowStart,
             x = FloatArray(starCount) { starX[it] },
             y = FloatArray(starCount) { starY[it] },
-            row = IntArray(starCount) { starRow[it] },
             kindOrdinal = IntArray(starCount) { starKind[it] },
             moodLevel = IntArray(starCount) { starMood[it] },
             epochDay = LongArray(starCount) { starDay[it] },
@@ -252,6 +247,27 @@ object Sky {
             recordIds = ids,
         )
     }
+
+    /**
+     * Where a star's own identity puts it, before the sky's lumps are applied. `[0, 1)`.
+     *
+     * Public because this pair **is** the rule "a star's position is a hash of its own identity and
+     * nothing else", and a rule that cannot be evaluated on its own is a rule that gets tested
+     * through three layers of warp and grid. The two axes being independent draws is asserted
+     * directly on these; the version before 2026-09-16 returned `y = 1 - x` and nothing noticed,
+     * because there was nowhere to look at the two numbers side by side.
+     *
+     * The renderer has no use for them — it draws [SkyLayout.x] and [SkyLayout.y], which are these
+     * warped — and nothing else in the app should call them.
+     */
+    fun unwarpedX(kind: SkyKind, anchorId: Long): Float = axis(kind, anchorId, X_SALT)
+
+    /** The other axis. See [unwarpedX]. */
+    fun unwarpedY(kind: SkyKind, anchorId: Long): Float = axis(kind, anchorId, Y_SALT)
+
+    /** One axis of a star's unwarped position, in `[0, 1)`. Kind and anchor id, and nothing else. */
+    private fun axis(kind: SkyKind, anchorId: Long, salt: Long): Float =
+        SkyRandom.unit(SkyRandom.mix(kind.ordinal.toLong() * KIND_SALT + salt, anchorId))
 
     /**
      * How many drawn positions each kind gets on one day.
@@ -292,25 +308,8 @@ object Sky {
     }
 
     // -------------------------------------------------------------------------------------------
-    // Navigation. Targets are dates and nothing else — there is no "jump to your best month",
-    // because there is no ranking (§6.2).
-    // -------------------------------------------------------------------------------------------
-
-    /**
-     * The contiguous index range covering rows `[firstRow, lastRow]`, clamped to the layout.
-     *
-     * Culling is a slice and not a search: stars are in time order and every star of a row is
-     * adjacent to the rest of its row, so the visible set is `rowStart[a] until rowStart[b + 1]`.
-     */
-    fun rowRange(layout: SkyLayout, firstRow: Int, lastRow: Int): IntRange {
-        if (layout.rowCount == 0) return IntRange.EMPTY
-        val a = if (firstRow < 0) 0 else if (firstRow > layout.rowCount - 1) layout.rowCount - 1 else firstRow
-        val b = if (lastRow < a) a else if (lastRow > layout.rowCount - 1) layout.rowCount - 1 else lastRow
-        return layout.rowStart[a] until layout.rowStart[b + 1]
-    }
-
-    // -------------------------------------------------------------------------------------------
-    // The text equivalent — a peer surface, not a fallback (§7.5).
+    // The text equivalent — a peer surface, not a fallback (§7.5), and now the only way to reach a
+    // particular date.
     // -------------------------------------------------------------------------------------------
 
     /**
@@ -327,23 +326,30 @@ object Sky {
      * the point of navigation: never aggregated into a total, never compared across periods, never
      * trended, and never shown to anyone who did not need it to move around.
      *
+     * Months are read off the stars themselves rather than off any layout geometry — there is none
+     * any more — which is why a month nobody logged in cannot produce a heading even by accident.
+     * The stars are in time order, so this is one pass with no sort and no map.
+     *
      * No summary, no overview sentence, no reading of the data. The list *is* the data.
      */
     fun list(layout: SkyLayout): List<SkyListItem> {
         val out = ArrayList<SkyListItem>()
-        for (r in 0 until layout.rowCount) {
-            val from = layout.rowStart[r]
-            val to = layout.rowStart[r + 1]
-            if (from == to) continue
-            val month = layout.firstEpochMonth + r
+        var index = 0
+        while (index < layout.starCount) {
+            val month = SkyCalendar.epochMonth(layout.epochDay[index])
+            var end = index
+            while (end < layout.starCount && SkyCalendar.epochMonth(layout.epochDay[end]) == month) {
+                end++
+            }
             out.add(
                 SkyListItem.MonthHeading(
                     year = SkyCalendar.yearOfMonth(month),
                     month = SkyCalendar.monthOfMonth(month),
-                    itemCount = to - from,
+                    itemCount = end - index,
                 ),
             )
-            for (i in from until to) out.add(SkyListItem.Star(i))
+            for (i in index until end) out.add(SkyListItem.Star(i))
+            index = end
         }
         return out
     }
@@ -427,9 +433,9 @@ enum class SkyKind(val key: String, val introduction: String) {
  *
  * **No time of day.** [epochDay] is the *local date the act was recorded*, from the record's own
  * timestamp — never a derived date, never a backfilled one, never "the day it was about". An entry
- * written at 03:00 on the 4th about the 3rd is a star on the 4th, because that is when the person
- * wrote it. The time is available in the record the star opens; it is absent here so that it cannot
- * find its way into a coordinate, which would draw the person's sleep pattern across the surface.
+ * written at 03:00 on the 4th about the 3rd is a star dated the 4th, because that is when the
+ * person wrote it. The time is available in the record the star opens; it is absent here so that it
+ * cannot find its way into a coordinate.
  */
 data class SkyRecord(
     val kind: SkyKind,
@@ -451,36 +457,33 @@ data class SkyRecord(
  *
  * Structure of arrays and not `List<Star>`, for the reason `docs/SKY.md` §8.2 gives: fifteen
  * thousand short-lived objects is avoidable collector pressure on a surface whose entire job is to
- * scroll smoothly, and the draw phase must allocate nothing. Coordinates are normalised to `[0, 1)`
- * inside their row, so **zoom is a transform and never a relayout** — every level is the same
- * numbers at a different scale, nothing reflows, and a star can be followed from the overview to
- * its own detail by eye.
+ * scroll smoothly, and the draw phase must allocate nothing.
+ *
+ * Coordinates are normalised to `[0, 1)` across **one open field** — there are no rows and no
+ * regions. The renderer maps that square onto the canvas, so a five-star sky spreads across the
+ * screen and a ten-year sky is dense, without any position ever changing and without anything
+ * reflowing: **zoom is a transform and never a relayout**.
+ *
+ * Time order is kept because the text list ([Sky.list]) and the descriptions need it, not because
+ * anything is drawn in it. A star's index says when it was logged relative to the others and says
+ * nothing whatever about where it is.
  */
 class SkyLayout(
-    /** The month of the earliest record. Row `r` is the month `firstEpochMonth + r`. */
-    val firstEpochMonth: Int,
-    /**
-     * One row per calendar month from the earliest record to the latest, with no gaps.
-     *
-     * A month with nothing in it still has a row, and that row draws **nothing** — it is sky, the
-     * same sky as every other row, at the same field density. Allocating rows only to months that
-     * have stars was rejected twice over: it would make the vertical axis a function of how much
-     * was logged, so a quiet year would be compressed into a line and a busy one stretched, and it
-     * would mean adding one record to an empty month shifted every row below it, which breaks the
-     * one property this surface cannot lose.
-     */
-    val rowCount: Int,
-    /** `rowCount + 1` boundaries. Row `r` owns `rowStart[r] until rowStart[r + 1]`. */
-    val rowStart: IntArray,
-    /** `[0, 1)` across the row's month. */
+    /** `[0, 1)` across the field. */
     val x: FloatArray,
-    /** `[0, 1)` down the row. */
+    /** `[0, 1)` down the field. */
     val y: FloatArray,
-    val row: IntArray,
     /** [SkyKind.ordinal]. An ordinal and not a [SkyKind] so the array is primitive. */
     val kindOrdinal: IntArray,
     /** `1..5`, or [SkyGlyph.MOOD_NONE]. */
     val moodLevel: IntArray,
+    /**
+     * The local date each star was recorded on, ascending.
+     *
+     * Kept although position no longer uses it, because **age is what colour is computed from**:
+     * [SkyAge.ageYears] turns this and the caller's idea of today into the redshift and the fade,
+     * which is now the only thing on the surface that says when a star is from.
+     */
     val epochDay: LongArray,
     /** `starCount + 1` boundaries into [recordIds]. */
     val idStart: IntArray,
@@ -515,7 +518,7 @@ class SkyLayout(
         }
 
     enum class Emptiness {
-        /** Nothing logged. Field, one line, no stars, no gutter, no month rows. */
+        /** Nothing logged. Field, one line, no stars. */
         NO_RECORDS,
 
         /**
@@ -537,12 +540,8 @@ class SkyLayout(
          * renderer works on it unchanged.
          */
         val EMPTY = SkyLayout(
-            firstEpochMonth = 0,
-            rowCount = 0,
-            rowStart = IntArray(1),
             x = FloatArray(0),
             y = FloatArray(0),
-            row = IntArray(0),
             kindOrdinal = IntArray(0),
             moodLevel = IntArray(0),
             epochDay = LongArray(0),

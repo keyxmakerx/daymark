@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.daymark.app.data.EntryRepository
 import com.daymark.app.data.entity.EntryWithActivities
+import com.daymark.app.stats.MoodCorrelations
 import com.daymark.app.stats.MoodStats
 import com.daymark.app.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -51,10 +52,10 @@ class StatsViewModel @Inject constructor(
         val days = entries.map { DateUtils.toLocalDate(it.entry.dateTime) }.toSet()
 
         // Per-activity average mood, with names + counts.
-        val pairs = entries.map { it.entry.moodLevel to it.activities.map { a -> a.id } }
+        val pairs = entries.map { it.entry.moodLevel to it.activities.map { a -> MoodCorrelations.FactorId.ofActivity(a.id) } }
         val averages = MoodStats.activityAverages(pairs)
-        val nameById = entries.flatMap { it.activities }.associate { it.id to it.name }
-        val counts = mutableMapOf<Long, Int>()
+        val nameById = entries.flatMap { it.activities }.associate { MoodCorrelations.FactorId.ofActivity(it.id) to it.name }
+        val counts = mutableMapOf<MoodCorrelations.FactorId, Int>()
         pairs.forEach { (_, ids) -> ids.distinct().forEach { counts[it] = (counts[it] ?: 0) + 1 } }
         val topActivities = averages.entries
             .mapNotNull { (id, avg) -> nameById[id]?.let { ActivityStat(it, avg, counts[id] ?: 0) } }

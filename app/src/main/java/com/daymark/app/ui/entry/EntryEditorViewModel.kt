@@ -7,12 +7,15 @@ import androidx.lifecycle.viewModelScope
 import com.daymark.app.data.ActivityRepository
 import com.daymark.app.data.EntryRepository
 import com.daymark.app.data.OfferLedgerRepository
+import com.daymark.app.data.PeopleRepository
 import com.daymark.app.data.PhotoStore
 import com.daymark.app.data.SettingsRepository
 import com.daymark.app.data.entity.ActivityEntity
 import com.daymark.app.data.entity.MoodEntry
 import com.daymark.app.data.entity.OfferKind
 import com.daymark.app.data.entity.OfferOutcome
+import com.daymark.app.data.entity.Person
+import com.daymark.app.data.entity.PersonGroup
 import com.daymark.app.security.AutoLockController
 import com.daymark.app.stats.InterruptionBudget
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -32,6 +35,16 @@ data class EntryEditorUiState(
     val dateTime: Long = System.currentTimeMillis(),
     val selectedActivityIds: Set<Long> = emptySet(),
     val activities: List<ActivityEntity> = emptyList(),
+    /**
+     * The *with* list: who, or what, this entry names. Ids only — the names live in [people].
+     *
+     * These sit in the same state object as [moodLevel] because one screen draws both, and that is
+     * the whole of their acquaintance. They are written by a different repository, in a different
+     * call, from a different argument list — see [EntryEditorViewModel.save].
+     */
+    val selectedPersonIds: Set<Long> = emptySet(),
+    /** Everybody not archived, for the picker. Archiving removes a name from here and nowhere else. */
+    val people: List<Person> = emptyList(),
     /** Relative filename of an attached photo, or null. */
     val photoPath: String? = null,
     val isEditing: Boolean = false,
@@ -59,6 +72,7 @@ const val LOW_MOOD_MAX = 2
 class EntryEditorViewModel @Inject constructor(
     private val entryRepository: EntryRepository,
     private val activityRepository: ActivityRepository,
+    private val peopleRepository: PeopleRepository,
     private val settingsRepository: SettingsRepository,
     private val offerLedger: OfferLedgerRepository,
     private val photoStore: PhotoStore,
@@ -90,6 +104,14 @@ class EntryEditorViewModel @Inject constructor(
                 _uiState.update { it.copy(activities = list) }
             }
         }
+        // The picker offers everybody who is not archived. `PeopleRepository.observeActive` is the
+        // only question asked here, and its answer is names and ids; there is no question on that
+        // repository that could come back with a mood.
+        viewModelScope.launch {
+            peopleRepository.observeActive().collect { list ->
+                _uiState.update { it.copy(people = list) }
+            }
+        }
         if (entryId != 0L) loadExisting(entryId)
     }
 
@@ -108,6 +130,12 @@ class EntryEditorViewModel @Inject constructor(
                     )
                 }
             }
+            // A second read rather than a join. `EntryDao` — the one that returns a mood level —
+            // has no method that touches `entry_people`, and that is deliberate: there is no query
+            // in the data layer that can hand back a (person, mood) pair for anything to correlate.
+            // Two reads on one screen is the price of that, and it is a small one.
+            val withIds: List<Long> = peopleRepository.personIdsForEntry(id)
+            _uiState.update { it.copy(selectedPersonIds = withIds.toSet()) }
         }
     }
 
@@ -121,6 +149,37 @@ class EntryEditorViewModel @Inject constructor(
         val next = state.selectedActivityIds.toMutableSet()
         if (!next.add(id)) next.remove(id)
         state.copy(selectedActivityIds = next)
+    }
+
+    fun togglePerson(id: Long) = _uiState.update { state ->
+        val next = state.selectedPersonIds.toMutableSet()
+        if (!next.add(id)) next.remove(id)
+        state.copy(selectedPersonIds = next)
+    }
+
+    /**
+     * Adds somebody from inside the editor and selects them, without leaving the entry.
+     *
+     * The new row's id comes straight back from the insert and goes into the selection, so the
+     * name the person just typed is already ticked when the dialog closes. Anything else means
+     * typing a name and then having to find it.
+     *
+     * Nothing about this write is conditional on the mood on screen, and nothing about the mood on
+     * screen changes because of it.
+     */
+    fun addPerson(name: String, group: PersonGroup) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch {
+            val newId: Long = peopleRepository.add(
+                name = trimmed,
+                group = group,
+                nowMillis = System.currentTimeMillis(),
+            )
+            _uiState.update { state ->
+                state.copy(selectedPersonIds = state.selectedPersonIds + newId)
+            }
+        }
     }
 
     /** Copies the picked image into private storage and attaches it, dropping any unsaved pick. */
@@ -142,10 +201,24 @@ class EntryEditorViewModel @Inject constructor(
         _uiState.update { it.copy(photoPath = null) }
     }
 
+    /**
+     * Writes the entry.
+     *
+     * ## Two writes, and why they are not one
+     *
+     * The mood, the note, the time, the photo and the activities go to `EntryRepository`. The
+     * *with* list goes to `PeopleRepository`. **No call below receives both a mood and a person**,
+     * and that is the shape the plan asked for: §2, *"Never in any rule that reads mood.
+     * Correlations, patterns and the cards they produce cannot receive a person or a community,
+     * groups included."* A single `save(entry, activities, people)` would be the one place in the
+     * app where the two are handed over together, and every later convenience would reach for it.
+     *
+     * The only thing that crosses between them is the row id, which is what a foreign key is.
+     */
     fun save() {
         val s = _uiState.value
         viewModelScope.launch {
-            entryRepository.save(
+            val savedId: Long = entryRepository.save(
                 MoodEntry(
                     id = s.entryId,
                     dateTime = s.dateTime,
@@ -155,6 +228,8 @@ class EntryEditorViewModel @Inject constructor(
                 ),
                 s.selectedActivityIds.toList(),
             )
+            // The second write: an entry id and a list of person ids, and nothing else.
+            peopleRepository.setPeopleOnEntry(savedId, s.selectedPersonIds.toList())
             // If the saved photo changed, the entry's original file is now orphaned.
             if (loadedPhotoPath != null && loadedPhotoPath != s.photoPath) {
                 photoStore.delete(loadedPhotoPath)
@@ -244,6 +319,16 @@ class EntryEditorViewModel @Inject constructor(
         val s = _uiState.value
         if (s.entryId == 0L) return
         viewModelScope.launch {
+            // The *with* links go first, and they have to go at all.
+            //
+            // `entry_people` has no foreign key by design, so nothing removes its rows when the
+            // entry does. A row id in SQLite is reused after the highest row is deleted, so a link
+            // left behind on entry 50 becomes the *with* list of whatever entry is written next and
+            // happens to be given id 50 — somebody else's day, silently saying it was spent with a
+            // named person. Cleared before the entry rather than after, so a failure part-way
+            // leaves an entry with fewer links (which deleting again fixes) rather than a link with
+            // no entry (which nothing can reach).
+            peopleRepository.setPeopleOnEntry(s.entryId, emptyList())
             entryRepository.delete(
                 MoodEntry(s.entryId, s.dateTime, s.moodLevel, s.note, s.photoPath),
             )

@@ -7,24 +7,6 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Finds a file in this repo by walking up from the working directory, because Gradle runs unit
- * tests with `user.dir` at the module directory while some IDEs use the repo root. Not finding it
- * throws: an assertion suite that cannot locate its subject is exactly the shape of a guard that
- * reports green forever.
- */
-internal fun repoFile(rel: String): File {
-    var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
-    val tail = rel.substringAfter("app/")
-    while (dir != null) {
-        for (candidate in listOf(File(dir, rel), File(dir, tail))) {
-            if (candidate.isFile) return candidate
-        }
-        dir = dir.parentFile
-    }
-    throw AssertionError("could not find $rel from ${System.getProperty("user.dir")}")
-}
-
-/**
  * "Replace all current data" must not leave a table behind.
  *
  * ## The bug this exists for

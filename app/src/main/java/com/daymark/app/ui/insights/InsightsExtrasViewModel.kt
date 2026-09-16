@@ -69,8 +69,8 @@ class InsightsExtrasViewModel @Inject constructor(
         if (entries.isEmpty()) return InsightsExtrasState()
 
         // --- Activity correlations ---
-        val moodActivityPairs = entries.map { it.entry.moodLevel to it.activities.map { a -> a.id } }
-        val nameById = entries.flatMap { it.activities }.associate { it.id to it.name }
+        val moodActivityPairs = entries.map { it.entry.moodLevel to it.activities.map { a -> MoodCorrelations.FactorId.ofActivity(a.id) } }
+        val nameById = entries.flatMap { it.activities }.associate { MoodCorrelations.FactorId.ofActivity(it.id) to it.name }
         val deltas = MoodCorrelations.factorDeltas(moodActivityPairs, MIN_OCCURRENCES)
         val (up, down) = MoodCorrelations.rankLifts(deltas, TOP_N)
         fun rows(list: List<MoodCorrelations.FactorDelta>) =

@@ -110,6 +110,29 @@ class GoalReachedSchemaTest {
     }
 
     /**
+     * The slice reads one migration, not the companion object from here down.
+     *
+     * The guard for [bodyOfMigration], and the reason it exists: without it, the two absence
+     * assertions above are claims about however much of the file the slice happened to take.
+     */
+    @Test
+    fun `the migration slice stops at the next migration`() {
+        val body = migrationBody()
+
+        assertTrue("the slice missed the statement it is about", body.contains("ADD COLUMN reachedAt"))
+        assertEquals("the slice runs past this migration", 1, body.split("execSQL").size - 1)
+
+        // Positive control: there IS a later migration in the file for the slice to have run into,
+        // so passing means the slice stopped rather than that there was nothing to stop at.
+        val later = Regex("""val MIGRATION_(\d+)_\d+ = object""").findAll(database)
+            .map { it.groupValues[1].toInt() }
+            .filter { it > 16 }
+            .toList()
+        assertTrue("no migration after 16_17 exists, so this guard proved nothing", later.isNotEmpty())
+        assertFalse("the slice swallowed a later migration", body.contains("val MIGRATION_"))
+    }
+
+    /**
      * The migration reads nothing and backfills nothing.
      *
      * The wrong version of this change is one line long — `UPDATE goals SET reachedAt = createdAt
@@ -384,8 +407,27 @@ class GoalReachedSchemaTest {
         .filterNot { it.trimStart().startsWith("//") }
         .joinToString("\n")
 
-    private fun migrationBody(): String =
-        database.substringAfter("val MIGRATION_16_17").substringBefore("val DEFAULT_ACTIVITIES")
+    private fun migrationBody(): String = bodyOfMigration("val MIGRATION_16_17")
+
+    /**
+     * The body of the migration named by [marker] — from its declaration to whatever comes next.
+     *
+     * **Stopping at the next migration, not at `val DEFAULT_ACTIVITIES`.** The original version
+     * sliced to the end of the companion object, which was the same thing only while the migration
+     * it names was the newest one. It stopped being the newest, the next migration's statements
+     * landed inside this slice, and the "exactly one `execSQL`" assertions below started reporting
+     * a second migration's code as this one's. That is this repository's most common bug shape
+     * arriving from the other side: a check written against an assumption, and the assumption
+     * stopped holding. Red was the lucky direction — the same slice widening is what would make an
+     * absence assertion pass over code it never read.
+     */
+    private fun bodyOfMigration(marker: String): String {
+        val after = database.substringAfter(marker)
+        val ends = listOf("val MIGRATION_", "val DEFAULT_ACTIVITIES")
+            .map { after.indexOf(it) }
+            .filter { it >= 0 }
+        return if (ends.isEmpty()) after else after.substring(0, ends.min())
+    }
 
     /** Every string literal the v17 migration executes, in order. */
     private fun migrationSql(): List<String> =

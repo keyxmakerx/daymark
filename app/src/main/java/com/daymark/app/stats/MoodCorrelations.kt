@@ -8,13 +8,56 @@ package com.daymark.app.stats
 object MoodCorrelations {
 
     /**
+     * What a factor IS, and the reason it is not a bare `Long`.
+     *
+     * ## The hole this closes
+     *
+     * [factorDeltas] used to take `List<Pair<Int, List<Long>>>` — a mood level and some ids. An
+     * activity id is a `Long`. A tracker id is a `Long`. **A person's id is also a `Long`**, so
+     * that signature accepted a person, and `Signals`, `PeriodReview` and the four-side report all
+     * inherited it. Nothing passed one. Nothing was going to, today.
+     *
+     * But `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2 does not say "we will not correlate people
+     * with mood", it says people can never reach a rule that reads mood, *enforced by shape*. The
+     * distance between those two is the distance between a convention and a guarantee, and this
+     * repository has already been bitten once by the first being mistaken for the second (see the
+     * field's signature in `sky/SkyField.kt`, written for exactly this reason).
+     *
+     * ## Why a private constructor
+     *
+     * The only ways to make one are [ofActivity] and [ofTracker]. There is deliberately no
+     * `ofPerson`, no `of(Long)`, and no public constructor, so correlating a person with mood is
+     * not a thing anybody can do by accident and not a thing a reviewer has to watch for — it
+     * requires adding a factory to this file, in the open, with this comment above it.
+     *
+     * It is a value class, so it costs nothing at runtime and `stats/` keeps its no-Android rule.
+     *
+     * ## What this does NOT guard
+     *
+     * [Signals.FactorLift] and [PeriodReview.Inputs] take factor **names**, not ids, and a person's
+     * name is a `String` like any other. The guard is upstream: a person never becomes a
+     * [FactorId], so a person never reaches the code that produces those names. Keep it that way —
+     * do not add a person-shaped field to `Signals.Inputs`.
+     */
+    @JvmInline
+    value class FactorId private constructor(val raw: Long) {
+        companion object {
+            /** An activity the person logged against an entry. */
+            fun ofActivity(id: Long): FactorId = FactorId(id)
+
+            /** A yes/no tracker. */
+            fun ofTracker(id: Long): FactorId = FactorId(id)
+        }
+    }
+
+    /**
      * How a single factor (an activity or a yes/no tracker) relates to mood.
      * [delta] is mean-mood-when-present minus mean-mood-when-absent.
      * [r] is the point-biserial correlation with mood, or null when it's undefined
      * (factor always or never present → no variance to correlate).
      */
     data class FactorDelta(
-        val id: Long,
+        val id: FactorId,
         val meanWith: Double,
         val meanWithout: Double,
         val delta: Double,
@@ -31,7 +74,7 @@ object MoodCorrelations {
      * where they're absent are returned (both groups are needed for a meaningful comparison).
      * Sorted by absolute delta, strongest first.
      */
-    fun factorDeltas(entries: List<Pair<Int, List<Long>>>, minOccurrences: Int): List<FactorDelta> {
+    fun factorDeltas(entries: List<Pair<Int, List<FactorId>>>, minOccurrences: Int): List<FactorDelta> {
         if (entries.isEmpty()) return emptyList()
         val moods = entries.map { it.first.toDouble() }
         val allIds = entries.flatMap { it.second }.toSet()

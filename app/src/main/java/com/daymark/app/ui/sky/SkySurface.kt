@@ -5,26 +5,39 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameMillis
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import com.daymark.app.sky.Sky
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import com.daymark.app.sky.SkyAge
 import com.daymark.app.sky.SkyDetail
 import com.daymark.app.sky.SkyField
 import com.daymark.app.sky.SkyGlyph
@@ -32,6 +45,7 @@ import com.daymark.app.sky.SkyKind
 import com.daymark.app.sky.SkyLayout
 import com.daymark.app.sky.SkyOptions
 import com.daymark.app.sky.SkyPalette
+import com.daymark.app.sky.SkyTwinkle
 import kotlin.math.ceil
 import kotlin.math.floor
 
@@ -70,17 +84,43 @@ import kotlin.math.floor
  * the viewport and the screen draws one ordinary, scalable [androidx.compose.material3.Text] label
  * above it. Coarser than a gutter; it is also the version that survives a large font setting.
  *
- * **Twinkle.** §7.4: a vestibular risk on a full-screen surface, off by default if it ships at all.
- * It does not ship. The only motion here is the field's parallax, which stops entirely under
- * [SkyOptions.motionEnabled] `= false`, and nothing is learned by watching either way.
+ * ## Twinkle, which now ships, and the frame loop that carries it
+ *
+ * `docs/SKY.md` §7.4 said a twinkle was a vestibular risk on a full-screen surface and should be
+ * off by default if it shipped at all. `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1 revises that: it
+ * ships, on, behind the motion switch, which already follows the platform's reduced-motion setting.
+ * Every number in it is [SkyTwinkle]'s and every one of them is pure, so what is here is a clock.
+ *
+ * **The clock is the one performance mistake this screen can actually make**, so it is written to
+ * be impossible to leave running:
+ *
+ *  - it exists only while [SkyOptions.motionEnabled] is true — off, there is no loop at all, not a
+ *    loop that computes nothing;
+ *  - it is wrapped in `repeatOnLifecycle(RESUMED)`, so it is cancelled when the app is backgrounded
+ *    or another screen covers this one;
+ *  - it lives inside this composable, so switching to the list (§7.5) disposes it;
+ *  - it drives a draw and never a recomposition — the elapsed time is read inside the `Canvas`
+ *    lambda, so a frame redraws the canvas and rebuilds no layout;
+ *  - and the draw itself skips every star the viewport cannot see, so nothing off screen is
+ *    animated because nothing off screen is visited. Note this is a bounds check per star and no
+ *    longer an index range: when the sky was ruled into months, x was monotonic in time and the
+ *    arrays were in time order, so everything on screen was one contiguous slice. A scattered field
+ *    has no ordering that corresponds to anything on screen (`docs/SKY.md` §3.1), and paying a
+ *    comparison per star is the accepted price of a surface with no empty regions in it.
  */
 @Composable
 fun SkySurface(
     layout: SkyLayout,
     fieldSeed: Long,
     options: SkyOptions,
-    /** The person's mood ramp, already through [SkyPalette.equalisedRamp]. Levels 1..5. */
-    equalisedRamp: IntArray,
+    /**
+     * Today, as `LocalDate.toEpochDay()`, so a star's age can be worked out.
+     *
+     * The clock read happens in the renderer and is passed down. `sky/` is import-free and has no
+     * clock by design — a pure layer that asked the system what day it is would stop being
+     * testable, and `SkyAge`'s whole surface takes an age rather than a date for that reason.
+     */
+    todayEpochDay: Long,
     /**
      * What the canvas is, for a screen reader — from [SkyPresentation.canvasDescription].
      *
@@ -92,12 +132,10 @@ fun SkySurface(
     description: String,
     selectedStar: Int,
     onStarTapped: (Int) -> Unit,
-    /** The month now at the top of the viewport, so the screen can label where the person is. */
-    onTopMonthChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var viewport by remember { mutableStateOf(IntSize.Zero) }
-    var visibleMonths by remember { mutableFloatStateOf(SkyPresentation.DEFAULT_VISIBLE_MONTHS) }
+    var zoom by remember { mutableFloatStateOf(SkyPresentation.DEFAULT_ZOOM) }
     var panX by remember { mutableFloatStateOf(0f) }
     var panY by remember { mutableFloatStateOf(0f) }
 
@@ -106,6 +144,16 @@ fun SkySurface(
     // frame, and is dropped wholesale rather than evicted one by one — it is pure derived data, so
     // throwing all of it away costs one frame's regeneration and no correctness.
     val tiles = remember(fieldSeed) { HashMap<Long, SkyField.Tile>() }
+
+    // Sprites are rasterised at the device's real pixel density and stamped 1:1, so they are keyed
+    // on it: a density change (a fold, a display swap) throws the whole cache away rather than
+    // resampling stars that were drawn for a different screen.
+    val pxPerDp = LocalDensity.current.density
+    val sprites = remember(pxPerDp) { SkySprites(pxPerDp) }
+
+    // The frame loop. See this file's header for the five things that stop it running when nobody
+    // is looking at it.
+    val elapsedMillis by rememberSkyElapsedMillis(options.motionEnabled)
 
     Box(
         modifier = modifier
@@ -116,13 +164,11 @@ fun SkySurface(
         val height = viewport.height.toFloat()
 
         /** Pan clamped against the geometry the current zoom implies. Idempotent, so safe to reapply. */
-        fun clampedPan(months: Float, rawX: Float, rawY: Float): Offset {
+        fun clampedPan(atZoom: Float, rawX: Float, rawY: Float): Offset {
             if (width <= 0f || height <= 0f) return Offset(rawX, rawY)
-            val rowHeight = SkyPresentation.rowHeightPx(height, months)
-            val rowWidth = SkyPresentation.rowWidthPx(width, months)
             return Offset(
-                SkyPresentation.clampPan(rawX, rowWidth, width),
-                SkyPresentation.clampPan(rawY, SkyPresentation.contentHeightPx(layout, rowHeight), height),
+                SkyPresentation.clampPan(rawX, SkyPresentation.contentWidthPx(width, atZoom), width),
+                SkyPresentation.clampPan(rawY, SkyPresentation.contentHeightPx(height, atZoom), height),
             )
         }
 
@@ -130,30 +176,40 @@ fun SkySurface(
         // the size was still zero would keep clamping pan against a zero-sized sky forever.
         val gestures = Modifier
             .pointerInput(layout, fieldSeed, viewport) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    // Zoom in = fewer months on screen, so the factor divides. Pinch and drag are
-                    // one gesture because they are one movement: a person zooming into March does
-                    // not first zoom and then find March again.
-                    val months = SkyPresentation.clampVisibleMonths(visibleMonths / zoom)
-                    val next = clampedPan(months, panX + pan.x, panY + pan.y)
-                    visibleMonths = months
-                    panX = next.x
-                    panY = next.y
-                    onTopMonthChange(topMonthOf(layout, height, months, next.y))
+                detectTransformGestures { centroid, pan, gestureZoom, _ ->
+                    // Zoom in MULTIPLIES now. It used to divide, because the number being held was
+                    // how many months were on screen and zooming in meant fewer of them. The field
+                    // is not measured in months any more, so the number is a plain scale factor.
+                    // Pinch and drag stay one gesture because they are one movement.
+                    //
+                    // The centroid is used, and it used to be discarded. Without it the field scales
+                    // about its own top-left corner, so the star you are pinching slides out from
+                    // between your fingers — and this surface has no labels and no landmarks to
+                    // navigate back by, so what you were looking at is simply gone. The arithmetic
+                    // is in SkyPresentation.panForZoomAbout, where it is a unit test rather than a
+                    // thing you find out by pinching.
+                    val next = SkyPresentation.clampZoom(zoom * gestureZoom)
+                    val held = Offset(
+                        SkyPresentation.panForZoomAbout(centroid.x, panX, zoom, next),
+                        SkyPresentation.panForZoomAbout(centroid.y, panY, zoom, next),
+                    )
+                    val panned = clampedPan(next, held.x + pan.x, held.y + pan.y)
+                    zoom = next
+                    panX = panned.x
+                    panY = panned.y
                 }
             }
             .pointerInput(layout, fieldSeed, viewport) {
                 detectTapGestures(
                     onTap = { offset ->
-                        val rowHeight = SkyPresentation.rowHeightPx(height, visibleMonths)
-                        val rowWidth = SkyPresentation.rowWidthPx(width, visibleMonths)
-                        val pan = clampedPan(visibleMonths, panX, panY)
-                        val rows = SkyPresentation.visibleRows(layout, rowHeight, pan.y, height)
-                        val hit = if (rows == null) -1 else SkyPresentation.nearestStar(
+                        val pan = clampedPan(zoom, panX, panY)
+                        val hit = SkyPresentation.nearestStar(
                             layout = layout,
-                            indices = Sky.rowRange(layout, rows.first, rows.last),
-                            rowWidthPx = rowWidth,
-                            rowHeightPx = rowHeight,
+                            // Every star, because no ordering of the arrays corresponds to any
+                            // ordering on screen once the field is scattered.
+                            indices = 0 until layout.starCount,
+                            contentWidthPx = SkyPresentation.contentWidthPx(width, zoom),
+                            contentHeightPx = SkyPresentation.contentHeightPx(height, zoom),
                             panXPx = pan.x,
                             panYPx = pan.y,
                             tapXPx = offset.x,
@@ -190,51 +246,64 @@ fun SkySurface(
             val w = size.width
             val h = size.height
             if (layout.starCount == 0 || w <= 0f || h <= 0f) return@Canvas
-            val months = visibleMonths
-            val detail = SkyPresentation.detailFor(months)
-            val rowHeight = SkyPresentation.rowHeightPx(h, months)
-            val rowWidth = SkyPresentation.rowWidthPx(w, months)
-            val pan = clampedPan(months, panX, panY)
-            val rows = SkyPresentation.visibleRows(layout, rowHeight, pan.y, h) ?: return@Canvas
-            // A contiguous slice, not a scan: x is monotonic in time and the arrays are in time
-            // order, so everything on screen is one index range.
-            val indices = Sky.rowRange(layout, rows.first, rows.last)
+            val detail = SkyPresentation.detailFor(zoom)
+            val contentW = SkyPresentation.contentWidthPx(w, zoom)
+            val contentH = SkyPresentation.contentHeightPx(h, zoom)
+            val pan = clampedPan(zoom, panX, panY)
             // Enough margin that a glyph whose centre has left the screen still draws its rays.
             val margin = 16.dp.toPx()
 
-            for (i in indices) {
-                val cx = SkyPresentation.screenX(layout, i, rowWidth, pan.x)
-                if (cx < -margin || cx > w + margin) continue
-                val cy = SkyPresentation.screenY(layout, i, rowHeight, pan.y)
+            // Array order is time order, so newer stars still land on top of older ones.
+            for (i in 0 until layout.starCount) {
+                val cx = SkyPresentation.screenX(layout, i, contentW, pan.x)
+                val cy = SkyPresentation.screenY(layout, i, contentH, pan.y)
+                if (!SkyPresentation.isOnScreen(cx, cy, w, h, margin)) continue
                 drawStar(
+                    sprites = sprites,
                     kind = layout.kindAt(i),
+                    // The anchor id, handed over by SkyTwinkle so the renderer cannot reach for a
+                    // different record: a folded star has one position and one rhythm, and both
+                    // come from the first id it covers.
+                    id = SkyTwinkle.identityIdAt(layout, i),
+                    ageYears = SkyAge.ageYears(layout.epochDay[i], todayEpochDay),
                     moodLevel = layout.moodLevel[i],
                     centre = Offset(cx, cy),
                     detail = detail,
                     options = options,
-                    equalisedRamp = equalisedRamp,
+                    elapsedMillis = elapsedMillis,
                     selected = i == selectedStar,
                 )
+            }
+        }
+
+        // The way back. It appears only once there is somewhere to come back FROM, so a sky at rest
+        // carries no chrome at all and a zoomed one is never a place you are stuck in.
+        //
+        // Not a double-tap, which was the obvious answer and the wrong one: Compose has to wait out
+        // the double-tap window before it can report a single tap, so every tap on a star would sit
+        // and wait to find out whether a second one was coming. Tapping a star is the thing people
+        // come here to do. A control that is absent until it is needed costs that nothing.
+        if (zoom > SkyPresentation.MIN_ZOOM) {
+            TextButton(
+                onClick = {
+                    zoom = SkyPresentation.DEFAULT_ZOOM
+                    val back = clampedPan(SkyPresentation.DEFAULT_ZOOM, 0f, 0f)
+                    panX = back.x
+                    panY = back.y
+                },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
+            ) {
+                // Says what it does to the view and claims nothing about time or place. "Today" and
+                // "Home" were both considered and both name something this surface does not have:
+                // no part of a scattered field is a date, and there is no origin to return to.
+                Text("Fit the whole sky", color = SkyNightInk)
             }
         }
     }
 }
 
-/**
- * The month at the top of the viewport — where the person is, in dates.
- *
- * Dates are the only navigation target the Sky has (§4.2): there is no "your best month" to jump
- * to, because there is no ranking to build one from.
- */
-private fun topMonthOf(layout: SkyLayout, heightPx: Float, months: Float, panYPx: Float): Int {
-    if (layout.rowCount == 0 || heightPx <= 0f) return layout.firstEpochMonth
-    val rowHeight = SkyPresentation.rowHeightPx(heightPx, months)
-    val row = floor((-panYPx) / rowHeight).toInt().coerceIn(0, layout.rowCount - 1)
-    return layout.firstEpochMonth + row
-}
-
 /** Packed `0xRRGGBB` from [SkyPalette] as an opaque Compose colour. */
-private fun skyColor(rgb: Int): Color = Color(0xFF000000.toInt() or rgb)
+internal fun skyColor(rgb: Int): Color = Color(0xFF000000.toInt() or rgb)
 
 /** The Sky's night ground, from the one place that measures it. Never a fourth copy of the hex. */
 internal val SkyNightBg: Color = skyColor(SkyPalette.NIGHT_BG)
@@ -311,56 +380,96 @@ private fun DrawScope.drawField(
 }
 
 /**
- * One star.
+ * One star: a point, then a glow.
  *
- * The core is [SkyGlyph.CORE_RADIUS_DP] at [SkyGlyph.CORE_ALPHA] for **every mood and every kind**,
- * and it is asked for by kind and mood so that the constancy is enforced at the signature rather
- * than assumed here. Mood moves the halo and nothing else: wider and softer at the hard end,
- * tighter and more concentrated at the good end, with total light held constant by construction.
- * So a hard day is neither dimmer nor smaller than a good one — which is the whole reason this
- * surface is buildable at all (§3.4).
+ * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1, *"Fidelity: a point, then a glow, never a blur
+ * alone"* — a hard-edged near-white core, a tight bright inner glow against it, and a soft faint
+ * outer glow spread by the mood. Those three live in the sprite ([SkySprites]); what happens here
+ * is where it goes, how bright it is at this instant, and the prism flash on top.
+ *
+ * **Everything that decides how a star looks is asked for, never computed here.** Colour is
+ * [SkyGlyph.starTint], which is age and the star's own temperature. Brightness is
+ * [SkyGlyph.starBrightness], which is age, multiplied by [SkyTwinkle.alphaAt], which is the star's
+ * own rhythm. Halo geometry is [SkyGlyph.haloRadiusDp] and [SkyGlyph.haloPeakAlpha]; the core's
+ * scale is [SkyGlyph.coreScale]. Every one of those takes a mood level and all but the halo ignore
+ * it, so the rule *mood moves the halo's spread and nothing else* is defended at the signature
+ * rather than trusted here.
+ *
+ * **Additive, not painted over.** The sprite is stamped with [BlendMode.Plus], so two stars whose
+ * glows overlap get brighter where they meet, the way light does. On the near-black ground
+ * ([SkyPalette.NIGHT_BG]) this is very close to ordinary compositing everywhere else, which is why
+ * the ground had to go near-black in the same change.
+ *
+ * **Sub-pixel, and therefore not scaled.** The sprite is rasterised at the device's real pixel
+ * density and stamped at its natural size at a fractional offset, so stars sit where they are
+ * rather than snapping to whole pixels as the sky is panned. That rules out [SkyTwinkle.scaleAt]'s
+ * 2% breathe, which would need a resample: §1 asks for the breathe to be *"brightness only"*, and
+ * a 2% resample of a sprite this small costs more in softness than the swell is worth.
  *
  * Nothing here varies with how many records the star covers. A folded star is drawn exactly like a
  * single one; a bigger mark for a busier day would rank days by output (§6.2).
  */
 private fun DrawScope.drawStar(
+    sprites: SkySprites,
     kind: SkyKind,
+    id: Long,
+    ageYears: Float,
     moodLevel: Int,
     centre: Offset,
     detail: SkyDetail,
     options: SkyOptions,
-    equalisedRamp: IntArray,
+    elapsedMillis: Long,
     selected: Boolean,
 ) {
-    val colour = starColour(moodLevel, equalisedRamp)
-    val coreRadius = SkyGlyph.coreRadiusDp(kind, moodLevel).dp.toPx()
+    // How brightly this star burns: its age, and then its own beat. Both are multipliers on the
+    // sprite's own alphas, so the twinkle is a proportion of whatever the star already was — an old
+    // star's breathe is as faint as the old star, and no star can be twinkled up past a younger one.
+    val fade = SkyGlyph.starBrightness(kind, ageYears, moodLevel)
+    val brightness = fade * SkyTwinkle.alphaAt(kind, id, elapsedMillis, options)
 
-    // High contrast drops halos outright (§7.1): a soft gradient around a small mark is the first
-    // thing to disappear for someone with low vision, and leaving it in only fuzzes the edge of the
-    // thing they are trying to find.
-    if (!options.highContrast) {
-        drawCircle(
-            color = colour,
-            radius = SkyGlyph.haloRadiusDp(moodLevel).dp.toPx(),
-            center = centre,
-            alpha = SkyGlyph.haloPeakAlpha(moodLevel),
-        )
-    }
-
-    drawCircle(
-        color = colour,
-        radius = coreRadius,
-        center = centre,
-        alpha = SkyGlyph.coreAlpha(kind, moodLevel),
+    val sprite = sprites.star(
+        kind = kind,
+        id = id,
+        ageYears = ageYears,
+        moodLevel = moodLevel,
+        quiet = options.highContrast,
+    )
+    val topLeft = Offset(centre.x - sprite.halfWidth, centre.y - sprite.halfHeight)
+    drawImage(
+        image = sprite.image,
+        topLeft = topLeft,
+        alpha = brightness.coerceIn(0f, 1f),
+        blendMode = BlendMode.Plus,
     )
 
-    // Kind is carried by form, and form only resolves from SEASON inward. At DRIFT a star is a
-    // point — which is honest, because at years-at-once a 4 dp ring is noise, not information.
+    drawGlint(
+        sprites = sprites,
+        sprite = sprite,
+        kind = kind,
+        id = id,
+        centre = centre,
+        options = options,
+        elapsedMillis = elapsedMillis,
+        fade = fade,
+    )
+
+    val coreRadius = (SkyGlyph.coreRadiusDp(kind, moodLevel) * SkyGlyph.coreScale(kind)).dp.toPx()
+
+    // Kind is carried by form, and form only resolves once the person has leaned in to one day.
+    // §1: "No marks for kind at ordinary zoom. A journal page, a step, a goal reached and a life
+    // event are all just stars until the person leans in to a single day." A landmark still looks
+    // different at every zoom, and that is its light and not a kind mark — see SkyDetail.drawsGlyphs.
     if (!SkyDetail.drawsGlyphs(detail)) {
         if (selected) drawSelection(centre, coreRadius)
         return
     }
 
+    // The same tint the sprite was rasterised in, which means the same QUANTISED age: a stroke
+    // drawn from the exact age and a core drawn from the bucket would be two slightly different
+    // colours on one star, and the seam is visible on a glyph sitting against its own glow.
+    val colour = skyColor(
+        SkyGlyph.starTint(kind, id, SkyAge.bucketAgeYears(SkyAge.ageBucket(ageYears)), moodLevel),
+    )
     val stroke = if (options.highContrast) 1.6.dp.toPx() else 1.0.dp.toPx()
 
     val ringRadius = SkyGlyph.ringRadiusDp(kind)
@@ -370,7 +479,7 @@ private fun DrawScope.drawStar(
             radius = ringRadius.dp.toPx(),
             center = centre,
             style = Stroke(width = stroke),
-            alpha = 0.85f,
+            alpha = 0.85f * fade,
         )
     }
 
@@ -385,6 +494,7 @@ private fun DrawScope.drawStar(
             end = Offset(centre.x, centre.y + length),
             strokeWidth = stroke,
             cap = StrokeCap.Round,
+            alpha = fade,
         )
         drawLine(
             color = colour,
@@ -392,6 +502,7 @@ private fun DrawScope.drawStar(
             end = Offset(centre.x + length, centre.y),
             strokeWidth = stroke,
             cap = StrokeCap.Round,
+            alpha = fade,
         )
     }
 
@@ -405,6 +516,7 @@ private fun DrawScope.drawStar(
             end = Offset(centre.x + half, below),
             strokeWidth = stroke,
             cap = StrokeCap.Round,
+            alpha = fade,
         )
     }
 
@@ -426,12 +538,70 @@ private fun DrawScope.drawStar(
 }
 
 /**
+ * The prism: a red fringe and a blue one, pulled apart either side of the star for a quarter of a
+ * second and gone again, with one extra pass of the star itself between them.
+ *
+ * §1: *"a quarter-second prism glint, a red and a blue fringe added on top of the star and gone
+ * again... The star's own tint never changes; the glint passes over it."* Added and not blended,
+ * which is what makes that true — an additive fringe leaves the star underneath exactly the colour
+ * it was.
+ *
+ * **Every alpha here is multiplied by [fade].** Without that an old star's glint would be drawn at
+ * a new star's brightness and the oldest, faintest stars would be the ones flashing hardest — the
+ * fade would be undone by the decoration laid over it. [fade] and not the twinkled brightness,
+ * because the glint is its own event and should not also be modulated by the breathe it happens to
+ * land in.
+ *
+ * [SkyTwinkle.glintEnvelopeAt] returns zero under the motion switch and zero in the quiet sky, so
+ * there is nothing to check here: a brief coloured flash over a small mark is exactly what someone
+ * who turned that switch on is trying to get away from.
+ */
+private fun DrawScope.drawGlint(
+    sprites: SkySprites,
+    sprite: SkySprites.Sprite,
+    kind: SkyKind,
+    id: Long,
+    centre: Offset,
+    options: SkyOptions,
+    elapsedMillis: Long,
+    fade: Float,
+) {
+    val envelope = SkyTwinkle.glintEnvelopeAt(kind, id, elapsedMillis, options)
+    if (envelope <= 0f) return
+
+    val landmark = kind == SkyKind.LIFE_EVENT
+    val offset = SkyTwinkle.glintFringeOffsetDp(kind, envelope).dp.toPx()
+    val fringeAlpha = (SkyTwinkle.glintFringeAlpha(kind, envelope) * fade).coerceIn(0f, 1f)
+    val flareAlpha = (SkyTwinkle.glintFlareAlpha(kind, envelope) * fade).coerceIn(0f, 1f)
+
+    for (red in booleanArrayOf(true, false)) {
+        val half = sprites.fringe(red, landmark)
+        val dx = if (red) -offset else offset
+        drawImage(
+            image = half.image,
+            topLeft = Offset(centre.x + dx - half.halfWidth, centre.y - half.halfHeight),
+            alpha = fringeAlpha,
+            blendMode = BlendMode.Plus,
+        )
+    }
+
+    // One more pass of the star itself, which is what makes a glint read as light rather than as
+    // two coloured smudges arriving beside it.
+    drawImage(
+        image = sprite.image,
+        topLeft = Offset(centre.x - sprite.halfWidth, centre.y - sprite.halfHeight),
+        alpha = flareAlpha,
+        blendMode = BlendMode.Plus,
+    )
+}
+
+/**
  * The mark on the star whose detail is open.
  *
- * A ring at a fixed offset from the core, in the sky's own ink rather than in the mood's colour, so
- * that "this is the one you tapped" is never mistaken for something about the record. It is drawn
- * *around* the star and never by growing it — a star that swells when selected is a star whose size
- * means something [SkyGlyph] says it must not.
+ * A ring at a fixed offset from the core, in the sky's own ink rather than in anything the star's
+ * own colour says, so that "this is the one you tapped" is never mistaken for something about the
+ * record. It is drawn *around* the star and never by growing it — a star that swells when selected
+ * is a star whose size means something [SkyGlyph] says it must not.
  */
 private fun DrawScope.drawSelection(centre: Offset, coreRadius: Float) {
     drawCircle(
@@ -444,16 +614,46 @@ private fun DrawScope.drawSelection(centre: Offset, coreRadius: Float) {
 }
 
 /**
- * A star's colour: the person's own equalised ramp, or the sky's ink when the record has no mood.
+ * Milliseconds since this surface started animating, or a fixed `0` when it is not.
  *
- * **An uncoloured star is not a lesser star.** [SkyPalette.NIGHT_INK] is the sky's *brightest*
- * value, so the four kinds that carry no mood are drawn at full presence rather than in a
- * placeholder grey — the alternative would make "no mood recorded" look like a weaker version of a
- * check-in, which is a judgement about kinds of act.
+ * The only clock on the Sky. [SkyTwinkle] is pure and takes an elapsed count, so this is the whole
+ * of what the renderer contributes to the twinkle — which is what makes every motion-safety rule in
+ * §1 a property of a file a plain-JVM test can execute.
+ *
+ * Three things about the shape, each of which is a battery decision:
+ *
+ *  - **`enabled = false` means no coroutine at all.** Not a loop that reads a flag and skips the
+ *    work: a running frame loop wakes the app every 16 ms whatever it does with the wakeup.
+ *  - **`repeatOnLifecycle(RESUMED)`** cancels it when the app is backgrounded or another screen
+ *    covers this one, and starts it again on the way back. `withFrameMillis` alone would mostly do
+ *    this — the frame clock stops when the window stops drawing — but "mostly" is not a guarantee
+ *    worth resting a phone's battery on, and a surface people leave open is exactly where it would
+ *    be noticed.
+ *  - **The state is a `Long`, read in a draw scope.** `mutableLongStateOf` does not box, so sixty
+ *    writes a second allocate nothing, and the read happens inside the `Canvas` lambda so a frame
+ *    invalidates the draw rather than recomposing anything.
+ *
+ * The count restarts from zero each time the loop does. Nothing in [SkyTwinkle] depends on the
+ * absolute value — every rhythm is a phase from the star's own hash — so a star resumes its own
+ * beat at a different point in it and no two stars fall into step by doing so.
  */
-private fun starColour(moodLevel: Int, equalisedRamp: IntArray): Color {
-    if (moodLevel < SkyGlyph.MOOD_MIN || moodLevel > SkyGlyph.MOOD_MAX) return SkyNightInk
-    val index = moodLevel - SkyGlyph.MOOD_MIN
-    if (index !in equalisedRamp.indices) return SkyNightInk
-    return skyColor(equalisedRamp[index])
+@Composable
+private fun rememberSkyElapsedMillis(enabled: Boolean): State<Long> {
+    val elapsed = remember { mutableLongStateOf(0L) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(enabled, lifecycleOwner) {
+        if (!enabled) {
+            // Exactly zero, so a still sky is the ordinary sky with time removed rather than the
+            // ordinary sky frozen at whatever instant the switch was thrown.
+            elapsed.longValue = 0L
+            return@LaunchedEffect
+        }
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            val start = withFrameMillis { it }
+            while (true) {
+                withFrameMillis { frame -> elapsed.longValue = frame - start }
+            }
+        }
+    }
+    return elapsed
 }

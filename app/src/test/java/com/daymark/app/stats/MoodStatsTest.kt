@@ -75,13 +75,15 @@ class MoodStatsTest {
 
     @Test
     fun activityAverages_perActivityMean() {
+        val a = MoodCorrelations.FactorId.ofActivity(1L)
+        val b = MoodCorrelations.FactorId.ofActivity(2L)
         val entries = listOf(
-            5 to listOf(1L, 2L),
-            3 to listOf(1L),
-            1 to listOf(2L),
+            5 to listOf(a, b),
+            3 to listOf(a),
+            1 to listOf(b),
         )
         val avgs = MoodStats.activityAverages(entries)
-        assertEquals(4.0, avgs[1L]!!, 0.0001) // (5 + 3) / 2
-        assertEquals(3.0, avgs[2L]!!, 0.0001) // (5 + 1) / 2
+        assertEquals(4.0, avgs[a]!!, 0.0001) // (5 + 3) / 2
+        assertEquals(3.0, avgs[b]!!, 0.0001) // (5 + 1) / 2
     }
 }

@@ -30,9 +30,10 @@ package com.daymark.app.sky
  *
  * | Fixed for every mood, every kind | Varies with mood |
  * |---|---|
- * | [CORE_RADIUS_DP] | hue — the person's own ramp colour |
- * | [CORE_ALPHA] | [haloRadiusDp] — how far the light spreads |
- * | contrast, equalised by [SkyPalette.equalised] | [haloPeakAlpha] — how concentrated it is |
+ * | [CORE_RADIUS_DP] | [haloRadiusDp] — how far the light spreads |
+ * | [CORE_ALPHA] | [haloPeakAlpha] — how concentrated it is |
+ * | colour — [SkyAge.tintFor], which is age | |
+ * | brightness — [SkyAge.fadeFor], which is age | |
  * | [HALO_LIGHT] — total light emitted | |
  *
  * So a hard day is a soft wide warm star and a good day is a tight crisp one. **Neither is
@@ -41,12 +42,27 @@ package com.daymark.app.sky
  * a table someone has to keep balanced. Mood is a quality of light, which is true, rather than a
  * quantity of it, which would be a verdict.
  *
+ * ## What changed in September 2026: colour left
+ *
+ * The right-hand column used to start with *hue — the person's own ramp colour*, and it does not
+ * any more. `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1 moves colour onto age
+ * ([SkyAge]) and states the remainder flatly: *"Mood is the character of the light and nothing
+ * else... Mood never touches brightness or colour."*
+ *
+ * The halo is therefore the **only** thing on a star that mood moves, and this file is where that
+ * is enforced: [starTint] and [starBrightness] take a mood level and ignore it, the way
+ * [coreRadiusDp] has always taken a kind and a mood and ignored both, so the sweep in
+ * `SkyGlyphTest` has something to sweep. Nothing was lost in the move that the person can see —
+ * their own mood colour is still on every row of the list and on the sheet when a star is tapped,
+ * where it is a word with a colour beside it rather than a hue someone could read off the sky over
+ * their shoulder.
+ *
  * **What was rejected on the way.** Holding peak alpha constant and varying only the radius was the
  * first attempt: it makes hard days glow *more*, which is not shaming but is still a ranking, and
  * an inverted one is no better than the original. Making mood drive nothing at all was seriously
- * considered and is the safest option — it was not taken because the mood ramp handing a person
- * their own recorded colour back is `docs/DECISIONS_2026-08.md` §D1b's "reflect, never label", and
- * dropping it would remove the one thing on the Sky that is the person's own answer rather than the
+ * considered and is the safest option — it was not taken because handing a person their own
+ * recorded answer back is `docs/DECISIONS_2026-08.md` §D1b's "reflect, never label", and dropping
+ * it entirely would remove the one thing on the Sky that is the person's own answer rather than the
  * app's observation. The variation that remains is deliberately small (a 14% spread in radius) so
  * it reads as texture at a glance and resolves into meaning only up close.
  *
@@ -130,6 +146,243 @@ object SkyGlyph {
     }
 
     // ---------------------------------------------------------------------------------------
+    // The halo's radial fade. September 2026, and it is the same change as the ground.
+    //
+    // `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1: "Halo becomes a radial fade to nothing instead
+    // of a flat translucent disc", and "Fidelity: a point, then a glow, never a blur alone."
+    //
+    // The flat disc had a hard outer edge at [haloRadiusDp] — a translucent coin, not a glow — and
+    // on the old warm ground its edge terminated on a warm smudge rather than on nothing. The
+    // ground moved to `#07070A` in the same pass so that the last stop really is nothing (see
+    // `SkyPalette`'s header). One without the other is half a change.
+    //
+    // WHAT WAS NOT TAKEN FROM THE PROTOTYPE. `docs/prototypes/your-sky.html` computes its outer
+    // gradient at `peak + 0.3` — an additive floor under every halo. Multiplied by the halo's own
+    // area that floor is `0.3 x r^2`, which is BIGGER for a wider halo, so a hard day would emit
+    // more total light than a good one. That is the inverted ranking this file's header records as
+    // already rejected once ("it makes hard days glow more, which is not shaming but is still a
+    // ranking"). So the stops below are weights on the halo's own peak and nothing is added to it,
+    // and [haloEmittedLight] is flat across the ramp by construction, exactly as the flat disc was.
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * Where each stop of the outer glow sits, as a fraction of [outerGlowRadiusDp].
+     *
+     * The prototype's five stops. Front-loaded — more than half the fall happens in the first fifth
+     * of the radius — because that is what reads as a glow around a point rather than as a disc
+     * with soft edges.
+     */
+    val HALO_STOP_POSITION = floatArrayOf(0f, 0.18f, 0.45f, 0.75f, 1f)
+
+    /**
+     * What each stop is worth, as a fraction of [haloPeakAlpha].
+     *
+     * The last is exactly zero, which is the *"to nothing"* in §1 and is the property the flat disc
+     * did not have. Nothing here is a function of mood: mood picks the peak and the radius, and the
+     * shape of the fall is the same for every star on the surface.
+     */
+    val HALO_STOP_WEIGHT = floatArrayOf(0.5f, 0.34f, 0.12f, 0.035f, 0f)
+
+    /** How far past [haloRadiusDp] the light carries before the fade reaches zero. */
+    const val GLOW_SPREAD = 1.25f
+
+    private const val OUTER_GLOW_SCALE = 1.3f
+    private const val OUTER_GLOW_SCALE_LANDMARK = 2.2f
+
+    /**
+     * The radius the outer glow actually fades out over — wider than [haloRadiusDp], because the
+     * halo radius is where the light is *concentrated* and the fade has to end somewhere past it.
+     *
+     * A landmark's glow reaches further still, for the same reason its peak is higher: it is the
+     * one mark the person placed by hand.
+     */
+    fun outerGlowRadiusDp(kind: SkyKind, moodLevel: Int): Float {
+        val scale = if (kind == SkyKind.LIFE_EVENT) OUTER_GLOW_SCALE_LANDMARK else OUTER_GLOW_SCALE
+        return haloRadiusDp(kind, moodLevel) * GLOW_SPREAD * scale
+    }
+
+    /** The alpha of stop [index] of this star's outer glow. */
+    fun haloStopAlpha(kind: SkyKind, moodLevel: Int, index: Int): Float =
+        HALO_STOP_WEIGHT[index.coerceIn(0, HALO_STOP_WEIGHT.size - 1)] * haloPeakAlpha(kind, moodLevel)
+
+    /**
+     * The total light the halo actually emits: the fade integrated over the disc it covers.
+     *
+     * This is [HALO_LIGHT]'s claim made checkable against the shape that is now drawn rather than
+     * against the one that used to be. `peak x radius²` was the right invariant for a flat disc and
+     * says nothing on its own about a gradient — so the profile is integrated, and the answer comes
+     * out **1.161 for every mood level** and 13.278 for a landmark. The flat number across the ramp
+     * is the whole of mechanism M4 on this surface; the landmark's is §1's *"a landmark is the one
+     * bright star"*, and it is allowed to be louder because a person placed it by hand.
+     *
+     * The profile itself passes 0.0831 of the light a flat disc of the same peak and radius would,
+     * which is the price of the edge going to nothing, and it is paid equally by every star.
+     */
+    fun haloEmittedLight(kind: SkyKind, moodLevel: Int): Float {
+        val r = outerGlowRadiusDp(kind, moodLevel)
+        return haloPeakAlpha(kind, moodLevel) * r * r * PROFILE_AREA
+    }
+
+    /**
+     * `∫ w(u) 2u du` over `0..1` for the piecewise-linear profile — the area-weighted mean weight,
+     * so a flat profile would be exactly 1.
+     *
+     * Computed rather than written down, so it follows the stops if anyone moves one.
+     */
+    val PROFILE_AREA: Float = run {
+        var total = 0.0
+        for (i in 0 until HALO_STOP_POSITION.size - 1) {
+            val u0 = HALO_STOP_POSITION[i].toDouble()
+            val u1 = HALO_STOP_POSITION[i + 1].toDouble()
+            val w0 = HALO_STOP_WEIGHT[i].toDouble()
+            val w1 = HALO_STOP_WEIGHT[i + 1].toDouble()
+            val slope = (w1 - w0) / (u1 - u0)
+            // 2 x integral of u(w0 + slope(u - u0)) du.
+            val at = { u: Double -> 2.0 * (w0 * u * u / 2.0 + slope * (u * u * u / 3.0 - u0 * u * u / 2.0)) }
+            total += at(u1) - at(u0)
+        }
+        total.toFloat()
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Temperature. A star's own warmth, from its identity — variety that says nothing.
+    //
+    // `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1: "Each star also has its own temperature from
+    // its identity, icy, white, pale gold or peach, mixed about a third into its age tint, so the
+    // sky is varied and the redshift still reads." A real field of stars is not one hue at one
+    // distance, and a sky that were would look printed.
+    //
+    // It is drawn from the hash of the star's own identity, like its position and its rhythm, so
+    // it is FIXED FOREVER AND MEANS NOTHING. There are exactly four and they are close together:
+    // the mix is a third, so an old star stays plainly old whichever one it drew. Anything
+    // stronger and temperature would start to compete with age, which is the one thing colour is
+    // allowed to say.
+    // ---------------------------------------------------------------------------------------
+
+    /** Icy, white, pale gold, peach. */
+    const val TEMPERATURE_COUNT = 4
+
+    private val TEMPERATURE_TINT = intArrayOf(0xC8D7FF, 0xFFFFFF, 0xFFEEC8, 0xFFD6BE)
+
+    /** How much of the temperature is mixed into the age tint. The prototype's 0.35. */
+    const val TEMPERATURE_MIX = 0.35f
+
+    private const val TEMPERATURE_KIND_SALT = 0x6B2D7F19L
+    private const val TEMPERATURE_SALT = 0x11A3C5E7L
+
+    /**
+     * Which temperature this star drew, `0..TEMPERATURE_COUNT - 1`: icy, white, pale gold, peach.
+     *
+     * Weighted the prototype's way — white is the commonest, peach the rarest — because an evenly
+     * split field reads as four groups rather than as one field with variety in it.
+     */
+    fun temperatureIndex(kind: SkyKind, id: Long): Int {
+        val seed = kind.ordinal.toLong() * TEMPERATURE_KIND_SALT + TEMPERATURE_SALT
+        val h = SkyRandom.unit(SkyRandom.mix(seed, id))
+        return when {
+            h < 0.30f -> 1
+            h < 0.55f -> 0
+            h < 0.80f -> 2
+            else -> 3
+        }
+    }
+
+    /** The tint of a temperature, packed `0xRRGGBB`. Out-of-range indices clamp rather than throw. */
+    fun temperatureTint(index: Int): Int =
+        TEMPERATURE_TINT[index.coerceIn(0, TEMPERATURE_COUNT - 1)]
+
+    // ---------------------------------------------------------------------------------------
+    // What a star is actually drawn in. Both of these take a mood and both of them ignore it.
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * A star's colour: its age tint, warmed a third of the way toward its own temperature.
+     *
+     * [moodLevel] is accepted and **ignored**, exactly as in [coreRadiusDp], and for exactly the
+     * same reason: this is the signature the renderer calls, so this is where the rule *colour is
+     * never a function of mood* can be defended. `SkyGlyphTest` sweeps the whole ramp through it
+     * and fails the moment the answer moves.
+     *
+     * A landmark is white at every age and takes no temperature at all — [SkyAge.tintFor] exempts
+     * it from the redshift, and mixing a temperature into white would tint the one star that is
+     * meant to be the sky's plainest.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    fun starTint(kind: SkyKind, id: Long, ageYears: Float, moodLevel: Int): Int {
+        val base = SkyAge.tintFor(kind, ageYears)
+        if (kind == SkyKind.LIFE_EVENT) return base
+        return mix(base, temperatureTint(temperatureIndex(kind, id)), TEMPERATURE_MIX)
+    }
+
+    /**
+     * How brightly a star burns before the twinkle and the glyph's own alphas: [SkyAge.fadeFor].
+     *
+     * [moodLevel] is accepted and ignored, as in [starTint]. **This is the assertion the whole
+     * surface rests on** — a person who logged through a bad month must not find that month drawn
+     * fainter than any other — and it is now true by construction, because the only input here is
+     * how long ago the act was.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    fun starBrightness(kind: SkyKind, ageYears: Float, moodLevel: Int): Float =
+        SkyAge.fadeFor(kind, ageYears)
+
+    // ---------------------------------------------------------------------------------------
+    // The landmark. The one exception, and it follows authorship rather than measurement.
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * How much bigger a landmark's core is drawn than every other star's.
+     *
+     * §1: *"A landmark is the one bright star. A life event is a mark the person placed to be
+     * found, so it alone is bigger, brighter, spiked, never redshifted and never faded. Brightness
+     * may follow a mark the person placed, never anything the app measured: a reached goal keeps
+     * its glint at lean-in and a journal page stays the size of everything else."*
+     *
+     * So this is a scale on [CORE_RADIUS_DP] and not a second core radius, and it is a function of
+     * kind alone — a life event's core does not know what mood or what date it is, and no other
+     * kind can reach this branch. [coreRadiusDp] stays constant across every mood and every kind
+     * and keeps its own tests; a landmark is louder *around* that constant, never by moving it.
+     */
+    const val LANDMARK_CORE_SCALE = 1.9f
+
+    /** [LANDMARK_CORE_SCALE] for a life event, `1` for everything else. Never a function of mood. */
+    fun coreScale(kind: SkyKind): Float =
+        if (kind == SkyKind.LIFE_EVENT) LANDMARK_CORE_SCALE else 1f
+
+    /** A landmark's halo: wider than the widest mood, and the one halo mood does not size. */
+    const val LANDMARK_HALO_RADIUS_DP = 6.5f
+
+    /**
+     * A landmark's halo peak — brighter than any other star's, which is the *"brighter"* in §1.
+     *
+     * Not [HALO_LIGHT] redistributed: a landmark genuinely emits more light than the stars around
+     * it, which is the whole of its job. That is allowed here and nowhere else because it follows
+     * a mark the person placed by hand.
+     */
+    const val LANDMARK_HALO_PEAK_ALPHA = 0.5f
+
+    /** [haloRadiusDp], with the landmark exception applied. Mood still sizes every other star. */
+    fun haloRadiusDp(kind: SkyKind, moodLevel: Int): Float =
+        if (kind == SkyKind.LIFE_EVENT) LANDMARK_HALO_RADIUS_DP else haloRadiusDp(moodLevel)
+
+    /** [haloPeakAlpha], with the landmark exception applied. */
+    fun haloPeakAlpha(kind: SkyKind, moodLevel: Int): Float =
+        if (kind == SkyKind.LIFE_EVENT) LANDMARK_HALO_PEAK_ALPHA else haloPeakAlpha(moodLevel)
+
+    /** A straight-line blend of two packed colours, `t` of the way from [from] to [to]. */
+    private fun mix(from: Int, to: Int, t: Float): Int {
+        val r = mixChannel((from shr 16) and 0xFF, (to shr 16) and 0xFF, t)
+        val g = mixChannel((from shr 8) and 0xFF, (to shr 8) and 0xFF, t)
+        val b = mixChannel(from and 0xFF, to and 0xFF, t)
+        return (r shl 16) or (g shl 8) or b
+    }
+
+    private fun mixChannel(from: Int, to: Int, t: Float): Int {
+        val value = Math.round(from + (to - from) * t)
+        return if (value < 0) 0 else if (value > 255) 255 else value
+    }
+
+    // ---------------------------------------------------------------------------------------
     // Kind. Carried by form, never by colour and never by motion.
     // ---------------------------------------------------------------------------------------
 
@@ -184,56 +437,92 @@ object SkyGlyph {
 }
 
 /**
- * Zoom, as five named thresholds on one continuous scale.
+ * Zoom, as three named thresholds on one continuous scale.
  *
  * Nothing reflows across a zoom: every level is the same coordinates under a different transform,
- * so a star can be followed from [DRIFT] to [STAR] by eye and culling stays a contiguous index
- * range. The levels decide only what *resolves* — how much of a glyph is drawn and whether stars
- * are individually focusable.
+ * so a star can be followed from [FAR] to [CLOSE] by eye. The levels decide only what *resolves* —
+ * how much of a glyph is drawn and whether stars are individually focusable.
+ *
+ * ## Why these are distances and no longer spans of time
+ *
+ * They were `DRIFT`, `SEASON`, `MONTH`, `NIGHT` and `STAR`, and each named how much *time* the
+ * viewport held, because the sky was a timeline with a row per month.
+ * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1.0 removed the rows: position carries no time at all
+ * any more, and a level called `MONTH` would be naming something that is not on the screen. So a
+ * level is how close someone is leaning in, which is the only thing zoom still means.
+ *
+ * **A level is a function of zoom alone and never of how many stars are on screen.** Deriving it
+ * from density would make what the surface draws a function of how much somebody logged — the same
+ * mistake, one layer up, that deleting the rows was meant to fix.
  */
 enum class SkyDetail {
-    /** Years at once. Points only, no glyphs, no threads. The view you leave open. */
-    DRIFT,
+    /** The whole sky at once. Points only, no glyphs, no threads. The view you leave open. */
+    FAR,
 
-    /** About a season. Kind glyphs begin to resolve. */
-    SEASON,
+    /** Leaning in. Kind marks begin to resolve and stars become individually focusable. */
+    NEAR,
 
-    /** One month row across the width. Full glyphs, project threads, focusable stars. */
-    MONTH,
-
-    /** One day, spread apart with leader lines. The sky continues at the edges — not a modal. */
-    NIGHT,
-
-    /** One star's detail. */
-    STAR,
+    /** Close. Full glyphs and project threads. */
+    CLOSE,
     ;
 
     companion object {
+        /** Where kind marks start to resolve, as a zoom factor. */
+        const val NEAR_ZOOM = 2.5f
+
+        /** Where the full glyph resolves. */
+        const val CLOSE_ZOOM = 7f
+
         /**
-         * The level implied by how many month rows fit on screen.
+         * The level implied by the zoom factor, where `1` is the whole field in the viewport.
          *
-         * Stated as a function of *rows visible* rather than of a zoom factor so the thresholds do
-         * not have to be re-tuned per screen size, and so the small-screen case (§11.6) is a number
-         * this file owns rather than a surprise in the renderer.
+         * Stated as a function of *zoom* rather than of anything measured in pixels so the
+         * thresholds do not have to be re-tuned per screen size, and so the small-screen case
+         * (§11.6) is a number this file owns rather than a surprise in the renderer.
          *
-         * It never returns [STAR]: a star's detail is reached by activating a star, not by zooming
-         * further into empty sky. Zoom bottoms out at [NIGHT], which is a place, not a sheet.
+         * There is no level for one star: a star's detail is reached by activating it, not by
+         * zooming further into empty sky. Zoom bottoms out at [CLOSE], which is a place, not a
+         * sheet.
          */
-        fun forVisibleMonths(visibleMonths: Float): SkyDetail = when {
-            visibleMonths > 12f -> DRIFT
-            visibleMonths > 4f -> SEASON
-            visibleMonths > 1.2f -> MONTH
-            else -> NIGHT
+        fun forZoom(zoom: Float): SkyDetail = when {
+            zoom < NEAR_ZOOM -> FAR
+            zoom < CLOSE_ZOOM -> NEAR
+            else -> CLOSE
         }
 
-        /** Glyph shape only resolves from [MONTH] inward; below that a star is a point. */
-        fun drawsGlyphs(detail: SkyDetail): Boolean = detail != DRIFT
+        /**
+         * Kind marks resolve **only** at [CLOSE] — when the person has leaned all the way in.
+         *
+         * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1, agreed with the maintainer: *"No marks for
+         * kind at ordinary zoom. A journal page, a step, a goal reached and a life event are all
+         * just stars until the person leans in, where the glyph appears. The text list still names
+         * the kind."* It *revises* `docs/SKY.md` §3.4, which drew glyphs at a month, and this
+         * function used to return true from the second level inward.
+         *
+         * The reason is what an ordinary sky is for. A ring, a cross and an underline scattered
+         * across the field turn the surface into a legend to be decoded — and worse, they sort a
+         * person's days into *kinds of act* at the zoom where somebody is looking at a whole
+         * stretch of their life at once. A star is a star. What it was is a question you ask about
+         * one star, by going to it, and the answer is also always available in the list without
+         * zooming at all.
+         *
+         * A landmark still looks different at every zoom, and that is not a kind mark: its size
+         * and its light come from [coreScale] and [LANDMARK_HALO_PEAK_ALPHA], which follow the fact
+         * that the person placed it by hand. Prominence follows authorship; form follows kind; only
+         * the second one waits.
+         *
+         * **Note for anyone comparing against history.** This rule was written against the old
+         * five-level enum, where the innermost level was called `NIGHT` and meant one day filling
+         * the screen. The levels are now [FAR], [NEAR] and [CLOSE] because months stopped being
+         * places (see `docs/SKY.md` §3.1) — the rule is unchanged, the name of its level is not.
+         */
+        fun drawsGlyphs(detail: SkyDetail): Boolean = detail == CLOSE
 
-        /** Project threads are the only line on the Sky, and they vanish at [DRIFT]. */
-        fun drawsThreads(detail: SkyDetail): Boolean = detail == MONTH || detail == NIGHT
+        /** Project threads are the only line on the Sky, and they resolve last. */
+        fun drawsThreads(detail: SkyDetail): Boolean = detail == CLOSE
 
-        /** Stars become individually focusable at [MONTH]; above that the canvas is one node. */
-        fun starsAreFocusable(detail: SkyDetail): Boolean = detail == MONTH || detail == NIGHT
+        /** Stars become individually focusable at [NEAR]; above that the canvas is one node. */
+        fun starsAreFocusable(detail: SkyDetail): Boolean = detail != FAR
     }
 }
 

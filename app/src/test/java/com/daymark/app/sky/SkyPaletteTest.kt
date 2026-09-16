@@ -12,6 +12,11 @@ import org.junit.Test
  * `#16150F` need actual measurement. The shipped 18% lerp-toward-white suggests the raw ramp does
  * not clear it. This blocks M4 and P1."* It is measured here, and the suspicion was right.
  *
+ * The ground it is measured against moved in September 2026 — `#16150F` to `#07070A`, with
+ * `SkyPalette.STAR_CONTRAST_TARGET` rising 5.0 to 6.5 to match (`SkyPalette`'s header has the
+ * arithmetic). Every number in this file was re-measured on the new ground rather than adjusted
+ * until it passed, and where a finding changed sign the test below says so in its own name.
+ *
  * The ramp is stated in this file rather than read from the app, deliberately. `model/Mood.kt`
  * imports `androidx.compose.ui.graphics.Color`, so the pure layer cannot see it and must not — the
  * mood palette is theme-provided and person-overridable (§3.2), and a Sky that hardcoded the hues
@@ -54,11 +59,13 @@ class SkyPaletteTest {
     }
 
     @Test
-    fun `the shipped ramp does not clear the floor, and is not level`() {
+    fun `the shipped ramp does not clear the floor, and is not level, on either ground`() {
         val ratios = DoubleArray(5) { SkyPalette.contrastRatio(shippedRamp[it], SkyPalette.NIGHT_BG) }
         for (i in ratios.indices) println("  raw ${levelNames[i]} = ${"%.2f".format(ratios[i])}:1")
 
-        // The finding §12.1 asked for: level 1 fails outright.
+        // The finding §12.1 asked for: level 1 fails outright. It measured 3.70:1 on the old
+        // ground and 4.08:1 on this one — a darker ground lifted it and it still does not reach
+        // 4.5, which is the answer to "does the near-black ground fix this on its own".
         assertTrue(
             "MoodAwful now measures ${ratios[0]} — if this has been fixed upstream, update the doc",
             ratios[0] < SkyPalette.CONTRAST_FLOOR,
@@ -66,7 +73,96 @@ class SkyPaletteTest {
         // And the finding that matters more: the ramp ranks the moods by how visible they are, with
         // the worst mood the faintest. This is the assertion that would have to be deleted for the
         // Sky to draw the raw ramp.
+        assertEquals("the worst mood is no longer the faintest", ratios.min(), ratios[0], 1e-9)
         assertTrue("the raw ramp is level after all", ratios.max() / ratios.min() > 2.0)
+
+        // The spread is a property of the hues and not of the ground, which is why changing the
+        // ground could never have been the fix. Measured on the OLD ground here, so the claim is
+        // checked rather than asserted from memory: both come out at 2.040.
+        val onOldGround = DoubleArray(5) { SkyPalette.contrastRatio(shippedRamp[it], OLD_NIGHT_BG) }
+        val spreadNow = ratios.max() / ratios.min()
+        val spreadThen = onOldGround.max() / onOldGround.min()
+        println("  spread on #${"%06X".format(OLD_NIGHT_BG)} = ${"%.3f".format(spreadThen)}, " +
+            "on #${"%06X".format(SkyPalette.NIGHT_BG)} = ${"%.3f".format(spreadNow)}")
+        assertEquals("a darker ground levelled the ramp after all", spreadThen, spreadNow, 0.01)
+    }
+
+    @Test
+    fun `the ground went darker and the marks drawn on it went brighter`() {
+        // §1: "Ground goes near-black, not pure black. The star contrast target rises with it, so
+        // stars get brighter, not dimmer (they are pinned to a ratio against the ground)." Both
+        // halves, as one assertion, because either alone is the wrong change.
+        val groundThen = SkyPalette.relativeLuminance(OLD_NIGHT_BG)
+        val groundNow = SkyPalette.relativeLuminance(SkyPalette.NIGHT_BG)
+        println("  ground ${"%.6f".format(groundThen)} -> ${"%.6f".format(groundNow)}")
+        assertTrue("the ground did not get darker", groundNow < groundThen)
+        assertTrue("the ground went to pure black, which has no floor to fade into", groundNow > 0.0)
+
+        // What a mood mark emits, which is the thing §1 says must not fall. Derived from the
+        // target and the ground rather than written down, so it stays true if either moves.
+        val emittedThen = OLD_STAR_CONTRAST_TARGET * (groundThen + 0.05) - 0.05
+        val emittedNow = SkyPalette.STAR_CONTRAST_TARGET * (groundNow + 0.05) - 0.05
+        println("  a mood mark emits ${"%.5f".format(emittedThen)} -> ${"%.5f".format(emittedNow)}" +
+            " (${"%.1f".format(100 * (emittedNow / emittedThen - 1))}% more light)")
+        assertTrue(
+            "the darker ground made the marks dimmer, which is the failure §1 names",
+            emittedNow > emittedThen,
+        )
+
+        // The positive control this pair needs. Without it the assertion above passes for a target
+        // that rose by a rounding error, and "brighter" would be a word rather than a measurement:
+        // 5.50 is exactly break-even on this ground, so anything at or under it is the failure.
+        val breakEven = (emittedThen + 0.05) / (groundNow + 0.05)
+        println("  break-even target on this ground is ${"%.2f".format(breakEven)}")
+        assertEquals("the break-even target moved; the header needs re-deriving", 5.50, breakEven, 0.01)
+        assertTrue(
+            "the target is at or under break-even, so nothing got brighter",
+            SkyPalette.STAR_CONTRAST_TARGET > breakEven,
+        )
+    }
+
+    @Test
+    fun `the target stops short of desaturating anybody's palette`() {
+        // The other half of how 6.5 was chosen. Equalisation reaches a target by scaling linear
+        // light, which holds hue; past the point where a channel would clip it has to blend toward
+        // the ink instead, and that visibly changes a colour the person picked. The sweep finds
+        // where the shipped ramp falls off that path, so the headroom under the target is a
+        // measurement and not a hope.
+        var cliff = Double.MAX_VALUE
+        var cliffLevel = -1
+        for (i in shippedRamp.indices) {
+            var t = SkyPalette.CONTRAST_FLOOR
+            while (t < 21.0) {
+                if (desaturated(shippedRamp[i], t)) {
+                    if (t < cliff) {
+                        cliff = t
+                        cliffLevel = i + 1
+                    }
+                    break
+                }
+                t += 0.05
+            }
+        }
+        println("  first shipped level to need desaturating: level $cliffLevel at ${"%.2f".format(cliff)}:1")
+        assertEquals("the cliff moved; SkyPalette's header quotes 8.35", 8.35, cliff, 0.06)
+        assertTrue(
+            "the target is at or past the cliff, so a shipped mood is being desaturated to reach it",
+            SkyPalette.STAR_CONTRAST_TARGET < cliff,
+        )
+        // Paired positive control: the detector can see a desaturation when there is one, so its
+        // silence below the cliff means something. Without this the sweep could be blind and the
+        // headroom above would be an artefact of a check that never fires.
+        assertTrue(
+            "the detector cannot see a desaturation, so its silence proves nothing",
+            desaturated(shippedRamp[cliffLevel - 1], cliff + 1.0),
+        )
+        // And the control at the other end: nothing is desaturated AT the target.
+        for (i in shippedRamp.indices) {
+            assertTrue(
+                "level ${i + 1} is desaturated at the shipped target",
+                !desaturated(shippedRamp[i], SkyPalette.STAR_CONTRAST_TARGET),
+            )
+        }
     }
 
     // -------------------------------------------------------------------------------------------
@@ -202,32 +298,92 @@ class SkyPaletteTest {
     }
 
     @Test
-    fun `the faint value is not faint, and the chrome cannot rely on contrast to recede`() {
+    fun `the faint value is still not faint, but it has stopped outshouting the stars`() {
         val ink = SkyPalette.contrastRatio(SkyPalette.NIGHT_INK, SkyPalette.NIGHT_BG)
         val faint = SkyPalette.contrastRatio(SkyPalette.NIGHT_FAINT, SkyPalette.NIGHT_BG)
         println("  NIGHT_INK ${"%.2f".format(ink)}:1, NIGHT_FAINT ${"%.2f".format(faint)}:1")
 
         assertTrue("the sky's ink is not comfortably legible", ink > 12.0)
 
-        // The measurement that was worth taking. `NIGHT_FAINT` reads as a name for "the quiet one",
-        // and it is not: at 5.18:1 it is a *desaturated* value, not a low-contrast one, and it sits
-        // essentially on top of the target every data star is drawn at. Two things follow.
-        //
-        // The good one: gutter labels and the project thread are legible, and clear the floor
-        // without anyone having to fix them.
-        //
-        // The one to be careful about: the chrome cannot recede by being fainter, because it isn't.
-        // Separation between chrome and data has to come from stroke weight, size and form. A
-        // reviewer assuming "faint therefore quieter" would draw month labels as present as the
-        // person's stars, which is a gutter competing with the sky.
+        // `NIGHT_FAINT` reads as a name for "the quiet one", and it is not: it is a *desaturated*
+        // value, not a low-contrast one. Gutter labels and the project thread are legible and clear
+        // the floor without anyone having to fix them.
         assertTrue("NIGHT_FAINT is below the floor after all", faint >= SkyPalette.CONTRAST_FLOOR)
+
+        // What changed with the ground, and it changed sign. On `#16150F` at a target of 5.0 the
+        // chrome measured 5.18:1 — ABOVE the target, so a month label was drawn more present than
+        // the person's own mood mark beside it. On `#07070A` at 6.5 it measures 5.70:1, and the
+        // chrome is finally the quieter of the two. Asserted as an ordering, not as a band, because
+        // the ordering is what matters: the chrome must never be louder than the data.
+        val was = SkyPalette.contrastRatio(SkyPalette.NIGHT_FAINT, OLD_NIGHT_BG)
+        println("  on #${"%06X".format(OLD_NIGHT_BG)} it was ${"%.2f".format(was)}:1 " +
+            "against a target of $OLD_STAR_CONTRAST_TARGET")
         assertTrue(
-            "NIGHT_FAINT has become genuinely low-contrast; the note above needs revisiting",
-            Math.abs(faint - SkyPalette.STAR_CONTRAST_TARGET) < 0.5,
+            "the old ground did not actually draw the chrome louder than the stars",
+            was > OLD_STAR_CONTRAST_TARGET,
+        )
+        assertTrue(
+            "the chrome is louder than the person's own marks again",
+            faint < SkyPalette.STAR_CONTRAST_TARGET,
+        )
+
+        // And the half of the old note that still stands: 0.8 of a ratio is not much of a gap.
+        // Separation between chrome and data still has to come from stroke weight, size and form.
+        // A reviewer assuming "faint therefore quiet" would still draw a gutter that competes.
+        assertTrue(
+            "NIGHT_FAINT has become genuinely low-contrast; the renderer may now lean on it to recede",
+            SkyPalette.STAR_CONTRAST_TARGET - faint < 1.5,
         )
     }
 
     // -------------------------------------------------------------------------------------------
+
+    /**
+     * The ground and the target before September 2026, kept so the change can be *measured* rather
+     * than remembered. Several findings here are comparisons between the two, and a comparison
+     * against a number that lives only in a comment is not a comparison.
+     */
+    private val OLD_NIGHT_BG = 0x16150F
+    private val OLD_STAR_CONTRAST_TARGET = 5.0
+
+    /**
+     * Whether reaching [target] cost this colour its hue — that is, whether [SkyPalette.equalised]
+     * had to take the blend-toward-the-ink path rather than the hue-preserving scaling one.
+     *
+     * Detected from the value, because the transform exposes no flag and a test that read one
+     * would be asking the implementation to grade itself. Scaling multiplies all three **linear**
+     * channels by a single factor, so every ratio between them survives exactly; blending toward
+     * `NIGHT_INK` pulls them together. So the measurement is the drift in those ratios, in logs so
+     * it is symmetric.
+     *
+     * The two populations are nowhere near each other, which is what makes the threshold safe
+     * rather than tuned: across the shipped ramp the scaling path never drifts past **0.023** (all
+     * of it 8-bit rounding) and the blend path lands above **1.10**. [HUE_DRIFT] sits at 0.2, two
+     * orders of margin from the noise and five times clear of the signal.
+     */
+    private fun desaturated(rgb: Int, target: Double): Boolean =
+        hueDrift(rgb, SkyPalette.equalised(rgb, target)) > HUE_DRIFT
+
+    private fun hueDrift(a: Int, b: Int): Double {
+        val la = DoubleArray(3) { linear((a shr (16 - 8 * it)) and 0xFF) }
+        val lb = DoubleArray(3) { linear((b shr (16 - 8 * it)) and 0xFF) }
+        var worst = 0.0
+        for (i in 0..2) {
+            for (j in 0..2) {
+                if (i == j || la[i] <= 0.0 || la[j] <= 0.0 || lb[i] <= 0.0 || lb[j] <= 0.0) continue
+                val drift = Math.abs(Math.log((la[i] / la[j]) / (lb[i] / lb[j])))
+                if (drift > worst) worst = drift
+            }
+        }
+        return worst
+    }
+
+    private fun linear(channel: Int): Double {
+        val v = channel / 255.0
+        return if (v <= 0.03928) v / 12.92 else Math.pow((v + 0.055) / 1.055, 2.4)
+    }
+
+    private val HUE_DRIFT = 0.2
 
     /** The three channels ranked by value — a coarse stand-in for hue that needs no colour space. */
     private fun channelOrder(rgb: Int): String {

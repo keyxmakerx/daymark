@@ -124,6 +124,13 @@ android {
     }
     buildFeatures {
         compose = true
+        // AGP 8 stopped generating BuildConfig unless asked, so this line is what makes
+        // `com.daymark.app.BuildConfig.DEBUG` exist at all. It is the gate on the timing debug
+        // screen (`ui/debug/`), which must be unreachable in a release build; without this the
+        // screen would not compile rather than quietly shipping, but the compile error would be
+        // the only warning, and a later `import BuildConfig` deleted by an IDE clean-up would put
+        // it back. The namespace above decides the package: `com.daymark.app`.
+        buildConfig = true
     }
     // MigrationTestHelper loads the exported schemas from the androidTest APK's assets, so the
     // schema directory has to be an androidTest asset source.
