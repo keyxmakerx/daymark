@@ -67,18 +67,24 @@ a scratch copy and each was caught (§0.3).
 
 ### 0.2 What is designed only
 
-- **`ui/sky/` is empty. Nothing renders.** Compose cannot be compiled in this environment, and a
-  file in the main source set that does not compile breaks the build for everyone. The renderer is
-  specified in §0.5 and is not written.
-- **The life-event record (§2.2) does not exist.** `SkyKind.LIFE_EVENT` is defined and laid out; the
-  table, the DAO and the migration are not written.
-- **Nothing is wired.** No DAO projection, no repository, no view model, no navigation entry. §0.4
-  lists exactly what is needed, all of it outside `sky/`.
-- **§4's zoom interaction, §5's accretion flags, §6.4's export, §7.3's semantics, §7.5's list *UI*.**
-  The list's *data* is built (`Sky.list`); the surface that presents it is not.
-- **Every number in §8 is still a budget.** The one thing now measured is the layout pass itself:
-  5,393 records became 5,393 stars across 120 month rows in **15–29 ms** on a plain JVM. That is the
-  precompute step of §8.2 rule 1, not the frame budget.
+**Revised 2026-09-16.** Most of what this section used to list as unwritten has since shipped, and a
+"what is designed only" list that names built things is worse than no list, because the one thing a
+reader wants from it is to know what they cannot rely on.
+
+**Built since this was written**, on `claude/pairing-stack-audit-suak0v`: `ui/sky/` renders
+(`SkyScreen`, `SkySurface`, `SkySprite`, `SkyPresentation`); the life-event record exists, with its
+table, DAO and migration; the whole thing is wired, from DAO projection through view model to a route
+off the More hub; §7.3's semantics and §7.5's list UI are built; and §4's zoom interaction is built
+in the reduced form §4 now describes.
+
+**Still designed only:**
+
+- **§5's accretion flags** and **§6.4's export**.
+- **§1's sparser, smaller, fainter field at low zoom.** `SkyField` is untouched: the field is as
+  dense and as bright at every zoom, now on a darker ground.
+- **Every number in §8 is still a budget.** The one thing measured is the layout pass itself:
+  5,393 records became 5,393 stars in **15–29 ms** on a plain JVM. That is the precompute step of
+  §8.2 rule 1, not the frame budget.
 
 ### 0.3 What building it caught
 
@@ -503,9 +509,30 @@ creates.
 
 ## 4. Zoom and focus — overview to a single star
 
-Five levels. Zoom is continuous (pinch, double-tap, or the platform accessibility zoom gesture); the
-levels are thresholds at which detail appears, not discrete screens. **Nothing reflows across a zoom**
-(§3.1), so a star can be followed from L0 to L4 by eye.
+**Revised 2026-09-16, by §1.0 of `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md`.** The five levels below
+were written for a field ruled into month rows, and three of them named things that placement being
+random deleted: a gutter with month names in it, "one month row across the width", and a day's stars
+spread apart with leader lines. None of that exists. No part of the surface is a date, so no level
+can be described as an amount of time on screen.
+
+What is built is three levels, thresholds on a plain zoom factor, in `SkyDetail`:
+
+| | Level | Shows | Detail that appears |
+|---|---|---|---|
+| **FAR** | below 2.5× | the whole sky at once | Points only, no kind marks, no threads. The ambient view, the one you leave open. |
+| **NEAR** | 2.5× to 7× | leaning in | Kind marks begin to resolve. Stars become individually focusable. |
+| **CLOSE** | above 7× | close | Full glyphs and project threads. |
+
+There is no level for one star: a star's detail is reached by activating it, not by zooming to it.
+Zoom is continuous — pinch, or the platform accessibility zoom gesture. **A pinch magnifies the point
+under the fingers** (`SkyPresentation.panForZoomAbout`), which matters more here than on an ordinary
+map because there are no labels to navigate back by. Once zoomed, a control appears in the corner
+that fits the whole sky again; it is deliberately not a double-tap, because Compose must wait out the
+double-tap window before it can report a single tap, and tapping a star is the thing people come here
+to do. **Nothing reflows across a zoom** (§3.1), so a star can be followed from FAR to CLOSE by eye.
+
+The superseded five-level table is kept below for the reasoning in the paragraphs after it, which is
+still about focus and damping and still applies. Read the levels as FAR / NEAR / CLOSE.
 
 | | Level | Shows | Detail that appears |
 |---|---|---|---|
