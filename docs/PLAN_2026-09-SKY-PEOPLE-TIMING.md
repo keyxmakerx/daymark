@@ -17,10 +17,21 @@ Where this revises an earlier document it says so; otherwise `docs/SKY.md` and
 - **Every star has a white heart.** The core is the same near-white for every star; the mood
   is the colour of the glow and how far it spreads. That is how a real star looks, and it makes
   equal presence structural rather than arithmetic. *Revises `docs/SKY.md` §3.4's coloured core.*
-- **The sky's default tint is the stellar sequence**: cool red, orange, yellow, yellow-white,
-  blue-white for the five levels, so a good day is white and there is no green star. A person's
-  own mood colours replace it when they have set any. A life event has no mood and no tint.
-- **Hue never shifts.** Colour is the mood the person logged; only the light breathes.
+- **Colour is age, not mood: redshift.** A star's tint is how far away in time it is, blue-white
+  when recent, through gold and amber to a deep red after some years, on one continuous ramp.
+  Time is a fact about the star, not a reading of the person, and red stops meaning "bad".
+- **Old stars recede but never vanish.** Brightness fades with age to a floor and stays there,
+  so an old year is far sky rather than a void; nothing is ever dropped from the surface. Only
+  the entries themselves are the record; the sky is a view of it.
+- **Mood is the character of the light and nothing else.** A hard day spreads its light wide and
+  soft; a good day gathers it into a sharp point; the total light is the same and so is the white
+  heart. Mood never touches brightness or colour. The mood word is on the sheet when a star is
+  tapped and on every row of the list.
+- **A landmark is the one bright star.** A life event is a mark the person placed to be found, so
+  it alone is bigger, brighter, spiked, never redshifted and never faded. Brightness may follow a
+  mark the person placed, never anything the app measured: a reached goal keeps its glint at
+  lean-in and a journal page stays the size of everything else.
+- **Hue never shifts on a star.** Only the light breathes.
 - **No marks for kind at ordinary zoom.** A journal page, a step, a goal reached and a life
   event are all just stars until the person leans in to a single day, where the glyph appears.
   The text list still names the kind. *Revises `docs/SKY.md` §3.4, which drew glyphs at a
@@ -30,8 +41,13 @@ Where this revises an earlier document it says so; otherwise `docs/SKY.md` and
 - **Zoom** keeps the month-row model but zooms about the pinch point; double-tap resets; a small
   "Today" control returns to now.
 - The year review's separate backdrop is replaced with the same field.
-- **Rejected:** a north star that is an unreached goal (not an act, so not a star). **Deferred:** a
-  north star the person names that is a value, never reached, never brighter.
+- **Zoom, restated after seeing five years:** a month is the full width all the way out and
+  widens only when leaning in, which is the app's existing model; pulled out to years the sky
+  reads as a field, with each year carrying its own faint nebula seeded by the year and blind to
+  what happened in it.
+- **Rejected:** a north star that is an unreached goal (not an act, so not a star); dimming by
+  mood, in every form it was asked for; dropping old stars entirely. **Deferred:** a north star
+  the person names that is a value, never reached, never brighter.
 
 ## 2. People and communities
 
