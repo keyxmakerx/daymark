@@ -103,6 +103,16 @@ object Routes {
      */
     const val LIFE_EVENTS = "life_events"
 
+    /**
+     * "Why it asks" — the timing layer described to itself. **Debug builds only.**
+     *
+     * Registered in `DaymarkAppScaffold` inside `if (BuildConfig.DEBUG)`, and reached from a
+     * Settings row inside the same check, so removing either leaves it unreachable in a release
+     * build. The constant itself is unconditional because a route string that does not exist is a
+     * compile error at both gates rather than one fewer door.
+     */
+    const val DEBUG_TIMING = "debug_timing"
+
     /** A single day's entries, keyed by epoch-day. */
     fun day(epochDay: Long) = "day/$epochDay"
     const val DAY_PATTERN = "day/{epochDay}"

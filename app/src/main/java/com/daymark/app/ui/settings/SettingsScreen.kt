@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.daymark.app.BuildConfig
 import com.daymark.app.util.DateUtils
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -54,6 +55,8 @@ fun SettingsScreen(
     onManageReminders: () -> Unit,
     onCustomizeMoods: () -> Unit,
     onManageSuggestions: () -> Unit,
+    /** Opens the timing debug screen. Only ever called from a debug build — see the "Debug" row. */
+    onOpenTimingDebug: () -> Unit,
     onShowMessage: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel(),
@@ -307,6 +310,26 @@ fun SettingsScreen(
             headlineContent = { Text("Daymark") },
             supportingContent = { Text("Open-source mood tracker · all data stays on your device") },
         )
+
+        // DEBUG BUILDS ONLY, and this is one of three checks rather than the only one.
+        //
+        // `BuildConfig.DEBUG` is false in every release variant, so this whole section is dead code
+        // the minifier drops; the route it opens is registered behind the same flag in
+        // DaymarkAppScaffold, and DebugTimingScreen re-checks it on entry. Removing any one of the
+        // three still leaves the screen unreachable in a release build, which is the point of there
+        // being three: this is the one surface in the app that lays the decision engine's whole
+        // state out at once.
+        if (BuildConfig.DEBUG) {
+            Divider()
+            SectionHeader("Debug")
+            ListItem(
+                headlineContent = { Text("Why it asks") },
+                supportingContent = {
+                    Text("The timing rules, what they read, and what each one would do right now")
+                },
+                modifier = Modifier.clickable { onOpenTimingDebug() },
+            )
+        }
     }
 
     if (showPinDialog) {

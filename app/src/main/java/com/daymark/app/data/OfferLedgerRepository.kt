@@ -6,9 +6,12 @@ import com.daymark.app.data.entity.OfferOutcome
 import com.daymark.app.data.entity.OfferRecord
 import com.daymark.app.stats.InterruptionBudget
 import com.daymark.app.stats.SupportOfferFrequency
+import com.daymark.app.stats.TimingGrid
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import java.time.Instant
+import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -26,10 +29,18 @@ import javax.inject.Singleton
  * ## What this class is not allowed to become
  *
  * It stores the app's behaviour and how that behaviour landed. It stores **nothing about the
- * person** — [OfferRecord] has three columns and no free-text field, and this class adds no fourth.
- * Nothing here counts consecutive runs, computes rates, or produces anything a report or a clinician
- * could read as a signal about how someone is doing (`docs/DECISIONS_2026-08.md` §D1a, §D6). A quiet
- * ledger means the app was quiet.
+ * person** — [OfferRecord] has no free-text field and this class adds none. Every column is a fact
+ * about the app's own asking: which feature asked, when, when in the week, whether anything came
+ * back, and what became of it. Nothing here counts consecutive runs, computes rates, or produces
+ * anything a report or a clinician could read as a signal about how someone is doing
+ * (`docs/DECISIONS_2026-08.md` §D1a, §D6). A quiet ledger means the app was quiet.
+ *
+ * **None of it is ever shared.** `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §4: *the reception ledger
+ * and the timing grid are never shared with a clinician — when someone answers the app is the app's
+ * business with them, and it stays on the phone.* There is no export path to close, and that is not
+ * an accident: `BackupManager` deliberately carries no `offer_records` table, so a backup, a CSV or
+ * a PDF report has nowhere to put one. [timedOffers] is read by a debug screen and by placement,
+ * and by nothing that leaves the device.
  *
  * It also holds no policy. Whether a feature may interrupt is [InterruptionBudget]'s answer; this
  * class reads rows, hands them over unjudged, and returns what the arbiter said. The one thing it
@@ -82,17 +93,55 @@ class OfferLedgerRepository @Inject constructor(
      * move. Which outcome fits is the calling feature's judgement, not this class's — it knows what
      * it showed and this class deliberately does not.
      *
+     * **[responded] is the narrower fact, and it defaults to `true`.** The outcome says what became
+     * of the offer and is what the budget spends; [responded] says only whether anybody was there,
+     * and it is the whole of placement's input. It defaults to `true` because that is the direction
+     * a mistake has to fail in: a caller that forgets it leaves the hour reading as answered and
+     * the app keeps asking there, whereas a default of `false` would let one un-updated call site
+     * quietly talk the app out of an hour somebody uses. See
+     * [com.daymark.app.data.entity.OfferRecord.responded] for why this is a column rather than a
+     * fifth [OfferOutcome].
+     *
      * The caller supplies the clock, as everywhere else in this layer, so the behaviour is testable
-     * without one.
+     * without one. [zone] is a parameter for the same reason and defaults to the phone's, which is
+     * the person's own — the only zone that means anything here.
      */
-    suspend fun record(kind: OfferKind, outcome: OfferOutcome, offeredAtMillis: Long): Long =
+    suspend fun record(
+        kind: OfferKind,
+        outcome: OfferOutcome,
+        offeredAtMillis: Long,
+        responded: Boolean = true,
+        zone: ZoneId = ZoneId.systemDefault(),
+    ): Long =
         dao.insert(
             OfferRecord(
                 kind = kind.key,
                 offeredAt = offeredAtMillis,
                 outcome = outcome.key,
+                offeredHour = hourIn(offeredAtMillis, zone),
+                offeredWeekday = weekdayIn(offeredAtMillis, zone),
+                responded = responded,
             ),
         )
+
+    /**
+     * [offeredAtMillis] as an hour of the day in [zone], 0..23.
+     *
+     * Derived here rather than passed in by every caller, and that is the point: a feature cannot
+     * forget to stamp it, the way it could forget an argument. It is sound only because of the
+     * contract [record] already states — **a line is written at the moment of the ask** — so the
+     * zone being read is the zone the person is in right now, applied to a timestamp from right
+     * now. The same two lines run over a timestamp from last March would be the invented evidence
+     * [com.daymark.app.data.entity.OfferRecord.offeredHour] forbids, which is why the one caller in
+     * this file that writes a row for something that was *not* an ask ([sweepRetention]) does not
+     * come through here.
+     */
+    private fun hourIn(offeredAtMillis: Long, zone: ZoneId): Int =
+        Instant.ofEpochMilli(offeredAtMillis).atZone(zone).hour
+
+    /** The same for the weekday, 1..7 with Monday as 1 — `java.time.DayOfWeek.value`. */
+    private fun weekdayIn(offeredAtMillis: Long, zone: ZoneId): Int =
+        Instant.ofEpochMilli(offeredAtMillis).atZone(zone).dayOfWeek.value
 
     // ---------------------------------------------------------------------------------------
     // Reading — per kind
@@ -148,6 +197,46 @@ class OfferLedgerRepository @Inject constructor(
                 kind = budgetKind(kind).key,
                 offeredAt = record.offeredAt,
                 outcome = record.outcome,
+            )
+        }
+
+    /**
+     * This kind's rows as **placement's** own input type — the second mapping this class exists for,
+     * and the counterpart to [recentOffers].
+     *
+     * **Every row of the kind, not a window.** [recentOffers] takes
+     * [InterruptionBudget.RECENT_WINDOW] because reception is a question about the last few asks;
+     * [TimingGrid] asks a different question — which hours of the week this feature has ever been
+     * answered in — and a window there would make an hour's standing depend on how recently the app
+     * happened to try it, so a quiet fortnight would erase what a month of answers established. The
+     * table is still bounded: [sweepRetention] keeps [RETENTION_DAYS] days and this adds nothing to
+     * that.
+     *
+     * Like [recentOffers] this stamps the arbiter's own key rather than the string out of the table,
+     * for the same reason — the query already filtered to one kind, and a drift between the two
+     * enums would otherwise read as a kind with no history, which is the direction that asks more.
+     *
+     * **The outcome is nulled only by a recorded `false`.** [TimingGrid.Ask.outcome] means something
+     * narrower than "what became of it": `null` is *no response was ever recorded*, and any other
+     * value — recognised or not — is an answer. So the rule here is exactly one line long, and it
+     * never looks at the outcome key:
+     *
+     *  - [OfferRecord.responded] `== false` → `null`. The app asked and nothing came back.
+     *  - anything else, including `null` → the stored key, unparsed.
+     *
+     * A row whose [OfferRecord.responded] is `null` predates the distinction, and "we do not know"
+     * must not be read as "nobody was there" — that is the direction that gives up an hour on
+     * evidence nothing recorded. Such a row carries [OfferRecord.UNRECORDED] slots too, so
+     * [TimingGrid] drops it before the outcome matters; the rule above is the belt to that pair of
+     * braces, and it fails in the same direction either way.
+     */
+    suspend fun timedOffers(kind: OfferKind): List<TimingGrid.Ask> =
+        dao.allForKind(kind.key).map { record ->
+            TimingGrid.Ask(
+                kind = budgetKind(kind).key,
+                hour = record.offeredHour,
+                weekday = record.offeredWeekday,
+                outcome = if (record.responded == false) null else record.outcome,
             )
         }
 
@@ -237,6 +326,17 @@ class OfferLedgerRepository @Inject constructor(
                         kind = kind.key,
                         offeredAt = cutoff,
                         outcome = OfferOutcome.STOP.key,
+                        // NOT the hour the sweep happened to run in. This row is a preference being
+                        // carried forward, not an ask that was made — writing a real slot on it
+                        // would inject a phantom ask into placement's grid at whatever hour the app
+                        // was next opened, which is evidence of the app's behaviour that the app did
+                        // not perform. UNRECORDED is out of range for both, so TimingGrid drops it.
+                        offeredHour = OfferRecord.UNRECORDED,
+                        offeredWeekday = OfferRecord.UNRECORDED,
+                        // Not an ask, so there was nothing to respond to. Left unrecorded rather
+                        // than called false: false would say an hour went unanswered, and this row
+                        // is not about an hour.
+                        responded = null,
                     ),
                 )
             }
@@ -259,8 +359,12 @@ class OfferLedgerRepository @Inject constructor(
      * Written as an exhaustive `when` rather than a lookup by key so that the two enums drifting
      * apart is a compile error here — the one place it can be caught — instead of a lookup that
      * quietly returns nothing and reads as a kind with no history.
+     *
+     * Public so that a caller holding an [OfferKind] can ask the pure engines a question directly —
+     * `ui/debug` does, to build a `RuleReadout` — rather than keeping a second copy of this `when`
+     * and reintroducing exactly the drift it exists to prevent.
      */
-    private fun budgetKind(kind: OfferKind): InterruptionBudget.Kind = when (kind) {
+    fun budgetKind(kind: OfferKind): InterruptionBudget.Kind = when (kind) {
         OfferKind.COMPANION -> InterruptionBudget.Kind.COMPANION
         OfferKind.REMINDER -> InterruptionBudget.Kind.REMINDER
         OfferKind.ASSIGNMENT -> InterruptionBudget.Kind.ASSIGNMENT
