@@ -55,6 +55,33 @@ package com.daymark.app.sky
  * reach the target by scaling — a saturated blue tops out at 0.0722 relative luminance — is blended
  * toward the night ink instead, which desaturates it. That is a visible change to someone's chosen
  * colour and it is the lesser harm: the alternative is a mood they cannot see.
+ *
+ * ## September 2026: stars stopped using this, and it stayed anyway
+ *
+ * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1 moved a star's colour off the mood ramp and onto its
+ * age ([SkyAge]), so **a drawn star no longer passes through [equalised] at all**. The obvious
+ * next move is to delete the equalisation machinery, and it would be a mistake for two separate
+ * reasons.
+ *
+ * **It is still on screen.** The mood ramp did not leave the Sky, it left the *star*: §1 keeps the
+ * mood word and its colour *"on the sheet when a star is tapped and on every row of the list"*.
+ * Those are small coloured marks on the same near-black ground, which is the case [equalised] was
+ * written for, and a list dot is exactly where an un-equalised ramp would put the hardest mood at
+ * 3.70:1 and the ordinary one at 7.56:1 — the ranking-by-visibility this file exists to remove,
+ * moved from the sky into the list beside it. `ui/sky/SkyScreen.kt` and
+ * `ui/sky/SkyPresentation.kt` both still call it, and the quiet sky's higher target
+ * (`SkyPresentation.HIGH_CONTRAST_TARGET`) is built on it.
+ *
+ * **The measurement is the record.** The table above is the only place in the tree where the
+ * shipped ramp's contrast against the night ground is written down, and `docs/SKY.md` §12.1 asked
+ * for exactly that. Deleting the transform would delete the finding with it.
+ *
+ * What did become stale is the ground itself. §1 opens with *"Ground goes near-black, not pure
+ * black. The star contrast target rises with it, so stars get brighter, not dimmer (they are
+ * pinned to a ratio against the ground)"*, and [NIGHT_BG] is still the old `#16150F`. That change
+ * is deliberately **not** made here: it moves every measured number in this file and in
+ * `SkyPaletteTest`, and it belongs with the renderer work that also makes the halo a radial fade,
+ * so that the ground and the light drawn on it are re-measured together rather than a week apart.
  */
 object SkyPalette {
 
@@ -70,7 +97,14 @@ object SkyPalette {
     /** The ground everything is drawn on. */
     const val NIGHT_BG = 0x16150F
 
-    /** The Sky's brightest value. Every star with no mood attached is this colour, at full alpha. */
+    /**
+     * The Sky's brightest value: chrome, the decorative field, the selection ring.
+     *
+     * It used to be the colour of every star with no mood attached. Stars now take their colour
+     * from [SkyAge] instead, so this is no longer a star colour — but it is still the value
+     * [equalised] blends toward when a colour is too dark or too saturated to carry the target
+     * contrast on its own, and it is still the sky's ceiling.
+     */
     const val NIGHT_INK = 0xEBE5D8
 
     /**
@@ -97,7 +131,8 @@ object SkyPalette {
     const val CONTRAST_FLOOR = 4.5
 
     /**
-     * What every data star is actually drawn at.
+     * What every mood mark the person is shown is drawn at — the list dot, the sheet, and until
+     * September 2026 the star itself. See this file's header for what moved and what did not.
      *
      * Above the floor for two reasons. The obvious one is rounding: the transform lands on 8-bit
      * channels, so a target sitting exactly on 4.5 would round some colours to 4.49. The real one

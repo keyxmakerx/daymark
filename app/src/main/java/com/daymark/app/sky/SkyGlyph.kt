@@ -30,9 +30,10 @@ package com.daymark.app.sky
  *
  * | Fixed for every mood, every kind | Varies with mood |
  * |---|---|
- * | [CORE_RADIUS_DP] | hue — the person's own ramp colour |
- * | [CORE_ALPHA] | [haloRadiusDp] — how far the light spreads |
- * | contrast, equalised by [SkyPalette.equalised] | [haloPeakAlpha] — how concentrated it is |
+ * | [CORE_RADIUS_DP] | [haloRadiusDp] — how far the light spreads |
+ * | [CORE_ALPHA] | [haloPeakAlpha] — how concentrated it is |
+ * | colour — [SkyAge.tintFor], which is age | |
+ * | brightness — [SkyAge.fadeFor], which is age | |
  * | [HALO_LIGHT] — total light emitted | |
  *
  * So a hard day is a soft wide warm star and a good day is a tight crisp one. **Neither is
@@ -41,12 +42,27 @@ package com.daymark.app.sky
  * a table someone has to keep balanced. Mood is a quality of light, which is true, rather than a
  * quantity of it, which would be a verdict.
  *
+ * ## What changed in September 2026: colour left
+ *
+ * The right-hand column used to start with *hue — the person's own ramp colour*, and it does not
+ * any more. `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1 moves colour onto age
+ * ([SkyAge]) and states the remainder flatly: *"Mood is the character of the light and nothing
+ * else... Mood never touches brightness or colour."*
+ *
+ * The halo is therefore the **only** thing on a star that mood moves, and this file is where that
+ * is enforced: [starTint] and [starBrightness] take a mood level and ignore it, the way
+ * [coreRadiusDp] has always taken a kind and a mood and ignored both, so the sweep in
+ * `SkyGlyphTest` has something to sweep. Nothing was lost in the move that the person can see —
+ * their own mood colour is still on every row of the list and on the sheet when a star is tapped,
+ * where it is a word with a colour beside it rather than a hue someone could read off the sky over
+ * their shoulder.
+ *
  * **What was rejected on the way.** Holding peak alpha constant and varying only the radius was the
  * first attempt: it makes hard days glow *more*, which is not shaming but is still a ranking, and
  * an inverted one is no better than the original. Making mood drive nothing at all was seriously
- * considered and is the safest option — it was not taken because the mood ramp handing a person
- * their own recorded colour back is `docs/DECISIONS_2026-08.md` §D1b's "reflect, never label", and
- * dropping it would remove the one thing on the Sky that is the person's own answer rather than the
+ * considered and is the safest option — it was not taken because handing a person their own
+ * recorded answer back is `docs/DECISIONS_2026-08.md` §D1b's "reflect, never label", and dropping
+ * it entirely would remove the one thing on the Sky that is the person's own answer rather than the
  * app's observation. The variation that remains is deliberately small (a 14% spread in radius) so
  * it reads as texture at a glance and resolves into meaning only up close.
  *
@@ -127,6 +143,144 @@ object SkyGlyph {
     fun haloPeakAlpha(moodLevel: Int): Float {
         val r = haloRadiusDp(moodLevel)
         return HALO_LIGHT / (r * r)
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Temperature. A star's own warmth, from its identity — variety that says nothing.
+    //
+    // `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1: "Each star also has its own temperature from
+    // its identity, icy, white, pale gold or peach, mixed about a third into its age tint, so the
+    // sky is varied and the redshift still reads." A real field of stars is not one hue at one
+    // distance, and a sky that were would look printed.
+    //
+    // It is drawn from the hash of the star's own identity, like its position and its rhythm, so
+    // it is FIXED FOREVER AND MEANS NOTHING. There are exactly four and they are close together:
+    // the mix is a third, so an old star stays plainly old whichever one it drew. Anything
+    // stronger and temperature would start to compete with age, which is the one thing colour is
+    // allowed to say.
+    // ---------------------------------------------------------------------------------------
+
+    /** Icy, white, pale gold, peach. */
+    const val TEMPERATURE_COUNT = 4
+
+    private val TEMPERATURE_TINT = intArrayOf(0xC8D7FF, 0xFFFFFF, 0xFFEEC8, 0xFFD6BE)
+
+    /** How much of the temperature is mixed into the age tint. The prototype's 0.35. */
+    const val TEMPERATURE_MIX = 0.35f
+
+    private const val TEMPERATURE_KIND_SALT = 0x6B2D7F19L
+    private const val TEMPERATURE_SALT = 0x11A3C5E7L
+
+    /**
+     * Which temperature this star drew, `0..TEMPERATURE_COUNT - 1`: icy, white, pale gold, peach.
+     *
+     * Weighted the prototype's way — white is the commonest, peach the rarest — because an evenly
+     * split field reads as four groups rather than as one field with variety in it.
+     */
+    fun temperatureIndex(kind: SkyKind, id: Long): Int {
+        val seed = kind.ordinal.toLong() * TEMPERATURE_KIND_SALT + TEMPERATURE_SALT
+        val h = SkyRandom.unit(SkyRandom.mix(seed, id))
+        return when {
+            h < 0.30f -> 1
+            h < 0.55f -> 0
+            h < 0.80f -> 2
+            else -> 3
+        }
+    }
+
+    /** The tint of a temperature, packed `0xRRGGBB`. Out-of-range indices clamp rather than throw. */
+    fun temperatureTint(index: Int): Int =
+        TEMPERATURE_TINT[index.coerceIn(0, TEMPERATURE_COUNT - 1)]
+
+    // ---------------------------------------------------------------------------------------
+    // What a star is actually drawn in. Both of these take a mood and both of them ignore it.
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * A star's colour: its age tint, warmed a third of the way toward its own temperature.
+     *
+     * [moodLevel] is accepted and **ignored**, exactly as in [coreRadiusDp], and for exactly the
+     * same reason: this is the signature the renderer calls, so this is where the rule *colour is
+     * never a function of mood* can be defended. `SkyGlyphTest` sweeps the whole ramp through it
+     * and fails the moment the answer moves.
+     *
+     * A landmark is white at every age and takes no temperature at all — [SkyAge.tintFor] exempts
+     * it from the redshift, and mixing a temperature into white would tint the one star that is
+     * meant to be the sky's plainest.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    fun starTint(kind: SkyKind, id: Long, ageYears: Float, moodLevel: Int): Int {
+        val base = SkyAge.tintFor(kind, ageYears)
+        if (kind == SkyKind.LIFE_EVENT) return base
+        return mix(base, temperatureTint(temperatureIndex(kind, id)), TEMPERATURE_MIX)
+    }
+
+    /**
+     * How brightly a star burns before the twinkle and the glyph's own alphas: [SkyAge.fadeFor].
+     *
+     * [moodLevel] is accepted and ignored, as in [starTint]. **This is the assertion the whole
+     * surface rests on** — a person who logged through a bad month must not find that month drawn
+     * fainter than any other — and it is now true by construction, because the only input here is
+     * how long ago the act was.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    fun starBrightness(kind: SkyKind, ageYears: Float, moodLevel: Int): Float =
+        SkyAge.fadeFor(kind, ageYears)
+
+    // ---------------------------------------------------------------------------------------
+    // The landmark. The one exception, and it follows authorship rather than measurement.
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * How much bigger a landmark's core is drawn than every other star's.
+     *
+     * §1: *"A landmark is the one bright star. A life event is a mark the person placed to be
+     * found, so it alone is bigger, brighter, spiked, never redshifted and never faded. Brightness
+     * may follow a mark the person placed, never anything the app measured: a reached goal keeps
+     * its glint at lean-in and a journal page stays the size of everything else."*
+     *
+     * So this is a scale on [CORE_RADIUS_DP] and not a second core radius, and it is a function of
+     * kind alone — a life event's core does not know what mood or what date it is, and no other
+     * kind can reach this branch. [coreRadiusDp] stays constant across every mood and every kind
+     * and keeps its own tests; a landmark is louder *around* that constant, never by moving it.
+     */
+    const val LANDMARK_CORE_SCALE = 1.9f
+
+    /** [LANDMARK_CORE_SCALE] for a life event, `1` for everything else. Never a function of mood. */
+    fun coreScale(kind: SkyKind): Float =
+        if (kind == SkyKind.LIFE_EVENT) LANDMARK_CORE_SCALE else 1f
+
+    /** A landmark's halo: wider than the widest mood, and the one halo mood does not size. */
+    const val LANDMARK_HALO_RADIUS_DP = 6.5f
+
+    /**
+     * A landmark's halo peak — brighter than any other star's, which is the *"brighter"* in §1.
+     *
+     * Not [HALO_LIGHT] redistributed: a landmark genuinely emits more light than the stars around
+     * it, which is the whole of its job. That is allowed here and nowhere else because it follows
+     * a mark the person placed by hand.
+     */
+    const val LANDMARK_HALO_PEAK_ALPHA = 0.5f
+
+    /** [haloRadiusDp], with the landmark exception applied. Mood still sizes every other star. */
+    fun haloRadiusDp(kind: SkyKind, moodLevel: Int): Float =
+        if (kind == SkyKind.LIFE_EVENT) LANDMARK_HALO_RADIUS_DP else haloRadiusDp(moodLevel)
+
+    /** [haloPeakAlpha], with the landmark exception applied. */
+    fun haloPeakAlpha(kind: SkyKind, moodLevel: Int): Float =
+        if (kind == SkyKind.LIFE_EVENT) LANDMARK_HALO_PEAK_ALPHA else haloPeakAlpha(moodLevel)
+
+    /** A straight-line blend of two packed colours, `t` of the way from [from] to [to]. */
+    private fun mix(from: Int, to: Int, t: Float): Int {
+        val r = mixChannel((from shr 16) and 0xFF, (to shr 16) and 0xFF, t)
+        val g = mixChannel((from shr 8) and 0xFF, (to shr 8) and 0xFF, t)
+        val b = mixChannel(from and 0xFF, to and 0xFF, t)
+        return (r shl 16) or (g shl 8) or b
+    }
+
+    private fun mixChannel(from: Int, to: Int, t: Float): Int {
+        val value = Math.round(from + (to - from) * t)
+        return if (value < 0) 0 else if (value > 255) 255 else value
     }
 
     // ---------------------------------------------------------------------------------------
