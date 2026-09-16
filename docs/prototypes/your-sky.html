@@ -39,8 +39,8 @@
     <canvas id="sky" aria-label="Your sky. Every star is something you did. The list shows the same stars as text."></canvas>
     <div class="top">
       <button class="iconbtn" id="back" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"></path></svg></button>
-      <div class="title"><div class="name">Your sky</div><div class="month" id="month">March 2026</div></div>
-      <button class="chip" id="today">Today</button>
+      <div class="title"><div class="name">Your sky</div><div class="month" id="month">Everything you have marked</div></div>
+      <button class="chip" id="today">Show all</button>
       <button class="textbtn" id="listbtn" aria-pressed="false">List</button>
     </div>
     <div class="list" id="list" hidden></div>
@@ -53,7 +53,7 @@
     <div class="sheet" id="sheet" hidden><div class="text" id="sheettext"></div><button class="textbtn" id="open">Open it</button><button class="textbtn" id="close">Close</button></div>
     <div class="toast" id="toast" hidden></div>
   </div>
-  <p class="hint">Tap a star. Drag to move, scroll or pinch to zoom, double-tap to come back to today. Pull all the way out for five years: the recent is blue-white, the old has redshifted and receded, the landmarks stay.</p>
+  <p class="hint">Tap a star. Drag to move, scroll or pinch to zoom, double-tap to show the whole sky. A star's place says nothing about when: the recent is blue-white, the old has redshifted and receded, and the landmarks stay.</p>
 </div>
 
 <script>
@@ -73,6 +73,23 @@
   const TODAY = new Date(2026, 2, 14);
   const VIS = 14, YEARS = 5, ROWS = YEARS * 12 + 1;   // fourteen months fill the screen; five years are there to pull out to
   function hash(a, b) { let h = (a * 374761393 + b * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296; }
+  // The cluster field. A uniform sprinkle reads as machine-made; a real sky clumps. This warps a
+  // position through lumpy value noise on a wrapping lattice. It takes a POSITION and nothing else:
+  // it cannot see a record, which is the same guarantee the background field keeps, and for the
+  // same reason — a warp that could see data would be a warp that could encode it.
+  const LUMPS = 4, WARP = 0.13;
+  const smooth = t => t * t * (3 - 2 * t);
+  function noise(x, y, salt) {
+    const gx = Math.floor(x * LUMPS), gy = Math.floor(y * LUMPS);
+    const fx = smooth(x * LUMPS - gx), fy = smooth(y * LUMPS - gy);
+    const at = (i, j) => hash(((i % LUMPS) + LUMPS) % LUMPS + salt, ((j % LUMPS) + LUMPS) % LUMPS);
+    const a = at(gx, gy), b = at(gx + 1, gy), c = at(gx, gy + 1), d = at(gx + 1, gy + 1);
+    return (a + (b - a) * fx) + ((c + (d - c) * fx) - (a + (b - a) * fx)) * fy;
+  }
+  const wrap01 = v => ((v % 1) + 1) % 1;
+  const warpX = (x, y) => wrap01(x + WARP * (noise(x, y, 17) - 0.5) * 2);
+  const warpY = (x, y) => wrap01(y + WARP * (noise(x, y, 91) - 0.5) * 2);
+
   let seed = 20260916; const rnd = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
 
   const first = new Date(TODAY.getFullYear(), TODAY.getMonth() - (ROWS - 1), 1);
@@ -100,9 +117,13 @@
   const kindIndex = k => Object.keys(KINDS).indexOf(k);
   for (const r of records) {
     const dim = new Date(r.y, r.m + 1, 0).getDate();
-    r.row = (r.y - first.getFullYear()) * 12 + (r.m - first.getMonth());
-    r.x = (r.d - 1 + 0.08 + 0.84 * hash(kindIndex(r.kind) + 1, r.id)) / dim;
-    r.y01 = 0.12 + 0.76 * hash(kindIndex(r.kind) + 7, r.id * 3);
+    // Position is a hash of the star's own identity and nothing else. Not the date, not the index,
+    // not how many records exist — so a star never moves and logging today reflows nothing.
+    // The two axes are drawn from separately salted mixes; the shipped app once salted AFTER the
+    // mixer and got y = 1 - x exactly, which drew every month as parallel diagonal streaks.
+    const hx = hash(kindIndex(r.kind) * 0x2F1B + 0x51E1, r.id);
+    const hy = hash(kindIndex(r.kind) * 0x2F1B + 0x3D0A, r.id * 2654435761);
+    r.x = warpX(hx, hy); r.y01 = warpY(hx, hy);
     r.rate = 3.5 + 4.5 * hash(kindIndex(r.kind) + 11, r.id * 5);   // its own beat, forever
     r.phase = 6.283 * hash(kindIndex(r.kind) + 13, r.id * 7);
     r.dim = dim;
@@ -161,10 +182,11 @@
       g.fillStyle = gr; g.beginPath(); g.arc(size / 2, size / 2, rad, 0, 7); g.fill(); return { c, size }; };
     return { r: mk(255, 70, 60), b: mk(90, 150, 255) };
   }
-  const rowH = () => (H / VIS) * view.z, rowW = () => W * Math.max(1, view.z);   // full width on the way out; wider only when leaning in
-  const sx = r => r.x * rowW() + view.px, sy = r => (r.row + r.y01) * rowH() + view.py;
+  // One open field. There are no rows and no months: a star's place says nothing about when.
+  const fieldW = () => W * view.z, fieldH = () => H * view.z;
+  const sx = r => r.x * fieldW() + view.px, sy = r => r.y01 * fieldH() + view.py;
   function clamp() {
-    const cw = rowW(), ch = ROWS * rowH();
+    const cw = fieldW(), ch = fieldH();
     view.px = cw <= W ? (W - cw) / 2 : Math.min(0, Math.max(W - cw, view.px));
     view.py = ch <= H ? (H - ch) / 2 : Math.min(0, Math.max(H - ch, view.py));
   }
@@ -180,26 +202,14 @@
   function drawField(t) {
     const par = 0.35, size = 110;                     // the field moves slower than the stars: depth, not data
     const ox = view.px * par, oy = view.py * par;
-    const HUES = ["120,140,205", "225,180,150", "150,140,210", "130,170,190", "215,160,175"];
-    const npar = 0.75, rh = rowH() * npar, rw = rowW() * npar;
-    for (let yi = -1; yi <= YEARS; yi++) for (const k of [0, 1]) {
-      const yr = first.getFullYear() + yi, h1 = hash(yr, 3 + k), h2 = hash(yr, 7 + k), h3 = hash(yr, 11 + k);
-      const gx = (0.15 + 0.7 * h1) * rw + view.px * npar, gy = (yi * 12 + 2 + 8 * h2 + (first.getMonth() ? 0 : 0)) * rh + view.py * npar;
-      const rr = (0.45 + 0.35 * h3) * Math.max(W, 6 * rh);
-      if (gy + rr < 0 || gy - rr > H) continue;
-      const col = HUES[Math.floor(hash(yr, 5) * HUES.length)];
-      const wash = ctx.createRadialGradient(gx, gy, 0, gx, gy, rr); wash.addColorStop(0, `rgba(${col},0.085)`); wash.addColorStop(0.5, `rgba(${col},0.035)`); wash.addColorStop(1, `rgba(${col},0)`);
+    // A faint wash for depth. It used to be one nebula per year, back when a year was a band of
+    // the field. Years are not places any more, so this is simply sky: fixed, seeded once, and
+    // moving with the field rather than with the data.
+    for (const [wx, wy, rad, col] of [[0.24, 0.30, 0.55, "120,140,205"], [0.78, 0.66, 0.60, "225,180,150"], [0.52, 1.02, 0.45, "140,150,210"]]) {
+      const gx = wx * W + ox * 0.6, gy = wy * H + oy * 0.6, rr = rad * Math.max(W, H);
+      const wash = ctx.createRadialGradient(gx, gy, 0, gx, gy, rr);
+      wash.addColorStop(0, `rgba(${col},0.075)`); wash.addColorStop(0.55, `rgba(${col},0.03)`); wash.addColorStop(1, `rgba(${col},0)`);
       ctx.fillStyle = wash; ctx.fillRect(0, 0, W, H);
-    }
-    const x0 = Math.floor(-ox / size) - 1, x1 = Math.floor((W - ox) / size) + 1, y0 = Math.floor(-oy / size) - 1, y1 = Math.floor((H - oy) / size) + 1;
-    for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) {
-      const k = tx + "," + ty; let tl = tiles.get(k); if (!tl) { tl = fieldTile(tx, ty); tiles.set(k, tl); }
-      for (const p of tl) {
-        const x = tx * size + p.x * size + ox, y = ty * size + p.y * size + oy;
-        let a = p.a; if (p.tw && opt.motion) a *= 0.7 + 0.3 * Math.sin(t / 1300 + p.x * 20);
-        ctx.fillStyle = p.warm ? `rgba(240,226,206,${a.toFixed(3)})` : `rgba(214,222,240,${a.toFixed(3)})`;
-        ctx.beginPath(); ctx.arc(x, y, p.s, 0, 7); ctx.fill();
-      }
     }
   }
   function glyph(r, x, y) {   // the marks for kind, drawn only when leaned in to one day
@@ -210,31 +220,18 @@
     else if (r.kind === "practice") { ctx.beginPath(); ctx.arc(x, y, 3.2, 0, 7); ctx.stroke(); }
     else if (r.kind === "life_event") { ctx.beginPath(); ctx.moveTo(x - 9.5, y); ctx.lineTo(x + 9.5, y); ctx.moveTo(x, y - 9.5); ctx.lineTo(x, y + 9.5); ctx.stroke(); ctx.strokeStyle = `rgba(${R},${G},${B},0.35)`; ctx.beginPath(); ctx.arc(x, y, 6, 0, 7); ctx.stroke(); }
   }
-  let spread = [];   // the day leaned in to, laid out with leader lines
   function draw(t) {
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.fillStyle = "#07070A"; ctx.fillRect(0, 0, W, H);
     if (opt.field && !opt.quiet) drawField(t);
-    const night = view.z >= NIGHT && selected;
-    spread = [];
-    if (night) {
-      const day = records.filter(r => r.y === selected.y && r.m === selected.m && r.d === selected.d);
-      const cx = ((selected.d - 0.5) / selected.dim) * rowW() + view.px;
-      const y0 = H * 0.16, y1 = H * 0.62, step = day.length > 1 ? (y1 - y0) / (day.length - 1) : 0;
-      day.forEach((r, i) => spread.push({ r, x: cx, y: day.length > 1 ? y0 + i * step : (y0 + y1) / 2 }));
-    }
+    const night = view.z >= NIGHT;   // kind marks resolve only when you lean all the way in
     for (const r of records) {
       const x = sx(r), y = sy(r); if (x < -20 || x > W + 20 || y < -20 || y > H + 20) continue;
-      const sp = spread.find(s => s.r === r);
       const slow = 0.5 + 0.5 * Math.sin(t / (r.rate * 1000) * 6.283 + r.phase);
       const quick = r.phase > 4.2 ? 0.5 + 0.5 * Math.sin(t / 260 + r.phase * 5) : 0.5;   // a third of them shimmer as well
       const a = opt.motion ? 1 - (0.22 * (1 - slow) + 0.05 * (1 - quick)) : 1;
       const grow = opt.motion ? 1 + 0.04 * (slow - 0.5) : 1;
       const s = makeSprite(r.mood, r.ab, r.tp, opt.quiet);
-      if (sp) {   // leader line from where it truly sits to where it is laid out
-        ctx.strokeStyle = "rgba(142,136,122,0.55)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(sp.x, sp.y); ctx.stroke();
-        ctx.globalAlpha = 0.35; ctx.drawImage(s.c, x - s.size / 2, y - s.size / 2, s.size, s.size); ctx.globalAlpha = 1;
-      }
-      const dx = sp ? sp.x : x, dy = sp ? sp.y : y;
+      const dx = x, dy = y;
       const gs = s.size * grow; ctx.globalAlpha = a * r.fade; ctx.drawImage(s.c, dx - gs / 2, dy - gs / 2, gs, gs); ctx.globalAlpha = 1;
       if (opt.motion && r.glints && !opt.quiet) {   // the prism: brief, rare, and added on top so the star itself never changes colour
         const gt = (t / 1000 + r.go) % r.gp, env = gt < 0.28 ? Math.sin(Math.PI * gt / 0.28) : 0;
@@ -248,40 +245,31 @@
         }
       }
       if (night) glyph(r, dx, dy);
-      if (sp) {
-        ctx.fillStyle = "rgba(183,175,158,0.95)"; ctx.font = "12px " + getComputedStyle(document.body).fontFamily; ctx.textBaseline = "middle";
-        ctx.fillText(`${pad(r.min)}  ${r.mood ? MOODS[r.mood] : ""}`.trim(), dx + 16, dy);
-      }
       if (r === selected) { ctx.strokeStyle = "rgba(235,229,216,0.9)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(dx, dy, 9, 0, 7); ctx.stroke(); }
     }
-    ctx.fillStyle = "rgba(142,136,122,0.9)";
-    const topRow = Math.max(0, Math.min(ROWS - 1, Math.floor((H * 0.12 - view.py) / rowH())));
-    const md = new Date(first.getFullYear(), first.getMonth() + topRow, 1);
-    document.getElementById("month").textContent = view.z < 0.5 ? `${md.getFullYear()}` : `${MONTHS[md.getMonth()]} ${md.getFullYear()}`;
+    // Nothing labels the field. No part of it is a date, so any label would be a claim that is
+    // not true, and a wrong date here is worse than none. Dates live in the list.
   }
   const pad = min => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
   function loop(t) { if (anim) { const k = Math.min(1, (t - anim.t0) / anim.ms), e = 1 - Math.pow(1 - k, 3); view.z = anim.z0 + (anim.z1 - anim.z0) * e; view.px = anim.px0 + (anim.px1 - anim.px0) * e; view.py = anim.py0 + (anim.py1 - anim.py0) * e; if (k >= 1) anim = null; } clamp(); draw(t); requestAnimationFrame(loop); }
   let started = false;
-  function resize() { const r = frame.getBoundingClientRect(); W = r.width; H = r.height; DPR = Math.min(3, devicePixelRatio || 1); fringe = null; canvas.width = W * DPR; canvas.height = H * DPR; sprites = {}; if (!started) { started = true; view.py = H - ROWS * (H / VIS); } clamp(); }
+  function resize() { const r = frame.getBoundingClientRect(); W = r.width; H = r.height; DPR = Math.min(3, devicePixelRatio || 1); fringe = null; canvas.width = W * DPR; canvas.height = H * DPR; sprites = {}; if (!started) { started = true; } clamp(); }
   new ResizeObserver(resize).observe(frame); resize(); requestAnimationFrame(loop);
 
   // ---------- moving through it ----------
   function zoomAt(fx, fy, z1) { z1 = Math.max(ZMIN, Math.min(ZMAX, z1)); const k = z1 / view.z; view.px = fx - (fx - view.px) * k; view.py = fy - (fy - view.py) * k; view.z = z1; clamp(); }
   function animateTo(z1, px1, py1) { if (reduced || !opt.motion) { view.z = z1; view.px = px1; view.py = py1; clamp(); return; } anim = { t0: performance.now(), ms: 480, z0: view.z, z1, px0: view.px, px1, py0: view.py, py1 }; }
-  function goToday() { selected = null; sheet.hidden = true; animateTo(1, 0, H - ROWS * (H / VIS)); }
+  function showAll() { selected = null; sheet.hidden = true; animateTo(1, 0, 0); }
   function leanIn(r) {
-    selected = r; const z1 = Math.min(ZMAX, 0.62 * r.dim);
-    const cx = ((r.d - 0.5) / r.dim) * W * Math.max(1, z1), cy = (r.row + 0.5) * (H / VIS) * z1;
-    let px1 = W / 2 - cx, py1 = H * 0.40 - cy;
-    const cw = W * Math.max(1, z1), ch = ROWS * (H / VIS) * z1; px1 = Math.min(0, Math.max(W - cw, px1)); py1 = Math.min(0, Math.max(H - ch, py1));
-    animateTo(z1, px1, py1);
-    const when = `${DAYS[r.dow]} ${r.d} ${MONTHS[r.m].slice(0, 3)}, ${pad(r.min)}`;
+    // Selecting a star no longer moves the view to a day, because a day is not a place. It marks
+    // the star and names it. The zoom stays where the person put it.
+    selected = r;
+    const when = `${DAYS[r.dow]} ${r.d} ${MONTHS[r.m].slice(0, 3)} ${r.y}, ${pad(r.min)}`;
     sheettext.textContent = `${KINDS[r.kind]} ${when}${r.mood ? " · " + MOODS[r.mood] : ""}`;
     openbtn.hidden = r.kind === "project_step"; sheet.hidden = false;
   }
   function hit(x, y) {
     let best = null, bd = 24;
-    if (spread.length) for (const s of spread) { const d = Math.hypot(s.x - x, s.y - y); if (d < bd) { bd = d; best = s.r; } }
     for (const r of records) { const d = Math.hypot(sx(r) - x, sy(r) - y); if (d < bd) { bd = d; best = r; } }
     return best;
   }
@@ -301,7 +289,7 @@
     ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null;
     if (drag && !drag.moved && performance.now() - drag.t < 400) {
       const now = performance.now();
-      if (now - lastTap < 300) { lastTap = 0; goToday(); }
+      if (now - lastTap < 300) { lastTap = 0; showAll(); }
       else { lastTap = now; const r = hit(e.offsetX, e.offsetY); if (r) leanIn(r); else if (selected) { selected = null; sheet.hidden = true; } }
     }
     drag = null;
@@ -313,7 +301,7 @@
   const toast = document.getElementById("toast"); let toastT = 0;
   const say = s => { toast.textContent = s; toast.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { toast.hidden = true; }, 1800); };
   const press = (el, on) => el.setAttribute("aria-pressed", on ? "true" : "false");
-  document.getElementById("today").addEventListener("click", goToday);
+  document.getElementById("today").addEventListener("click", showAll);
   document.getElementById("field").addEventListener("click", e => { opt.field = !opt.field; press(e.currentTarget, opt.field); });
   document.getElementById("motion").addEventListener("click", e => { opt.motion = !opt.motion; press(e.currentTarget, opt.motion); });
   document.getElementById("quiet").addEventListener("click", e => { opt.quiet = !opt.quiet; press(e.currentTarget, opt.quiet); if (opt.quiet) { opt.field = false; press(document.getElementById("field"), false); } });
@@ -325,9 +313,18 @@
   // the list: the same stars as text, a peer and not a fallback
   const list = document.getElementById("list"), listbtn = document.getElementById("listbtn");
   function buildList() {
-    let html = "", cur = -1; const byRow = [...records].sort((a, b) => a.row - b.row || a.d - b.d || a.min - b.min);
+    // The month comes off the star's own date now, not off a row, because there are no rows. This
+    // is the only place in the product where a date is a heading, and it matters more than it used
+    // to: with the field scattered, the list is the ONLY way to reach a particular day.
+    const monthKey = r => r.y * 12 + r.m;
+    let html = "", cur = -1;
+    const byRow = [...records].sort((a, b) => monthKey(a) - monthKey(b) || a.d - b.d || a.min - b.min);
     for (const r of byRow) {
-      if (r.row !== cur) { cur = r.row; const n = byRow.filter(o => o.row === cur).length; html += `<h2>${MONTHS[r.m]} ${r.y}<span>${n} items</span></h2>`; }
+      if (monthKey(r) !== cur) {
+        cur = monthKey(r);
+        const n = byRow.filter(o => monthKey(o) === cur).length;
+        html += `<h2>${MONTHS[r.m]} ${r.y}<span>${n} items</span></h2>`;
+      }
       const [R, G, B] = r.kind === "life_event" ? [255,255,255] : tintFor(r.age);
       html += `<div class="row" data-id="${r.id}"><div class="dot" style="background: rgb(${R},${G},${B}); opacity: ${r.fade.toFixed(2)};"></div><div class="when">${DAYS[r.dow]} ${r.d} ${MONTHS[r.m].slice(0,3)} · ${pad(r.min)}</div><div class="what">${KINDS[r.kind].replace(/\.$/, "")}</div><div class="mood">${r.mood ? MOODS[r.mood] : ""}</div></div>`;
     }
