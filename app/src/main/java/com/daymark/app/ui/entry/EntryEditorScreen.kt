@@ -66,6 +66,7 @@ import com.daymark.app.model.Mood
 import com.daymark.app.ui.components.ActivityChip
 import com.daymark.app.ui.components.EntryPhoto
 import com.daymark.app.ui.components.MoodFace
+import com.daymark.app.ui.people.WithPicker
 import com.daymark.app.util.DateUtils
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -214,6 +215,17 @@ fun EntryEditorScreen(
                     )
                 }
             }
+
+            // Beside the activities, and the same gesture: chips you tap. The difference is only
+            // that these names came from the person rather than from a library — and that nothing
+            // downstream will ever read them next to the mood above. `ui/people/WithPicker.kt`.
+            Text("Who were you with?", style = MaterialTheme.typography.titleMedium)
+            WithPicker(
+                people = state.people,
+                selectedIds = state.selectedPersonIds,
+                onToggle = viewModel::togglePerson,
+                onAddPerson = viewModel::addPerson,
+            )
 
             Text("Why do you feel this way?", style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(
