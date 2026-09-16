@@ -14,7 +14,17 @@ Where this revises an earlier document it says so; otherwise `docs/SKY.md` and
   its own identity, the way its position is: every star twinkles, each to its own beat, the same
   beat forever. Never a function of mood, kind or count. Lives in `sky/` so it is unit-tested.
   *Revises `docs/SKY.md` §7.4, which said off by default if it ships at all.*
-- **Hue never shifts.** Colour is the mood the person logged.
+- **Every star has a white heart.** The core is the same near-white for every star; the mood
+  is the colour of the glow and how far it spreads. That is how a real star looks, and it makes
+  equal presence structural rather than arithmetic. *Revises `docs/SKY.md` §3.4's coloured core.*
+- **The sky's default tint is the stellar sequence**: cool red, orange, yellow, yellow-white,
+  blue-white for the five levels, so a good day is white and there is no green star. A person's
+  own mood colours replace it when they have set any. A life event has no mood and no tint.
+- **Hue never shifts.** Colour is the mood the person logged; only the light breathes.
+- **No marks for kind at ordinary zoom.** A journal page, a step, a goal reached and a life
+  event are all just stars until the person leans in to a single day, where the glyph appears.
+  The text list still names the kind. *Revises `docs/SKY.md` §3.4, which drew glyphs at a
+  month.*
 - **Field** gets sparser, smaller and fainter. Still uniform, still blind to data, still
   switchable off.
 - **Zoom** keeps the month-row model but zooms about the pinch point; double-tap resets; a small
