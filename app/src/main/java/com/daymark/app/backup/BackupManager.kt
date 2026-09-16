@@ -11,12 +11,16 @@ import com.daymark.app.data.dao.TrackerLogDao
 import com.daymark.app.data.dao.TreatmentDao
 import com.daymark.app.data.entity.ActivityEntity
 import com.daymark.app.data.entity.EntryActivityCrossRef
+import com.daymark.app.data.entity.EntryPersonCrossRef
 import com.daymark.app.data.entity.Goal
 import com.daymark.app.data.entity.GoalStep
 import com.daymark.app.data.entity.JournalEntry
 import com.daymark.app.data.entity.LifeEvent
 import com.daymark.app.data.entity.AssessmentResult
 import com.daymark.app.data.entity.MoodEntry
+import com.daymark.app.data.entity.Person
+import com.daymark.app.data.entity.PersonGroupShare
+import com.daymark.app.data.entity.PersonNote
 import com.daymark.app.data.entity.ThoughtRecord
 import com.daymark.app.data.entity.Reminder
 import com.daymark.app.data.entity.SafetyPlanItem
@@ -172,6 +176,59 @@ data class BackupLifeEvent(
     val createdAt: Long = 0,
 )
 
+/**
+ * One `people` row — a person or a community. Added in v17, alongside the table.
+ *
+ * All seven columns, [sharedOverride] included, and that one is the reason this class has a note.
+ * It is the person's own answer to *is this one shared with a clinician*, with `null` meaning
+ * *follow my group's default* ([com.daymark.app.data.entity.Person] has the long version). Carried
+ * as `Boolean?` and never flattened to a `Boolean`: a file that wrote `false` for "not chosen"
+ * would restore somebody as permanently excluded, and a file that wrote `true` for it would share
+ * everybody the moment a group default was turned on. Both are silent, and one of the two sends a
+ * name off the device.
+ *
+ * Defaulted like every field added since v1, so a v16 file — one taken before people existed —
+ * still reads and comes back with nobody in it, which is the truth about it.
+ */
+@Serializable
+data class BackupPerson(
+    val id: Long,
+    val name: String,
+    val groupKey: String = "other",
+    val whoTheyAre: String = "",
+    val archived: Boolean = false,
+    val createdAt: Long = 0,
+    val sharedOverride: Boolean? = null,
+)
+
+/**
+ * One `person_notes` row. Added in v17.
+ *
+ * This is writing, in the person's own words, about somebody in their life, and there is no second
+ * copy of it anywhere on the device — the same thing [BackupLifeEvent] is, which is why both are in
+ * the file rather than treated as reconstructible.
+ */
+@Serializable
+data class BackupPersonNote(
+    val id: Long,
+    val personId: Long,
+    val dateTime: Long,
+    val body: String,
+)
+
+/** One `entry_people` row: an entry and somebody it says it was with. Added in v17. */
+@Serializable
+data class BackupEntryPerson(val entryId: Long, val personId: Long)
+
+/**
+ * One `person_group_shares` row: a group's sharing default. Added in v17.
+ *
+ * A group with no row is not shared, so the absence of this list in an older file is the correct
+ * reading of that file and not a loss — see the restore paths, which differ here on purpose.
+ */
+@Serializable
+data class BackupPersonGroupShare(val groupKey: String, val shared: Boolean = false)
+
 @Serializable
 data class BackupData(
     /**
@@ -242,6 +299,23 @@ data class BackupData(
      * words, and there is no second copy of it anywhere on the device.
      */
     val lifeEvents: List<BackupLifeEvent> = emptyList(),
+    /**
+     * The people and communities in somebody's life, their notes, and the entries that name them.
+     * Added in v17, defaulted like everything since v1 so a v16 file still reads.
+     *
+     * [personNotes] belongs with [lifeEvents] in the paragraph above it: it is writing that exists
+     * nowhere else. A person's *name* could be typed again; what they are to somebody, and what was
+     * written about them across two years, could not.
+     *
+     * [personGroupShares] is the one list here that a restore treats differently on the two paths,
+     * and the difference is deliberate rather than an oversight — see [importReplace] and
+     * [importMerge]. Nothing in a backup file may end up turning sharing **on** for somebody who
+     * was already on the phone.
+     */
+    val people: List<BackupPerson> = emptyList(),
+    val personNotes: List<BackupPersonNote> = emptyList(),
+    val entryPeople: List<BackupEntryPerson> = emptyList(),
+    val personGroupShares: List<BackupPersonGroupShare> = emptyList(),
 )
 
 /**
@@ -278,6 +352,39 @@ internal fun replaceGoalIdMap(goals: List<BackupGoal>): Map<Long, Long> =
     goals.associate { it.id to it.id }
 
 /**
+ * The backup's person notes rebound to the person ids an import actually used, dropping any whose
+ * person is not in [personIdMap].
+ *
+ * The same function, for the same two reasons, as [remapGoalSteps]. On the MERGE path each person
+ * is inserted as `Person(0, ...)` and takes whatever id Room hands back, so every `personId` in the
+ * file is stale before the notes are written — and getting the rebinding wrong does not throw,
+ * because the wrong id is still a real person. It files what somebody wrote about one person
+ * underneath another one. That is the worst failure in this file: silent, permanent, and about
+ * people.
+ *
+ * An unmapped note is dropped rather than kept, because `person_notes.personId` is a live foreign
+ * key and inserting a note whose person is absent throws and takes the whole import down over one
+ * orphan line. [BackupData.refs] already handles a cross-ref to a missing row this way.
+ * [BackupPersonNote.id] is carried through untouched; each import path decides what id to write.
+ */
+internal fun remapPersonNotes(
+    notes: List<BackupPersonNote>,
+    personIdMap: Map<Long, Long>,
+): List<BackupPersonNote> =
+    notes.mapNotNull { note -> personIdMap[note.personId]?.let { note.copy(personId = it) } }
+
+/**
+ * The map [remapPersonNotes] needs on the REPLACE path: every person in the file, to themselves.
+ *
+ * REPLACE reinserts each person with their original id, so a note's `personId` still names the right
+ * row. Routing REPLACE through the same function as MERGE is the point — the orphan-dropping rule is
+ * what keeps a hand-edited file from throwing mid-import, and two copies of it would drift.
+ * [replaceGoalIdMap] is the same thing for goals and steps.
+ */
+internal fun replacePersonIdMap(people: List<BackupPerson>): Map<Long, Long> =
+    people.associate { it.id to it.id }
+
+/**
  * Exports/imports the entire local database as JSON. This is the user's only safety
  * net in a local-only app, so it round-trips every table a person would miss.
  *
@@ -303,6 +410,12 @@ class BackupManager @Inject constructor(
     private val thoughtRecordDao: com.daymark.app.data.dao.ThoughtRecordDao,
     private val safetyPlanDao: com.daymark.app.data.dao.SafetyPlanDao,
     private val lifeEventDao: com.daymark.app.data.dao.LifeEventDao,
+    private val personDao: com.daymark.app.data.dao.PersonDao,
+    private val personNoteDao: com.daymark.app.data.dao.PersonNoteDao,
+    // The entry -> person link, through its own DAO rather than EntryDao. That separation is the
+    // shape `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2 asks for — EntryDao is the door that returns
+    // moodLevel, and it has no method that touches entry_people. See EntryPersonDao's header.
+    private val entryPersonDao: com.daymark.app.data.dao.EntryPersonDao,
     // The reception ledger, held only to be able to empty it on a REPLACE — see importReplace.
     // Deliberately the repository and not `OfferRecordDao`: the repository is the seam that decides
     // what may be read out of that table, and a backup path has no business reading rows at all.
@@ -367,6 +480,16 @@ class BackupManager @Inject constructor(
             lifeEvents = lifeEventDao.getAll().map {
                 BackupLifeEvent(it.id, it.epochDay, it.label, it.createdAt)
             },
+            people = personDao.getAll().map {
+                BackupPerson(it.id, it.name, it.groupKey, it.whoTheyAre, it.archived, it.createdAt, it.sharedOverride)
+            },
+            personNotes = personNoteDao.getAll().map {
+                BackupPersonNote(it.id, it.personId, it.dateTime, it.body)
+            },
+            entryPeople = entryPersonDao.getAll().map { BackupEntryPerson(it.entryId, it.personId) },
+            personGroupShares = personDao.getAllGroupShares().map {
+                BackupPersonGroupShare(it.groupKey, it.shared)
+            },
         )
         return json.encodeToString(data)
     }
@@ -410,7 +533,7 @@ class BackupManager @Inject constructor(
             "This backup was made by a newer version of Daymark (v${data.version}). Please update the app."
         }
         when (mode) {
-            // One transaction, because importReplace empties thirteen tables before it writes
+            // One transaction, because importReplace empties every table it can reach before writing
             // anything back. Without this, an insert that throws part-way — an older file whose
             // cross-refs name an activity it no longer carries, a process killed during a long
             // restore — left every delete standing and put nothing in their place: an empty
@@ -498,6 +621,47 @@ class BackupManager @Inject constructor(
         data.lifeEvents.forEach {
             lifeEventDao.insert(LifeEvent(it.id, it.epochDay, it.label, it.createdAt))
         }
+
+        /*
+         * People, their notes, their entry links, and the per-group sharing defaults.
+         *
+         * THE DELETE ORDER. Links first, then notes, then people — children before parents, the same
+         * reason `goal_steps` goes before `goals` above. `person_notes` cascades off `people`, but
+         * the cascade needs `PRAGMA foreign_keys` on, which Room sets and a raw
+         * SupportSQLiteDatabase does not have to; `entry_people` has no foreign key at all, so
+         * nothing would take its rows. A restore that left those standing would attach a previous
+         * life's entries to whatever person ids the file happens to reuse below.
+         *
+         * THE INSERT ORDER. People before notes, always: `person_notes.personId` is a live foreign
+         * key and the pragma is on, so a note written ahead of its person throws and aborts the
+         * restore. `remapPersonNotes` drops any note whose person is not in the file, which is what
+         * stops one orphan line in a hand-edited backup from costing somebody everything else.
+         *
+         * SHARING IS RESTORED VERBATIM HERE, AND ONLY HERE. REPLACE has just emptied `people`, so
+         * there is nobody left on this phone for a restored group default to newly expose — every
+         * name that exists afterwards came out of this file, together with that file's own answer
+         * about it. That is what makes carrying `sharedOverride` and the group rows across
+         * faithfully the safe thing to do on this path and the unsafe thing on the other one; see
+         * importMerge, which does not write group defaults at all.
+         */
+        entryPersonDao.deleteAll()
+        personNoteDao.deleteAll()
+        personDao.deleteAll()
+        personDao.deleteAllGroupShares()
+        data.people.forEach {
+            personDao.insert(
+                Person(it.id, it.name, it.groupKey, it.whoTheyAre, it.archived, it.createdAt, it.sharedOverride),
+            )
+        }
+        personNoteDao.insertAll(
+            remapPersonNotes(data.personNotes, replacePersonIdMap(data.people)).map {
+                PersonNote(it.id, it.personId, it.dateTime, it.body)
+            },
+        )
+        // Verbatim, like data.refs above and for the same reason: entry_people has no foreign key,
+        // so a pair naming a row this file does not carry is inert rather than fatal.
+        entryPersonDao.insertCrossRefs(data.entryPeople.map { EntryPersonCrossRef(it.entryId, it.personId) })
+        personDao.setGroupShares(data.personGroupShares.map { PersonGroupShare(it.groupKey, it.shared) })
 
         /*
          * The reception ledger is emptied here, and it is the one table with no matching restore
@@ -623,6 +787,50 @@ class BackupManager @Inject constructor(
         data.lifeEvents.forEach { e ->
             lifeEventDao.insert(LifeEvent(0, e.epochDay, e.label, e.createdAt))
         }
+
+        /*
+         * People take fresh row ids, like every other MERGE insert, and their notes follow through
+         * `remapPersonNotes` — see it for why getting that wrong is the worst kind of quiet: a note
+         * filed under the wrong person still renders perfectly. No de-duplication by name; two
+         * people really can be called Sam, the same rule `lifeEvents` follows above.
+         *
+         * SHARING IS THE ONE THING A MERGE MAY NOT CARRY FORWARD WHOLE. A merge adds the file's rows
+         * beside data already on this phone, and nothing in a file may end up turning sharing ON for
+         * somebody who was already here.
+         *
+         * So a null `sharedOverride` becomes an explicit `false`: null means *follow my group*, and
+         * the group defaults here are not the ones the file was exported against — somebody exported
+         * from a phone where `friends` was off would arrive where `friends` is on and be shared, with
+         * nobody choosing it and no screen looking wrong. An explicit true or false is a decision
+         * about a named person and is carried as written. And `personGroupShares` is not written at
+         * all, so this device's own defaults stand. The cost is small and honest (a group may need
+         * turning back on after a merge); what it prevents is names leaving because of a file.
+         */
+        val personIdMap = HashMap<Long, Long>()
+        data.people.forEach { p ->
+            val newId = personDao.insert(
+                Person(0, p.name, p.groupKey, p.whoTheyAre, p.archived, p.createdAt, p.sharedOverride ?: false),
+            )
+            personIdMap[p.id] = newId
+        }
+        personNoteDao.insertAll(
+            remapPersonNotes(data.personNotes, personIdMap).map {
+                PersonNote(0, it.personId, it.dateTime, it.body)
+            },
+        )
+        // Both ends are remapped, and a pair that loses either end is dropped — the same shape the
+        // activity cross-refs use above.
+        entryPersonDao.insertCrossRefs(
+            data.entryPeople.mapNotNull { ref ->
+                val newEntry = entryIdMap[ref.entryId]
+                val newPerson = personIdMap[ref.personId]
+                if (newEntry != null && newPerson != null) {
+                    EntryPersonCrossRef(newEntry, newPerson)
+                } else {
+                    null
+                }
+            },
+        )
     }
 
     /**
@@ -652,6 +860,11 @@ class BackupManager @Inject constructor(
         // stops a file written by this build from claiming to be v15: a v15 reader would accept it
         // and drop the mark — and the date under it — without saying so. Same reason v15 was bumped
         // for `lifeEvents`, which a v14 reader would have dropped the same way.
-        const val CURRENT_VERSION = 16
+        // v17 adds people and communities: `people`, `personNotes`, `entryPeople` and
+        // `personGroupShares`, all defaulted, so a v16 file still reads and comes back with nobody
+        // in it. The bump is what stops a file written by this build from claiming to be v16: a v16
+        // reader would accept it and drop every person, every note about them and every link — the
+        // same silent loss v15 was bumped for with `lifeEvents` and v16 with `reachedAt`.
+        const val CURRENT_VERSION = 17
     }
 }

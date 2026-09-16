@@ -384,8 +384,22 @@ class GoalReachedSchemaTest {
         .filterNot { it.trimStart().startsWith("//") }
         .joinToString("\n")
 
+    /**
+     * MIGRATION_16_17's body and nothing else.
+     *
+     * Bounded at BOTH `val DEFAULT_ACTIVITIES` and the next `val MIGRATION_`, because the first
+     * bound alone only worked while v17 was the newest migration. The moment v18 was written the
+     * slice swallowed it, and every absence assertion below started reading somebody else's SQL:
+     * `people` has an `archived` column, so "the migration reads `archived`" would have gone red
+     * against a migration that does no such thing, attributed to whoever added the table. That is
+     * this repository's most common bug shape — a check written against an assumption, failing when
+     * the assumption stops holding — and the fix is to slice to one migration rather than to
+     * whatever follows it.
+     */
     private fun migrationBody(): String =
-        database.substringAfter("val MIGRATION_16_17").substringBefore("val DEFAULT_ACTIVITIES")
+        database.substringAfter("val MIGRATION_16_17")
+            .substringBefore("val DEFAULT_ACTIVITIES")
+            .substringBefore("val MIGRATION_")
 
     /** Every string literal the v17 migration executes, in order. */
     private fun migrationSql(): List<String> =

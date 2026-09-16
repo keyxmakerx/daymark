@@ -304,10 +304,22 @@ class LifeEventSchemaTest {
             .toList()
     }
 
-    /** Every string literal in MIGRATION_15_16, concatenated — the SQL as the migration builds it. */
+    /**
+     * Every string literal in MIGRATION_15_16, concatenated — the SQL as the migration builds it.
+     *
+     * Bounded at the next `val MIGRATION_` as well as at `val DEFAULT_ACTIVITIES`, so this reads one
+     * migration rather than every migration written after it. With only the second bound the slice
+     * grew on every schema change, and the index assertions below — which look at everything after
+     * the first `CREATE INDEX` — would have started making claims about a later migration's
+     * indices. See the same note on `GoalReachedSchemaTest.migrationBody`.
+     */
     private fun migrationSql(source: String): String =
         Regex("\"([^\"]*)\"")
-            .findAll(source.substringAfter("val MIGRATION_15_16").substringBefore("val DEFAULT_ACTIVITIES"))
+            .findAll(
+                source.substringAfter("val MIGRATION_15_16")
+                    .substringBefore("val DEFAULT_ACTIVITIES")
+                    .substringBefore("val MIGRATION_"),
+            )
             .joinToString("") { it.groupValues[1] }
 
     private fun createTable(source: String): String =
