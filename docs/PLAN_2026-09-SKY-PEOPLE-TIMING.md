@@ -27,20 +27,27 @@ Where this revises an earlier document it says so; otherwise `docs/SKY.md` and
 
 - A tag kind alongside activities. Groups for sorting the picker only: friends, family,
   partners, communities, other.
-- Each carries one free-text line, **"who (or what) is this to you"**, in the person's words,
-  editable. No status field, no dates, no photos. The app stores, shows and shares it; it never
-  reads it.
-- **Archive** hides one from the picker. Every entry that named them is untouched.
+- **Each has a page**, the way the mood side of the app is about moods: a **"who (or what) is
+  this to you"** line, then dated notes the person writes about them over time, then the entries
+  that name them. All free text in the person's words. No status field, no dates about the
+  relationship, no photos. The app stores, shows and shares it; it never reads it.
+- **Archive** hides one from the picker. Entries and notes are untouched.
 - An entry gains **"with"**.
-- **Never in a statistic.** Excluded from correlations, patterns, prompts and cards, groups
-  included, enforced by signature the way the Sky's field is kept blind to data. Activities stay in
-  statistics; putting "meetup" in as an activity is the person's choice.
-- **Sharing is per person and per community**, off by default even under an accept-all grant.
-  The switches live with the app's other sharing controls, never on the person's own page, which
-  only shows the current state and points there. The clinician sees exactly the words written and
-  the entries naming them. An unshared one shows as *with one person, not shared*, never as a
-  blank. The word is **clinician** throughout: a therapist, a doctor and a psychiatrist are one
-  role to the app.
+- **Never in any rule that reads mood.** Correlations, patterns and the cards they produce cannot
+  receive a person or a community, groups included, enforced by signature the way the Sky's field
+  is kept blind to data. Activities stay in statistics; "meetup" as an activity is the person's
+  choice.
+- **Prompts about people are a feature of their own**, reading only tags and dates, never mood,
+  and asking the gate before speaking like every other feature. Allowed: an entry names someone
+  who has no page yet, so offer one, once; someone has come up several times and has no page,
+  offer once. **Never:** "you haven't written about X in a while." A gap is never a prompt. A
+  person's page may state *last note: June* as a fact, when opened.
+- **Sharing** is one screen listing every person and community, with a default per group (all
+  off) and overrides per item, off even under an accept-all grant. On a person's page the state
+  is one quiet line at the bottom: present, never a nag. The clinician sees exactly the words
+  written and the entries naming them. An unshared one shows as *with one person, not shared*,
+  never as a blank. The word is **clinician** throughout: a therapist, a doctor and a psychiatrist
+  are one role to the app.
 
 ## 3. The entry view page
 
@@ -70,6 +77,6 @@ phrase pool. Could later be shown to everyone; starts debug-only.
 ## Not doing
 
 A request-access flow: every connection starts with the owner's invitation, and nobody can ask
-for one. App commentary on entries. A relationship model of any kind. Photos of other people.
+for one. A prompt about someone's absence from the record. App commentary on entries. A relationship model of any kind. Photos of other people.
 Mood-with-person or mood-with-community statistics. A north star that is a goal. Colour-shifting
 stars.
