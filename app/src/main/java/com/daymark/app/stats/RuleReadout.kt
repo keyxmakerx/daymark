@@ -138,10 +138,10 @@ object RuleReadout {
         TimingGrid.Basis.EveryHour -> "Any hour — this one does not choose the moment, you do"
         TimingGrid.Basis.NoHoursAtAll -> "No hours — it is not asking at all"
         TimingGrid.Basis.TooLittleEvidence ->
-            "Spread across the day — not enough asks yet to have a view"
+            "Spread across the day — too few asks on record to have a view"
         TimingGrid.Basis.AnsweredHours -> "The hours you have answered in before"
         TimingGrid.Basis.NoHourAnswered ->
-            "Spread across the day — no hour has been answered in yet"
+            "Spread across the day — no hour has ever been answered in"
     }
 
     /**
@@ -260,7 +260,7 @@ object RuleReadout {
             Value("Shortest gap you allow", describeGap(declaredGap)),
             Value("Shortest gap in force", describeGap(effectiveGap)),
             Value("Held back by", heldBackLabel(declaredGap, effectiveGap)),
-            Value("Last asked", if (lastAt <= 0L) "Not yet" else describeSpan(nowMillis - lastAt) + " ago"),
+            Value("Last asked", if (lastAt <= 0L) "It has not asked" else describeSpan(nowMillis - lastAt) + " ago"),
             Value("Asks on record", asksOnRecord.toString()),
             Value("Of those, answered", asksAnswered.toString()),
             Value("Hours it uses", hoursLabel(placement.hours)),

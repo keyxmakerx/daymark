@@ -190,7 +190,7 @@ private fun FeatureCard(row: DebugFeature) {
         if (row.declaredIsDefault) {
             Spacer(Modifier.height(Spacing.sm))
             Text(
-                text = "There is no setting for this one yet, so “your setting” above is the " +
+                text = "There is no setting for this one, so “your setting” above is the " +
                     "starting point the app uses until you choose.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.tertiary,
