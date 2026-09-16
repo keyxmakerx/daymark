@@ -114,7 +114,13 @@ CLASSES=$(find "$OUT" -name '*.class' | wc -l)
 [ "$CLASSES" -gt 0 ] || { echo "FAILED: nothing compiled" >&2; exit 1; }
 
 [ -z "$SKIPPED" ] || echo "skipped (imports another package, CI still runs these):$SKIPPED"
-TESTS=$(for f in $KEEP; do case "$f" in *Test.kt) basename "$f" .kt | sed "s/^/com.daymark.app.$PKG./";; esac; done)
+# A nested package is given with a slash — `tools/jvm-tests.sh ui/sky` — because that is how it
+# looks on disk. It has to become a dot before it is a class name, and the slash used to go straight
+# into the sed replacement, where it terminated the expression: the compile succeeded, the runner
+# died on `unknown option to s', and the tests never ran. A runner that cannot say a package's name
+# is a runner that reports nothing for it.
+PKG_CLASS=$(echo "$PKG" | tr '/' '.')
+TESTS=$(for f in $KEEP; do case "$f" in *Test.kt) basename "$f" .kt | sed "s/^/com.daymark.app.$PKG_CLASS./";; esac; done)
 [ -n "$TESTS" ] || { echo "compiled $CLASSES classes; no tests in $PKG" ; exit 0; }
 
 cd "$REPO"
