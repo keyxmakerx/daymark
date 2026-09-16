@@ -31,7 +31,17 @@ Where this revises an earlier document it says so; otherwise `docs/SKY.md` and
   it alone is bigger, brighter, spiked, never redshifted and never faded. Brightness may follow a
   mark the person placed, never anything the app measured: a reached goal keeps its glint at
   lean-in and a journal page stays the size of everything else.
-- **Hue never shifts on a star.** Only the light breathes.
+- **Twinkle is three things, all decoration:** a slow breathe in brightness, a faint quick shimmer
+  on some stars, and now and then a quarter-second prism glint, a red and a blue fringe added on
+  top of the star and gone again. The star's own tint never changes; the glint passes over it.
+  **Motion safety rules:** everything stops under the motion switch; at any moment no more than a
+  few percent of stars are glinting; a glint is under a third of a second; nothing is ever in
+  step with anything else; amplitude stays low. Landmarks glint a little more, as bright stars do.
+- **Fidelity:** sprites at the device's full pixel density, glows drawn additively, the field with
+  varied sizes and warmth. It is meant to be beautiful, and that is allowed as long as nothing in
+  the beauty is a reading of the person.
+- **A landmark can be placed from an entry**, not only from the life-events screen: a "mark this
+  day" action on the entry page, so the bright stars are easy to make.
 - **No marks for kind at ordinary zoom.** A journal page, a step, a goal reached and a life
   event are all just stars until the person leans in to a single day, where the glyph appears.
   The text list still names the kind. *Revises `docs/SKY.md` §3.4, which drew glyphs at a
@@ -92,6 +102,8 @@ now*, and knows only its own history with the person.
   evening pools are fine (the clock is a fact). The draw is blind to mood; a phrasing is never
   chosen because of how the person seemed.
 - It never holds a mood trend, goals, people or communities.
+- **The reception ledger and the timing grid are never shared with a clinician.** When someone
+  answers the app is the app's business with them, and it stays on the phone.
 
 ## 5. Debug screen (debug builds only)
 
