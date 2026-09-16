@@ -37,6 +37,44 @@ All notable changes to this project are documented here. The format is based on
   still contains unlock times restores normally; the badges in it are just not brought back.
 
 ### Added
+- **An entry can say who you were with, and everyone you name gets a page of their own.** There is
+  a new **People and communities** screen in More. A community counts: a church, a fandom, a team, a
+  support group — anything you would say you are part of. Each name you add sits in Friends, Family,
+  Partners, Communities or Other, and each has a page with two things on it: a line answering **"who
+  (or what) is this to you?"**, in your own words, and a set of dated notes you add whenever you
+  like. The page also lists the entries that named them, so you can see when you last wrote about
+  somebody without the app counting it for you. In the entry editor there is now an optional
+  **"with"** row — a picker over the same list and nothing more. Leaving it empty is not a gap.
+
+  **What the app deliberately does not do with any of this.** Nobody's name is ever an input to
+  anything that reads your mood. Daymark will not tell you your mood is lower with a particular
+  person, will not rank the people in your life, and will never say "you haven't written about X in
+  a while" — the sentence everybody reaches for first, and the one that turns a place to keep things
+  into a thing that wants something from you. Archiving somebody takes them out of the picker and
+  leaves everything you wrote about them exactly where it is.
+
+  **Sharing is off for everything until you switch it on.** One screen, reached from the people
+  list: a default for each group and an override for each person, all starting off. Nothing about
+  anybody in here reaches a clinician unless you put it there yourself.
+- **Tapping a past entry now opens it to read, not to edit.** Before, tapping an entry anywhere in
+  the app dropped you into the editor with a delete button in the corner, which is the wrong first
+  thing to meet when you open the record of a hard day. The new page shows the mood word you chose
+  in your own colour, your activities, who you were with, your note and your photo; the editor is
+  one deliberate tap further on. The page says what you wrote and never interprets it. There is no
+  line anywhere on it that begins "you seem".
+- **Daymark now notices when in the week you tend to answer, and asks then.** The app has always had
+  a small set of things it can offer — a check-in, a suggestion, a reminder. It now keeps a
+  sixty-day ledger of when it asked and whether anything came back, by hour and by day of the week,
+  and moves its asking toward the hours you actually reply in. **It does not ask more often**: the
+  number of asks is unchanged and this only decides where in the week they land. An hour with no
+  answer in it is recorded as exactly that and nothing more — asleep, busy and a hard week look
+  identical from here, so no reason is ever stored. The ledger is never shared with a clinician and
+  appears in no backup, export or report.
+- **A "Why it asks" screen, in development builds only.** It lists every rule that can decide to
+  speak, what each would do at this moment and why not if it would not, the hours it is willing to
+  use, and the full list of what it reads. It is reachable only from a Settings row that exists only
+  in a debug build, so it is not in the app you install. It exists so the rules can be checked by
+  looking at them rather than by trusting a description of them.
 - **Your journal is now encrypted on your phone.** Daymark does this for everybody, from the first
   time you open it — you don't switch it on and there is nothing to remember. The key is made on
   your phone and kept in the phone's own secure hardware, where it can't be copied off, so someone
@@ -155,6 +193,26 @@ All notable changes to this project are documented here. The format is based on
   both jobs.
 
 ### Changed
+- **The sky is a sky now, not a calendar.** Stars used to be laid out in rows, one row per month
+  with the days running across — a chart wearing a starfield's clothes. They are scattered now:
+  where a star sits comes from a hash of its own identity and nothing else, warped so the field
+  clumps and thins the way a real one does. The consequences are deliberate. No part of the surface
+  is a date, so no part of it is labelled with one, and the month headings live in the list
+  underneath, which is now the way to reach a particular day. Stars can overlap and are left to. Two
+  stars close together mean nothing at all.
+- **Colour in the sky is age, not mood.** A star's tint used to come from the mood you recorded, so
+  the warm end of the range was the hard end and a bad month was a red month — a verdict drawn in
+  colour on the most screenshot-able surface in the app. Colour now says one thing only: how long
+  ago it was. Blue-white when it is recent, through white and gold and amber to a deep red after
+  about five and a half years. Every star reddens, all at the same rate, so nobody's worst week is
+  their reddest. Brightness follows the same clock — older stars recede toward a floor they never
+  fall below, so an old year reads as far sky and **nothing is ever dropped from the surface**.
+  Somebody who logged for a year, stopped, and came back after five finds all of it still there.
+  Mood keeps one job and it is a quiet one: it changes how a star's light is *spread* — wider and
+  softer after a hard day, gathered tighter after a good one — and it is **the same amount of light
+  either way**. Nothing adds light to a good day or takes it from a hard one; the light is only
+  arranged differently. The marks you place yourself are exempt from both curves. A life event does
+  not fade and does not redden, which is what leaves it the brightest thing up there.
 - **The sky is drawn as light now, on a darker night.** A star used to be a flat translucent disc
   with a dot on it. It is now a hard white point, a tight bright glow right against it, and a soft
   outer glow that fades away to nothing — and the glows add up where stars overlap, the way light
