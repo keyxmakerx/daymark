@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.daymark.app.security.BiometricHelper
+import com.daymark.app.security.PinPolicy
 import kotlinx.coroutines.delay
 
 @Composable
@@ -108,7 +109,7 @@ fun LockScreen(
         OutlinedTextField(
             value = pin,
             onValueChange = {
-                if (it.all(Char::isDigit) && it.length <= 8) { pin = it; error = false }
+                if (PinPolicy.stillTypeable(it)) { pin = it; error = false }
             },
             label = { Text("PIN") },
             isError = error && !lockedOut,

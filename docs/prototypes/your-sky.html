@@ -1,0 +1,340 @@
+<title>Your Sky</title>
+<style>
+  :root { --page: #0E0E12; --night: #07070A; --ink: #EBE5D8; --soft: #B7AF9E; --faint: #8E887A; --hair: #34312A; --sheet: #24221D; --sans: Roboto, system-ui, -apple-system, "Segoe UI", sans-serif; --serif: Georgia, "Noto Serif", "Times New Roman", serif; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--page); color: var(--ink); font-family: var(--sans); font-size: 14px; line-height: 20px; }
+  .page { display: flex; flex-direction: column; align-items: center; gap: 14px; padding-block: 24px; padding-inline: 16px; min-height: 100%; box-sizing: border-box; }
+  .frame { position: relative; width: min(390px, 100%); height: min(844px, calc(100dvh - 90px)); min-height: 520px; background: var(--night); border-radius: 22px; overflow: hidden; box-shadow: 0 0 0 1px #1C1B22, 0 30px 80px rgba(0,0,0,0.6); touch-action: none; user-select: none; -webkit-user-select: none; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .top { position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: center; gap: 8px; height: 64px; padding: 0 8px 0 4px; pointer-events: none; background: linear-gradient(rgba(7,7,10,0.92), rgba(7,7,10,0.6) 60%, rgba(7,7,10,0)); }
+  .top > * { pointer-events: auto; }
+  .iconbtn { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; border: 0; background: transparent; color: var(--ink); border-radius: 24px; cursor: pointer; }
+  .title { flex-grow: 1; display: flex; flex-direction: column; gap: 0; pointer-events: none; }
+  .title .name { font-family: var(--serif); font-size: 20px; line-height: 24px; font-weight: 500; color: var(--ink); }
+  .title .month { font-size: 11px; line-height: 14px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .chip { display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--hair); background: transparent; color: var(--soft); font: 500 14px/20px var(--sans); cursor: pointer; }
+  .chip[aria-pressed="true"] { background: var(--ink); color: #1B1A17; border-color: var(--ink); }
+  .textbtn { border: 0; background: transparent; color: var(--ink); font: 600 14px/20px var(--sans); padding: 0 12px; height: 40px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+  .chip:focus-visible, .textbtn:focus-visible, .iconbtn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .bottom { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 8px; padding: 12px 16px 16px 16px; background: linear-gradient(rgba(7,7,10,0), rgba(7,7,10,0.92) 40%); }
+  .bottom .textbtn { margin-left: auto; padding-right: 0; }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--sheet); color: var(--ink); display: flex; align-items: center; gap: 4px; padding: 8px 8px 8px 16px; transform: translateY(0); transition: transform 260ms cubic-bezier(.2,.8,.2,1); box-shadow: 0 -1px 0 var(--hair); }
+  .sheet[hidden] { display: flex !important; transform: translateY(110%); }
+  .sheet .text { flex-grow: 1; font-size: 14px; line-height: 20px; }
+  .toast { position: absolute; left: 50%; bottom: 72px; transform: translateX(-50%); background: var(--sheet); color: var(--ink); padding: 8px 14px; border-radius: 12px; font-size: 13px; line-height: 18px; box-shadow: 0 0 0 1px var(--hair); white-space: nowrap; }
+  .list { position: absolute; inset: 56px 0 0 0; background: var(--night); overflow-y: auto; padding: 8px 16px 24px 16px; }
+  .list h2 { font-family: var(--serif); font-size: 20px; line-height: 26px; font-weight: 500; margin: 20px 0 6px 0; color: var(--ink); }
+  .list h2 span { font-family: var(--sans); font-size: 12px; line-height: 16px; color: var(--faint); margin-left: 8px; font-weight: 400; }
+  .list .row { display: flex; align-items: center; gap: 10px; min-height: 44px; border-bottom: 1px solid var(--hair); cursor: pointer; }
+  .list .dot { width: 8px; height: 8px; border-radius: 4px; flex: none; }
+  .list .when { width: 92px; color: var(--soft); font-size: 12px; flex: none; }
+  .list .what { flex-grow: 1; }
+  .list .mood { color: var(--soft); font-size: 12px; }
+  .hint { margin: 0; color: #6E6A78; font-size: 12px; line-height: 16px; text-align: center; max-width: 390px; }
+  @media (prefers-reduced-motion: reduce) { .sheet { transition: none; } }
+</style>
+
+<div class="page">
+  <div class="frame" id="frame">
+    <canvas id="sky" aria-label="Your sky. Every star is something you did. The list shows the same stars as text."></canvas>
+    <div class="top">
+      <button class="iconbtn" id="back" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"></path></svg></button>
+      <div class="title"><div class="name">Your sky</div><div class="month" id="month">March 2026</div></div>
+      <button class="chip" id="today">Today</button>
+      <button class="textbtn" id="listbtn" aria-pressed="false">List</button>
+    </div>
+    <div class="list" id="list" hidden></div>
+    <div class="bottom" id="bottom">
+      <button class="chip" id="field" aria-pressed="true">Field</button>
+      <button class="chip" id="motion" aria-pressed="true">Motion</button>
+      <button class="chip" id="quiet" aria-pressed="false">Quiet sky</button>
+      <button class="textbtn" id="events">Life events</button>
+    </div>
+    <div class="sheet" id="sheet" hidden><div class="text" id="sheettext"></div><button class="textbtn" id="open">Open it</button><button class="textbtn" id="close">Close</button></div>
+    <div class="toast" id="toast" hidden></div>
+  </div>
+  <p class="hint">Tap a star. Drag to move, scroll or pinch to zoom, double-tap to come back to today. Pull all the way out for five years: the recent is blue-white, the old has redshifted and receded, the landmarks stay.</p>
+</div>
+
+<script>
+(() => {
+  // ---------- the record: fourteen months, made once from a fixed seed ----------
+  const KINDS = { check_in: "A check-in you logged.", practice: "A practice you used.", journal: "An entry you wrote.", goal_reached: "A goal you reached.", project_step: "A step you completed.", life_event: "A mark you placed." };
+  const MOODS = ["", "Awful", "Bad", "Meh", "Good", "Rad"];
+  // redshift: how far away in time a star is decides its colour. Mood never touches colour or brightness.
+  const SHIFT = [[0, [196,218,255]], [0.6, [255,250,236]], [1.6, [255,226,150]], [3.2, [255,172,100]], [5.5, [255,110,88]]];
+  function tintFor(age) { for (let i = 1; i < SHIFT.length; i++) { const [a0, c0] = SHIFT[i - 1], [a1, c1] = SHIFT[i]; if (age <= a1) { const t = (age - a0) / (a1 - a0); return c0.map((v, k) => Math.round(v + (c1[k] - v) * t)); } } return SHIFT[SHIFT.length - 1][1]; }
+  const FADE_FLOOR = 0.22, FADE_YEARS = 2.1;   // old stars recede but never vanish; landmarks never fade
+  const fadeFor = age => FADE_FLOOR + (1 - FADE_FLOOR) * Math.exp(-age / FADE_YEARS);
+  const HALO = { 1: 5.6, 2: 4.9, 3: 4.2, 4: 3.7, 5: 3.2, 0: 6.5 };   // spread for hard days, gathered for good ones; a landmark is wide and bright
+  const CORE = 1.9, LIGHT = 0.30 * 4.2 * 4.2;                        // same core, same total light, every star
+  const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const TODAY = new Date(2026, 2, 14);
+  const VIS = 14, YEARS = 5, ROWS = YEARS * 12 + 1;   // fourteen months fill the screen; five years are there to pull out to
+  function hash(a, b) { let h = (a * 374761393 + b * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296; }
+  let seed = 20260916; const rnd = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
+
+  const first = new Date(TODAY.getFullYear(), TODAY.getMonth() - (ROWS - 1), 1);
+  const records = []; let id = 1, mood = 3;
+  for (let d = new Date(first); d <= TODAY; d.setDate(d.getDate() + 1)) {
+    const rough = hash(d.getFullYear(), d.getMonth() + 1) < 0.14 && d.getDate() > 5 && d.getDate() < 25;   // a quiet half-month now and then
+    if (rough && rnd() < 0.72) continue;
+    mood = Math.max(1, Math.min(5, mood + (rnd() < 0.5 ? -1 : 1) * (rnd() < 0.55 ? 1 : 0)));
+    const day = { y: d.getFullYear(), m: d.getMonth(), d: d.getDate(), dow: d.getDay() };
+    const add = (kind, mo, min) => records.push({ id: id++, kind, mood: mo, min, ...day });
+    if (rnd() < 0.78) add("check_in", mood, 480 + Math.floor(rnd() * 840));
+    if (rnd() < 0.22) add("check_in", Math.max(1, Math.min(5, mood + (rnd() < 0.5 ? -1 : 1))), 1200 + Math.floor(rnd() * 120));
+    if (rnd() < 0.14) add("journal", mood, 1260 + Math.floor(rnd() * 90));
+    if (rnd() < 0.08) add("practice", mood, 540 + Math.floor(rnd() * 600));
+    if (rnd() < 0.07) add("project_step", mood, 600 + Math.floor(rnd() * 600));
+  }
+  // three goals reached and two marks placed, on days that have something else
+  const withStars = records.filter((r, i, a) => a.findIndex(o => o.y === r.y && o.m === r.m && o.d === r.d) === i);
+  for (let yi = 0; yi < YEARS; yi++) {
+    for (const f of [0.22, 0.61]) { const r = withStars[Math.floor((yi + f) / YEARS * withStars.length)]; records.push({ id: id++, kind: "goal_reached", mood: r.mood, min: 1100, y: r.y, m: r.m, d: r.d, dow: r.dow }); }
+    for (const f of [0.38, 0.84]) { if (hash(yi, 99) < 0.35 && f > 0.5) continue; const r = withStars[Math.floor((yi + f) / YEARS * withStars.length)]; records.push({ id: id++, kind: "life_event", mood: 0, min: 720, y: r.y, m: r.m, d: r.d, dow: r.dow }); }
+  }
+
+  // a star's position is a hash of its own identity and nothing else
+  const kindIndex = k => Object.keys(KINDS).indexOf(k);
+  for (const r of records) {
+    const dim = new Date(r.y, r.m + 1, 0).getDate();
+    r.row = (r.y - first.getFullYear()) * 12 + (r.m - first.getMonth());
+    r.x = (r.d - 1 + 0.08 + 0.84 * hash(kindIndex(r.kind) + 1, r.id)) / dim;
+    r.y01 = 0.12 + 0.76 * hash(kindIndex(r.kind) + 7, r.id * 3);
+    r.rate = 3.5 + 4.5 * hash(kindIndex(r.kind) + 11, r.id * 5);   // its own beat, forever
+    r.phase = 6.283 * hash(kindIndex(r.kind) + 13, r.id * 7);
+    r.dim = dim;
+    r.age = (TODAY - new Date(r.y, r.m, r.d)) / 31557600000;
+    r.ab = Math.min(28, Math.round(r.age * 4));            // a quarter-year per sprite
+    r.fade = r.kind === "life_event" ? 1 : fadeFor(r.age);
+    const th = hash(kindIndex(r.kind) + 29, r.id * 19); r.tp = th < 0.30 ? 1 : th < 0.55 ? 0 : th < 0.80 ? 2 : 3;
+    r.glints = r.kind === "life_event" || hash(kindIndex(r.kind) + 23, r.id * 17) < 0.22;   // only some stars ever glint
+    r.gp = 7 + 15 * hash(kindIndex(r.kind) + 17, r.id * 11);   // seconds between glints
+    r.go = r.gp * hash(kindIndex(r.kind) + 19, r.id * 13);     // where in that cycle it starts
+  }
+  records.sort((a, b) => a.row - b.row || a.d - b.d || a.min - b.min);
+
+  // ---------- drawing ----------
+  const frame = document.getElementById("frame"), canvas = document.getElementById("sky"), ctx = canvas.getContext("2d");
+  let W = 390, H = 844, DPR = 1, fringe = null;
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const opt = { field: true, motion: true, quiet: false };   // the app follows the phone's reduced-motion setting; the prototype starts moving so it can be judged
+  const view = { z: 1, px: 0, py: 0 };          // z = 1 → fourteen months fill the height
+  const ZMIN = (VIS / ROWS) * 0.9, ZMAX = 26, NIGHT = 12;
+  let selected = null, anim = null, sprites = {};
+
+  const GLOW = 1.25;   // fixed. it is a night sky, not an instrument
+  const TEMPS = [[200,215,255], [255,255,255], [255,238,200], [255,214,190]];   // a star's own temperature, from its identity: icy, white, pale gold, peach
+  function makeSprite(m, ab, tp, quiet) {
+    const key = m + ":" + ab + ":" + tp + (quiet ? "q" : ""); if (sprites[key]) return sprites[key];
+    const land = m === 0, hr = HALO[m] * GLOW, peak = land ? 0.5 : LIGHT / (HALO[m] * HALO[m]);
+    const R = hr * (land ? 2.2 : 1.3), size = Math.ceil(R * 2) + 2, core = land ? 2.2 : 1.15;
+    const c = document.createElement("canvas"); c.width = c.height = size * DPR; const g = c.getContext("2d"); g.scale(DPR, DPR);
+    let [Rc, Gc, Bc] = land ? [255,255,255] : tintFor(ab / 4);
+    if (!land) { const T = TEMPS[tp]; Rc = Math.round(Rc * 0.65 + T[0] * 0.35); Gc = Math.round(Gc * 0.65 + T[1] * 0.35); Bc = Math.round(Bc * 0.65 + T[2] * 0.35); }
+    const a = al => `rgba(${Rc},${Gc},${Bc},${Math.max(0, Math.min(1, al)).toFixed(3)})`, cx = size / 2;
+    if (!quiet) {
+      if (land) {   // four soft spikes, the way a bright star flares in the eye
+        for (const rot of [0, Math.PI / 2]) {
+          g.save(); g.translate(cx, cx); g.rotate(rot);
+          const sp = g.createLinearGradient(-R, 0, R, 0);
+          sp.addColorStop(0, "rgba(255,255,255,0)"); sp.addColorStop(0.5, "rgba(255,255,255,0.6)"); sp.addColorStop(1, "rgba(255,255,255,0)");
+          g.fillStyle = sp; g.fillRect(-R, -0.6, 2 * R, 1.2); g.restore();
+        }
+      }
+      const k = peak + 0.3;   // the outer glow: soft and faint, spread by the mood
+      const outer = g.createRadialGradient(cx, cx, core, cx, cx, R);
+      outer.addColorStop(0, a(0.5 * k)); outer.addColorStop(0.18, a(0.34 * k)); outer.addColorStop(0.45, a(0.12 * k)); outer.addColorStop(0.75, a(0.035 * k)); outer.addColorStop(1, a(0));
+      g.fillStyle = outer; g.beginPath(); g.arc(cx, cx, R, 0, 7); g.fill();
+      const inner = g.createRadialGradient(cx, cx, 0, cx, cx, core + 1.5);   // the inner glow: tight and bright, right against the point
+      inner.addColorStop(0, a(0.95)); inner.addColorStop(0.5, a(0.55)); inner.addColorStop(1, a(0));
+      g.fillStyle = inner; g.beginPath(); g.arc(cx, cx, core + 1.5, 0, 7); g.fill();
+    }
+    g.fillStyle = "rgb(255,253,247)"; g.beginPath(); g.arc(cx, cx, quiet ? core + 0.5 : core, 0, 7); g.fill();   // the point: hard-edged and crisp
+    return (sprites[key] = { c, size });
+  }
+  function makeFringe() {   // the two halves of a prism flash: a red glow and a blue one, added to the star for a moment
+    const mk = (R, G, B) => { const rad = (CORE + 1.6) * GLOW, size = Math.ceil(rad * 2) + 2, c = document.createElement("canvas"); c.width = c.height = size * DPR; const g = c.getContext("2d"); g.scale(DPR, DPR);
+      const gr = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, rad); gr.addColorStop(0, `rgba(${R},${G},${B},0.9)`); gr.addColorStop(0.5, `rgba(${R},${G},${B},0.35)`); gr.addColorStop(1, `rgba(${R},${G},${B},0)`);
+      g.fillStyle = gr; g.beginPath(); g.arc(size / 2, size / 2, rad, 0, 7); g.fill(); return { c, size }; };
+    return { r: mk(255, 70, 60), b: mk(90, 150, 255) };
+  }
+  const rowH = () => (H / VIS) * view.z, rowW = () => W * Math.max(1, view.z);   // full width on the way out; wider only when leaning in
+  const sx = r => r.x * rowW() + view.px, sy = r => (r.row + r.y01) * rowH() + view.py;
+  function clamp() {
+    const cw = rowW(), ch = ROWS * rowH();
+    view.px = cw <= W ? (W - cw) / 2 : Math.min(0, Math.max(W - cw, view.px));
+    view.py = ch <= H ? (H - ch) / 2 : Math.min(0, Math.max(H - ch, view.py));
+  }
+  function fieldTile(tx, ty) {
+    const out = []; const n = 26;
+    for (let i = 0; i < n; i++) {
+      const h1 = hash(tx * 31 + i, ty * 17 + 3), h2 = hash(tx * 13 + i * 7, ty * 29 + 5), h3 = hash(i + tx, ty * 3 + i);
+      out.push({ x: h1, y: h2, s: 0.5 + h3 * 1.0, a: 0.06 + hash(i * 11, tx + ty) * 0.12, warm: hash(tx, ty + i) < 0.5, tw: hash(i * 5, tx * ty + 1) < 0.12 });
+    }
+    return out;
+  }
+  const tiles = new Map();
+  function drawField(t) {
+    const par = 0.35, size = 110;                     // the field moves slower than the stars: depth, not data
+    const ox = view.px * par, oy = view.py * par;
+    const HUES = ["120,140,205", "225,180,150", "150,140,210", "130,170,190", "215,160,175"];
+    const npar = 0.75, rh = rowH() * npar, rw = rowW() * npar;
+    for (let yi = -1; yi <= YEARS; yi++) for (const k of [0, 1]) {
+      const yr = first.getFullYear() + yi, h1 = hash(yr, 3 + k), h2 = hash(yr, 7 + k), h3 = hash(yr, 11 + k);
+      const gx = (0.15 + 0.7 * h1) * rw + view.px * npar, gy = (yi * 12 + 2 + 8 * h2 + (first.getMonth() ? 0 : 0)) * rh + view.py * npar;
+      const rr = (0.45 + 0.35 * h3) * Math.max(W, 6 * rh);
+      if (gy + rr < 0 || gy - rr > H) continue;
+      const col = HUES[Math.floor(hash(yr, 5) * HUES.length)];
+      const wash = ctx.createRadialGradient(gx, gy, 0, gx, gy, rr); wash.addColorStop(0, `rgba(${col},0.085)`); wash.addColorStop(0.5, `rgba(${col},0.035)`); wash.addColorStop(1, `rgba(${col},0)`);
+      ctx.fillStyle = wash; ctx.fillRect(0, 0, W, H);
+    }
+    const x0 = Math.floor(-ox / size) - 1, x1 = Math.floor((W - ox) / size) + 1, y0 = Math.floor(-oy / size) - 1, y1 = Math.floor((H - oy) / size) + 1;
+    for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) {
+      const k = tx + "," + ty; let tl = tiles.get(k); if (!tl) { tl = fieldTile(tx, ty); tiles.set(k, tl); }
+      for (const p of tl) {
+        const x = tx * size + p.x * size + ox, y = ty * size + p.y * size + oy;
+        let a = p.a; if (p.tw && opt.motion) a *= 0.7 + 0.3 * Math.sin(t / 1300 + p.x * 20);
+        ctx.fillStyle = p.warm ? `rgba(240,226,206,${a.toFixed(3)})` : `rgba(214,222,240,${a.toFixed(3)})`;
+        ctx.beginPath(); ctx.arc(x, y, p.s, 0, 7); ctx.fill();
+      }
+    }
+  }
+  function glyph(r, x, y) {   // the marks for kind, drawn only when leaned in to one day
+    const [R, G, B] = r.kind === "life_event" ? [255,255,255] : tintFor(r.age); ctx.strokeStyle = `rgba(${R},${G},${B},0.7)`; ctx.fillStyle = ctx.strokeStyle; ctx.lineWidth = 1;
+    if (r.kind === "goal_reached") { ctx.beginPath(); ctx.moveTo(x - 5, y); ctx.lineTo(x + 5, y); ctx.moveTo(x, y - 5); ctx.lineTo(x, y + 5); ctx.stroke(); }
+    else if (r.kind === "project_step") { ctx.fillRect(x - 5.5, y - 0.5, 3, 1); }
+    else if (r.kind === "journal") { ctx.fillRect(x - 2.6, y + 3.5, 5.2, 1); }
+    else if (r.kind === "practice") { ctx.beginPath(); ctx.arc(x, y, 3.2, 0, 7); ctx.stroke(); }
+    else if (r.kind === "life_event") { ctx.beginPath(); ctx.moveTo(x - 9.5, y); ctx.lineTo(x + 9.5, y); ctx.moveTo(x, y - 9.5); ctx.lineTo(x, y + 9.5); ctx.stroke(); ctx.strokeStyle = `rgba(${R},${G},${B},0.35)`; ctx.beginPath(); ctx.arc(x, y, 6, 0, 7); ctx.stroke(); }
+  }
+  let spread = [];   // the day leaned in to, laid out with leader lines
+  function draw(t) {
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.fillStyle = "#07070A"; ctx.fillRect(0, 0, W, H);
+    if (opt.field && !opt.quiet) drawField(t);
+    const night = view.z >= NIGHT && selected;
+    spread = [];
+    if (night) {
+      const day = records.filter(r => r.y === selected.y && r.m === selected.m && r.d === selected.d);
+      const cx = ((selected.d - 0.5) / selected.dim) * rowW() + view.px;
+      const y0 = H * 0.16, y1 = H * 0.62, step = day.length > 1 ? (y1 - y0) / (day.length - 1) : 0;
+      day.forEach((r, i) => spread.push({ r, x: cx, y: day.length > 1 ? y0 + i * step : (y0 + y1) / 2 }));
+    }
+    for (const r of records) {
+      const x = sx(r), y = sy(r); if (x < -20 || x > W + 20 || y < -20 || y > H + 20) continue;
+      const sp = spread.find(s => s.r === r);
+      const slow = 0.5 + 0.5 * Math.sin(t / (r.rate * 1000) * 6.283 + r.phase);
+      const quick = r.phase > 4.2 ? 0.5 + 0.5 * Math.sin(t / 260 + r.phase * 5) : 0.5;   // a third of them shimmer as well
+      const a = opt.motion ? 1 - (0.22 * (1 - slow) + 0.05 * (1 - quick)) : 1;
+      const grow = opt.motion ? 1 + 0.04 * (slow - 0.5) : 1;
+      const s = makeSprite(r.mood, r.ab, r.tp, opt.quiet);
+      if (sp) {   // leader line from where it truly sits to where it is laid out
+        ctx.strokeStyle = "rgba(142,136,122,0.55)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(sp.x, sp.y); ctx.stroke();
+        ctx.globalAlpha = 0.35; ctx.drawImage(s.c, x - s.size / 2, y - s.size / 2, s.size, s.size); ctx.globalAlpha = 1;
+      }
+      const dx = sp ? sp.x : x, dy = sp ? sp.y : y;
+      const gs = s.size * grow; ctx.globalAlpha = a * r.fade; ctx.drawImage(s.c, dx - gs / 2, dy - gs / 2, gs, gs); ctx.globalAlpha = 1;
+      if (opt.motion && r.glints && !opt.quiet) {   // the prism: brief, rare, and added on top so the star itself never changes colour
+        const gt = (t / 1000 + r.go) % r.gp, env = gt < 0.28 ? Math.sin(Math.PI * gt / 0.28) : 0;
+        if (env > 0) {
+          if (!fringe) fringe = makeFringe();
+          const land = r.kind === "life_event", off = (land ? 1.6 : 0.8) * env, fs = fringe.r.size * (land ? 1.8 : 1);
+          ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = (land ? 0.5 : 0.34) * env * r.fade;
+          ctx.drawImage(fringe.r.c, dx - off - fs / 2, dy - fs / 2, fs, fs); ctx.drawImage(fringe.b.c, dx + off - fs / 2, dy - fs / 2, fs, fs);
+          ctx.globalAlpha = (land ? 0.3 : 0.16) * env * r.fade; ctx.drawImage(s.c, dx - gs / 2, dy - gs / 2, gs, gs);
+          ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1;
+        }
+      }
+      if (night) glyph(r, dx, dy);
+      if (sp) {
+        ctx.fillStyle = "rgba(183,175,158,0.95)"; ctx.font = "12px " + getComputedStyle(document.body).fontFamily; ctx.textBaseline = "middle";
+        ctx.fillText(`${pad(r.min)}  ${r.mood ? MOODS[r.mood] : ""}`.trim(), dx + 16, dy);
+      }
+      if (r === selected) { ctx.strokeStyle = "rgba(235,229,216,0.9)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(dx, dy, 9, 0, 7); ctx.stroke(); }
+    }
+    ctx.fillStyle = "rgba(142,136,122,0.9)";
+    const topRow = Math.max(0, Math.min(ROWS - 1, Math.floor((H * 0.12 - view.py) / rowH())));
+    const md = new Date(first.getFullYear(), first.getMonth() + topRow, 1);
+    document.getElementById("month").textContent = view.z < 0.5 ? `${md.getFullYear()}` : `${MONTHS[md.getMonth()]} ${md.getFullYear()}`;
+  }
+  const pad = min => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+  function loop(t) { if (anim) { const k = Math.min(1, (t - anim.t0) / anim.ms), e = 1 - Math.pow(1 - k, 3); view.z = anim.z0 + (anim.z1 - anim.z0) * e; view.px = anim.px0 + (anim.px1 - anim.px0) * e; view.py = anim.py0 + (anim.py1 - anim.py0) * e; if (k >= 1) anim = null; } clamp(); draw(t); requestAnimationFrame(loop); }
+  let started = false;
+  function resize() { const r = frame.getBoundingClientRect(); W = r.width; H = r.height; DPR = Math.min(3, devicePixelRatio || 1); fringe = null; canvas.width = W * DPR; canvas.height = H * DPR; sprites = {}; if (!started) { started = true; view.py = H - ROWS * (H / VIS); } clamp(); }
+  new ResizeObserver(resize).observe(frame); resize(); requestAnimationFrame(loop);
+
+  // ---------- moving through it ----------
+  function zoomAt(fx, fy, z1) { z1 = Math.max(ZMIN, Math.min(ZMAX, z1)); const k = z1 / view.z; view.px = fx - (fx - view.px) * k; view.py = fy - (fy - view.py) * k; view.z = z1; clamp(); }
+  function animateTo(z1, px1, py1) { if (reduced || !opt.motion) { view.z = z1; view.px = px1; view.py = py1; clamp(); return; } anim = { t0: performance.now(), ms: 480, z0: view.z, z1, px0: view.px, px1, py0: view.py, py1 }; }
+  function goToday() { selected = null; sheet.hidden = true; animateTo(1, 0, H - ROWS * (H / VIS)); }
+  function leanIn(r) {
+    selected = r; const z1 = Math.min(ZMAX, 0.62 * r.dim);
+    const cx = ((r.d - 0.5) / r.dim) * W * Math.max(1, z1), cy = (r.row + 0.5) * (H / VIS) * z1;
+    let px1 = W / 2 - cx, py1 = H * 0.40 - cy;
+    const cw = W * Math.max(1, z1), ch = ROWS * (H / VIS) * z1; px1 = Math.min(0, Math.max(W - cw, px1)); py1 = Math.min(0, Math.max(H - ch, py1));
+    animateTo(z1, px1, py1);
+    const when = `${DAYS[r.dow]} ${r.d} ${MONTHS[r.m].slice(0, 3)}, ${pad(r.min)}`;
+    sheettext.textContent = `${KINDS[r.kind]} ${when}${r.mood ? " · " + MOODS[r.mood] : ""}`;
+    openbtn.hidden = r.kind === "project_step"; sheet.hidden = false;
+  }
+  function hit(x, y) {
+    let best = null, bd = 24;
+    if (spread.length) for (const s of spread) { const d = Math.hypot(s.x - x, s.y - y); if (d < bd) { bd = d; best = s.r; } }
+    for (const r of records) { const d = Math.hypot(sx(r) - x, sy(r) - y); if (d < bd) { bd = d; best = r; } }
+    return best;
+  }
+  const sheet = document.getElementById("sheet"), sheettext = document.getElementById("sheettext"), openbtn = document.getElementById("open");
+  const ptrs = new Map(); let drag = null, lastTap = 0, pinch = null;
+  canvas.addEventListener("pointerdown", e => {
+    canvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+    if (ptrs.size === 1) drag = { x: e.offsetX, y: e.offsetY, px: view.px, py: view.py, moved: false, t: performance.now() };
+    if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), z: view.z }; drag = null; }
+  });
+  canvas.addEventListener("pointermove", e => {
+    if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+    if (pinch && ptrs.size === 2) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y); zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, pinch.z * d / pinch.d); return; }
+    if (drag) { const dx = e.offsetX - drag.x, dy = e.offsetY - drag.y; if (Math.hypot(dx, dy) > 6) drag.moved = true; if (drag.moved) { anim = null; view.px = drag.px + dx; view.py = drag.py + dy; clamp(); } }
+  });
+  canvas.addEventListener("pointerup", e => {
+    ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null;
+    if (drag && !drag.moved && performance.now() - drag.t < 400) {
+      const now = performance.now();
+      if (now - lastTap < 300) { lastTap = 0; goToday(); }
+      else { lastTap = now; const r = hit(e.offsetX, e.offsetY); if (r) leanIn(r); else if (selected) { selected = null; sheet.hidden = true; } }
+    }
+    drag = null;
+  });
+  canvas.addEventListener("pointercancel", e => { ptrs.delete(e.pointerId); drag = null; pinch = null; });
+  canvas.addEventListener("wheel", e => { e.preventDefault(); anim = null; zoomAt(e.offsetX, e.offsetY, view.z * Math.exp(-e.deltaY * 0.0018)); }, { passive: false });
+
+  // ---------- the controls, as on the real screen ----------
+  const toast = document.getElementById("toast"); let toastT = 0;
+  const say = s => { toast.textContent = s; toast.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { toast.hidden = true; }, 1800); };
+  const press = (el, on) => el.setAttribute("aria-pressed", on ? "true" : "false");
+  document.getElementById("today").addEventListener("click", goToday);
+  document.getElementById("field").addEventListener("click", e => { opt.field = !opt.field; press(e.currentTarget, opt.field); });
+  document.getElementById("motion").addEventListener("click", e => { opt.motion = !opt.motion; press(e.currentTarget, opt.motion); });
+  document.getElementById("quiet").addEventListener("click", e => { opt.quiet = !opt.quiet; press(e.currentTarget, opt.quiet); if (opt.quiet) { opt.field = false; press(document.getElementById("field"), false); } });
+  document.getElementById("events").addEventListener("click", () => say("Opens the life events screen"));
+  document.getElementById("back").addEventListener("click", () => say("Back to Home"));
+  openbtn.addEventListener("click", () => say(selected && selected.kind === "life_event" ? "Opens that mark" : "Opens the entry"));
+  document.getElementById("close").addEventListener("click", () => { selected = null; sheet.hidden = true; });
+
+  // the list: the same stars as text, a peer and not a fallback
+  const list = document.getElementById("list"), listbtn = document.getElementById("listbtn");
+  function buildList() {
+    let html = "", cur = -1; const byRow = [...records].sort((a, b) => a.row - b.row || a.d - b.d || a.min - b.min);
+    for (const r of byRow) {
+      if (r.row !== cur) { cur = r.row; const n = byRow.filter(o => o.row === cur).length; html += `<h2>${MONTHS[r.m]} ${r.y}<span>${n} items</span></h2>`; }
+      const [R, G, B] = r.kind === "life_event" ? [255,255,255] : tintFor(r.age);
+      html += `<div class="row" data-id="${r.id}"><div class="dot" style="background: rgb(${R},${G},${B}); opacity: ${r.fade.toFixed(2)};"></div><div class="when">${DAYS[r.dow]} ${r.d} ${MONTHS[r.m].slice(0,3)} · ${pad(r.min)}</div><div class="what">${KINDS[r.kind].replace(/\.$/, "")}</div><div class="mood">${r.mood ? MOODS[r.mood] : ""}</div></div>`;
+    }
+    list.innerHTML = html;
+    list.querySelectorAll(".row").forEach(el => el.addEventListener("click", () => { const r = records.find(o => o.id === +el.dataset.id); list.hidden = true; listbtn.textContent = "List"; press(listbtn, false); leanIn(r); }));
+  }
+  buildList();
+  listbtn.addEventListener("click", () => { const show = list.hidden; list.hidden = !show; listbtn.textContent = show ? "Sky" : "List"; press(listbtn, show); document.getElementById("bottom").hidden = show; if (show) { sheet.hidden = true; selected = null; } });
+})();
+</script>

@@ -134,6 +134,7 @@ class SettingsViewModel @Inject constructor(
                 val json = backupManager.exportToJson(System.currentTimeMillis())
                 withContext(Dispatchers.IO) {
                     context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                        ?: error("Could not open file")
                 }
             }.onSuccess { _messages.tryEmit("Backup exported") }
                 .onFailure { _messages.tryEmit("Export failed: ${it.message}") }
@@ -159,6 +160,7 @@ class SettingsViewModel @Inject constructor(
                 val csv = backupManager.exportEntriesCsv()
                 withContext(Dispatchers.IO) {
                     context.contentResolver.openOutputStream(uri)?.use { it.write(csv.toByteArray()) }
+                        ?: error("Could not open file")
                 }
             }.onSuccess { _messages.tryEmit("CSV exported") }
                 .onFailure { _messages.tryEmit("CSV export failed: ${it.message}") }

@@ -145,7 +145,7 @@ private fun IntroPage(review: YearReview.Review, appear: Float, modifier: Modifi
         )
         Spacer16()
         Text(
-            "${review.totalStars} days you showed up for yourself. Let’s walk through them — gently, no scores.",
+            "${review.totalStars} days with an entry. Let’s walk through them, gently.",
             style = MaterialTheme.typography.bodyMedium,
             color = NightFaint,
             textAlign = TextAlign.Center,

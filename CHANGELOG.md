@@ -155,6 +155,10 @@ All notable changes to this project are documented here. The format is based on
   both jobs.
 
 ### Changed
+- **"Review my year" opens on a count, not a compliment.** The first page used to read "N days you
+  showed up for yourself", which says what your year meant rather than what it held, and decides on
+  your behalf why you wrote. It now reads "N days with an entry" — the same phrase the rest of the
+  app settled on — and the invitation that follows is unchanged.
 - **Companion — a reply that will not open now asks you a question instead of guessing.** When
   somebody answers your invitation and what comes back does not open with your code, the screen used
   to offer a new code and a paragraph speculating about whether it was a typo. It now says "A reply
@@ -166,6 +170,29 @@ All notable changes to this project are documented here. The format is based on
   quiet notice that names nobody and counts nothing.
 
 ### Fixed
+- **Restoring a backup no longer empties the journal when it fails part-way.** "Replace all
+  current data" deleted thirteen tables and then wrote the backup back, and the two halves were not
+  tied together. If anything threw between them — an older file whose activity links name something
+  it no longer carries, or the app being killed during a long restore — every deletion stood and
+  nothing took its place. The person was left with an empty journal, an "Import failed" message,
+  and their entries only in the file that had just failed to load. The deletions and the writes are
+  now one operation: either the backup is in place, or nothing was touched.
+- **"Backup exported" is no longer shown when nothing was written.** If the file could not be
+  opened, the failure was swallowed and the app reported success over a zero-byte file. It now says
+  the export failed, which is the whole point of the one file people are told to make before
+  installing a new version. The PDF export already did this correctly; the backup and the
+  spreadsheet did not.
+- **A PIN longer than eight digits can be typed back in.** Settings and the first-run setup both
+  offer a PIN of six to twelve digits, and the note under the field says a longer one takes longer
+  for someone else to guess. The unlock screen, meanwhile, stopped accepting keystrokes at the
+  eighth digit. Anyone who took that advice could set a PIN, close the app, and then never get back
+  in: the screen said "Incorrect PIN", cleared the field, and after five tries started a cool-down
+  of up to five minutes, with nothing to suggest that the length was the problem. The entries were
+  never damaged and are not encrypted under the PIN, but the only screen that can read them sits
+  behind that lock, so the realistic way out was clearing the app's data, which deletes the journal.
+  The unlock screen now asks the same single place that decides the rule, and the test written to
+  catch exactly this drift was looking at the two screens that SET a PIN and not at the one that
+  takes it back; it now covers all three.
 - **Companion — the secret that guards your journal is now made by the console, not typed into a
   box.** Every request a clinician makes for your material carries a token, and the token is what
   makes a copy of the server's database useless to whoever took it. Nothing in Daymark made one.

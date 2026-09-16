@@ -1,5 +1,11 @@
 # The Sky — design specification
 
+> **Revised 2026-09-16.** Several sections below are superseded by
+> `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md`: a star's colour is its age rather than its mood, the
+> core is white for every star, kind glyphs appear only when leaned in to a day, twinkle ships,
+> and a life event is the one bright star. Where this document and the plan disagree, the plan
+> governs until this document is rewritten on build. `docs/prototypes/your-sky.html` shows it.
+
 > Status: **the decision layer is built and tested; nothing is rendered.** Specifies section 2 of
 > [PLAN_2026-08-NEXT.md](./PLAN_2026-08-NEXT.md). §0 below is the line between what exists in the
 > tree and what is still only this document. There is still no Android SDK in the authoring
