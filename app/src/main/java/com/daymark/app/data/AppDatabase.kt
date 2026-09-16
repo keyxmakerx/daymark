@@ -34,8 +34,12 @@ import com.daymark.app.data.entity.Treatment
         com.daymark.app.data.entity.OfferRecord::class,
         com.daymark.app.data.entity.GoalStep::class,
         com.daymark.app.data.entity.LifeEvent::class,
+        com.daymark.app.data.entity.Person::class,
+        com.daymark.app.data.entity.PersonNote::class,
+        com.daymark.app.data.entity.EntryPersonCrossRef::class,
+        com.daymark.app.data.entity.PersonGroupShare::class,
     ],
-    version = 17,
+    version = 18,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -54,6 +58,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun offerRecordDao(): com.daymark.app.data.dao.OfferRecordDao
     abstract fun goalStepDao(): com.daymark.app.data.dao.GoalStepDao
     abstract fun lifeEventDao(): com.daymark.app.data.dao.LifeEventDao
+    abstract fun personDao(): com.daymark.app.data.dao.PersonDao
+    abstract fun personNoteDao(): com.daymark.app.data.dao.PersonNoteDao
+    abstract fun entryPersonDao(): com.daymark.app.data.dao.EntryPersonDao
 
     /** Seeds a sensible set of starter activities on first install. */
     class SeedCallback : Callback() {
@@ -388,6 +395,125 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_16_17 = object : Migration(16, 17) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE goals ADD COLUMN reachedAt INTEGER")
+            }
+        }
+
+        /**
+         * v18 adds people and communities: `people`, `person_notes`, `entry_people` and
+         * `person_group_shares`. Existing data is preserved and no existing table is touched —
+         * `mood_entries` in particular is not altered, and nothing here reads a row of it.
+         *
+         * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2 is the design;
+         * [com.daymark.app.data.entity.Person] and its neighbours carry the reasoning per table.
+         *
+         * Every statement below is Room's own generated form for the entity it creates — column for
+         * column, in declaration order, in Room's wording — because `runMigrationsAndValidate`
+         * compares each table against the SQL Room would have written and a difference in *wording*
+         * fails the comparison even when the meaning matches. That comparison runs on a device, so
+         * it does not run in CI (`MigrationTest.kt`'s header says so); `PeopleSchemaTest` asserts
+         * the same agreement here, where it does run.
+         *
+         * ## The order of the four statements
+         *
+         * `people` first, because `person_notes` references it. SQLite would in fact accept the
+         * child table ahead of its parent — a foreign key is resolved when a row is written, not
+         * when the table is declared — but writing it in dependency order is what the reader
+         * expects, and [MIGRATION_14_15] set that precedent with `goal_steps`.
+         *
+         * ## The foreign key, and the one place there deliberately is not one
+         *
+         * `person_notes.personId` references `people(id)` with `ON UPDATE NO ACTION ON DELETE
+         * CASCADE`, copied verbatim from [MIGRATION_14_15]'s `goal_steps` clause including its
+         * ordering and the space before the closing paren: that is Room's spelling, and this
+         * migration is judged against Room's spelling. Notes are somebody's writing *about* a
+         * person, so they go when that person goes rather than becoming rows no screen can reach.
+         *
+         * `entry_people` has **no** foreign key, and that is not an oversight — it mirrors
+         * `entry_activity`, which has none either, and
+         * [com.daymark.app.data.entity.EntryPersonCrossRef] explains what it buys: the restore path
+         * writes these rows from a backup file, a file is untrusted input, and one cross-ref naming
+         * a row the file does not carry would otherwise abort the whole import and give the person
+         * back nothing. A dangling pair joins to nothing; a refused restore loses everything.
+         *
+         * Foreign keys are enforced only while `PRAGMA foreign_keys` is on. Room sets it; a raw
+         * `SupportSQLiteDatabase` does not have to. So the cascade is not the only thing between a
+         * deleted person and orphaned notes — `PeopleRepository.delete` clears them by hand, the way
+         * `GoalRepository.deleteById` does.
+         *
+         * ## The two indices, and why neither is decoration
+         *
+         * `index_person_notes_personId` and `index_entry_people_personId` are the indices those two
+         * entities declare. Every read of either table is by person, and on `person_notes` the index
+         * is additionally what stops Room warning that a foreign key's child column is unindexed.
+         * An index present on an entity and missing from its migration is the quietest drift this
+         * file has shipped before: every query still works, so nothing looks wrong until Room
+         * compares the two schemas, on somebody else's change.
+         *
+         * `people` gets no index, matching `activities`, which has none. A person's list is tens of
+         * rows; an index nobody needs is one more thing for a later schema to disagree about.
+         *
+         * ## No column here has a DEFAULT, and none may be given one
+         *
+         * These are new tables, so there are no existing rows to give a value to — the v11
+         * cue/routine shape has nothing to do here. Room writes a `DEFAULT` only for an explicit
+         * `@ColumnInfo(defaultValue = …)`, none of these entities has one, and adding one to the SQL
+         * alone would fail the schema comparison rather than help anybody.
+         *
+         * `people.sharedOverride` is `INTEGER` with no `NOT NULL`: three states, where `NULL` means
+         * *follow the group*. A `NOT NULL DEFAULT 0` column would have collapsed it to two and made
+         * a group default nobody could ever apply — see the field's own note. This is the same
+         * distinction [MIGRATION_16_17] drew for `goals.reachedAt`, in the opposite direction:
+         * there a default would have invented a date, here it would invent a decision.
+         *
+         * ## Nothing is seeded
+         *
+         * No starter people, and no `person_group_shares` rows. A group with no row is not shared,
+         * and sharing is off for everything until somebody says otherwise — so the safe state has to
+         * be the one an empty table produces. Contrast [SeedCallback], which seeds `activities`:
+         * a suggested activity is a convenience, a suggested person is the app guessing at somebody's
+         * life.
+         */
+        val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `people` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`groupKey` TEXT NOT NULL, " +
+                        "`whoTheyAre` TEXT NOT NULL, " +
+                        "`archived` INTEGER NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL, " +
+                        "`sharedOverride` INTEGER)",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `person_notes` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`personId` INTEGER NOT NULL, " +
+                        "`dateTime` INTEGER NOT NULL, " +
+                        "`body` TEXT NOT NULL, " +
+                        "FOREIGN KEY(`personId`) REFERENCES `people`(`id`) " +
+                        "ON UPDATE NO ACTION ON DELETE CASCADE )",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_person_notes_personId` " +
+                        "ON `person_notes` (`personId`)",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `entry_people` (" +
+                        "`entryId` INTEGER NOT NULL, " +
+                        "`personId` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`entryId`, `personId`))",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_entry_people_personId` " +
+                        "ON `entry_people` (`personId`)",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `person_group_shares` (" +
+                        "`groupKey` TEXT NOT NULL, " +
+                        "`shared` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`groupKey`))",
+                )
             }
         }
 
