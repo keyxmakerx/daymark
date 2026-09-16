@@ -155,6 +155,25 @@ All notable changes to this project are documented here. The format is based on
   both jobs.
 
 ### Changed
+- **The sky is drawn as light now, on a darker night.** A star used to be a flat translucent disc
+  with a dot on it. It is now a hard white point, a tight bright glow right against it, and a soft
+  outer glow that fades away to nothing — and the glows add up where stars overlap, the way light
+  does. The ground under them went from a warm near-black to a cooler, deeper one, so the glow has
+  somewhere to fade *to* instead of stopping on a smudge, and so the older, redder stars read as
+  warm against it. Because the ground got darker, every mood colour on this screen was re-measured
+  and re-pinned: they are drawn at a higher contrast than before and come out **22% brighter**, not
+  dimmer. The mood word you tapped a star to see now has your own colour beside it.
+- **Stars have their own beat.** Every star breathes slowly in brightness, each to its own rhythm,
+  the same rhythm forever; about one in five carries a brief red-and-blue sparkle a couple of times
+  a minute, as does every mark you placed yourself. None of it is a reading of you — the rhythm
+  comes from the star's identity, never from your mood, the kind of thing it was, or how much you
+  logged — and **all of it stops** when the Motion switch is off, which follows your phone's own
+  "remove animations" setting. The animation also stops entirely whenever the sky is not the thing
+  on screen, so it costs nothing in the background.
+- **A star is just a star until you come close.** The small marks that said what kind of thing a
+  star was — the ring, the cross, the underline — used to appear as soon as you zoomed in a little.
+  They now wait until you are looking at a single day. At any wider view the sky is stars and
+  nothing else. The list still names the kind of every entry, as it always did.
 - **"Review my year" opens on a count, not a compliment.** The first page used to read "N days you
   showed up for yourself", which says what your year meant rather than what it held, and decides on
   your behalf why you wrote. It now reads "N days with an entry" — the same phrase the rest of the

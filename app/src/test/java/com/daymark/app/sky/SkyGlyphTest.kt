@@ -404,9 +404,29 @@ class SkyGlyphTest {
     }
 
     @Test
-    fun `the whole sky is points and leaning in is glyphs`() {
-        assertTrue(!SkyDetail.drawsGlyphs(SkyDetail.FAR))
-        assertTrue(SkyDetail.drawsGlyphs(SkyDetail.NEAR))
+    fun `everything is a point until you lean all the way in`() {
+        // THIS TEST WAS INVERTED IN SEPTEMBER 2026. It used to assert that a star at the month
+        // level DID draw its kind mark.
+        //
+        // `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1, agreed with the maintainer: "No marks for
+        // kind at ordinary zoom. A journal page, a step, a goal reached and a life event are all
+        // just stars until the person leans in, where the glyph appears. The text list still names
+        // the kind." It revises `docs/SKY.md` §3.4, which drew glyphs at a month.
+        //
+        // It is inverted rather than deleted on purpose: the old assertion was the record that the
+        // Sky used to sort a person's days into kinds of act at a zoom where a whole stretch of a
+        // life is on screen, and the new one has to be just as hard to change back by accident.
+        assertTrue("a kind mark at the whole sky", !SkyDetail.drawsGlyphs(SkyDetail.FAR))
+        assertTrue("a kind mark part of the way in", !SkyDetail.drawsGlyphs(SkyDetail.NEAR))
+        assertTrue("leaning all the way in resolves nothing", SkyDetail.drawsGlyphs(SkyDetail.CLOSE))
+        // The positive control this needs. Every level above says "no", so without one level that
+        // says "yes" the sweep would pass just as happily against `= false`, and the kind marks
+        // would be gone from the app entirely with a green suite over it.
+        assertTrue(
+            "nothing draws a kind mark at any level, so the glyphs are unreachable",
+            SkyDetail.entries.any { SkyDetail.drawsGlyphs(it) },
+        )
+
         // The project thread is the only line on the Sky, and it is gone at the overview.
         assertTrue(!SkyDetail.drawsThreads(SkyDetail.FAR))
         assertTrue(!SkyDetail.drawsThreads(SkyDetail.NEAR))
@@ -416,6 +436,110 @@ class SkyGlyphTest {
         assertTrue(!SkyDetail.starsAreFocusable(SkyDetail.FAR))
         assertTrue(SkyDetail.starsAreFocusable(SkyDetail.NEAR))
         assertTrue(SkyDetail.starsAreFocusable(SkyDetail.CLOSE))
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // The halo's radial fade — September 2026, and the same change as the near-black ground.
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    fun `the halo fades to nothing instead of ending on an edge`() {
+        // The flat translucent disc had a hard boundary at its radius. §1 replaces it with a fade,
+        // and "to nothing" is the part that is checkable: the outermost stop must be exactly zero.
+        assertEquals(1f, SkyGlyph.HALO_STOP_POSITION.last(), 0f)
+        assertEquals(0f, SkyGlyph.HALO_STOP_WEIGHT.last(), 0f)
+        assertEquals(0f, SkyGlyph.HALO_STOP_POSITION.first(), 0f)
+        assertEquals(
+            "the stops and their weights are different lengths",
+            SkyGlyph.HALO_STOP_POSITION.size,
+            SkyGlyph.HALO_STOP_WEIGHT.size,
+        )
+        // Monotonic in both, or it is not a fade: light that rises again on the way out is a ring.
+        for (i in 1 until SkyGlyph.HALO_STOP_POSITION.size) {
+            assertTrue(
+                "stop $i does not move outward",
+                SkyGlyph.HALO_STOP_POSITION[i] > SkyGlyph.HALO_STOP_POSITION[i - 1],
+            )
+            assertTrue(
+                "stop $i is brighter than the one inside it",
+                SkyGlyph.HALO_STOP_WEIGHT[i] < SkyGlyph.HALO_STOP_WEIGHT[i - 1],
+            )
+        }
+        // And it ends past where the light is concentrated, which is what makes it a glow around a
+        // point rather than a disc with a soft rim.
+        for (level in SkyGlyph.MOOD_NONE..SkyGlyph.MOOD_MAX) {
+            assertTrue(
+                "the fade ends inside the halo radius at level $level",
+                SkyGlyph.outerGlowRadiusDp(SkyKind.CHECK_IN, level) >
+                    SkyGlyph.haloRadiusDp(SkyKind.CHECK_IN, level),
+            )
+        }
+    }
+
+    @Test
+    fun `the fade emits the same total light at every mood`() {
+        // The invariant `HALO_LIGHT` claims, restated against the shape that is now drawn. A flat
+        // disc's total was `peak x radius²` by definition; a gradient's is the profile integrated
+        // over the disc, and it has to come out flat for the same reason — mood is a quality of
+        // light on this surface and never a quantity of it.
+        val emitted = (SkyGlyph.MOOD_MIN..SkyGlyph.MOOD_MAX).map {
+            SkyGlyph.haloEmittedLight(SkyKind.CHECK_IN, it)
+        }
+        for (i in emitted.indices) {
+            println("  level ${i + 1} emits ${"%.4f".format(emitted[i])}")
+        }
+        assertEquals("the widest and the tightest halo emit different light",
+            emitted.min().toDouble(), emitted.max().toDouble(), 1e-3)
+        assertEquals("the profile area moved; SkyGlyph's header quotes 0.0831",
+            0.0831, SkyGlyph.PROFILE_AREA.toDouble(), 1e-4)
+
+        // Positive control. Every level emitting the same number would also be true of a function
+        // that ignored its argument, so the radius and the peak really do move underneath it.
+        assertTrue(
+            "the halo radius no longer varies with mood, so flat total light proves nothing",
+            SkyGlyph.haloRadiusDp(SkyKind.CHECK_IN, SkyGlyph.MOOD_MIN) !=
+                SkyGlyph.haloRadiusDp(SkyKind.CHECK_IN, SkyGlyph.MOOD_MAX),
+        )
+        assertTrue(
+            "the halo peak no longer varies with mood, so flat total light proves nothing",
+            SkyGlyph.haloPeakAlpha(SkyKind.CHECK_IN, SkyGlyph.MOOD_MIN) !=
+                SkyGlyph.haloPeakAlpha(SkyKind.CHECK_IN, SkyGlyph.MOOD_MAX),
+        )
+
+        // And the one star that is allowed to be louder, because a person placed it by hand.
+        val landmark = SkyGlyph.haloEmittedLight(SkyKind.LIFE_EVENT, SkyGlyph.MOOD_NONE)
+        println("  a landmark emits ${"%.4f".format(landmark)}")
+        assertTrue("a landmark is not the one bright star", landmark > emitted.max())
+    }
+
+    @Test
+    fun `a stop's alpha is the peak's, never mood's own idea`() {
+        // Each stop is a fixed fraction of the star's own peak, so the SHAPE of the fall is
+        // identical at every mood and only its scale moves. A profile that changed shape with mood
+        // would be a second, hidden channel for mood to speak through.
+        for (index in SkyGlyph.HALO_STOP_WEIGHT.indices) {
+            for (level in SkyGlyph.MOOD_MIN..SkyGlyph.MOOD_MAX) {
+                val peak = SkyGlyph.haloPeakAlpha(SkyKind.CHECK_IN, level)
+                assertEquals(
+                    "stop $index at level $level is not the peak's own fraction",
+                    (SkyGlyph.HALO_STOP_WEIGHT[index] * peak).toDouble(),
+                    SkyGlyph.haloStopAlpha(SkyKind.CHECK_IN, level, index).toDouble(),
+                    1e-6,
+                )
+            }
+        }
+        // Out-of-range indices clamp rather than throw: the renderer walks these in a loop and a
+        // crash on this surface is the worst possible failure mode.
+        assertEquals(
+            SkyGlyph.haloStopAlpha(SkyKind.CHECK_IN, 3, 0).toDouble(),
+            SkyGlyph.haloStopAlpha(SkyKind.CHECK_IN, 3, -1).toDouble(),
+            1e-6,
+        )
+        assertEquals(
+            SkyGlyph.haloStopAlpha(SkyKind.CHECK_IN, 3, SkyGlyph.HALO_STOP_WEIGHT.size - 1).toDouble(),
+            SkyGlyph.haloStopAlpha(SkyKind.CHECK_IN, 3, 99).toDouble(),
+            1e-6,
+        )
     }
 
     @Test
