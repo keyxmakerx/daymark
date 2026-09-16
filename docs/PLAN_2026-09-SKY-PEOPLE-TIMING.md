@@ -6,6 +6,46 @@ Where this revises an earlier document it says so; otherwise `docs/SKY.md` and
 
 ## 1. The Sky
 
+### 1.0 Placement is random — revised 2026-09-16, and it replaces the geography
+
+**Decided by the maintainer, and it reverses `docs/SKY.md` §3.1 ("Placement — time is the sky's
+geography").** There are no month rows. A star is scattered at random and time is carried entirely
+by colour and brightness.
+
+This became possible only because of the redshift below. §3.1 was written when position was the
+only thing that could say *when*; now a star says it by being blue-white or deep red, bright or
+faint. Position is therefore free to be sky.
+
+What it buys, and this is the reason to prefer it: **an empty stretch is no longer anywhere.** A
+row per month draws a hard month as a visibly empty band, which is the exact reading this surface
+exists to prevent — the uniform field exists almost entirely to soften it. When position encodes
+nothing, there is no region that can be empty, and the problem is gone at the root rather than
+masked.
+
+What it costs, accepted knowingly: **you cannot find a date by looking.** The text list is the way
+to reach a particular day, and it keeps its month headings. Two records from the same day are
+nowhere near each other, so leaning in to a day is gone with the rows.
+
+The rules placement must keep:
+
+- **A star's position is a hash of its own identity and nothing else** — its kind and its anchor
+  record id, exactly as before. Never the index, never the count, never the date, never the mood.
+  This is what keeps "a star never moves" true, and it is the property the whole surface rests on.
+- **Normalised `[0,1)` in both axes.** The renderer maps that to the canvas, so a new sky with five
+  stars spreads across the screen and a ten-year sky is dense, without any position ever changing.
+- **Clusters, carrying nothing.** Uniform scatter reads as machine-made. Warp the position through
+  a fixed lumpy field seeded by the sky seed, so the sky clumps like a real one. The warp is a pure
+  function of position and seed and cannot see the record — same discipline as `SkyField`, and for
+  the same reason.
+- **Overlap is accepted, never resolved.** Nudging a star apart from its neighbour would make its
+  position depend on other records. Zoom separates them; a tap resolves to the nearest; the list
+  reaches anything.
+
+Consequently deleted: month rows, `rowStart`, the visible-months zoom model, the day spread with
+leader lines, and the per-year nebula (years no longer occupy regions). `epochDay` stays on the
+layout, because age is what colour is computed from.
+
+
 - **Ground** goes near-black, not pure black. The star contrast target rises with it, so stars
   get brighter, not dimmer (they are pinned to a ratio against the ground).
 - **Halo** becomes a radial fade to nothing instead of a flat translucent disc.
