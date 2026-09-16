@@ -106,9 +106,8 @@ package com.daymark.app.sky
  *  - **Where it has to stop.** Above the target, [equalised] can no longer reach by scaling and
  *    falls to blending toward [NIGHT_INK], which desaturates the person's own colour. Swept in
  *    0.05 steps, the first shipped mood to fall off the hue-preserving path does so at **8.35**
- *    (level 1, the darkest; level 2 follows at 10.35). 6.5 leaves most of a stop of headroom
- *    under that cliff, so a custom palette a shade darker than the shipped one still keeps
- *    its hue.
+ *    (level 1, the darkest; level 2 follows at 10.35). 6.5 sits 28% under that cliff, so a
+ *    custom palette a shade darker than the shipped one still keeps its hue.
  *
  * **What the move fixed by accident, and it is worth knowing.** [NIGHT_FAINT] measures 5.70:1 on
  * the new ground against a target of 6.5, where it measured 5.18:1 against a target of 5.0. The
@@ -201,8 +200,7 @@ object SkyPalette {
      * It was 5.0 on the old `#16150F` ground. It is 6.5 on `#07070A`, and the two measurements
      * that fix it there are in this file's header: 5.50 is where a mark emits exactly the light it
      * used to, and 8.35 is where the darkest shipped mood stops being reachable without
-     * desaturating it. 6.5 sits above the first with 22% more light and below the second with
-     * most of a stop to spare.
+     * desaturating it. 6.5 sits above the first with 22% more light and 28% below the second.
      *
      * Well above [CONTRAST_FLOOR] for two further reasons. The obvious one is rounding: the
      * transform lands on 8-bit channels, so a target sitting exactly on 4.5 would round some
