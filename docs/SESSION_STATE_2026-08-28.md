@@ -207,3 +207,82 @@ and which oracle works where, the recurring copy/security/process rules, the tes
 and a pointer table saying which single document answers which question. It exists because sessions
 kept spending their context re-deriving all of that. Keep it short; when it grows, move the detail
 into the document the table points at.
+
+## Addendum 2026-09-16 — the Sky redesign, people and communities, timing, and a debug screen
+
+Branch `claude/pairing-stack-audit-suak0v`, thirty-two commits on top of `main`. **No pull request
+opened yet** — that is still the maintainer's call, and they asked for one at the end of this wave.
+
+### What this wave is
+
+Five features, built in parallel by separate agents and merged here. The maintainer drove the design
+in conversation and reversed two of their own earlier decisions along the way; both reversals are
+recorded in `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md`, which is the design document for all of it.
+
+1. **The Sky was redesigned twice.** First the star became a hard point with a tight glow and a soft
+   outer halo on a re-measured near-black ground, with a per-star twinkle. Then two reversals: colour
+   is **age** (redshift) rather than mood, and placement is **random** rather than a month-row
+   timeline. §1.0 of the plan carries the second one and supersedes `docs/SKY.md` §3.1.
+2. **People and communities.** Four tables, a page per person or community with dated notes, an
+   optional "with" on an entry, a sharing screen with everything off to begin with.
+3. **The entry view page.** Tapping an entry anywhere now opens a page that reads it; the editor is
+   one deliberate tap further on.
+4. **The timing layer.** The reception ledger records the hour and weekday of each ask and whether
+   anything came back, and placement moves asking toward the hours that get answered. It never asks
+   more often.
+5. **A "Why it asks" debug screen**, reachable only from a Settings row inside `if (BuildConfig.DEBUG)`.
+
+### The two things that cost the most, recorded so they are not re-learned
+
+**Merging two parallel v18 migrations.** Two features wrote a version 18 against different tables and
+neither had shipped. They were merged into one nine-statement migration rather than left as v18 and
+v19: a version is a state a database can actually be in, and no phone anywhere holds a v18 with the
+people tables but not the ledger columns. The cost lands on the tests. `PeopleSchemaTest` and
+`TimedOfferSchemaTest` both slice on `val MIGRATION_17_18`, so each began reading the other's
+statements and seven assertions went red at once. Each now selects its half by what a statement *is*
+and names the remainder, so the pair is still a closed account of v18.
+
+**The repair to that made a test blind, and only a local run caught it.** Narrowing the back-fill
+scan to the ledger's own `ALTER`s looked right and was not: a planted `UPDATE offer_records SET
+offeredHour = ...` left the test named for the back-fill green while two counting tests failed for
+the wrong reason. CI would have passed it. `tools/jvm-source-tests.sh` exists because of this — it
+compiles the two `data/` schema tests, which read source as text and import no Room type, and runs
+them in under a second.
+
+### Verification
+
+Local oracles, all green at the head commit: `tools/jvm-tests.sh sky` 122 tests,
+`tools/jvm-tests.sh stats` 136, `tools/jvm-source-tests.sh` 29, Companion server 427 across 43 XML
+files, Companion web 1702 with `svelte-check` clean over 587 files and a clean production build.
+Android is CI only.
+
+Three mutations were run against the migration tests and two against the factor guard; each turned
+red the test that names the property.
+
+### Two guards that were blind and are not now
+
+- `MoodCorrelationsTest`'s factory sweep was `fun of(\w+)\(`, so it could not see `fun of(id: Long)`
+  — the exact factory `FactorId`'s own header names as the danger, and a person id is a `Long`. The
+  sweep now reads `\w*` and a second check counts the `= FactorId(` construction sites, which catches
+  a factory not called `of` anything.
+- Nothing in the repository reads `ui/sky/SkySurface.kt`, `SkySprite.kt` or `SkyPresentation.kt`. An
+  adversarial pass inserted a mood term into the brightness expression and the whole suite stayed
+  green — a person would have seen every hard day drawn faintest, which is the defect the redshift
+  reversal removed.
+
+### Stated honestly rather than left to be found
+
+- **Mood does move a star's peak alpha.** It redistributes a fixed amount of light between width and
+  centre — wider and softer after a hard day, gathered after a good one. Total emitted light is a
+  function of age alone. The earlier claim that mood never changes brightness was too strong, and
+  `CHANGELOG.md` now says "the same amount of light either way".
+- **`ui/components/YearInStarsGrid.kt` still ranks months by mood.** Good days get a brighter glint
+  and its own docstring says "the *amount of twinkle* itself reads as how a stretch of life went" —
+  the reading the Sky's redesign exists to refuse. Its ground also never moved to the Sky's darker
+  one. `SkyPalette`'s header flags the divergence deliberately and declines to fix it quietly,
+  because matching the colour alone would make the two look like one system while one of them still
+  grades somebody's year. **This is a product decision and it is the maintainer's.**
+- **`OfferLedgerRepository.record`'s `responded` argument is not passed at its call sites.** A
+  reminder row is written before any answer exists, so wiring it there would attribute one evening's
+  silence to a different evening. The default is `null`, which reaches placement as an answered hour
+  and therefore keeps the app asking — it fails in the only direction this system may move.
