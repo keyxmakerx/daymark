@@ -25,9 +25,20 @@ set -eu
 
 PKG="${1:-}"
 if [ -z "$PKG" ]; then
-  echo "usage: tools/jvm-tests.sh <package under com/daymark/app>   e.g. stats, sky" >&2
+  echo "usage: tools/jvm-tests.sh <package> [package it may import ...]" >&2
+  echo "  e.g. tools/jvm-tests.sh stats" >&2
+  echo "       tools/jvm-tests.sh ui/sky sky      # ui/sky's pure half, which reads sky/" >&2
   exit 2
 fi
+shift
+# Extra packages compiled in alongside, and allowed as imports. Without this the rule below is
+# "imports nothing outside its own package", which is right for `sky/` and `stats/` and wrong for
+# `ui/sky/SkyPresentation.kt`: that file imports `sky/` and NOTHING else — no Compose, no Android —
+# so it and its test were being skipped as though they needed a device, when the only thing missing
+# was a way to say which other pure package they lean on. A dependency named here is compiled from
+# source the same way, so a package with an Android import in it still fails, loudly, at the
+# compiler rather than by being quietly dropped.
+DEPS="$*"
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 OUT="${TMPDIR:-/tmp}/daymark-jvm-tests/$PKG"
@@ -54,6 +65,15 @@ MAIN="$REPO/app/src/main/java/com/daymark/app/$PKG"
 TEST="$REPO/app/src/test/java/com/daymark/app/$PKG"
 [ -d "$MAIN" ] || { echo "no such package: $MAIN" >&2; exit 2; }
 
+# Every package whose symbols a file here may name: its own, plus the ones given on the command line.
+ALLOWED="$PKG $DEPS"
+DEP_MAIN=""
+for d in $DEPS; do
+  dir="$REPO/app/src/main/java/com/daymark/app/$d"
+  [ -d "$dir" ] || { echo "no such package: $dir" >&2; exit 2; }
+  DEP_MAIN="$DEP_MAIN $(find "$dir" -name '*.kt' | tr '\n' ' ')"
+done
+
 # `repoFile` lives alone in its own file precisely so source-scanning tests can be compiled without
 # dragging in the Room entity graph — see the header of RepoFile.kt.
 HELPERS="$REPO/app/src/test/java/com/daymark/app/backup/RepoFile.kt"
@@ -67,9 +87,20 @@ HELPERS="$REPO/app/src/test/java/com/daymark/app/backup/RepoFile.kt"
 # source-scanning utility, it carries no dependencies of its own, and treating it as an outside
 # import would silently drop every source-scanning test in the package. Which it did, once.
 reaches_out() {
-  grep -E "^import com\.daymark\.app\." "$1" 2>/dev/null \
-    | grep -v "^import com\.daymark\.app\.backup\.repoFile$" \
-    | grep -qv "^import com\.daymark\.app\.$PKG\."
+  # Android first, and by name. This used to be caught only as a side effect — a Compose file also
+  # imported another Daymark package, so it was skipped for the wrong reason — and the moment a
+  # dependency package was allowed, `ui/sky/SkySprite.kt` came through and the compile failed on
+  # `unresolved reference 'androidx'`. The real constraint is "no Android on the classpath", so it
+  # is the one that is stated.
+  grep -qE "^import (androidx|android)\." "$1" 2>/dev/null && return 0
+
+  imports=$(grep -E "^import com\.daymark\.app\." "$1" 2>/dev/null \
+    | grep -v "^import com\.daymark\.app\.backup\.repoFile$")
+  for pkg in $ALLOWED; do
+    dotted=$(echo "$pkg" | tr '/' '.')
+    imports=$(printf '%s\n' "$imports" | grep -v "^import com\.daymark\.app\.$dotted\.")
+  done
+  [ -n "$(printf '%s' "$imports" | tr -d '[:space:]')" ]
 }
 
 SKIPPED=""
@@ -103,6 +134,7 @@ java -cp "$KC:$STDLIB:$GL/kotlin-reflect-$KOTLIN.jar:$GL/kotlin-script-runtime-$
   -nowarn \
   -cp "$STDLIB:$JUNIT:$HAMCREST:$ANNOT" \
   -d "$OUT" \
+  $DEP_MAIN \
   $KEEP_MAIN \
   $KEEP \
   "$HELPERS" 2>&1 | grep -v '^Picked up JAVA_TOOL_OPTIONS' || true
@@ -113,7 +145,7 @@ java -cp "$KC:$STDLIB:$GL/kotlin-reflect-$KOTLIN.jar:$GL/kotlin-script-runtime-$
 CLASSES=$(find "$OUT" -name '*.class' | wc -l)
 [ "$CLASSES" -gt 0 ] || { echo "FAILED: nothing compiled" >&2; exit 1; }
 
-[ -z "$SKIPPED" ] || echo "skipped (imports another package, CI still runs these):$SKIPPED"
+[ -z "$SKIPPED" ] || echo "skipped (imports Android or a package not named here; CI still runs these):$SKIPPED"
 # A nested package is given with a slash — `tools/jvm-tests.sh ui/sky` — because that is how it
 # looks on disk. It has to become a dot before it is a class name, and the slash used to go straight
 # into the sed replacement, where it terminated the expression: the compile succeeded, the runner
