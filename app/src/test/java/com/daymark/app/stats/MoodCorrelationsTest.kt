@@ -2,6 +2,7 @@ package com.daymark.app.stats
 
 import com.daymark.app.backup.repoFile
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -102,20 +103,70 @@ class MoodCorrelationsTest {
 
         assertTrue("the constructor stopped being private", code.contains("value class FactorId private constructor"))
 
-        val factories = Regex("""fun of(\w+)\(""").findAll(code).map { it.groupValues[1] }.toList()
+        // `\w*`, not `\w+`. A bare `fun of(` is the exact addition this type's header names as the
+        // danger — "no `ofPerson`, no `of(Long)`, and no public constructor" — and `\w+` requires a
+        // character after `of`, so the one factory the documentation warns about was the one the
+        // sweep could not see. A review planted `fun of(id: Long): FactorId = FactorId(id)` into
+        // MoodCorrelations.kt and all 136 tests here stayed green. It now reads as the empty name.
+        val factories = factoriesIn(code)
         assertEquals(
             "a third way to make a factor appeared. If it is a person, that is the one thing this " +
                 "type exists to prevent — see its header. If it is not, add it to this list on purpose",
             listOf("Activity", "Tracker"),
             factories,
         )
+
+        // A name is not the only way in. `FactorId(...)` can only be called inside the class, so
+        // counting the construction sites catches a factory that is not called `of` anything —
+        // `fromPerson`, `forId`, an `invoke` operator — which no name-shaped check ever will.
+        assertEquals(
+            "something other than the two factories constructs a FactorId",
+            2,
+            Regex("""=\s*FactorId\(""").findAll(code).count(),
+        )
     }
 
-    /** The planted control for the sweep above: it would see a person factory if one were added. */
+    /**
+     * The planted controls for the sweep above. Three, because it has three ways to be blind.
+     *
+     * Each mutation is derived from the source that is really there rather than written as a
+     * literal, so none of them can silently be a no-op — `CLAUDE.md` §5's second most common bug
+     * shape in this repository.
+     */
     @Test
     fun `the factory check is not blind`() {
-        val planted = "fun ofPerson(id: Long): FactorId = FactorId(id)"
-        val factories = Regex("""fun of(\w+)\(""").findAll(planted).map { it.groupValues[1] }.toList()
-        assertEquals(listOf("Person"), factories)
+        val code = strippedSource()
+
+        // 1. A named person factory.
+        assertEquals(listOf("Person"), factoriesIn("fun ofPerson(id: Long): FactorId = FactorId(id)"))
+
+        // 2. A bare `of(Long)` — the one the type's own header names, and the one the old `\w+`
+        //    sweep could not see. It reads as the empty name, which is not in the expected list.
+        val bare = code.replace(
+            "fun ofActivity(id: Long): FactorId = FactorId(id)",
+            "fun ofActivity(id: Long): FactorId = FactorId(id)\n            fun of(id: Long): FactorId = FactorId(id)",
+        )
+        assertNotEquals("the mutation did not land", code, bare)
+        assertTrue("the bare factory was not seen at all", factoriesIn(bare).contains(""))
+        assertNotEquals("a bare of(Long) would pass the sweep", listOf("Activity", "Tracker"), factoriesIn(bare))
+
+        // 3. A factory whose name contains no `of` at all, caught by the construction count rather
+        //    than by the name sweep — so the two checks are not the same check twice.
+        val renamed = code.replace(
+            "fun ofTracker(id: Long): FactorId = FactorId(id)",
+            "fun ofTracker(id: Long): FactorId = FactorId(id)\n            fun fromPerson(id: Long): FactorId = FactorId(id)",
+        )
+        assertNotEquals("the mutation did not land", code, renamed)
+        assertEquals("the name sweep sees it, so this proves nothing about the counter", listOf("Activity", "Tracker"), factoriesIn(renamed))
+        assertEquals(3, Regex("""=\s*FactorId\(""").findAll(renamed).count())
     }
+
+    /** Every `fun of…(` in [source], by the part of the name after `of` — which may be empty. */
+    private fun factoriesIn(source: String): List<String> =
+        Regex("""fun of(\w*)\(""").findAll(source).map { it.groupValues[1] }.toList()
+
+    private fun strippedSource(): String =
+        repoFile("app/src/main/java/com/daymark/app/stats/MoodCorrelations.kt").readText()
+            .replace(Regex("/\\*[\\s\\S]*?\\*/"), "")
+            .lines().filterNot { it.trimStart().startsWith("//") }.joinToString("\n")
 }
