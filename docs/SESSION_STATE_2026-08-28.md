@@ -286,3 +286,20 @@ red the test that names the property.
   reminder row is written before any answer exists, so wiring it there would attribute one evening's
   silence to a different evening. The default is `null`, which reaches placement as an answered hour
   and therefore keeps the app asking — it fails in the only direction this system may move.
+- **The timing layer's placement rule decides nothing yet, and wiring it to either existing ask
+  would be wrong.** `TimingGrid.allocate` and `mayAskNow` are reached only through `RuleReadout`,
+  which only the debug screen calls. That reads as a gap and is not one. A reminder is at a time the
+  person chose, and `ReminderScheduler` carries a traced account of what happened when it *was*
+  rationed: two unanswered firings dropped the kind to once a week, so a 9am/1pm/9pm schedule
+  collapsed silently, with no reminder-frequency setting anywhere to turn it back up and about five
+  weeks to recover. The support offer is made while the person is already in the app writing, so
+  where it falls in the week says nothing about whether they are there to hear it. Placement is for
+  something the app starts on its own, and there is no such thing yet. `CHANGELOG.md` and the plan's
+  header now say this rather than claiming the feature steers anything.
+- **Six smaller things the plan asks for and the code does not do**, found by auditing the plan
+  against the branch: the field does not get sparser or fainter at low zoom; nothing sends a person
+  or community to a clinician, so the verbatim "with one person, not shared" has nowhere to render;
+  neither prompt about people exists; the phrase pool is listed on the debug screen and never spoken
+  and no rotation is persisted; the debug screen shows the current moment rather than a history of
+  decisions; and `SkyTwinkle.scaleAt` and `glintFringeScale` have no caller. All six are recorded in
+  the plan's own header so they are visible from the design document rather than only from here.

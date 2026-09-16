@@ -62,14 +62,23 @@ All notable changes to this project are documented here. The format is based on
   in your own colour, your activities, who you were with, your note and your photo; the editor is
   one deliberate tap further on. The page says what you wrote and never interprets it. There is no
   line anywhere on it that begins "you seem".
-- **Daymark now notices when in the week you tend to answer, and asks then.** The app has always had
-  a small set of things it can offer — a check-in, a suggestion, a reminder. It now keeps a
-  sixty-day ledger of when it asked and whether anything came back, by hour and by day of the week,
-  and moves its asking toward the hours you actually reply in. **It does not ask more often**: the
-  number of asks is unchanged and this only decides where in the week they land. An hour with no
-  answer in it is recorded as exactly that and nothing more — asleep, busy and a hard week look
-  identical from here, so no reason is ever stored. The ledger is never shared with a clinician and
-  appears in no backup, export or report.
+- **Daymark now keeps track of when in the week it asked you things, and whether anything came
+  back.** By hour and by day of the week, for sixty days. An hour with no answer in it is recorded
+  as exactly that and nothing more — asleep, busy and a hard week look identical from here, so no
+  reason is ever stored. The ledger is never shared with a clinician and appears in no backup,
+  export or report.
+
+  **What it does not do yet, said plainly.** The rule that would move asking toward the hours you
+  reply in is built and you can read it on the debug screen, but it does not currently decide
+  anything, because neither thing the app says today is the kind of thing it should decide.
+  A **reminder** is at a time you chose, and quieting something you explicitly scheduled is
+  overriding you rather than being considerate — an earlier version did ration them, and two
+  unanswered firings could collapse a three-a-day schedule to one a week with no setting anywhere to
+  turn it back up. The **support offer** appears while you are already in the app writing, so where
+  it falls in the week says nothing about whether you are there to hear it. Choosing an hour is for
+  something the app starts on its own, and there is no such thing yet. The ledger is the part that
+  had to come first, because a rule about when you answer is worth nothing until there is a record
+  of when you answered.
 - **A "Why it asks" screen, in development builds only.** It lists every rule that can decide to
   speak, what each would do at this moment and why not if it would not, the hours it is willing to
   use, and the full list of what it reads. It is reachable only from a Settings row that exists only
@@ -193,6 +202,13 @@ All notable changes to this project are documented here. The format is based on
   both jobs.
 
 ### Changed
+- **Pinching the sky now magnifies the place you are pinching, and there is a way back out.** A
+  pinch used to scale the field about its own corner, so whatever you had your fingers on slid away
+  from between them — and this surface has no labels and no landmarks, so what you were looking at
+  was simply gone. It holds still now. And once you have zoomed in, a quiet **Fit the whole sky**
+  appears in the corner; at rest there is nothing there, because there is nothing to come back from.
+  It is not a double-tap, which would have made every tap on a star wait to find out whether a
+  second one was coming.
 - **The sky is a sky now, not a calendar.** Stars used to be laid out in rows, one row per month
   with the days running across — a chart wearing a starfield's clothes. They are scattered now:
   where a star sits comes from a hash of its own identity and nothing else, warped so the field

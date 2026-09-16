@@ -1,8 +1,19 @@
 # Plan 2026-09 — the Sky, people and communities, the timing layer
 
-Agreed 2026-09-16. Nothing here is built. Order: **Sky → entry page with people → debug screen.**
-Where this revises an earlier document it says so; otherwise `docs/SKY.md` and
-`docs/DECISIONS_2026-08.md` still govern.
+Agreed 2026-09-16, and **built the same day** on `claude/pairing-stack-audit-suak0v`. Where this
+revises an earlier document it says so; otherwise `docs/SKY.md` and `docs/DECISIONS_2026-08.md`
+still govern.
+
+**What is not built, so nobody has to find out by reading code.** §1's sparser, smaller, fainter
+field at low zoom, and its *Today* control — the second of which §1.0 arguably deletes along with the
+geography, since position carries no time and there is no present to return to. §2's clinician-facing
+half: the sharing switches store a decision that no export, report or sync path reads yet, so the
+verbatim *"with one person, not shared"* has nothing to render in, and the two allowed prompts about
+people do not exist. §4's placement rule decides nothing yet, for a reason worth reading before
+wiring it: a reminder is at a time the person chose and rationing it overrides them, and the support
+offer is made while they are already in the app, so neither is the kind of ask an hour should be
+picked for. The phrase pool is listed on the debug screen and never spoken, and nothing persists a
+rotation. §5's per-decision history is one reading of the current moment, not a log.
 
 ## 1. The Sky
 
