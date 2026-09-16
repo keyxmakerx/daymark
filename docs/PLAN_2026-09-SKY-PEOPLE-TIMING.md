@@ -31,15 +31,20 @@ Where this revises an earlier document it says so; otherwise `docs/SKY.md` and
   it alone is bigger, brighter, spiked, never redshifted and never faded. Brightness may follow a
   mark the person placed, never anything the app measured: a reached goal keeps its glint at
   lean-in and a journal page stays the size of everything else.
-- **Twinkle is three things, all decoration:** a slow breathe in brightness, a faint quick shimmer
-  on some stars, and now and then a quarter-second prism glint, a red and a blue fringe added on
-  top of the star and gone again. The star's own tint never changes; the glint passes over it.
-  **Motion safety rules:** everything stops under the motion switch; at any moment no more than a
-  few percent of stars are glinting; a glint is under a third of a second; nothing is ever in
-  step with anything else; amplitude stays low. Landmarks glint a little more, as bright stars do.
-- **Fidelity:** sprites at the device's full pixel density, glows drawn additively, the field with
-  varied sizes and warmth. It is meant to be beautiful, and that is allowed as long as nothing in
-  the beauty is a reading of the person.
+- **Twinkle is subtle and fixed; there is no dial.** It should look like a night sky, not an
+  instrument. Three things, all decoration: a slow shallow breathe in brightness, a faint quick
+  shimmer on some stars, and a quarter-second prism glint, a red and a blue fringe added on top of
+  the star and gone again, on about a fifth of the stars (chosen by identity) and on every
+  landmark. The star's own tint never changes; the glint passes over it. **Motion safety rules:**
+  everything stops under the motion switch; at any moment only a few stars are glinting; a glint
+  is under a third of a second; nothing is ever in step with anything else.
+- **Fidelity: a point, then a glow, never a blur alone.** Every star is a hard-edged white point,
+  a tight bright inner glow, and a soft faint outer glow spread by the mood. Each star also has
+  its own temperature from its identity, icy, white, pale gold or peach, mixed about a third into
+  its age tint, so the sky is varied and the redshift still reads. Sprites at the device's full
+  pixel density, glows added, the field with varied sizes and warmth. It is meant to be
+  beautiful, and that is allowed as long as nothing in the beauty is a reading of the person.
+  The reference is `docs/prototypes/your-sky.html`, which opens in any browser.
 - **A landmark can be placed from an entry**, not only from the life-events screen: a "mark this
   day" action on the entry page, so the bright stars are easy to make.
 - **No marks for kind at ordinary zoom.** A journal page, a step, a goal reached and a life
@@ -111,6 +116,13 @@ Per feature: the rule, what it reads, its current values, whether it would fire 
 why, offers made and how they were answered, and how much the gate is holding back. Plus the
 timing grid (hour × weekday, answered or not) with the reason for each recent decision, and the
 phrase pool. Could later be shown to everyone; starts debug-only.
+
+## Follow-ups, not in this plan's build
+
+- A copy sweep from "therapist" to "clinician" across the phone and the web console.
+- Verify "off even under an accept-all grant" against the real sharing scopes when people are
+  built; it was written before checking how accept-all behaves today.
+- `docs/SKY.md` carries a note pointing here; it is rewritten properly when the sky is built.
 
 ## Not doing
 

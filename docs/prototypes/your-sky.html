@@ -30,9 +30,6 @@
   .list .when { width: 92px; color: var(--soft); font-size: 12px; flex: none; }
   .list .what { flex-grow: 1; }
   .list .mood { color: var(--soft); font-size: 12px; }
-  .dial { display: flex; align-items: center; gap: 8px; }
-  .dial input { width: 140px; accent-color: #EBE5D8; }
-  .dial .dim { color: #4E4A58; }
   .hint { margin: 0; color: #6E6A78; font-size: 12px; line-height: 16px; text-align: center; max-width: 390px; }
   @media (prefers-reduced-motion: reduce) { .sheet { transition: none; } }
 </style>
@@ -57,8 +54,6 @@
     <div class="toast" id="toast" hidden></div>
   </div>
   <p class="hint">Tap a star. Drag to move, scroll or pinch to zoom, double-tap to come back to today. Pull all the way out for five years: the recent is blue-white, the old has redshifted and receded, the landmarks stay.</p>
-  <label class="hint dial">Glow <input type="range" id="glow" min="1" max="2.6" step="0.1" value="1.6"> <span id="glowv">1.6×</span> <span class="dim">(1.0× is what the app draws today)</span></label>
-  <label class="hint dial">Twinkle <input type="range" id="twk" min="0" max="2" step="0.1" value="1"> <span id="twkv">1.0×</span> <span class="dim">(breathe, shimmer, and a prism glint now and then)</span></label>
 </div>
 
 <script>
@@ -114,6 +109,8 @@
     r.age = (TODAY - new Date(r.y, r.m, r.d)) / 31557600000;
     r.ab = Math.min(28, Math.round(r.age * 4));            // a quarter-year per sprite
     r.fade = r.kind === "life_event" ? 1 : fadeFor(r.age);
+    const th = hash(kindIndex(r.kind) + 29, r.id * 19); r.tp = th < 0.30 ? 1 : th < 0.55 ? 0 : th < 0.80 ? 2 : 3;
+    r.glints = r.kind === "life_event" || hash(kindIndex(r.kind) + 23, r.id * 17) < 0.22;   // only some stars ever glint
     r.gp = 7 + 15 * hash(kindIndex(r.kind) + 17, r.id * 11);   // seconds between glints
     r.go = r.gp * hash(kindIndex(r.kind) + 19, r.id * 13);     // where in that cycle it starts
   }
@@ -128,37 +125,41 @@
   const ZMIN = (VIS / ROWS) * 0.9, ZMAX = 26, NIGHT = 12;
   let selected = null, anim = null, sprites = {};
 
-  let glow = 1.6, twk = 1.0;   // dials for this prototype only: glow 1.0 is the size the app draws today
-  function makeSprite(m, ab, quiet) {
-    const key = m + ":" + ab + (quiet ? "q" : "") + glow.toFixed(1); if (sprites[key]) return sprites[key];
-    const land = m === 0, hr = HALO[m] * glow, peak = land ? 0.55 : LIGHT / (HALO[m] * HALO[m]), R = hr * (land ? 2.2 : 1.35), size = Math.ceil(R * 2) + 2, core = land ? 2.9 : CORE;
+  const GLOW = 1.25;   // fixed. it is a night sky, not an instrument
+  const TEMPS = [[200,215,255], [255,255,255], [255,238,200], [255,214,190]];   // a star's own temperature, from its identity: icy, white, pale gold, peach
+  function makeSprite(m, ab, tp, quiet) {
+    const key = m + ":" + ab + ":" + tp + (quiet ? "q" : ""); if (sprites[key]) return sprites[key];
+    const land = m === 0, hr = HALO[m] * GLOW, peak = land ? 0.5 : LIGHT / (HALO[m] * HALO[m]);
+    const R = hr * (land ? 2.2 : 1.3), size = Math.ceil(R * 2) + 2, core = land ? 2.2 : 1.15;
     const c = document.createElement("canvas"); c.width = c.height = size * DPR; const g = c.getContext("2d"); g.scale(DPR, DPR);
-    const [Rc, Gc, Bc] = m === 0 ? [255,255,255] : tintFor(ab / 4), a = al => `rgba(${Rc},${Gc},${Bc},${Math.max(0, Math.min(1, al)).toFixed(3)})`, cx = size / 2;
+    let [Rc, Gc, Bc] = land ? [255,255,255] : tintFor(ab / 4);
+    if (!land) { const T = TEMPS[tp]; Rc = Math.round(Rc * 0.65 + T[0] * 0.35); Gc = Math.round(Gc * 0.65 + T[1] * 0.35); Bc = Math.round(Bc * 0.65 + T[2] * 0.35); }
+    const a = al => `rgba(${Rc},${Gc},${Bc},${Math.max(0, Math.min(1, al)).toFixed(3)})`, cx = size / 2;
     if (!quiet) {
-      // white heart, feathered edge, then the mood's glow falling away like a real point of light
       if (land) {   // four soft spikes, the way a bright star flares in the eye
         for (const rot of [0, Math.PI / 2]) {
           g.save(); g.translate(cx, cx); g.rotate(rot);
           const sp = g.createLinearGradient(-R, 0, R, 0);
-          sp.addColorStop(0, "rgba(255,255,255,0)"); sp.addColorStop(0.5, "rgba(255,255,255,0.55)"); sp.addColorStop(1, "rgba(255,255,255,0)");
+          sp.addColorStop(0, "rgba(255,255,255,0)"); sp.addColorStop(0.5, "rgba(255,255,255,0.6)"); sp.addColorStop(1, "rgba(255,255,255,0)");
           g.fillStyle = sp; g.fillRect(-R, -0.6, 2 * R, 1.2); g.restore();
         }
       }
-      const grad = g.createRadialGradient(cx, cx, 0, cx, cx, R), a0 = Math.min(0.95, peak + 0.5);
-      grad.addColorStop(0, "rgb(255,252,244)");
-      grad.addColorStop((core - 0.5) / R, "rgb(255,252,244)");
-      grad.addColorStop((core + 0.25) / R, a(a0));
-      const N = 10;
-      for (let i = 1; i <= N; i++) { const px = core + 0.25 + (R - core - 0.25) * i / N, t = (px - core) / (hr - core); grad.addColorStop(Math.min(1, px / R), a(i === N ? 0 : a0 * Math.exp(-(1.8 * t) * (1.8 * t)))); }
-      g.fillStyle = grad; g.beginPath(); g.arc(cx, cx, R, 0, 7); g.fill();
-    } else { g.fillStyle = "rgb(255,252,244)"; g.beginPath(); g.arc(cx, cx, CORE + 0.6, 0, 7); g.fill(); }
+      const k = peak + 0.3;   // the outer glow: soft and faint, spread by the mood
+      const outer = g.createRadialGradient(cx, cx, core, cx, cx, R);
+      outer.addColorStop(0, a(0.5 * k)); outer.addColorStop(0.18, a(0.34 * k)); outer.addColorStop(0.45, a(0.12 * k)); outer.addColorStop(0.75, a(0.035 * k)); outer.addColorStop(1, a(0));
+      g.fillStyle = outer; g.beginPath(); g.arc(cx, cx, R, 0, 7); g.fill();
+      const inner = g.createRadialGradient(cx, cx, 0, cx, cx, core + 1.5);   // the inner glow: tight and bright, right against the point
+      inner.addColorStop(0, a(0.95)); inner.addColorStop(0.5, a(0.55)); inner.addColorStop(1, a(0));
+      g.fillStyle = inner; g.beginPath(); g.arc(cx, cx, core + 1.5, 0, 7); g.fill();
+    }
+    g.fillStyle = "rgb(255,253,247)"; g.beginPath(); g.arc(cx, cx, quiet ? core + 0.5 : core, 0, 7); g.fill();   // the point: hard-edged and crisp
     return (sprites[key] = { c, size });
   }
   function makeFringe() {   // the two halves of a prism flash: a red glow and a blue one, added to the star for a moment
-    const mk = (R, G, B) => { const rad = (CORE + 1.6) * glow, size = Math.ceil(rad * 2) + 2, c = document.createElement("canvas"); c.width = c.height = size * DPR; const g = c.getContext("2d"); g.scale(DPR, DPR);
+    const mk = (R, G, B) => { const rad = (CORE + 1.6) * GLOW, size = Math.ceil(rad * 2) + 2, c = document.createElement("canvas"); c.width = c.height = size * DPR; const g = c.getContext("2d"); g.scale(DPR, DPR);
       const gr = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, rad); gr.addColorStop(0, `rgba(${R},${G},${B},0.9)`); gr.addColorStop(0.5, `rgba(${R},${G},${B},0.35)`); gr.addColorStop(1, `rgba(${R},${G},${B},0)`);
       g.fillStyle = gr; g.beginPath(); g.arc(size / 2, size / 2, rad, 0, 7); g.fill(); return { c, size }; };
-    return { r: mk(255, 70, 60), b: mk(90, 150, 255), g: glow };
+    return { r: mk(255, 70, 60), b: mk(90, 150, 255) };
   }
   const rowH = () => (H / VIS) * view.z, rowW = () => W * Math.max(1, view.z);   // full width on the way out; wider only when leaning in
   const sx = r => r.x * rowW() + view.px, sy = r => (r.row + r.y01) * rowH() + view.py;
@@ -226,23 +227,23 @@
       const sp = spread.find(s => s.r === r);
       const slow = 0.5 + 0.5 * Math.sin(t / (r.rate * 1000) * 6.283 + r.phase);
       const quick = r.phase > 4.2 ? 0.5 + 0.5 * Math.sin(t / 260 + r.phase * 5) : 0.5;   // a third of them shimmer as well
-      const a = opt.motion ? 1 - twk * (0.42 * (1 - slow) + 0.10 * (1 - quick)) : 1;
-      const grow = opt.motion ? 1 + 0.07 * twk * (slow - 0.5) : 1;
-      const s = makeSprite(r.mood, r.ab, opt.quiet);
+      const a = opt.motion ? 1 - (0.22 * (1 - slow) + 0.05 * (1 - quick)) : 1;
+      const grow = opt.motion ? 1 + 0.04 * (slow - 0.5) : 1;
+      const s = makeSprite(r.mood, r.ab, r.tp, opt.quiet);
       if (sp) {   // leader line from where it truly sits to where it is laid out
         ctx.strokeStyle = "rgba(142,136,122,0.55)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(sp.x, sp.y); ctx.stroke();
         ctx.globalAlpha = 0.35; ctx.drawImage(s.c, x - s.size / 2, y - s.size / 2, s.size, s.size); ctx.globalAlpha = 1;
       }
       const dx = sp ? sp.x : x, dy = sp ? sp.y : y;
       const gs = s.size * grow; ctx.globalAlpha = a * r.fade; ctx.drawImage(s.c, dx - gs / 2, dy - gs / 2, gs, gs); ctx.globalAlpha = 1;
-      if (opt.motion && twk > 0 && !opt.quiet) {   // the prism: brief, rare, and added on top so the star itself never changes colour
+      if (opt.motion && r.glints && !opt.quiet) {   // the prism: brief, rare, and added on top so the star itself never changes colour
         const gt = (t / 1000 + r.go) % r.gp, env = gt < 0.28 ? Math.sin(Math.PI * gt / 0.28) : 0;
         if (env > 0) {
-          if (!fringe || fringe.g !== glow) fringe = makeFringe();
+          if (!fringe) fringe = makeFringe();
           const land = r.kind === "life_event", off = (land ? 1.6 : 0.8) * env, fs = fringe.r.size * (land ? 1.8 : 1);
-          ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = (land ? 0.6 : 0.42) * env * Math.min(1, twk) * r.fade;
+          ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = (land ? 0.5 : 0.34) * env * r.fade;
           ctx.drawImage(fringe.r.c, dx - off - fs / 2, dy - fs / 2, fs, fs); ctx.drawImage(fringe.b.c, dx + off - fs / 2, dy - fs / 2, fs, fs);
-          ctx.globalAlpha = (land ? 0.35 : 0.2) * env * r.fade; ctx.drawImage(s.c, dx - gs / 2, dy - gs / 2, gs, gs);
+          ctx.globalAlpha = (land ? 0.3 : 0.16) * env * r.fade; ctx.drawImage(s.c, dx - gs / 2, dy - gs / 2, gs, gs);
           ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1;
         }
       }
@@ -313,8 +314,6 @@
   const say = s => { toast.textContent = s; toast.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { toast.hidden = true; }, 1800); };
   const press = (el, on) => el.setAttribute("aria-pressed", on ? "true" : "false");
   document.getElementById("today").addEventListener("click", goToday);
-  document.getElementById("glow").addEventListener("input", e => { glow = +e.target.value; document.getElementById("glowv").textContent = glow.toFixed(1) + "×"; });
-  document.getElementById("twk").addEventListener("input", e => { twk = +e.target.value; document.getElementById("twkv").textContent = twk.toFixed(1) + "×"; });
   document.getElementById("field").addEventListener("click", e => { opt.field = !opt.field; press(e.currentTarget, opt.field); });
   document.getElementById("motion").addEventListener("click", e => { opt.motion = !opt.motion; press(e.currentTarget, opt.motion); });
   document.getElementById("quiet").addEventListener("click", e => { opt.quiet = !opt.quiet; press(e.currentTarget, opt.quiet); if (opt.quiet) { opt.field = false; press(document.getElementById("field"), false); } });
