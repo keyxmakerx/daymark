@@ -32,6 +32,24 @@ interface OfferRecordDao {
     suspend fun recentForKind(kind: String, limit: Int): List<OfferRecord>
 
     /**
+     * Every offer of a kind, oldest first — what placement (`com.daymark.app.stats.TimingGrid`)
+     * reads.
+     *
+     * The one deliberately *wide* read on this DAO, and the reason is the question being asked.
+     * Reception is about the last few asks, so [recentForKind] takes a window; placement is about
+     * which hours of the week this feature has ever been answered in, and a window would make an
+     * hour's standing depend on how recently the app happened to try it. The table is not unbounded
+     * either way — `OfferLedgerRepository.sweepRetention` keeps sixty days of it and nothing here
+     * extends that.
+     *
+     * It is still only this table: counts of the app's own asks, per hour and weekday. It is not an
+     * aggregate over the person, and `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §4 is explicit that
+     * what it feeds is never shared with a clinician.
+     */
+    @Query("SELECT * FROM offer_records WHERE kind = :kind ORDER BY offeredAt ASC")
+    suspend fun allForKind(kind: String): List<OfferRecord>
+
+    /**
      * When this kind last asked, or 0 if never — the `lastOfferedAt` argument
      * `SupportOffer.shouldInterrupt` already takes.
      */

@@ -47,7 +47,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.daymark.app.BuildConfig
 import com.daymark.app.R
+import com.daymark.app.ui.debug.DebugTimingScreen
 import com.daymark.app.ui.activities.ActivitiesScreen
 import com.daymark.app.ui.activities.ActivityLibraryScreen
 import com.daymark.app.ui.calendar.CalendarScreen
@@ -499,9 +501,24 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                     onManageReminders = { navController.navigate(Routes.REMINDERS) },
                     onCustomizeMoods = { navController.navigate(Routes.CUSTOMIZE_MOODS) },
                     onManageSuggestions = { navController.navigate(Routes.SUGGESTIONS) },
+                    // Gated too, so no mention of the debug route in this graph sits outside a
+                    // `BuildConfig.DEBUG` check — including the one that would still be a live
+                    // navigation if the Settings row below it ever lost its own.
+                    onOpenTimingDebug = {
+                        if (BuildConfig.DEBUG) { navController.navigate(Routes.DEBUG_TIMING) }
+                    },
                     onShowMessage = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                     modifier = Modifier.padding(padding),
                 )
+            }
+            // The timing debug screen exists only in a debug build. This `if` means the release
+            // graph has no such destination at all, so the route cannot be reached by a deep link
+            // or by anything that navigates by string; the screen re-checks the same flag itself,
+            // and so does the Settings row that points here. Any one of the three is enough.
+            if (BuildConfig.DEBUG) {
+                composable(Routes.DEBUG_TIMING, enterTransition = zEnter, popExitTransition = zPopExit) {
+                    DebugTimingScreen(onBack = { navController.popBackStack() })
+                }
             }
             composable(Routes.SUGGESTIONS, enterTransition = zEnter, popExitTransition = zPopExit) {
                 SuggestionsScreen(onBack = { navController.popBackStack() })

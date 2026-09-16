@@ -7,6 +7,7 @@ import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.daymark.app.data.AppDatabase
+import com.daymark.app.data.entity.OfferRecord
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -288,6 +289,56 @@ class MigrationTest {
                 assertEquals("Old goal", c.getString(1))
                 assertTrue("an archived goal came back marked reached", c.isNull(2))
             }
+        }
+    }
+
+    @Test
+    fun migrate17To18_leavesEveryExistingOfferWithNoSlotAndNoAnswerRecorded() {
+        helper.createDatabase(TEST_DB, 17).use { db ->
+            db.execSQL(
+                "INSERT INTO offer_records (id, kind, offeredAt, outcome) " +
+                    "VALUES (1, 'support', 1700000000000, 'accepted')",
+            )
+            db.execSQL(
+                "INSERT INTO offer_records (id, kind, offeredAt, outcome) " +
+                    "VALUES (2, 'reminder', 1700003600000, 'dismissed')",
+            )
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 18, true, AppDatabase.MIGRATION_17_18).use { db ->
+            // The whole point of the sentinel. An hour of the day cannot be recovered from an epoch
+            // millisecond after the fact — the zone the person was in is not knowable later — so
+            // every pre-migration row has to come out saying nothing rather than saying midnight.
+            // TimingGrid drops a row outside 0..23 / 1..7 instead of placing it.
+            db.query("SELECT id, outcome, offeredHour, offeredWeekday, responded FROM offer_records ORDER BY id")
+                .use { c ->
+                    assertTrue(c.moveToFirst())
+                    assertEquals("accepted", c.getString(1))
+                    assertEquals(OfferRecord.UNRECORDED, c.getInt(2))
+                    assertEquals(OfferRecord.UNRECORDED, c.getInt(3))
+                    assertTrue("an old row came back claiming an answer either way", c.isNull(4))
+
+                    assertTrue(c.moveToNext())
+                    // The outcome is untouched: the budget still reads exactly what it read before,
+                    // so nothing about this migration changes how often the app may speak.
+                    assertEquals("dismissed", c.getString(1))
+                    assertEquals(OfferRecord.UNRECORDED, c.getInt(2))
+                    assertEquals(OfferRecord.UNRECORDED, c.getInt(3))
+                    assertTrue("an old row came back claiming an answer either way", c.isNull(4))
+                }
+
+            // A row written after the migration can carry all three, and `responded = 0` is a real
+            // value rather than the absence the rows above hold.
+            db.execSQL(
+                "INSERT INTO offer_records (id, kind, offeredAt, outcome, offeredHour, " +
+                    "offeredWeekday, responded) VALUES (3, 'support', 1700007200000, 'dismissed', 21, 7, 0)",
+            )
+            db.query("SELECT offeredHour, offeredWeekday, responded FROM offer_records WHERE id = 3")
+                .use { c ->
+                    assertTrue(c.moveToFirst())
+                    assertEquals(21, c.getInt(0))
+                    assertEquals(7, c.getInt(1))
+                    assertEquals(0, c.getInt(2))
+                }
         }
     }
 

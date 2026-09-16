@@ -472,6 +472,44 @@ abstract class AppDatabase : RoomDatabase() {
          * be the one an empty table produces. Contrast [SeedCallback], which seeds `activities`:
          * a suggested activity is a convenience, a suggested person is the app guessing at somebody's
          * life.
+         *
+         * ## Two changes in one version, and why they are not two versions
+         *
+         * This migration was written twice, in parallel, for two unrelated features — the people
+         * tables below and the three reception-ledger columns after them. Neither had shipped, so
+         * they are merged into the one v18 rather than left as v18 and v19. A version is a state a
+         * database can actually be in, and there was never a phone anywhere holding a v18 that had
+         * people but no ledger columns: inventing one would mean maintaining, and testing, a
+         * migration path nothing has ever taken.
+         *
+         * The two halves touch nothing in common — four new tables, then three `ALTER`s on a table
+         * neither half of the people work reads — so the order is presentation, not dependency.
+         *
+         * ## The reception ledger's three columns
+         *
+         * v18 lets the reception ledger say *when in the week* the app asked and whether anything
+         * came back: `offer_records.offeredHour`, `.offeredWeekday` and `.responded`.
+         *
+         * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §4 asks for the first two, and
+         * [com.daymark.app.stats.TimingGrid] is what reads all three. See
+         * [com.daymark.app.data.entity.OfferRecord] for why the hour and weekday have to be stored
+         * at the moment of the ask rather than derived from `offeredAt` afterwards, and why
+         * "nobody answered" is a column of its own rather than a fifth `OfferOutcome`.
+         *
+         * **It does not back-fill, and it never may.** Every existing row gets
+         * [com.daymark.app.data.entity.OfferRecord.UNRECORDED] for both slots — out of range for an
+         * hour (0..23) and for a weekday (1..7), so `TimingGrid` drops those rows instead of
+         * placing them. Deriving the hour from `offeredAt` under the phone's *current* zone is the
+         * one thing that must not happen here: an epoch millisecond only becomes an hour once a
+         * zone is applied, the zone somebody was in last March is not knowable in October, and the
+         * result would be a migration inventing evidence about a person's day and then letting
+         * placement act on it. Losing the history is the honest outcome; the ledger keeps sixty
+         * days (`OfferLedgerRepository.RETENTION_DAYS`) and refills in weeks.
+         *
+         * `responded` is nullable with no default for the same reason, one step further: `NULL`
+         * here means "this row predates the distinction", which is not `false`. Only a stored
+         * `false` reaches `TimingGrid` as an unanswered ask, so nothing this migration writes can
+         * make the app give up an hour.
          */
         val MIGRATION_17_18 = object : Migration(17, 18) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -514,6 +552,9 @@ abstract class AppDatabase : RoomDatabase() {
                         "`shared` INTEGER NOT NULL, " +
                         "PRIMARY KEY(`groupKey`))",
                 )
+                db.execSQL("ALTER TABLE offer_records ADD COLUMN offeredHour INTEGER NOT NULL DEFAULT -1")
+                db.execSQL("ALTER TABLE offer_records ADD COLUMN offeredWeekday INTEGER NOT NULL DEFAULT -1")
+                db.execSQL("ALTER TABLE offer_records ADD COLUMN responded INTEGER")
             }
         }
 
