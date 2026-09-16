@@ -168,6 +168,214 @@ class SkyGlyphTest {
     }
 
     // -------------------------------------------------------------------------------------------
+    // Colour and brightness, which are age now. The sweeps below are what stops mood reaching them.
+    // -------------------------------------------------------------------------------------------
+
+    /** Every mood level a renderer could hand over, including ones this version does not have. */
+    private val everyMoodLevel = listOf(-3, SkyGlyph.MOOD_NONE, 1, 2, 3, 4, 5, 6, 99)
+
+    /** Ages either side of every stop on the redshift, and past the end of it. */
+    private val sampleAges = floatArrayOf(0f, 0.1f, 0.59f, 0.6f, 1.6f, 2.4f, 3.2f, 5.5f, 9f)
+
+    private val sampleIds = longArrayOf(1L, 2L, 17L, 4_242L, 900_001L)
+
+    /**
+     * Everything about a drawn star **except its halo**, which is the one thing mood is allowed to
+     * move. Whatever else ends up on a star belongs in this list, because this list is what the
+     * mood sweep compares.
+     */
+    private fun drawnStar(kind: SkyKind, id: Long, ageYears: Float, moodLevel: Int): List<Float> {
+        val tint = SkyGlyph.starTint(kind, id, ageYears, moodLevel)
+        return listOf(
+            SkyGlyph.coreRadiusDp(kind, moodLevel) * SkyGlyph.coreScale(kind),
+            SkyGlyph.coreAlpha(kind, moodLevel),
+            ((tint shr 16) and 0xFF).toFloat(),
+            ((tint shr 8) and 0xFF).toFloat(),
+            (tint and 0xFF).toFloat(),
+            SkyGlyph.starBrightness(kind, ageYears, moodLevel),
+            SkyTwinkle.alphaAt(kind, id, 3_700L, SkyOptions()),
+            SkyTwinkle.scaleAt(kind, id, 3_700L, SkyOptions()),
+            SkyGlyph.rayCount(kind).toFloat(),
+            SkyGlyph.rayLengthDp(kind),
+            SkyGlyph.ringRadiusDp(kind),
+            SkyGlyph.underlineWidthDp(kind),
+            SkyGlyph.threadStubDp(kind),
+        )
+    }
+
+    @Test
+    fun `the drawn-star comparison can fail`() {
+        // Run first. The sweep below is an absence assertion over a list of numbers, and a list
+        // comparison that cannot see a difference certifies nothing. The halo is the difference:
+        // it is the one thing mood still moves, and it is deliberately not in `drawnStar`.
+        val hard = drawnStar(SkyKind.CHECK_IN, 7L, 1f, 1) + SkyGlyph.haloRadiusDp(1)
+        val good = drawnStar(SkyKind.CHECK_IN, 7L, 1f, 5) + SkyGlyph.haloRadiusDp(5)
+        assertNotEquals("the comparison cannot see a quantity that does vary with mood", hard, good)
+    }
+
+    @Test
+    fun `no star's colour and no star's brightness is a function of mood`() {
+        // The property the whole redesign turns on. Colour is age and brightness is age; mood keeps
+        // the halo and nothing else. Somebody's worst month must not be their reddest or their
+        // faintest, and that is now true by construction — `starTint` and `starBrightness` take a
+        // mood level and ignore it, the way `coreRadiusDp` always has.
+        for (kind in SkyKind.entries) {
+            for (id in sampleIds) {
+                for (age in sampleAges) {
+                    val reference = drawnStar(kind, id, age, everyMoodLevel.first())
+                    for (level in everyMoodLevel) {
+                        assertEquals(
+                            "$kind $id at $age years is drawn differently at mood $level",
+                            reference,
+                            drawnStar(kind, id, age, level),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `colour and brightness do move with age, so the sweep above is not over a constant`() {
+        // The other half of the control: a tint and a fade that never changed at all would pass
+        // every assertion in the test above.
+        val young = SkyGlyph.starTint(SkyKind.CHECK_IN, 17L, 0f, 3)
+        val old = SkyGlyph.starTint(SkyKind.CHECK_IN, 17L, 5.5f, 3)
+        assertNotEquals("the redshift does nothing", young, old)
+        assertTrue(
+            "the redshift does not redden",
+            ((old shr 16) and 0xFF) - (old and 0xFF) > ((young shr 16) and 0xFF) - (young and 0xFF),
+        )
+        assertTrue(
+            "the fade does nothing",
+            SkyGlyph.starBrightness(SkyKind.CHECK_IN, 5.5f, 3) <
+                SkyGlyph.starBrightness(SkyKind.CHECK_IN, 0f, 3),
+        )
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Temperature: variety that says nothing.
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    fun `a star's temperature is its own, and all four are used`() {
+        val counts = IntArray(SkyGlyph.TEMPERATURE_COUNT)
+        for (id in 1L..2000L) {
+            val index = SkyGlyph.temperatureIndex(SkyKind.CHECK_IN, id)
+            assertEquals("temperature is not stable", index, SkyGlyph.temperatureIndex(SkyKind.CHECK_IN, id))
+            assertTrue("temperature $index out of range", index in 0 until SkyGlyph.TEMPERATURE_COUNT)
+            counts[index]++
+        }
+        for (i in counts.indices) {
+            val share = counts[i].toDouble() / 2000.0
+            println("  temperature $i: ${"%.1f".format(share * 100)}%")
+            assertTrue("temperature $i is all but unused: $share", share > 0.15)
+            assertTrue("temperature $i has taken over the sky: $share", share < 0.35)
+        }
+        // Out of range clamps rather than throwing: a sprite cache keyed on an index from an older
+        // version must not crash the sky.
+        assertEquals(SkyGlyph.temperatureTint(0), SkyGlyph.temperatureTint(-1))
+        assertEquals(
+            SkyGlyph.temperatureTint(SkyGlyph.TEMPERATURE_COUNT - 1),
+            SkyGlyph.temperatureTint(99),
+        )
+    }
+
+    @Test
+    fun `temperature varies the sky without hiding the redshift`() {
+        // The mix is about a third, and a third is the number that has to be defended: too much and
+        // an icy old star reads younger than a peach new one, which would make colour meaningless
+        // rather than merely decorative.
+        val idOfTemperature = LongArray(SkyGlyph.TEMPERATURE_COUNT) { -1L }
+        var id = 1L
+        while (id < 500L && idOfTemperature.any { it < 0L }) {
+            val index = SkyGlyph.temperatureIndex(SkyKind.CHECK_IN, id)
+            if (idOfTemperature[index] < 0L) idOfTemperature[index] = id
+            id++
+        }
+        assertTrue("could not find one star of each temperature", idOfTemperature.all { it > 0L })
+
+        fun warmth(temperature: Int, age: Float): Int {
+            val tint = SkyGlyph.starTint(SkyKind.CHECK_IN, idOfTemperature[temperature], age, 3)
+            return ((tint shr 16) and 0xFF) - (tint and 0xFF)
+        }
+
+        val ages = ArrayList<Float>()
+        var age = 0f
+        while (age <= 8f) {
+            ages.add(age)
+            age += 0.05f
+        }
+
+        // Within one temperature the ramp still only reddens.
+        for (temperature in 0 until SkyGlyph.TEMPERATURE_COUNT) {
+            var previous = warmth(temperature, 0f)
+            for (a in ages) {
+                val here = warmth(temperature, a)
+                assertTrue("temperature $temperature cooled at age $a", here >= previous)
+                previous = here
+            }
+        }
+
+        val acrossTemperatures = ages.maxOf { a ->
+            (0 until SkyGlyph.TEMPERATURE_COUNT).maxOf { warmth(it, a) } -
+                (0 until SkyGlyph.TEMPERATURE_COUNT).minOf { warmth(it, a) }
+        }
+        val acrossAges = (0 until SkyGlyph.TEMPERATURE_COUNT).minOf { t ->
+            ages.maxOf { warmth(t, it) } - ages.minOf { warmth(t, it) }
+        }
+        println("  warmth spread: $acrossTemperatures across temperature, $acrossAges across age")
+        assertTrue("temperature is doing nothing", acrossTemperatures > 10)
+        assertTrue(
+            "temperature is louder than the redshift: $acrossTemperatures vs $acrossAges",
+            acrossTemperatures * 2 < acrossAges,
+        )
+        // And the reading that matters at a glance: this year is colder than five years ago,
+        // whichever temperatures the two stars happened to draw.
+        val newest = (0 until SkyGlyph.TEMPERATURE_COUNT).maxOf { warmth(it, 0f) }
+        val oldest = (0 until SkyGlyph.TEMPERATURE_COUNT).minOf { warmth(it, 5f) }
+        assertTrue("an old star can read as new: $newest vs $oldest", newest < oldest)
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // The landmark, which is the one exception and follows authorship rather than measurement.
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    fun `a landmark is bigger and brighter, and nothing else is`() {
+        for (kind in SkyKind.entries) {
+            if (kind == SkyKind.LIFE_EVENT) continue
+            assertEquals(
+                "$kind is drawn louder than the mark the person placed by hand",
+                1f,
+                SkyGlyph.coreScale(kind),
+                0f,
+            )
+            for (level in everyMoodLevel) {
+                assertEquals(SkyGlyph.haloRadiusDp(level), SkyGlyph.haloRadiusDp(kind, level), 0f)
+                assertEquals(SkyGlyph.haloPeakAlpha(level), SkyGlyph.haloPeakAlpha(kind, level), 0f)
+            }
+        }
+
+        val landmark = SkyKind.LIFE_EVENT
+        assertTrue("a landmark is no bigger than anything else", SkyGlyph.coreScale(landmark) > 1f)
+        // Bigger and brighter than any mood can make an ordinary star — so a landmark is found by
+        // looking, and a hard day can never be mistaken for one.
+        for (level in moods) {
+            assertTrue(SkyGlyph.haloRadiusDp(landmark, level) > SkyGlyph.haloRadiusDp(level))
+            assertTrue(SkyGlyph.haloPeakAlpha(landmark, level) > SkyGlyph.haloPeakAlpha(level))
+        }
+        // And none of that is mood: a landmark carries no mood at all, and is drawn identically
+        // whatever one arrives attached to it.
+        assertConstantAcrossMoods("a landmark's halo radius") { SkyGlyph.haloRadiusDp(landmark, it) }
+        assertConstantAcrossMoods("a landmark's halo peak") { SkyGlyph.haloPeakAlpha(landmark, it) }
+        // The core constant is untouched: the landmark's size is a scale applied to it, and M4 is
+        // still one radius and one alpha for every star on the surface.
+        assertEquals(SkyGlyph.CORE_RADIUS_DP, SkyGlyph.coreRadiusDp(landmark, 3), 0f)
+        assertEquals(SkyGlyph.CORE_ALPHA, SkyGlyph.coreAlpha(landmark, 3), 0f)
+    }
+
+    // -------------------------------------------------------------------------------------------
 
     @Test
     fun `zoom levels are ordered and reachable`() {
