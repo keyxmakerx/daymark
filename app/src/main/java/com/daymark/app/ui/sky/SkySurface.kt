@@ -5,6 +5,9 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -15,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
@@ -172,13 +176,24 @@ fun SkySurface(
         // the size was still zero would keep clamping pan against a zero-sized sky forever.
         val gestures = Modifier
             .pointerInput(layout, fieldSeed, viewport) {
-                detectTransformGestures { _, pan, gestureZoom, _ ->
+                detectTransformGestures { centroid, pan, gestureZoom, _ ->
                     // Zoom in MULTIPLIES now. It used to divide, because the number being held was
                     // how many months were on screen and zooming in meant fewer of them. The field
                     // is not measured in months any more, so the number is a plain scale factor.
                     // Pinch and drag stay one gesture because they are one movement.
+                    //
+                    // The centroid is used, and it used to be discarded. Without it the field scales
+                    // about its own top-left corner, so the star you are pinching slides out from
+                    // between your fingers — and this surface has no labels and no landmarks to
+                    // navigate back by, so what you were looking at is simply gone. The arithmetic
+                    // is in SkyPresentation.panForZoomAbout, where it is a unit test rather than a
+                    // thing you find out by pinching.
                     val next = SkyPresentation.clampZoom(zoom * gestureZoom)
-                    val panned = clampedPan(next, panX + pan.x, panY + pan.y)
+                    val held = Offset(
+                        SkyPresentation.panForZoomAbout(centroid.x, panX, zoom, next),
+                        SkyPresentation.panForZoomAbout(centroid.y, panY, zoom, next),
+                    )
+                    val panned = clampedPan(next, held.x + pan.x, held.y + pan.y)
                     zoom = next
                     panX = panned.x
                     panY = panned.y
@@ -258,6 +273,30 @@ fun SkySurface(
                     elapsedMillis = elapsedMillis,
                     selected = i == selectedStar,
                 )
+            }
+        }
+
+        // The way back. It appears only once there is somewhere to come back FROM, so a sky at rest
+        // carries no chrome at all and a zoomed one is never a place you are stuck in.
+        //
+        // Not a double-tap, which was the obvious answer and the wrong one: Compose has to wait out
+        // the double-tap window before it can report a single tap, so every tap on a star would sit
+        // and wait to find out whether a second one was coming. Tapping a star is the thing people
+        // come here to do. A control that is absent until it is needed costs that nothing.
+        if (zoom > SkyPresentation.MIN_ZOOM) {
+            TextButton(
+                onClick = {
+                    zoom = SkyPresentation.DEFAULT_ZOOM
+                    val back = clampedPan(SkyPresentation.DEFAULT_ZOOM, 0f, 0f)
+                    panX = back.x
+                    panY = back.y
+                },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
+            ) {
+                // Says what it does to the view and claims nothing about time or place. "Today" and
+                // "Home" were both considered and both name something this surface does not have:
+                // no part of a scattered field is a date, and there is no origin to return to.
+                Text("Fit the whole sky", color = SkyNightInk)
             }
         }
     }

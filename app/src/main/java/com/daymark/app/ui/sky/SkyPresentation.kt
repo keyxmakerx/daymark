@@ -124,6 +124,35 @@ object SkyPresentation {
         if (contentPx <= viewportPx) (viewportPx - contentPx) / 2f
         else pan.coerceIn(viewportPx - contentPx, 0f)
 
+    /**
+     * Where the content's edge has to move so that the point under somebody's fingers stays there.
+     *
+     * A pinch used to scale the field about its own top-left corner, because the gesture's centroid
+     * was discarded. The effect is the one the maintainer described as "pinch to widen": the sky
+     * grows, but whatever you were pinching slides away from between your fingers, and on a surface
+     * with no landmarks and no labels there is nothing to navigate back by. A pinch has to be a
+     * magnifying glass held over a place.
+     *
+     * The arithmetic, on one axis. Screen is `content * u + pan`, so the normalised point under the
+     * focus is `u = (focus - pan) / content`. Holding it under the focus after the zoom means
+     * `focus = u * content' + pan'`, and since both content sizes are the viewport times their zoom,
+     * `content' / content` is just `to / from`:
+     *
+     *     pan' = focus - (focus - pan) * (to / from)
+     *
+     * [to] is the zoom AFTER clamping, deliberately. At either stop a further pinch changes nothing,
+     * so the ratio is 1 and the sky holds still rather than drifting under fingers that are still
+     * moving — the shape of bug where a control keeps responding after it has stopped having an
+     * effect. When [from] is not positive there is no meaningful previous scale, so the pan is
+     * returned untouched rather than divided by zero.
+     *
+     * The result is not clamped here. Clamping needs the viewport and the new content size, the
+     * caller has both, and it must happen after the drag part of the same gesture is added — a
+     * pinch and a drag are one movement and clamping between them would fight the finger.
+     */
+    fun panForZoomAbout(focusPx: Float, panPx: Float, from: Float, to: Float): Float =
+        if (from <= 0f) panPx else focusPx - (focusPx - panPx) * (to / from)
+
     fun screenX(layout: SkyLayout, index: Int, contentWidthPx: Float, panXPx: Float): Float =
         layout.x[index] * contentWidthPx + panXPx
 

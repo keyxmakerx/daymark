@@ -448,4 +448,92 @@ class SkyPresentationTest {
             assertTrue(kind.key, SkyPresentation.hasAction(kind))
         }
     }
+
+    // -------------------------------------------------------------------------------------------
+    // Pinching about a place.
+    // -------------------------------------------------------------------------------------------
+
+    /**
+     * The property, stated as what a person's fingers do: whatever was under the pinch is still
+     * under the pinch.
+     *
+     * Checked by carrying a point all the way to the screen and back rather than by re-deriving the
+     * formula, which would only assert that the same arithmetic equals itself.
+     */
+    @Test
+    fun `whatever is under the pinch stays under the pinch`() {
+        val viewport = 1000f
+        for (focus in listOf(0f, 137f, 500f, 863f, 1000f)) {
+            for (from in listOf(1f, 1.7f, 4f, 11.5f)) {
+                for (factor in listOf(0.4f, 0.9f, 1.15f, 3f)) {
+                    val to = SkyPresentation.clampZoom(from * factor)
+                    val pan = -0.31f * SkyPresentation.contentWidthPx(viewport, from)
+                    val moved = SkyPresentation.panForZoomAbout(focus, pan, from, to)
+
+                    // The normalised point that was under the focus before, and where it lands after.
+                    val before = (focus - pan) / SkyPresentation.contentWidthPx(viewport, from)
+                    val after = before * SkyPresentation.contentWidthPx(viewport, to) + moved
+                    assertEquals("focus $focus, $from -> $to", focus, after, 0.01f)
+                }
+            }
+        }
+    }
+
+    /** A drag is not a pinch: with no scale change the pan is returned exactly as it came in. */
+    @Test
+    fun `a gesture that does not scale does not move the field on its own`() {
+        for (pan in listOf(0f, -240f, -4821.5f)) {
+            for (focus in listOf(0f, 333f, 1000f)) {
+                assertEquals(pan, SkyPresentation.panForZoomAbout(focus, pan, 3.25f, 3.25f), 0f)
+            }
+        }
+    }
+
+    /**
+     * At a stop, a pinch that cannot change the zoom does not move the sky either.
+     *
+     * The failure this rules out is a control that keeps responding after it has stopped having an
+     * effect: fingers still spreading at MAX_ZOOM, nothing getting bigger, and the field sliding
+     * anyway. [SkyPresentation.panForZoomAbout] takes the CLAMPED zoom for this reason.
+     */
+    @Test
+    fun `at the stops a pinch that changes nothing moves nothing`() {
+        val pan = -900f
+        val beyondMax = SkyPresentation.clampZoom(SkyPresentation.MAX_ZOOM * 2f)
+        assertEquals(SkyPresentation.MAX_ZOOM, beyondMax, 0f)
+        assertEquals(pan, SkyPresentation.panForZoomAbout(400f, pan, SkyPresentation.MAX_ZOOM, beyondMax), 0f)
+
+        val belowMin = SkyPresentation.clampZoom(SkyPresentation.MIN_ZOOM / 2f)
+        assertEquals(SkyPresentation.MIN_ZOOM, belowMin, 0f)
+        assertEquals(0f, SkyPresentation.panForZoomAbout(400f, 0f, SkyPresentation.MIN_ZOOM, belowMin), 0f)
+    }
+
+    /**
+     * The controls. Without these the three tests above pass on a function that ignores its focus.
+     *
+     * The old behaviour is reproduced rather than described — scaling about the field's top-left is
+     * `pan * ratio`, which is what the surface did when it discarded the centroid — and asserted to
+     * be a different answer. Then the same reconstruction is run at the one focus where the two
+     * agree, so the difference is shown to be about the focus and not about the formula.
+     */
+    @Test
+    fun `the check would fail on a zoom that ignores where the fingers are`() {
+        val viewport = 1000f
+        val from = 2f
+        val to = 8f
+        val pan = -0.31f * SkyPresentation.contentWidthPx(viewport, from)
+        val focus = 640f
+
+        val corner = pan * (to / from)
+        val held = SkyPresentation.panForZoomAbout(focus, pan, from, to)
+        assertNotEquals("the old behaviour and the new one agree, so this proves nothing", corner, held, 1f)
+
+        // Where the corner-scaling answer actually puts the pinched point, which is not under it.
+        val before = (focus - pan) / SkyPresentation.contentWidthPx(viewport, from)
+        val strayed = before * SkyPresentation.contentWidthPx(viewport, to) + corner
+        assertNotEquals("the old behaviour kept the point in place", focus, strayed, 1f)
+
+        // And at focus 0 the two are the same, because the top-left corner IS the focus there.
+        assertEquals(corner, SkyPresentation.panForZoomAbout(0f, pan, from, to), 0.01f)
+    }
 }
