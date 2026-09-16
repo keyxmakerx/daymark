@@ -105,7 +105,6 @@ fun SkyScreen(
     var highContrast by rememberSaveable { mutableStateOf(platformHighContrast) }
     var showList by rememberSaveable { mutableStateOf(false) }
     var selected by rememberSaveable { mutableStateOf(NO_SELECTION) }
-    var topMonth by remember { mutableStateOf<Int?>(null) }
 
     val options = SkyOptions(
         fieldEnabled = fieldEnabled,
@@ -216,7 +215,6 @@ fun SkyScreen(
                         description = SkyPresentation.canvasDescription(layout, locale),
                         selectedStar = selected,
                         onStarTapped = { selected = it },
-                        onTopMonthChange = { topMonth = it },
                         modifier = Modifier.fillMaxSize(),
                     )
 
@@ -236,15 +234,13 @@ fun SkyScreen(
                             color = SkyNightInk,
                             modifier = Modifier.align(Alignment.BottomStart).padding(24.dp),
                         )
-                        SkyLayout.Emptiness.POPULATED -> Text(
-                            text = SkyPresentation.monthLabel(
-                                topMonth ?: layout.firstEpochMonth,
-                                locale,
-                            ),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = SkyNightFaint,
-                            modifier = Modifier.align(Alignment.TopStart).padding(16.dp),
-                        )
+                        // A populated sky is labelled with nothing at all, and that is the change
+                        // rather than an omission. This corner used to name the month at the top of
+                        // the viewport, which was true when months were places. No part of a
+                        // scattered field is a date now (`docs/SKY.md` §3.1), so any label here
+                        // would be a claim that is not true — and the one thing worse than having
+                        // no date on this surface is having a wrong one. Dates live in the list.
+                        SkyLayout.Emptiness.POPULATED -> Unit
                     }
 
                     if (selected in 0 until layout.starCount) {

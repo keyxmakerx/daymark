@@ -33,7 +33,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
-import com.daymark.app.sky.Sky
 import com.daymark.app.sky.SkyAge
 import com.daymark.app.sky.SkyDetail
 import com.daymark.app.sky.SkyField
@@ -98,9 +97,12 @@ import kotlin.math.floor
  *  - it lives inside this composable, so switching to the list (§7.5) disposes it;
  *  - it drives a draw and never a recomposition — the elapsed time is read inside the `Canvas`
  *    lambda, so a frame redraws the canvas and rebuilds no layout;
- *  - and the draw itself only walks the stars the viewport can see, which is a contiguous index
- *    range rather than a scan (see [Sky.rowRange]). Nothing off screen is animated because nothing
- *    off screen is visited.
+ *  - and the draw itself skips every star the viewport cannot see, so nothing off screen is
+ *    animated because nothing off screen is visited. Note this is a bounds check per star and no
+ *    longer an index range: when the sky was ruled into months, x was monotonic in time and the
+ *    arrays were in time order, so everything on screen was one contiguous slice. A scattered field
+ *    has no ordering that corresponds to anything on screen (`docs/SKY.md` §3.1), and paying a
+ *    comparison per star is the accepted price of a surface with no empty regions in it.
  */
 @Composable
 fun SkySurface(
@@ -126,12 +128,10 @@ fun SkySurface(
     description: String,
     selectedStar: Int,
     onStarTapped: (Int) -> Unit,
-    /** The month now at the top of the viewport, so the screen can label where the person is. */
-    onTopMonthChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var viewport by remember { mutableStateOf(IntSize.Zero) }
-    var visibleMonths by remember { mutableFloatStateOf(SkyPresentation.DEFAULT_VISIBLE_MONTHS) }
+    var zoom by remember { mutableFloatStateOf(SkyPresentation.DEFAULT_ZOOM) }
     var panX by remember { mutableFloatStateOf(0f) }
     var panY by remember { mutableFloatStateOf(0f) }
 
@@ -160,13 +160,11 @@ fun SkySurface(
         val height = viewport.height.toFloat()
 
         /** Pan clamped against the geometry the current zoom implies. Idempotent, so safe to reapply. */
-        fun clampedPan(months: Float, rawX: Float, rawY: Float): Offset {
+        fun clampedPan(atZoom: Float, rawX: Float, rawY: Float): Offset {
             if (width <= 0f || height <= 0f) return Offset(rawX, rawY)
-            val rowHeight = SkyPresentation.rowHeightPx(height, months)
-            val rowWidth = SkyPresentation.rowWidthPx(width, months)
             return Offset(
-                SkyPresentation.clampPan(rawX, rowWidth, width),
-                SkyPresentation.clampPan(rawY, SkyPresentation.contentHeightPx(layout, rowHeight), height),
+                SkyPresentation.clampPan(rawX, SkyPresentation.contentWidthPx(width, atZoom), width),
+                SkyPresentation.clampPan(rawY, SkyPresentation.contentHeightPx(height, atZoom), height),
             )
         }
 
@@ -174,30 +172,29 @@ fun SkySurface(
         // the size was still zero would keep clamping pan against a zero-sized sky forever.
         val gestures = Modifier
             .pointerInput(layout, fieldSeed, viewport) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    // Zoom in = fewer months on screen, so the factor divides. Pinch and drag are
-                    // one gesture because they are one movement: a person zooming into March does
-                    // not first zoom and then find March again.
-                    val months = SkyPresentation.clampVisibleMonths(visibleMonths / zoom)
-                    val next = clampedPan(months, panX + pan.x, panY + pan.y)
-                    visibleMonths = months
-                    panX = next.x
-                    panY = next.y
-                    onTopMonthChange(topMonthOf(layout, height, months, next.y))
+                detectTransformGestures { _, pan, gestureZoom, _ ->
+                    // Zoom in MULTIPLIES now. It used to divide, because the number being held was
+                    // how many months were on screen and zooming in meant fewer of them. The field
+                    // is not measured in months any more, so the number is a plain scale factor.
+                    // Pinch and drag stay one gesture because they are one movement.
+                    val next = SkyPresentation.clampZoom(zoom * gestureZoom)
+                    val panned = clampedPan(next, panX + pan.x, panY + pan.y)
+                    zoom = next
+                    panX = panned.x
+                    panY = panned.y
                 }
             }
             .pointerInput(layout, fieldSeed, viewport) {
                 detectTapGestures(
                     onTap = { offset ->
-                        val rowHeight = SkyPresentation.rowHeightPx(height, visibleMonths)
-                        val rowWidth = SkyPresentation.rowWidthPx(width, visibleMonths)
-                        val pan = clampedPan(visibleMonths, panX, panY)
-                        val rows = SkyPresentation.visibleRows(layout, rowHeight, pan.y, height)
-                        val hit = if (rows == null) -1 else SkyPresentation.nearestStar(
+                        val pan = clampedPan(zoom, panX, panY)
+                        val hit = SkyPresentation.nearestStar(
                             layout = layout,
-                            indices = Sky.rowRange(layout, rows.first, rows.last),
-                            rowWidthPx = rowWidth,
-                            rowHeightPx = rowHeight,
+                            // Every star, because no ordering of the arrays corresponds to any
+                            // ordering on screen once the field is scattered.
+                            indices = 0 until layout.starCount,
+                            contentWidthPx = SkyPresentation.contentWidthPx(width, zoom),
+                            contentHeightPx = SkyPresentation.contentHeightPx(height, zoom),
                             panXPx = pan.x,
                             panYPx = pan.y,
                             tapXPx = offset.x,
@@ -234,22 +231,18 @@ fun SkySurface(
             val w = size.width
             val h = size.height
             if (layout.starCount == 0 || w <= 0f || h <= 0f) return@Canvas
-            val months = visibleMonths
-            val detail = SkyPresentation.detailFor(months)
-            val rowHeight = SkyPresentation.rowHeightPx(h, months)
-            val rowWidth = SkyPresentation.rowWidthPx(w, months)
-            val pan = clampedPan(months, panX, panY)
-            val rows = SkyPresentation.visibleRows(layout, rowHeight, pan.y, h) ?: return@Canvas
-            // A contiguous slice, not a scan: x is monotonic in time and the arrays are in time
-            // order, so everything on screen is one index range.
-            val indices = Sky.rowRange(layout, rows.first, rows.last)
+            val detail = SkyPresentation.detailFor(zoom)
+            val contentW = SkyPresentation.contentWidthPx(w, zoom)
+            val contentH = SkyPresentation.contentHeightPx(h, zoom)
+            val pan = clampedPan(zoom, panX, panY)
             // Enough margin that a glyph whose centre has left the screen still draws its rays.
             val margin = 16.dp.toPx()
 
-            for (i in indices) {
-                val cx = SkyPresentation.screenX(layout, i, rowWidth, pan.x)
-                if (cx < -margin || cx > w + margin) continue
-                val cy = SkyPresentation.screenY(layout, i, rowHeight, pan.y)
+            // Array order is time order, so newer stars still land on top of older ones.
+            for (i in 0 until layout.starCount) {
+                val cx = SkyPresentation.screenX(layout, i, contentW, pan.x)
+                val cy = SkyPresentation.screenY(layout, i, contentH, pan.y)
+                if (!SkyPresentation.isOnScreen(cx, cy, w, h, margin)) continue
                 drawStar(
                     sprites = sprites,
                     kind = layout.kindAt(i),
@@ -268,19 +261,6 @@ fun SkySurface(
             }
         }
     }
-}
-
-/**
- * The month at the top of the viewport — where the person is, in dates.
- *
- * Dates are the only navigation target the Sky has (§4.2): there is no "your best month" to jump
- * to, because there is no ranking to build one from.
- */
-private fun topMonthOf(layout: SkyLayout, heightPx: Float, months: Float, panYPx: Float): Int {
-    if (layout.rowCount == 0 || heightPx <= 0f) return layout.firstEpochMonth
-    val rowHeight = SkyPresentation.rowHeightPx(heightPx, months)
-    val row = floor((-panYPx) / rowHeight).toInt().coerceIn(0, layout.rowCount - 1)
-    return layout.firstEpochMonth + row
 }
 
 /** Packed `0xRRGGBB` from [SkyPalette] as an opaque Compose colour. */
