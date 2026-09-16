@@ -62,8 +62,14 @@ HELPERS="$REPO/app/src/test/java/com/daymark/app/backup/RepoFile.kt"
 # Room entity's enum, for instance. Those cannot be compiled here without dragging in the graph this
 # tool exists to avoid, so they are skipped. They are NAMED when skipped and never dropped quietly:
 # a coverage gap you cannot see is worse than one you can, and CI still runs every one of them.
+# "Reaches out" means: imports a Daymark symbol from outside this package. The one exception is
+# `backup.repoFile`, because RepoFile.kt is compiled in as a helper below — it is the shared
+# source-scanning utility, it carries no dependencies of its own, and treating it as an outside
+# import would silently drop every source-scanning test in the package. Which it did, once.
 reaches_out() {
-  grep -E "^import com\.daymark\.app\." "$1" 2>/dev/null | grep -qv "^import com\.daymark\.app\.$PKG\."
+  grep -E "^import com\.daymark\.app\." "$1" 2>/dev/null \
+    | grep -v "^import com\.daymark\.app\.backup\.repoFile$" \
+    | grep -qv "^import com\.daymark\.app\.$PKG\."
 }
 
 SKIPPED=""

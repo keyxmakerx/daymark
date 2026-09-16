@@ -47,11 +47,17 @@ object MoodStats {
 
     /**
      * Average mood on days/entries where each activity appears.
-     * [entries] is a list of (moodLevel, activityIds). Returns activityId -> average mood.
+     * [entries] is a list of (moodLevel, factor ids). Returns factor -> average mood.
+     *
+     * Takes [MoodCorrelations.FactorId] rather than a bare `Long` for the reason set out in that
+     * type's header: this is a function that puts an id and a mood level together, and a person's
+     * id is a `Long` like any other. The type is what stops one arriving.
      */
-    fun activityAverages(entries: List<Pair<Int, List<Long>>>): Map<Long, Double> {
-        val sums = mutableMapOf<Long, Int>()
-        val counts = mutableMapOf<Long, Int>()
+    fun activityAverages(
+        entries: List<Pair<Int, List<MoodCorrelations.FactorId>>>,
+    ): Map<MoodCorrelations.FactorId, Double> {
+        val sums = mutableMapOf<MoodCorrelations.FactorId, Int>()
+        val counts = mutableMapOf<MoodCorrelations.FactorId, Int>()
         for ((level, activityIds) in entries) {
             for (id in activityIds.distinct()) {
                 sums[id] = (sums[id] ?: 0) + level

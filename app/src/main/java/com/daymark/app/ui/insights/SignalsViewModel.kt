@@ -80,8 +80,8 @@ class SignalsViewModel @Inject constructor(
     private fun topFactors(
         entries: List<EntryWithActivities>,
     ): Pair<Signals.FactorLift?, Signals.FactorLift?> {
-        val pairs = entries.map { it.entry.moodLevel to it.activities.map { a -> a.id } }
-        val nameById = entries.flatMap { it.activities }.associate { it.id to it.name }
+        val pairs = entries.map { it.entry.moodLevel to it.activities.map { a -> MoodCorrelations.FactorId.ofActivity(a.id) } }
+        val nameById = entries.flatMap { it.activities }.associate { MoodCorrelations.FactorId.ofActivity(it.id) to it.name }
         val (up, down) = MoodCorrelations.rankLifts(
             MoodCorrelations.factorDeltas(pairs, MIN_OCCURRENCES), topN = 1,
         )
