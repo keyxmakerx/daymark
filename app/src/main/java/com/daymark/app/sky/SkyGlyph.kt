@@ -146,6 +146,105 @@ object SkyGlyph {
     }
 
     // ---------------------------------------------------------------------------------------
+    // The halo's radial fade. September 2026, and it is the same change as the ground.
+    //
+    // `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1: "Halo becomes a radial fade to nothing instead
+    // of a flat translucent disc", and "Fidelity: a point, then a glow, never a blur alone."
+    //
+    // The flat disc had a hard outer edge at [haloRadiusDp] — a translucent coin, not a glow — and
+    // on the old warm ground its edge terminated on a warm smudge rather than on nothing. The
+    // ground moved to `#07070A` in the same pass so that the last stop really is nothing (see
+    // `SkyPalette`'s header). One without the other is half a change.
+    //
+    // WHAT WAS NOT TAKEN FROM THE PROTOTYPE. `docs/prototypes/your-sky.html` computes its outer
+    // gradient at `peak + 0.3` — an additive floor under every halo. Multiplied by the halo's own
+    // area that floor is `0.3 x r^2`, which is BIGGER for a wider halo, so a hard day would emit
+    // more total light than a good one. That is the inverted ranking this file's header records as
+    // already rejected once ("it makes hard days glow more, which is not shaming but is still a
+    // ranking"). So the stops below are weights on the halo's own peak and nothing is added to it,
+    // and [haloEmittedLight] is flat across the ramp by construction, exactly as the flat disc was.
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * Where each stop of the outer glow sits, as a fraction of [outerGlowRadiusDp].
+     *
+     * The prototype's five stops. Front-loaded — more than half the fall happens in the first fifth
+     * of the radius — because that is what reads as a glow around a point rather than as a disc
+     * with soft edges.
+     */
+    val HALO_STOP_POSITION = floatArrayOf(0f, 0.18f, 0.45f, 0.75f, 1f)
+
+    /**
+     * What each stop is worth, as a fraction of [haloPeakAlpha].
+     *
+     * The last is exactly zero, which is the *"to nothing"* in §1 and is the property the flat disc
+     * did not have. Nothing here is a function of mood: mood picks the peak and the radius, and the
+     * shape of the fall is the same for every star on the surface.
+     */
+    val HALO_STOP_WEIGHT = floatArrayOf(0.5f, 0.34f, 0.12f, 0.035f, 0f)
+
+    /** How far past [haloRadiusDp] the light carries before the fade reaches zero. */
+    const val GLOW_SPREAD = 1.25f
+
+    private const val OUTER_GLOW_SCALE = 1.3f
+    private const val OUTER_GLOW_SCALE_LANDMARK = 2.2f
+
+    /**
+     * The radius the outer glow actually fades out over — wider than [haloRadiusDp], because the
+     * halo radius is where the light is *concentrated* and the fade has to end somewhere past it.
+     *
+     * A landmark's glow reaches further still, for the same reason its peak is higher: it is the
+     * one mark the person placed by hand.
+     */
+    fun outerGlowRadiusDp(kind: SkyKind, moodLevel: Int): Float {
+        val scale = if (kind == SkyKind.LIFE_EVENT) OUTER_GLOW_SCALE_LANDMARK else OUTER_GLOW_SCALE
+        return haloRadiusDp(kind, moodLevel) * GLOW_SPREAD * scale
+    }
+
+    /** The alpha of stop [index] of this star's outer glow. */
+    fun haloStopAlpha(kind: SkyKind, moodLevel: Int, index: Int): Float =
+        HALO_STOP_WEIGHT[index.coerceIn(0, HALO_STOP_WEIGHT.size - 1)] * haloPeakAlpha(kind, moodLevel)
+
+    /**
+     * The total light the halo actually emits: the fade integrated over the disc it covers.
+     *
+     * This is [HALO_LIGHT]'s claim made checkable against the shape that is now drawn rather than
+     * against the one that used to be. `peak x radius²` was the right invariant for a flat disc and
+     * says nothing on its own about a gradient — so the profile is integrated, and the answer comes
+     * out **1.161 for every mood level** and 13.278 for a landmark. The flat number across the ramp
+     * is the whole of mechanism M4 on this surface; the landmark's is §1's *"a landmark is the one
+     * bright star"*, and it is allowed to be louder because a person placed it by hand.
+     *
+     * The profile itself passes 0.0831 of the light a flat disc of the same peak and radius would,
+     * which is the price of the edge going to nothing, and it is paid equally by every star.
+     */
+    fun haloEmittedLight(kind: SkyKind, moodLevel: Int): Float {
+        val r = outerGlowRadiusDp(kind, moodLevel)
+        return haloPeakAlpha(kind, moodLevel) * r * r * PROFILE_AREA
+    }
+
+    /**
+     * `∫ w(u) 2u du` over `0..1` for the piecewise-linear profile — the area-weighted mean weight,
+     * so a flat profile would be exactly 1.
+     *
+     * Computed rather than written down, so it follows the stops if anyone moves one.
+     */
+    val PROFILE_AREA: Float = run {
+        var total = 0.0
+        for (i in 0 until HALO_STOP_POSITION.size - 1) {
+            val u0 = HALO_STOP_POSITION[i].toDouble()
+            val u1 = HALO_STOP_POSITION[i + 1].toDouble()
+            val w0 = HALO_STOP_WEIGHT[i].toDouble()
+            val w1 = HALO_STOP_WEIGHT[i + 1].toDouble()
+            val slope = (w1 - w0) / (u1 - u0)
+            // 2 x integral of u(w0 + slope(u - u0)) du.
+            val at = { u: Double -> 2.0 * (w0 * u * u / 2.0 + slope * (u * u * u / 3.0 - u0 * u * u / 2.0)) }
+            total += at(u1) - at(u0)
+        }
+        total.toFloat()
+    }
+
+    // ---------------------------------------------------------------------------------------
     // Temperature. A star's own warmth, from its identity — variety that says nothing.
     //
     // `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1: "Each star also has its own temperature from
@@ -380,8 +479,28 @@ enum class SkyDetail {
             else -> NIGHT
         }
 
-        /** Glyph shape only resolves from [MONTH] inward; below that a star is a point. */
-        fun drawsGlyphs(detail: SkyDetail): Boolean = detail != DRIFT
+        /**
+         * Kind marks resolve **only** at [NIGHT] — when the person has leaned in to one day.
+         *
+         * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1, agreed with the maintainer: *"No marks for
+         * kind at ordinary zoom. A journal page, a step, a goal reached and a life event are all
+         * just stars until the person leans in to a single day, where the glyph appears. The text
+         * list still names the kind."* It *revises* `docs/SKY.md` §3.4, which drew glyphs at a
+         * month, and this function used to return true from [SEASON] inward.
+         *
+         * The reason is what an ordinary sky is for. A ring, a cross and an underline scattered
+         * across a year turn the surface into a legend to be decoded — and worse, they sort a
+         * person's days into *kinds of act* at the zoom where somebody is looking at a whole
+         * stretch of their life at once. A star is a star. What it was is a question you ask about
+         * one day, by going to that day, and the answer is also always available in the list
+         * without zooming at all.
+         *
+         * A landmark still looks different at every zoom, and that is not a kind mark: its size
+         * and its light come from [coreScale] and [LANDMARK_HALO_PEAK_ALPHA], which follow the fact
+         * that the person placed it by hand. Prominence follows authorship; form follows kind; only
+         * the second one waits.
+         */
+        fun drawsGlyphs(detail: SkyDetail): Boolean = detail == NIGHT
 
         /** Project threads are the only line on the Sky, and they vanish at [DRIFT]. */
         fun drawsThreads(detail: SkyDetail): Boolean = detail == MONTH || detail == NIGHT

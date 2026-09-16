@@ -98,10 +98,17 @@ object SkyPresentation {
      * brighter: the mid-ramp would pin against white while the worst mood sat below it, which is the
      * original cruelty with the contrast turned up.
      *
-     * 9.0 is most of the way to the sky's own ink (14.6:1 on the night ground) and leaves the ground
-     * still legibly a night ground rather than a grey one.
+     * It was 9.0 on the old `#16150F` ground and is 10.0 on `#07070A`, re-measured with everything
+     * else in that pass. The number is fixed by the same cliff `SkyPalette`'s header describes: at
+     * 9.0 on the old ground exactly one shipped mood — level 1, the darkest — had to be blended
+     * toward the ink to reach the target, and on this ground 10.0 is the brightest value that keeps
+     * that shape. At 10.5 level 2 joins it, and the quiet sky would start washing out a second of
+     * the person's own colours.
+     *
+     * 10.0 is most of the way to the sky's own ink (16.0:1 on the night ground) and leaves the
+     * ground still legibly a night ground rather than a grey one.
      */
-    const val HIGH_CONTRAST_TARGET = 9.0
+    const val HIGH_CONTRAST_TARGET = 10.0
 
     fun clampVisibleMonths(visibleMonths: Float): Float =
         visibleMonths.coerceIn(MIN_VISIBLE_MONTHS, MAX_VISIBLE_MONTHS)

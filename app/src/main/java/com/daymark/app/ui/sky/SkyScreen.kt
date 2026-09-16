@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -49,6 +50,13 @@ import com.daymark.app.sky.SkyOptions
 import com.daymark.app.sky.SkyPalette
 import com.daymark.app.ui.theme.moodColors
 import com.daymark.app.ui.theme.moodLabels
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import com.daymark.app.sky.SkyGlyph
+import java.time.LocalDate
 import java.util.Locale
 
 /**
@@ -119,6 +127,12 @@ fun SkyScreen(
             target = target,
         )
     }
+
+    // The renderer's clock read. `sky/` is import-free and has no clock — `SkyAge` takes an age in
+    // years and never a date — so the one call to `LocalDate.now()` on this surface is here.
+    // Re-read whenever the layout changes rather than once ever: a phone left open across midnight
+    // would otherwise keep drawing yesterday's ages, and a new record is what usually wakes it.
+    val todayEpochDay = remember(state.layout) { LocalDate.now().toEpochDay() }
 
     val layout = state.layout
     val moodLabel: (Int) -> String = { labels.forLevel(it) }
@@ -198,7 +212,7 @@ fun SkyScreen(
                         layout = layout,
                         fieldSeed = state.fieldSeed,
                         options = options,
-                        equalisedRamp = ramp,
+                        todayEpochDay = todayEpochDay,
                         description = SkyPresentation.canvasDescription(layout, locale),
                         selectedStar = selected,
                         onStarTapped = { selected = it },
@@ -242,6 +256,8 @@ fun SkyScreen(
                                 locale,
                             ),
                             kind = layout.kindAt(selected),
+                            moodLevel = layout.moodLevel[selected],
+                            equalisedRamp = ramp,
                             onOpen = { activate(selected) },
                             onDismiss = { selected = NO_SELECTION },
                             modifier = Modifier.align(Alignment.BottomCenter),
@@ -258,9 +274,10 @@ private const val NO_SELECTION = -1
 /**
  * The sky's own controls, on an ordinary surface rather than on the night ground.
  *
- * They sit on the app's normal background on purpose: chips drawn straight onto `#16150F` inherit
- * the light theme's foreground colours and land somewhere around 2:1, which would put the controls
- * a low-vision reader needs most out of reach on the screen built for them.
+ * They sit on the app's normal background on purpose: chips drawn straight onto the night ground
+ * inherit the light theme's foreground colours and land somewhere around 2:1, which would put the
+ * controls a low-vision reader needs most out of reach on the screen built for them. The ground
+ * went darker in September 2026 (`SkyPalette.NIGHT_BG`), which makes that worse rather than better.
  */
 @Composable
 private fun SkyControls(
@@ -317,11 +334,25 @@ private fun SkyControls(
  * edges, so there is nothing to go "back" from. The strip carries what the star was, when, and its
  * mood if it had one — and an action that hands off to the feature owning the content. It carries no
  * prose, because [SkyLayout] has none to give it.
+ *
+ * ## The mood dot, which is where the mood ramp went
+ *
+ * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1 moved a star's colour onto its age, and it is
+ * explicit about where the person's own mood colour lives afterwards: *"The mood word is on the
+ * sheet when a star is tapped and on every row of the list."* This is that sheet. The dot is drawn
+ * from the **equalised** ramp and never from the raw one — a raw list dot is exactly where the
+ * ranking-by-visibility `SkyPalette` exists to remove would reappear, at 4.08:1 for the hardest
+ * mood against 8.32:1 for an ordinary one, moved off the sky and into the strip beside it.
+ *
+ * The word is already in [text]; the dot is beside it and never instead of it.
  */
 @Composable
 private fun SkyStarDetail(
     text: String,
     kind: SkyKind,
+    moodLevel: Int,
+    /** The person's mood ramp, already through [SkyPalette.equalisedRamp]. Levels 1..5. */
+    equalisedRamp: IntArray,
     onOpen: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
@@ -331,6 +362,20 @@ private fun SkyStarDetail(
             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val moodIndex = moodLevel - SkyGlyph.MOOD_MIN
+            if (moodIndex in equalisedRamp.indices) {
+                // Decorative: the mood is already a word in the text beside it, so a screen reader
+                // that also announced the dot would say it twice. Four kinds carry no mood at all
+                // and get no dot rather than a grey one — an uncoloured star is not a lesser star.
+                Spacer(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(skyColor(equalisedRamp[moodIndex]))
+                        .clearAndSetSemantics {},
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+            }
             Text(
                 text = text,
                 style = MaterialTheme.typography.bodyMedium,
