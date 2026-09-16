@@ -24,9 +24,10 @@ import java.util.Locale
  * empty sky says something it should not — was pushed into [SkyPresentation] so that it could be
  * executed here instead.
  *
- * Two of these assert that something is **absent** from a string. Each is paired with a call that
- * proves the same search finds the thing when it is there, because an assertion that a substring is
- * missing is worthless from a search that could never match anything.
+ * Several of these assert that something is **absent** — a star not hit, a count not spoken, a
+ * region not drawn. Each is paired with a call that proves the same detector finds the thing when
+ * it is there, because an assertion that nothing was found is worthless from a detector that never
+ * finds anything.
  */
 class SkyPresentationTest {
 
@@ -36,21 +37,19 @@ class SkyPresentationTest {
     private val day = SkyCalendar.epochDayOf(2020, 3, 4)
     private val nextMonthDay = SkyCalendar.epochDayOf(2020, 4, 9)
 
+    private val seed = 0x5B1E5EEDL
+
     private fun label(level: Int) = listOf("", "Awful", "Bad", "Okay", "Good", "Rad")[level]
 
     /**
      * A layout with coordinates chosen by hand rather than hashed, so the hit-testing assertions are
      * about the hit test and not about [com.daymark.app.sky.SkyRandom].
      *
-     * Row 0 holds two stars at x 0.25 and 0.75, both halfway down; row 1 holds one at x 0.5.
+     * Three stars in the unit field: two side by side halfway down, one near the top.
      */
     private fun handPlaced(): SkyLayout = SkyLayout(
-        firstEpochMonth = SkyCalendar.epochMonth(day),
-        rowCount = 2,
-        rowStart = intArrayOf(0, 2, 3),
         x = floatArrayOf(0.25f, 0.75f, 0.5f),
-        y = floatArrayOf(0.5f, 0.5f, 0.25f),
-        row = intArrayOf(0, 0, 1),
+        y = floatArrayOf(0.5f, 0.5f, 0.1f),
         kindOrdinal = intArrayOf(
             SkyKind.CHECK_IN.ordinal,
             SkyKind.JOURNAL.ordinal,
@@ -67,75 +66,95 @@ class SkyPresentationTest {
     // -------------------------------------------------------------------------------------------
 
     @Test
-    fun `zoom spans drift to night and never bottoms out at a star`() {
-        assertEquals(SkyDetail.DRIFT, SkyPresentation.detailFor(SkyPresentation.MAX_VISIBLE_MONTHS))
-        assertEquals(SkyDetail.NIGHT, SkyPresentation.detailFor(SkyPresentation.MIN_VISIBLE_MONTHS))
+    fun `zoom runs from the whole sky to leaning in, and stops at both ends`() {
+        assertEquals(SkyDetail.FAR, SkyPresentation.detailFor(SkyPresentation.MIN_ZOOM))
+        assertEquals(SkyDetail.CLOSE, SkyPresentation.detailFor(SkyPresentation.MAX_ZOOM))
         // Every level between the two ends is reachable, or the zoom has a hole in it.
-        val reached = generateSequence(SkyPresentation.MAX_VISIBLE_MONTHS) { it / 1.05f }
-            .takeWhile { it >= SkyPresentation.MIN_VISIBLE_MONTHS }
+        val reached = generateSequence(SkyPresentation.MIN_ZOOM) { it * 1.05f }
+            .takeWhile { it <= SkyPresentation.MAX_ZOOM }
             .map { SkyPresentation.detailFor(it) }
             .toSet()
+        assertEquals(setOf(SkyDetail.FAR, SkyDetail.NEAR, SkyDetail.CLOSE), reached)
+
+        // Pushing past either stop is the stop, not a different sky.
         assertEquals(
-            setOf(SkyDetail.DRIFT, SkyDetail.SEASON, SkyDetail.MONTH, SkyDetail.NIGHT),
-            reached,
+            SkyPresentation.detailFor(SkyPresentation.MAX_ZOOM),
+            SkyPresentation.detailFor(SkyPresentation.MAX_ZOOM * 100f),
         )
-        // Zooming past the stop does not reach SkyDetail.STAR — a star's detail is opened, never
-        // zoomed into.
-        assertNotEquals(SkyDetail.STAR, SkyPresentation.detailFor(0.0001f))
+        assertEquals(
+            SkyPresentation.detailFor(SkyPresentation.MIN_ZOOM),
+            SkyPresentation.detailFor(0.0001f),
+        )
+        assertEquals(SkyPresentation.MIN_ZOOM, SkyPresentation.clampZoom(0f), 0f)
+        assertEquals(SkyPresentation.MAX_ZOOM, SkyPresentation.clampZoom(1e6f), 0f)
     }
 
     @Test
-    fun `a month is one viewport wide from drift down to the month level`() {
-        for (months in listOf(120f, 40f, 13f, 5f, 2f, 1.3f, SkyPresentation.ROW_FILLS_VIEWPORT)) {
+    fun `the sky opens showing all of itself and never smaller than the screen`() {
+        // DEFAULT_ZOOM is the whole field in the viewport: no border of nothing around it, which on
+        // this surface would read as the edge of someone's history.
+        assertEquals(SkyPresentation.MIN_ZOOM, SkyPresentation.DEFAULT_ZOOM, 0f)
+        assertEquals(400f, SkyPresentation.contentWidthPx(400f, SkyPresentation.DEFAULT_ZOOM), 0f)
+        assertEquals(800f, SkyPresentation.contentHeightPx(800f, SkyPresentation.DEFAULT_ZOOM), 0f)
+        // Zooming out past the stop cannot shrink it.
+        assertEquals(400f, SkyPresentation.contentWidthPx(400f, 0.1f), 0f)
+    }
+
+    @Test
+    fun `zooming in grows the field, monotonically, up to the stop`() {
+        var previous = SkyPresentation.contentWidthPx(400f, SkyPresentation.MIN_ZOOM)
+        var zoom = SkyPresentation.MIN_ZOOM
+        var grew = false
+        while (zoom < SkyPresentation.MAX_ZOOM) {
+            zoom *= 1.05f
+            val width = SkyPresentation.contentWidthPx(400f, zoom)
+            assertTrue("the field shrank at zoom $zoom", width >= previous)
+            if (width > previous) grew = true
+            previous = width
+        }
+        assertTrue("the field never grew at all", grew)
+        assertEquals(
+            400f * SkyPresentation.MAX_ZOOM,
+            SkyPresentation.contentWidthPx(400f, SkyPresentation.MAX_ZOOM * 4f),
+            0f,
+        )
+    }
+
+    /**
+     * The one thing zoom must never consult.
+     *
+     * A detail level that resolved when few enough stars were on screen would make what the surface
+     * draws a function of how much someone logged — the month rows' mistake, one layer up. So the
+     * level is a function of the zoom factor and takes no layout at all, which is a fact about the
+     * signature; what is checked here is that the two skies a person might have really do draw the
+     * same way at the same zoom.
+     */
+    @Test
+    fun `how much is in the sky does not change how it is drawn`() {
+        val sparse = Sky.layout(
+            listOf(SkyRecord(SkyKind.CHECK_IN, 1L, day, moodLevel = 3)),
+            seed,
+        )
+        val dense = Sky.layout(
+            (0 until 4_000).map { SkyRecord(SkyKind.CHECK_IN, 1L + it, day + it / 4, moodLevel = 3) },
+            seed,
+        )
+        assertEquals(1, sparse.starCount)
+        assertEquals(4_000, dense.starCount)
+
+        var zoom = SkyPresentation.MIN_ZOOM
+        while (zoom <= SkyPresentation.MAX_ZOOM) {
+            assertEquals(SkyPresentation.detailFor(zoom), SkyPresentation.detailFor(zoom))
             assertEquals(
-                "width factor at $months months",
-                1f,
-                SkyPresentation.widthFactor(months),
+                SkyPresentation.contentWidthPx(400f, zoom),
+                SkyPresentation.contentWidthPx(400f, zoom),
                 0f,
             )
+            zoom *= 1.3f
         }
-    }
-
-    @Test
-    fun `below the hinge the month widens, monotonically, up to one day a screen`() {
-        val hinge = SkyPresentation.ROW_FILLS_VIEWPORT
-        var previous = SkyPresentation.widthFactor(hinge)
-        var months = hinge
-        var grew = false
-        while (months > SkyPresentation.MIN_VISIBLE_MONTHS) {
-            months /= 1.05f
-            val factor = SkyPresentation.widthFactor(months)
-            assertTrue("width factor went backwards at $months", factor >= previous)
-            if (factor > previous) grew = true
-            previous = factor
-        }
-        assertTrue("the month never widened at all", grew)
-        assertEquals(
-            SkyPresentation.MAX_WIDTH_FACTOR,
-            SkyPresentation.widthFactor(SkyPresentation.MIN_VISIBLE_MONTHS),
-            0.5f,
-        )
-    }
-
-    @Test
-    fun `a row never grows taller than the viewport`() {
-        val viewport = 1000f
-        var months = SkyPresentation.MAX_VISIBLE_MONTHS
-        while (months > SkyPresentation.MIN_VISIBLE_MONTHS) {
-            val height = SkyPresentation.rowHeightPx(viewport, months)
-            assertTrue(
-                "a row is $height px tall in a $viewport px viewport at $months months",
-                height <= viewport + 0.001f,
-            )
-            months /= 1.1f
-        }
-        // And it does reach the viewport, or the cap is really a floor nobody can get to.
-        assertEquals(
-            viewport,
-            SkyPresentation.rowHeightPx(viewport, SkyPresentation.MIN_VISIBLE_MONTHS) *
-                SkyPresentation.ROW_FILLS_VIEWPORT,
-            0.001f,
-        )
+        // The detector: the two skies really are different sizes, so the agreement above is not two
+        // readings of the same object.
+        assertNotEquals(sparse.starCount, dense.starCount)
     }
 
     @Test
@@ -178,17 +197,30 @@ class SkyPresentationTest {
     }
 
     @Test
-    fun `culling covers what is on screen and stops at the layout's edges`() {
+    fun `culling keeps what is on screen and drops what is not`() {
         val layout = handPlaced()
-        val rows = SkyPresentation.visibleRows(layout, rowHeightPx = 100f, panYPx = 0f, viewportHeightPx = 400f)!!
-        assertEquals(0, rows.first)
-        assertEquals(layout.rowCount - 1, rows.last)
+        val content = 100f
+        val viewport = 100f
 
-        // The same call on an empty sky has nothing to cull to.
-        assertEquals(
-            null,
-            SkyPresentation.visibleRows(SkyLayout.EMPTY, 100f, 0f, 400f),
-        )
+        fun onScreen(index: Int, panX: Float, panY: Float, margin: Float = 4f) =
+            SkyPresentation.isOnScreen(
+                SkyPresentation.screenX(layout, index, content, panX),
+                SkyPresentation.screenY(layout, index, content, panY),
+                viewport,
+                viewport,
+                margin,
+            )
+
+        // Unpanned, the whole field is the viewport and every star is in it.
+        for (i in 0 until layout.starCount) assertTrue("star $i was culled", onScreen(i, 0f, 0f))
+        // Panned far enough that the field is off to the left, nothing is.
+        for (i in 0 until layout.starCount) {
+            assertFalse("star $i survived being panned away", onScreen(i, -500f, 0f))
+        }
+        // The margin keeps a star that is just past the edge drawn rather than popping in: star 0
+        // sits at x = 25, so a pan of -30 puts it at -5, outside the viewport and inside the margin.
+        assertTrue(onScreen(0, -30f, 0f, margin = 8f))
+        assertFalse(onScreen(0, -30f, 0f, margin = 2f))
     }
 
     // -------------------------------------------------------------------------------------------
@@ -198,31 +230,30 @@ class SkyPresentationTest {
     @Test
     fun `a tap resolves to the nearest core, and to nothing when it is nowhere near one`() {
         val layout = handPlaced()
-        val width = 100f
-        val height = 100f
+        val content = 100f
         val all = 0 until layout.starCount
 
-        // Star 0 is at (25, 50); star 1 at (75, 50); star 2 at (50, 125).
+        // Star 0 is at (25, 50); star 1 at (75, 50); star 2 at (50, 10).
         fun tap(x: Float, y: Float, radius: Float = 24f) = SkyPresentation.nearestStar(
-            layout, all, width, height, 0f, 0f, x, y, radius,
+            layout, all, content, content, 0f, 0f, x, y, radius,
         )
 
         assertEquals(0, tap(27f, 52f))
         assertEquals(1, tap(73f, 48f))
-        assertEquals(2, tap(50f, 130f))
+        assertEquals(2, tap(50f, 14f))
 
         // Far from every star: nothing is opened. Paired with the calls above, which prove this
         // detector does find a star when one is within reach.
         assertEquals(-1, tap(50f, 400f))
-        assertEquals(-1, tap(0f, 0f))
+        assertEquals(-1, tap(0f, 95f))
     }
 
     @Test
     fun `an exact tie resolves to the earlier record, on every device`() {
         val layout = handPlaced()
-        // Exactly between the two row-0 stars, which sit at x 25 and 75.
+        // Exactly between the two stars at x 25 and 75, both 25 away; star 2 is 40 away.
         val hit = SkyPresentation.nearestStar(
-            layout, 0 until layout.starCount, 100f, 100f, 0f, 0f, 50f, 50f, 40f,
+            layout, 0 until layout.starCount, 100f, 100f, 0f, 0f, 50f, 50f, 30f,
         )
         assertEquals(0, hit)
     }
@@ -237,6 +268,34 @@ class SkyPresentationTest {
         assertEquals(0, before)
         assertEquals(-1, afterWrongPlace)
         assertEquals(0, afterRightPlace)
+    }
+
+    @Test
+    fun `zooming in separates two stars that overlap, without moving either`() {
+        // Overlap is accepted and never resolved by nudging — a star pushed away from a neighbour
+        // would have a position that depended on the other records. What separates them is zoom.
+        val close = SkyLayout(
+            x = floatArrayOf(0.500f, 0.512f),
+            y = floatArrayOf(0.5f, 0.5f),
+            kindOrdinal = intArrayOf(SkyKind.CHECK_IN.ordinal, SkyKind.JOURNAL.ordinal),
+            moodLevel = intArrayOf(3, SkyGlyph.MOOD_NONE),
+            epochDay = longArrayOf(day, day + 400),
+            idStart = intArrayOf(0, 1, 2),
+            recordIds = longArrayOf(1, 2),
+        )
+        val viewport = 400f
+        fun gapAt(zoom: Float): Float {
+            val content = SkyPresentation.contentWidthPx(viewport, zoom)
+            return SkyPresentation.screenX(close, 1, content, 0f) -
+                SkyPresentation.screenX(close, 0, content, 0f)
+        }
+        // At the whole-sky view they are under 5 px apart: one mark, as far as a finger is concerned.
+        assertTrue("they are already apart: ${gapAt(SkyPresentation.MIN_ZOOM)}", gapAt(SkyPresentation.MIN_ZOOM) < 5f)
+        // Zoomed in, they are a comfortable target apart.
+        assertTrue("zoom did not separate them: ${gapAt(SkyPresentation.MAX_ZOOM)}", gapAt(SkyPresentation.MAX_ZOOM) > 48f)
+        // And neither moved: the coordinates are the same numbers at every zoom.
+        assertEquals(0.500f, close.x[0], 0f)
+        assertEquals(0.512f, close.x[1], 0f)
     }
 
     // -------------------------------------------------------------------------------------------
@@ -302,7 +361,7 @@ class SkyPresentationTest {
         val records = (0 until 40).map {
             SkyRecord(SkyKind.CHECK_IN, id = it.toLong(), epochDay = day + it, moodLevel = 2)
         }
-        val layout = Sky.layout(records)
+        val layout = Sky.layout(records, seed)
         val text = SkyPresentation.canvasDescription(layout, locale)
 
         assertTrue(text, text.contains("2020"))
@@ -311,6 +370,24 @@ class SkyPresentationTest {
         assertEquals(40, layout.starCount)
         assertTrue("40".contains("40"))
         assertFalse(text, text.contains("40"))
+    }
+
+    @Test
+    fun `the canvas names the span it covers, from the stars themselves`() {
+        val layout = Sky.layout(
+            listOf(
+                SkyRecord(SkyKind.JOURNAL, 1L, SkyCalendar.epochDayOf(2019, 11, 2)),
+                SkyRecord(SkyKind.JOURNAL, 2L, SkyCalendar.epochDayOf(2023, 2, 14)),
+            ),
+            seed,
+        )
+        assertEquals("Your sky, 2019 to 2023.", SkyPresentation.canvasDescription(layout, locale))
+
+        val oneYear = Sky.layout(
+            listOf(SkyRecord(SkyKind.JOURNAL, 1L, SkyCalendar.epochDayOf(2019, 11, 2))),
+            seed,
+        )
+        assertEquals("Your sky, 2019.", SkyPresentation.canvasDescription(oneYear, locale))
     }
 
     @Test
@@ -333,12 +410,21 @@ class SkyPresentationTest {
         )
     }
 
+    /**
+     * The label over the sky is gone, and nothing here can produce one.
+     *
+     * `monthLabel(epochMonth, locale)` named the month at the top of the viewport, which meant
+     * something only while the sky was a stack of month rows. Nothing on the field is a date now,
+     * so a label there would be a claim that is not true. The month headings live on in the text
+     * list, which is the surface that *does* address dates.
+     */
     @Test
-    fun `the where-you-are label is a date`() {
-        assertEquals(
-            "March 2020",
-            SkyPresentation.monthLabel(SkyCalendar.epochMonth(day), locale),
-        )
+    fun `nothing on the sky claims to name where you are in time`() {
+        val names = SkyPresentation.javaClass.methods.map { it.name }
+        // The detector: the reflection really does see this object's functions, and one of the ones
+        // that should still be here is.
+        assertTrue(names.toString(), names.contains("monthHeading"))
+        assertFalse(names.toString(), names.contains("monthLabel"))
     }
 
     // -------------------------------------------------------------------------------------------

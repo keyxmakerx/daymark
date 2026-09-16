@@ -23,6 +23,15 @@ class SkyTwinkleTest {
     private val still = SkyOptions(motionEnabled = false)
     private val quiet = SkyOptions(highContrast = true)
 
+    /**
+     * One sky's seed, for the two cases here that lay a history out.
+     *
+     * It seeds [SkyWarp] and so decides where the stars land; it has nothing to do with rhythm,
+     * which is why every other case in this file hashes an identity directly and never builds a
+     * layout at all.
+     */
+    private val SKY_SEED = 0x5B1E5EEDL
+
     private val populationSize = 2000
 
     /**
@@ -118,13 +127,14 @@ class SkyTwinkleTest {
         // The property at the level it matters: a rhythm follows the star's own identity, so
         // logging something today cannot change how last year's stars twinkle.
         val old = SkyRecord(SkyKind.CHECK_IN, id = 41L, epochDay = 19_000L, moodLevel = 2)
-        val before = Sky.layout(listOf(old))
+        val before = Sky.layout(listOf(old), SKY_SEED)
         val after = Sky.layout(
             listOf(
                 old,
                 SkyRecord(SkyKind.JOURNAL, id = 42L, epochDay = 19_400L),
                 SkyRecord(SkyKind.CHECK_IN, id = 43L, epochDay = 19_450L, moodLevel = 5),
             ),
+            SKY_SEED,
         )
         val idBefore = SkyTwinkle.identityIdAt(before, 0)
         val idAfter = SkyTwinkle.identityIdAt(after, 0)
@@ -150,7 +160,7 @@ class SkyTwinkleTest {
         // would still pass, because every other star in this file covers exactly one record.
         val many = ArrayList<SkyRecord>()
         for (i in 1..20) many.add(SkyRecord(SkyKind.CHECK_IN, id = i.toLong(), epochDay = 19_000L, moodLevel = 3))
-        val layout = Sky.layout(many)
+        val layout = Sky.layout(many, SKY_SEED)
 
         var folded = 0
         for (index in 0 until layout.starCount) {
