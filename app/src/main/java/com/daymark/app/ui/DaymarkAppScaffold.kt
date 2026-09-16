@@ -58,6 +58,10 @@ import com.daymark.app.ui.goals.GoalsScreen
 import com.daymark.app.data.entity.EntryWithActivities
 import com.daymark.app.ui.entry.EntryActionsViewModel
 import com.daymark.app.ui.entry.EntryEditorScreen
+import com.daymark.app.ui.entry.EntryViewScreen
+import com.daymark.app.ui.people.PeopleScreen
+import com.daymark.app.ui.people.PeopleSharingScreen
+import com.daymark.app.ui.people.PersonScreen
 import com.daymark.app.ui.components.RaisedCenterNavBar
 import com.daymark.app.ui.foryou.ForYouScreen
 import com.daymark.app.ui.history.HistoryScreen
@@ -270,7 +274,10 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
         ) {
             composable(Routes.HOME) {
                 HomeScreen(
-                    onEntryClick = { id -> navController.navigate(Routes.entry(id)) },
+                    // Tapping a past entry opens the entry *page*, not the editor: it is a record
+                    // being read, and the editor — with its delete button in the corner — is one
+                    // deliberate tap further on. `Routes.ENTRY_VIEW` carries the argument.
+                    onEntryClick = { id -> navController.navigate(Routes.entryView(id)) },
                     onQuickCheckIn = { level -> navController.navigate(Routes.entry(mood = level)) },
                     onSignalAction = { action -> navController.navigate(signalActionRoute(action)) },
                     onOpenForYou = { navController.navigate(Routes.FOR_YOU) },
@@ -282,7 +289,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
             composable(Routes.HISTORY, enterTransition = zEnter, popExitTransition = zPopExit) {
                 HistoryScreen(
                     onBack = { navController.popBackStack() },
-                    onEntryClick = { id -> navController.navigate(Routes.entry(id)) },
+                    onEntryClick = { id -> navController.navigate(Routes.entryView(id)) },
                     onDeleteEntry = deleteEntryWithUndo,
                 )
             }
@@ -290,7 +297,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                 ForYouScreen(
                     onBack = { navController.popBackStack() },
                     onSignalAction = { action -> navController.navigate(signalActionRoute(action)) },
-                    onEntryClick = { id -> navController.navigate(Routes.entry(id)) },
+                    onEntryClick = { id -> navController.navigate(Routes.entryView(id)) },
                 )
             }
             composable(Routes.INSIGHTS) {
@@ -317,13 +324,13 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
             ) {
                 DayDetailScreen(
                     onBack = { navController.popBackStack() },
-                    onEditEntry = { id -> navController.navigate(Routes.entry(id)) },
+                    onEditEntry = { id -> navController.navigate(Routes.entryView(id)) },
                 )
             }
             composable(Routes.SEARCH, enterTransition = zEnter, popExitTransition = zPopExit) {
                 SearchScreen(
                     onBack = { navController.popBackStack() },
-                    onEditEntry = { id -> navController.navigate(Routes.entry(id)) },
+                    onEditEntry = { id -> navController.navigate(Routes.entryView(id)) },
                 )
             }
             composable(Routes.TRACKERS, enterTransition = zEnter, popExitTransition = zPopExit) {
@@ -363,6 +370,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                 MoreHubScreen(
                     onGoals = { navController.navigate(Routes.GOALS) },
                     onSky = { navController.navigate(Routes.SKY) },
+                    onPeople = { navController.navigate(Routes.PEOPLE) },
                     onActivities = { navController.navigate(Routes.ACTIVITIES) },
                     onYearPixels = { navController.navigate(Routes.YEAR_PIXELS) },
                     onSleep = { navController.navigate(Routes.SLEEP) },
@@ -570,6 +578,46 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                     // stack, so taking a moment never costs you what you were in the middle of.
                     onTakeAMoment = { navController.navigate(Routes.SUPPORT) },
                 )
+            }
+            composable(
+                Routes.ENTRY_VIEW_PATTERN,
+                arguments = listOf(navArgument("entryId") { type = NavType.StringType }),
+                enterTransition = zEnter,
+                popExitTransition = zPopExit,
+            ) {
+                EntryViewScreen(
+                    onBack = { navController.popBackStack() },
+                    // Editing replaces this page rather than stacking on top of it, so Back from
+                    // the editor returns to wherever the entry was tapped instead of to a stale
+                    // copy of the page that was just changed.
+                    onEdit = { id ->
+                        navController.popBackStack()
+                        navController.navigate(Routes.entry(id))
+                    },
+                    onOpenPerson = { id -> navController.navigate(Routes.person(id)) },
+                )
+            }
+            composable(Routes.PEOPLE, enterTransition = zEnter, popExitTransition = zPopExit) {
+                PeopleScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenPerson = { id -> navController.navigate(Routes.person(id)) },
+                    onOpenSharing = { navController.navigate(Routes.PEOPLE_SHARING) },
+                )
+            }
+            composable(
+                Routes.PERSON_PATTERN,
+                arguments = listOf(navArgument("personId") { type = NavType.StringType }),
+                enterTransition = zEnter,
+                popExitTransition = zPopExit,
+            ) {
+                PersonScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenEntry = { id -> navController.navigate(Routes.entryView(id)) },
+                    onOpenSharing = { navController.navigate(Routes.PEOPLE_SHARING) },
+                )
+            }
+            composable(Routes.PEOPLE_SHARING, enterTransition = zEnter, popExitTransition = zPopExit) {
+                PeopleSharingScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.ACTIVITIES, enterTransition = zEnter, popExitTransition = zPopExit) {
                 ActivitiesScreen(

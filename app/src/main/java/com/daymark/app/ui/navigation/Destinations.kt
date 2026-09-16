@@ -103,6 +103,40 @@ object Routes {
      */
     const val LIFE_EVENTS = "life_events"
 
+    /**
+     * "People and communities" — every name the person has written down, grouped for sorting.
+     *
+     * A drill-down from the More hub. It is not a tab and it is not on Home: it is a place to keep
+     * things, not a thing to be reminded of, and nothing in this app nudges anybody about the
+     * people in their life (`docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2 forbids the one prompt
+     * everybody reaches for first).
+     */
+    const val PEOPLE = "people"
+
+    /**
+     * The sharing screen: one list, a default per group, an override per item, all off to begin
+     * with. Reached from the people list and from the quiet line at the foot of a person's page.
+     */
+    const val PEOPLE_SHARING = "people_sharing"
+
+    /** One person's or community's page, keyed by their row id. */
+    const val PERSON = "person"
+    fun person(id: Long) = "$PERSON/$id"
+    const val PERSON_PATTERN = "$PERSON/{personId}"
+
+    /**
+     * A past entry, read rather than edited — the mood word the person chose, their activities,
+     * who they were with, their note and their photo.
+     *
+     * Distinct from [ENTRY], which is the editor. Tapping an entry anywhere in the app now lands
+     * here, and the editor is one deliberate tap further on, because opening a record of a hard
+     * day straight into a form with a delete button in the corner is the wrong first thing to
+     * happen.
+     */
+    const val ENTRY_VIEW = "entry_view"
+    fun entryView(id: Long) = "$ENTRY_VIEW/$id"
+    const val ENTRY_VIEW_PATTERN = "$ENTRY_VIEW/{entryId}"
+
     /** A single day's entries, keyed by epoch-day. */
     fun day(epochDay: Long) = "day/$epochDay"
     const val DAY_PATTERN = "day/{epochDay}"

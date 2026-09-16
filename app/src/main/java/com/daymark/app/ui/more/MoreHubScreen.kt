@@ -41,6 +41,7 @@ import com.daymark.app.ui.components.PaperSurface
 fun MoreHubScreen(
     onGoals: () -> Unit,
     onSky: () -> Unit,
+    onPeople: () -> Unit,
     onActivities: () -> Unit,
     onYearPixels: () -> Unit,
     onSleep: () -> Unit,
@@ -74,6 +75,17 @@ fun MoreHubScreen(
             subtitle = "Everything you did, as stars",
             onClick = onSky,
             modifier = Modifier.fillMaxWidth(),
+        )
+        // Full width, and a place rather than a tool, for the same reason the Sky is: it is
+        // somewhere to keep things. The subtitle names what is there and promises nothing — no
+        // count of people, which would be a scoreboard made of somebody's relationships, and
+        // nothing about who has not been written about lately, which the plan forbids outright.
+        HubCard(
+            icon = R.drawable.ic_act_friends,
+            title = "People and communities",
+            subtitle = "Who you were with, and your own notes",
+            onClick = onPeople,
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
         )
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
