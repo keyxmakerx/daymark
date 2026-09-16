@@ -36,8 +36,11 @@ Where this revises an earlier document it says so; otherwise `docs/SKY.md` and
   included, enforced by signature the way the Sky's field is kept blind to data. Activities stay in
   statistics; putting "meetup" in as an activity is the person's choice.
 - **Sharing is per person and per community**, off by default even under an accept-all grant.
-  The clinician sees exactly the words written and the entries naming them. An unshared one shows
-  as *with one person, not shared*, never as a blank.
+  The switches live with the app's other sharing controls, never on the person's own page, which
+  only shows the current state and points there. The clinician sees exactly the words written and
+  the entries naming them. An unshared one shows as *with one person, not shared*, never as a
+  blank. The word is **clinician** throughout: a therapist, a doctor and a psychiatrist are one
+  role to the app.
 
 ## 3. The entry view page
 
@@ -66,6 +69,7 @@ phrase pool. Could later be shown to everyone; starts debug-only.
 
 ## Not doing
 
-App commentary on entries. A relationship model of any kind. Photos of other people.
+A request-access flow: every connection starts with the owner's invitation, and nobody can ask
+for one. App commentary on entries. A relationship model of any kind. Photos of other people.
 Mood-with-person or mood-with-community statistics. A north star that is a goal. Colour-shifting
 stars.
