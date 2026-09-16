@@ -6,10 +6,16 @@ package com.daymark.app.sky
  * ## Why the Sky does its own calendar
  *
  * `java.time` would do this in one line, and using it would cost more than it saves. The layout has
- * to answer three questions — which month row a day belongs to, where that row starts, how long it
- * is — and every one of them is integer arithmetic. Pulling in `LocalDate` to answer them would put
- * a `ZoneId` inside the layout, and a zone is a decision about *whose day this is* that belongs at
- * the edge of the app where the person's locale is known, not in the middle of a geometry pass.
+ * to answer one question — which calendar month a day falls in, so the text equivalent ([Sky.list])
+ * can group by it and head each group with a date — and it is integer arithmetic. Pulling in
+ * `LocalDate` to answer it would put a `ZoneId` inside the layout, and a zone is a decision about
+ * *whose day this is* that belongs at the edge of the app where the person's locale is known, not
+ * in the middle of a layout pass.
+ *
+ * It used to answer three, the other two being where a month row started and how long it was.
+ * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1.0 deleted the rows, so nothing on the sky maps a date
+ * to a place any more. [firstEpochDayOfMonth] and [lengthOfMonth] survive as plain calendar
+ * arithmetic with tests of their own; nothing in the layout calls them.
  *
  * So the boundary is drawn at the epoch day. The caller converts a stored `epochMillis` to a local
  * date once, with the zone it already has, and hands the layout a `LocalDate.toEpochDay()` — the

@@ -13,8 +13,6 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.time.format.TextStyle
 import java.util.Locale
-import kotlin.math.floor
-import kotlin.math.pow
 
 /**
  * Everything the Sky's renderer would otherwise decide in a `Canvas` block where no test can reach
@@ -35,57 +33,37 @@ import kotlin.math.pow
 object SkyPresentation {
 
     // -------------------------------------------------------------------------------------------
-    // Zoom. One parameter — how many month rows the viewport is asked to hold — because that is
-    // what SkyDetail.forVisibleMonths reads, and having two zoom numbers would let the level shown
-    // disagree with the level drawn.
+    // Zoom. One parameter, a plain scale factor over the normalised field — there are no month rows
+    // to count any more, and having two zoom numbers would let the level shown disagree with the
+    // level drawn.
     // -------------------------------------------------------------------------------------------
 
     /**
-     * Where the Sky opens: a bit over a year, which is [SkyDetail.DRIFT].
+     * Where the Sky opens: the whole field in the viewport, which is [SkyDetail.FAR].
      *
-     * §4 calls DRIFT "the view you leave open", and it is also the honest first frame — it shows
-     * the shape of a history without inviting anyone to read a single month as a verdict. It is
-     * deliberately not "today, close up": the Sky has no start (§4.2) and opening on the present
-     * would make the most recent weeks the subject every time, which is the reading most likely to
-     * hurt on a bad week.
+     * §4 calls it "the view you leave open", and it is also the honest first frame — the shape of a
+     * sky, with nothing singled out. It is deliberately not "today, close up": the Sky has no start
+     * (§4.2), and now that position carries no time at all there is no "the present" to open on.
      */
-    const val DEFAULT_VISIBLE_MONTHS = 14f
+    const val DEFAULT_ZOOM = 1f
+
+    /**
+     * The zoom-out stop: the field exactly fills the viewport and never shrinks inside it.
+     *
+     * Letting it shrink would put a border of nothing around the sky, and a hard edge with empty
+     * space beyond it is the one shape §1 spends four pages ruling out.
+     */
+    const val MIN_ZOOM = 1f
 
     /**
      * The zoom-in stop.
      *
-     * Below [ROW_FILLS_VIEWPORT] the row is already as tall as the screen and further zoom is
-     * horizontal only ([widthFactor]) — this value is chosen so the widest the month can get is one
-     * day roughly filling the viewport, which is [SkyDetail.NIGHT]. Zoom bottoms out there and
-     * never at a single star: a star's detail is reached by activating it, not by pushing further
-     * into empty sky.
+     * At 32 the viewport holds about a thousandth of the field, which separates all but the very
+     * closest pairs — overlap is accepted and resolved by zoom, never by moving a star
+     * (`docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1.0). Past this there is nothing further to
+     * resolve and the surface only gets emptier, which on this surface reads as absence.
      */
-    const val MIN_VISIBLE_MONTHS = 0.13f
-
-    /** Ten years at once. Past this, rows are thinner than a glyph and the surface is noise. */
-    const val MAX_VISIBLE_MONTHS = 120f
-
-    /**
-     * The zoom at which one month row fills the height, and the hinge the whole transform turns on.
-     *
-     * It is [SkyDetail]'s own MONTH/NIGHT threshold rather than a number this file picked. Above
-     * it, zooming stacks fewer rows on screen; at it, one row fills the viewport and the month runs
-     * edge to edge, which is §4's L2 exactly; below it the row stops growing and the *month* widens
-     * instead, which is how a day comes close without a star's vertical scatter being stretched
-     * across eight screens.
-     */
-    const val ROW_FILLS_VIEWPORT = 1.2f
-
-    /**
-     * How far a month may be stretched horizontally: 31 viewports, so a day is about a screen.
-     *
-     * Not larger. Past one-day-per-screen there is nothing further to resolve — a day's stars are
-     * already spread apart — and the surface would only get emptier, which on this surface reads as
-     * absence and is the one reading the Sky is built to avoid.
-     */
-    const val MAX_WIDTH_FACTOR = 31f
-
-    private const val WIDTH_EXPONENT = 1.6
+    const val MAX_ZOOM = 32f
 
     /**
      * What "maximum contrast" is, arithmetically.
@@ -103,39 +81,24 @@ object SkyPresentation {
      */
     const val HIGH_CONTRAST_TARGET = 9.0
 
-    fun clampVisibleMonths(visibleMonths: Float): Float =
-        visibleMonths.coerceIn(MIN_VISIBLE_MONTHS, MAX_VISIBLE_MONTHS)
+    fun clampZoom(zoom: Float): Float = zoom.coerceIn(MIN_ZOOM, MAX_ZOOM)
 
-    fun detailFor(visibleMonths: Float): SkyDetail =
-        SkyDetail.forVisibleMonths(clampVisibleMonths(visibleMonths))
+    fun detailFor(zoom: Float): SkyDetail = SkyDetail.forZoom(clampZoom(zoom))
 
     /**
-     * A month row's height in pixels.
+     * How wide the whole field is drawn, in pixels.
      *
-     * Capped at [ROW_FILLS_VIEWPORT] rows: a row never grows past the viewport, so `y` — which is
-     * a fraction *down the row* — never scatters a day's stars across more screen than a person can
-     * see at once.
+     * At [MIN_ZOOM] it is exactly the viewport, so a sky with five stars in it spreads across the
+     * screen and a sky with fifteen thousand is dense — **without any star's position changing**.
+     * That is the whole benefit of normalised coordinates, and it is why the layout has no idea how
+     * big anything is.
      */
-    fun rowHeightPx(viewportHeightPx: Float, visibleMonths: Float): Float =
-        viewportHeightPx / maxOf(clampVisibleMonths(visibleMonths), ROW_FILLS_VIEWPORT)
+    fun contentWidthPx(viewportWidthPx: Float, zoom: Float): Float =
+        viewportWidthPx * clampZoom(zoom)
 
-    /**
-     * How many viewports wide one month is drawn.
-     *
-     * `1` at every zoom from DRIFT down to MONTH — so the month is the width of the screen and the
-     * horizontal axis means the same thing at all three of those levels, which is what lets a star
-     * be followed from the overview to its own month by eye. It only leaves 1 once the row can no
-     * longer grow vertically, and then it is the only thing still moving.
-     */
-    fun widthFactor(visibleMonths: Float): Float {
-        val months = clampVisibleMonths(visibleMonths)
-        if (months >= ROW_FILLS_VIEWPORT) return 1f
-        val grown = (ROW_FILLS_VIEWPORT / months).toDouble().pow(WIDTH_EXPONENT).toFloat()
-        return grown.coerceIn(1f, MAX_WIDTH_FACTOR)
-    }
-
-    fun rowWidthPx(viewportWidthPx: Float, visibleMonths: Float): Float =
-        viewportWidthPx * widthFactor(visibleMonths)
+    /** How tall the whole field is drawn, in pixels. The counterpart of [contentWidthPx]. */
+    fun contentHeightPx(viewportHeightPx: Float, zoom: Float): Float =
+        viewportHeightPx * clampZoom(zoom)
 
     // -------------------------------------------------------------------------------------------
     // Pan. `pan` is where the content's top-left corner sits on screen, so screen = content + pan.
@@ -145,46 +108,42 @@ object SkyPresentation {
      * Keeps the sky reachable without letting it be dragged off the screen.
      *
      * When the content is smaller than the viewport it is centred rather than pinned to a corner —
-     * a person with two months of history should find their sky in the middle of the screen, not
-     * hugging the top-left with a void under it. "Void" is not a metaphor here: empty space on this
-     * surface is the thing §1 spends four pages ruling out, and a layout that parks a short history
-     * against one edge manufactures exactly that.
+     * a person's sky belongs in the middle of the screen, not hugging the top-left with a void
+     * under it. "Void" is not a metaphor here: empty space on this surface is the thing §1 spends
+     * four pages ruling out, and a layout that parks the field against one edge manufactures
+     * exactly that.
      */
     fun clampPan(pan: Float, contentPx: Float, viewportPx: Float): Float =
         if (contentPx <= viewportPx) (viewportPx - contentPx) / 2f
         else pan.coerceIn(viewportPx - contentPx, 0f)
 
-    fun contentHeightPx(layout: SkyLayout, rowHeightPx: Float): Float =
-        layout.rowCount * rowHeightPx
+    fun screenX(layout: SkyLayout, index: Int, contentWidthPx: Float, panXPx: Float): Float =
+        layout.x[index] * contentWidthPx + panXPx
 
-    fun screenX(layout: SkyLayout, index: Int, rowWidthPx: Float, panXPx: Float): Float =
-        layout.x[index] * rowWidthPx + panXPx
-
-    fun screenY(layout: SkyLayout, index: Int, rowHeightPx: Float, panYPx: Float): Float =
-        (layout.row[index] + layout.y[index]) * rowHeightPx + panYPx
+    fun screenY(layout: SkyLayout, index: Int, contentHeightPx: Float, panYPx: Float): Float =
+        layout.y[index] * contentHeightPx + panYPx
 
     /**
-     * The rows overlapping the viewport, as an inclusive range, or `null` when the layout is empty.
+     * Whether a star is close enough to the viewport to be worth drawing.
      *
-     * Widened by one row on each side so a star sitting near a row's edge is drawn while it is
-     * still partly on screen instead of popping in. The result feeds [com.daymark.app.sky.Sky.rowRange],
-     * which turns it into one contiguous slice of the packed arrays — culling is an array slice and
-     * never a scan.
+     * Culling used to be a contiguous slice of the packed arrays, because x was monotonic in the
+     * date and every star of a month row sat next to the rest of its row. With the rows gone
+     * (`docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1.0) there is no order in the arrays that
+     * corresponds to any order on the screen, so the renderer walks all of them and asks this. That
+     * is a bounds check per star per frame over a primitive array with no allocation — a few tens of
+     * microseconds for ten years of daily use, which the layout's own timing test bounds.
+     *
+     * [marginPx] keeps a star that is half off the edge drawn instead of popping in.
      */
-    fun visibleRows(
-        layout: SkyLayout,
-        rowHeightPx: Float,
-        panYPx: Float,
+    fun isOnScreen(
+        screenXPx: Float,
+        screenYPx: Float,
+        viewportWidthPx: Float,
         viewportHeightPx: Float,
-    ): IntPair? {
-        if (layout.rowCount == 0 || rowHeightPx <= 0f) return null
-        val first = floor((-panYPx) / rowHeightPx).toInt() - 1
-        val last = floor((viewportHeightPx - panYPx) / rowHeightPx).toInt() + 1
-        return IntPair(first.coerceAtLeast(0), last.coerceAtMost(layout.rowCount - 1))
-    }
-
-    /** A first/last row pair. A `data class` rather than `IntRange` so `first > last` stays sayable. */
-    data class IntPair(val first: Int, val last: Int)
+        marginPx: Float,
+    ): Boolean =
+        screenXPx >= -marginPx && screenXPx <= viewportWidthPx + marginPx &&
+            screenYPx >= -marginPx && screenYPx <= viewportHeightPx + marginPx
 
     /**
      * The star nearest to a tap, or `-1`.
@@ -192,7 +151,8 @@ object SkyPresentation {
      * §7.1: every star is a 48 dp target however small it is drawn, and where targets overlap the
      * tap resolves to the **nearest core** — it does not grow the star underneath, because a star
      * that swells when you reach for it is a star whose size means something other than what
-     * [SkyGlyph] says it means.
+     * [SkyGlyph] says it means. Overlap is not resolved by moving anything: §1.0 accepts it, and a
+     * star nudged away from a neighbour would be a star whose position depended on other records.
      *
      * Ties go to the lower index, which is the earlier record: the arrays are in time order, so two
      * stars exactly equidistant resolve the same way on every device and every open.
@@ -200,8 +160,8 @@ object SkyPresentation {
     fun nearestStar(
         layout: SkyLayout,
         indices: IntRange,
-        rowWidthPx: Float,
-        rowHeightPx: Float,
+        contentWidthPx: Float,
+        contentHeightPx: Float,
         panXPx: Float,
         panYPx: Float,
         tapXPx: Float,
@@ -211,8 +171,8 @@ object SkyPresentation {
         var best = -1
         var bestDistanceSquared = maxDistancePx * maxDistancePx
         for (i in indices) {
-            val dx = screenX(layout, i, rowWidthPx, panXPx) - tapXPx
-            val dy = screenY(layout, i, rowHeightPx, panYPx) - tapYPx
+            val dx = screenX(layout, i, contentWidthPx, panXPx) - tapXPx
+            val dy = screenY(layout, i, contentHeightPx, panYPx) - tapYPx
             val distanceSquared = dx * dx + dy * dy
             if (distanceSquared < bestDistanceSquared) {
                 bestDistanceSquared = distanceSquared
@@ -229,18 +189,21 @@ object SkyPresentation {
     /**
      * What the canvas is, for someone who will never see it.
      *
-     * §7.3: at DRIFT and SEASON the canvas is a **single node described by what it is, not by what
+     * §7.3: at [SkyDetail.FAR] the canvas is a **single node described by what it is, not by what
      * it contains**. It does not enumerate its stars and it announces no total — a screen-reader
      * user who wants the contents gets the list (§7.5), which is a peer surface, not a summary read
      * out of this one.
      *
-     * The span is the two years the sky covers. That is a property of the axis, the way "January to
-     * December" is a property of a calendar, and not a count of anything the person did.
+     * The span is the years the sky covers, read off the earliest and latest star rather than off
+     * any geometry — there is none any more. It is a property of the person's history the way
+     * "January to December" is a property of a calendar, and not a count of anything they did.
      */
     fun canvasDescription(layout: SkyLayout, locale: Locale): String {
         if (layout.starCount == 0) return SkyLayout.EMPTY_LINE
-        val firstYear = SkyCalendar.yearOfMonth(layout.firstEpochMonth)
-        val lastYear = SkyCalendar.yearOfMonth(layout.firstEpochMonth + layout.rowCount - 1)
+        // The arrays are in time order, so the ends are the span. No scan, and no min/max that
+        // could quietly become a "busiest year".
+        val firstYear = SkyCalendar.civilOf(layout.epochDay[0]).year
+        val lastYear = SkyCalendar.civilOf(layout.epochDay[layout.starCount - 1]).year
         return if (firstYear == lastYear) {
             "Your sky, $firstYear."
         } else {
@@ -310,12 +273,12 @@ object SkyPresentation {
         return "$month ${heading.year}, $items"
     }
 
-    /** The "where you are" label over the sky. A date, because navigation targets are dates (§4.2). */
-    fun monthLabel(epochMonth: Int, locale: Locale): String {
-        val month = Month.of(SkyCalendar.monthOfMonth(epochMonth))
-            .getDisplayName(TextStyle.FULL_STANDALONE, locale)
-        return "$month ${SkyCalendar.yearOfMonth(epochMonth)}"
-    }
+    // There is no "where you are" label any more, and there is no function here that could produce
+    // one. `monthLabel(epochMonth, locale)` named the month at the top of the viewport, which was
+    // meaningful only while the sky was a stack of month rows. With placement random
+    // (`docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1.0) the top of the viewport is not a date and no
+    // part of the screen is: a label there would be a claim about where you are that is not true.
+    // The way to reach a particular date is the text list, which keeps its month headings.
 
     fun dateLabel(epochDay: Long, locale: Locale): String =
         LocalDate.ofEpochDay(epochDay)

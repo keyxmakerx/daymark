@@ -379,37 +379,43 @@ class SkyGlyphTest {
 
     @Test
     fun `zoom levels are ordered and reachable`() {
-        assertEquals(SkyDetail.DRIFT, SkyDetail.forVisibleMonths(120f))
-        assertEquals(SkyDetail.DRIFT, SkyDetail.forVisibleMonths(12.5f))
-        assertEquals(SkyDetail.SEASON, SkyDetail.forVisibleMonths(6f))
-        assertEquals(SkyDetail.MONTH, SkyDetail.forVisibleMonths(2f))
-        assertEquals(SkyDetail.NIGHT, SkyDetail.forVisibleMonths(1f))
-        assertEquals(SkyDetail.NIGHT, SkyDetail.forVisibleMonths(0.03f))
+        assertEquals(SkyDetail.FAR, SkyDetail.forZoom(1f))
+        assertEquals(SkyDetail.FAR, SkyDetail.forZoom(SkyDetail.NEAR_ZOOM - 0.01f))
+        assertEquals(SkyDetail.NEAR, SkyDetail.forZoom(SkyDetail.NEAR_ZOOM))
+        assertEquals(SkyDetail.NEAR, SkyDetail.forZoom(SkyDetail.CLOSE_ZOOM - 0.01f))
+        assertEquals(SkyDetail.CLOSE, SkyDetail.forZoom(SkyDetail.CLOSE_ZOOM))
+        assertEquals(SkyDetail.CLOSE, SkyDetail.forZoom(400f))
 
         // Monotonic: zooming in never goes back out a level.
-        var previous = SkyDetail.forVisibleMonths(400f).ordinal
-        var v = 400f
-        while (v > 0.01f) {
-            val here = SkyDetail.forVisibleMonths(v).ordinal
-            assertTrue("zooming in at $v months went backwards", here >= previous)
+        var previous = SkyDetail.forZoom(0.01f).ordinal
+        var zoom = 0.01f
+        while (zoom < 400f) {
+            val here = SkyDetail.forZoom(zoom).ordinal
+            assertTrue("zooming in at $zoom went backwards", here >= previous)
             previous = here
-            v *= 0.97f
+            zoom *= 1.03f
         }
+        // And every level is actually reached, or a threshold has swallowed one.
+        assertEquals(
+            SkyDetail.entries.toSet(),
+            generateSequence(0.01f) { it * 1.03f }.takeWhile { it < 400f }
+                .map { SkyDetail.forZoom(it) }.toSet(),
+        )
     }
 
     @Test
-    fun `the overview is points and the month is glyphs`() {
-        assertTrue(!SkyDetail.drawsGlyphs(SkyDetail.DRIFT))
-        assertTrue(SkyDetail.drawsGlyphs(SkyDetail.MONTH))
+    fun `the whole sky is points and leaning in is glyphs`() {
+        assertTrue(!SkyDetail.drawsGlyphs(SkyDetail.FAR))
+        assertTrue(SkyDetail.drawsGlyphs(SkyDetail.NEAR))
         // The project thread is the only line on the Sky, and it is gone at the overview.
-        assertTrue(!SkyDetail.drawsThreads(SkyDetail.DRIFT))
-        assertTrue(!SkyDetail.drawsThreads(SkyDetail.SEASON))
-        assertTrue(SkyDetail.drawsThreads(SkyDetail.MONTH))
+        assertTrue(!SkyDetail.drawsThreads(SkyDetail.FAR))
+        assertTrue(!SkyDetail.drawsThreads(SkyDetail.NEAR))
+        assertTrue(SkyDetail.drawsThreads(SkyDetail.CLOSE))
         // A canvas of thousands of points is not navigable, so stars only become focusable once
         // there are few enough of them on screen for that to mean something.
-        assertTrue(!SkyDetail.starsAreFocusable(SkyDetail.DRIFT))
-        assertTrue(!SkyDetail.starsAreFocusable(SkyDetail.SEASON))
-        assertTrue(SkyDetail.starsAreFocusable(SkyDetail.MONTH))
+        assertTrue(!SkyDetail.starsAreFocusable(SkyDetail.FAR))
+        assertTrue(SkyDetail.starsAreFocusable(SkyDetail.NEAR))
+        assertTrue(SkyDetail.starsAreFocusable(SkyDetail.CLOSE))
     }
 
     @Test

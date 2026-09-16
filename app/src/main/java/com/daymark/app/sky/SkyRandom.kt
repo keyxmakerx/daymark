@@ -104,20 +104,24 @@ class SkyStream(seed: Long) {
 /**
  * Where the Sky's seed comes from.
  *
- * The brief is that the sky is seeded from the person's own data. Star *positions* already are —
- * they are a hash of each record's kind and row id ([SkyRandom.mix]), so two people with different
- * histories get visibly different skies with no seed involved at all, and that is the part of the
- * uniqueness that matters.
+ * The brief is that the sky is seeded from the person's own data. Star *positions* mostly are
+ * already — they are a hash of each record's kind and row id ([SkyRandom.mix]), so two people with
+ * different histories get visibly different skies with no seed involved at all, and that is the
+ * part of the uniqueness that matters.
  *
- * The decorative field is the part that needs a seed, and it needs one with an awkward property:
- * derived from the person, but **never changing afterwards**. A field re-derived from the whole
- * history would redraw the entire background every time the person logged anything, and a place
- * whose walls move is not a place (`docs/SKY.md` §3.1). So [forFirstRecord] is a *one-time*
- * derivation: the caller computes it once, when the first record exists, persists it, and passes
- * the persisted value from then on. This object never re-derives it, and nothing here can, because
- * [Sky.layout] does not take a seed at all.
+ * The decorative field ([SkyField]) and the cluster warp ([SkyWarp]) are the parts that need a
+ * seed, and they need one with an awkward property: derived from the person, but **never changing
+ * afterwards**. A seed re-derived from the whole history would redraw the entire background every
+ * time the person logged anything — and, since 2026-09-16, would move every star with it, because
+ * the warp is seeded from the same value. A place whose walls move is not a place
+ * (`docs/SKY.md` §3.1).
  *
- * Deleting that first record must not reseed the field — deletion "leaves no shape" (§2.1), and a
+ * So [forFirstRecord] is a *one-time* derivation: the caller computes it once, when the first
+ * record exists, persists it, and passes the persisted value from then on. This object never
+ * re-derives it, and nothing here can — [Sky.layout] takes the seed as a parameter and has no way
+ * to compute one.
+ *
+ * Deleting that first record must not reseed the sky — deletion "leaves no shape" (§2.1), and a
  * background that changes is a shape. That is a rule about the persistence the caller owns, stated
  * here because this is where someone would look for it.
  */

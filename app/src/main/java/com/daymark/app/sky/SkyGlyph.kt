@@ -338,56 +338,67 @@ object SkyGlyph {
 }
 
 /**
- * Zoom, as five named thresholds on one continuous scale.
+ * Zoom, as three named thresholds on one continuous scale.
  *
  * Nothing reflows across a zoom: every level is the same coordinates under a different transform,
- * so a star can be followed from [DRIFT] to [STAR] by eye and culling stays a contiguous index
- * range. The levels decide only what *resolves* — how much of a glyph is drawn and whether stars
- * are individually focusable.
+ * so a star can be followed from [FAR] to [CLOSE] by eye. The levels decide only what *resolves* —
+ * how much of a glyph is drawn and whether stars are individually focusable.
+ *
+ * ## Why these are distances and no longer spans of time
+ *
+ * They were `DRIFT`, `SEASON`, `MONTH`, `NIGHT` and `STAR`, and each named how much *time* the
+ * viewport held, because the sky was a timeline with a row per month.
+ * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1.0 removed the rows: position carries no time at all
+ * any more, and a level called `MONTH` would be naming something that is not on the screen. So a
+ * level is how close someone is leaning in, which is the only thing zoom still means.
+ *
+ * **A level is a function of zoom alone and never of how many stars are on screen.** Deriving it
+ * from density would make what the surface draws a function of how much somebody logged — the same
+ * mistake, one layer up, that deleting the rows was meant to fix.
  */
 enum class SkyDetail {
-    /** Years at once. Points only, no glyphs, no threads. The view you leave open. */
-    DRIFT,
+    /** The whole sky at once. Points only, no glyphs, no threads. The view you leave open. */
+    FAR,
 
-    /** About a season. Kind glyphs begin to resolve. */
-    SEASON,
+    /** Leaning in. Kind marks begin to resolve and stars become individually focusable. */
+    NEAR,
 
-    /** One month row across the width. Full glyphs, project threads, focusable stars. */
-    MONTH,
-
-    /** One day, spread apart with leader lines. The sky continues at the edges — not a modal. */
-    NIGHT,
-
-    /** One star's detail. */
-    STAR,
+    /** Close. Full glyphs and project threads. */
+    CLOSE,
     ;
 
     companion object {
+        /** Where kind marks start to resolve, as a zoom factor. */
+        const val NEAR_ZOOM = 2.5f
+
+        /** Where the full glyph resolves. */
+        const val CLOSE_ZOOM = 7f
+
         /**
-         * The level implied by how many month rows fit on screen.
+         * The level implied by the zoom factor, where `1` is the whole field in the viewport.
          *
-         * Stated as a function of *rows visible* rather than of a zoom factor so the thresholds do
-         * not have to be re-tuned per screen size, and so the small-screen case (§11.6) is a number
-         * this file owns rather than a surprise in the renderer.
+         * Stated as a function of *zoom* rather than of anything measured in pixels so the
+         * thresholds do not have to be re-tuned per screen size, and so the small-screen case
+         * (§11.6) is a number this file owns rather than a surprise in the renderer.
          *
-         * It never returns [STAR]: a star's detail is reached by activating a star, not by zooming
-         * further into empty sky. Zoom bottoms out at [NIGHT], which is a place, not a sheet.
+         * There is no level for one star: a star's detail is reached by activating it, not by
+         * zooming further into empty sky. Zoom bottoms out at [CLOSE], which is a place, not a
+         * sheet.
          */
-        fun forVisibleMonths(visibleMonths: Float): SkyDetail = when {
-            visibleMonths > 12f -> DRIFT
-            visibleMonths > 4f -> SEASON
-            visibleMonths > 1.2f -> MONTH
-            else -> NIGHT
+        fun forZoom(zoom: Float): SkyDetail = when {
+            zoom < NEAR_ZOOM -> FAR
+            zoom < CLOSE_ZOOM -> NEAR
+            else -> CLOSE
         }
 
-        /** Glyph shape only resolves from [MONTH] inward; below that a star is a point. */
-        fun drawsGlyphs(detail: SkyDetail): Boolean = detail != DRIFT
+        /** Glyph shape only resolves from [NEAR] inward; above that a star is a point. */
+        fun drawsGlyphs(detail: SkyDetail): Boolean = detail != FAR
 
-        /** Project threads are the only line on the Sky, and they vanish at [DRIFT]. */
-        fun drawsThreads(detail: SkyDetail): Boolean = detail == MONTH || detail == NIGHT
+        /** Project threads are the only line on the Sky, and they resolve last. */
+        fun drawsThreads(detail: SkyDetail): Boolean = detail == CLOSE
 
-        /** Stars become individually focusable at [MONTH]; above that the canvas is one node. */
-        fun starsAreFocusable(detail: SkyDetail): Boolean = detail == MONTH || detail == NIGHT
+        /** Stars become individually focusable at [NEAR]; above that the canvas is one node. */
+        fun starsAreFocusable(detail: SkyDetail): Boolean = detail != FAR
     }
 }
 
