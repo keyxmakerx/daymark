@@ -1,0 +1,50 @@
+name: Work item
+description: Something to build, fix or tidy — one coherent piece of work for the backlog.
+type: Task
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Write this for someone who has not opened the repository. The `/next` loop reads every
+        field, and nothing is picked up until the maintainer adds the `claude-ready` label.
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What should be true when this is done
+      description: In plain words, from the point of view of the person using Daymark or running the Companion.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it matters
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Android app
+        - Companion server
+        - Companion web consoles
+        - Phone and Companion sync
+        - Build, CI and release
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: watch-out
+    attributes:
+      label: Watch out
+      description: Where this is known to go wrong — house rules it touches (CLAUDE.md §4), tests that guard it, what was tried before.
+  - type: textarea
+    id: check
+    attributes:
+      label: How to check it
+      description: "Which oracle proves it: `pnpm test` in companion/web, `./gradlew test` in companion/server, `tools/jvm-tests.sh <package>`, or CI only (anything with an Android import)."
+  - type: textarea
+    id: source
+    attributes:
+      label: Where this came from
+      description: A permanent link to the document section, issue or conversation this was taken from.

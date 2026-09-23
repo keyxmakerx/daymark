@@ -1,0 +1,34 @@
+name: Decision needed
+description: A choice that belongs to the maintainer — about the product, its users, or money.
+labels: ["needs-decision"]
+type: Task
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A decision issue is closed by the maintainer's answer. The answer goes in the closing
+        comment, and that comment is the permanent record — code and docs cite the issue number.
+  - type: textarea
+    id: question
+    attributes:
+      label: The question
+      description: One sentence a person can answer without opening the code.
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: The options, and what each one costs
+      description: For each option, what changes for the people who use Daymark, and what it rules out.
+    validations:
+      required: true
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: Recommendation, if there is one
+      description: Specific enough to overrule.
+  - type: textarea
+    id: blocked
+    attributes:
+      label: What is waiting on it
+      description: The issues or work that cannot proceed until this is answered.
