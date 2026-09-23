@@ -202,6 +202,16 @@ All notable changes to this project are documented here. The format is based on
   both jobs.
 
 ### Changed
+- **Planning moved to GitHub, and the documents describe only what exists.** Work to do, bugs and
+  open decisions had been spread across plans, session logs, dated audits and to-do comments, and
+  several of those had gone stale in ways that told a reader something false. They are now GitHub
+  issues, organised under a [roadmap](https://github.com/keyxmakerx/daymark/issues/132); a choice
+  only the maintainer can make carries the `needs-decision` label. Twenty-seven retired documents
+  were deleted (git history and the issues keep their text), their reference content was merged into
+  the documents that remain, and [docs/DECISIONS.md](docs/DECISIONS.md) replaces the dated decision
+  log. Code comments cite issues and reference documents rather than plans, and a test now fails if
+  code, configuration or an agent instruction names a document that does not exist. Where each kind
+  of information lives is set out in [CONTRIBUTING.md](CONTRIBUTING.md).
 - **Pinching the sky now magnifies the place you are pinching, and there is a way back out.** A
   pinch used to scale the field about its own corner, so whatever you had your fingers on slid away
   from between them — and this surface has no labels and no landmarks, so what you were looking at
