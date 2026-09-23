@@ -11,20 +11,23 @@ aimed at someone in distress is the hazard the whole architecture exists to avoi
 word is a fixed, human-written template with the person's own numbers slotted in. "Personalisation"
 means rules over the person's own data.
 
-Corollaries: non-diagnostic (screeners are self-checks); descriptive, never interpretive (state what
-the data shows, never narrate how they must have felt); crisis resources are offline, static and
-user-editable, never auto-escalating. `HANDOFF.md` §0 has the long form.
+Corollaries: non-diagnostic (screeners are self-checks; describe association, never causation);
+descriptive, never interpretive (state what the data shows, never narrate how they must have felt);
+crisis resources are offline, static and user-editable, never auto-escalating. The rules engine that
+personalises the app (Signals, the arbiter) exists precisely so that per-person help needs no model.
 
 ## 1. Where to look
 
-| Question | Document |
+| Question | Where |
 | --- | --- |
-| What is this project, end to end | `HANDOFF.md` (long; stale on branch/PR numbers) |
-| Where the work currently stands | `docs/SESSION_STATE_2026-08-28.md` — read the **last addendum first** |
-| Companion server + web design | `docs/COMPANION_ARCHITECTURE.md`, `docs/COMPANION_PLAN.md` |
-| Therapist access, invitations, pairing | `docs/COMPANION_THERAPIST.md`, `docs/COMPANION_SECURITY.md` |
-| Copy rules, tone, component patterns | `docs/COMPANION_UX.md`, `docs/COMPANION_DESIGN_SYSTEM.md` |
-| Phone-side sync contract | `docs/COMPANION_PHONE_2B.md`, `docs/SYNC_PROTOCOL.md` |
+| Where the work stands, and what is next | GitHub issues in `keyxmakerx/daymark`: the roadmap is #132; `needs-decision` marks what waits on the maintainer |
+| What is this project, and which document says what | `README.md`, then `docs/README.md` (the index) |
+| Why something is the way it is | `docs/DECISIONS.md` (code cites its §D numbers) |
+| The app's features and the rules each keeps | `docs/FEATURES.md`, `docs/SKY.md`, `docs/ARCHITECTURE.md` |
+| Companion server + web design | `docs/COMPANION_ARCHITECTURE.md`, `docs/COMPANION_SECURITY.md` |
+| Therapist access, invitations, pairing | `docs/COMPANION_PAIRING.md`, `docs/COMPANION_THERAPIST.md`, `docs/COMPANION_ACCESS_CONTROL.md` |
+| Copy rules, tone, component patterns | `docs/COMPANION_UX.md`, `docs/COMPANION_DESIGN_SYSTEM.md`, `docs/DESIGN.md` |
+| Phone-side sync contract | `docs/COMPANION_PHONE.md`, `docs/SYNC_PROTOCOL.md` |
 | What changed and when | `CHANGELOG.md` |
 
 ## 2. Repo map
@@ -35,7 +38,8 @@ user-editable, never auto-escalating. `HANDOFF.md` §0 has the long form.
 - `sync-crypto/` — shared Kotlin crypto used by the app (CPace, lazysodium).
 - `companion/server/` — Kotlin/Ktor server. `companion/web/` — Svelte owner, therapist and admin
   consoles.
-- `docs/` — design and planning corpus. `gradle/libs.versions.toml` — the version catalog.
+- `docs/` — reference documents describing the system as built (indexed in `docs/README.md`); no
+  plans or logs. `gradle/libs.versions.toml` — the version catalog.
 
 ## 3. Commands, and which oracle actually works here
 
@@ -84,6 +88,16 @@ typed on.
 unless explicitly asked. Commit subjects are lowercase `type(scope): what changed, stated from the
 product's point of view` — see `git log` for the register.
 
+**Where things go.** Work lives in GitHub issues, never in a document or a comment: anything deferred,
+unfinished or found along the way becomes an issue under the right tracking issue, and a choice for
+the maintainer becomes a `needs-decision` issue. Documents in `docs/` describe what is built; they
+carry no plans, status banners, dated addenda or to-do lists, and say "Not built: #n" instead. A
+settled product rule goes in `docs/DECISIONS.md`. `CONTRIBUTING.md` has the full table.
+
+**Code comments** say what the code must keep true and why, in the present tense. The story of how
+it got that way belongs in the commit message and the issue; cite the issue, `(#101)`. Cite reference
+documents by section, never a plan.
+
 ## 5. Testing conventions
 
 - **Every absence assertion is paired with a positive control.** A grep that cannot see a planted
@@ -115,7 +129,10 @@ product's point of view` — see `git log` for the register.
   `.svelte` source**; sequencing lives in ports-and-transitions modules (see
   `companion/web/src/lib/pairing/ownerCeremony.ts`) so ORDER is a node test.
 - `companion/web/src/lib/docs.test.ts` resolves every backticked path in `docs/` and root markdown
-  against the tree. A path you write in a doc must exist, or be declared absent with a reason.
+  against the tree, and every document a code comment names. A path you write must exist, or be
+  declared absent with a reason.
+- **A missing verdict is not a pass.** A check that produced no result — an empty grep, a skipped
+  suite, a tool that printed nothing — has not passed; say so rather than reporting green.
 
 ## 6. Context discipline
 

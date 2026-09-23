@@ -79,17 +79,13 @@ class ReminderScheduler @Inject constructor(
     }
 
     /**
-     * Posts the notification for a fired reminder, with a one-tap "Log" action — if the decision
-     * engine permits an interruption right now.
+     * Posts the notification for a fired reminder, with a one-tap "Log" action, and writes one
+     * ledger line for the firing.
      *
-     * A reminder that keeps going unanswered ends up asking less often, and that is the only
-     * direction available: [OfferKind.REMINDER]'s declared frequency is
-     * [OfferLedgerRepository.defaultFrequency] — every firing, because the person chose these times
-     * themselves and nothing here has any business second-guessing a schedule they set — and
-     * reception can only step that down. There is no combination of rows that posts more
-     * notifications than the schedule already asks for.
-     *
-     * A suppressed firing writes nothing: a ledger line means the app asked, and it did not.
+     * Every firing posts: the decision engine does not gate reminders (the comment inside says why).
+     * The person chose these times, so the schedule they set is the whole of the permission. The
+     * ledger records the firing and whether the one before it was answered; nothing reads that
+     * record to ration this schedule.
      */
     suspend fun showNotification(reminder: Reminder, nowMillis: Long = System.currentTimeMillis()) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&

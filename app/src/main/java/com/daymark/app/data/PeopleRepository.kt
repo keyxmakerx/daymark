@@ -28,8 +28,9 @@ import javax.inject.Singleton
  * `moodWithPerson`, no `entriesFor(person): List<MoodEntry>`, and no aggregate of any kind keyed
  * by a person — not a mean, not a count-by-mood, not a "most often with".
  *
- * That is the half of the guard this layer can hold. The other half is `stats/`'s own signatures,
- * and it is not yet in place — see **What `stats/` still has to do**, below.
+ * That is the half of the guard this layer can hold. The other half is `stats/`'s own signatures:
+ * a correlation factor is a `MoodCorrelations.FactorId`, which can only be made from an activity or
+ * a tracker, so a person id does not compile into a correlation at all.
  *
  * ## The one prompt this layer is allowed to feed
  *
@@ -40,19 +41,6 @@ import javax.inject.Singleton
  * The prompt that is forbidden — *"you haven't written about X in a while"* — has no query behind
  * it anywhere in this layer, and `PersonNoteDao` says why that absence is deliberate rather than an
  * omission somebody should helpfully fill in.
- *
- * ## What `stats/` still has to do
- *
- * `MoodCorrelations.factorDeltas(entries: List<Pair<Int, List<Long>>>, minOccurrences: Int)` takes
- * bare `Long` ids. An activity id and a person id are both `Long`, so that signature accepts a
- * person today, and `Signals`, `PeriodReview` and `ReportData` inherit the same hole. Nothing in
- * this app passes one — but "nothing passes one" is a promise, and §2 asked for a shape.
- *
- * The change that makes it true by signature is a `@JvmInline value class FactorId(val raw: Long)`
- * in `stats/`, constructed only from an activity or a tracker, with `factorDeltas` and
- * `FactorDelta.id` taking and returning that instead of `Long`. A person id would then not compile
- * into a correlation, and the mistake would be caught at the call site rather than by review.
- * `stats/` is another agent's file this session, so this is written down rather than done.
  */
 @Singleton
 class PeopleRepository @Inject constructor(

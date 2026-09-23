@@ -10,12 +10,16 @@ In order:
 
 1. **Check it.** Run `/tests` (or spawn `verifier`) and wait for the verdict. Do not proceed on a
    failure — fix it, or say plainly what is broken and stop.
-2. **Write down what changed.** Add a `CHANGELOG.md` entry. If the work shifted where the project
-   stands — something finished, something deferred, a decision made — append a dated addendum to
-   `docs/SESSION_STATE_2026-08-28.md`, newest last. Record what was deliberately NOT done and why;
-   that is the part a later session cannot reconstruct.
-3. **Keep the docs honest.** `companion/web/src/lib/docs.test.ts` resolves every backticked path in
-   `docs/` and the root markdown against the tree. A path you write must exist.
+2. **Write down what changed — in the right place.** Add a `CHANGELOG.md` entry. Then, on GitHub:
+   comment on the issue the work belongs to (what now works, what was deliberately NOT done and
+   why — the part a later session cannot reconstruct); open an issue for anything deferred or found
+   along the way, under the right tracking issue (the roadmap is #132); and turn any choice that
+   belongs to the maintainer into a `needs-decision` issue. Never record status in a document or a
+   code comment — no addenda, no to-do lists.
+3. **Keep the docs honest.** If the change alters how something works, update the reference document
+   that describes it (`docs/README.md` lists them). `companion/web/src/lib/docs.test.ts` resolves
+   every backticked path in `docs/` and the root markdown, and every document a code comment names,
+   against the tree. A path you write must exist.
 4. **Commit** on the current `claude/*` branch — never `main`. Subject in the repository's register:
    lowercase `type(scope): what changed, stated from the product's point of view`. The body explains
    why, for someone who was not here.

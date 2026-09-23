@@ -185,6 +185,61 @@ describe('every file the documentation points at exists', () => {
 })
 
 /**
+ * THE OTHER DIRECTION: every document the code names exists.
+ *
+ * Comments, test names and user-visible copy cite documents by name — "COMPANION_SECURITY.md §9", or
+ * `specifiedAt: 'docs/COMPANION_ACCESS_CONTROL.md, revocation.'` rendered on a screen. Plans, session
+ * logs and dated audits are deleted once their open work is in GitHub issues, so a citation of one
+ * is a pointer into nothing, and nothing else notices: a comment compiles whatever it says. This
+ * checks that the file named exists. It cannot check that the section still says what the comment
+ * claims — that still needs a reader.
+ */
+const CODE_PREFIXES = ['app/', 'companion/', 'sync-crypto/', 'tools/', 'gradle/', '.github/', '.claude/']
+const CODE_EXT = /\.(kt|kts|ts|svelte|js|mjs|sh|yml|yaml|json|toml|properties|html|css|md|example)$|(^|\/)Dockerfile$/
+/** An uppercase document name, optionally with a directory: `COMPANION_UX.md`, `docs/SKY.md`. */
+const DOC_NAME_IN_CODE = /(?<![A-Za-z0-9_.-])((?:[a-z][a-z0-9-]*\/)*[A-Z][A-Z0-9]*(?:[_-][A-Z0-9]+)*\.md)\b/g
+/** This file plants a missing name on purpose, to prove the resolver can say no. */
+const SELF = 'companion/web/src/lib/docs.test.ts'
+
+const CODE_FILES = FILE_INDEX.filter(
+  (f) => CODE_PREFIXES.some((p) => f.startsWith(p)) && CODE_EXT.test(f) && f !== SELF && !f.includes('node_modules/'),
+)
+
+function docNamesIn(text: string): string[] {
+  return [...new Set([...text.matchAll(DOC_NAME_IN_CODE)].map((m) => m[1]))]
+}
+
+/** A bare name resolves to any document with that file name; a path must resolve as a path. */
+function docResolves(name: string): boolean {
+  return name.includes('/') ? resolves(name) : FILE_INDEX.some((f) => f === name || f.endsWith('/' + name))
+}
+
+describe('every document the code names exists', () => {
+  const cited = CODE_FILES.map((f) => ({ f, names: docNamesIn(readFileSync(join(REPO, f), 'utf8')) })).filter(
+    (c) => c.names.length,
+  )
+
+  it('found code that cites documents, and the check can fail', () => {
+    // Guards the assertion below: a scanner that finds nothing makes it pass vacuously.
+    expect(cited.length).toBeGreaterThan(100)
+    expect(cited.some((c) => c.names.includes('COMPANION_SECURITY.md'))).toBe(true)
+    expect(docNamesIn('see docs/PLAN_THAT_NEVER_EXISTED.md §3 and COMPANION_UX.md')).toEqual([
+      'docs/PLAN_THAT_NEVER_EXISTED.md',
+      'COMPANION_UX.md',
+    ])
+    expect(docResolves('docs/PLAN_THAT_NEVER_EXISTED.md')).toBe(false)
+    expect(docResolves('PLAN_THAT_NEVER_EXISTED.md')).toBe(false)
+    expect(docResolves('COMPANION_SECURITY.md')).toBe(true)
+    expect(docResolves('docs/SKY.md')).toBe(true)
+  })
+
+  it('no code, config or agent instruction points at a document that does not exist', () => {
+    const missing = cited.flatMap((c) => c.names.filter((n) => !docResolves(n)).map((n) => `${c.f}: ${n}`))
+    expect(missing, 'these files cite documents that do not exist — repoint them').toEqual([])
+  })
+})
+
+/**
  * Tokens the documentation names that app.css does not define — each with the reason.
  *
  * The first version of this test asserted the simple rule "if a doc names a token, app.css defines
