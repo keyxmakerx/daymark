@@ -5,7 +5,7 @@ standardized questionnaires we **bundle**, which we deliberately **do not** bund
 self-help **methods** in the app are free to implement in our own words.
 
 > **Non-diagnostic.** The bundled check-ins are wellbeing self-checks, not clinical assessments.
-> They do not detect, diagnose, or treat any condition. See [PRIVACY.md](PRIVACY.md) — the app
+> They do not detect, diagnose, or treat any condition. See [PRIVACY.md](../PRIVACY.md) — the app
 > stores **scores only**, never the individual item answers.
 
 ## Bundled questionnaires (Check-ins)
@@ -21,9 +21,11 @@ The relevant citation/attribution is shown **in-app** on each check-in screen.
 
 ## NOT bundled (licensed or permission required)
 
-These instruments are **intentionally absent**. They are copyrighted and/or require a license or
-permission to reproduce, which does not fit a free, open-source app. A code comment in the
-assessment module forbids adding them.
+These instruments are **intentionally absent**, and none of them may be added — to the app or to the
+Companion. They are copyrighted and/or require a license or permission to reproduce, which does not
+fit a free, open-source app. This page is the rule. In the Companion, code enforces it too: the
+honesty gate refuses any instrument definition that names one of these, or the TOVA, Conners and
+CAARS attention batteries (`FORBIDDEN_SOURCES` in `instruments/validate.ts`).
 
 | Instrument | Domain | Why not bundled |
 |---|---|---|
@@ -84,9 +86,12 @@ consequences worth recording:
   may write anything they like in their own words; we never prompt for it.
 - **If permission is ever obtained**, the tool becomes **Validated** and this row changes with it.
 
-Detail and rationale: [SAFETY_PLAN_FEATURE_PLAN.md](SAFETY_PLAN_FEATURE_PLAN.md).
+The original licensing notes are kept
+[at the pre-consolidation commit](https://github.com/keyxmakerx/daymark/blob/968638594f10f6a4424415f8a5c14fd8eb4aaa00/docs/SAFETY_PLAN_FEATURE_PLAN.md?plain=1#L28-L55).
 
 ## See also
 
-- [PRIVACY.md](PRIVACY.md) — what is stored locally (scores only) and the no-`INTERNET` posture.
+- [PRIVACY.md](../PRIVACY.md) — what is stored locally (scores only) and the no-`INTERNET` posture.
 - [FEATURES.md](FEATURES.md) — what each feature does.
+- [PROVENANCE.md](PROVENANCE.md) — the Validated / Adapted / Custom labels every tool carries.
+- `companion/INSTRUMENTS.md` — the Companion's own ledger, one entry per instrument it ships.

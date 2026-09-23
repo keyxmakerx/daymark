@@ -252,34 +252,20 @@ describe('every document the code names exists', () => {
  *  FORBIDDEN   the name must never appear in app.css. Enforced for real, against values as well as
  *              names, in components/ui/invariants.test.ts group (d).
  *  SUPERSEDED  a pre-implementation sketch's name for something that shipped under another name.
+ *              None are left: the sketches were cut when the docs were consolidated.
  *  UNBUILT     named in a proposal the docs mark as not built.
  */
 const ABSENT_TOKENS: Record<string, string> = {
   // FORBIDDEN — a green "you are fine" is a clinical claim this product does not get to make.
   '--success': 'DESIGN_SYSTEM §2.3.2 — no health-coloured status token; ui/invariants.test.ts (d)',
   '--warning': 'DESIGN_SYSTEM §2.3.2 — same rule; the mood ramp is data, not a severity palette',
-  '--trust-locked': 'UX §10.1/§496 — a served page is never painted green, whatever it claims',
-  '--trust-caution': 'UX §10 — the trust strip carries no colour vocabulary of its own',
-  '--trust-open': 'UX §10 — same; assurance is worded, not hued',
+  '--trust-locked': 'UX §10.1 — a served page is never painted green, whatever it claims',
+  '--trust-caution': 'DESIGN_SYSTEM §2.3.2 — the trust strip carries no colour vocabulary of its own',
+  '--trust-open': 'DESIGN_SYSTEM §2.3.2 — same; assurance is worded, not hued',
 
-  // SUPERSEDED — UX.md §3 and FEATURES.md §7.2 predate app.css. Both now carry a status banner
-  // naming the replacements; these entries are the mechanical half of the same correction.
-  '--paper': 'sketch name; shipped as --paper-bg',
-  '--sheet': 'sketch name; shipped as --paper-sheet',
-  '--surface': 'sketch name; shipped as --paper-sheet',
-  '--ink': 'sketch name; shipped as --ink-text',
-  '--soft': 'sketch name; shipped as --ink-soft',
-  '--faint': 'sketch name; shipped as --ink-faint',
-  '--accent': 'sketch name; shipped as --ink-accent',
-  '--hair': 'sketch name; shipped as --hairline',
-  '--radius-card': 'sketch name; shipped as --radius',
-  '--radius-chip': 'sketch name; shipped as --radius-sm',
-  '--font-serif': 'sketch name; shipped as --font-display',
-  '--font-sans': 'sketch name; shipped as --font-text',
-
-  // UNBUILT — DESIGN_SYSTEM §3.2 says so in its own banner. The reduced-motion guarantee does not
+  // UNBUILT — DESIGN_SYSTEM §3.2 names them as not built. The reduced-motion guarantee does not
   // depend on them: the global block neutralises durations rather than each site opting in.
-  '--ease-standard': 'DESIGN_SYSTEM §3.2 "motion tokens do not exist"; transitions are per-component',
+  '--ease-standard': 'DESIGN_SYSTEM §3.2 — not built; transitions are per-component',
   '--ease-entrance': 'DESIGN_SYSTEM §3.2 — same',
   '--dur-fast': 'DESIGN_SYSTEM §3.2 — same',
   '--dur-base': 'DESIGN_SYSTEM §3.2 — same',
