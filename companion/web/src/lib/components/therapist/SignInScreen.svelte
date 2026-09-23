@@ -39,11 +39,11 @@
    * page's own subject in the outline that heading-navigation users rely on — the same reason
    * the NavRail's brand block is not a heading.
    *
-   * WHY THE DIGEST SITS ABOVE THE FIELDS AND NOT UNDER THEM. "Promoted from footnote to
-   * control" (COMPANION_WEB_REDESIGN_PLAN.md, Phase 3 item 4) is a claim about placement as much
-   * as about markup: which image is serving this page is something to read BEFORE typing a
-   * passphrase into it, so it is the first thing in the credential column, at the same weight as
-   * everything else there, with its value legible in mono and copyable in one click.
+   * WHY THE DIGEST SITS ABOVE THE FIELDS AND NOT UNDER THEM. "A control, not a footnote"
+   * (COMPANION_UX.md §10.4) is a claim about placement as much as about markup: which image is
+   * serving this page is something to read BEFORE typing a passphrase into it, so it is the first
+   * thing in the credential column, at the same weight as everything else there, with its value
+   * legible in mono and copyable in one click.
    *
    * WHY NOTHING HERE SAYS WHETHER THE DIGEST IS RIGHT. There is no expected value on this
    * screen, no comparison and no verdict. The comparison would be performed by the same page

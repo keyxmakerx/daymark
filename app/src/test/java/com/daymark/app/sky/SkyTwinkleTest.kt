@@ -6,10 +6,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The four motion-safety rules from `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1, as arithmetic.
+ * The four motion-safety rules from `docs/SKY.md` §7.4, as arithmetic.
  *
- * *"Everything stops under the motion switch; at any moment only a few stars are glinting; a glint
- * is under a third of a second; nothing is ever in step with anything else."* Each is a test below,
+ * Everything stops under the motion switch; at any moment only a few stars are glinting; a glint
+ * is under a third of a second; nothing is ever in step with anything else. Each is a test below,
  * and each absence assertion has a planted counter-example run through the same checker first.
  *
  * The population is deliberately realistic — two thousand stars in the proportions the prototype's
@@ -109,9 +109,9 @@ class SkyTwinkleTest {
 
     @Test
     fun `no two stars share a rhythm`() {
-        // §1: "nothing is ever in step with anything else". Two stars with the same period and the
-        // same phase pulse together forever, and a pair of synchronised lights is the one thing on
-        // a night sky that reads as a machine.
+        // `docs/SKY.md` §7.4: "nothing is ever in step with anything else". Two stars with the same
+        // period and the same phase pulse together forever, and a pair of synchronised lights is
+        // the one thing on a night sky that reads as a machine.
         val rhythms = population.map { rhythmOf(it.first, it.second) }.toSet()
         assertEquals("some stars beat together", population.size, rhythms.size)
 

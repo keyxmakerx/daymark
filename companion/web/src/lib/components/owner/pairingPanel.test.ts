@@ -84,7 +84,7 @@ describe('what the screen says', () => {
   /*
    * ISSUE #112. One notice on this screen when a reply does not open — and deliberately nothing
    * else: no notification, because the owner's half is a browser tab and a closed tab cannot raise
-   * one honestly. The phone's version of this is a contract in COMPANION_PHONE_2B.md §4, not code
+   * one honestly. The phone's version of this is a contract in COMPANION_PAIRING.md §14, not code
    * improvised here.
    */
   it('renders a mismatch as a question with two human choices, never as an attack', () => {

@@ -2,11 +2,11 @@
  * Everything the pairing screens say, in one place.
  *
  * WHY A COPY MODULE. Two reasons, both learned here. The first is that these sentences are load-
- * bearing: "wrong code is not an error" is a design rule (plan §3.7), and a screen that phrases a
- * mismatch as a failure has broken it more thoroughly than a bug would. Keeping them as named
- * constants means a test can read them and a reviewer can read them without opening a component.
- * The second is that the same words appear on two screens and in two states, and a sentence
- * duplicated in markup drifts.
+ * bearing: "wrong code is not an error" is a design rule (COMPANION_PAIRING.md §6), and a screen
+ * that phrases a mismatch as a failure has broken it more thoroughly than a bug would. Keeping
+ * them as named constants means a test can read them and a reviewer can read them without opening
+ * a component. The second is that the same words appear on two screens and in two states, and a
+ * sentence duplicated in markup drifts.
  *
  * THE REGISTER. Calm, plain, and never a verdict. No exclamation marks, no congratulation, no
  * green: what "done" looks like in this product is solid ink and a sentence in the past tense
@@ -32,8 +32,8 @@ export const OWNER_COPY = {
 
   /**
    * The rule the whole design rests on, at the point of the click rather than in a footnote
-   * (plan §3.7.4: the Companion must not offer to email the code, and the reason is written at
-   * the call site).
+   * (COMPANION_PAIRING.md §2, "Two channels": the Companion must not offer to email the code, and
+   * the reason is written at the call site).
    */
   twoChannels:
     'Send the link however you like. Say the code some other way — out loud, by text, in the ' +
@@ -42,7 +42,7 @@ export const OWNER_COPY = {
   codeLabel: 'Say this code to them',
   codeHint: 'Eight characters. Case does not matter, and the dash is only there to read by.',
 
-  /** The lower-assurance line, from COMPANION_UX R5. Applied here rather than restated. */
+  /** The lower-assurance line, from COMPANION_SECURITY.md R5. Applied here rather than restated. */
   browserCaveat:
     'This page is served to your browser by the server, so it is the convenient way to do this ' +
     'rather than the strongest one.',
@@ -62,9 +62,9 @@ export const OWNER_COPY = {
    *
    * ONE NOTICE, ON THIS SCREEN, AND NO NOTIFICATION. The owner's half runs in a browser tab today,
    * and a closed tab cannot raise a notification honestly: it would arrive late, or not at all, and
-   * either way the person would learn to treat it as unreliable. The phone half (4.0b) can do it
-   * properly and the contract for that is written down in COMPANION_PHONE_2B.md §4 rather than
-   * improvised here.
+   * either way the person would learn to treat it as unreliable. The phone half (not built: #174)
+   * can do it properly and the contract for that is written down in COMPANION_PAIRING.md §14
+   * rather than improvised here.
    *
    * The count stays where it was, below this, and stays a count. Nothing about a reply that did not
    * open changes how often anything is asked of the server — see ownerCeremony.ts, checkForReply.

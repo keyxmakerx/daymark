@@ -30,7 +30,8 @@ private fun SnapshotMeta.toDto() = MetaDto(version, size, contentHash, createdAt
 /**
  * The /v1 sync API. The server is zero-knowledge: every blob is opaque ciphertext it
  * cannot read. All routes require a valid bearer token; identity for rate-limit/lockout
- * is the socket peer (no forwarded headers trusted).
+ * is [clientAddress]: the socket peer, unless a proxy on the operator's trusted-proxy list
+ * vouches for another address (docs/COMPANION_DEPLOYMENT.md §4.0).
  */
 fun Route.syncRoutes(store: BlobStore, guard: AuthGuard, maxRequestBytes: Long) {
     route("/v1") {

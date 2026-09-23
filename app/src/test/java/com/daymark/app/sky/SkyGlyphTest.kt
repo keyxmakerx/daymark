@@ -408,10 +408,8 @@ class SkyGlyphTest {
         // THIS TEST WAS INVERTED IN SEPTEMBER 2026. It used to assert that a star at the month
         // level DID draw its kind mark.
         //
-        // `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1, agreed with the maintainer: "No marks for
-        // kind at ordinary zoom. A journal page, a step, a goal reached and a life event are all
-        // just stars until the person leans in, where the glyph appears. The text list still names
-        // the kind." It revises `docs/SKY.md` §3.4, which drew glyphs at a month.
+        // `docs/SKY.md` §3.3, agreed with the maintainer: "Kind marks appear only at CLOSE (§4).
+        // Further out, every kind is just a star, and the list always names it."
         //
         // It is inverted rather than deleted on purpose: the old assertion was the record that the
         // Sky used to sort a person's days into kinds of act at a zoom where a whole stretch of a
@@ -444,8 +442,9 @@ class SkyGlyphTest {
 
     @Test
     fun `the halo fades to nothing instead of ending on an edge`() {
-        // The flat translucent disc had a hard boundary at its radius. §1 replaces it with a fade,
-        // and "to nothing" is the part that is checkable: the outermost stop must be exactly zero.
+        // The flat translucent disc had a hard boundary at its radius. `docs/SKY.md` §3.5 replaces
+        // it with a fade, and "to exactly nothing" is the part that is checkable: the outermost
+        // stop must be exactly zero.
         assertEquals(1f, SkyGlyph.HALO_STOP_POSITION.last(), 0f)
         assertEquals(0f, SkyGlyph.HALO_STOP_WEIGHT.last(), 0f)
         assertEquals(0f, SkyGlyph.HALO_STOP_POSITION.first(), 0f)

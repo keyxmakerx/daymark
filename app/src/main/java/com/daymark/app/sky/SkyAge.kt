@@ -11,10 +11,8 @@ package com.daymark.app.sky
  *
  * ## Why colour is age
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1: *"Colour is age, not mood: redshift. A star's tint
- * is how far away in time it is, blue-white when recent, through gold and amber to a deep red after
- * some years, on one continuous ramp. Time is a fact about the star, not a reading of the person,
- * and red stops meaning bad."*
+ * `docs/SKY.md` §3.2: *"A star's colour is how long ago it was: blue-white when new, through white,
+ * gold and amber, to a deep red after five and a half years. Red means old, never bad."*
  *
  * That last clause is the whole argument. On the old design a star took its hue from the mood the
  * person recorded, so the warm end of the ramp was the hard end, and a bad month was a red month —
@@ -41,11 +39,11 @@ package com.daymark.app.sky
  * | 5 years 6 months and beyond | `#FF6E58` deep red | the far end; it stops here and stays |
  *
  * [fadeFor] falls from full brightness toward [FADE_FLOOR] with a time constant of [FADE_YEARS].
- * **It never reaches zero and it is never allowed to** — §1: *"Old stars recede but never vanish...
- * so an old year is far sky rather than a void; nothing is ever dropped from the surface."* A
- * person who logged for a year and stopped must not open this and find that year gone, and someone
- * who comes back after five years must find everything they left. The floor is what makes fading a
- * sense of distance rather than a deletion on a timer.
+ * **It never reaches zero and it is never allowed to** — `docs/SKY.md` §3.5: *"Old stars recede but
+ * never vanish"*, so an old year is far sky rather than a void; nothing is ever dropped from the
+ * surface. A person who logged for a year and stopped must not open this and find that year gone,
+ * and someone who comes back after five years must find everything they left. The floor is what
+ * makes fading a sense of distance rather than a deletion on a timer.
  *
  * `0.22` and `2.1` years are the prototype's. The shape they give: half the fall has happened by
  * about 1.5 years, three quarters by about 3 years, and the last quarter never quite finishes.
@@ -133,10 +131,10 @@ object SkyAge {
     /**
      * The tint of a star of this [kind] and this age.
      *
-     * A **landmark is exempt**: §1 says a life event *"alone is bigger, brighter, spiked, never
-     * redshifted and never faded"*, because it is a mark the person placed in order to find it
-     * again, and something placed to be found must not recede. It is drawn in [LANDMARK_TINT], the
-     * sky's own white, at every age.
+     * A **landmark is exempt**: `docs/SKY.md` §3.4 says a life event alone is bigger, brighter,
+     * spiked, never redshifted and never faded, because it is a mark the person placed in order to
+     * find it again, and something placed to be found must not recede. It is drawn in
+     * [LANDMARK_TINT], the sky's own white, at every age.
      *
      * Kind is used here for exactly one thing — *did the person author this* — and never as a rank
      * between the other five. A journal page and a check-in and a step all redshift identically.

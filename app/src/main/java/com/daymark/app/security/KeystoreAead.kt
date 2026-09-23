@@ -29,8 +29,9 @@ import javax.crypto.spec.GCMParameterSpec
  * A key with no authentication requirement is usable by this app whenever this app runs. So while
  * this wrap is the only one, the journal opens without anybody being asked for anything — which is
  * correct for someone who has set no PIN, and would make a liar of the settings copy for someone who
- * has. `DataKeyStore` therefore deletes this wrap, and this key, when a PIN of six or more digits is
- * set. See the note at the top of `DataKeyWraps.kt`.
+ * has. Once the PIN wrap is armed, `DataKeyStore` deletes this wrap, and this key, when a PIN of
+ * six or more digits is set; it is not armed yet (#109). See the note at the top of
+ * `DataKeyWraps.kt`.
  *
  * ## The parameters, and the two that are deliberately absent
  *

@@ -208,10 +208,11 @@ class EntryEditorViewModel @Inject constructor(
      *
      * The mood, the note, the time, the photo and the activities go to `EntryRepository`. The
      * *with* list goes to `PeopleRepository`. **No call below receives both a mood and a person**,
-     * and that is the shape the plan asked for: §2, *"Never in any rule that reads mood.
-     * Correlations, patterns and the cards they produce cannot receive a person or a community,
-     * groups included."* A single `save(entry, activities, people)` would be the one place in the
-     * app where the two are handed over together, and every later convenience would reach for it.
+     * and that is the shape `docs/FEATURES.md` §11.2 asks for: *"Never in any rule that reads
+     * mood. Correlations, patterns and the cards they produce cannot receive a person or a
+     * community, groups included."* A single `save(entry, activities, people)` would be the one
+     * place in the app where the two are handed over together, and every later convenience would
+     * reach for it.
      *
      * The only thing that crosses between them is the row id, which is what a foreign key is.
      */

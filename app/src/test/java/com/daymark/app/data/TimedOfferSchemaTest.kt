@@ -52,8 +52,8 @@ import java.io.File
  * 4. **The mapper learning to read outcome keys.** `TimingGrid` treats any non-null outcome,
  *    recognised or not, as an answer on purpose. A mapper that special-cased particular keys would
  *    put back exactly the coupling that rule exists to remove.
- * 5. **The ledger reaching a backup, a CSV or a PDF.** `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §4:
- *    the reception ledger and the timing grid are never shared with a clinician.
+ * 5. **The ledger reaching a backup, a CSV or a PDF.** `docs/FEATURES.md` §13.2: the reception
+ *    ledger and the timing grid are never shared with a clinician.
  */
 class TimedOfferSchemaTest {
 
@@ -539,8 +539,8 @@ class TimedOfferSchemaTest {
     // ---------------------------------------------------------------------------------------------
 
     /**
-     * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §4: *the reception ledger and the timing grid are
-     * never shared with a clinician.*
+     * `docs/FEATURES.md` §13.2: *the reception ledger and the timing grid are never shared with a
+     * clinician.*
      *
      * `BackupReplaceSourceTest` already asserts that the backup payload has no ledger field at all;
      * this is the narrower claim for the three columns added here, over every file that produces

@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentHashMap
 /** The owner's registered notification address + which [MailMessage.ReviewKind] events it wants. */
 data class NotificationSettings(val email: String?, val events: Set<MailMessage.ReviewKind>)
 
-/** A minted, single-use recovery-confirmation link (Track T2 access-token re-issue). */
+/** A minted, single-use recovery-confirmation link (the owner's access-token re-issue). */
 data class ReissueMint(val email: String, val confirmToken: String, val expiresAt: Long)
 
 sealed interface ReissueConfirmOutcome {
@@ -19,11 +19,12 @@ sealed interface ReissueConfirmOutcome {
 }
 
 /**
- * Server-side state for Track T2 (email Option A): the owner's registered
- * notification email + per-event preferences, the currently accepted owner/bearer token
- * (rotatable via the email-triggered recovery flow, durable across restarts), and single-use
- * recovery-confirmation tokens. One SQLite file per data dir, independent of the therapist-portal
- * feature flag — the bearer token also gates the plain sync API, which does not need the portal.
+ * Server-side state for the owner's email (COMPANION_SECURITY.md §6, "Owner notifications and
+ * server-access recovery"): the owner's registered notification email + per-event preferences,
+ * the currently accepted owner/bearer token (rotatable via the email-triggered recovery flow,
+ * durable across restarts), and single-use recovery-confirmation tokens. One SQLite file per data
+ * dir, independent of the therapist-portal feature flag — the bearer token also gates the plain
+ * sync API, which does not need the portal.
  *
  * **Token storage is a digest, not the token.** `owner_token.token` and `owner_token.bootstrap_token`
  * hold [Secrets.tokenHash] of the bearer token, never the token itself;
@@ -46,8 +47,8 @@ sealed interface ReissueConfirmOutcome {
  * *stored copy* changes.
  *
  * The registered notification email is likewise stored in plaintext, but by necessity (the server
- * must read it to address an outbound message) rather than by the stale reasoning above; see the
- * T2 security note in COMPANION_SECURITY.md.
+ * must read it to address an outbound message) rather than by the stale reasoning above; see
+ * COMPANION_SECURITY.md §6, "Owner notifications and server-access recovery".
  */
 class OwnerAccountStore(
     dataDir: String,

@@ -171,15 +171,15 @@ fun Route.therapistAuthRoutes(
     // Per-SOURCE budget for the credential-free PAIRING touches — the relay's fetch and respond —
     // and the one budget in this file that is DURABLE.
     //
-    // Two reasons, and the first is the one that made this a blocker rather than a nicety. §3.7's
-    // pairing rests on a password-authenticated exchange whose entire security argument is "one
-    // online guess per attempt, and no offline attack"; that argument is worth exactly as much as
-    // the thing counting attempts, and an in-process map is cleared by any restart and duplicated
-    // by any second instance. A limiter an attacker can reset by waiting for a deploy is not a
-    // limiter. Second, and smaller: the per-invite backoff in AuthStore has always been durable,
-    // so leaving the per-source half in memory would have made half of one control survive a
-    // restart and the other half not — the confusing kind of partial guarantee that reads as
-    // protection in a review and is not.
+    // Two reasons, and the first is the one that made this a blocker rather than a nicety. The
+    // pairing (COMPANION_PAIRING.md §2 and §7) rests on a password-authenticated exchange whose
+    // entire security argument is one online guess per attempt, and no offline attack; that
+    // argument is worth exactly as much as the thing counting attempts, and an in-process map is
+    // cleared by any restart and duplicated by any second instance. A limiter an attacker can
+    // reset by waiting for a deploy is not a limiter. Second, and smaller: the per-invite backoff
+    // in AuthStore has always been durable, so leaving the per-source half in memory would have
+    // made half of one control survive a restart and the other half not — the confusing kind of
+    // partial guarantee that reads as protection in a review and is not.
     //
     // Fetch and respond share ONE scope deliberately. They verify the same invite secret, so
     // separate budgets would let an attacker alternate routes and spend twice the attempts on it.
@@ -211,7 +211,8 @@ fun Route.therapistAuthRoutes(
         }
 
         /*
-         * THE REDEEM ROUTE IS GONE, and its absence is the point (plan §3.7, 2026-09-04).
+         * THE REDEEM ROUTE IS GONE, and its absence is the point (COMPANION_PAIRING.md §4, "No
+         * enrolment without approval").
          *
          * It took the invitation secret — which the emailed link carries — and answered with an
          * enrolment ticket. So whoever read that email could enrol as the therapist, and the short

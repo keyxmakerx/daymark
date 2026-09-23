@@ -11,7 +11,7 @@ import com.daymark.app.goals.GoalKind
  * A **habit** is what this row has always been: "Exercise 5× per week", optionally linked to an
  * [activityId], where progress is the number of distinct days this week whose entries include that
  * activity. A **project** ignores [activityId] and [targetPerWeek] entirely and is a container for
- * `goal_steps` rows instead — `docs/CLINICIAN_FEEDBACK.md` §8, `docs/DECISIONS.md` §D5.
+ * `goal_steps` rows instead — `docs/DECISIONS.md` §D5.
  *
  * The two coexist rather than one replacing the other. §D5 reads as a replacement, and it was not
  * built as one: people are mid-way through using the weekly count right now, [cue] and [routine] are

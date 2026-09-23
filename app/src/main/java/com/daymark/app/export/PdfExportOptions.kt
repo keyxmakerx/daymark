@@ -10,7 +10,7 @@ enum class PaperSize(val widthPt: Int, val heightPt: Int) {
  * Options for the therapist PDF report. The defaults are the one-tap path; everything
  * else is exposed in an "advanced" expander.
  *
- * The report is four sides (see `docs/PLAN_2026-08-NEXT.md` §1). Sides 1, 2 and 4 always print —
+ * The report is four sides (see `docs/DECISIONS.md` §D8). Sides 1, 2 and 4 always print —
  * they are scores, bands, entries and provenance. Side 3 is the person's own writing and is the
  * only side that is off unless they turn it on.
  */
@@ -34,9 +34,9 @@ data class PdfExportOptions(
      * Ids of the journal entries the person chose, one at a time, to put in front of a clinician.
      *
      * Empty means side 3 prints nothing, even when [includeInTheirWords] is on — absence of a
-     * choice is not consent. The software may *nominate* a set for this list (the plan allows
-     * proposing a representative spread), but the set that reaches here is the one the person
-     * confirmed after seeing it. Nothing may be added to it silently, and nothing here is
+     * choice is not consent. The software may *nominate* a set for this list (`docs/DECISIONS.md`
+     * §D8 allows proposing a representative spread), but the set that reaches here is the one the
+     * person confirmed after seeing it. Nothing may be added to it silently, and nothing here is
      * summarised or excerpted: an included entry prints whole.
      */
     val includedJournalEntryIds: Set<Long> = emptySet(),

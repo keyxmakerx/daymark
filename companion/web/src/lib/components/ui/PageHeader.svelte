@@ -15,7 +15,7 @@
    * cell painted its shadow straight over the page title. The header has to win, and it wins
    * by being in the same stacking game the cell is playing. Removing that pair re-breaks it,
    * and it re-breaks silently — it only shows up while hovering a specific cell on one
-   * screen. (COMPANION_WEB_REDESIGN_PLAN.md §1d: topbar 6, rail 7, body 1 + isolate.)
+   * screen. (COMPANION_DESIGN_SYSTEM.md §4.9: topbar 6, rail 7, body 1 + isolate.)
    *
    * WHY IT WRAPS RATHER THAN TRUNCATES. The trailing slot holds real actions; the chips hold
    * counts a person is entitled to read. Neither may be quietly clipped on a narrow window,

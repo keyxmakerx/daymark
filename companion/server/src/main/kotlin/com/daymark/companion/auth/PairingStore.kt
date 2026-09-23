@@ -6,7 +6,7 @@ import java.sql.Connection
 import java.sql.DriverManager
 
 /**
- * Store-and-forward relay state for the CPace pairing exchange (plan §3.7.3).
+ * Store-and-forward relay state for the CPace pairing exchange (COMPANION_PAIRING.md §4).
  *
  * The exchange this carries is one round trip that never happens in real time: the owner posts
  * their opening message, the therapist fetches it and posts the reply whenever they open the
@@ -16,7 +16,8 @@ import java.sql.DriverManager
  *  - THE BLOBS ARE OPAQUE. `msg_a`, `msg_b`, `env_to_owner` and `env_to_therapist` are stored and
  *    returned byte-for-byte, never parsed, never validated beyond a size cap. The server cannot
  *    participate in the exchange — it does not have the pairing code, and the code never reaches
- *    it in any form (§3.7.4) — so there is nothing it could legitimately do with the contents.
+ *    it in any form (COMPANION_PAIRING.md §5) — so there is nothing it could legitimately do with
+ *    the contents.
  *    A relay that started reading its parcels would learn nothing and become a thing worth
  *    compromising. One envelope goes each way: the therapist's offer (their public keys, a name,
  *    the enrol ticket they chose) travels with the reply, and the owner's own public keys travel
@@ -258,7 +259,7 @@ class PairingStore(
         if (updated == 1) TransitionStatus.OK else TransitionStatus.GONE
     }
 
-    /** Owner cancels; OPEN or RESPONDED → CANCELLED. The 4.0a owner Cancel. */
+    /** Owner cancels; OPEN or RESPONDED → CANCELLED (COMPANION_PAIRING.md §8). */
     fun cancel(exchangeId: String, relRef: String): TransitionStatus =
         transition(exchangeId, relRef, from = listOf(State.OPEN, State.RESPONDED), to = State.CANCELLED)
 

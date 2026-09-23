@@ -21,8 +21,9 @@ import javax.inject.Inject
 /**
  * One entry, exactly as it was written.
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §3: *"Descriptive only: the person's own mood word,
- * activities, with, note, photo. No commentary of any kind. Never 'you seem'."*
+ * `docs/FEATURES.md` §1.3: *"The page is descriptive only: the person's own mood word, their
+ * activities, who they were with, their note and their photo. There is no commentary of any kind:
+ * no "you seem", no comparison with another day, no count, no encouragement."*
  *
  * Everything here is a field read back. There is no score, no summary, no comparison with another
  * day, no "this was one of your better ones" and nothing derived from the mood level except the
@@ -60,8 +61,8 @@ data class EntryViewUiState(
  *
  * The rule the people feature is built around — *a person or a community may never reach anything
  * that reads mood* — is about rules, correlations and the cards they produce, not about showing a
- * person their own entry. §3 asks for the mood word, the activities, the *with* list, the note and
- * the photo on one page, so one object holds them.
+ * person their own entry. `docs/FEATURES.md` §1.3 asks for the mood word, the activities, the
+ * *with* list, the note and the photo on one page, so one object holds them.
  *
  * What makes that safe is that nothing here combines them. The mood level is read from the entry
  * and handed to the screen; the *with* list is read from `PeopleRepository` by entry id and handed

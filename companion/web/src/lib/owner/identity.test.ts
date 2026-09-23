@@ -245,8 +245,8 @@ describe('(f) a pinned vector holds the derivation still', () => {
    * Everything above is internally consistent: change KDF_CONTEXT from 'dmsync01' to 'dmownr01',
    * or swap subkey ids 3 and 4 for 5 and 6, and every sameness assertion on this page still passes,
    * because both sides of each comparison move together. What would NOT still pass is a clinician
-   * who pinned a key last month, and — once plan 4.0b lands — a phone deriving the same identity
-   * from the same master.
+   * who pinned a key last month, and — once the phone's half is built (#174) — a phone deriving
+   * the same identity from the same master.
    *
    * So the derivation is pinned to bytes. This vector is the cross-platform contract: the Android
    * implementation is correct when it reproduces these two public keys from this master, and a

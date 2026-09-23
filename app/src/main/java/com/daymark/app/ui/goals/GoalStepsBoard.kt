@@ -28,13 +28,13 @@ import com.daymark.app.ui.components.PaperSurface
 
 /**
  * The three columns a project's steps sit in — the clinician's "like the programming tool", with
- * the parts of that tool that do not belong in this product left out
- * (`docs/CLINICIAN_FEEDBACK.md` §3).
+ * the parts of that tool that do not belong in this product left out. The board is
+ * `docs/DECISIONS.md` §D5; what is left out follows §D6.
  *
  * ## What was left out, and why
  *
- * **No counts on the column headers.** `docs/DECISIONS.md` §D6 rules out "count badges on
- * pending columns", and a badge on *To do* is a running total of things a person has not done. The
+ * **No counts on the column headers.** `docs/DECISIONS.md` §D6 rules out count badges on the
+ * activity board, and a badge on *To do* is a running total of things a person has not done. The
  * one number on the screen is the caller's "n of m steps done", stated once.
  *
  * **Nothing is coloured by state, and nothing is red.** All three columns look the same. A step that

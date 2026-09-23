@@ -5,12 +5,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The measurement `docs/SKY.md` §12.1 says nobody has taken, and the transform it turned out to
- * need.
- *
- * §12.1: *"The contrast floor is unverified. `MoodAwful #AE5747` and `MoodBad #C27C46` against
- * `#16150F` need actual measurement. The shipped 18% lerp-toward-white suggests the raw ramp does
- * not clear it. This blocks M4 and P1."* It is measured here, and the suspicion was right.
+ * The mood ramp's contrast against the night ground, measured, and the transform it turned out to
+ * need. The result is `docs/SKY.md` §0.3 finding 1 and §7.1: `MoodAwful #AE5747` does not clear
+ * the 4.5 floor on either ground, and the raw ramp ranks the moods by visibility. How the colours
+ * read on a real OLED panel at low brightness is for a person to judge (#147).
  *
  * The ground it is measured against moved in September 2026 — `#16150F` to `#07070A`, with
  * `SkyPalette.STAR_CONTRAST_TARGET` rising 5.0 to 6.5 to match (`SkyPalette`'s header has the
@@ -63,7 +61,7 @@ class SkyPaletteTest {
         val ratios = DoubleArray(5) { SkyPalette.contrastRatio(shippedRamp[it], SkyPalette.NIGHT_BG) }
         for (i in ratios.indices) println("  raw ${levelNames[i]} = ${"%.2f".format(ratios[i])}:1")
 
-        // The finding §12.1 asked for: level 1 fails outright. It measured 3.70:1 on the old
+        // `docs/SKY.md` §0.3 finding 1: level 1 fails outright. It measured 3.70:1 on the old
         // ground and 4.08:1 on this one — a darker ground lifted it and it still does not reach
         // 4.5, which is the answer to "does the near-black ground fix this on its own".
         assertTrue(
@@ -89,23 +87,25 @@ class SkyPaletteTest {
 
     @Test
     fun `the ground went darker and the marks drawn on it went brighter`() {
-        // §1: "Ground goes near-black, not pure black. The star contrast target rises with it, so
-        // stars get brighter, not dimmer (they are pinned to a ratio against the ground)." Both
-        // halves, as one assertion, because either alone is the wrong change.
+        // The ground is near-black, not pure black (`docs/SKY.md` §3.5), and the star contrast
+        // target rises with it, so stars get brighter, not dimmer (they are pinned to a ratio
+        // against the ground; `SkyPalette`'s header). Both halves, as one assertion, because either
+        // alone is the wrong change.
         val groundThen = SkyPalette.relativeLuminance(OLD_NIGHT_BG)
         val groundNow = SkyPalette.relativeLuminance(SkyPalette.NIGHT_BG)
         println("  ground ${"%.6f".format(groundThen)} -> ${"%.6f".format(groundNow)}")
         assertTrue("the ground did not get darker", groundNow < groundThen)
         assertTrue("the ground went to pure black, which has no floor to fade into", groundNow > 0.0)
 
-        // What a mood mark emits, which is the thing §1 says must not fall. Derived from the
-        // target and the ground rather than written down, so it stays true if either moves.
+        // What a mood mark emits, which is the thing `SkyPalette`'s header says must not fall.
+        // Derived from the target and the ground rather than written down, so it stays true if
+        // either moves.
         val emittedThen = OLD_STAR_CONTRAST_TARGET * (groundThen + 0.05) - 0.05
         val emittedNow = SkyPalette.STAR_CONTRAST_TARGET * (groundNow + 0.05) - 0.05
         println("  a mood mark emits ${"%.5f".format(emittedThen)} -> ${"%.5f".format(emittedNow)}" +
             " (${"%.1f".format(100 * (emittedNow / emittedThen - 1))}% more light)")
         assertTrue(
-            "the darker ground made the marks dimmer, which is the failure §1 names",
+            "the darker ground made the marks dimmer, which is the failure SkyPalette names",
             emittedNow > emittedThen,
         )
 

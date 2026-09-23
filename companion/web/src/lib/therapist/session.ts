@@ -117,12 +117,12 @@ export class PortalClient {
   }
 
   /*
-   * `redeemInvite` USED TO BE HERE, and its route is gone from the server (plan §3.7,
-   * 2026-09-04). It exchanged the invitation secret — which the emailed link carries — for an
-   * enrolment ticket, so the pairing code secured nothing. A ticket is now chosen by the
-   * therapist, sealed to the owner under the pairing key, and made live by the owner's approval;
-   * see therapist/pairingAccept.ts and pairing/relay.ts. `RedeemResult` survives as the shape the
-   * pairing fetch answers with.
+   * `redeemInvite` USED TO BE HERE, and its route is gone from the server (COMPANION_PAIRING.md
+   * §4, "No enrolment without approval"). It exchanged the invitation secret — which the emailed
+   * link carries — for an enrolment ticket, so the pairing code secured nothing. A ticket is now
+   * chosen by the therapist, sealed to the owner under the pairing key, and made live by the
+   * owner's approval; see therapist/pairingAccept.ts and pairing/relay.ts. `RedeemResult`
+   * survives as the shape the pairing fetch answers with.
    */
 
   /**

@@ -2,11 +2,11 @@
  * SIGN-IN — the contract a person reads before they are trusted with someone else's record,
  * and the digest of the image serving them, as plain data.
  *
- * WHAT THIS SCREEN IS FOR. Signing in here opens another person's mental-health record. The
- * plan (COMPANION_WEB_REDESIGN_PLAN.md, Phase 3 item 4) calls it a "two-column contract": on
- * one side the credential entry, on the other an explicit statement of what the person signing
- * in is about to be trusted with and what the server does and does not learn. This module owns
- * the second column and the digest control. It owns no credential, no key, no request.
+ * WHAT THIS SCREEN IS FOR. Signing in here opens another person's mental-health record.
+ * COMPANION_UX.md §10.4 makes it a two-column contract: on one side the credential entry, on the
+ * other an explicit statement of what the person signing in is about to be trusted with and what
+ * the server does and does not learn. This module owns the second column and the digest control.
+ * It owns no credential, no key, no request.
  *
  * WHY THE CONTRACT IS DATA AND NOT MARKUP. Every sentence below is a premade constant written
  * by a person. Holding them here rather than in the component buys three things a <p> cannot:
@@ -17,11 +17,11 @@
  * Nothing here is generated, inferred, or phrased by a model.
  *
  * WHY THE MODULE REFUSES TO STATE THE ASSURANCE CAVEAT ITSELF. The fixed LowerAssuranceBanner
- * copy is quoted verbatim in COMPANION_SECURITY.md and asserted character-for-character by
- * components/invariants.tree.test.ts. It is rendered by the component that owns it and is
- * retyped nowhere — not here, not in the screen. `checkContract` actively rejects a clause that
- * reaches for the banner's subjects, because the way fixed copy actually gets softened is not
- * an edit to the fixed copy: it is a friendlier paraphrase added beside it.
+ * copy is asserted character-for-character by components/invariants.tree.test.ts. It is rendered
+ * by the component that owns it and is retyped nowhere — not here, not in the screen.
+ * `checkContract` actively rejects a clause that reaches for the banner's subjects, because the
+ * way fixed copy actually gets softened is not an edit to the fixed copy: it is a friendlier
+ * paraphrase added beside it.
  *
  * WHY THE DIGEST IS SHOWN WHOLE. A truncated hash is a hash you cannot compare. `sha256:e7c40c…`
  * and a tampered image whose digest shares those eight characters read identically, and the

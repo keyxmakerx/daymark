@@ -34,10 +34,10 @@ import java.time.Instant
 private val log = LoggerFactory.getLogger("com.daymark.companion.routes.RecoveryRoutes")
 
 /**
- * Track T2 (email Option A, per the Companion coordination plan): owner notification-email
- * registration and the unauthenticated access-token recovery flow. This recovers *server access
- * only* — the server is zero-knowledge and can never reset the PIN or E2EE passphrase; see
- * COMPANION_SECURITY.md.
+ * The owner's email: notification-email registration and the unauthenticated access-token
+ * recovery flow. This recovers *server access only* — the server is zero-knowledge and can never
+ * reset the PIN or E2EE passphrase; see COMPANION_SECURITY.md §6, "Owner notifications and
+ * server-access recovery".
  *
  * `/v1/owner/notifications` is owner-bearer-token-authenticated, matching every other owner
  * write path. The `/v1/recovery` routes are deliberately unauthenticated (that is the point of a

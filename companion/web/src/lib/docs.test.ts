@@ -307,8 +307,9 @@ describe('every design token the documentation names is defined', () => {
 
 describe('claims of the form "not built" stay true', () => {
   /*
-   * PLAN §5 exists to stop green CI being read as "the feature landed". If something on that list
-   * quietly acquires a production caller, the list becomes the lie instead of the safeguard.
+   * The docs' "not built" claims (docs/DECISIONS.md §D1b, docs/COMPANION_DIALOGUE.md) exist to stop
+   * green CI being read as "the feature landed". If something they name quietly acquires a
+   * production caller, the claim becomes the lie instead of the safeguard.
    */
   const webSrc = join(REPO, 'companion', 'web', 'src')
 
@@ -329,8 +330,9 @@ describe('claims of the form "not built" stay true', () => {
 
   it('the companion dialogue is still unmounted, as the docs say', () => {
     // Three of its six destinations (check-in, journal, safety-plan) do not exist in this app, so
-    // mounting it here would give endings nothing to open. When that changes, this test should be
-    // updated in the same commit as the mount — and PLAN §5 with it.
+    // mounting it here would give endings nothing to open. When that changes (#272), this test
+    // should be updated in the same commit as the mount — and docs/DECISIONS.md §D1b and
+    // docs/COMPANION_DIALOGUE.md with it.
     const importers = PRODUCTION.filter(
       (p) => /from '.*companion\/(content|walk)'/.test(p.text) && !p.f.endsWith('Companion.svelte'),
     )

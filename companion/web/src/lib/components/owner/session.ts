@@ -4,8 +4,8 @@
  * box keypair; signing grants/shares needs the owner Ed25519 sign keypair. PinnedTherapist keys
  * are OOB-verified (the pairing slice) and are the ONLY authors the console will trust.
  *
- * Key GENERATION / at-rest custody (WebAuthn-PRF wrapping) is the pairing/auth slice — this
- * console CONSUMES already-unlocked keys. See the slice's "unverifiableHere" note.
+ * Key GENERATION and at-rest custody live in owner/unlock.ts and owner/identity.ts — this
+ * console CONSUMES already-unlocked keys. A passkey (WebAuthn-PRF) unlock is not built: #205.
  */
 import type { BoxKeyPair, SignKeyPair } from '../../assignments/crypto'
 import type { Grant } from '../../assignments/types'

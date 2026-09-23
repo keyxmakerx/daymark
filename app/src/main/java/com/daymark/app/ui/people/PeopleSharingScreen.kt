@@ -35,8 +35,8 @@ import com.daymark.app.data.entity.PersonGroup
 /**
  * "Sharing" — one list of every person and community, a default per group, an override per item.
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2. The word **clinician** is used throughout: a
- * therapist, a doctor and a psychiatrist are one role to this app.
+ * `docs/FEATURES.md` §11.4. The word **clinician** is used throughout: a therapist, a doctor and a
+ * psychiatrist are one role to this app.
  *
  * ## Everything is off, and off is a complete answer
  *

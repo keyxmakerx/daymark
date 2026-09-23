@@ -38,7 +38,7 @@
    *
    * WHY IT HANGS OFF THIS PANEL. This is the screen about the sync server, and the sync server is
    * the answer to "my phone is gone, how do I get the past years of my life back"
-   * (PLAN_2026-08-COMPANION-NEXT.md §3.11.1). A recovery code is the second half of that same
+   * (COMPANION_ARCHITECTURE.md §1). A recovery code is the second half of that same
    * question — the half that applies when what was lost is the passphrase rather than the handset —
    * so it belongs beside the passphrase field rather than behind a separate route nobody visits
    * until it is too late to be useful.

@@ -1,5 +1,5 @@
 /*
- * Provenance-aware tool builder (docs/PROVENANCE.md — BLD-1).
+ * Provenance-aware tool builder (docs/PROVENANCE.md).
  *
  * A ToolDraft is the editable shape the builder UI holds. compileDraft() turns it into a full
  * InstrumentDefinition; validateDraft() runs the same honesty gate the shipped catalog uses, so

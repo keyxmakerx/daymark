@@ -147,8 +147,8 @@ object AppModule {
      * The link from an entry to the people it names.
      *
      * A binding of its own because the link is a DAO of its own, which is the point:
-     * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2 keeps a person away from anything that reads mood,
-     * and `EntryDao` — the one that returns `moodLevel` — has no method that touches `entry_people`.
+     * `docs/FEATURES.md` §11.2 keeps a person away from anything that reads mood, and `EntryDao` —
+     * the one that returns `moodLevel` — has no method that touches `entry_people`.
      * See `EntryPersonDao`'s header.
      */
     @Provides

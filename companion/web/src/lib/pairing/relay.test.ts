@@ -1,5 +1,6 @@
 /*
- * The §3.7.4 test: the pairing code must not appear in any request the server can observe.
+ * The COMPANION_PAIRING.md §5 test: the pairing code must not appear in any request the server can
+ * observe.
  *
  * A full pairing — owner opens, therapist answers, owner collects — is driven through a
  * RECORDING transport that also plays the server's part (the same state machine
@@ -764,7 +765,7 @@ describe('the offer and the approval', () => {
   })
 })
 
-describe('§3.7.4 — the code never reaches the wire, and each sealed thing reaches it once', () => {
+describe('the code never reaches the wire, and each sealed thing reaches it once', () => {
   it('a full pairing, from both codes, leaves no trace of either in any request', async () => {
     const { doFetch, recorded, responses, exchange } = relayServer()
     const opened = await ownerOpenPairing(

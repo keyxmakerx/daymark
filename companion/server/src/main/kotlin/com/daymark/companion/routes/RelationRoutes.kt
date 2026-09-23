@@ -89,7 +89,7 @@ enum class Role { OWNER, THERAPIST }
  *   ASSIGN  therapist-PUT / owner-GET
  *   GAMEPLAN therapist-PUT / owner-GET
  *
- * Transitional-state note (see spec risks): OWNER role = a valid owner bearer token; THERAPIST
+ * Transitional-state note (#208): OWNER role = a valid owner bearer token; THERAPIST
  * role = a valid therapist session cookie bound to this relRef.
  */
 fun Route.relationRoutes(
@@ -107,8 +107,8 @@ fun Route.relationRoutes(
     /**
      * The cookie-caller budget, built once here because `Application.module` has no knob for it —
      * `DAYMARK_RATE_LIMIT_RPS` sizes AuthGuard's bearer bucket, which is a different resource with
-     * different traffic. Defaulted rather than required so this stays one file's change; wiring an
-     * operator-visible knob through Config is a follow-up, not part of closing the bypass.
+     * different traffic. Defaulted rather than required so this stays one file's change; an
+     * operator-visible knob through Config is not built: #204.
      */
     therapistLimiter: AttemptLimiter = AttemptLimiter(THERAPIST_MAX_PER_WINDOW, THERAPIST_WINDOW_MS),
 ) {

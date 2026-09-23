@@ -50,7 +50,7 @@ export interface AuditLogPage {
   nextCursor: number | null
 }
 
-/** Track T2 (email Option A): owner notification-email registration + per-event preferences. */
+/** Owner notification-email registration + per-event preferences (COMPANION_SECURITY.md §6). */
 export interface NotificationSettings {
   email: string | null
   events: string[]
@@ -210,9 +210,9 @@ export class PortalClient {
 
   /**
    * End an invitation the owner no longer trusts. This is the ONE thing that kills an invitation
-   * (plan §3.9.1: wrong codes never do; only a human report). The owner path is the bearer token
-   * itself — no body, no secret — and the server refuses everything minted under that invitation
-   * from then on. Nothing already shared changes, and nobody is told.
+   * (COMPANION_PAIRING.md §7: wrong codes never do; only a human report). The owner path is the
+   * bearer token itself — no body, no secret — and the server refuses everything minted under that
+   * invitation from then on. Nothing already shared changes, and nobody is told.
    */
   async reportInvite(inviteId: string): Promise<void> {
     const res = await this.req(`/v1/invite/${encodeURIComponent(inviteId)}/report`, { method: 'POST' })
@@ -308,7 +308,7 @@ export class PortalClient {
     return (await res.json()) as { endedAt: number }
   }
 
-  // --- owner notification-email registration (Track T2) ---
+  // --- owner notification-email registration (COMPANION_SECURITY.md §6) ---
 
   async getNotificationSettings(): Promise<NotificationSettings> {
     const res = await this.req('/v1/owner/notifications')
@@ -326,7 +326,7 @@ export class PortalClient {
   }
 }
 
-// --- access-token recovery (Track T2) — deliberately UNAUTHENTICATED; no token exists yet ---
+// --- access-token recovery — deliberately UNAUTHENTICATED; no token exists yet ---
 
 /**
  * Request access-token recovery. Always resolves — the server responds identically whether the

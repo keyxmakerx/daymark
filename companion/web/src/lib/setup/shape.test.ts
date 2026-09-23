@@ -539,7 +539,7 @@ describe('the practice panel, which is not the practice console', () => {
     // read a single note" true rather than marketing.
     expect(PRACTICE_ROLE_NOTE).toMatch(/never carries a key/i)
     expect(PRACTICE_ROLE_NOTE).toContain('COMPANION_ACCESS_CONTROL.md')
-    // And the open question that gates the whole shape (§3.11.3).
+    // And the passphrase-reset question that gates the whole shape (COMPANION_PAIRING.md §12).
     expect(PRACTICE_OPEN_QUESTION).toMatch(/forgotten passphrase/i)
     expect(PRACTICE_OPEN_QUESTION).toMatch(/read the\s+journals/is)
   })
@@ -688,9 +688,10 @@ describe('the copy', () => {
 
   it('never promises the copy is safe, or that it survives a lost phone', () => {
     // THE TWO CLAIMS THIS SCREEN IS FORBIDDEN TO MAKE. There is one disk here and nothing backing
-    // it up (§3.11.1), so "your journal is safe" is the sentence somebody would remember on the
-    // day the disk died — and the recovery property, which is real, holds only while this machine
-    // still has the copy. Both are promises, and neither is this screen's to make.
+    // it up (COMPANION_ARCHITECTURE.md §1), so "your journal is safe" is the sentence somebody
+    // would remember on the day the disk died — and the recovery property, which is real, holds
+    // only while this machine still has the copy. Both are promises, and neither is this screen's
+    // to make.
     const OVERPROMISE =
       /(?<![\w-])(safe|safely|kept safe|backed up|never lose|can'?t lose|cannot lose|always be able|guarantee[ds]?|peace of mind)(?![\w-])/i
     expect(OVERPROMISE.test('your journal is safe here')).toBe(true)

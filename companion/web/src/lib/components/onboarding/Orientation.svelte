@@ -430,7 +430,7 @@
           <!--
             The limitation that was nowhere on this page and belongs here more than anything else
             on it: this viewer is delivered BY the server it protects you from. See
-            docs/PLAN_2026-08-COMPANION-NEXT.md §1.2.
+            docs/COMPANION_ARCHITECTURE.md §6.
           -->
           <h3 class="group-title">{LABELS.servedBy}</h3>
           <p class="para">{SERVED_BY_THE_SERVER}</p>

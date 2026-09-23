@@ -8,9 +8,9 @@ import androidx.room.PrimaryKey
 /**
  * One dated note the person wrote about a [Person] — the middle section of their page.
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2: *"a **who (or what) is this to you** line, then
- * dated notes the person writes about them over time, then the entries that name them. All free
- * text in the person's words ... The app stores, shows and shares it; it never reads it."*
+ * `docs/FEATURES.md` §11.1: *"a "who (or what) is this to you" line, dated notes the person writes
+ * about them over time, then the entries that name them. It is all free text in the person's words
+ * ... The app stores it and shows it; it never reads it."*
  *
  * ## Why this is a table and not a second free-text column on [Person]
  *
@@ -21,11 +21,11 @@ import androidx.room.PrimaryKey
  *
  * ## The one thing this table must never become
  *
- * §2 is explicit about the gap rule: **"Never: 'you haven't written about X in a while.' A gap is
- * never a prompt."** [dateTime] exists so a page can state when the last note was, on a screen the
- * person chose to open. It does not exist so anything can notice a silence and speak about it. A
- * quiet stretch in here is somebody living their life, or grieving, or busy; it is not an omission
- * and there is nothing to be reminded of.
+ * `docs/FEATURES.md` §11.3 is explicit about the gap rule: **"Never: 'you haven't written about X
+ * in a while.' A gap is never a prompt."** [dateTime] exists so a page can state when the last
+ * note was, on a screen the person chose to open. It does not exist so anything can notice a
+ * silence and speak about it. A quiet stretch in here is somebody living their life, or grieving,
+ * or busy; it is not an omission and there is nothing to be reminded of.
  *
  * Nor is there any writer for this table but the person. Nothing summarises, nothing suggests a
  * note, nothing writes one on their behalf — the same rule [LifeEvent] holds, and for the same

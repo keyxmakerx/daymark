@@ -36,7 +36,7 @@ import com.daymark.app.data.entity.PersonGroup
  * "People and communities" — every name the person has written down, grouped for sorting, plus the
  * way in to the sharing screen.
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2 is the design.
+ * `docs/FEATURES.md` §11 is the design.
  *
  * ## The rule this whole package is built inside
  *
@@ -47,8 +47,8 @@ import com.daymark.app.data.entity.PersonGroup
  *
  * It is why the entries on a person's page are drawn as a date and their own words and nothing
  * else. A column of mood faces under somebody's name is a mood-with-person statistic — the eye
- * does the correlation whether or not the code does — and the plan's *Not doing* list rules that
- * out by name.
+ * does the correlation whether or not the code does — and `docs/FEATURES.md` §11.2 rules that out
+ * by name.
  *
  * ## The empty state asks for nothing
  *

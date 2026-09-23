@@ -3,15 +3,16 @@ package com.daymark.app.data.entity
 /**
  * Which drawer of the picker a [Person] sits in.
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2: *"Groups for sorting the picker only: friends,
- * family, partners, communities, other."* That sentence is the whole specification, and the word
- * **only** is the part worth holding. A group sorts a list. It is not a relationship model, it is
- * not a fact about the person on the other end of it, and nothing in the app may read it as one.
+ * `docs/FEATURES.md` §11.1: *"Groups (friends, family, partners, communities, other) sort the
+ * picker and the list, and do nothing else."* That sentence is the whole specification, and
+ * **nothing else** is the part worth holding. A group sorts a list. It is not a relationship
+ * model, it is not a fact about the person on the other end of it, and nothing in the app may read
+ * it as one.
  *
  * ## A community is not a second kind of thing
  *
  * There is one table and one entity, [Person], with a group on it — not a `Person` table and a
- * `Community` table. The plan is explicit that these are one kind of thing, and the reason is
+ * `Community` table. `docs/FEATURES.md` §11.1 makes them one tag kind, and the reason is
  * practical rather than tidy: an entry says *with*, and what it is with is a name the person typed.
  * Splitting the storage would mean every screen, every picker and every cross-reference had to ask
  * which of two tables a name came from, and the first place that forgot to ask would quietly drop

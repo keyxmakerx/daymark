@@ -16,12 +16,11 @@ import java.io.File
 /**
  * What the people screens may contain, and the two things they may never contain.
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2 asked for both of these as *shapes* rather than
- * promises:
+ * `docs/FEATURES.md` §11.2 and §11.3 ask for both of these as *shapes* rather than promises:
  *
  *  1. **No person or community reaches anything that reads mood.** *"Correlations, patterns and
- *     the cards they produce cannot receive a person or a community, groups included, enforced by
- *     signature the way the Sky's field is kept blind to data."* The data layer holds up its end
+ *     the cards they produce cannot receive a person or a community, groups included. This is
+ *     enforced by shape, not by convention."* The data layer holds up its end
  *     by what it does not return (`PeopleRepository`'s header). This holds up the UI's end: no
  *     file under `ui/people` names a mood at all, and the editor — the one screen that legitimately
  *     holds both — writes them through two calls, neither of which receives the other's argument.
@@ -68,7 +67,7 @@ class PeopleUiSourceTest {
             "FactorDelta",
         )
 
-        /** The prompt §2 forbids by name, and the family it belongs to. */
+        /** The prompt `docs/FEATURES.md` §11.3 forbids by name, and the family it belongs to. */
         val ABSENCE_PROMPTS = listOf(
             "haven't written",
             "have not written",
@@ -182,9 +181,9 @@ class PeopleUiSourceTest {
         for ((name, code) in peopleCode) {
             assertFalse(
                 "$name names a mood. A person or a community may never reach anything that " +
-                    "reads one (PLAN_2026-09 §2), and a page about somebody is where that breaks " +
-                    "first: a column of faces under their name is the correlation drawn for the " +
-                    "eye, whether or not any code computed it.",
+                    "reads one (FEATURES.md §11.2), and a page about somebody is where that " +
+                    "breaks first: a column of faces under their name is the correlation drawn " +
+                    "for the eye, whether or not any code computed it.",
                 code.lowercase().contains(MOOD),
             )
         }
@@ -287,7 +286,7 @@ class PeopleUiSourceTest {
         )
         assertFalse(
             "the entry save now receives people as well as a mood. That single call is the " +
-                "bridge PLAN_2026-09 §2 rules out; keep them two calls.",
+                "bridge FEATURES.md §11.2 rules out; keep them two calls.",
             saveArgs.contains("PersonIds") || saveArgs.contains("person"),
         )
 
@@ -392,9 +391,10 @@ class PeopleUiSourceTest {
             val literals = literalsOf(name)
             val absence = firstPhraseIn(literals, ABSENCE_PROMPTS)
             assertNull(
-                "$name says \"$absence\". PLAN_2026-09 §2 forbids a prompt about a gap by name: " +
-                    "\"you haven't written about X in a while\". A page may state `last note: " +
-                    "June` as a fact when it is opened; nothing may raise a silence unprompted.",
+                "$name says \"$absence\". FEATURES.md §11.3 forbids a prompt about a gap by " +
+                    "name: \"you haven't written about X in a while\". A page may state `last " +
+                    "note: June` as a fact when it is opened; nothing may raise a silence " +
+                    "unprompted.",
                 absence,
             )
             val commentary = firstPhraseIn(literals, COMMENTARY)
@@ -467,10 +467,10 @@ class PeopleUiSourceTest {
     fun `the archive promise is stated where the archive control is`() {
         val literals = literalsOf("PersonScreen.kt")
         assertTrue(
-            "the archive control no longer says what archiving leaves alone. §2: \"Archive hides " +
-                "one from the picker. Entries and notes are untouched\" — and somebody archiving " +
-                "a person who has left their life is deciding whether the record of the years " +
-                "they were in it survives.",
+            "the archive control no longer says what archiving leaves alone. FEATURES.md " +
+                "§11.1: \"Archive hides someone from the picker. Their page, notes and entries " +
+                "stay as they are\" — and somebody archiving a person who has left their life " +
+                "is deciding whether the record of the years they were in it survives.",
             literals.any { it.contains("Archiving only hides them from the with picker") },
         )
         assertTrue(

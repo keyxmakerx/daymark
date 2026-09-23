@@ -57,7 +57,7 @@
    * FIRST RUN: WHICH OF THE THREE DEPLOYMENT SHAPES THIS MACHINE IS.
    * ═══════════════════════════════════════════════════════════════════════════════════════════
    *
-   * docs/PLAN_2026-08-COMPANION-NEXT.md §3.11 names three, and they are not sizes of one product:
+   * docs/COMPANION_ARCHITECTURE.md §2 names three, and they are not sizes of one product:
    * Solo and Paired put the journal on its owner's own hardware, while Practice inverts that and
    * makes the person a tenant on their clinic's machine. Nothing in this app used to ask, so the
    * answer was whatever screen somebody clicked first.

@@ -26,7 +26,8 @@
   /**
    * The one action that kills an invitation. A wrong code never does (the server cannot even
    * see one); only this, a person saying "not this one". Copy at the button names exactly what
-   * it does and does not do, per plan §3.6.1: a revoke is not a message to the other person.
+   * it does and does not do, per COMPANION_PAIRING.md §11: a revoke is not a message to the other
+   * person.
    */
   async function stop() {
     if (!client || !invite) return

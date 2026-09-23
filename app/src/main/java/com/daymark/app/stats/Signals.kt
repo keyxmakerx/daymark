@@ -46,8 +46,7 @@ object Signals {
     sealed interface Action {
         /**
          * Offer to turn a positive factor into a gentle goal. [factor] names the factor for the
-         * card copy; the router currently opens a blank goal editor (factor prefill is a planned
-         * follow-up).
+         * card copy; the router opens a blank goal editor (factor prefill is not built: #178).
          */
         data class CreateGoalFromFactor(val factor: String) : Action
         /** Open the daily check-in / mood logger. */

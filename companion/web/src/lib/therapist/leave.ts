@@ -1,5 +1,5 @@
 /*
- * A CLINICIAN PUTTING DOWN THEIR OWN ACCESS (issue #91, Slice E).
+ * A CLINICIAN PUTTING DOWN THEIR OWN ACCESS (issue #91).
  *
  * An ordinary professional act — leaving a practice, retiring, no longer needing this — and the
  * copy and the colours treat it as one. What it must never be is a route to touching anything of

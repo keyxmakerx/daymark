@@ -128,13 +128,14 @@ class AuthStore(
              * share sealed to whatever key was written last, which is exactly the substitution the
              * pinning was built to catch.
              *
-             * Note what is NOT hashed. Every other secret in this file is stored as an Argon2id or
-             * BLAKE2b digest because the server has no business being able to read it back. These
-             * are public keys — the point of storing them is to hand them back verbatim — so they
-             * sit here in the clear, and that is correct rather than an oversight. They are also
-             * not sensitive to this server in the way the rest of this table set is: knowing a
-             * therapist's public key lets you seal something TO them, never open anything OF
-             * theirs.
+             * Note what is NOT hashed. Every other secret in this file but the TOTP seed (see the
+             * header) and the per-session CSRF token (handed back to the session holder) is stored
+             * as an Argon2id or BLAKE2b digest, because the server has no business being able to
+             * read it back. These are public keys — the point of storing them is to hand them back
+             * verbatim — so they sit here in the clear, and that is correct rather than an
+             * oversight. They are also not sensitive to this server in the way the rest of this
+             * table set is: knowing a therapist's public key lets you seal something TO them, never
+             * open anything OF theirs.
              *
              * And the server does not vouch for them. It took delivery of two strings from
              * whoever held a valid session for this relationship and it will hand the same two
@@ -422,9 +423,9 @@ class AuthStore(
     /**
      * The owner approves a pairing run: the invite moves PENDING -> REDEEMING, and the enrolment
      * ticket THE THERAPIST CHOSE becomes the one ticket this invite will honour. That ticket
-     * reached the owner sealed under the pairing key (plan §3.7.3), so only someone who typed the
-     * right code holds it; the owner forwards it here, and the server, as ever, never sees the
-     * code — only a 32-byte value it will later compare a hash against.
+     * reached the owner sealed under the pairing key (COMPANION_PAIRING.md §4), so only someone
+     * who typed the right code holds it; the owner forwards it here, and the server, as ever,
+     * never sees the code — only a 32-byte value it will later compare a hash against.
      *
      * This is how a ticket comes to exist once the PAKE runs BEFORE redeem, and two things differ
      * from [redeemInvite] on purpose:

@@ -75,7 +75,7 @@ describe('PortalClient.getAuditLog', () => {
   })
 })
 
-describe('PortalClient notification settings (Track T2)', () => {
+describe('PortalClient notification settings', () => {
   it('gets notification settings with the owner bearer token', async () => {
     const fetchMock = vi.fn<FetchMock>(async () => jsonResponse({ email: 'owner@example.org', events: ['NEW_ASSIGNMENT'] }))
     const client = new PortalClient('https://host', 'owner-token', fetchMock as unknown as typeof fetch)
@@ -103,7 +103,7 @@ describe('PortalClient notification settings (Track T2)', () => {
   })
 })
 
-describe('access-token recovery client functions (Track T2)', () => {
+describe('access-token recovery client functions', () => {
   it('requestAccessRecovery posts the email and never throws, even on a non-ok response', async () => {
     const fetchMock = vi.fn<FetchMock>(async () => jsonResponse({}, false, 429))
     await expect(requestAccessRecovery('https://host', 'owner@example.org', fetchMock as unknown as typeof fetch)).resolves.toBeUndefined()

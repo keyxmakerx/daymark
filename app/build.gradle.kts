@@ -44,7 +44,7 @@ android {
         }
     }
 
-    // "network" flavor dimension (see docs/COMPANION_PHONE_2B.md §0): the default `foss`
+    // "network" flavor dimension (see docs/COMPANION_PHONE.md §0): the default `foss`
     // flavor is the flagship, offline-only build — unchanged, no INTERNET permission, no
     // network code reachable. `sync` is the separate, opt-in "Daymark Sync" flavor; it alone
     // gets INTERNET (declared only in src/sync/AndroidManifest.xml) and the Companion sync
@@ -232,8 +232,8 @@ dependencies {
     implementation(libs.androidx.glance.appwidget)
     implementation(libs.nayuki.qrcodegen)
 
-    // Companion sync crypto (Milestone 2b) — the `sync` flavor only; see
-    // docs/COMPANION_PHONE_2B.md. lazysodium-android's own POM depends on the plain (desktop)
+    // Companion sync crypto — the `sync` flavor only; see
+    // docs/COMPANION_PHONE.md §1. lazysodium-android's own POM depends on the plain (desktop)
     // jna jar, not the Android-native `aar` variant, so that transitive is excluded and the
     // `aar` artifact is requested explicitly instead (mirrors lazysodium-android's own README).
     // Deliberately NOT `libs.jna) { artifact { type = "aar" } }` — combining a version-catalog

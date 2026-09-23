@@ -13,12 +13,12 @@
  *
  *     what is this machine for?
  *
- * docs/PLAN_2026-08-COMPANION-NEXT.md §3.11 names three answers and they are not variations of
- * one product. Solo and Paired are one product with a flag — same trust model, same threat model,
- * one clinician switched on. Practice INVERTS the arrangement the product exists to offer (§3.11.3):
- * the clinic owns the machine and the person is a tenant on it, which is a different posture, not
- * a bigger one. A screen that asks the question once, records the answer, and then gets out of the
- * way is the smallest honest way to hold that distinction.
+ * docs/COMPANION_ARCHITECTURE.md §2 names three answers and they are not variations of one
+ * product. Solo and Paired are one product with a flag — same trust model, same threat model, one
+ * clinician switched on. Practice INVERTS the arrangement the product exists to offer (the same
+ * section): the clinic owns the machine and the person is a tenant on it, which is a different
+ * posture, not a bigger one. A screen that asks the question once, records the answer, and then
+ * gets out of the way is the smallest honest way to hold that distinction.
  *
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  * WHAT THE OPENING SENTENCES ARE ALLOWED TO CLAIM, AND WHAT THEY ARE NOT
@@ -32,9 +32,9 @@
  * Two claims are deliberately NOT made, and both are the kind of claim a setup screen reaches for
  * without noticing:
  *
- *   NOT "your journal is safe here". §3.11.1 is blunt about what this actually is — one disk, and
- *   nothing backing it up. Calling a single unreplicated copy safe is the sentence someone would
- *   remember on the day the disk dies.
+ *   NOT "your journal is safe here". COMPANION_ARCHITECTURE.md §1 is blunt about what this
+ *   actually is — one disk, and nothing backing it up. Calling a single unreplicated copy safe is
+ *   the sentence someone would remember on the day the disk dies.
  *
  *   NOT "you can get it back if you lose your phone". The recovery property is real (the key
  *   derives from the passphrase alone, nothing is bound to the handset — SyncCrypto.kt) and it is
@@ -117,7 +117,10 @@ export interface DeploymentShape {
   id: ShapeId
   /** Names the shape and, in the same breath, who is on it. A bare "Solo" answers nothing. */
   label: string
-  /** Who owns the machine and whose data is on it — §3.11.2's table, in one line. */
+  /**
+   * Who owns the machine and whose data is on it — COMPANION_ARCHITECTURE.md §2's table, in one
+   * line.
+   */
   arrangement: string
   /** What choosing it gets you, in one sentence. */
   summary: string
@@ -228,10 +231,11 @@ export const SETUP_LEDE =
  * The two facts that are not allowed to be softened, stated as facts rather than as warnings —
  * a callout here would read as an alarm about something that is simply how it works.
  *
- * "One copy, on one disk" is §3.11.1's other half. "Nobody can open it without the passphrase"
- * is the same sentence from the other side, and is the reason this machine can be run by someone
- * who does not trust whoever hosts it. Neither is reassurance and neither is a promise: the first
- * says what would be lost with the disk, the second says who cannot help you if the passphrase is.
+ * "One copy, on one disk" is the other half of COMPANION_ARCHITECTURE.md §1. "Nobody can open it
+ * without the passphrase" is the same sentence from the other side, and is the reason this machine
+ * can be run by someone who does not trust whoever hosts it. Neither is reassurance and neither is
+ * a promise: the first says what would be lost with the disk, the second says who cannot help you
+ * if the passphrase is.
  */
 export const SETUP_LIMITS =
   'One copy on one disk here, and nothing copies it elsewhere. Lose the disk and it is gone. ' +
@@ -446,9 +450,10 @@ export const PRACTICE_ROLE_NOTE =
   'authoritative here.'
 
 /**
- * The unanswered question from §3.11.3, on the screen rather than in a plan document. It is the
- * gate on Practice being responsible to build at all, and someone standing one up should meet it
- * before they have staff depending on the answer.
+ * Who can reset a forgotten passphrase — the question COMPANION_PAIRING.md §12 answers (nobody) —
+ * on the screen rather than in a document. It is the gate on Practice being responsible to build
+ * at all, and someone standing one up should meet it before they have staff depending on the
+ * answer. The text below still calls the question open: #313.
  */
 export const PRACTICE_OPEN_QUESTION =
   'One question is still open, and it is the one that decides whether a practice server can be ' +

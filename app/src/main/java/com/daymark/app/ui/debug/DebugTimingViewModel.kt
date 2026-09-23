@@ -52,7 +52,7 @@ data class DebugTimingState(
 )
 
 /**
- * The timing layer, read back out of the real engines — `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §5.
+ * The timing layer, read back out of the real engines — `docs/FEATURES.md` §13.4.
  *
  * It computes nothing. Every number on the screen comes from calling [RuleReadout.feature] with the
  * rows the ledger actually holds, which is the property that keeps the description from drifting

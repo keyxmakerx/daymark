@@ -20,9 +20,8 @@ import java.io.File
  *
  * So this checks the structural precondition instead, which is the thing a future change would
  * break: **[PhotoStore] must decode and re-encode on every path into storage.** That is a weaker
- * claim than "no GPS in the output", and the gap is stated rather than papered over — an
- * instrumented test asserting the output directly is listed in `docs/PLAN_2026-08-NEXT.md` as
- * needing a machine with an SDK.
+ * claim than "no GPS in the output", and the gap is stated rather than papered over — checking
+ * the output directly needs a real device: #147.
  *
  * ## The specific change this exists to stop
  *

@@ -9,10 +9,10 @@ package com.daymark.app.stats
  * end-to-end argument), so the total number of asks is still the frequency setting's to decide and
  * nothing here can raise it.
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §4: *the reception ledger records the hour and weekday of
- * every ask alongside its outcome. Allocation places the allowed asks into hours that have been
- * answered before and out of hours that have not. Same total as the frequency setting. It never
- * learns why an hour goes unanswered.*
+ * `docs/FEATURES.md` §13.3: this places a feature's allowed asks into hours that have been answered
+ * before and out of hours that have not, with the same total as the frequency setting, and it never
+ * learns why an hour went unanswered. The hours come from the reception ledger, which records the
+ * hour and weekday of every ask alongside its outcome (§13.2).
  *
  * ## The invariant this file must not break
  *
@@ -182,9 +182,9 @@ object TimingGrid {
      * The whole hour × weekday grid, always [DAYS_IN_WEEK] × [HOURS_IN_DAY] cells in weekday-then-hour
      * order, so a screen never has to invent the empty ones.
      *
-     * The grid is the app's own behaviour laid out on a clock. `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md`
-     * §4 is explicit that it is **never shared with a clinician** — when someone answers the app is
-     * the app's business with them.
+     * The grid is the app's own behaviour laid out on a clock. `docs/FEATURES.md` §13.2 is explicit
+     * that it is **never shared with a clinician** — when someone answers is the app's business
+     * with them.
      */
     data class Grid(
         val kind: String,

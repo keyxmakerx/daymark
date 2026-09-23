@@ -94,14 +94,16 @@ enum class AuditAction(val wire: String) {
     /**
      * A holder of the invite link answered the newest open exchange. Same contract as
      * [PAIRING_OPENED]: a receipt that a reply was relayed, never a statement about who replied
-     * or whether their code was right — the server cannot know either, by design (§3.7.4). If
-     * the codes did not match, the owner's side simply fails to open what follows and the owner
-     * decides what that means; that decision is [INVITE_REPORTED] when it is hostile.
+     * or whether their code was right — the server cannot know either, by design
+     * (COMPANION_PAIRING.md §5). If the codes did not match, the owner's side simply fails to open
+     * what follows and the owner decides what that means; that decision is [INVITE_REPORTED] when
+     * it is hostile.
      */
     PAIRING_RESPONDED("pairing.responded"),
 
-    /** The owner cancelled a pairing exchange — the 4.0a Cancel, recorded because withdrawal of
-     *  an in-flight ceremony is exactly the kind of event a person wants to find again later. */
+    /** The owner cancelled a pairing exchange — the owner's Cancel (COMPANION_PAIRING.md §8),
+     *  recorded because withdrawal of an in-flight ceremony is exactly the kind of event a person
+     *  wants to find again later. */
     PAIRING_CANCELLED("pairing.cancelled"),
 
     /**
@@ -307,10 +309,10 @@ data class AuditEvent(
  *    An [oldestSeq] above 1 is the ordinary consequence of retention pruning, not a finding.
  *  - [headHash] is the newest entry's hash exactly as stored. This is the value the whole check
  *    exists to surface: a chain head is only evidence if it is anchored somewhere this server
- *    cannot reach (the finding in docs/PLAN_2026-08-COMPANION-NEXT.md 3.9.7), and the first such
- *    anchor is a person writing it down. It is reported even when the chain is broken, because
- *    "what the server serves today" is itself worth recording in that case — as evidence, not as
- *    a baseline.
+ *    cannot reach (docs/COMPANION_ARCHITECTURE.md §6, "It writes the audit log about itself"),
+ *    and the first such anchor is a person writing it down. It is reported even when the chain
+ *    is broken, because "what the server serves today" is itself worth recording in that case —
+ *    as evidence, not as a baseline.
  *  - [firstBreakSeq] is the sequence number of the first entry that contradicts the chain it
  *    sits in, or null when every recomputable entry agreed with what is stored. Null is NOT a
  *    verdict of completeness — see [AuditStore.verifyChain] for what this deliberately cannot
@@ -520,7 +522,7 @@ class AuditStore(
      * report IS good against is the honest-but-damaged cases — a bad disk, a botched restore, a
      * hand-edited row — and what survives even a lying server is not this verdict but the head
      * hash, once it is anchored somewhere the server cannot reach (a person's note today; the
-     * phone anchor of docs/PLAN_2026-08-COMPANION-NEXT.md 3.9.7 eventually).
+     * phone's own copy eventually — not built: #182).
      */
     fun verifyChain(relRef: String): ChainVerification = synchronized(lock) {
         requireName(relRef)

@@ -4,7 +4,7 @@
    *
    * WHAT IT REPLACES. Nothing — that is the point. index.html opened straight onto the
    * six-destination menu, and no screen anywhere let a person say what this deployment was for.
-   * The three shapes (docs/PLAN_2026-08-COMPANION-NEXT.md §3.11) are not variations of one
+   * The three shapes (docs/COMPANION_ARCHITECTURE.md §2) are not variations of one
    * product; Practice inverts the arrangement the other two exist to offer. A question that is
    * never asked gets answered by whichever screen someone happens to click first.
    *
@@ -297,7 +297,7 @@
    * The choice card. Structural accent on hover and focus, never the mood ramp: which option the
    * pointer is over is interface state, and the ramp encodes a person's reported experience. The
    * border is --border-strong rather than --hairline because this element's identity as a control
-   * depends on it (design system §2.3.1).
+   * depends on it (design system §2.3.7).
    *
    * The card is the <li>; the control is `.choose`, laid over it (see the markup note). `:hover`
    * on the card still fires while the pointer is on the overlay, because the overlay is inside it.

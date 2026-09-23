@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 /**
  * The invariant suite for the token layer.
  *
- * WHAT THIS IS FOR. Phase 1 split one palette into two: the mood ramp encodes a person's
+ * WHAT THIS IS FOR. The token layer splits the palette in two: the mood ramp encodes a person's
  * reported experience, and everything the interface has to say about itself is drawn from
  * chrome, indigo, clay and amber. That split is not enforced by the type system, the compiler
  * or the browser. It is enforced by nothing at all except a shared understanding — which is to
@@ -317,7 +317,7 @@ describe('(a) app.css defines the token contract in all three theme states', () 
   })
 
   it('no colour is defined only inside a media or [data-theme] block', () => {
-    // COMPANION_WEB_REDESIGN_PLAN.md §1c. A role that exists only in the dark blocks is
+    // COMPANION_DESIGN_SYSTEM.md §2.3.3. A role that exists only in the dark blocks is
     // undefined in the default theme, and the component using it renders unstyled in daylight.
     const orphans = [...mediaDark.keys(), ...attrDark.keys()].filter((t) => !light.has(t))
     expect(orphans).toEqual([])
@@ -423,7 +423,7 @@ describe('(d) there is no success/green anywhere in the system', () => {
     expect(declared.has('--clay')).toBe(true)
     // Named, not valued: --mood-5 is green and stays green, because it means "this person
     // reported a good day", not "the system is fine". The ban is on a token whose NAME asserts
-    // health — the trust strip may never be painted green (COMPANION_UX.md §496).
+    // health — the trust strip may never be painted green (COMPANION_UX.md §10.1).
     const success = [...declared].filter((n) =>
       /^--(success|ok|okay|positive|good|healthy|safe|pass|passing|valid|verified|secure|green)(-|$)/.test(n),
     )
@@ -444,7 +444,7 @@ describe('(d) there is no success/green anywhere in the system', () => {
   })
 
   it('no token the status ramp is built from resolves to a green hue', () => {
-    // COMPANION_WEB_REDESIGN_PLAN.md §1c, asserted against values so a "success green" cannot be
+    // COMPANION_DESIGN_SYSTEM.md §2.3.2, asserted against values so a "success green" cannot be
     // reintroduced by quietly re-pointing a token that already has an innocent name.
     const statusTokens = [
       ...CHROME_TOKENS, ...INDIGO_TOKENS, ...ALARM_TOKENS,
@@ -503,7 +503,7 @@ describe('(f) the stacking-context fix survives', () => {
   // neighbours; without contexts of their own the rail and header lose to it and the shadow
   // paints across the navigation and the page title. This re-breaks silently — it shows only
   // while hovering one kind of cell on one screen — so nothing catches it but this test.
-  // (COMPANION_WEB_REDESIGN_PLAN.md §1d: topbar 6, rail 7, body 1 + isolate.)
+  // (COMPANION_DESIGN_SYSTEM.md §4.9: topbar 6, rail 7, body 1 + isolate.)
   const shell = styleOf('AppShell.svelte')
   const head = styleOf('PageHeader.svelte')
   const ruleIn = (block: string | null, selector: string) =>

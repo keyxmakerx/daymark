@@ -50,8 +50,8 @@
 
   function decide(idx: number, decision: Decision) {
     items = items.map((it, i) => (i === idx ? { ...it, decision } : it))
-    // NB: persisting an owner-signed acknowledgement blob is handled by the ack lineage; wiring
-    // the ack PUT is deferred to the therapist-receipt slice (see slice unverifiableHere note).
+    // NB: persisting an owner-signed acknowledgement blob is handled by the ack lineage; the ack
+    // PUT is not built: #234.
   }
 </script>
 

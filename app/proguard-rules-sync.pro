@@ -1,4 +1,4 @@
-# `sync` flavor only (see docs/COMPANION_PHONE_2B.md). JNA binds native methods via
+# `sync` flavor only (see docs/COMPANION_PHONE.md). JNA binds native methods via
 # reflection at runtime, so R8 can't see those call sites — without these rules a minified
 # release build can silently strip or rename classes JNA needs and fail at runtime with
 # UnsatisfiedLinkError/NoSuchMethodError instead of at compile time.

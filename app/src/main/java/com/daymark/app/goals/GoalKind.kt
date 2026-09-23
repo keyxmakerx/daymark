@@ -3,11 +3,10 @@ package com.daymark.app.goals
 /**
  * What shape a goal is — and the reason `Goal` did not grow a `steps` list.
  *
- * `docs/CLINICIAN_FEEDBACK.md` §8: *"Read a book on X" and "exercise 3× a week" are not the same
- * shape and the model only expresses the second.* Rather than replace the weekly count, which
- * people are using right now and which `docs/DECISIONS.md` §D5 keeps ("the
- * implementation-intention part is the well-evidenced piece and should survive"), a goal now
- * declares which of the two it is, and the two coexist.
+ * "Read a book on X" and "exercise 3× a week" are not the same shape, and `docs/DECISIONS.md` §D5
+ * makes goals into projects: containers for concrete steps. Rather than replace the weekly count,
+ * which people are using right now and whose implementation intention is the well-evidenced piece,
+ * a goal now declares which of the two it is, and the two coexist.
  *
  * ## Why a key and not a Room enum column
  *

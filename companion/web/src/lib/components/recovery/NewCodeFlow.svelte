@@ -5,7 +5,7 @@
    * ─── THE FOUR STEPS, AND WHY THE THIRD ONE IS THE FEATURE ─────────────────────────────────────
    *
    *   start    a passphrase, and the sentence about what losing both costs, BEFORE anything is
-   *            generated. docs/PLAN_2026-08-COMPANION-NEXT.md §3.11.1 is explicit that the cost has
+   *            generated. docs/COMPANION_ARCHITECTURE.md §1 is explicit that the cost has
    *            to be stated where the passphrase is chosen and not in a footnote.
    *   showing  the code, large, in six numbered groups, with print and download beside it.
    *   confirm  the code is hidden and two of its groups are asked for. This step is the reason the

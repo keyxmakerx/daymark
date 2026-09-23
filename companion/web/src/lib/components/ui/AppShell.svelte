@@ -25,7 +25,7 @@
    *
    *   This re-breaks silently if any of the three is removed: it only shows while hovering one
    *   kind of cell on one screen, so nothing catches it but a person looking at it.
-   *   (COMPANION_WEB_REDESIGN_PLAN.md §1d: topbar 6, rail 7, body 1 + isolate.)
+   *   (COMPANION_DESIGN_SYSTEM.md §4.9: topbar 6, rail 7, body 1 + isolate.)
    *
    * WHY THE RAIL SLOT IS A FLEX CONTAINER. So the rail stretches to the full height of the
    * window rather than stopping under its last item and leaving the chrome ground half-drawn

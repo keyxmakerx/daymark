@@ -9,7 +9,7 @@ import java.util.Locale
 /**
  * Side 4's prompts, and the line they are not allowed to cross.
  *
- * The regulatory point (`docs/PLAN_2026-08-NEXT.md` §1) is not a style preference: a report that
+ * The regulatory point (`docs/DECISIONS.md` §D8) is not a style preference: a report that
  * tells a clinician what to do is clinical decision support. So the load-bearing tests here are not
  * the ones checking that a rule fires — they are `the guard catches …` and `no generated prompt …`,
  * which run the forbidden-phrasing regex over everything these rules can emit. The guard is proved

@@ -45,17 +45,17 @@ package com.daymark.app.sky
  * ## What changed in September 2026: colour left
  *
  * The right-hand column used to start with *hue — the person's own ramp colour*, and it does not
- * any more. `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1 moves colour onto age
- * ([SkyAge]) and states the remainder flatly: *"Mood is the character of the light and nothing
- * else... Mood never touches brightness or colour."*
+ * any more. `docs/SKY.md` §3.2 puts colour on age ([SkyAge]), and §3.4 states the remainder
+ * flatly: *"Mood changes a star's character, never its presence. A hard day's star is not smaller,
+ * fainter or a different colour."*
  *
  * The halo is therefore the **only** thing on a star that mood moves, and this file is where that
  * is enforced: [starTint] and [starBrightness] take a mood level and ignore it, the way
  * [coreRadiusDp] has always taken a kind and a mood and ignored both, so the sweep in
  * `SkyGlyphTest` has something to sweep. Nothing was lost in the move that the person can see —
- * their own mood colour is still on every row of the list and on the sheet when a star is tapped,
- * where it is a word with a colour beside it rather than a hue someone could read off the sky over
- * their shoulder.
+ * their own mood colour is still on the sheet when a star is tapped, a word with a colour beside it
+ * rather than a hue someone could read off the sky over their shoulder, and the word is on every
+ * row of the list.
  *
  * **What was rejected on the way.** Holding peak alpha constant and varying only the radius was the
  * first attempt: it makes hard days glow *more*, which is not shaming but is still a ranking, and
@@ -148,8 +148,8 @@ object SkyGlyph {
     // ---------------------------------------------------------------------------------------
     // The halo's radial fade. September 2026, and it is the same change as the ground.
     //
-    // `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1: "Halo becomes a radial fade to nothing instead
-    // of a flat translucent disc", and "Fidelity: a point, then a glow, never a blur alone."
+    // `docs/SKY.md` §3.5, "a point, then a glow": the halo is a soft outer glow "fading to exactly
+    // nothing", not a flat translucent disc.
     //
     // The flat disc had a hard outer edge at [haloRadiusDp] — a translucent coin, not a glow — and
     // on the old warm ground its edge terminated on a warm smudge rather than on nothing. The
@@ -177,9 +177,9 @@ object SkyGlyph {
     /**
      * What each stop is worth, as a fraction of [haloPeakAlpha].
      *
-     * The last is exactly zero, which is the *"to nothing"* in §1 and is the property the flat disc
-     * did not have. Nothing here is a function of mood: mood picks the peak and the radius, and the
-     * shape of the fall is the same for every star on the surface.
+     * The last is exactly zero, which is the *"to exactly nothing"* in `docs/SKY.md` §3.5 and is
+     * the property the flat disc did not have. Nothing here is a function of mood: mood picks the
+     * peak and the radius, and the shape of the fall is the same for every star on the surface.
      */
     val HALO_STOP_WEIGHT = floatArrayOf(0.5f, 0.34f, 0.12f, 0.035f, 0f)
 
@@ -212,8 +212,9 @@ object SkyGlyph {
      * against the one that used to be. `peak x radius²` was the right invariant for a flat disc and
      * says nothing on its own about a gradient — so the profile is integrated, and the answer comes
      * out **1.161 for every mood level** and 13.278 for a landmark. The flat number across the ramp
-     * is the whole of mechanism M4 on this surface; the landmark's is §1's *"a landmark is the one
-     * bright star"*, and it is allowed to be louder because a person placed it by hand.
+     * is the whole of mechanism M4 on this surface; the landmark's is `docs/SKY.md` §3.4's *"a
+     * landmark is the one bright star"*, and it is allowed to be louder because a person placed
+     * it by hand.
      *
      * The profile itself passes 0.0831 of the light a flat disc of the same peak and radius would,
      * which is the price of the edge going to nothing, and it is paid equally by every star.
@@ -247,10 +248,10 @@ object SkyGlyph {
     // ---------------------------------------------------------------------------------------
     // Temperature. A star's own warmth, from its identity — variety that says nothing.
     //
-    // `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1: "Each star also has its own temperature from
-    // its identity, icy, white, pale gold or peach, mixed about a third into its age tint, so the
-    // sky is varied and the redshift still reads." A real field of stars is not one hue at one
-    // distance, and a sky that were would look printed.
+    // `docs/SKY.md` §3.2: "Each star has its own temperature, from its identity and fixed
+    // forever (icy, white, pale gold or peach), mixed about a third into its age tint so the sky
+    // is varied." A real field of stars is not one hue at one distance, and a sky that were would
+    // look printed.
     //
     // It is drawn from the hash of the star's own identity, like its position and its rhythm, so
     // it is FIXED FOREVER AND MEANS NOTHING. There are exactly four and they are close together:
@@ -333,10 +334,10 @@ object SkyGlyph {
     /**
      * How much bigger a landmark's core is drawn than every other star's.
      *
-     * §1: *"A landmark is the one bright star. A life event is a mark the person placed to be
-     * found, so it alone is bigger, brighter, spiked, never redshifted and never faded. Brightness
-     * may follow a mark the person placed, never anything the app measured: a reached goal keeps
-     * its glint at lean-in and a journal page stays the size of everything else."*
+     * `docs/SKY.md` §3.4: *"A landmark is the one bright star. A life event is placed to be found
+     * again, so it alone is bigger (core × 1.9), brighter (the one halo that emits more light),
+     * spiked (four soft white spikes at every zoom), never redshifted, never faded, and always
+     * glints. Brightness may follow a mark the person placed, never anything the app measured."*
      *
      * So this is a scale on [CORE_RADIUS_DP] and not a second core radius, and it is a function of
      * kind alone — a life event's core does not know what mood or what date it is, and no other
@@ -353,7 +354,8 @@ object SkyGlyph {
     const val LANDMARK_HALO_RADIUS_DP = 6.5f
 
     /**
-     * A landmark's halo peak — brighter than any other star's, which is the *"brighter"* in §1.
+     * A landmark's halo peak — brighter than any other star's, which is the *"brighter"* in
+     * `docs/SKY.md` §3.4.
      *
      * Not [HALO_LIGHT] redistributed: a landmark genuinely emits more light than the stars around
      * it, which is the whole of its job. That is allowed here and nowhere else because it follows
@@ -446,10 +448,10 @@ object SkyGlyph {
  * ## Why these are distances and no longer spans of time
  *
  * They were `DRIFT`, `SEASON`, `MONTH`, `NIGHT` and `STAR`, and each named how much *time* the
- * viewport held, because the sky was a timeline with a row per month.
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1.0 removed the rows: position carries no time at all
- * any more, and a level called `MONTH` would be naming something that is not on the screen. So a
- * level is how close someone is leaning in, which is the only thing zoom still means.
+ * viewport held, because the sky was a timeline with a row per month. There are no rows
+ * (`docs/SKY.md` §3.1): position carries no time at all any more, and a level called `MONTH` would
+ * be naming something that is not on the screen. So a level is how close someone is leaning in,
+ * which is the only thing zoom still means (§4).
  *
  * **A level is a function of zoom alone and never of how many stars are on screen.** Deriving it
  * from density would make what the surface draws a function of how much somebody logged — the same
@@ -459,15 +461,18 @@ enum class SkyDetail {
     /** The whole sky at once. Points only, no glyphs, no threads. The view you leave open. */
     FAR,
 
-    /** Leaning in. Kind marks begin to resolve and stars become individually focusable. */
+    /**
+     * Leaning in: the same stars, closer. Kind marks wait for [CLOSE]. [starsAreFocusable] answers
+     * true from here, but nothing reads it yet (#151).
+     */
     NEAR,
 
-    /** Close. Full glyphs and project threads. */
+    /** Close. Full glyphs, each with its thread stub; the full thread between steps is #152. */
     CLOSE,
     ;
 
     companion object {
-        /** Where kind marks start to resolve, as a zoom factor. */
+        /** Where [NEAR] starts, as a zoom factor. Kind marks still wait for [CLOSE_ZOOM]. */
         const val NEAR_ZOOM = 2.5f
 
         /** Where the full glyph resolves. */
@@ -478,7 +483,8 @@ enum class SkyDetail {
          *
          * Stated as a function of *zoom* rather than of anything measured in pixels so the
          * thresholds do not have to be re-tuned per screen size, and so the small-screen case
-         * (§11.6) is a number this file owns rather than a surprise in the renderer.
+         * (`docs/SKY.md` §11 item 6, #155) is a number this file owns rather than a surprise in the
+         * renderer.
          *
          * There is no level for one star: a star's detail is reached by activating it, not by
          * zooming further into empty sky. Zoom bottoms out at [CLOSE], which is a place, not a
@@ -493,11 +499,8 @@ enum class SkyDetail {
         /**
          * Kind marks resolve **only** at [CLOSE] — when the person has leaned all the way in.
          *
-         * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1, agreed with the maintainer: *"No marks for
-         * kind at ordinary zoom. A journal page, a step, a goal reached and a life event are all
-         * just stars until the person leans in, where the glyph appears. The text list still names
-         * the kind."* It *revises* `docs/SKY.md` §3.4, which drew glyphs at a month, and this
-         * function used to return true from the second level inward.
+         * `docs/SKY.md` §3.3, agreed with the maintainer: *"Kind marks appear only at CLOSE (§4).
+         * Further out, every kind is just a star, and the list always names it."*
          *
          * The reason is what an ordinary sky is for. A ring, a cross and an underline scattered
          * across the field turn the surface into a legend to be decoded — and worse, they sort a

@@ -3,9 +3,10 @@
  *
  * WHY IT HAS TO EXIST. relay.ts holds the CPace scalar in memory only, on purpose, and says the
  * caller must keep it "on the device, under its own protection" if the run is to survive the
- * store-and-forward gap of plan §3.7.3 — the owner opens a run now and the therapist answers
- * whenever they open the link. Without this, a page reload between those two moments makes the run
- * unfinishable by anyone, and the only remedy spends one of the invitation's eight exchanges.
+ * store-and-forward gap (COMPANION_PAIRING.md §4, "What each side keeps across the gap") — the
+ * owner opens a run now and the therapist answers whenever they open the link. Without this, a
+ * page reload between those two moments makes the run unfinishable by anyone, and the only remedy
+ * spends one of the invitation's eight exchanges.
  *
  * WHAT IS IN IT, AND WHAT IS NOT. The scalar, the opening message, the session id, and the ids that
  * name the run — everything cpaceFinish() needs. NOT the code: the code is never persisted anywhere,

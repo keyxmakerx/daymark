@@ -18,9 +18,9 @@ import javax.inject.Singleton
  *
  * ## The rule this class is built around
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2: *"**Never in any rule that reads mood.**
- * Correlations, patterns and the cards they produce cannot receive a person or a community, groups
- * included, enforced by signature the way the Sky's field is kept blind to data."*
+ * `docs/FEATURES.md` §11.2: *"**Never in any rule that reads mood.** Correlations, patterns and the
+ * cards they produce cannot receive a person or a community, groups included. This is enforced by
+ * shape, not by convention."*
  *
  * **Nothing on this class returns a mood, and nothing takes one.** `observeEntryIds` hands back
  * entry ids; the caller that wants to draw those entries asks `EntryRepository` for them and does
@@ -34,9 +34,10 @@ import javax.inject.Singleton
  *
  * ## The one prompt this layer is allowed to feed
  *
- * §2 allows exactly two: an entry names somebody with no page yet, so offer one, once; and somebody
- * has come up several times with no page, offer once. Both read tags and dates and never mood.
- * [findByName] and [observeEntryCount] are what they need, and neither returns anything else.
+ * `docs/FEATURES.md` §11.3 allows exactly two: an entry names somebody with no page yet, so offer
+ * one, once; and somebody has come up several times with no page, offer once. Both read tags and
+ * dates and never mood. [findByName] and [observeEntryCount] are what they need, and neither
+ * returns anything else.
  *
  * The prompt that is forbidden — *"you haven't written about X in a while"* — has no query behind
  * it anywhere in this layer, and `PersonNoteDao` says why that absence is deliberate rather than an

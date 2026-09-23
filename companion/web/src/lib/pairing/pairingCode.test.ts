@@ -22,7 +22,7 @@ import {
  * Every property here is checkable in microseconds, so the sweeps are exhaustive rather than
  * sampled. The code is drawn fresh each run: the properties hold for ALL codes, and a fixture would
  * only have narrowed the coverage. One literal IS pinned — K7M4-RD96 — because it is the example
- * in the plan and the check arithmetic behind it must never move.
+ * in docs/COMPANION_PAIRING.md §2 and the check arithmetic behind it must never move.
  */
 let code: PairingCode
 
@@ -59,7 +59,7 @@ describe('the shape of a pairing code', () => {
     expect(PAIRING_GROUP_SIZE).not.toBe(RECOVERY_GROUP_SIZE)
   })
 
-  it("pins the plan's example: K7M4-RD96 is a valid code and its check symbol is 6", () => {
+  it('pins the documented example: K7M4-RD96 is a valid code and its check symbol is 6', () => {
     // Weighted sum 1·K + 2·7 + 3·M + 4·4 + 5·R + 6·D + 7·9 over the alphabet indices is 314,
     // and 314 mod 31 is 4, whose symbol is '6'. If this moves, every code ever spoken is invalid.
     const parsed = parsePairingCode('K7M4-RD96')

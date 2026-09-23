@@ -21,7 +21,7 @@ import kotlin.math.roundToInt
  * Renders a [ReportData] into a clinician-facing PDF using the platform [PdfDocument] + [Canvas]
  * (no third-party PDF dependency; text stays selectable/vector).
  *
- * **Four sides, one job each** (see `docs/PLAN_2026-08-NEXT.md` §1). The reconciliation of "fill the
+ * **Four sides, one job each** (see `docs/DECISIONS.md` §D8). The reconciliation of "fill the
  * page" with the alert-fatigue evidence is that the finding is about elements *competing in the same
  * glance*, not about page count. So the flag keeps its own zone at the top of side 1 and never shares
  * it; everything below and after may be dense, because a reader on side 2 has chosen to go looking.

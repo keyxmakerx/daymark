@@ -15,10 +15,10 @@ import java.util.concurrent.atomic.AtomicLong
  * opaque blobs; it never decrypts anything.
  *
  * The accepted token is swappable at runtime via [rotate] — the email-triggered access-token
- * recovery flow (Track T2, email Option A) calls this after persisting a newly issued token, so a
- * live server never needs a restart to accept it. `@Volatile` is sufficient (not a lock): the
- * whole array reference is swapped atomically, so a concurrent reader always sees a complete
- * old or new token, never a partial one.
+ * recovery flow (COMPANION_SECURITY.md §6, "Owner notifications and server-access recovery")
+ * calls this after persisting a newly issued token, so a live server never needs a restart to
+ * accept it. `@Volatile` is sufficient (not a lock): the whole array reference is swapped
+ * atomically, so a concurrent reader always sees a complete old or new token, never a partial one.
  *
  * This class never holds the plaintext token. What it is constructed and [rotate]d with is
  * [Secrets.tokenHash] of the accepted token — the same digest [com.daymark.companion.mail.OwnerAccountStore]

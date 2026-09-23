@@ -1,6 +1,7 @@
 <script lang="ts">
   /*
-   * Track T2 (email Option A): the unauthenticated owner-access-token recovery flow. This
+   * The owner's email, recovery half (COMPANION_SECURITY.md §6, "Owner notifications and
+   * server-access recovery"): the unauthenticated owner-access-token recovery flow. This
    * recovers SERVER ACCESS ONLY — the server is zero-knowledge and can never reset the PIN or
    * E2EE passphrase; a recovered token still cannot decrypt anything. Deliberately requires no
    * login: that is the point of a recovery path.

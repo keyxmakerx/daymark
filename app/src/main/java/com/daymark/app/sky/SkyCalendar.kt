@@ -13,9 +13,9 @@ package com.daymark.app.sky
  * in the middle of a layout pass.
  *
  * It used to answer three, the other two being where a month row started and how long it was.
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1.0 deleted the rows, so nothing on the sky maps a date
- * to a place any more. [firstEpochDayOfMonth] and [lengthOfMonth] survive as plain calendar
- * arithmetic with tests of their own; nothing in the layout calls them.
+ * There are no rows now (`docs/SKY.md` §3.1), so nothing on the sky maps a date to a place any
+ * more. [firstEpochDayOfMonth] and [lengthOfMonth] survive as plain calendar arithmetic with tests
+ * of their own; nothing in the layout calls them.
  *
  * So the boundary is drawn at the epoch day. The caller converts a stored `epochMillis` to a local
  * date once, with the zone it already has, and hands the layout a `LocalDate.toEpochDay()` — the

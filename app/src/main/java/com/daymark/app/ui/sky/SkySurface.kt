@@ -76,20 +76,18 @@ import kotlin.math.floor
  * — a star is `(kind, id, day, mood)`. Widening it would put a grouping key on the Sky, which is a
  * field the surface could later draw something else from. So each step gets
  * [SkyGlyph.threadStubDp], which exists for exactly this case: the link is part of the glyph, drawn
- * alone, so "a step in something" is readable from one star. The full thread stays unbuilt and
- * recorded rather than faked.
+ * alone, so "a step in something" is readable from one star. The full thread is not faked; not
+ * built: #152.
  *
- * **Per-row month labels in a gutter.** Text on a canvas needs the platform text stack, and text
- * that must scale to 200% (§7.1) needs it more. Instead the surface reports the month at the top of
- * the viewport and the screen draws one ordinary, scalable [androidx.compose.material3.Text] label
- * above it. Coarser than a gutter; it is also the version that survives a large font setting.
+ * **Month labels.** None, on the canvas or above it. No part of the scattered field is a date
+ * (`docs/SKY.md` §3.1), so a label would be a claim that is not true, and nothing is written on the
+ * canvas at all (§7.1). Dates live in the list (§7.5), in ordinary, scalable text.
  *
  * ## Twinkle, which now ships, and the frame loop that carries it
  *
- * `docs/SKY.md` §7.4 said a twinkle was a vestibular risk on a full-screen surface and should be
- * off by default if it shipped at all. `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1 revises that: it
- * ships, on, behind the motion switch, which already follows the platform's reduced-motion setting.
- * Every number in it is [SkyTwinkle]'s and every one of them is pure, so what is here is a clock.
+ * Twinkle ships on, behind the motion switch, which takes the platform's reduced-motion setting as
+ * its default (`docs/SKY.md` §7.4). Every number in it is [SkyTwinkle]'s and every one of them is
+ * pure, so what is here is a clock.
  *
  * **The clock is the one performance mistake this screen can actually make**, so it is written to
  * be impossible to leave running:
@@ -382,10 +380,10 @@ private fun DrawScope.drawField(
 /**
  * One star: a point, then a glow.
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1, *"Fidelity: a point, then a glow, never a blur
- * alone"* — a hard-edged near-white core, a tight bright inner glow against it, and a soft faint
- * outer glow spread by the mood. Those three live in the sprite ([SkySprites]); what happens here
- * is where it goes, how bright it is at this instant, and the prism flash on top.
+ * `docs/SKY.md` §3.5, *"a point, then a glow"* — a hard-edged near-white core, a tight bright inner
+ * glow against it, and a soft faint outer glow spread by the mood. Those three live in the sprite
+ * ([SkySprites]); what happens here is where it goes, how bright it is at this instant, and the
+ * prism flash on top.
  *
  * **Everything that decides how a star looks is asked for, never computed here.** Colour is
  * [SkyGlyph.starTint], which is age and the star's own temperature. Brightness is
@@ -403,8 +401,9 @@ private fun DrawScope.drawField(
  * **Sub-pixel, and therefore not scaled.** The sprite is rasterised at the device's real pixel
  * density and stamped at its natural size at a fractional offset, so stars sit where they are
  * rather than snapping to whole pixels as the sky is panned. That rules out [SkyTwinkle.scaleAt]'s
- * 2% breathe, which would need a resample: §1 asks for the breathe to be *"brightness only"*, and
- * a 2% resample of a sprite this small costs more in softness than the swell is worth.
+ * 2% breathe, which would need a resample: in `docs/SKY.md` §3.6 the breathe is a dip in
+ * brightness, and a 2% resample of a sprite this small costs more in softness than the swell is
+ * worth.
  *
  * Nothing here varies with how many records the star covers. A folded star is drawn exactly like a
  * single one; a bigger mark for a busier day would rank days by output (§6.2).
@@ -456,9 +455,9 @@ private fun DrawScope.drawStar(
     val coreRadius = (SkyGlyph.coreRadiusDp(kind, moodLevel) * SkyGlyph.coreScale(kind)).dp.toPx()
 
     // Kind is carried by form, and form only resolves once the person has leaned in to one day.
-    // §1: "No marks for kind at ordinary zoom. A journal page, a step, a goal reached and a life
-    // event are all just stars until the person leans in to a single day." A landmark still looks
-    // different at every zoom, and that is its light and not a kind mark — see SkyDetail.drawsGlyphs.
+    // `docs/SKY.md` §3.3: "Kind marks appear only at CLOSE (§4). Further out, every kind is just a
+    // star, and the list always names it." A landmark still looks different at every zoom, and
+    // that is its light and not a kind mark — see SkyDetail.drawsGlyphs.
     if (!SkyDetail.drawsGlyphs(detail)) {
         if (selected) drawSelection(centre, coreRadius)
         return
@@ -541,8 +540,8 @@ private fun DrawScope.drawStar(
  * The prism: a red fringe and a blue one, pulled apart either side of the star for a quarter of a
  * second and gone again, with one extra pass of the star itself between them.
  *
- * §1: *"a quarter-second prism glint, a red and a blue fringe added on top of the star and gone
- * again... The star's own tint never changes; the glint passes over it."* Added and not blended,
+ * `docs/SKY.md` §3.6: *"for 280 ms, a red and a blue fringe are added either side of the star,
+ * like a prism. The star's own tint never changes."* Added and not blended,
  * which is what makes that true — an additive fringe leaves the star underneath exactly the colour
  * it was.
  *
@@ -618,7 +617,7 @@ private fun DrawScope.drawSelection(centre: Offset, coreRadius: Float) {
  *
  * The only clock on the Sky. [SkyTwinkle] is pure and takes an elapsed count, so this is the whole
  * of what the renderer contributes to the twinkle — which is what makes every motion-safety rule in
- * §1 a property of a file a plain-JVM test can execute.
+ * `docs/SKY.md` §7.4 a property of a file a plain-JVM test can execute.
  *
  * Three things about the shape, each of which is a battery decision:
  *

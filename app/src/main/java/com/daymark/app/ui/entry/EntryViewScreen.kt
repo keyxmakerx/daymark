@@ -52,8 +52,9 @@ import com.daymark.app.util.DateUtils
 /**
  * One entry, read back.
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §3: *"Descriptive only: the person's own mood word,
- * activities, with, note, photo. No commentary of any kind. Never 'you seem'."*
+ * `docs/FEATURES.md` §1.3: *"The page is descriptive only: the person's own mood word, their
+ * activities, who they were with, their note and their photo. There is no commentary of any kind:
+ * no "you seem", no comparison with another day, no count, no encouragement."*
  *
  * ## The sentence this page may never contain
  *
@@ -74,7 +75,7 @@ import com.daymark.app.util.DateUtils
  *
  * Tapping a name opens that person's page: their own description of them, the notes they wrote,
  * the entries that name them. It does not open anything that has counted, averaged or compared
- * moods across them, because no such surface exists — §2 forbids it and
+ * moods across them, because no such surface exists — `docs/FEATURES.md` §11.2 forbids it and
  * `data/PeopleRepository.kt` is shaped so the query behind it cannot be written by accident.
  */
 @OptIn(ExperimentalMaterial3Api::class)

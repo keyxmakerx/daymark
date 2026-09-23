@@ -14,9 +14,8 @@ import org.junit.Test
  * The one expression that decides whether somebody's name leaves the device, and the group keys it
  * is decided against.
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2: *"Sharing is one screen listing every person and
- * community, with a default per group (all off) and overrides per item, off even under an
- * accept-all grant."*
+ * `docs/FEATURES.md` §11.4: *"One screen lists every person and community, with a default per
+ * group (all off) and an override per person."* Sharing stays off even under an accept-all grant.
  *
  * `PeopleRepository.isShared` is a companion function precisely so this file can exercise it
  * without Room, a device or a mocking framework. It is three tokens long and every one of them is
@@ -132,7 +131,7 @@ class PeopleSharingTest {
      * migration, not a refactor, and this is where that shows up.
      */
     @Test
-    fun `the five group keys are the ones the plan names, and they are stable strings`() {
+    fun `the five group keys are the ones FEATURES names, and they are stable strings`() {
         assertEquals(
             listOf("friends", "family", "partners", "communities", "other"),
             PersonGroup.entries.map { it.key },

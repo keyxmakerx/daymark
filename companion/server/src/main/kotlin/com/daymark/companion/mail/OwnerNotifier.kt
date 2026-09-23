@@ -4,8 +4,8 @@ import java.net.URI
 import org.slf4j.LoggerFactory
 
 /**
- * Fires the owner-facing [MailMessage.ReviewNotification] events from Track T2's mini-spec
- * (therapist enrolled, new inbox item), gated on the owner having registered an email AND
+ * Fires the owner-facing [MailMessage.ReviewNotification] events (therapist enrolled, new inbox
+ * item; COMPANION_OBSERVABILITY.md §3.5), gated on the owner having registered an email AND
  * opted into that [MailMessage.ReviewKind]. A no-op (never throws, never gates the caller's own
  * operation) when nothing is registered, the event isn't opted into, or SMTP is disabled —
  * identical posture to [Mailer.send] itself.

@@ -59,16 +59,18 @@ data class Config(
     val auditRetentionDays: Long = 90L,
     val auditSourceIpEnabled: Boolean = false,
     /**
-     * Track T2 (email Option A): the unauthenticated access-token recovery request endpoint is
-     * capped at this many attempts per source per hour (heavily rate-limited, per the mini-spec).
+     * The owner's access-token recovery: the unauthenticated request endpoint is capped at this
+     * many attempts per source per hour (COMPANION_SECURITY.md §6, "Owner notifications and
+     * server-access recovery").
      */
     val reissueMaxPerHour: Int = 3,
     /** How long a minted recovery-confirmation link stays valid before it is GONE. */
     val reissueConfirmTtlSeconds: Long = 3600L,
     /**
      * Whether the therapist session cookie carries the `Secure` attribute. TRUE by default
-     * (the portal requires a real TLS origin, per COMPANION_SECURITY.md open Q7). Only set
-     * false for a plain-HTTP dev/test origin — the cookie would otherwise not be sent.
+     * (the portal requires a real TLS origin, per COMPANION_SECURITY.md §5.4; what that means for
+     * a LAN deployment is still open, in #205). Only set false for a plain-HTTP dev/test origin —
+     * the cookie would otherwise not be sent.
      */
     val cookieSecure: Boolean = true,
     /**

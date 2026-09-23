@@ -51,26 +51,27 @@ import com.daymark.app.util.DateUtils
  * A person's or a community's page: who they are in the person's own words, the dated notes
  * written about them over time, and the entries that name them.
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2 is the design — *"the way the mood side of the app
- * is about moods"*.
+ * `docs/FEATURES.md` §11.1 is the design: a page for each of them, the way the mood side of the app
+ * is about moods.
  *
  * ## What is on this page and what is not
  *
  * There is no mood on it, in any form. Not a face beside an entry, not a colour, not a word, not a
- * summary of the ones that name them. §2: *"Never in any rule that reads mood ... Correlations,
- * patterns and the cards they produce cannot receive a person or a community, groups included."*
+ * summary of the ones that name them. `docs/FEATURES.md` §11.2: *"Never in any rule that reads
+ * mood ... Correlations, patterns and the cards they produce cannot receive a person or a
+ * community, groups included."*
  * A column of coloured faces under somebody's name is that correlation drawn for the eye, so the
  * entries here are a date and the person's own words, and the whole record is one tap away on the
  * entry's own page where it belongs.
  *
  * ## The one fact it may state, and the sentence it may never say
  *
- * §2 allows *last note: June* when the page is opened, and forbids *"you haven't written about X
- * in a while"* anywhere, ever. The difference is not politeness: the first is the record answering
- * a question that was just asked of it, and the second is the app noticing a silence about
- * somebody and raising it unprompted — which lands hardest on exactly the person it would find.
- * So the date line is drawn only when there is a note to date, and when there is none this page
- * says nothing about it at all.
+ * `docs/FEATURES.md` §11.3 allows *last note: June* when the page is opened, and forbids *"you
+ * haven't written about X in a while"* anywhere, ever. The difference is not politeness: the first
+ * is the record answering a question that was just asked of it, and the second is the app noticing
+ * a silence about somebody and raising it unprompted — which lands hardest on exactly the person it
+ * would find. So the date line is drawn only when there is a note to date, and when there is none
+ * this page says nothing about it at all.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -364,10 +365,11 @@ private fun EntriesBlock(entries: List<PersonEntryLine>, onOpenEntry: (Long) -> 
 /**
  * Archive, and the sentence that has to be next to it.
  *
- * §2: *"Archive hides one from the picker. Entries and notes are untouched."* That promise is
- * printed under the button as well as inside the dialog, because somebody deciding whether to
- * archive a person who has left their life is deciding whether the record of the years they were
- * in it survives, and the answer has to be visible before the tap, not only after it.
+ * `docs/FEATURES.md` §11.1: *"Archive hides someone from the picker. Their page, notes and entries
+ * stay as they are."* That promise is printed under the button as well as inside the dialog,
+ * because somebody deciding whether to archive a person who has left their life is deciding whether
+ * the record of the years they were in it survives, and the answer has to be visible before the
+ * tap, not only after it.
  */
 @Composable
 private fun ArchiveBlock(person: Person, onArchive: () -> Unit, onRestore: () -> Unit) {
@@ -406,10 +408,11 @@ private fun ArchiveBlock(person: Person, onArchive: () -> Unit, onRestore: () ->
 /**
  * The one quiet line at the foot: what the sharing state *is*, and where it is changed.
  *
- * §2: *"On a person's page the state is one quiet line at the bottom: present, never a nag."* So
- * it is a statement in the same register whichever way it reads. There is no warning colour, no
- * icon, no "consider sharing this" and nothing that makes one of the two answers look like the
- * right one. Off is the default and staying off is a complete decision.
+ * `docs/FEATURES.md` §11.4: *"A quiet line at the foot of a person's page says whether they are
+ * shared with the clinician: present, never a nag."* So it is a statement in the same register
+ * whichever way it reads. There is no warning colour, no icon, no "consider sharing this" and
+ * nothing that makes one of the two answers look like the right one. Off is the default and
+ * staying off is a complete decision.
  */
 @Composable
 private fun SharingLine(shared: Boolean, onOpenSharing: () -> Unit) {

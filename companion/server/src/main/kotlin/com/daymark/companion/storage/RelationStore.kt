@@ -52,11 +52,12 @@ class RelationStoreException(message: String, val kind: Kind) : Exception(messag
  * strict-charset path segments, keep-last-N prune, per-relationship quota, atomic write,
  * server-side SHA-256) — the server never decrypts and never inspects blob contents.
  *
- * STRUCTURAL SETTING-ALLOWLIST: a `setting`-type assignment carries a NON-SECRET routing tag
+ * STRUCTURAL SETTING-ALLOWLIST: a `setting`-type assignment may carry a NON-SECRET routing tag
  * (X-Setting-Key). The store rejects any tag outside the fixed [SETTING_ALLOWLIST] constant
- * WITHOUT reading the (sealed) value. This is a redundant structural gate on top of the
- * client-side authoritative check; it guarantees no PIN/lock/encryption/network/backup key
- * can ever transit the setting channel. See docs/COMPANION_ASSIGNMENTS.md.
+ * WITHOUT reading the (sealed) value. That keeps a stray string out of the index and guarantees
+ * nothing about the setting: the tag is a second claim by the same author, the shipped clinician
+ * client does not send it, and the setting itself is inside the sealed body. The check that
+ * binds is the owner's, on the decrypted item. See docs/COMPANION_ASSIGNMENTS.md §2.2.
  */
 class RelationStore(
     dataDir: String,

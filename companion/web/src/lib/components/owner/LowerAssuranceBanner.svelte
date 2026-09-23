@@ -8,7 +8,7 @@
    * SUBSTRATE: ui/Callout, tone 'warn'. This one IS a genuine warning — a degraded assurance
    * path, which is exactly what amber is reserved for — so unlike the non-diagnostic framing it
    * earns a severity hue. Callout passes the copy through as children untouched; the wording is
-   * fixed and quoted in COMPANION_SECURITY.md.
+   * fixed, and components/invariants.tree.test.ts asserts it verbatim.
    *
    * It previously drew --mood-3-wash with a --mood-3 dot, i.e. caution borrowed from the middle
    * of a person's mood ramp. The ramp is DATA only (app.css, invariant 1) and this is interface

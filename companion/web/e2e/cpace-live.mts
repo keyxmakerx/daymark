@@ -1,6 +1,7 @@
 /*
- * The browser half of a live CPace interop exchange — gate 0.2's "JVM ↔ browser" proof run
- * with fresh randomness, as opposed to the shared deterministic vectors both unit suites pin.
+ * The browser half of a live CPace interop exchange — a JVM ↔ browser proof run (the two
+ * implementations of COMPANION_PAIRING.md §3) with fresh randomness, as opposed to the shared
+ * deterministic vectors both unit suites pin.
  *
  * This is a TEST HARNESS, not transport: secret scalars travel between the two harness halves
  * as hex strings, which is exactly what production must never do. It exists so a person (or a

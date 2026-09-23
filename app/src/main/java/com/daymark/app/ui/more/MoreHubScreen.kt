@@ -63,7 +63,7 @@ fun MoreHubScreen(
     ) {
         SectionLabel("Track")
         // Full width and first, because it is a place rather than a tool — and one card rather than
-        // a tab, which is `docs/SKY.md` §11's open question answered cautiously: the Sky is the most
+        // a tab, as `docs/SKY.md` §11 item 1 settles it, cautiously: the Sky is the most
         // identifying thing this app can draw, so it stays behind the app's lock and one deliberate
         // tap away instead of sitting on the bar under a stranger's thumb.
         //
@@ -79,7 +79,8 @@ fun MoreHubScreen(
         // Full width, and a place rather than a tool, for the same reason the Sky is: it is
         // somewhere to keep things. The subtitle names what is there and promises nothing — no
         // count of people, which would be a scoreboard made of somebody's relationships, and
-        // nothing about who has not been written about lately, which the plan forbids outright.
+        // nothing about who has not been written about lately, which `docs/FEATURES.md` §11.3
+        // forbids outright.
         HubCard(
             icon = R.drawable.ic_act_friends,
             title = "People and communities",

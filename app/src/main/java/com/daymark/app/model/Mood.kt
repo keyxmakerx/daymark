@@ -7,7 +7,8 @@ import androidx.compose.ui.graphics.Color
  * [level] is what is persisted in the database (1 = worst, 5 = best).
  *
  * Colours are the muted, earthy "paper" mood palette (see ui/theme/Color.kt).
- * A user-customisable scale is a planned follow-up; for now the scale is constant.
+ * The five levels are fixed; a person can rename and recolour them
+ * (data/MoodCustomizationStore.kt). A scale with a different number of steps is #206.
  */
 enum class Mood(
     val level: Int,

@@ -60,16 +60,16 @@ object SkyPresentation {
      *
      * At 32 the viewport holds about a thousandth of the field, which separates all but the very
      * closest pairs — overlap is accepted and resolved by zoom, never by moving a star
-     * (`docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1.0). Past this there is nothing further to
-     * resolve and the surface only gets emptier, which on this surface reads as absence.
+     * (`docs/SKY.md` §3.1). Past this there is nothing further to resolve and the surface only
+     * gets emptier, which on this surface reads as absence.
      */
     const val MAX_ZOOM = 32f
 
     /**
      * What "maximum contrast" is, arithmetically.
      *
-     * §7.1's quiet sky "raises every glyph to maximum contrast", which needed a number or it would
-     * have become a guess inside a draw call. Every colour still goes through
+     * §7.1's quiet sky draws the mood colours at maximum contrast, which needed a number or it
+     * would have become a guess inside a draw call. Every colour still goes through
      * [com.daymark.app.sky.SkyPalette.equalised] — the same transform, a higher target — rather than
      * through a second code path, so the ramp stays **level** at this setting too. Lifting the ramp
      * to a ceiling instead would re-introduce the ranking equalisation exists to remove, only
@@ -163,11 +163,11 @@ object SkyPresentation {
      * Whether a star is close enough to the viewport to be worth drawing.
      *
      * Culling used to be a contiguous slice of the packed arrays, because x was monotonic in the
-     * date and every star of a month row sat next to the rest of its row. With the rows gone
-     * (`docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1.0) there is no order in the arrays that
-     * corresponds to any order on the screen, so the renderer walks all of them and asks this. That
-     * is a bounds check per star per frame over a primitive array with no allocation — a few tens of
-     * microseconds for ten years of daily use, which the layout's own timing test bounds.
+     * date and every star of a month row sat next to the rest of its row. With no rows
+     * (`docs/SKY.md` §3.1) there is no order in the arrays that corresponds to any order on the
+     * screen, so the renderer walks all of them and asks this (§8.2 rule 4). That is a bounds check
+     * per star per frame over a primitive array with no allocation — a few tens of microseconds for
+     * ten years of daily use, which the layout's own timing test bounds.
      *
      * [marginPx] keeps a star that is half off the edge drawn instead of popping in.
      */
@@ -187,8 +187,9 @@ object SkyPresentation {
      * §7.1: every star is a 48 dp target however small it is drawn, and where targets overlap the
      * tap resolves to the **nearest core** — it does not grow the star underneath, because a star
      * that swells when you reach for it is a star whose size means something other than what
-     * [SkyGlyph] says it means. Overlap is not resolved by moving anything: §1.0 accepts it, and a
-     * star nudged away from a neighbour would be a star whose position depended on other records.
+     * [SkyGlyph] says it means. Overlap is not resolved by moving anything: `docs/SKY.md` §3.1
+     * accepts it, and a star nudged away from a neighbour would be a star whose position depended
+     * on other records.
      *
      * Ties go to the lower index, which is the earlier record: the arrays are in time order, so two
      * stars exactly equidistant resolve the same way on every device and every open.
@@ -312,8 +313,8 @@ object SkyPresentation {
     // There is no "where you are" label any more, and there is no function here that could produce
     // one. `monthLabel(epochMonth, locale)` named the month at the top of the viewport, which was
     // meaningful only while the sky was a stack of month rows. With placement random
-    // (`docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1.0) the top of the viewport is not a date and no
-    // part of the screen is: a label there would be a claim about where you are that is not true.
+    // (`docs/SKY.md` §3.1) the top of the viewport is not a date and no part of the screen is: a
+    // label there would be a claim about where you are that is not true.
     // The way to reach a particular date is the text list, which keeps its month headings.
 
     fun dateLabel(epochDay: Long, locale: Locale): String =

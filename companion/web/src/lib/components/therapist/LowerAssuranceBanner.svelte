@@ -18,8 +18,8 @@
    * a printout, a visually hidden "Warning:" prefix for screen readers, and the words — which
    * were always the point. The <aside> stays so the region keeps its accessible name.
    *
-   * The copy below is fixed and quoted verbatim in the security notes. Restyle the container;
-   * never the sentences.
+   * The copy below is fixed, and components/invariants.tree.test.ts asserts it verbatim. Restyle
+   * the container; never the sentences.
    */
   import { Callout } from '../ui'
 </script>

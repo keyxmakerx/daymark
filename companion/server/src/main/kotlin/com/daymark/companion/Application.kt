@@ -75,7 +75,7 @@ fun main() {
     // slowloris weak, not the slow-request kind, and Ktor's own default here is
     // `requestReadTimeoutSeconds = 0` — infinite (verified against the Ktor 3.0.3 source, not
     // assumed). The operator's proxy is asked for the same thing in
-    // COMPANION_DEPLOYMENT_HARDENING.md §3.1 requirement 9, but the app must not depend on a proxy
+    // COMPANION_DEPLOYMENT.md §3.1 requirement 9, but the app must not depend on a proxy
     // it cannot see for its floor.
     //
     // 120 s, not 10: a 25 MiB snapshot over a slow mobile uplink is a legitimate long request, and
@@ -159,10 +159,11 @@ fun Application.module(
         blobStore ?: BlobStore(config.dataDir, config.maxBlobBytes, config.maxVersions, config.perTokenQuotaBytes)
     } else null
 
-    // Track T2 (email Option A): the owner/bearer token now lives here, not just in config —
-    // this is what makes it rotatable at runtime via the email-triggered recovery flow without a
-    // restart. Bootstrapped from (and reconciled against, on every boot) DAYMARK_AUTH_TOKEN; see
-    // OwnerAccountStore's kdoc for the reconciliation rule.
+    // The owner's email, for notifications and access-token recovery (COMPANION_SECURITY.md §6,
+    // "Owner notifications and server-access recovery"): the owner/bearer token now lives here, not
+    // just in config — this is what makes it rotatable at runtime via the email-triggered recovery
+    // flow without a restart. Bootstrapped from (and reconciled against, on every boot)
+    // DAYMARK_AUTH_TOKEN; see OwnerAccountStore's kdoc for the reconciliation rule.
     val account = config.authToken?.let { token ->
         accountStore ?: OwnerAccountStore(config.dataDir, token)
     }
@@ -199,8 +200,8 @@ fun Application.module(
     val orgAudit = if (config.therapistAuthEnabled) {
         orgAuditStore ?: AuditStore(config.dataDir, config.auditRetentionDays * 86_400L, dbName = "org-audit.db")
     } else null
-    // Store-and-forward state for the CPace pairing exchange (plan §3.7.3). Same feature gate:
-    // an exchange belongs to an invite, and invites only exist when the portal is on.
+    // Store-and-forward state for the CPace pairing exchange (COMPANION_PAIRING.md §4). Same
+    // feature gate: an exchange belongs to an invite, and invites only exist when the portal is on.
     val pairing = if (config.therapistAuthEnabled) {
         pairingStore ?: PairingStore(config.dataDir)
     } else null
@@ -356,10 +357,11 @@ fun Application.module(
             delete("/v1/orgs/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
         }
 
-        // Track T2 (email Option A): owner notification-email registration + the unauthenticated
-        // access-token recovery flow. Gated on the sync/owner bearer token being configured at
-        // all (independent of the therapist portal — recovery covers plain /v1 sync access too),
-        // fail-closed to 503 otherwise so a probe cannot tell configured-but-empty from absent.
+        // The owner's email (COMPANION_SECURITY.md §6, "Owner notifications and server-access
+        // recovery"): notification-email registration + the unauthenticated access-token recovery
+        // flow. Gated on the sync/owner bearer token being configured at all (independent of the
+        // therapist portal — recovery covers plain /v1 sync access too), fail-closed to 503
+        // otherwise so a probe cannot tell configured-but-empty from absent.
         if (account != null && guard != null && notifier != null) {
             recoveryRoutes(
                 accountStore = account,

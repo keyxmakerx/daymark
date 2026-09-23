@@ -312,7 +312,7 @@
   --ink-faint: var(--c-ink-faint);
   --text-subtle: var(--c-ink-subtle);
   /* Decorative separator, ~1.16:1 — grouping only. Anything whose identity as a
-     control depends on its border uses --border-strong (design system §2.3.1). */
+     control depends on its border uses --border-strong (design system §2.3.7). */
   --hairline: var(--c-hairline-day);
   --border-strong: var(--c-border-day);
   --ink-accent: var(--c-accent-day);

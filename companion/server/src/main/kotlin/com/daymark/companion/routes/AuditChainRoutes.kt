@@ -50,10 +50,10 @@ private val CHAIN_REL_REF = Regex("^[A-Za-z0-9_-]{1,64}$")
  * not harmless: a head plus an entry count, served per relRef to whoever asks, answers "does this
  * relationship exist on this server" and "how active has it been" for any reference an anonymous
  * caller cares to probe — which is precisely the metadata a compromised or nosy observer is
- * documented as being able to take (docs/PLAN_2026-08-COMPANION-NEXT.md 1.2: how many
- * relationships exist, how active each one is), and this server does not volunteer it to callers
- * who present nothing. The bearer token is the difference between the owner checking their own
- * log's spine and an open directory of who has a therapist and how often they talk.
+ * documented as being able to take (docs/COMPANION_ARCHITECTURE.md §6, "Metadata is visible": how
+ * many relationships exist, how active each one is), and this server does not volunteer it to
+ * callers who present nothing. The bearer token is the difference between the owner checking
+ * their own log's spine and an open directory of who has a therapist and how often they talk.
  *
  * Why the owner token ALONE, without the X-Rel-Token second factor the audit-entry read next door
  * demands: what that second factor protects on the entry read is the log's CONTENT — who did what,
@@ -78,8 +78,9 @@ private val CHAIN_REL_REF = Regex("^[A-Za-z0-9_-]{1,64}$")
  * verdicts — the client side is responsible for saying, next to whatever it renders, that internal
  * consistency is not completeness and that a server that declines to append, or truncates,
  * verifies perfectly (docs/COMPANION_SECURITY.md §9, R12). What outlives a lying server is the
- * head hash once it is anchored beyond the server's reach — a person's note now, the phone anchor
- * of docs/PLAN_2026-08-COMPANION-NEXT.md 3.9.7 later. This route exists to hand that value over.
+ * head hash once it is anchored beyond the server's reach — a person's note now, the phone's own
+ * copy later (docs/COMPANION_ARCHITECTURE.md §6; not built: #182). This route exists to hand that
+ * value over.
  *
  * NOTHING HERE LOGS. Not the relRef, not the head, not the outcome. The server is a zero-knowledge
  * relay and a chain check is not an incident.

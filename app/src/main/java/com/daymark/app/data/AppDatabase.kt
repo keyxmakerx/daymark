@@ -403,8 +403,8 @@ abstract class AppDatabase : RoomDatabase() {
          * `person_group_shares`. Existing data is preserved and no existing table is touched —
          * `mood_entries` in particular is not altered, and nothing here reads a row of it.
          *
-         * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2 is the design;
-         * [com.daymark.app.data.entity.Person] and its neighbours carry the reasoning per table.
+         * `docs/FEATURES.md` §11 is the design; [com.daymark.app.data.entity.Person] and its
+         * neighbours carry the reasoning per table.
          *
          * Every statement below is Room's own generated form for the entity it creates — column for
          * column, in declaration order, in Room's wording — because `runMigrationsAndValidate`
@@ -490,8 +490,9 @@ abstract class AppDatabase : RoomDatabase() {
          * v18 lets the reception ledger say *when in the week* the app asked and whether anything
          * came back: `offer_records.offeredHour`, `.offeredWeekday` and `.responded`.
          *
-         * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §4 asks for the first two, and
-         * [com.daymark.app.stats.TimingGrid] is what reads all three. See
+         * `docs/FEATURES.md` §13.2 describes all three.
+         * [com.daymark.app.data.OfferLedgerRepository.timedOffers] reads them, folding `responded`
+         * into the outcome that [com.daymark.app.stats.TimingGrid] places by. See
          * [com.daymark.app.data.entity.OfferRecord] for why the hour and weekday have to be stored
          * at the moment of the ask rather than derived from `offeredAt` afterwards, and why
          * "nobody answered" is a column of its own rather than a fifth `OfferOutcome`.

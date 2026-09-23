@@ -28,9 +28,9 @@ import com.daymark.app.data.entity.PersonGroup
 /**
  * The entry editor's *with* picker: who, or what, you were with.
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2: *"An entry gains **with**."* It sits beside the
- * activity chips and works the same way, because it is the same gesture — the difference is only
- * that these names came from the person rather than from a library.
+ * `docs/FEATURES.md` §11.1: *"An entry gains **with**."* It sits beside the activity chips and
+ * works the same way, because it is the same gesture — the difference is only that these names
+ * came from the person rather than from a library.
  *
  * ## Grouped, and that is all a group is for
  *

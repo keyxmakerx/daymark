@@ -12,8 +12,8 @@ import androidx.compose.ui.unit.sp
  * Paper typography: a serif for the wordmark / display / titles (journal feel) and the
  * platform default sans for UI, labels and numbers.
  *
- * Note: bundling a specific serif (e.g. Fraunces) + Inter as TTFs in res/font is a planned
- * polish step; for now we use [FontFamily.Serif] / [FontFamily.SansSerif] so the design lands
+ * Note: whether to bundle a specific serif (e.g. Fraunces) + Inter as TTFs in res/font is an open
+ * decision (#251); today this uses [FontFamily.Serif] / [FontFamily.SansSerif], so the design lands
  * without a network font dependency (also keeps the F-Droid/offline story clean).
  */
 private val Serif = FontFamily.Serif

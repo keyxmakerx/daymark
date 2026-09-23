@@ -90,7 +90,7 @@ class SyncCryptoTest {
     fun base64IsUrlSafeNoPadding_theSyncProtocolConformanceVector() {
         // bytes 0x00..0x0F -> RFC 4648 section 5 URL-safe, no padding.
         // This is THE conformance vector docs/SYNC_PROTOCOL.md §1.2 requires the phone client
-        // to pass before any networking lands (see docs/COMPANION_PHONE_2B.md build order).
+        // to pass before any networking lands (see docs/COMPANION_PHONE.md §6).
         val bytes = ByteArray(16) { it.toByte() }
         val b64 = SyncCrypto.toBase64(bytes)
         assertEquals("AAECAwQFBgcICQoLDA0ODw", b64)

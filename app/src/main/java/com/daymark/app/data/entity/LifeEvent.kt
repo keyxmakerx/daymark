@@ -48,9 +48,9 @@ import androidx.room.PrimaryKey
  * rejected: a person may well mark a date they know is coming — a surgery, a court date, a move,
  * the first anniversary — and a mark placed ahead of time is still the person's own decision that
  * it matters. Refusing it would be the software overruling the one author this table has. The cost
- * is stated rather than hidden: the Sky's rows run from the earliest record to the latest, so a
- * future life event extends the sky past the current month. That is a mark the person placed, not
- * the empty forward slots `docs/SKY.md` §4.2 rules out.
+ * is stated rather than hidden: a future life event is drawn as new, like anything dated after
+ * today (`docs/SKY.md` §3.2). That is a mark the person placed, not the empty forward slots
+ * `docs/SKY.md` §4.2 rules out.
  *
  * ## What is not here
  *
@@ -62,8 +62,8 @@ import androidx.room.PrimaryKey
  * - **No body text.** If someone wants to write about it, that is a journal entry, which has its own
  *   surface and its own rules. This is the pin in the map, not the page. A second free-text field
  *   here would split a person's writing across two places that treat it differently.
- * - **No end date or range.** §2.2 allows a range; one date is the smaller honest thing, and a
- *   nullable `endEpochDay` can be added later without rewriting a row.
+ * - **No end date or range.** `docs/SKY.md` §2.2 keeps one day, and whether ranges should exist is
+ *   open (#155); a nullable `endEpochDay` can be added later without rewriting a row.
  *
  * ## The index
  *

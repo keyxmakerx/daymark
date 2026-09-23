@@ -31,7 +31,7 @@ private fun auditSafely(block: () -> Unit) {
 @Serializable data class RelationshipEndingRecord(val endedAt: Long)
 
 /**
- * A CLINICIAN PUTTING DOWN THEIR OWN ACCESS, AND THE OWNER FINDING OUT (issue #91, Slice E).
+ * A CLINICIAN PUTTING DOWN THEIR OWN ACCESS, AND THE OWNER FINDING OUT (issue #91).
  *
  * Two routes. The clinician ends the relationship from their own console; the owner reads back
  * whether it has ended. Between them they are the whole server side of self-leave.

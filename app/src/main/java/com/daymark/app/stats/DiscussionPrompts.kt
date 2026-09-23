@@ -5,7 +5,7 @@ import kotlin.math.abs
 
 /**
  * Side 4's discussion prompts — observations about a person's own data, phrased as questions for
- * the two humans in the room (`docs/PLAN_2026-08-NEXT.md` §1, "Side 4").
+ * the two humans in the room (`docs/DECISIONS.md` §D8, "Side 4").
  *
  * **The bright line this file exists to hold.** A report that tells a clinician what to *do* is
  * clinical decision support, a regulated category with a different compliance life than anything
@@ -73,7 +73,8 @@ object DiscussionPrompts {
      * One week of the range.
      *
      * [activityCount] counts logged activities, not entries — a week can hold check-ins and no
-     * activity at all, which is exactly the co-occurrence the plan's worked example is about.
+     * activity at all, which is exactly the co-occurrence the worked example in
+     * `docs/DECISIONS.md` §D8 is about.
      */
     data class Week(
         val entryCount: Int,
@@ -219,11 +220,11 @@ object DiscussionPrompts {
             out.add(Prompt(KIND_THIN_DATA, text))
         }
 
-        // RULE 2 — the plan's worked example. Fires when at least MIN_WEEKS_EACH_SIDE weeks logged
-        // entries but no activity at all, at least that many logged both, and the quiet weeks
-        // averaged at least MIN_MOOD_DIFFERENCE lower. Co-occurrence, stated as co-occurrence: it
-        // reports two counts and two means and asks a question, and says nothing about which way
-        // round any of it runs.
+        // RULE 2 — the worked example in `docs/DECISIONS.md` §D8. Fires when at least
+        // MIN_WEEKS_EACH_SIDE weeks logged entries but no activity at all, at least that many
+        // logged both, and the quiet weeks averaged at least MIN_MOOD_DIFFERENCE lower.
+        // Co-occurrence, stated as co-occurrence: it reports two counts and two means and asks a
+        // question, and says nothing about which way round any of it runs.
         if (!thin) {
             val logged = inputs.weeks.filter { it.entryCount > 0 && it.averageMood != null }
             val quietWeeks = logged.filter { it.activityCount == 0 }

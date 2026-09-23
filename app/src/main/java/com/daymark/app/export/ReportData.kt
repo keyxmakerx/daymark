@@ -148,7 +148,7 @@ data class ReportData(
     /** A short rules-based narrative summary (derived; not part of the authenticity hash). */
     val periodReview: String,
     val sha256Hex: String,
-    // --- four-side layout (docs/PLAN_2026-08-NEXT.md §1) ---
+    // --- four-side layout (docs/DECISIONS.md §D8) ---
     /** Side 1: one plot per instrument. */
     val instrumentSeries: List<ReportInstrumentSeries> = emptyList(),
     /** Side 2: what was suggested and what happened to it. */
@@ -466,8 +466,8 @@ class ReportDataBuilder @Inject constructor(
          *
          * Kept computable because reports printed before the bump are in filing cabinets carrying a
          * v1 hash, and a verifier handed one of those files still has to be able to check it.
-         * Nothing in this repository calls it — there is no verifier yet — so it stands as the
-         * specification of the old bytes rather than as live code.
+         * Nothing in this repository calls it — a verifier is not built: #311 — so it stands as
+         * the specification of the old bytes rather than as live code.
          */
         fun canonicalPayloadV1(
             fromMillis: Long,

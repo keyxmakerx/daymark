@@ -21,9 +21,9 @@
  * discovered until it is far too late to fix.
  *
  * It is deliberately not hedged, not apologetic, and not reassuring. docs/COMPANION_SECURITY.md §4
- * and docs/PLAN_2026-08-COMPANION-NEXT.md §3.11.1 both state it flatly ("forget it and the data is
- * gone... This is what makes it safe and what makes it unforgiving"), and the plan says explicitly
- * that it must be said "where the passphrase is chosen, not in a footnote".
+ * states it flatly ("the data is gone ... That is what makes it safe and what makes it
+ * unforgiving"), and docs/COMPANION_ARCHITECTURE.md §1 says explicitly that the sentence belongs
+ * "where the passphrase is chosen, not in a footnote".
  *
  * ─── THE OTHER THING THIS SURFACE MUST NOT DO ────────────────────────────────────────────────────
  *

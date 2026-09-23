@@ -82,24 +82,23 @@ object Routes {
     /**
      * "Your sky" — the whole history as a night sky.
      *
-     * A drill-down reached from More, **not** a tab. `docs/SKY.md` §11 leaves this open and gives
-     * the argument on both sides: the Sky is a place, which argues for a top-level destination, and
-     * it is also the most identifying surface in the product (§6.5), which argues for keeping it
-     * behind whatever lock the app has rather than one tap from a cold screen. This picks the
-     * cautious half and does not claim to have resolved the question — a route can be promoted to a
-     * tab later, and a surface that has been on the tab bar cannot be quietly demoted.
+     * A drill-down reached from More, **not** a tab, as `docs/SKY.md` §11 item 1 settles it. The
+     * argument on both sides: the Sky is a place, which argues for a top-level destination, and it
+     * is also the most identifying surface in the product (§6.5), which argues for keeping it
+     * behind whatever lock the app has rather than one tap from a cold screen. The cautious half
+     * won — a route can be promoted to a tab later, and a surface that has been on the tab bar
+     * cannot be quietly demoted.
      */
     const val SKY = "sky"
 
     /**
      * The life-events list, where a person places their own marks.
      *
-     * The screen was built before anything could reach it. §2.2 says the affordance belongs on the
-     * Sky, so that is where the entry point is; this route exists so the Sky has somewhere to send
-     * people. There is deliberately no second entry point in the More hub: "the affordance is a
-     * plain 'add a life event' control on the Sky and nowhere else" is the design's own sentence,
-     * and a second door would make this feel like a thing the app collects rather than a thing the
-     * person marks.
+     * The screen was built before anything could reach it. `docs/SKY.md` §2.2 gives life events two
+     * doors: the Sky, whose Life events control and whose life-event stars ("Open it") are the only
+     * ways here, and "Mark this day" on an entry's page, which adds a mark for that entry's date
+     * without coming here. There is deliberately no entry point in the More hub: a door there would
+     * make this feel like a thing the app collects rather than a thing the person marks.
      */
     const val LIFE_EVENTS = "life_events"
 
@@ -108,8 +107,8 @@ object Routes {
      *
      * A drill-down from the More hub. It is not a tab and it is not on Home: it is a place to keep
      * things, not a thing to be reminded of, and nothing in this app nudges anybody about the
-     * people in their life (`docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2 forbids the one prompt
-     * everybody reaches for first).
+     * people in their life (`docs/FEATURES.md` §11.3 forbids the one prompt everybody reaches for
+     * first).
      */
     const val PEOPLE = "people"
 

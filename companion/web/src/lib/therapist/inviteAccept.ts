@@ -854,7 +854,8 @@ export function sameKeys(a: TherapistKeys, b: TherapistKeys): boolean {
 }
 
 /*
- * `beginAcceptance` USED TO LIVE HERE, and its removal is the cut-over (plan §3.7, 2026-09-04).
+ * `beginAcceptance` USED TO LIVE HERE, and its removal is the cut-over (COMPANION_PAIRING.md §4,
+ * "No enrolment without approval").
  *
  * It began by redeeming the invitation secret — which the emailed link carries — so the ceremony
  * it opened was reachable by whoever read that email, and the short pairing code in the design

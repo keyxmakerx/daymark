@@ -10,8 +10,8 @@ import javax.inject.Singleton
 
 /**
  * The owner's safety plan. Local-only: nothing here syncs, and nothing reads it but the person who
- * wrote it. See `docs/SAFETY_PLAN_FEATURE_PLAN.md` for why sharing, if it ever ships, has to be an
- * owner-granted, time-boxed share and never an automatic one.
+ * wrote it. `docs/FEATURES.md` §8: sharing, if it ever ships, has to be an owner-granted,
+ * time-boxed share and never an automatic one.
  */
 @Singleton
 class SafetyPlanRepository @Inject constructor(

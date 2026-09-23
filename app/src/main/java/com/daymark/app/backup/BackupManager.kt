@@ -413,8 +413,8 @@ class BackupManager @Inject constructor(
     private val personDao: com.daymark.app.data.dao.PersonDao,
     private val personNoteDao: com.daymark.app.data.dao.PersonNoteDao,
     // The entry -> person link, through its own DAO rather than EntryDao. That separation is the
-    // shape `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2 asks for — EntryDao is the door that returns
-    // moodLevel, and it has no method that touches entry_people. See EntryPersonDao's header.
+    // shape `docs/FEATURES.md` §11.2 asks for — EntryDao is the door that returns moodLevel, and it
+    // has no method that touches entry_people. See EntryPersonDao's header.
     private val entryPersonDao: com.daymark.app.data.dao.EntryPersonDao,
     // The reception ledger, held only to be able to empty it on a REPLACE — see importReplace.
     // Deliberately the repository and not `OfferRecordDao`: the repository is the seam that decides

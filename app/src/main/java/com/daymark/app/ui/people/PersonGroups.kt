@@ -6,16 +6,16 @@ import com.daymark.app.data.entity.PersonGroup
 /**
  * How the five groups are ordered and named on screen, and nothing else.
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2: *"Groups for sorting the picker only: friends,
- * family, partners, communities, other."* The word **only** is the whole of this file's brief. A
- * group orders a list and gives a heading. It is not read by anything that decides, suggests,
+ * `docs/FEATURES.md` §11.1: *"Groups (friends, family, partners, communities, other) sort the
+ * picker and the list, and do nothing else."* **Nothing else** is the whole of this file's brief.
+ * A group orders a list and gives a heading. It is not read by anything that decides, suggests,
  * counts or draws anything else, and it never reaches a rule about mood.
  *
  * Plain Kotlin with no Compose in it, so the ordering and the fallback are exercised by an ordinary
  * unit test rather than believed.
  */
 
-/** The order the plan gives, which is the order every list and picker in `ui/people` uses. */
+/** The order `docs/FEATURES.md` §11.1 gives; every list and picker in `ui/people` uses it. */
 val PersonGroupOrder: List<PersonGroup> = listOf(
     PersonGroup.FRIENDS,
     PersonGroup.FAMILY,

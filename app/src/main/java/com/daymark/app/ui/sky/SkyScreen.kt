@@ -333,12 +333,12 @@ private fun SkyControls(
  *
  * ## The mood dot, which is where the mood ramp went
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1 moved a star's colour onto its age, and it is
- * explicit about where the person's own mood colour lives afterwards: *"The mood word is on the
- * sheet when a star is tapped and on every row of the list."* This is that sheet. The dot is drawn
- * from the **equalised** ramp and never from the raw one — a raw list dot is exactly where the
- * ranking-by-visibility `SkyPalette` exists to remove would reappear, at 4.08:1 for the hardest
- * mood against 8.32:1 for an ordinary one, moved off the sky and into the strip beside it.
+ * A star's colour is its age (`docs/SKY.md` §3.2), and §3.2 is explicit about where the person's
+ * own mood colour lives instead: *"a dot beside the mood word in a star's detail"*. This is that
+ * detail (§4.1). The dot is drawn from the **equalised** ramp and never from the raw one — a raw
+ * dot is exactly where the ranking-by-visibility `SkyPalette` exists to remove would reappear, at
+ * 4.08:1 for the hardest mood against 8.32:1 for an ordinary one, moved off the sky and into the
+ * strip beside it.
  *
  * The word is already in [text]; the dot is beside it and never instead of it.
  */
@@ -451,9 +451,9 @@ private fun SkyList(
 /**
  * The Android equivalent of `prefers-reduced-motion`.
  *
- * There is no reduced-motion helper anywhere in this app — `docs/SKY.md` §12 records that as a
- * prerequisite nobody had built — so this is it, deliberately local to the one surface that needs
- * it rather than installed as an app-wide utility this change has no mandate to introduce.
+ * This is the app's only reduced-motion check (`docs/SKY.md` §7.4), deliberately local to the one
+ * surface that needs it rather than installed as an app-wide utility this change has no mandate to
+ * introduce.
  *
  * `ANIMATOR_DURATION_SCALE` at zero is what the platform's own "Remove animations" setting sets,
  * and it is the signal Android's accessibility guidance points at. It is coarse — someone may have

@@ -1,4 +1,4 @@
-// Pure-JVM, Android-free crypto module for the phone "sync" flavor (Milestone 2b).
+// Pure-JVM, Android-free crypto module for the phone "sync" flavor.
 //
 // This module contains ONLY the byte-for-byte port of companion/web/src/lib/sync/crypto.ts.
 // It is compiled against the shared com.goterl.lazysodium.* types so its unit tests run on the
@@ -6,7 +6,7 @@
 // while the real `sync` product flavor in :app wires the same class up with lazysodium-android
 // at runtime. That cross-artifact linkage is verified by LazySodiumParityTest on every test run
 // — see the version-catalog comment for why it stopped being taken on trust. See
-// docs/COMPANION_PHONE_2B.md and docs/SYNC_PROTOCOL.md.
+// docs/COMPANION_PHONE.md §1 and docs/SYNC_PROTOCOL.md.
 plugins {
     alias(libs.plugins.kotlin.jvm)
 }

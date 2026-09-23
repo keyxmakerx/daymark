@@ -12,8 +12,9 @@ import androidx.room.PrimaryKey
  * It began as the three columns `docs/COMPANION_DIALOGUE.md` specifies and now carries three more,
  * all of them facts about *the app's own behaviour at the moment it spoke* and none of them about
  * the person: which hour and weekday the ask was made in ([offeredHour], [offeredWeekday]) and
- * whether anything came back ([responded]). `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §4 is what
- * asks for them, and `com.daymark.app.stats.TimingGrid` is what reads them.
+ * whether anything came back ([responded]). `docs/FEATURES.md` §13.2 describes them.
+ * `OfferLedgerRepository.timedOffers` reads them, folding [responded] into the outcome that
+ * `com.daymark.app.stats.TimingGrid` places by.
  *
  * This is the decision engine's own table (`docs/DECISIONS.md` §D1a). It holds the app's
  * behaviour and the reception of that behaviour — **never anything about the person**. There is no

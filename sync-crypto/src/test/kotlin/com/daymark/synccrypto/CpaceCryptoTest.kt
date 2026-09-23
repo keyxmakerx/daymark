@@ -133,7 +133,7 @@ class CpaceCryptoTest {
     fun aWrongCodeYieldsADifferentKeyAndNoError() {
         // The mismatch surfaces as an AEAD failure at the next layer, where a human decides
         // what it means — this layer cannot tell a typo from an attacker, by construction,
-        // which is why a wrong code must never burn an invite (plan §3.9.1).
+        // which is why a wrong code must never burn an invite (docs/COMPANION_PAIRING.md §6, §7).
         val a = cpace.start(prs, ci, sid, ada)
         val b = cpace.respond("Passw0rd".toByteArray(), ci, sid, a.msgA, adb)
         assertFalse(cpace.finish(sid, a, b.msgB).contentEquals(b.isk))

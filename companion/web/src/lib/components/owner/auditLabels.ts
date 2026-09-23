@@ -13,8 +13,8 @@ const ACTION_LABELS: Record<string, string> = {
   'assignment.publish': 'Sent a new assignment',
   'gameplan.publish': 'Sent a new game plan',
   'session.expired': 'Session expired',
-  // Pairing (plan §3.7). A wrong code is never an event: the server cannot see one. What it can
-  // see is a wrong invitation LINK being tried, and the run-level moves.
+  // Pairing (COMPANION_PAIRING.md §6–§7). A wrong code is never an event: the server cannot see
+  // one. What it can see is a wrong invitation LINK being tried, and the run-level moves.
   'pairing.opened': 'Started a pairing with a new code',
   'pairing.responded': 'Answered the pairing code',
   'pairing.cancelled': 'Cancelled a pairing',

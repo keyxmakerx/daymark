@@ -9,10 +9,10 @@
  * node test. It is the same argument therapist/loginGate.ts makes, for the same reason.
  *
  * THE ONE RULE THE WHOLE SCREEN HANGS ON: a retry after a failed envelope is a HUMAN action, never
- * automatic (plan 4.0a). Nothing in this module opens a second run on its own. `newCode` exists,
- * it costs one of the invitation's eight exchanges, and only a person clicking calls it — because
- * an automatic retry would spend a person's whole guess budget on a bad phone line and turn the
- * bound the PAKE gives into a number nobody was watching.
+ * automatic (COMPANION_PAIRING.md §4, "Nothing retries by itself"). Nothing in this module opens
+ * a second run on its own. `newCode` exists, it costs one of the invitation's eight exchanges, and
+ * only a person clicking calls it — because an automatic retry would spend a person's whole guess
+ * budget on a bad phone line and turn the bound the PAKE gives into a number nobody was watching.
  *
  * WRONG CODE IS A QUESTION, NOT A VERDICT. The mismatch state carries no diagnosis, because there
  * is none to carry: a typo and a stranger holding the link produce the same null. The screen asks;
@@ -336,7 +336,10 @@ export async function abandonApproval(ports: OwnerCeremonyPorts, state: OwnerCer
   }
 }
 
-/** End the invitation. The one act that kills one; a wrong code never does (plan §3.9.1). */
+/**
+ * End the invitation. The one act that kills one; a wrong code never does
+ * (COMPANION_PAIRING.md §7).
+ */
 export async function stopInvitation(ports: OwnerCeremonyPorts, state: OwnerCeremony): Promise<OwnerCeremony> {
   if (state.phase === 'idle') throw new CeremonyError('there is no invitation to stop')
   await ports.reportInvite(state.invite.inviteId)

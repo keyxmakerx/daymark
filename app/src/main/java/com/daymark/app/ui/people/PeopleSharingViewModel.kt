@@ -43,9 +43,8 @@ data class PeopleSharingUiState(
  * The sharing screen's state: every person and community, a default per group, an override per
  * item, and everything off until somebody says otherwise.
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2: *"Sharing is one screen listing every person and
- * community, with a default per group (all off) and overrides per item, off even under an
- * accept-all grant."*
+ * `docs/FEATURES.md` §11.4: *"One screen lists every person and community, with a default per
+ * group (all off) and an override per person."* Sharing stays off even under an accept-all grant.
  *
  * ## The rule is called, never copied
  *
@@ -58,9 +57,9 @@ data class PeopleSharingUiState(
  *
  * ## Archived names are still listed
  *
- * *Every* person and community, says §2, and archiving is only about the picker. Somebody archived
- * two years ago is still named by two years of entries, so the screen that says what is shared has
- * to be able to say it about them.
+ * *Every* person and community, says `docs/FEATURES.md` §11.4, and archiving is only about the
+ * picker. Somebody archived two years ago is still named by two years of entries, so the screen
+ * that says what is shared has to be able to say it about them.
  */
 @HiltViewModel
 class PeopleSharingViewModel @Inject constructor(

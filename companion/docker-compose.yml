@@ -16,7 +16,7 @@
 #     cannot read it and the server exits on startup.
 #
 # TWO THINGS YOUR PROXY MUST DO. Neither is optional. The full nine-point contract is
-# §3 of docs/COMPANION_DEPLOYMENT_HARDENING.md; these two are the ones that bite first.
+# §3.1 of docs/COMPANION_DEPLOYMENT.md; these two are the ones that bite first.
 #
 #   1. Set DAYMARK_TRUSTED_PROXIES to the proxy's source address AS THE APP SEES IT.
 #      Leave it unset and every per-client control — sync auth lockout, TOTP lockout,
@@ -90,7 +90,7 @@ services:
       back:
         ipv4_address: 10.89.0.3
 
-    user: "65532:65532"          # distroless nonroot. WAS 10001 — see §4.4 migration.
+    user: "65532:65532"          # distroless nonroot. WAS 10001 — see COMPANION_DEPLOYMENT.md §7.
 
     environment:
       DAYMARK_BIND_ADDR: "0.0.0.0"        # all interfaces INSIDE the container only
@@ -113,7 +113,8 @@ services:
       # The real external origin, as clients type it. Not a LAN alias: this is the
       # WebAuthn RP-ID and the base URL for invite links in outbound email. Without it,
       # RouteUrls.resolveBaseUrl() falls back to the client-supplied Host header and
-      # emails an attacker-controlled invite link. See §6 item 6.
+      # emails an attacker-controlled invite link. See docs/COMPANION_DEPLOYMENT.md §3.1,
+      # requirement 5; refusing to start without it is #180.
       DAYMARK_PUBLIC_BASE_URL:  "${DAYMARK_PUBLIC_SCHEME:-https}://${DAYMARK_DOMAIN:?set in .env, e.g. daymark.example.com}"
       DAYMARK_WEBAUTHN_RP_ID:   "${DAYMARK_DOMAIN:?set in .env, e.g. daymark.example.com}"
       DAYMARK_WEBAUTHN_ORIGINS: "${DAYMARK_PUBLIC_SCHEME:-https}://${DAYMARK_DOMAIN:?set in .env, e.g. daymark.example.com}"
@@ -210,8 +211,8 @@ networks:
       # network, because published ports do NOT work on Docker `internal:` networks
       # (moby/moby#36174, still open).
       #
-      # Enabling outbound SMTP means turning this back on; see §2.1 of
-      # docs/COMPANION_DEPLOYMENT_HARDENING.md.
+      # Enabling outbound SMTP means turning this back on; see §8 of
+      # docs/COMPANION_DEPLOYMENT.md.
       com.docker.network.bridge.enable_ip_masquerade: "false"
     ipam:
       config:

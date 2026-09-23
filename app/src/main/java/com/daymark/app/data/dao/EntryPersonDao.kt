@@ -20,9 +20,9 @@ import kotlinx.coroutines.flow.Flow
  * existing one is four lines, reads as symmetry, and would hand every caller of `observeAll` a
  * mood and a person in the same object.
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2 forbids that: *"Never in any rule that reads mood.
- * Correlations, patterns and the cards they produce cannot receive a person or a community, groups
- * included ... enforced by signature the way the Sky's field is kept blind to data."* So the link
+ * `docs/FEATURES.md` §11.2 forbids that: *"Never in any rule that reads mood. Correlations,
+ * patterns and the cards they produce cannot receive a person or a community, groups included.
+ * This is enforced by shape, not by convention."* So the link
  * is kept behind a separate door, and **every method here returns ids or counts — never a
  * `MoodEntry`, never a `moodLevel`, never an `EntryWithActivities`.** The one screen that shows a
  * person's entries takes the ids from here and asks `EntryDao` for them, which is a join the caller

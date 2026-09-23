@@ -43,8 +43,8 @@ interface OfferRecordDao {
      * extends that.
      *
      * It is still only this table: counts of the app's own asks, per hour and weekday. It is not an
-     * aggregate over the person, and `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §4 is explicit that
-     * what it feeds is never shared with a clinician.
+     * aggregate over the person, and `docs/FEATURES.md` §13.2 is explicit that what it feeds is
+     * never shared with a clinician.
      */
     @Query("SELECT * FROM offer_records WHERE kind = :kind ORDER BY offeredAt ASC")
     suspend fun allForKind(kind: String): List<OfferRecord>

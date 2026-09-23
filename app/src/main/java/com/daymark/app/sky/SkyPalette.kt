@@ -11,10 +11,10 @@ package com.daymark.app.sky
  *
  * ## The problem this file exists for
  *
- * `docs/SKY.md` §12.1 records the contrast floor as **unverified** — "nobody has measured this" —
- * and flags `MoodAwful #AE5747` on the night ground as the one to check first. It has been
- * measured, by [contrastRatio], and it fails on both grounds this file has had. The shipped ramp
- * measures:
+ * The mood ramp's contrast on the night ground is measured, by [contrastRatio], and
+ * `MoodAwful #AE5747` fails on both grounds this file has had (`docs/SKY.md` §0.3 finding 1, §7.1).
+ * How the colours read on a real OLED panel at low brightness is for a person to judge (#147). The
+ * shipped ramp measures:
  *
  * | Level | Colour | On `#16150F` (the old ground) | On `#07070A` (now) | Equalised to 6.5:1 |
  * |---|---|---|---|---|
@@ -24,10 +24,10 @@ package com.daymark.app.sky
  * | 4 Good | `#8FA268` | 6.56 | 7.22 | `#879962` |
  * | 5 Rad | `#5E8A66` | 4.62 | 5.08 | `#6C9E75` |
  *
- * The old column is kept because it is the record §12.1 asked for, and because it is the evidence
- * that the second finding below is a property of the *hues* and not of the ground: the spread
- * between the loudest and the faintest mood measures **2.040** on `#16150F` and **2.040** on
- * `#07070A`. A darker ground lifts every ratio by the same factor; it cannot level a ramp.
+ * The old column is kept because it is the evidence that the second finding below is a property of
+ * the *hues* and not of the ground: the spread between the loudest and the faintest mood measures
+ * **2.040** on `#16150F` and **2.040** on `#07070A`. A darker ground lifts every ratio by the same
+ * factor; it cannot level a ramp.
  *
  * Two separate problems, and only one of them is the accessibility one:
  *
@@ -40,11 +40,10 @@ package com.daymark.app.sky
  *
  * ## What was rejected
  *
- * **Lifting only the failures to 4.5:1.** This is the obvious fix, it is what §7.1 offers as one of
- * three options, and it solves (1) while leaving (2) exactly as it was — level 1 at 4.5 and level 3
- * at 7.8 is still a ranking, only a legal one. **Lifting everything by a fixed 18% toward white**,
- * as `ui/components/YearInStarsGrid.kt` does, has the same defect and additionally does nothing for
- * a custom palette that starts darker.
+ * **Lifting only the failures to 4.5:1.** This is the obvious fix, and it solves (1) while leaving
+ * (2) exactly as it was — level 1 at 4.5 and level 3 at 7.8 is still a ranking, only a legal one.
+ * **Lifting everything by a fixed 18% toward white**, as `ui/components/YearInStarsGrid.kt` does,
+ * has the same defect and additionally does nothing for a custom palette that starts darker.
  *
  * ## What is built: equalisation, not flooring
  *
@@ -63,46 +62,46 @@ package com.daymark.app.sky
  *
  * ## September 2026: stars stopped using this, and it stayed anyway
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1 moved a star's colour off the mood ramp and onto its
- * age ([SkyAge]), so **a drawn star no longer passes through [equalised] at all**. The obvious
- * next move is to delete the equalisation machinery, and it would be a mistake for two separate
- * reasons.
+ * A star's colour is its age ([SkyAge]), not the mood ramp (`docs/SKY.md` §3.2), so **a drawn star
+ * no longer passes through [equalised] at all**. The obvious next move is to delete the
+ * equalisation machinery, and it would be a mistake for two separate reasons.
  *
- * **It is still on screen.** The mood ramp did not leave the Sky, it left the *star*: §1 keeps the
- * mood word and its colour *"on the sheet when a star is tapped and on every row of the list"*.
- * Those are small coloured marks on the same near-black ground, which is the case [equalised] was
- * written for, and a list dot is exactly where an un-equalised ramp would put the hardest mood at
- * 4.08:1 and the ordinary one at 8.32:1 — the ranking-by-visibility this file exists to remove,
- * moved from the sky into the list beside it. `ui/sky/SkyScreen.kt` and
+ * **It is still on screen.** The mood ramp did not leave the Sky, it left the *star*: §3.2 keeps
+ * the mood as *"a dot beside the mood word in a star's detail"*. That is a small coloured mark on
+ * the same near-black ground, which is the case [equalised] was written for, and it is exactly
+ * where an un-equalised ramp would put the hardest mood at 4.08:1 and the ordinary one at 8.32:1 —
+ * the ranking-by-visibility this file exists to remove, moved from the sky into the detail beside
+ * it. The list carries the mood word alone. `ui/sky/SkyScreen.kt` and
  * `ui/sky/SkyPresentation.kt` both still call it, and the quiet sky's higher target
  * (`SkyPresentation.HIGH_CONTRAST_TARGET`) is built on it.
  *
- * **The measurement is the record.** The table above is the only place in the tree where the
- * shipped ramp's contrast against the night ground is written down, and `docs/SKY.md` §12.1 asked
- * for exactly that. Deleting the transform would delete the finding with it.
+ * **The measurement is the record.** The table above is where the shipped ramp's contrast against
+ * both grounds is written down in full; `docs/SKY.md` §0.3 finding 1 records its result. Deleting
+ * the transform would delete the finding with it.
  *
  * ## September 2026, second pass: the ground moved, and every number here moved with it
  *
- * §1 opens with *"Ground goes near-black, not pure black. The star contrast target rises with it,
- * so stars get brighter, not dimmer (they are pinned to a ratio against the ground)"*. That is two
- * changes and they are only correct together, so they were made together, with the halo's radial
- * fade ([SkyGlyph.HALO_STOP_WEIGHT]) in the same pass. What follows is what was measured, not what
- * was intended.
+ * The ground is near-black, not pure black (`docs/SKY.md` §3.5), and the star contrast target rises
+ * with it, so stars get brighter, not dimmer (they are pinned to a ratio against the ground). That
+ * is two changes and they are only correct together, so they were made together, with the halo's
+ * radial fade ([SkyGlyph.HALO_STOP_WEIGHT]) in the same pass. What follows is what was measured,
+ * not what was intended.
  *
  * **The ground: `#16150F` to `#07070A`.** Relative luminance **0.007414 to 0.002190** — the ground
  * now carries 3.4 times less light. The old value was a warm near-black, and a warm ground is the
  * wrong ground for this surface twice over. A glow fading out over it does not fade to *nothing*,
- * it fades to a warm smudge, which is the flat translucent disc §1 is replacing, drawn softly. And
- * a star's colour is now its age — blue-white through gold to a deep red — so a warm ground sits
- * underneath the red end of that ramp and takes the redshift's last stop away. `#07070A` is the
- * prototype's ground (`docs/prototypes/your-sky.html`), which is the look that was signed off.
+ * it fades to a warm smudge, which is the flat translucent disc the radial fade replaces
+ * (`docs/SKY.md` §3.5), drawn softly. And a star's colour is now its age — blue-white through gold
+ * to a deep red — so a warm ground sits underneath the red end of that ramp and takes the
+ * redshift's last stop away. `#07070A` is the prototype's ground (`docs/prototypes/your-sky.html`),
+ * which is the look that was signed off.
  *
  * **The target: 5.0 to 6.5.** Chosen by two measurements rather than by eye.
  *
  *  - **Where "brighter" starts.** A mood mark at 5.0 on the old ground emits 0.23707 relative
  *    luminance. On `#07070A`, the target that emits *exactly that* is **5.50** (0.23705). So any
- *    target at or under 5.5 is the failure §1 names — a darker ground and dimmer marks. 6.5 emits
- *    0.28924, which is **22% more light** than the old ground carried.
+ *    target at or under 5.5 is the failure named above — a darker ground and dimmer marks. 6.5
+ *    emits 0.28924, which is **22% more light** than the old ground carried.
  *  - **Where it has to stop.** Above the target, [equalised] can no longer reach by scaling and
  *    falls to blending toward [NIGHT_INK], which desaturates the person's own colour. Swept in
  *    0.05 steps, the first shipped mood to fall off the hue-preserving path does so at **8.35**
@@ -119,20 +118,20 @@ package com.daymark.app.sky
  * now, and alpha compositing happens in encoded sRGB, so the same glow adds slightly less linear
  * light over a darker ground. The dimmest thing the surface can produce — an oldest star's core at
  * [SkyAge.FADE_FLOOR], at the bottom of its breathe — measures **1.53:1** on `#07070A` where it
- * measured 1.70:1 on `#16150F`. Both are far under [CONTRAST_FLOOR] and both are meant to be: §1
- * asks for old stars to *"recede but never vanish"*, and that is a decorative floor, not text. It
- * is recorded because "the ground got darker so everything got brighter" is the intuition, and for
- * added light it is false.
+ * measured 1.70:1 on `#16150F`. Both are far under [CONTRAST_FLOOR] and both are meant to be:
+ * `docs/SKY.md` §3.5 asks for old stars to *"recede but never vanish"*, and that is a decorative
+ * floor, not text. It is recorded because "the ground got darker so everything got brighter" is the
+ * intuition, and for added light it is false.
  */
 object SkyPalette {
 
     // ---------------------------------------------------------------------------------------
     // The night surface. These three values already exist once elsewhere in the tree, as `Color`s
-    // in `ui/components/YearInStarsGrid.kt:39-41`, and `docs/SKY.md` records that duplication as
-    // unowned. (There was a third copy, as canvas ints in the year keepsake renderer; that file is
-    // gone with the export it served.) This is the second copy, in the one package that can be
-    // unit-tested, and the renderer under `ui/sky/` reads them from here rather than making a
-    // third.
+    // in `ui/components/YearInStarsGrid.kt:39-41`, and what to do about that component is undecided
+    // (`docs/SKY.md` §9, #148). (There was a third copy, as canvas ints in the year keepsake
+    // renderer; that file is gone with the export it served.) This is the second copy, in the one
+    // package that can be unit-tested, and the renderer under `ui/sky/` reads them from here rather
+    // than making a third.
     //
     // AND THEY HAVE NOW DIVERGED. `YearInStarsGrid`'s `NightBg` is still `#16150F`; the Sky's is
     // `#07070A`. That is a real inconsistency between two surfaces and it is left standing rather
@@ -167,7 +166,7 @@ object SkyPalette {
     const val NIGHT_INK = 0xEBE5D8
 
     /**
-     * Gutter labels, leader lines, the project thread. Never a star core.
+     * The project thread's stub, the one thing on the Sky still drawn in it. Never a star core.
      *
      * Its name is misleading and the measurement says so: `#8E887A` is **5.70:1** on the night
      * ground, which is not a low-contrast value — it is a *desaturated* one. It used to be worse:
@@ -194,7 +193,7 @@ object SkyPalette {
     const val CONTRAST_FLOOR = 4.5
 
     /**
-     * What every mood mark the person is shown is drawn at — the list dot, the sheet, and until
+     * What every mood mark the person is shown is drawn at — the dot in a star's detail, and until
      * September 2026 the star itself. See this file's header for what moved and what did not.
      *
      * It was 5.0 on the old `#16150F` ground. It is 6.5 on `#07070A`, and the two measurements

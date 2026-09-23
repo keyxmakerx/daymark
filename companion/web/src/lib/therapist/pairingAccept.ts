@@ -1,5 +1,5 @@
 /*
- * The therapist's side of a pairing: one code and one passphrase (plan §4.0a).
+ * The therapist's side of a pairing: one code and one passphrase (COMPANION_PAIRING.md §4).
  *
  * WHAT REPLACED WHAT. The old ceremony started by redeeming the invitation secret, which the link
  * carries — so whoever read the email got an enrolment ticket, and the code in the design document
@@ -91,8 +91,8 @@ export const THERAPIST_RUN_STORAGE_KEY = 'daymark.pairing.therapist-run.v1'
  * SCALAR — one secret, whose life is this run — and the public messages that were on the wire
  * anyway, and re-derive. Keeping the key itself would be storing the thing that opens the envelope
  * rather than the thing that computes it, for no gain; keeping the code would break the one
- * invariant the whole ceremony rests on (§3.7.4). A test greps a stored record for both, with
- * planted controls so it cannot pass by being blind.
+ * invariant the whole ceremony rests on (COMPANION_PAIRING.md §5). A test greps a stored record
+ * for both, with planted controls so it cannot pass by being blind.
  *
  * MSGb is stored as well as MSGa, and that is not redundancy: the responder's transcript half
  * cannot be recomputed from the scalar without the generator, and the generator needs the code.
