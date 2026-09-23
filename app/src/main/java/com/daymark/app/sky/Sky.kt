@@ -83,7 +83,7 @@ package com.daymark.app.sky
  * Nothing here is derived, detected, scored or inferred. Every star is an act the person performed,
  * which is the single sentence that makes the surface defensible. There is no aggregate, no total,
  * no percentage, no coverage figure, no streak, no superlative and no ranking of any period against
- * any other — `docs/DECISIONS_2026-08.md` §D6 rules streaks out product-wide, and on a permanent
+ * any other — `docs/DECISIONS.md` §D6 rules streaks out product-wide, and on a permanent
  * artefact a broken streak is a scar with a date on it. The one count that exists is
  * [SkyListItem.MonthHeading.itemCount], and it exists because a screen-reader user cannot navigate a
  * list without list semantics; see [list].
@@ -362,7 +362,7 @@ object Sky {
  * inferred or synthesised — if a star is there, the person did the thing. That is what lets the
  * surface exist at all, and it is why there is no kind for a notification sent, an offer made, an
  * app open, a suggestion declined, a missed reminder or a practice skipped. There is no negative
- * star. The reception ledger `docs/DECISIONS_2026-08.md` §D1a describes is the decision engine's
+ * star. The reception ledger `docs/DECISIONS.md` §D1a describes is the decision engine's
  * private business and never appears here.
  *
  * [introduction] is the whole of the Sky's onboarding: the first time a kind appears, one line

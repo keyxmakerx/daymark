@@ -23,7 +23,7 @@ package com.daymark.app.stats
  * It follows that [Hold] is a **closed list of five fixed sentences**, not a free string. A "why
  * not" the engine could compose is a "why not" that could one day say something about the person.
  *
- * `docs/DECISIONS_2026-08.md` §D2 — the gate has no user-facing name and no persona. What is named
+ * `docs/DECISIONS.md` §D2 — the gate has no user-facing name and no persona. What is named
  * here are the *features*, which already have names; the thing underneath them is "the rule".
  *
  * Pure and Android-free like the rest of `stats/`: no clock, no persistence. The caller supplies

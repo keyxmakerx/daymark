@@ -141,7 +141,7 @@ class GoalReachedTest {
      * Nothing in this feature's copy praises, grades or accuses.
      *
      * A "goal reached" control is where praise arrives first and looks most harmless — "Nice work!",
-     * "Completed", a streak count. `docs/DECISIONS_2026-08.md` §D6 rules out the reward vocabulary,
+     * "Completed", a streak count. `docs/DECISIONS.md` §D6 rules out the reward vocabulary,
      * and `sky/Sky.kt` states the rule these strings follow: naming, not praise, and no exclamation
      * mark, because congratulation is evaluation.
      */

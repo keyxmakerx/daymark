@@ -78,7 +78,7 @@ import java.util.Locale
  *
  * The empty state is the case worth reading twice. A new install draws the field, one line, and
  * nothing else: no error, no fabricated sky, no illustration of a sky someone else made, and above
- * all no invitation to start logging. `docs/DECISIONS_2026-08.md` is unambiguous that nothing here
+ * all no invitation to start logging. `docs/DECISIONS.md` is unambiguous that nothing here
  * shames, and "you haven't written anything yet" is a scoreboard with one entry on it. The sky is
  * a sky that nothing of theirs is in yet, which is true and is allowed to be said plainly.
  */

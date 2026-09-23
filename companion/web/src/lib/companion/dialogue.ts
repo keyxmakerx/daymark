@@ -18,7 +18,7 @@
  *   2. NO DEAD ENDS. Every node offers options, and each option either names the next node or
  *      ends the conversation explicitly. A panel with no line and no option is a validation
  *      error, not a blank box. "I just wanted to say it out loud" is a first-class ending
- *      (DECISIONS_2026-08.md §D1b) — it is an option carrying `end`, and it needs no further node.
+ *      (DECISIONS.md §D1b) — it is an option carrying `end`, and it needs no further node.
  *   3. MISSING SIGNALS ARE NORMAL. A new install has no history. The empty substrate is the first
  *      case the planner is written for, not an exception it defends against: with no signals at
  *      all, every node still produces its fallback line and nothing throws.

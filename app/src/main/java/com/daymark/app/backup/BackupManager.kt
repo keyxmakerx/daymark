@@ -681,7 +681,7 @@ class BackupManager @Inject constructor(
          * a sixty-day retention (OfferLedgerRepository.RETENTION_DAYS), not history, and everything
          * a person would miss is already in `entries`. A field for it here would also be the first
          * step towards the ledger looking like data worth keeping, which is the direction
-         * `docs/DECISIONS_2026-08.md` §D1a exists to block.
+         * `docs/DECISIONS.md` §D1a exists to block.
          *
          * WHAT A PERSON WILL NOTICE. A standing "stop asking" is stored as a STOP row in this table
          * (OfferLedgerRepository.saidStop), so clearing it lifts that preference and the support

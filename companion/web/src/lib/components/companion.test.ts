@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url'
  * reason: the realistic regression here is a person re-typing markup, not a subtle runtime path.
  * The conversation's behaviour is tested properly in companion/walk.test.ts, which executes it.
  *
- * Each rule below is a decision from docs/DECISIONS_2026-08.md §D1b that would be easy to undo by
+ * Each rule below is a decision from docs/DECISIONS.md §D1b that would be easy to undo by
  * accident while "improving" the UI.
  */
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8')

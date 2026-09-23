@@ -5,7 +5,7 @@ package com.daymark.app.goals
  *
  * `docs/CLINICIAN_FEEDBACK.md` §8: *"Read a book on X" and "exercise 3× a week" are not the same
  * shape and the model only expresses the second.* Rather than replace the weekly count, which
- * people are using right now and which `docs/DECISIONS_2026-08.md` §D5 keeps ("the
+ * people are using right now and which `docs/DECISIONS.md` §D5 keeps ("the
  * implementation-intention part is the well-evidenced piece and should survive"), a goal now
  * declares which of the two it is, and the two coexist.
  *

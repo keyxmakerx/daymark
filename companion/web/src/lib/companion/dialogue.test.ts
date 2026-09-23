@@ -38,7 +38,7 @@ const dialogue = (nodes: DialogueNode[], entry = nodes[0]?.id ?? 'open'): Dialog
   nodes,
 })
 
-/** A close-enough model of the illustrative flow in DECISIONS_2026-08.md §D1b. */
+/** A close-enough model of the illustrative flow in DECISIONS.md §D1b. */
 const companionDialogue = (): Dialogue =>
   dialogue([
     node(

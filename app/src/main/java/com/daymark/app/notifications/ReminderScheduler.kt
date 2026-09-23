@@ -153,7 +153,7 @@ class ReminderScheduler @Inject constructor(
      *
      * **What counts as answered, and what deliberately does not.** A check-in the person wrote.
      * That is the thing the reminder asks for, and it is them doing something on purpose. It is
-     * explicitly *not* "did they open the app" — `docs/DECISIONS_2026-08.md` §D6 rules that one out,
+     * explicitly *not* "did they open the app" — `docs/DECISIONS.md` §D6 rules that one out,
      * and it is right to: a notification raises the odds of an app open ~3.66× with nothing
      * underneath it improving, so it is the metric that would move most easily while meaning least.
      *

@@ -147,7 +147,7 @@ fun GoalEditorScreen(
             Text("If-then plan (optional)", style = MaterialTheme.typography.titleMedium)
             Text(
                 if (state.kind == GoalKind.PROJECT) {
-                    // docs/DECISIONS_2026-08.md §D5: the evidenced unit is the next concrete action,
+                    // docs/DECISIONS.md §D5: the evidenced unit is the next concrete action,
                     // not the project. "When I want to learn statistics, I will learn statistics" is
                     // the shape this line exists to steer away from.
                     "A simple, well-evidenced nudge — aim it at the next step, not the whole project."

@@ -61,7 +61,7 @@ package com.daymark.app.sky
  * first attempt: it makes hard days glow *more*, which is not shaming but is still a ranking, and
  * an inverted one is no better than the original. Making mood drive nothing at all was seriously
  * considered and is the safest option — it was not taken because handing a person their own
- * recorded answer back is `docs/DECISIONS_2026-08.md` §D1b's "reflect, never label", and dropping
+ * recorded answer back is `docs/DECISIONS.md` §D1b's "reflect, never label", and dropping
  * it entirely would remove the one thing on the Sky that is the person's own answer rather than the
  * app's observation. The variation that remains is deliberately small (a 14% spread in radius) so
  * it reads as texture at a glance and resolves into meaning only up close.

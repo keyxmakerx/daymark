@@ -33,7 +33,7 @@ import com.daymark.app.ui.components.PaperSurface
  *
  * ## What was left out, and why
  *
- * **No counts on the column headers.** `docs/DECISIONS_2026-08.md` §D6 rules out "count badges on
+ * **No counts on the column headers.** `docs/DECISIONS.md` §D6 rules out "count badges on
  * pending columns", and a badge on *To do* is a running total of things a person has not done. The
  * one number on the screen is the caller's "n of m steps done", stated once.
  *

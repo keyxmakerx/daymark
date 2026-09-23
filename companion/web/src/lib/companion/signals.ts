@@ -6,7 +6,7 @@
  * 1. docs/COMPANION_DIALOGUE.md, "The signal vocabulary". These eight facts are the whole
  *    substrate a dialogue may branch on. The list is CLOSED on purpose: every signal is a
  *    coupling point, and the closed list is what keeps the companion from becoming the beast
- *    DECISIONS_2026-08.md §D1 warns about. Adding a ninth should require someone to make a
+ *    DECISIONS.md §D1 warns about. Adding a ninth should require someone to make a
  *    case — the test file asserts the count so that argument cannot be skipped.
  *
  * 2. docs/COMPANION_DIALOGUE.md, Finding 3 — the branch-shaped side channel. Predicates

@@ -73,7 +73,7 @@ import com.daymark.app.ui.theme.Spacing
  *
  * It follows that an unanswered hour is drawn as **an hour with no answer in it, and nothing else**.
  * Asleep, at work, out of battery and having a terrible week are indistinguishable to the engine on
- * purpose (`docs/DECISIONS_2026-08.md` §D1a), so they are indistinguishable here: no red, no
+ * purpose (`docs/DECISIONS.md` §D1a), so they are indistinguishable here: no red, no
  * warning, no empty-state sentence suggesting the person ought to have been there. A gap in
  * someone's data is never drawn as a failure.
  *

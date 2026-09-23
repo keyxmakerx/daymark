@@ -8,7 +8,7 @@ import com.daymark.app.goals.GoalBoard
 
 /**
  * One concrete step of a project goal ([com.daymark.app.goals.GoalKind.PROJECT]) — the "folder for
- * steps" `docs/DECISIONS_2026-08.md` §D5 asks for.
+ * steps" `docs/DECISIONS.md` §D5 asks for.
  *
  * ## Why the cascade, and why the repository also deletes explicitly
  *

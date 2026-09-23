@@ -1,7 +1,7 @@
 /*
  * THE APP-AUTHORED COMPANION DIALOGUE — every line written in advance, by a person, here.
  *
- * This is the conversation from DECISIONS_2026-08.md §D1b, as data in the ./dialogue format.
+ * This is the conversation from DECISIONS.md §D1b, as data in the ./dialogue format.
  * Nothing in it is generated, templated or filled in at runtime: what you read below is exactly
  * what someone is shown. That is the point of the design — a dialogue of fixed choices has no
  * "typed something real into a box that cannot answer" failure mode, and it can be read, argued

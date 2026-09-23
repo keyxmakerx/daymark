@@ -16,7 +16,7 @@ package com.daymark.app.stats
  *
  * ## The invariant this file must not break
  *
- * `docs/DECISIONS_2026-08.md` §D1a:
+ * `docs/DECISIONS.md` §D1a:
  *
  * > The arbiter's response to falling reception is **monotonic and one-directional**: it may only
  * > ever ask *less*. No signal, in any combination, may cause it to ask more.

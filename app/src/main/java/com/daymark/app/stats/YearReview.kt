@@ -21,7 +21,7 @@ import kotlin.math.roundToInt
  * The finale used to end on three numbers, and each one was a different way of grading a year of
  * somebody's life:
  *
- *  - **Longest streak.** A run, and therefore a run that ended. `docs/DECISIONS_2026-08.md` §D6.
+ *  - **Longest streak.** A run, and therefore a run that ended. `docs/DECISIONS.md` §D6.
  *  - **Brightest month.** A superlative, and a rank of the person's own past against itself. Its
  *    mirror is the part nobody prints: naming the brightest month tells the reader that some other
  *    month was the darkest, and they can usually work out which.

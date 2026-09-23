@@ -11,7 +11,7 @@ import com.daymark.app.goals.GoalKind
  * A **habit** is what this row has always been: "Exercise 5× per week", optionally linked to an
  * [activityId], where progress is the number of distinct days this week whose entries include that
  * activity. A **project** ignores [activityId] and [targetPerWeek] entirely and is a container for
- * `goal_steps` rows instead — `docs/CLINICIAN_FEEDBACK.md` §8, `docs/DECISIONS_2026-08.md` §D5.
+ * `goal_steps` rows instead — `docs/CLINICIAN_FEEDBACK.md` §8, `docs/DECISIONS.md` §D5.
  *
  * The two coexist rather than one replacing the other. §D5 reads as a replacement, and it was not
  * built as one: people are mid-way through using the weekly count right now, [cue] and [routine] are
@@ -47,7 +47,7 @@ data class Goal(
      *
      * **This is not [archived], and the difference is the whole reason the column exists.** Archiving
      * is giving up on something, putting it aside, or losing interest —
-     * `docs/DECISIONS_2026-08.md` §D5 keeps that act neutral and uncounted. Reading an archived row as
+     * `docs/DECISIONS.md` §D5 keeps that act neutral and uncounted. Reading an archived row as
      * a reached one would draw a "goal reached" star for someone abandoning a goal, congratulating
      * them for it on the surface that promises not to judge. The two are independent in both
      * directions: archiving never sets this, and a goal marked reached and then archived keeps the
