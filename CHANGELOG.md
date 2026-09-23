@@ -778,7 +778,7 @@ All notable changes to this project are documented here. The format is based on
   already run (Cosmos Cloud, Caddy, Traefik, nginx, a tunnel) to terminate TLS in front of. Bundling
   one meant shipping ACME, a certificate volume, a `:80`/`:443` binding and a privileged-port
   workaround for an audience that already has a proxy. What your proxy must do is now written down
-  as a nine-point contract in `docs/COMPANION_DEPLOYMENT_HARDENING.md` §3, and worked configs for
+  as a nine-point contract in `docs/COMPANION_DEPLOYMENT.md` §3.1, and worked configs for
   Caddy / nginx / Traefik moved to `docs/alternatives/` where their status as untested references is
   stated rather than implied.
   - `docker-compose.no-egress.yml` is the stronger opt-in topology for a **containerised** proxy: no
