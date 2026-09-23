@@ -126,12 +126,8 @@ function resolves(p: string): boolean {
  */
 const ABSENT_PATHS: Record<string, string> = {
   'companion/docker-compose.smtp.yml':
-    'HARDENING §2.1 — an opt-in override the operator writes if they enable SMTP. Shipping it would ' +
-    'put a mail network in the default topology, which is the thing that section argues against.',
-  'renovate.json':
-    'HARDENING §4.7 — proposed config, not adopted. The repo uses .github/dependabot.yml instead; ' +
-    'the section is kept because its point (a pinned-and-rotting digest is worse than an unpinned ' +
-    'one) applies to whichever updater is running.',
+    'COMPANION_DEPLOYMENT.md §8 — an opt-in override the operator writes if they enable SMTP. Shipping ' +
+    'it would put a mail network in the default topology, which is the thing that section argues against.',
 }
 
 describe('the corpus is actually being read', () => {

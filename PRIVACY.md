@@ -19,16 +19,23 @@ log is ever sent anywhere by it.
 
 ## Where your data lives
 
-- Everything you record is stored in a local SQLite (Room) database in the app's private storage,
-  which the Android sandbox isolates from other apps. That covers:
+- What you record is stored in a local SQLite (Room) database in the app's private storage, which
+  the Android sandbox isolates from other apps. That covers:
   - mood entries and activities, and journal entries;
   - goals, projects and their steps;
   - custom trackers, sleep logs and treatments;
-  - self-check results, wellbeing check-in scores, thought records, and movement and
-    behavioural-activation logs;
+  - wellbeing check-in scores, thought records, and movement and behavioural-activation logs;
   - your safety plan and life events;
-  - the people and communities you name, and your notes about them;
-  - your settings.
+  - the people and communities you name, and your notes about them.
+- **A few smaller things live in a separate preferences file** in the same private storage:
+  - your settings and suggestion choices;
+  - your custom mood names and colours;
+  - the crisis line you entered;
+  - your sleep setup answers;
+  - the latest result of each sleep self-check.
+
+  That file is protected by the Android sandbox and the device's own encryption, but **the app does
+  not encrypt it** the way it encrypts the database (#{N12}).
 - **Other people's names.** People and communities you add are your own notes about them. They stay
   on the device like everything else, and sharing them is off by default.
 - **Check-ins store scores only.** For the PHQ-9, GAD-7 and WHO-5 check-ins only the **score and

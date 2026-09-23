@@ -23,7 +23,7 @@ mood-tracking app.**
 ## What it does
 
 - **Mood and journal.** Quick entries on a five-level scale, with activities, people, a photo and a
-  note. There is a separate free-form journal, search across everything, and "on this day".
+  note. There is a separate free-form journal, search for both, and "on this day".
 - **Your sky.** Each check-in, journal entry, practice you used, project step, reached goal and life
   event you mark becomes a star in a sky that fills as you go. It never marks a missing day as a
   failure. See [docs/SKY.md](docs/SKY.md).
@@ -43,9 +43,11 @@ use each screen is in [docs/USER_GUIDE.md](docs/USER_GUIDE.md).
 
 ## Privacy
 
-The released app has **no `INTERNET` permission** and makes no network connections. Everything lives
-in a local database that the app **encrypts for everybody from the first run**, with the key held by
-the phone's hardware keystore. The PIN hash sits in an encrypted preference store. Data leaves your
+The released app has **no `INTERNET` permission** and makes no network connections. Your entries,
+journal and everything else you record live in a local database that the app **encrypts for
+everybody from the first run**, with the key held by the phone's hardware keystore. A few settings
+and the latest sleep self-check results sit in a separate preferences file that the app does not yet
+encrypt. The PIN hash sits in an encrypted preference store. Data leaves your
 device only when **you** export it; exports are plain files. The full statement, with a table of
 every permission, is [PRIVACY.md](PRIVACY.md).
 

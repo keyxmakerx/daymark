@@ -1,26 +1,33 @@
-# Daymark Companion — Sync Protocol (v1)
+# Daymark Companion — sync protocol (v1)
 
-> **Status: implemented (Milestone 2) for the server + web/CLI clients.** The phone
-> "Daymark Sync" flavor (Milestone 2b) MUST implement this byte-for-byte to interoperate.
-> This is the normative wire spec; the reference implementation is
-> `companion/web/src/lib/sync/crypto.ts` + `client.ts`, exercised by the crypto and
-> integration tests.
+The wire format of the Companion's end-to-end-encrypted snapshot sync. The reference implementation
+is `companion/web/src/lib/sync/crypto.ts` and `client.ts`; the Kotlin port is
+`sync-crypto/src/main/kotlin/com/daymark/synccrypto/SyncCrypto.kt`. Any other implementation must
+produce byte-identical envelopes and accept theirs.
 
-The server is **zero-knowledge**: it stores opaque ciphertext blobs + non-secret routing
-metadata and never sees the passphrase, keys, or plaintext. All cryptography is
-client-side. See [COMPANION_SECURITY.md](COMPANION_SECURITY.md) §4 for the threat model.
+The server stores opaque ciphertext and non-secret routing metadata. It never sees the passphrase,
+a key, or plaintext; all cryptography runs on the client. The threat model is
+[COMPANION_SECURITY.md](COMPANION_SECURITY.md) §4.
 
 ## 1. Cryptography
 
 | Step | Primitive | Parameters |
 |---|---|---|
 | KDF | **Argon2id** (`crypto_pwhash`, `ALG_ARGON2ID13`) | `memMiB ≥ 256`, `ops ≥ 3`, 16-byte random salt (non-secret), 32-byte master |
-| Subkeys | **`crypto_kdf_derive_from_key`** | context `"dmsync01"` (8 bytes); id 1 → `SYNC_KEY` (32B), id 2 → `MANIFEST_SEED` (32B Ed25519 seed) |
+| Subkeys | **`crypto_kdf_derive_from_key`** | context `"dmsync01"` (8 bytes), 32 bytes each: id 1 → `SYNC_KEY`, id 2 → `MANIFEST_SEED` (Ed25519 seed), id 3 → the owner's X25519 seed, id 4 → the owner's Ed25519 seed |
 | Content AEAD | **XChaCha20-Poly1305** (`crypto_aead_xchacha20poly1305_ietf`) | 24-byte random nonce per blob, 32-byte `SYNC_KEY` |
 | Manifest signing | **Ed25519** (`crypto_sign_detached`) | keypair from `crypto_sign_seed_keypair(MANIFEST_SEED)` |
 
-The passphrase **never leaves the device**. Only the salt + KDF params (non-secret) are
+The passphrase **never leaves the device**. Only the salt and KDF parameters (non-secret) are
 published, in `keyparams`.
+
+Ids 3 and 4 are the owner's pairing identity (`crypto_box_seed_keypair` and
+`crypto_sign_seed_keypair` over those seeds; reference `companion/web/src/lib/owner/identity.ts`).
+They are reserved on every platform; the next free id is 5. A recovery code opens a master through
+a wrapped-key file (`companion/web/src/lib/recovery/dataKey.ts`); wrapping an existing owner's
+passphrase-derived master (`companion/web/src/lib/recovery/migration.ts`) is what makes the code yield
+these same subkeys. Enrolling an existing owner that way, and a server route to store the file, are
+not built: #{W14}.
 
 ### 1.1 Snapshot envelope (the stored blob bytes)
 
@@ -68,33 +75,31 @@ A manifest lists `{version, sha256(envelope)}` for a lineage and is Ed25519-sign
 utf8(JSON.stringify({ lineage, head, entries: [{version, hash}, …] }))   // stable key order
 ```
 
-Per [COMPANION_SECURITY.md](COMPANION_SECURITY.md) §8, the **only real anti-rollback** is
-this signed manifest checked against a **local trust watermark** the writer keeps and
-refuses to regress past. Server-side version/hash checks are **DoS hygiene only**.
+The only real anti-rollback is this signed manifest checked against a **local trust watermark**
+the writer keeps and refuses to regress past ([COMPANION_SECURITY.md](COMPANION_SECURITY.md) §8).
+Server-side version and hash checks are denial-of-service hygiene only.
 
-> **Milestone 2 scope (honest):** the browser and CLI readers perform **AEAD integrity
-> only** — the XChaCha20-Poly1305 tag authenticates each blob's contents under the owner
-> key, so a tampered or substituted blob fails to decrypt. They do **not** verify a signed
-> manifest and hold **no watermark**, so a malicious server can still present an older
-> version as "head" (rollback) undetected. Manifest signing/verification + the persistent
-> watermark ship with the **phone client (2b)**; the manifest primitives here are the
-> tested building blocks for it, and **no manifest is stored on the server in M2.**
+The signing and verifying primitives exist on both platforms and are tested. Nothing uses them yet:
+readers check each blob with the AEAD tag only, the server stores no manifest, and no client keeps a
+watermark. So a tampered or substituted blob fails to decrypt, but a malicious server can still
+present an older version as the newest. Not built: #{F4}.
 
 ## 2. HTTP API (`/v1`)
 
-All routes require `Authorization: Bearer <DAYMARK_AUTH_TOKEN>`. Bodies/responses below.
-Rate-limit + lockout identity is the **socket peer** (no forwarded headers trusted by
-default; see [COMPANION_SECURITY.md](COMPANION_SECURITY.md) §7).
+Every route requires `Authorization: Bearer <token>`, where the token is the owner's. At first boot
+it is `DAYMARK_AUTH_TOKEN`; after an access-recovery reissue (`POST /v1/recovery/confirm`) it is the
+rotated token, and the old one stops working at once. If the operator later changes
+`DAYMARK_AUTH_TOKEN`, the new environment value is accepted from the next start. The server stores
+only a digest of the accepted token.
 
-> **M2 limitation:** because identity is the socket peer and there is not yet a
-> trusted-proxy config, **behind a reverse proxy all clients share one rate-limit/lockout
-> bucket** (the proxy is the only peer). Per-client limiting behind a proxy — via a pinned
-> trusted-proxy CIDR that lets `X-Forwarded-For` be honored *only* from that proxy — is a
-> follow-up. Direct/LAN deployments already get per-client limiting.
+Rate limiting and lockout key on the client address: the socket peer, unless that peer is a proxy
+named in `DAYMARK_TRUSTED_PROXIES`, in which case the nearest `X-Forwarded-For` entry that is not
+itself a trusted proxy. With the setting empty (the default) behind a proxy, every client shares one
+bucket; see [COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md).
 
 | Method · Path | Body | Success | Notes |
 |---|---|---|---|
-| `PUT /v1/keyparams` | JSON (§1.2), ≤ 4 KiB | `204` | Overwrite-allowed |
+| `PUT /v1/keyparams` | JSON (§1.2), ≤ 4 KiB | `204` | Overwrite allowed |
 | `GET /v1/keyparams` | — | `200` JSON · `404` if unset | |
 | `GET /v1/snapshots` | — | `200 {"lineages":[…]}` | |
 | `GET /v1/snapshots/{lineage}` | — | `200 {"lineage","versions":[{version,size,contentHash,createdAt}]}` | |
@@ -103,12 +108,15 @@ default; see [COMPANION_SECURITY.md](COMPANION_SECURITY.md) §7).
 
 `lineage` ⊂ `[A-Za-z0-9_-]{1,64}` (server-validated; the blob path is server-derived).
 `version` is a non-negative integer (monotonic per device; pick `max(existing)+1`).
+`X-Content-Hash` is the server's own SHA-256 over the stored bytes; a client-supplied hash is never
+trusted.
 
 ### Status codes
 
-`401` bad/missing token · `429` rate-limited or locked out · `400` bad lineage/version ·
-`409` append-only conflict · `413` over `MAX_BLOB_BYTES`/request cap · `507` quota or
-disk-full · `503` sync API not configured (no token) · `404` not found.
+`401` bad or missing token · `429` rate-limited or locked out · `400` bad lineage or version ·
+`409` the version exists, or is older than the retention window would keep · `413` over
+`MAX_BLOB_BYTES` or the request cap · `507` quota or disk full · `503` sync API not configured (no
+token) · `404` not found.
 
 ### Caps & retention (server config, `DAYMARK_*`)
 
@@ -118,15 +126,22 @@ hard-deleted), `PER_TOKEN_QUOTA_BYTES` (5 GiB, fail-closed), `RATE_LIMIT_RPS` (5
 
 ## 3. Client flows
 
-**Push (writer — CLI today, phone tomorrow):** ensure keyparams (GET, or create+PUT a
-fresh salt) → derive keys → `version = max(existing)+1` → encrypt → `PUT` envelope.
+**Push (writer).** Ensure keyparams (GET, or create a fresh salt and PUT) → derive keys →
+`version = max(existing)+1` → encrypt → `PUT` the envelope. Today's writer is the command-line tool
+(`pnpm push` in `companion/web`); the phone's is not built: #{F1}.
 
-**Pull (reader — browser/CLI):** GET keyparams → derive keys → list versions → fetch the
-head → decrypt (AEAD verifies integrity). Wrong passphrase ⇒ decrypt fails (no oracle).
+**Pull (reader — the browser, or the CLI).** GET keyparams → derive keys → list versions → fetch the
+head → decrypt (the AEAD verifies integrity). A wrong passphrase makes decryption fail, with no
+oracle beyond that.
 
-## 4. Conformance for the phone (Milestone 2b)
+Sync is single-writer and last-snapshot-wins: the newest full snapshot is authoritative, and rows are
+never merged, because the app's schema has no per-row ids or timestamps. Whether that stays so is a
+decision: #{F12}.
 
-Use a libsodium binding (e.g. lazysodium on JVM). Reproduce: Argon2id params, the
-`crypto_kdf` context `"dmsync01"` + subkey ids, the exact envelope layout and AAD string,
-and the keyparams JSON. The crypto + integration tests in `companion/web/src/lib/sync/`
-are the conformance oracle — a phone-produced envelope must decrypt there and vice-versa.
+## 4. Conformance
+
+A second implementation reproduces the Argon2id parameters, the `crypto_kdf` context and subkey ids,
+the exact envelope layout and AAD string, the keyparams JSON, and the base64 variant. The crypto and
+integration tests in `companion/web/src/lib/sync/` are the oracle: an envelope made elsewhere must
+decrypt there, and the other way round. The Kotlin port is held to it by `SyncCryptoTest`, which
+includes cross-language vectors generated from `crypto.ts`; see [COMPANION_PHONE.md](COMPANION_PHONE.md) §1.

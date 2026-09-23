@@ -1,757 +1,440 @@
-# Daymark Companion — Security: Multi-Party Threat Model & Hardening
+# Daymark Companion — security model
 
-> ## ⚠️ STATUS: DESIGN ONLY — NO CODE EXISTS YET
->
-> **Nothing in this document is implemented.** The Daymark Companion is a *design
-> proposal*. There is no server binary, no Docker image, no "Daymark Sync" build
-> flavor, no therapist portal, and no pairing/sharing/game-plan crypto in the
-> shipping app today. Every threat-model row, guarantee, table, ASCII diagram, and
-> config snippet below describes an **intended** design still under review. It may
-> change or be dropped entirely.
->
-> The flagship Daymark app remains **fully offline, declares no `INTERNET`
-> permission, and operates 100% on-device** (see [../PRIVACY.md](../PRIVACY.md) and
-> [../SECURITY.md](../SECURITY.md)). All second-party functionality described here
-> lives **only** in a separate, opt-in **Daymark Sync** flavor and the self-hosted
-> Companion container, and never alters that default.
->
-> This document folds in the findings of an adversarial security review. Where a
-> previously-claimed property was found to be false or overstated, it is **retracted
-> in place and loudly** rather than quietly edited — see [Retractions &
-> corrections](#0-retractions--corrections-read-this-first).
+The Companion is the optional, self-hosted server (`companion/server`) and its browser consoles
+(`companion/web`): the owner console, the clinician portal, the practice console and the admin page.
+This document is its security reference, as built. Where it and the code disagree, the code wins and
+this document has a bug.
 
----
+The flagship phone app (the `foss` build) has no network access at all; see
+[SECURITY.md](../SECURITY.md) and [PRIVACY.md](../PRIVACY.md). The phone's `sync` build does not
+talk to the Companion yet (Not built: #138), so today the owner uses the browser console.
 
-## Contents
-
-- [0. Retractions & corrections (read this first)](#0-retractions--corrections-read-this-first)
-- [1. Security objectives (what must hold)](#1-security-objectives-what-must-hold)
-- [2. Parties, assets & trust boundaries](#2-parties-assets--trust-boundaries)
-- [3. Multi-party threat model](#3-multi-party-threat-model)
-- [4. Cryptography & key hierarchy](#4-cryptography--key-hierarchy)
-- [5. MFA, key custody & session model](#5-mfa-key-custody--session-model)
-- [6. Server hardening defaults](#6-server-hardening-defaults)
-- [7. Reverse-proxy / trusted-proxy hardening](#7-reverse-proxy--trusted-proxy-hardening)
-- [8. Anti-rollback & integrity (client-anchored)](#8-anti-rollback--integrity-client-anchored)
-- [9. Audit-logging posture](#9-audit-logging-posture)
-- [9a. Closing a credential without deleting one](#9a-closing-a-credential-without-deleting-one)
-- [10. Hardening checklist (copy-paste)](#10-hardening-checklist-copy-paste)
-- [11. Out of scope / honest limits](#11-out-of-scope--honest-limits)
-- [Related documents](#related-documents)
-
----
-
-## 0. Retractions & corrections (read this first)
-
-The original Companion security drafts contained several claims that an adversarial
-review found to be **false or materially overstated**. Each is corrected here. If you
-have read an earlier draft, **these supersede it.**
-
-| # | Earlier claim | Verdict | Honest replacement |
-|---|---|---|---|
-| R1 | "AES-256-GCM is a documented equivalent for the sync path." | **REMOVED.** Random 96-bit GCM nonces under one indefinitely-reused `SYNC_KEY` hit birthday-bound reuse — catastrophic for an append-only single-key store. | **XChaCha20-Poly1305 (192-bit random nonce) is MANDATORY everywhere**, on JVM (lazysodium) and in the browser (libsodium-wasm). No GCM "equivalent" for the long-lived key path. |
-| R2 | "Ephemeral sender ⇒ forward secrecy" for `crypto_box_seal`. | **FALSE, retracted everywhere.** A sealed box makes the *sender* anonymous; the *recipient* key is long-term. | The honest property is **"confidentiality + sender anonymity, no PFS."** One compromise of the recipient long-term X25519 key retroactively decrypts **every** blob ever sealed to it. Mitigated only by **bounded server retention** (§3 T1, §11). |
-| R3 | "CEK rotation defeats a colluding/malicious server's revocation." | **RETRACTED.** The wrapped CEK persists on disk and the therapist key never rotates on revoke. | Revocation stops **future fetches against an *honest* server only.** Real future-data revocation requires **therapist re-keying** (re-pair to a new verified key). See [§11](#11-out-of-scope--honest-limits). |
-| R4 | "Owner share is authenticated by `crypto_box_seal`." | **FALSE.** Sealed boxes are anonymous; `ShareBundle.owner` was unauthenticated JSON. A hostile server holding the therapist pubkey could fabricate a fully valid share with attacker-chosen "clinical" content. | The owner **MUST Ed25519-sign every bundle**; the therapist **MUST verify** against the owner's **OOB-pinned** fingerprint before rendering. AAD binds `shareId‖version‖recipientFp‖expiry‖ownerSigningFp`. |
-| R5 | "SRI/CSP make the browser portal zero-knowledge against a malicious server." | **FALSE, dropped.** The same first-party origin serves both the SRI-referencing HTML and the assets; a hostile operator rewrites both together. | The browser portal is a **lower-assurance convenience path, not zero-knowledge.** The native phone Sync flavor is the only secret-handling owner path. See [§3 T3](#t3--malicious--compromised-server-the-hardest-party). |
-| R6 | "Server-side prevHash/version-chain enforcement provides anti-rollback integrity." | **RETRACTED.** A hostile server forges a consistent chain over client-supplied metadata. | The only real anti-rollback is the **Ed25519-signed, hash-chained manifest verified against a local trust watermark** on the phone. Server chain checks are **DoS hygiene only — zero integrity guarantee.** See [§8](#8-anti-rollback--integrity-client-anchored). |
-| R7 | "internal:true structurally enforces no egress (Topology A)." | **FALSE.** The companion shared the egress-capable `edge` network with the proxy. | Put the companion on its **own** `internal: true` bridge that the proxy *also* joins (proxy multi-homed), or drop "structurally enforced" wording and require a host-firewall egress-deny. The flagship F-Droid build remains provably network-free. See [COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md). |
-| R8 | "There is no server, so there is no server-side surface." | **FALSE for the opt-in Sync flavor.** Owner→therapist sharing is a plaintext egress of curated clinical records to a third human party. | Documented honestly here and in PRIVACY.md/SECURITY.md. The flagship build is unchanged; the Sync flavor holds `INTERNET` and introduces a bounded, opt-in server surface. |
-| R9 | "Trust 172.16.0.0/12 as the default proxy CIDR." | **REMOVED.** A /12 lets any co-resident Docker container forge `X-Forwarded-*`. | **Default trusts NO forwarded headers** (use socket peer); operator pins a single narrow proxy IP/CIDR. See [§7](#7-reverse-proxy--trusted-proxy-hardening). |
-| R10 | "Therapist-authored game plans land in the existing `treatments` table." | **REMOVED.** `Treatment.kt` is an owner-authored, explicitly non-evaluative sleep-marker; writing clinical guidance there violates [HANDOFF.md](../HANDOFF.md) §0. | Game plans go in a **new segregated `game_plans` table** (DB v13). See [COMPANION_THERAPIST.md](COMPANION_THERAPIST.md). |
-| R11 | "Deterministic three-way LWW row-merge with per-row `updatedAt`/tombstones." | **NOT IMPLEMENTABLE.** No `updatedAt` column exists anywhere; every entity is `@PrimaryKey(autoGenerate=true) Long`; `entry_activity` is keyed on raw rowids. | **v1 sync is SINGLE-WRITER, LAST-SNAPSHOT-WINS replication.** True row-merge is gated behind a prerequisite UUID+`updatedAt` schema migration, deferred. See [COMPANION_ARCHITECTURE.md](COMPANION_ARCHITECTURE.md). |
-| R12 | "Therapist-signed attestations make access non-hideable." | **PARTIALLY RETRACTED.** A server-computed monotonic hash-chain now ships (Track T1), making a *stored* entry's tampering/reordering detectable. It is **not** a therapist-signed attestation, so it adds no non-repudiation, and a hostile server can still simply never append an event or truncate the chain. | The "cannot be hidden" claim stays dropped for **withholding**; it is lifted only for **tampering/reordering of returned entries**. See [§9](#9-audit-logging-posture). |
+Related: pairing is specified in [COMPANION_PAIRING.md](COMPANION_PAIRING.md); running a server in
+[COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md) and
+[COMPANION_OBSERVABILITY.md](COMPANION_OBSERVABILITY.md); practices and roles in
+[COMPANION_ACCESS_CONTROL.md](COMPANION_ACCESS_CONTROL.md). Appendix R lists twelve claims earlier
+drafts made that were false (R1–R12); code cites them by number.
 
 ---
 
 ## 1. Security objectives (what must hold)
 
-| # | Invariant | Why it matters |
+| # | Objective | Why |
 |---|---|---|
-| **O1** | Server breach (process + disk) leaks **only opaque ciphertext + non-secret routing metadata** — and that metadata is itself minimized (§3 T1). | Core zero-knowledge promise, honestly bounded. |
-| **O2** | The owner's symmetric **sync passphrase is never shared** with the therapist or server. Granting therapist read access never widens who can read the full backup. | Least authority across parties. |
-| **O3** | The therapist reads **only the curated subset**, only after MFA, only until expiry — and the owner can block **future honest-server fetches** instantly. *(Not retroactive; see R3.)* | Owner sovereignty + minimization, honestly scoped. |
-| **O4** | Game plans reaching the owner are **therapist-signed and owner-verified**; shares reaching the therapist are **owner-signed and therapist-verified**. A hostile server cannot forge or inject content in either direction. | Bidirectional integrity (R4). |
-| **O5** | The default phone build makes **zero outbound calls** and declares no `INTERNET`. The Companion container's no-egress posture is enforced by network topology *and/or* host firewall (R7). | No telemetry. |
-| **O6** | **No key escrow anywhere.** Lost passphrase / lost therapist key → unrecoverable by design, documented loudly. | Honest, no-secret-on-server posture. |
-| **O7** | The phone-local Room DB is the **source of truth**; the server is a convenience replica that can withhold but never read or author. | Append-only, never destructive. |
+| O1 | A full compromise of the server and its disk yields ciphertext, routing metadata and some sign-in secrets (§5.2) — never anything that decrypts a record. | The zero-knowledge promise, honestly bounded. |
+| O2 | The owner's passphrase is never shared with the clinician or the server. Giving a clinician access never widens who can read the whole archive. | Least authority. |
+| O3 | A clinician reads only the subset sealed to them, only while signed in, only until it expires; the owner can stop future fetches from an honest server at once. Not retroactive (R3). | Owner control, honestly scoped. |
+| O4 | Shares are owner-signed and clinician-verified; game plans and assignments are clinician-signed and owner-verified. A hostile server can forge neither. | Integrity both ways (R4). |
+| O5 | The flagship build makes no network calls. The Companion container makes none except the operator's own SMTP, which is off by default (§6). | No telemetry. |
+| O6 | No key escrow anywhere. A lost passphrase is unrecoverable by design. | Nothing on the server can open a record. |
+| O7 | The server is a replica. It can withhold data; it can never read or author it. | The owner's device holds the journal. |
 
----
+## 2. Parties, assets and trust boundaries
 
-## 2. Parties, assets & trust boundaries
+| Party | Holds | Never holds |
+|---|---|---|
+| Owner, in the browser console (the phone later: #138) | The passphrase, the master key and the owner's X25519 and Ed25519 private keys (derived, §4), and plaintext — in memory while unlocked | The clinician's private keys |
+| Clinician, in the browser portal | Their X25519 and Ed25519 private keys, wrapped under a reading passphrase in their own browser; share plaintext in memory only | The owner's passphrase or keys; any other patient's data |
+| Server | Ciphertext, sealed content keys, signatures, public keys, token digests, sign-in code seeds (§5.2), routing metadata, audit chains | Any private key, unwrapped content key, passphrase or plaintext |
+| Practice administrator | Membership and roles | Any key or content ([COMPANION_ACCESS_CONTROL.md](COMPANION_ACCESS_CONTROL.md)) |
+| Operator | The container, its volume, its logs | Nothing beyond what the server holds |
 
-```
-        TRUSTED ENDPOINTS (out of server threat model)        UNTRUSTED FOR CONFIDENTIALITY
- ┌───────────────────────────┐  ┌──────────────────────────┐  ┌──────────────────────────────┐
- │ Phone — flagship build     │  │ Phone — Sync flavor       │  │ Companion container (Ktor)    │
- │ no INTERNET, plaintext SoT │  │ owner passphrase + priv   │  │ blob store + SQLite index     │
- └───────────────────────────┘  │ keys; SIGNS+authors shares│  │ static portal (server-served) │
-                                 │ verifies+adopts plans     │  │ ───────────────────────────── │
- ┌───────────────────────────┐  └──────────────────────────┘  │ NEVER holds: passphrase, any  │
- │ Therapist installed/pinned │  ┌──────────────────────────┐  │ private key, CEK, plaintext   │
- │ client (preferred)         │  │ Therapist browser portal  │  │ Worst case: withhold / serve  │
- │ RAM-only secrets           │  │ (LOWER ASSURANCE, R5)     │  │ stale/tampered blobs + JS     │
- └───────────────────────────┘  └──────────────────────────┘  └──────────────────────────────┘
-            ▲                                ▲                              ▲
-            └──── OOB SAS pairing (§5.6) ────┴──── E2EE payload over TLS ───┘
-                  BIDIRECTIONAL pinning           (TLS = defense in depth,
-                  before ANY payload flows         NOT the confidentiality boundary)
-```
+**Assets, most sensitive first:** the owner's passphrase and private keys; the owner's plaintext; the
+clinician's private keys; per-share content keys (CEKs); plaintext on either endpoint; routing
+metadata (it can re-identify a caseload and signal acuity); sign-in secrets.
 
-**Assets, ranked.** (1) Owner sync passphrase + owner X25519/Ed25519 private keys.
-(2) Owner plaintext journal/mood records. (3) Therapist X25519 reading key + Ed25519
-signing key. (4) Per-share CEKs. (5) Share-subset / game-plan plaintext on the
-endpoint. (6) **Routing metadata** — now treated as sensitive (caseload
-re-identification, acuity proxies; see §3 T1). (7) Server auth / capability tokens /
-WebAuthn credential public keys.
-
-**Trust boundaries crossed:** endpoint → container (HTTPS; payload already E2EE);
-container disk; container → (ideally) nothing outbound; **owner ↔ therapist key
-pairing**, which is the only trust anchor and is established **out-of-band and
-bidirectionally** (§5.6) — the server never vouches for a key.
-
----
+**Trust boundaries:** browser to server (TLS ends at the operator's proxy; payloads are already
+end-to-end encrypted); the server's disk; the server to the outside (nothing, except SMTP); and the
+owner-to-clinician key pairing, which is the only trust anchor. The server never vouches for a key.
 
 ## 3. Multi-party threat model
 
-Each adversary lists **can**, **cannot (when defenses honored)**, and **defenses**.
+Each adversary: what it can do, what it cannot while the defences hold, and the defences as built.
 
-### T1 — Stolen server / stolen disk (offline attacker, full storage)
+### T1 — Stolen server or stolen disk
 
-- **Can:** read the entire blob volume + SQLite index; copy everything; correlate
-  metadata across owners.
-- **Cannot:** read any record, game plan, or share content; derive any key; recover
-  the passphrase (Argon2id ≥ 256 MiB over a strong passphrase).
-- **Defenses:**
-  - Every blob is XChaCha20-Poly1305 ciphertext or a sealed box; **no plaintext
-    columns** in SQLite (CI grep over the index schema asserts this).
-  - **Metadata minimization is a requirement, not a footnote.** `recipient_fp` is a
-    stable cross-owner correlator that reconstructs a therapist's whole patient panel
-    (a risk to the therapist's *other* patients). Therefore:
-    - **Remove `recipientFp` / owner fp from query strings**; route via opaque
-      **per-relationship inbox tokens**.
-    - **Pad blob sizes to fixed buckets BY DEFAULT** (e.g. `4 / 16 / 64 KiB`, larger
-      tiers for snapshots) — padding is **on by default for all blob types**, closing
-      the per-version size-delta acuity proxy and the `isTombstone+size` withdrawal
-      de-anonymization.
-    - Keep the access log **owner-local** where possible; short retention when
-      server-stored; `device_label`/timestamp exposure minimized.
-  - **Bounded retention** (R2 consequence): shares/game-plan blobs have a configurable
-    TTL + **hard-delete of superseded/expired blob bytes**, making the
-    harvest-now-decrypt-later window **finite** instead of "keep forever."
+- **Can:** read the whole volume: every blob, every lineage id and version, exact sizes and
+  timestamps (so journalling cadence, gaps and bursts), the relationship graph, which channel each
+  write went to, cleartext `X-Setting-Key` tags, 90 days of audit entries, the notification email,
+  and the sign-in code seeds — enough to sign in as any enrolled clinician (§5.2).
+- **Cannot:** read a record, share or game plan; derive a key; recover a passphrase (Argon2id,
+  client-side, §4).
+- **Defences:** every stored blob is XChaCha20-Poly1305 ciphertext or a sealed box, and the indexes
+  have no plaintext columns. Relationships are routed by an opaque per-relationship inbox token whose
+  BLAKE2b digest is the `relRef`; no fingerprint appears in any URL. The owner bearer token, session
+  ids and inbox tokens are stored as digests and invitation secrets as Argon2id hashes. The audit
+  log's source address is off by default.
+- **Not built:** padding stored sizes to fixed buckets (#{O25}); deleting the bytes of expired shares
+  and game plans — withdrawing a share deletes its bytes, but expiry only blocks reads (#{W2}).
 
-### T2 — Passive / active network attacker (LAN, Wi-Fi, on-path)
+Mood-tracking cadence is mental-health data. Size and timing are the leak that remains.
 
-- **Can:** observe/redirect traffic; attempt to strip TLS.
-- **Cannot:** read payloads (E2EE *before* TLS); forge content (AEAD + Ed25519
-  signatures); silently roll back (client-anchored manifest, §8).
-- **Defenses:** payload is E2EE end-to-end, TLS is defense-in-depth; reverse-proxy
-  TLS for WAN with HSTS when a real cert is present; WebAuthn assertions are
-  origin-bound (config-pinned, §5.5) defeating credential phishing/relay.
+### T2 — Network attacker (LAN, Wi-Fi, on-path)
 
-### T3 — Malicious / compromised server (the hardest party)
+Payloads are encrypted before TLS, so a broken TLS layer leaks only ciphertext; TLS and HSTS are the
+operator's proxy's job ([COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md) §3). AEAD tags and
+signatures stop forgery. Rollback protection is not built (§8).
 
-- **Can:** withhold, replay, or serve stale blobs; **serve tampered portal JS/WASM**;
-  attempt key substitution during pairing; observe (minimized) routing metadata;
-  ignore its own `revoked`/`expiry` flags.
-- **Cannot (when defenses honored):** read any plaintext; **forge a valid share**
-  (owner Ed25519 signature, R4) or **game plan** (therapist Ed25519 signature);
-  silently roll back versions past the local watermark (§8); pass off a substituted
-  key once the OOB SAS is compared (§5.6).
-- **Defenses:**
-  - **Bidirectional content authentication (R4):** the owner Ed25519-signs every share
-    bundle; the therapist Ed25519-signs every game plan. Each side verifies against the
-    **OOB-pinned** fingerprint of the other before rendering. AAD/transcript binds
-    `shareId‖version‖recipientFp‖expiry‖ownerSigningFp`, killing the
-    hostile-server content-injection break.
-  - **Key authenticity (anti-MITM):** TOFU pinning + **mandatory bidirectional OOB
-    SAS** (4–6 word BLAKE2b code / QR, read out-of-band). `recipientFp` inside a signed
-    payload is necessary but **not sufficient** (an attacker can set it); the OOB SAS
-    comparison is the binding step. Specified as a named deliverable — see
-    **PAIRING.md** (a planned sibling) and [COMPANION_THERAPIST.md](COMPANION_THERAPIST.md).
-  - **Tampered portal JS — the unclosable browser hole (R5).** SRI/CSP are **inert**
-    against the first-party origin that serves both the policy and the assets. Worse for
-    the therapist: a PRF-derived KUK is **deterministic**, so a single tampered-JS
-    capture yields **permanent offline decryption**. Resolution:
-    1. The **native phone Sync flavor is the only secret-handling owner path.**
-       Entering the master passphrase into the browser portal is **forbidden /
-       strongly discouraged** in product copy.
-    2. The therapist decrypt path moves toward a **pinned/installed client** OR an
-       **out-of-band-pinned** portal bundle, and **`prfSalt` is rotatable** so one
-       capture is not forever.
-    3. **SRI is dropped as a stated mitigation** against tampered portal JS. The
-       browser portal is documented as a **lower-assurance convenience path, not a
-       zero-knowledge one.**
+### T3 — Malicious or compromised server (the hardest party)
 
-### T4 — Malicious therapist OR stolen/compromised therapist device
+- **Can:** withhold, replay or serve stale blobs; serve tampered console JavaScript; substitute a key
+  in anything it relays; ignore its own expiry and withdrawal flags; observe metadata.
+- **Cannot, while the defences hold:** read plaintext; forge a share (the owner signs it, R4) or a game
+  plan (the clinician signs it); pass off a substituted key once pairing has bound the real one
+  (§5.6).
+- **Defences:** the owner Ed25519-signs every share over the transcript
+  `context|shareId|version|recipientFp|expiry|ownerSigningFp`, which is also the AEAD's associated
+  data, so a sealed content key cannot be spliced onto another ciphertext and a bundle cannot be
+  re-pointed at another owner. The clinician verifies against the owner key pinned at pairing before
+  rendering anything. Game plans name their recipient and context inside the signed payload. Pinned
+  keys are insert-only on both sides (§4).
+- **The hole a browser cannot close (R5).** The server serves the page that holds the keys, so CSP and
+  SRI protect against third parties and never against the origin itself. Every console that handles
+  keys therefore shows a fixed lower-assurance banner; its wording is asserted character for
+  character by `components/invariants.tree.test.ts`. The answers are not built: the phone as the
+  owner's secret-handling path (#138), a pinned or installed clinician client (#{I8}), and a
+  published hash of each release's web bundle (#{B8}).
+- The owner-side check of a game plan exists (`openGamePlan` in `lib/therapist/gamePlan.ts`), but no
+  screen calls it yet (#{W3}).
 
-- **Can:** read the curated share legitimately granted; copy/screenshot it; author
-  plans. A stolen device holds the WebAuthn-bound, at-rest-wrapped reading key.
-- **Cannot:** read the owner's full backup (only the curated subset was sealed to
-  them); enumerate other shares/patients (per-relationship inbox tokens, scoped caps);
-  forge the owner's data (owner signature); persist plaintext by default (thin viewer).
-- **Defenses:** crypto-enforced minimization (self-contained subset under a fresh CEK);
-  **thin in-memory viewer**, no default disk cache, re-fetch per session (residue
-  bounded to one live session); time-box + revoke (honest-server scope, R3); reading
-  key wrapped under WebAuthn-PRF / passphrase at rest.
-- **Honest limit:** already-decrypted plaintext is never recallable — identical to
-  handing someone a PDF. **Real future revocation = therapist re-keying** (R3).
+### T4 — Malicious clinician, or a stolen clinician device
 
-### T5 — Malicious owner (against the server operator / therapist)
+- **Can:** read what was shared while it is live; copy or photograph it; author game plans and
+  assignments. A stolen device holds the wrapped key record, and an open tab holds unwrapped keys until
+  the idle wipe.
+- **Cannot:** read the owner's archive or anything not sealed to them; reach another patient's
+  relationship (each session is bound to one `relRef`, and content routes also demand that
+  relationship's inbox token); forge the owner's data; keep decrypted plaintext by default (reads are
+  `Cache-Control: no-store`, and the portal holds plaintext in memory only).
+- **Honest limit:** decrypted plaintext is never recallable. Real future revocation is re-pairing to
+  new keys (R3).
 
-- **Token-holder is an integrity/availability weapon, not just an enumeration guard.**
-  A bearer/cap-token holder (no E2EE key needed) can PUT garbage versions to evict real
-  history (append-only-prune eviction DoS) and exhaust disk
-  (`MAX_BLOB_SIZE × MAX_VERSIONS`). Defenses:
-  - **Per-token storage quota** + **disk-full fail-closed** handling.
-  - **Server-derived `blob_path`** (never client-supplied), validated against a strict
-    charset — closes path-traversal on DELETE/store.
-  - **Server-side content hashing** over the opaque blob; the client `X-Content-Hash` is
-    **untrusted** and never used for integrity decisions.
-  - **Caps + rate-limits on version + lineage creation** to prevent monotonic-poisoning
-    (e.g. `X-Plan-Version=MAXINT` lineage-lock) and PROPOSED-queue flooding.
-  - **Prune executes only after the client confirms a newer durable version exists.**
-- Owner cannot coerce server-side decryption — architecturally impossible (no keys on
-  the server, no decrypt endpoint). The access log is owner-readable and therapist
-  attestations are therapist-signed, keeping accountability symmetric.
+### T5 — Malicious owner or bearer-token holder (against the operator or the clinician)
 
-### T6 — Supply chain (image, deps, build, vendored web assets)
+A bearer-token holder needs no key to fill the disk or push versions. Defences: per-token and
+per-relationship storage quotas; keep-last-N retention per lineage; append-only storage (a version is
+never overwritten, and a version that retention would delete at once is refused); server-derived blob
+paths from `^[A-Za-z0-9_-]{1,64}$` plus an integer version; a server-computed SHA-256 (a
+client-supplied hash is never trusted); a full disk fails closed with 507. There is no decrypt
+endpoint to coerce. The plain sync API has one bearer token and lists every lineage, which is right
+for one owner per server and wrong the day a server holds two (#{I7}).
 
-- **Defenses:** base image **pinned by digest**; lockfiles with hashes; **vendored web
-  assets in-repo** (no runtime `npm`/CDN fetch); **SBOM** (CycloneDX/SPDX) + **build
-  provenance / SLSA** + **cosign-signed** images and tags per release; **reproducible
-  builds**; CI vuln/license/secret scans + an **egress=0 test** (which covers only the
-  *shipped image*, not the operator's runtime compose — documented as such, R7). No
-  package manager in the final layer.
+### T6 — Supply chain
 
-### T7 — Brute force (passphrase, server auth, MFA, enumeration)
+See §10.
 
-- **Defenses:** Argon2id (≥ 256 MiB, client-side) over a long passphrase makes offline
-  attack infeasible even after a disk steal; **per-credential + per-IP rate-limit +
-  exponential backoff + lockout** keyed on the **trusted source identity** (§7) so a
-  spoofed `X-Forwarded-For` cannot bypass lockout; constant-time comparisons; generic,
-  non-enumerating errors; unguessable IDs; per-relationship inbox tokens prevent
-  cross-share enumeration.
+### T7 — Brute force and enumeration
 
----
+Argon2id makes an offline attack on a strong passphrase infeasible even with the disk. Online:
+per-address limits keyed on the trusted client address (§7; the table is
+[COMPANION_OBSERVABILITY.md](COMPANION_OBSERVABILITY.md) §1.1), a per-credential lockout on sign-in
+codes, and capped backoff on invitations — a wrong guess never burns one; only a human report does.
+Comparisons are constant-time, refusals are identical whichever check failed, the anonymous report
+route always answers 204, and every token and invitation id is 256 random bits.
 
-## 4. Cryptography & key hierarchy
+## 4. Cryptography and key hierarchy
 
-**One primitive set, used identically on JVM (lazysodium) and browser
-(libsodium-wasm). No custom crypto, no hand-rolled modes.**
+One primitive set for end-to-end encryption, from libsodium, used identically in the browser and on
+the JVM (lazysodium). No custom crypto. The server's own hashing, in the last row, uses Bouncy Castle.
 
-| Purpose | Primitive | Parameters / notes |
+| Purpose | Primitive | As built |
 |---|---|---|
-| KDF (owner passphrase → keys) | **Argon2id** *(only KDF)* | `memlimit ≥ 256 MiB`, `opslimit ≥ 3`, 16-byte random salt (non-secret), 32-byte output. **Client-side only.** |
-| Purpose separation | **`crypto_kdf`** | Derives `content_key`, manifest signing key, device-label key from one master — distinct subkeys, never reused across purposes. |
-| Content AEAD (snapshots, share subset, plan body) | **XChaCha20-Poly1305** | 192-bit **random** nonce per blob (collision-safe), 256-bit key, Poly1305 tag. **MANDATORY everywhere. AES-256-GCM is NOT an accepted equivalent (R1).** |
-| Per-share content key | random 256-bit **CEK** | Fresh per share; never reused; isolates a share from the master archive and other shares. |
-| Envelope / recipient encryption | **X25519 sealed box** (`crypto_box_seal`) | Wraps the CEK / seals plan bodies to the recipient's long-term key. **Property: confidentiality + sender anonymity. NO PFS (R2).** |
-| Signing / authorship | **Ed25519** | **Owner** signs every share bundle *and* verifies game plans. **Therapist** signs every game plan *and* signed attestations. Owner identity is a first-class pinned trust anchor, symmetric with the therapist's. |
-| Fingerprints / SAS | **BLAKE2b** over the raw pubkey | Rendered as a 4–6 word code / QR for **bidirectional** OOB verification (§5.6). |
-| Therapist key custody at rest | wrapped under **WebAuthn-PRF**-derived KUK (else Argon2id passphrase) | Private key never leaves the client; server stores only the public key + WebAuthn credential public key. **`prfSalt` is rotatable (R5).** |
-| Capability / inbox token | 256-bit CSPRNG, stored **hashed** (BLAKE2b) | Per-relationship; minted by the owner console since 2026-09-12 (see below); never logged in plaintext; **bound to the authenticated WebAuthn credential at first fetch** (§5.5). |
-
-**The inbox token became a 256-bit CSPRNG value on 2026-09-12 (issue #126). Before that date the row
-above described an intention, not the code.** Nothing in this repository generated one. The only way
-a token entered the system was a text box on the owner console whose entire validation was
-"not empty", so a single character produced a perfectly valid relationship reference — while the
-server's own `Secrets.newToken()`, a real `SecureRandom`, was never called for this value at all.
-The owner console now takes 32 bytes from libsodium's CSPRNG when a clinician is added
-(`companion/web/src/lib/owner/inboxToken.ts`), shows the result once, and has no field to type one
-into: a hand-chosen token is the defect, so the generate path replaces the input rather than
-guarding it. Two consequences worth stating. The token is now 43 characters of base64url, which is
-what makes a stolen database useless — the property this design leans on and the typed path quietly
-removed. And two clinicians can no longer be given one token by accident, which used to hand them a
-shared relationship reference and each other's shares, grants, assignments and audit log; the
-console could not have shown it, because its pending id embedded the first eight characters of the
-token followed by the list index, so one token rendered as two different-looking rows.
-
-**The token has never been deliverable by the invitation, and still is not.** The mail message has no
-field for it, and the mint API is handed the digest rather than the value, so the server has never
-held a token it could put in one. "Out of band" is therefore the only channel this value has ever
-had. Until 2026-09-12 one screen said otherwise — `companion/web/src/lib/onboarding/fieldHelp.ts`
-told the clinician the token "was in the invitation", which is the sentence they read while the
-other person is on the phone asking what to send. Both consoles now say the same true thing.
-
-### Key hierarchy
+| Passphrase to master key | Argon2id, the only KDF | 256 MiB, 3 passes, random 16-byte salt, 32-byte output, client-side only. The salt and cost live in the owner's public `keyparams.json`. |
+| Purpose separation | `crypto_kdf`, context `dmsync01` | Subkey 1: sync key. 2: manifest signing seed. 3 and 4: the owner's X25519 and Ed25519 seeds. |
+| Content encryption | XChaCha20-Poly1305, random 192-bit nonce | Everywhere. AES-256-GCM is not an accepted equivalent (R1). |
+| Per-share key | Random 256-bit CEK | Fresh for every share version. |
+| Encrypting to a recipient | X25519 sealed box | Confidentiality and sender anonymity; no forward secrecy (R2). |
+| Signing | Ed25519 | The owner signs shares and grants; the clinician signs game plans and assignments. |
+| Fingerprints | BLAKE2b over the raw public key | Shown as words for comparison. |
+| Clinician key custody | Argon2id-wrapped under a reading passphrase that is not the sign-in code | Stored only in the clinician's own browser; the server never holds it, so a cleared browser loses the keys. A passkey (PRF) wrap is not built (#{I1}). |
+| Inbox token | 256-bit random, base64url | Minted by the owner console when a clinician is added (`lib/owner/inboxToken.ts`), shown once, delivered out of band. The invitation cannot carry it: the server only ever sees its digest. |
+| Server-side hashing | Argon2id (invitation secrets); BLAKE2b-256 (session ids, inbox tokens, the owner bearer token) | `auth/Secrets.kt`. Constant-time comparisons. |
 
 ```
 OWNER
-  passphrase ──Argon2id(salt)──▶ master ──crypto_kdf──┬─▶ id 1  SYNC_KEY  ──XChaCha20-Poly1305──▶ snapshot blobs
-                                                       ├─▶ id 2  manifest signing key (Ed25519 seed)
-                                                       ├─▶ id 3  owner_x25519 seed   ┐  the pairing identity
-                                                       ├─▶ id 4  owner_ed25519 seed  ┘  (owner/identity.ts)
-                                                       └─▶ device-label key
-  owner_x25519_priv / owner_ed25519_priv  DERIVED, never generated, never stored [NEVER uploaded]
-      └─ owner_*_pub  ─────────────────────────────────────────▶ published (therapist pins via OOB SAS)
+  passphrase ──Argon2id(salt)──▶ master ──crypto_kdf("dmsync01")──┬─ 1 ▶ sync key ──XChaCha20-Poly1305──▶ snapshots
+                                                                  ├─ 2 ▶ manifest signing seed (Ed25519)
+                                                                  ├─ 3 ▶ owner X25519 seed  ┐ the pairing identity
+                                                                  └─ 4 ▶ owner Ed25519 seed ┘ (lib/owner/identity.ts)
+  owner public keys ──▶ published to the server; the clinician pins them at pairing
 
-THERAPIST
-  ther_x25519_priv / ther_ed25519_priv (wrapped under WebAuthn-PRF KUK)     [NEVER uploaded]
-      └─ ther_*_pub  ──────────────────────────────────────────▶ published (owner pins via OOB SAS)
+CLINICIAN
+  X25519 + Ed25519 private keys, wrapped in their browser ──▶ public halves pinned by the owner at pairing
 
-SHARE  (owner → therapist)
-  subset_plaintext ──XChaCha20(CEK)──▶ share_blob
-  bundle ──Ed25519.sign(owner_ed25519_priv)──▶ signed bundle   (therapist verifies vs PINNED owner fp)
-  CEK ──crypto_box_seal(ther_x25519_pub)──▶ wrapped_CEK
-  AAD = shareId‖version‖recipientFp‖expiry‖ownerSigningFp
+SHARE (owner → clinician)
+  subset ──XChaCha20-Poly1305(CEK, AAD = transcript)──▶ ciphertext
+  CEK ──sealed box(clinician X25519)──▶ wrapped CEK
+  transcript ──Ed25519(owner)──▶ signature        (verified against the PINNED owner key)
 
-GAME PLAN  (therapist → owner)         [lands in NEW game_plans table, DB v13 — see COMPANION_THERAPIST.md]
-  plan_body ──Ed25519.sign(ther_ed25519_priv)──▶ signed plan   (owner verifies vs PINNED therapist fp)
-  signed plan ──crypto_box_seal(owner_x25519_pub)──▶ plan_blob
+GAME PLAN / ASSIGNMENT (clinician → owner)
+  payload ──Ed25519(clinician)──▶ signed ──sealed box(owner X25519)──▶ blob
 
-SERVER holds: ciphertext blobs, wrapped CEKs, PUBLIC keys, hashed tokens, MINIMIZED routing
-metadata. NOTHING that decrypts, authenticates a party, or authors content.
+SERVER holds ciphertext, sealed CEKs, signatures, public keys, token digests and metadata —
+nothing that decrypts a record or authors content.
 ```
 
-**The owner's pairing identity is derived from the master, not generated (issue #121).** It was
-generated per browser session until 2026-09-12, so a clinician who pinned the owner's fingerprint
-correctly could verify nothing the owner signed in any later session — and from their side a
-rotated owner key and a hostile server substituting one are indistinguishable. Deriving it makes
-the identity exist if and only if the journal is readable, so every way back into the data
-(passphrase slot, recovery-code slot, and the WebAuthn-PRF slot the blob format anticipates)
-covers the identity too, and neither a passphrase change nor a recovery-code rotation disturbs it.
-The consequence, accepted deliberately: **whoever holds the master can now sign as the owner, not
-only read.** The recovery code on paper is no longer read-only. Subkey ids 3 and 4 under context
-`dmsync01` are reserved for this on both platforms, and a pinned vector in the tests is the
-cross-platform contract for the phone side.
+- **The owner's pairing identity is derived, not generated** (subkeys 3 and 4). It exists exactly
+  when the journal is readable, and neither a passphrase change nor a new recovery code disturbs it —
+  otherwise a clinician could not tell the owner rotating a key from a server substituting one. The
+  price: whoever holds the master can sign as the owner, so a recovery code on paper is not read-only.
+- **`owner_keys` and `therapist_keys` are insert-only.** `rel_ref` is the primary key and the only
+  writer is `INSERT OR IGNORE`, so the first key published for a relationship stays; a second publish
+  answers 409, and the owner may read their own published keys back to compare. This is a property of
+  the application, not the file: anyone who can write to the database can change a row.
+- **The published owner key is a cross-check, never a source.** At sign-in the clinician's portal
+  compares it with the key pairing pinned; a disagreement on either half refuses the sign-in and names
+  no cause, because a typo, a re-key and a substituting server look the same from there. A record made
+  before sealed approvals existed signs in on the published copy behind a caveat
+  (`OWNER_KEY_UNPINNED_CAVEAT`, `lib/therapist/inviteAccept.ts`).
+- **No escrow (O6).** Forget the passphrase and have no recovery code, and the data is gone: nobody —
+  not the maintainer, not the operator — can get it back. That is what makes it safe and what makes it
+  unforgiving. A recovery code can wrap the master in the browser (`lib/recovery/`), but the wrapped
+  key has nowhere to live yet, so the code cannot be used from another device (#{W14}); the format has
+  room for more slots, such as a passkey (#{I1}). A lost clinician key means a fresh invitation and
+  re-pairing.
+- **The browser consoles are the convenience path.** The phone is meant to become the secret-handling
+  path (#138); until then the lower-assurance banner says so wherever keys are handled.
 
-**`owner_keys` is insert-only, and the owner can read it back.** The first key published for a
-relationship is that relationship's key permanently — the store's only writer is
-`INSERT OR IGNORE`, with no update path and no delete — because a route that could overwrite would
-make a server swapping the owner's key indistinguishable from the owner rotating it. **That is a
-property of the application, not of the file.** There is no trigger and no constraint behind it, so
-anyone with WRITE access to the database can `UPDATE` the row; read-only dumps are unaffected, and
-"insert-only" must not be inherited as a property that holds against someone holding the disk. A second publish answers 409, which alone cannot say whether the frozen key is
-the owner's own (a harmless repeat) or one they can no longer produce; so the owner may GET the
-route with their bearer token and compare. Their own read is not audited: the audit log is what
-the owner reads to see what the *clinician* did.
+## 5. Sign-in, key custody and sessions
 
-**The clinician compares the published key; it never overwrites what they pinned (issue #122).**
-A sign-in that supplies both owner public keys by hand uses those, and treats the server's copy as
-a cross-check only — a disagreement on either half refuses the sign-in rather than picking a
-winner, and names no cause, because a mistyped key, a re-key and a substituting server are
-indistinguishable from there. The published copy is used only when nothing was typed, which is the
-honestly-weaker trust-on-first-use path.
+### 5.1 Passkeys (WebAuthn)
 
-**No escrow, anywhere (O6).** Lose the passphrase → snapshots unrecoverable
-(phone-local copy is the fallback). Lose the therapist key → owner re-invitation +
-**re-pair (re-verify a new fingerprint) + re-wrap** (also the only real revocation
-primitive, R3).
+Not built: #{I1}. The four `/v1/webauthn/*` routes answer 501. `DAYMARK_WEBAUTHN_RP_ID` and
+`DAYMARK_WEBAUTHN_ORIGINS` are read from configuration now, so a later implementation cannot fall
+back to a client-supplied `Host` header. The design used a discoverable credential with user
+verification, and its PRF output as the key that unwraps the clinician's keys, so that signing in and
+being able to decrypt would be one gate.
 
----
+### 5.2 Six-digit sign-in codes (TOTP)
 
-## 5. MFA, key custody & session model
+The only sign-in a clinician has. RFC 6238: HMAC-SHA1, six digits, 30-second steps, one step of
+drift, compared in constant time. Each code is accepted at most once (the used step is recorded, so a
+shoulder-surfed code cannot be replayed). Five wrong codes lock the credential for 300 s, and a
+per-address budget sits in front.
 
-### 5.1 Primary credential — WebAuthn / passkey (default)
+- The seed is generated in the clinician's browser (at least 16 bytes), is distinct from the
+  invitation secret, and is sent once, at enrolment.
+- **The server stores the seed in the clear** (`auth.db`, table `totp`, column `secret_b64`), because a
+  verifier must recompute codes and a hash cannot. Anyone who reads `/data` or a backup of it can mint
+  valid codes for every enrolled clinician without anyone noticing. It opens no content: the code
+  never unlocks a reading key.
+- **There is no way to replace a seed.** `totp` is insert-only, with one credential per relationship
+  (`idx_totp_rel_ref`). If a seed may have leaked, withdraw what is shared and start a new relationship
+  with a fresh invitation. The clinician can close the old credential themselves (§9a); the owner
+  cannot yet (#{I3}).
 
-Resident/discoverable credential (`residentKey: "required"`),
-`userVerification: "required"`, attestation `"none"`. User verification binds
-*possession* (the authenticator) to an *inherence/knowledge* factor in one ceremony —
-two-factor with no IdP and no outbound message. The **WebAuthn PRF extension** output
-is the **Key-Unlock Key (KUK)** that unwraps the therapist's in-browser reading/signing
-keys, so **"authenticated" and "able to decrypt" are the same client-side gate** — the
-server never holds anything that decrypts.
+### 5.3 Step-up for sensitive actions
 
-> **Deterministic-KUK caveat (R5):** because `KUK = PRF(credential, prfSalt)` is
-> deterministic, a single tampered-JS capture in the server-served portal yields
-> *permanent* offline decryption. Mitigations: pinned/installed therapist client,
-> rotatable `prfSalt`, native-only owner secrets.
-
-### 5.2 Fallback — TOTP (honestly flagged as weaker, R/limits)
-
-TOTP-only therapists cannot use PRF, so their reading key is wrapped under a **separate
-Argon2id passphrase** (never under the TOTP secret). The TOTP authenticating secret:
-
-- is **distinct** from the single-use bootstrap invite code,
-- is **client-set, high-entropy, rotatable**,
-- is **never sent in cleartext** over the wire, but **IS stored on the server in the clear**
-  (base64, `AuthStore.totp.secret_b64`). This is not a lapse and cannot be fixed by hashing it:
-  TOTP verification requires the verifier to recompute the code, which requires the shared
-  secret itself. *(Corrected 2026-08-09 — this line previously claimed "stored server-side only
-  as an Argon2id hash", which understated the breach impact of the very thing the paragraph
-  exists to flag. The invite code, session tokens and inbox tokens ARE hashed; the TOTP seed
-  structurally cannot be.)*
-
-This is a **phishable, server-stored authenticating secret** that breaks the "server
-holds nothing that authenticates" property — documented in [§11](#11-out-of-scope--honest-limits),
-not glossed. `signCount` regression / synced-passkey (`signCount=0`) clone-detection
-limits are documented there too.
-
-### 5.3 Step-up "sign-off" for sensitive actions
-
-`share.open`, `gameplan.publish`, `key.rotate`, and `revoke` each require a fresh,
-single-use, action-scoped step-up WebAuthn assertion — **bound to the active, live,
-non-revoked session id** (R/mustFix). An assertion minted in one context **cannot be
-exec'd from a stolen session**, and the server returns blobs **only to the bound
-session.** The same biometric gesture both proves intent and yields the PRF decryption
-secret.
+Not built: #{I1}. `StepUpDialog.svelte` is a confirmation in the browser, not a server-verified
+assertion, so sensitive actions rest on the session cookie and its CSRF token. The design asks for a
+fresh, single-use assertion bound to the live session before opening a share, publishing a game plan
+or rotating a key — and never before revoking, because the safe direction stays cheap
+([COMPANION_ACCESS_CONTROL.md](COMPANION_ACCESS_CONTROL.md), The annoyance budget).
 
 ### 5.4 Sessions
 
-| Control | Spec |
+| Control | As built |
 |---|---|
-| Token | Opaque, server-side **256-bit random** session id (a stored record, not a JWT) → instant revocation, no forgeable client secret. `HttpOnly; Secure; SameSite=Strict`. |
-| Lifetime | **15 min idle**, **8 h absolute**. Sensitive actions require a fresh assertion regardless. |
-| Binding | Session record stores `credentialId`; every request re-checks active, non-revoked credential + active relationship. Step-up assertions are bound to the live session id (§5.3). |
-| CSRF | `SameSite=Strict` **plus** a per-session anti-CSRF token on all state-changing requests. |
-| Logout/expiry | Server deletes the session; client zeroizes in-memory KUK, private keys, CEK, plaintext. |
+| Token | An opaque 256-bit session id in the cookie `daymark_session`, `HttpOnly; Secure; SameSite=Strict; Path=/`. The server stores only its digest. `DAYMARK_COOKIE_INSECURE` drops `Secure`, for plain-HTTP testing only (a startup refusal alongside an https address: #{O12}). |
+| Lifetime | 15 minutes idle, 8 hours absolute. |
+| Binding | Each session belongs to one credential and one relationship; every request re-checks both, and a session presented for another relationship is refused. |
+| CSRF | `SameSite=Strict` plus a per-session token, required as `X-CSRF-Token` on every state-changing request. |
+| End | Logout deletes the session on the server; the portal wipes keys and plaintext from memory on logout and when idle. |
 
-> The **device-cookie binding** from earlier drafts is **not counted** as a security
-> control: it travels with the session cookie under every realistic theft vector
-> (XSS, endpoint malware, hostile server) and is security theater. The real
-> stolen-session defense is the **session-bound step-up assertion** (§5.3).
+### 5.5 Relying party, origins and links
 
-### 5.5 WebAuthn RP-ID / origin (config-pinned, never client-derived)
+- The passkey relying-party id and origins come only from configuration. The app never reads
+  `X-Forwarded-Host`, `X-Forwarded-Proto`, `X-Forwarded-Prefix` or `Forwarded`.
+- Links in email are built from `DAYMARK_PUBLIC_BASE_URL`, falling back to the first
+  `DAYMARK_WEBAUTHN_ORIGINS` entry. The unauthenticated recovery route goes no further. Routes that
+  need an owner token or a clinician session fall back to the request's `Host` as a last resort, which
+  compose makes unreachable by always setting the base URL; refusing to start without it is #{O11}.
+- Serving under a sub-path (`DAYMARK_BASE_PATH` other than `/`) is not supported: pages move under the
+  prefix, but the API stays at `/v1` on the root and the consoles call it there (#{O10}).
 
-`rp.id` and the origin allowlist come from explicit
-`DAYMARK_WEBAUTHN_RP_ID` / origin config — **never** from a client-controllable
-`Host` / `X-Forwarded-Host`. Sub-path deployment is fully specified: the proxy strips
-the prefix, the app re-adds it via `DAYMARK_BASE_PATH`, and cookie `Path` / CSP /
-RP-ID are computed **from config**. Assertion origin verification is **exact**.
-Capability tokens **must be bound to the authenticated WebAuthn credential at first
-fetch** — no single-factor bearer fetch.
+### 5.6 Pairing
 
-```yaml
-# Companion config (illustrative — DESIGN ONLY)
-DAYMARK_WEBAUTHN_RP_ID: "companion.example.org"   # pinned, NOT from Host header
-DAYMARK_WEBAUTHN_ORIGINS:                          # exact allowlist
-  - "https://companion.example.org"
-DAYMARK_BASE_PATH: "/"                             # set to "/daymark" for sub-path deploys
-```
+The protocol is [COMPANION_PAIRING.md](COMPANION_PAIRING.md). The properties the rest of this document
+relies on:
 
-### 5.6 Pairing — mutual, out-of-band, bidirectional (mandatory)
+- Keys are pinned in both directions before anything is shared. The binding step is a short pairing
+  code the owner's device shows and the clinician types; the server relays sealed messages and holds a
+  key for neither direction.
+- **The pairing code never leaves the device it was typed on** — not in a request body, header, query
+  string or log line, on either side. A wrong code is silent key divergence: never an error, never a
+  burned invitation. Only a human report burns an invitation.
+- An approval that carries no sealed owner keys is refused, so no clinician is enrolled without the
+  owner's keys proved to them.
+- A matching code on a **fresh** invitation may replace a pinned key, under three conditions: the old
+  invitation is already dead (every pairing route demands a pending invitation; see
+  `PairingRelayRoutesTest.kt`); the replacement reaches nothing already sealed, and the screen says so
+  at the click; and the pin record is insert-only — a new row, with the old one kept as history.
+- Keys the server relays outside a pairing (`owner/therapistKeys.ts`) and the manual key-change screen
+  (`lib/therapist/pinStore.ts`) still require the fingerprint words read aloud, because nothing has
+  replaced them there. A key the console already holds for a *different* relationship is refused.
 
-TOFU pinning is required in **both directions before any payload flows**:
+### 5.7 Recovery and revocation
 
-1. The **owner verifies the therapist's** X25519 + Ed25519 fingerprints.
-2. The **therapist verifies the owner's** X25519 (encryption) + Ed25519 (signing)
-   fingerprints.
-
-All via a short-authentication-string (4–6 word BLAKE2b code / QR) read **out-of-band**.
-The server **never** vouches for keys and **never** mediates an unverified encryption
-key. `recipientFp` inside a signed payload is necessary but not sufficient; the **OOB
-SAS comparison is the binding step**. This protocol is a **named deliverable
-(PAIRING.md)**, not hand-waved as "(out-of-band)". See
-[COMPANION_THERAPIST.md](COMPANION_THERAPIST.md) for the enrollment ceremony.
-
-**Status, 2026-09.** The binding step is moving from the read-aloud SAS to a short pairing
-code and a PAKE (PLAN_2026-08-COMPANION-NEXT.md §3.7): the owner's device generates an
-eight-character code, the therapist types it, and the two derive a shared key that a holder
-of the link alone cannot. The invariant that carries over unchanged, and that the web client
-tests by grepping the wire: **the pairing code never leaves the device it was typed on.** It is
-never in a request body, a header, a query string, or a log line, on either side. A wrong code
-is not an error and never burns an invitation; only a human report does (§3.9.1 of the plan).
-The SAS words remain as a fingerprint the connections screen can show; they stop being a
-blocking step once the code-based ceremony has a screen.
-
-**What each direction rests on, 2026-09-12 (issue #101 — closed).** Both directions now rest on the
-short code, and neither rests on a channel the server can reach.
-
-| Direction | How the key is learned | What it rests on |
-| --- | --- | --- |
-| Owner learns the clinician's keys | **E1**, sealed by the clinician into the pairing reply and opened only by deriving the ISK from the code | The code. A link-holder who answers first produces something the owner cannot open, so nothing of theirs is ever pinned or approved. |
-| Clinician learns the owner's keys | **E2**, sealed by the owner at Approve under the same run's key in the other direction, and served to the clinician on the status poll of a closed run | The code. An envelope that opens was sealed by the person who spoke it, and one that does not is a null — not a diagnosis. |
-
-The two envelopes are sealed under **different** keys derived from the same ISK (the direction is in
-the key label and in the AAD), so neither can be reflected back and opened as the other, and each
-payload decoder refuses the other's shape field for field. The server relays both and holds a key
-for neither. E2 travels in exactly one request (the owner's approve) and comes back in exactly one
-response (a status poll of a `CLOSED` run); E1 the same, one request and one response the other way.
-An approval that carries no E2 is **refused** rather than closed — the recoverable failure is a
-reload and a fresh code, the unrecoverable one is a clinician enrolled with no owner keys proved to
-them.
-
-**What the server-published owner key is still for.** The owner publishes their two public keys to
-the server (`/v1/relations/{relRef}/owner-keys`), and that copy has not gone away. It is now the
-**cross-check and never the source**: at sign-in the clinician's console compares it against what the
-ceremony pinned, a disagreement on either half refuses the sign-in naming the consequence, and a
-server that publishes nothing takes nothing away, because the pin is the stronger value and is
-already in hand. This is the mirror of what `TherapistKeyIntake` does on the owner's side with the
-server-registered clinician keys.
-
-**Records that predate E2.** A clinician who enrolled before this existed has no ceremony pin, and
-nothing can retroactively make their ceremony have proved one. They sign in on the published copy
-alone, are told exactly that — nothing proved these keys to you, this server does not vouch for
-them, check the fingerprint on another channel — and are told that accepting a fresh invitation
-replaces it with keys the code proves (`OWNER_KEY_UNPINNED_CAVEAT`,
-`companion/web/src/lib/therapist/inviteAccept.ts`). The same is true of the **manual sign-in path**
-— pasting a saved copy of the key record instead of using the one this browser holds: there is no
-stored record to compare against, so that path also signs in on the published copy behind the same
-caveat, and a substituted key is *named* there, not refused. The refusal is a property of the stored
-record a post-E2 pairing wrote, not of every sign-in. There is no longer any way for a clinician to
-type an owner key into this product, which is the point rather than a simplification: a field would
-be a way back to the weaker half.
-
-**A matching code on a FRESH invitation replaces a pinned key (issue #111, 2026-09-12).** The owner
-console used to refuse to approve a reply whose keys were not the ones it already held, and told the
-owner to reach the clinician another way. That refusal is retracted, and the reasoning is worth
-stating because it is the same shape as several arguments in this document. The pin's authority IS
-the code: the existing pin was recorded on exactly the proof *"the party that sealed this envelope
-is the party I spoke the code to"* and on nothing stronger. Demanding a stronger proof to replace a
-pin than to create one is incoherent, and it buys nothing — someone who obtains a code can already
-pair fresh and be sent every future share, so letting them replace a pin adds no access. It adds
-detectability: the real clinician's next share stops opening and they phone.
-
-Three things carry that trade and none is optional.
-
-1. **Rotation always costs a fresh invitation.** Approving moves the invitation out of `PENDING`,
-   and every route that starts or answers a run demands `PENDING`, so the old invitation and its
-   code are dead by the time a second offer could exist. A touch against a spent invitation is
-   refused by status: no burn, no error, it simply never opens. Pinned in
-   `companion/server/src/test/kotlin/com/daymark/companion/PairingRelayRoutesTest.kt`.
-2. **It reaches nothing already sealed.** Rotation changes what is sealed from now on and nothing
-   else; whoever holds the device that carried the old keys can still open every share sent before.
-   The screen says so, in those words, at the point of the click — the same standing fact as
-   *"Revoking does not un-send what was already read."*
-3. **The record is insert-only.** A supersession is a NEW pin row; the old one stays as history and
-   seals target the newest (`companion/web/src/lib/share/pairing.ts`). The owner's record can say a
-   key changed and when, rather than quietly looking as though it never had.
-
-What the console still refuses on this route is keys it has already recorded for a DIFFERENT
-relationship — not a rotation but an ambiguity about who a share is for, which no amount of
-code-typing settles. And the OTHER key route is unchanged: keys the **server** hands over
-(`owner/therapistKeys.ts`, `acceptTherapistKeys`) still require the fingerprints read aloud, and the
-manual rotation screen still requires the SAS words, because on those channels nothing has replaced
-them.
-
-**A replacement pairing seals E2 too.** The re-key path above runs through the same approve, so a
-clinician who comes back with new keys leaves holding the owner's, proved by the code they just
-typed. The owner's identity is derived rather than generated, so what the replacement proves is the
-same identity the first pairing did — and the person being re-verified is the last one who should
-be left unable to verify back.
-
-### 5.7 Recovery & revocation
-
-- **No server-side escrow.** Single lost device → optional self-held,
-  Argon2id-passphrase-protected recovery file (never touches the server).
-- Compromised/no-file case → **owner re-invitation**: revoke, re-pair (re-verify new
-  fingerprint), re-wrap each active share's CEK to the new reading key.
-- **Therapist key loss = owner re-invitation + re-pair + re-wrap; no escrow** — and is
-  also the only real revocation primitive against a colluding server (R3).
-- **V1 scope lock:** **one therapist, one keypair, one device.** Multi-therapist /
-  multi-device fan-out and a therapist dashboard are **out of scope** (added trust
-  surface). The owner remains the **sole root of trust.**
-
----
+- No escrow on the server. Server-access recovery (§6) restores the bearer token and nothing else.
+- The owner can withdraw a share: the server marks it withdrawn, deletes its bytes, records
+  `share.revoke`, and answers 410 to every later read. This binds an honest server only (R3, #{I8}).
+- A clinician can end their own relationship (§9a). The owner cannot yet end a clinician's sign-in
+  (#{I3}). Rotating the owner's data key for whoever remains authorised is not built (#{C7}).
+- One sign-in credential per relationship. An owner may hold several relationships, one per
+  clinician, each with its own inbox token. Practices add a control plane and never a key. Whether
+  that is the scope the product wants: #{C2}.
 
 ## 6. Server hardening defaults
 
-### Container / runtime
+### Container and runtime
 
-- **Non-root** (`USER 10001:10001`); `cap_drop: ["ALL"]`; `no-new-privileges`.
-- **Read-only root filesystem**; only the blob volume + a small `tmpfs` writable.
-- **Egress lockdown (R7):** the companion runs on its **own** `internal: true` bridge
-  that the proxy *also* joins (proxy multi-homed) so the companion has no path to the
-  gateway — **or** the "structurally enforced" wording is dropped and a **host-firewall
-  egress-deny** is required. The shipped image contains **no package manager** and
-  installs nothing at runtime. See [COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md).
-- Minimal distroless/alpine base **pinned by digest**; SBOM + provenance per release.
-- Healthcheck is **loopback-only** and does **no DB work**; the unauthenticated
-  `/healthz` and any meta endpoint are liveness-only and reveal no init state.
+- A distroless Java 21 image pinned by digest: no shell, no package manager, no `curl`. It runs as
+  UID 65532, distroless's own non-root user. Health is a static Go binary probing `/readyz`.
+- The shipped compose file adds a read-only root filesystem, `/tmp` as a `noexec` tmpfs,
+  `cap_drop: ALL`, `no-new-privileges`, AppArmor `docker-default`, an init process, and memory, CPU
+  and process limits. Only `/data` is writable.
+- **Egress (R7).** By default the network has IP masquerading off, so outbound packets get no reply;
+  the opt-in no-egress override removes the gateway entirely. CI boots both and proves egress fails.
+  The one deliberate outbound path is SMTP, off by default
+  ([COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md) §8).
+- `/healthz` and `/readyz` are unauthenticated and content-free; `/v1/config` returns only whether
+  SMTP is on.
 
-### HTTP / portal
+### HTTP
 
-- **Strict CSP:** `default-src 'self'; script-src 'self' 'wasm-unsafe-eval';
-  style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none';
-  base-uri 'none'; frame-ancestors 'none'; form-action 'self'`. No `unsafe-inline`, no
-  `unsafe-eval`, no third-party origins, **no CDN**.
-  > **CSP/SRI are NOT counted as a zero-knowledge defense against the first-party
-  > origin (R5).** They harden against third-party tampering only.
-- Security headers: `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
-  `X-Frame-Options: DENY`, `Cross-Origin-Opener-Policy: same-origin`,
-  `Cross-Origin-Resource-Policy: same-origin`, `Permissions-Policy` disabling
-  geolocation/camera/mic (except WebAuthn), HSTS with a real cert.
-- No directory listing; generic error bodies; no stack traces.
+Every response carries these headers (`SecurityHeaders.kt`). This is the only copy of the policy in
+the documentation; if it differs from the code, the code is right.
 
-### Auth, rate-limiting, DoS hygiene
-
-- Server access credential **separate from** the E2EE passphrase.
-- **Per-credential + per-IP** rate-limit + exponential backoff + lockout, keyed on the
-  **trusted source identity** (§7); constant-time comparisons; generic, non-enumerating
-  errors.
-- **Caps:** `MAX_BLOB_SIZE`, `MAX_VERSIONS` (prune), max request body, **per-token
-  storage quota**, max in-flight requests, lineage/version creation caps (T5). All apply
-  to owner and therapist endpoints.
-- **Server-derived `blob_path`** validated against a strict charset; **server-side
-  content hashing** (client hash untrusted); **disk-full fail-closed**.
-- Unguessable per-relationship inbox tokens; listing scoped to the caller's own
-  relationship only.
-
-### Owner notifications + access-token recovery (Track T2, shipped)
-
-Email Option A: **owner notifications + server-access-token re-issue only** — no owner
-accounts, no passwords, no escrow. The server still can never reset the PIN or E2EE
-passphrase.
-
-- **The registered notification email is stored in plaintext** on the server. This is
-  necessary — the server must read the address to send to it — and is documented
-  loudly rather than glossed. It is comparable in sensitivity to the routing metadata
-  already covered by §3 T1 (a leak reveals that a relationship/owner exists at this
-  address, not any record content).
-- **The owner/bearer token is stored as a digest**, in a small per-datadir store rather
-  than only held in process memory from the env var. It was originally kept plaintext
-  there on the reasoning that it was the same class of secret as `DAYMARK_AUTH_TOKEN`
-  itself (already an operator-plaintext secret in an env var / mounted file) and only a
-  network-enumeration/DoS guard, not a confidentiality boundary. That stopped being true
-  once `POST /v1/relations/{relRef}/pairing/{exchangeId}/approve` became the *only* path
-  that mints a therapist enrolment ticket, authorised by this token alone: holding it now
-  lets someone mint an invite, answer their own pairing exchange, approve it as the
-  owner, and enrol a credential, over the network, with no code to guess (issue #113).
-  An investigation found the resulting exposure is still bounded — every content route
-  separately gates on the raw per-relationship inbox token, of which only a digest is
-  stored, so a token-holder cannot read existing or future relationship *content* this
-  way — but the token being a confidentiality-adjacent credential kept in the clear was a
-  needless class of risk. The store now persists `Secrets.tokenHash(token)`, never the
-  token; `DAYMARK_AUTH_TOKEN` itself is unaffected and remains the operator's own
-  plaintext secret, by design, in their own environment.
-- **The access-token recovery request endpoint is unauthenticated by necessity** (that
-  is the point of a recovery path) but is heavily rate-limited per source (with a
-  bounded, evicted rate-limit table so an unauthenticated flood cannot grow it without
-  bound) and **always responds `202` identically** whether the submitted email matches
-  the registered one or not, so a status/body oracle cannot reveal whether an address
-  is registered. The one branch that does real work on a match — sending the email —
-  is **dispatched to a background task, never awaited inline**, so a match and a
-  non-match take the same time to respond too; without this, the real SMTP round-trip
-  that only happens on a match would itself be a timing side-channel defeating the
-  "always responds identically" property. Email comparison is case-insensitive
-  (addresses are normalized to lowercase at registration and at compare time) so a
-  registered `Owner@Example.org` still matches a recovery request for the everyday
-  lowercase form.
-- **The recovery link is built ONLY from the operator-configured `DAYMARK_PUBLIC_BASE_URL`
-  (or `DAYMARK_WEBAUTHN_ORIGINS` as a fallback) — never from the request's `Host`
-  header.** Unlike the owner-authenticated invite link (which does fall back to `Host`
-  as a best effort, acceptable there because minting an invite already requires the
-  owner's bearer token), this route has no credential gate at all; trusting a
-  client-supplied `Host` here would let an unauthenticated attacker cause a real,
-  single-use recovery token to be emailed inside a link pointing at a domain *they*
-  control. If no public base URL is configured, the server accepts the request
-  (still responding identically) but skips sending and logs a warning — see
-  COMPANION_DEPLOYMENT.md.
-- **Recovery is single-use and time-limited**: the confirmation link is a high-entropy,
-  one-time token; confirming it rotates the bearer token immediately (the old value
-  stops working with no overlap) and the new token is shown **once**, in the response
-  to the confirm call — **never** emailed. The rotation is applied to the live
-  in-process token guard from *inside* the same critical section that persists it, so
-  two concurrent confirms (e.g. two outstanding valid links) can't leave the live guard
-  and the persisted/restart-recovered token disagreeing. A follow-up "your access token
-  was just re-issued" receipt is sent to the registered address so an owner who did not
-  initiate a rotation is alerted.
-- **Recovering server access never recovers anything else.** A newly issued bearer
-  token still cannot decrypt a single record — the E2EE passphrase and PIN remain
-  entirely client-side and are unrecoverable by design (O6).
-- **Deferred from this slice:** lockout-alert emails (the "(optional)" item in the
-  original mini-spec) are not yet wired up; tracked as a follow-up.
-
----
-
-## 7. Reverse-proxy / trusted-proxy hardening
-
-This unifies the proxy posture across **every** track (sync, sharing, auth, game-plans,
-deploy, threat). It closes the rate-limit/lockout bypass — the **sole brute-force
-defense** for the bearer/cap token — and the loopback-spoof bypass.
-
-| Rule | Spec |
-|---|---|
-| **Default** | **Trust NO forwarded headers** — derive everything from the **socket peer**. The shipped `172.16.0.0/12` default is **REMOVED (R9)** — a /12 lets any co-resident Docker container forge `X-Forwarded-*`. |
-| Trusted proxy | Operator **explicitly** sets a **single narrow** proxy IP/CIDR. |
-| Header stripping | The proxy **strips inbound** `X-Forwarded-For` / `X-Real-IP` / `X-Forwarded-Host` / `Forwarded` **before** setting its own. |
-| Derived identities | Rate-limit identity, lockout key, audit source-IP, and the **"HTTPS-required-for-non-loopback"** gate derive from forwarded headers **only when the pinned proxy is trusted**, else from the **socket peer**. |
-| RP-ID / origin | **Never** derived from client-controllable `Host` / `X-Forwarded-Host` — pinned to config (§5.5). The nginx `$host` example is fixed to a configured `server_name`. |
-
-```nginx
-# Illustrative (DESIGN ONLY) — pin server_name, do NOT pass client Host through.
-server {
-    server_name companion.example.org;           # NOT $host
-    location / {
-        proxy_set_header Host              $server_name;
-        proxy_set_header X-Forwarded-Proto https;  # proxy-asserted, client value stripped
-        proxy_set_header X-Forwarded-For   $remote_addr;   # replace, never append client value
-        proxy_pass http://companion:8080;
-    }
-}
+```
+Content-Security-Policy: default-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self'; manifest-src 'self'
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+Referrer-Policy: no-referrer
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Resource-Policy: same-origin
+Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=(), usb=(), magnetometer=(), accelerometer=()
 ```
 
----
+`'wasm-unsafe-eval'` is the one relaxation, for libsodium's WebAssembly; `blob:` and `data:` images
+let the browser show images it decrypted. There is no `unsafe-inline`, no `unsafe-eval` and no
+third-party origin. The app sends no `Strict-Transport-Security`, because it cannot know it is behind
+TLS; the proxy must add it, and must not add a second CSP, which the browser would intersect with this
+one ([COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md) §3). Error responses are generic and carry no
+stack trace; the server's own log line for an unhandled error does not yet meet that standard
+(#{O1}).
 
-## 8. Anti-rollback & integrity (client-anchored)
+### Deliberately not changed
 
-**Server-side `prevHash` / version-chain enforcement provides ZERO integrity guarantee
-(R6).** A hostile server forges a consistent chain over client-supplied metadata; an
-owner-readable "expected hash" log fetched from the *same* server is equally forgeable.
+- **`connect-src 'self'` stays.** Relaxing it would not make the consoles' absolute "Server URL"
+  fields work across origins — the server has no CORS support, so every authenticated cross-origin
+  call fails its preflight anyway — and it is the exfiltration boundary for a page holding a decrypted
+  journal and unwrapped keys. The fix belongs in the consoles: stop offering another origin, and stop
+  reporting the browser's refusal as an unreachable server (#{W11}).
+- **`X-Setting-Key` is not a control.** The server's allowlist (`SETTING_ALLOWLIST` in
+  `storage/RelationStore.kt`) constrains a cleartext routing tag the clinician chooses. The setting an
+  assignment changes is inside the sealed body, and the shipping clinician client never sends the
+  header. Making it mandatory would change nothing, because the same party writes both halves. The
+  check that binds is the owner's, on the plaintext, after decrypting (`lib/assignments/inbox.ts`).
 
-The **only** real anti-rollback is:
+### Authentication, limits and denial of service
 
-- an **Ed25519-signed, hash-chained manifest** (signing key derived via `crypto_kdf`,
-  §4),
-- verified against a **local trust watermark** on the phone that **sync refuses to
-  regress past.**
+- The owner bearer token is the server's access credential. It is separate from the passphrase and
+  decrypts nothing.
+- Per-address limits, keyed on the trusted client address (§7), are tabled in
+  [COMPANION_OBSERVABILITY.md](COMPANION_OBSERVABILITY.md) §1.1. Comparisons are constant-time.
+- Caps: blobs of at most 25 MiB, upload bodies of at most 26 MiB, JSON bodies of at most 64 KiB, and a
+  120-second limit on reading a request; the newest 200 versions kept per snapshot lineage and 50 per
+  relationship lineage; 5 GiB of snapshots per token and 256 MiB per relationship. All are
+  configurable ([COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md) §5).
 
-The client **never** trusts server `list` / `prevHash` / log output without manifest
-verification. Server-side chain checks are **DoS hygiene only.** This is stated
-explicitly here per the reviewer must-fix.
+### Owner notifications and server-access recovery
 
-> **v1 sync model (R11):** single-writer, **last-snapshot-wins** replication
-> (newest full snapshot is authoritative; older device pulls and replaces;
-> append-only history preserved server-side). **Not** row-level merge — the schema
-> has no `updatedAt` and `entry_activity` is keyed on raw rowids, so a deterministic
-> three-way merge is unimplementable and would corrupt the entry↔activity join and
-> photo associations. True multi-device row-merge is gated behind a prerequisite
-> migration (stable cross-device UUIDs + real `updatedAt` + UUID-re-keyed tombstones),
-> deferred. See [COMPANION_ARCHITECTURE.md](COMPANION_ARCHITECTURE.md).
+- There are no owner accounts or passwords, and the server can never reset a passphrase or PIN.
+- **The notification email is stored in plaintext**, because the server must read it to send. A leak
+  shows that an owner exists at that address, not any content.
+- **The owner bearer token is stored as a BLAKE2b digest** in `owner-account.db`, never as the token.
+  (`DAYMARK_AUTH_TOKEN` itself remains the operator's secret file.) The token alone can approve a
+  pairing and so enrol a clinician, which is why it may not sit in the clear. Content routes also
+  demand the relationship's inbox token, whose digest is all the server holds.
+- `POST /v1/recovery/request` is unauthenticated by necessity. It is limited per address (3 an hour),
+  always answers 202, and sends mail from a background task, so a matching and a non-matching address
+  take the same time. Addresses compare case-insensitively.
+- The recovery link is built only from `DAYMARK_PUBLIC_BASE_URL` (or `DAYMARK_WEBAUTHN_ORIGINS`) and
+  never from the request's `Host`; with neither set, the request is accepted and nothing is sent. The
+  link points at `/recover#t=…`, which no route serves yet (#{O9}).
+- `POST /v1/recovery/confirm` replaces the token at once, with no overlap, and returns the new one in
+  the response — once, never by mail. A "your access token was re-issued" notice then goes to the
+  registered address. The confirm writes no audit entry and no log line and has no rate limit
+  (#{O3}).
+- An email when a lockout starts: not built (#{O15}).
 
----
+## 7. Reverse proxy and trusted proxies
+
+- **Default: trust no forwarded header.** Every per-address control keys on the socket peer. There is
+  no broad default such as `172.16.0.0/12` (R9).
+- `DAYMARK_TRUSTED_PROXIES` names the proxy, narrowly (a `/32`). Only from a trusted peer does the app
+  read `X-Forwarded-For`, and it reads it right to left, skipping trusted hops
+  (`ClientAddress.resolve`), because the leftmost entry is whatever the client wrote. It reads no other
+  forwarded header.
+- A proxy may replace `X-Forwarded-For` or append to it; passing the client's header through
+  unchanged is the one configuration that breaks every lockout.
+- A misconfiguration fails quiet: with an empty or wrong list behind a proxy, all clients share one
+  bucket. The app warns once when a forwarded header arrives while the list is empty; a wrong
+  non-empty list produces no warning (#{O6}).
+- The operator's side: [COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md) §3 and §4.0. Symptoms and
+  the test: [COMPANION_OBSERVABILITY.md](COMPANION_OBSERVABILITY.md) §1. The example nginx config still
+  forwards the client's `Host` and has no catch-all server (#{O23}).
+
+## 8. Anti-rollback and integrity (client-anchored)
+
+- **Server-side version chains give no integrity (R6).** A hostile server can forge a consistent
+  chain over metadata the client supplied. A client must never trust the server's listing on its own.
+- The only real anti-rollback is an Ed25519-signed, hash-chained manifest (signed with subkey 2),
+  checked against a local watermark the client refuses to go back past. The key and the sign and
+  verify functions exist (`lib/sync/crypto.ts`); no client signs or checks a manifest yet, and the
+  server stores none. Not built: #138.
+- **The manifest public key never changes** — not on upgrade, not when a recovery code is added. It is
+  the trust anchor, and a change is indistinguishable from a server swapping the signing identity.
+- **Sync is single-writer, last-snapshot-wins (R11).** The newest full snapshot is authoritative.
+  There is no row-level merge: no synced table has stable cross-device ids or per-row timestamps.
 
 ## 9. Audit-logging posture
 
-**Log events, not content.** Owner-readable, append-only, metadata-only. **Shipped**
-(Track T1): `GET /v1/rel/{relRef}/audit`, gated the same two ways as the blob API — the
-caller must hold the relationship's inbox token (`X-Rel-Token`, hashed to `relRef`) AND
-present the owner bearer token. Therapists cannot read or write it directly; entries are
-appended server-side from the real access paths (auth, TOTP enrol, share/game-plan
-fetch, assignment/game-plan publish, session expiry) — never client-supplied.
+**Log events, not content.**
 
-```jsonc
-{
-  "seq": 412,                    // monotonic per relationship, starts at 1
-  "ts": 1719600123,               // server time, epoch seconds
-  "actor": "therapist",           // "owner" | "therapist" — who performed the action
-  "action": "share.open",         // auth.success | auth.fail | lockout | enrol.ok |
-                                   //   share.open | gameplan.open | assignment.publish |
-                                   //   gameplan.publish | session.expired |
-                                   //   relationship.ended (extend as needed)
-  "objectRef": "lin1:3",          // opaque channel-scoped id (lineage:version); never content
-  "meta": { "credentialId": "…" },// small, fixed, non-content annotations only (optional)
-  "entryHash": "<sha256 hex>"      // = SHA256(prevHash ‖ seq ‖ ts ‖ relRef ‖ actor ‖ action ‖ objectRef ‖ meta)
-}
-```
-
-- **Never logged:** which individual records/moods were viewed, any plaintext, CEKs,
-  private keys, PRF output, TOTP codes, passphrases.
-- **IP is OFF by default** (`DAYMARK_ACCESS_LOG_SOURCE_IP`) — a logged IP geolocates the
-  clinic; when enabled it rides in `meta.sourceIp`. Retention is configurable
-  (`DAYMARK_ACCESS_LOG_RETENTION_DAYS`, default 90) — entries older than the window are
-  pruned on the relationship's next append.
-- **Suppression resistance, updated (R12):** each entry is now **server-computed
-  hash-chained** (`entryHash` above) — a *stored* entry cannot be silently altered or
-  reordered without breaking the chain for every entry after it. This is **not** the
-  therapist-signed attestation originally described here (no Ed25519 signature; every
-  event above is server-asserted, the same trust level `auth.fail`/`lockout` already
-  had) — so it adds no non-repudiation, and it does **not** stop a hostile server from
-  simply never appending an event, or from truncating the chain and serving a
-  shorter-but-internally-consistent history. **"Access cannot be hidden" therefore
-  remains partially retracted:** tampering/reordering of what the server *does* return
-  is now detectable; withholding is not. Full suppression-resistance still needs the
-  originally-scoped signed client attestation, which has not shipped.
-
----
+- Each relationship has an append-only, metadata-only, hash-chained log in `audit.db`. Each practice
+  has its own in `org-audit.db`, a separate file so the two identifier spaces can never meet.
+- Entries are written by the server on the real access paths — sign-in, lockout, enrolment, share and
+  game-plan reads, assignment and game-plan publishing, share withdrawal, session expiry, pairing
+  steps, invitation reports, key registration and fetches, relationship endings, practice membership —
+  and never supplied by a client. The closed list is `AuditAction` in `storage/AuditStore.kt`.
+- An entry is `seq` (monotonic per relationship), `ts`, `actor`, `action`, `objectRef` (an opaque
+  lineage and version) and `meta` (small fixed annotations: a credential id; the source address only if
+  enabled), with `entryHash = SHA-256(prevHash ‖ seq ‖ ts ‖ relRef ‖ actor ‖ action ‖ objectRef ‖ meta)`.
+- **Never logged:** which records were viewed, any plaintext, keys, content keys, codes or passphrases.
+- **The source address is off by default** (`DAYMARK_ACCESS_LOG_SOURCE_IP`): an address geolocates the
+  clinic.
+- **Retention** is `DAYMARK_ACCESS_LOG_RETENTION_DAYS` (90), applied only on a relationship's next
+  append — so a quiet relationship is never pruned — and pruning leaves no marker (#{O5}).
+- **Reading.** The owner reads a relationship's log at `GET /v1/rel/{relRef}/audit` with both the inbox
+  token (`X-Rel-Token`) and the bearer token. A clinician can neither read nor write it; an operator
+  holds neither credential. `GET /v1/relations/{relRef}/audit-chain` (bearer token) recomputes the
+  chain (`AuditStore.verifyChain`) and returns the entry count, the sequence extent, the head hash and
+  the first break, if any. It writes nothing and logs nothing.
+- **What the chain proves (R12).** A stored entry cannot be altered or reordered without breaking
+  every later hash. The chain is computed by the server and signed by no one, so a server that never
+  appends an event, or cuts the tail off, leaves a chain that checks out. "Access cannot be hidden"
+  holds for tampering, not for withholding, and every surface that shows a verdict says so (the owner's
+  audit caveat; `CHAIN_CAVEAT` in the admin console). What outlives a lying server is the head hash,
+  written down somewhere it cannot reach. Signed clinician attestations: #{O26}. The phone keeping its
+  own copy of the head: #138.
+- **Missing events:** a refused read of an expired or withdrawn share (`SHARE_DENIED` is declared and
+  never written: #{O4}); the token re-issue, invitations minted or expired, reads of the log itself,
+  bulk reads, and changes to logging policy (#{O14}).
 
 ## 9a. Closing a credential without deleting one
 
-Issue #91 gave a clinician a way to end their own access. The security-relevant half of it is one
-row, and the shape of that row is the whole argument.
-
-### The table
+A clinician can end their own access (issue #91). The security-relevant half is one row:
 
 ```sql
 CREATE TABLE IF NOT EXISTS relationship_endings (
@@ -761,178 +444,92 @@ CREATE TABLE IF NOT EXISTS relationship_endings (
 )
 ```
 
-Written by `POST /v1/relations/{relRef}/ending` (therapist session cookie + `X-CSRF-Token`, and the
-session must be bound to that exact relationship — a session for another one is refused `403`,
-identically to every other cross-relationship request). Read on the sign-in path: `POST
-/v1/totp/verify` consults it after the code verifies and answers `410 Gone` instead of issuing a
-session. Read again on the owner's share publish, which is refused `410` before the body is read.
+It is written by `POST /v1/relations/{relRef}/ending`, which needs the clinician's session cookie and
+`X-CSRF-Token`, with the session bound to that exact relationship (a session for another one is
+refused 403). `POST /v1/totp/verify` consults it after the code verifies and answers `410 Gone`
+instead of issuing a session; the owner's next share publish to that relationship is refused 410
+before the body is read.
 
-### Why a separate table, and not a flag or a delete
+**Why a separate table, not a flag or a delete.** `totp` is insert-only, and both halves of that
+matter. A DELETE would be worse than nothing: the unique index `idx_totp_rel_ref` is what stops a
+second enrolment, so removing the row would let anyone still holding the invitation link enrol a fresh
+credential against a relationship somebody has just left — an exit turned into an entrance. An UPDATE
+(`disabled=1`) would be a write path into the one table whose safety is that it has none. So the
+closure sits beside the credential, and `totp` is never touched. `rel_ref` is the primary key, which
+makes the write insert-only and idempotent in the same stroke, as in `therapist_keys` and
+`owner_keys`.
 
-`totp` is insert-only, and both halves of that property are load-bearing here.
+**Keyed on the relationship.** One credential per relationship means closing it ends exactly one
+relationship and reaches no other patient's work, and an ended relationship stays ended: the way back
+is a fresh invitation, which is a fresh relationship.
 
-- **A DELETE would be worse than doing nothing.** The `UNIQUE` index `idx_totp_rel_ref` is the only
-  thing stopping a second enrolment against a relationship. Removing the row would hand anyone still
-  holding the invitation link a way to enrol a *fresh* credential against a relationship somebody has
-  just left — turning an exit into an entrance.
-- **An UPDATE (`disabled=1`) would be an update path into the one table whose safety property is
-  that it has none.** Every other protection in that table rests on "a row, once written, is never
-  rewritten"; adding one mutable column adds one code path that can be reached by a bug, a stolen
-  session, or a later refactor that does not know why the rule existed.
+**What it discloses.** The 410 is reachable only behind a correct code; every earlier refusal on that
+route is an identical 401, so someone holding only a credential id — a username, not a secret — learns
+nothing. `GET /v1/relations/{relRef}/ending` answers the owner's bearer token with a timestamp, or 404
+while the relationship is live, and never echoes the credential id. The audit entry is appended once,
+when the ending is recorded, never per attempt — the same rule as a lockout, because a log that grows
+a row per retry buries the row that matters.
 
-So the closure lives beside the credential rather than inside it, and `totp` is never touched by any
-of this. The same reasoning the `therapist_keys` and `owner_keys` tables already use: `rel_ref` is
-the PRIMARY KEY, the constraint refuses inside the `INSERT OR IGNORE` statement rather than in a
-check a second connection could slip past, and idempotence falls out of it for free.
+**Ordering.** The row is written before the sessions are cut. A crash in between leaves "ended, with a
+session alive until it times out" — bounded, and already closed to new sign-ins. The other order would
+leave "signed out, not ended", which looks like a completed exit and is not one.
 
-### Keyed on the relationship, not the credential
+## 10. Supply chain and build
 
-`idx_totp_rel_ref` makes a TOTP credential per-relationship: `enrollTotp` refuses a second credential
-for a `rel_ref`, so closing one closes exactly one relationship and can reach no other patient's
-work. Keying the ending on the **relationship** puts that property in the schema rather than in a
-coincidence — and it means the ending survives any future re-enrolment path. A relationship that was
-ended stays ended; the way back is a fresh invitation, which is a fresh relationship, exactly as the
-clinician is told at the point of the click.
+- Every `FROM` in `companion/Dockerfile` is pinned by multi-arch digest, and Dependabot proposes the
+  bumps (`.github/dependabot.yml`). A digest never changes, so a running server keeps the operating
+  system and Java runtime it was built with until it is rebuilt or pulled again.
+- The web bundle is built from the lockfile and ships inside the image; nothing is fetched from a CDN
+  at run time.
+- CI validates the Gradle wrapper, fails if the resolved Netty is below the request-smuggling fixes,
+  boots both compose topologies and proves egress fails. The image it pushes to GHCR is the image it
+  tested, tagged `sha-<commit>`. The CI egress test covers the shipped topologies, not an operator's
+  own compose changes (R7).
+- The server is built with the validated wrapper (`./gradlew`), not the builder image's Gradle.
+- Not built: an SBOM, provenance and a signature for the image, a published hash of the web bundle, and
+  an arm64 image (#{B8}); a checksum for the Gradle wrapper, dependency verification, pnpm's minimum
+  release age and actions pinned by commit (#{B9}); dependency audits and lints in CI (#{B12}).
 
-### What it discloses, and to whom
+## 11. Out of scope and honest limits
 
-- The `410` on sign-in is reachable **only behind a correct code**. Every earlier refusal on that
-  route collapses into an identical `401`, so a caller holding only a credential id — which is a
-  therapist-typed username, not a secret — learns nothing. Behind the code, the only caller who can
-  reach the honest answer is the clinician themselves.
-- `GET /v1/relations/{relRef}/ending` answers the owner's bearer token with a timestamp and `404`
-  while the relationship is live. The credential id is deliberately **not** echoed: the owner has no
-  use for it, and a route that hands one back is a route that can be asked for one.
-- The audit line carries the event and the credential id as membership metadata — the same
-  annotation the sign-in lines already carry — and nothing about what was read, shared or written.
-  It is appended **once**, when the ending is recorded, never per call: the same rule as a lockout,
-  for the same reason. A log that grows a row per retry buries the row that matters.
+- **Endpoint compromise is out of scope.** A compromised phone, laptop or clinician machine defeats
+  everything here, as it does for the flagship app.
+- **No forward secrecy on sealed boxes (R2).** A compromise of a recipient's long-term X25519 key —
+  the clinician's for shares, the owner's for game plans — decrypts everything ever sealed to it.
+  Rotating CEKs does not help. Deleting old bytes shortens the window; withdrawing a share does, but
+  expiry does not yet (#{W2}).
+- **Revocation binds an honest server only (R3).** Honestly: future fetches stop on an honest server;
+  data published after re-keying is unreadable to the old key; plaintext already decrypted is never
+  recallable. Real revocation is re-pairing to new keys (#{I8}).
+- **The browser consoles are not zero-knowledge against a malicious server (R5)**, because the server
+  serves the code that holds the keys (§3 T3).
+- **Anti-rollback is client-side and not built** (§8). **Sync is single-writer** (R11).
+- **Metadata leaks.** The existence, cadence and size of relationships and snapshots are visible to the
+  server (§3 T1). Padding would reduce, not remove, this (#{O25}).
+- **Sign-in codes are phishable and stored in the clear on the server** (§5.2). A breach lets an
+  attacker sign in as a clinician. It never lets them decrypt.
+- **Withholding audit events is undetectable** (R12, §9).
+- **No escrow and no recovery by the server**, by design (O6).
+- **Non-diagnostic by framing, not by construction.** Game-plan bodies are free text the schema cannot
+  constrain, so the authoring screen carries fixed "guidance, not treatment" copy. Share bundles have
+  no slot for the PHQ-9 self-harm item and carry check-in scores and bands only. A share is a
+  deliberate, consented disclosure to a third person (R8).
+- **Availability.** The operator can delete everything. The server is never the source of truth; the
+  journal lives on the owner's phone.
 
-### Ordering, and what survives a crash
+## Appendix R — Corrections to earlier drafts
 
-The row is written **before** sessions are cut. If the process dies between them the surviving state
-is "ended, with a session alive until it times out" — bounded, and already closed to any new sign-in.
-The other order would leave "signed out, not ended", which looks exactly like a completed leave and
-is not one.
----
-
-## 10. Hardening checklist (copy-paste)
-
-**Crypto**
-- [ ] Argon2id `memlimit ≥ 256 MiB`, `opslimit ≥ 3`, client-side only; the **only** KDF.
-- [ ] **XChaCha20-Poly1305**, fresh 192-bit random nonce per blob, **everywhere**. **No AES-GCM equivalent.**
-- [ ] `crypto_kdf` purpose-separation for `content_key` / manifest-signing / device-label keys.
-- [ ] Fresh random 256-bit CEK per share; never reused.
-- [ ] CEK / plan body wrapped via X25519 `crypto_box_seal` — documented as **no PFS**.
-- [ ] **Owner Ed25519-signs every share bundle**; therapist verifies vs pinned owner fp.
-- [ ] **Therapist Ed25519-signs every game plan**; owner verifies vs pinned therapist fp.
-- [ ] AAD binds `shareId‖version‖recipientFp‖expiry‖ownerSigningFp`.
-- [ ] Private keys generated client-side, wrapped at rest (WebAuthn-PRF / Argon2id); **never uploaded**. `prfSalt` rotatable.
-- [ ] No plaintext columns in SQLite (CI grep asserts schema).
-
-**Container / runtime / supply chain**
-- [ ] Non-root, caps dropped, `no-new-privileges`, read-only root FS, tmpfs-only scratch.
-- [ ] Companion on its **own** `internal: true` bridge (proxy multi-homed) **or** host-firewall egress-deny; **no** `172.16.0.0/12` trust.
-- [ ] No package manager / no runtime install in final image; base pinned by digest.
-- [ ] SBOM + SLSA provenance + cosign signature + reproducible build; CI vuln/license/secret scans + egress=0 (image-only) test.
-
-**HTTP / portal**
-- [ ] Strict CSP (`'self'` + `wasm-unsafe-eval` only; no inline/eval; no CDN). **SRI NOT counted as anti-tamper vs first-party origin.**
-- [ ] Security headers: nosniff, no-referrer, frame DENY, COOP/CORP same-origin, Permissions-Policy, HSTS (real cert).
-- [ ] Browser portal documented as **lower-assurance**; master passphrase entry into portal **forbidden/discouraged**; therapist path pinned/installed where possible.
-
-**Reverse proxy**
-- [ ] Default trust-none; pin a single narrow proxy CIDR; strip inbound `X-Forwarded-*`/`Forwarded` at the proxy.
-- [ ] Rate-limit/lockout/audit-IP/HTTPS-gate derive from forwarded headers **only** when the pinned proxy is trusted, else socket peer.
-- [ ] RP-ID/origin/cookie-Path/base-path from **config**, never client `Host`/`X-Forwarded-Host`.
-
-**Auth / MFA / session**
-- [ ] WebAuthn primary (resident, UV required, origin-bound, config-pinned RP-ID); PRF gates key unlock.
-- [ ] TOTP fallback honestly flagged; authenticating secret distinct from invite code, client-set, high-entropy, rotatable, never cleartext.
-- [ ] Step-up assertions for `share.open`/`gameplan.publish`/`key.rotate`/`revoke`, **bound to the live session id**.
-- [ ] Capability/inbox token bound to the authenticated credential at first fetch; no single-factor bearer fetch.
-- [ ] Opaque server-side sessions; 15 min idle / 8 h absolute; per-session CSRF token; instant revocation.
-- [ ] Invite redemption uses **capped backoff** (NOT burn-after-5), unguessable `inviteId`s, no-referrer enroll pages.
-
-**Shares / DoS / metadata / integrity**
-- [ ] Share = materialized curated subset (crypto-enforced minimization); PHQ-9 self-harm item structurally absent; check-ins carry scores/bands only.
-- [ ] Server enforces expiry + revoke on GET (honest-server scope only; re-keying = real revocation).
-- [ ] Thin in-memory therapist viewer (no default disk cache).
-- [ ] Bounded server retention: TTL + hard-delete of superseded/expired blob bytes.
-- [ ] **Size-bucket padding ON BY DEFAULT for all blob types**; `recipientFp`/owner fp out of query strings (opaque inbox tokens).
-- [ ] Per-token storage quota + disk-full fail-closed; server-derived `blob_path` (strict charset); server-side content hashing (client hash untrusted); version/lineage caps; prune only after newer durable version confirmed.
-- [ ] **Client-anchored anti-rollback:** Ed25519 hash-chained manifest verified vs local trust watermark; server chain checks are DoS hygiene only.
-
-**Audit**
-- [x] Events not content; owner-readable; opaque per-relationship token (not fp/name); IP **off by default**; short retention. — shipped (Track T1), see [§9](#9-audit-logging-posture).
-- [x] Monotonic sequence / hash-chain on entries — shipped, **server-computed, not therapist-signed**; the "access cannot be hidden" claim stays dropped for withholding (see [§9](#9-audit-logging-posture)).
-
-**Product boundary**
-- [ ] Therapist viewer + game-plan UI carry the same "self-check, not a diagnosis; scores are not clinical thresholds" framing as the app.
-- [x] PRIVACY.md/SECURITY.md retract "no server, so no server-side surface" for the Sync flavor; flagship F-Droid build remains provably network-free (no `INTERNET`).
-
----
-
-## 11. Out of scope / honest limits
-
-- **Endpoint compromise is out of the server threat model.** A compromised owner phone
-  or therapist device defeats all of this — endpoint security is the user's
-  responsibility (same posture as the flagship).
-- **No PFS on sealed boxes (R2).** One compromise of a recipient long-term X25519 key
-  (therapist for shares, owner for game plans) retroactively decrypts **every** blob
-  ever sealed to it. CEK rotation does **not** mitigate this — all versions are sealed
-  to the same long-term key. **Bounded server retention** (TTL + hard-delete) makes the
-  harvest-now-decrypt-later window finite; it does not make it zero.
-- **Revocation is honest-server-scoped (R3).** Three honest guarantees: (1) future
-  server-mediated fetches are blocked **on an honest server**; (2) data published
-  **after** therapist re-key is unreadable to the old key; (3) already-decrypted
-  plaintext is never recallable (like handing someone a PDF). A
-  malicious/colluding server can still serve an already-pushed (even not-yet-decrypted)
-  share to the unrotated therapist key. **Real future-data revocation requires therapist
-  re-keying.**
-- **The browser portal is NOT zero-knowledge against a malicious server (R5).** Anyone
-  who types the passphrase (owner) or unlocks the reading key (therapist) in the
-  server-served portal is exposed; the deterministic PRF-KUK makes a single tampered-JS
-  capture a permanent therapist break. Native-only owner secrets, a pinned/installed or
-  OOB-pinned therapist client, and rotatable `prfSalt` are the answers. SRI is **not** a
-  defense here.
-- **Anti-rollback is client-only (R6).** Server chain checks guarantee nothing; only the
-  signed manifest + local watermark do.
-- **v1 sync is single-writer last-snapshot-wins (R11).** No concurrent multi-device row
-  editing; true merge is gated behind a deferred UUID+`updatedAt` migration.
-- **Metadata leakage is inherent but minimized, not "harmless."** Padding +
-  per-relationship inbox tokens + IP-off-by-default reduce caseload re-identification,
-  acuity proxies, and withdrawal de-anonymization, but cannot fully hide the existence
-  and cadence of a relationship on a self-hosted box.
-- **TOTP is a weaker parallel custody path.** It places a phishable, server-stored
-  **cleartext** authenticating secret on the box, breaking "server holds nothing that
-  authenticates." A server breach therefore yields the ability to mint valid codes for as long
-  as the credential lives — not a hash an attacker must first crack. Rotation is the only
-  remedy; there is no hashing option, because the verifier needs the seed. `signCount` regression and synced-passkey (`signCount=0`)
-  clone-detection are not reliable for cloud-synced credentials.
-- **Audit suppression is undetectable until the chain ships (R12).** Forgery is
-  prevented; silent omission is not, absent the signed monotonic sequence.
-- **No escrow / no recovery by design (O6).** Lost passphrase → blobs unrecoverable
-  (phone-local fallback); lost therapist key → re-invitation + re-pair + re-wrap.
-- **One therapist, one keypair, one device.** Multi-therapist / multi-device fan-out
-  and a therapist dashboard are out of scope; the owner is the sole root of trust.
-- **Non-diagnostic by *framing*, not by construction.** Free-text game-plan bodies can
-  contain diagnostic/medication content the schema cannot constrain, so the guarantee is
-  downgraded to **non-diagnostic by framing**: the therapist viewer and game-plan UI
-  carry explicit "this is guidance from your real clinician; the app is not practicing
-  medicine; scores are self-checks, not clinical thresholds" disclaimers. The synced
-  bundle keeps item-9 / self-harm scoring **structurally absent.** The Sync flavor's
-  owner→therapist plaintext egress to a third human party is stated honestly here and in
-  [../PRIVACY.md](../PRIVACY.md) / [../SECURITY.md](../SECURITY.md) (R8).
-- **The CI egress=0 test covers the shipped image only**, not the operator's runtime
-  compose (R7).
-
----
-
-## Related documents
-
-- [COMPANION_SCOPE.md](COMPANION_SCOPE.md) — purpose, roles, in/out of scope, honest limits.
-- [COMPANION_ARCHITECTURE.md](COMPANION_ARCHITECTURE.md) — sync model, blob store, manifest, DB v13.
-- [COMPANION_THERAPIST.md](COMPANION_THERAPIST.md) — pairing/enrollment, sharing, game plans (`game_plans` table).
-- [COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md) — Docker/Compose, network topology, reverse-proxy config.
-- [../PRIVACY.md](../PRIVACY.md) · [../SECURITY.md](../SECURITY.md) · [../HANDOFF.md](../HANDOFF.md) — flagship privacy/security posture and the non-diagnostic prime directive (§0).
+| # | Earlier claim | What is true |
+|---|---|---|
+| R1 | AES-256-GCM is an equivalent for sync | Removed: random 96-bit nonces under one long-lived key risk reuse. XChaCha20-Poly1305 everywhere. |
+| R2 | A sealed box gives forward secrecy | False: it gives sender anonymity only (§11). |
+| R3 | Rotating content keys defeats a colluding server's revocation | Retracted: revocation binds an honest server only; re-keying is the real revocation. |
+| R4 | A sealed box authenticates the owner | False: the owner signs every share and the clinician verifies against the pinned key before rendering. |
+| R5 | SRI and CSP make the browser consoles zero-knowledge | False: they are a lower-assurance path (§3 T3). |
+| R6 | Server-side version chains give anti-rollback | Retracted: only a signed manifest checked against a local watermark does (§8). |
+| R7 | `internal: true` enforced "no egress" in the original topology | False then: the app shared an egress-capable network with the proxy. What holds now is in §6. |
+| R8 | "No server, so no server-side surface" | False for the `sync` build and the Companion. |
+| R9 | Trust `172.16.0.0/12` as the default proxy range | Removed: the default trusts nothing (§7). |
+| R10 | Game plans land in the phone's `treatments` table | Removed: `treatments` is owner-authored and non-evaluative. Game plans get their own table when the phone side is built (#138). |
+| R11 | A three-way, row-level merge with per-row timestamps | Not implementable: sync is single-writer, last-snapshot-wins (§8). |
+| R12 | Clinician-signed attestations make access impossible to hide | Partly retracted: a server-computed chain makes tampering detectable, not withholding (§9). |

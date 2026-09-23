@@ -1,548 +1,535 @@
 # Daymark User Guide
 
-Welcome to **Daymark** — a free, private mood tracker and journal for Android.
+Welcome to **Daymark**, a free, private mood tracker and journal for Android.
 
-Daymark helps you notice how your days feel. You log a mood, tag what you did,
-write a little about *why*, and over time watch patterns appear in the calendar
-and stats. Everything stays **on your device** — there are no accounts, no
-servers, and no tracking. Nothing leaves your phone unless *you* choose to
-export it.
+Daymark helps you notice how your days feel. You log a mood, tag what you did and who you were
+with, write a little about *why*, and over time see patterns appear in Insights and in your sky.
+Everything stays **on your device**: there are no accounts, no servers and no tracking. Nothing
+leaves your phone unless *you* export it.
 
-This guide walks through everything the app can do, one task at a time.
+This guide walks through what the app can do, one task at a time. Daymark is not a medical device:
+its self-checks, sleep and breathing features and support are for your own reflection, not a
+diagnosis or treatment.
 
 ---
 
 ## Getting started
 
-1. Install Daymark (see the FAQ if you get an "unknown app" warning).
-2. Open the app — you'll land on **Home**, which asks *"How are you, right now?"*
-3. Tap a face to log your first mood — or the **Entry** button for the full
-   editor, if you want to add a note, activities or a photo straight away.
+1. Install Daymark (see the [FAQ](FAQ.md) if you get an "unknown app" warning).
+2. The first time you open it, a short setup offers a daily reminder and a PIN. Both are optional,
+   and both can be changed later.
+3. You land on **Home**, which asks *"How are you, right now?"* Tap a face to start your first entry.
 
-That's it. There's no sign-up and nothing to configure before you begin. You can
-explore the bottom navigation any time: **Home**, **Journal**, **Calendar**,
-**Stats**, and **Settings**.
+The bar at the bottom has five places: **Insights**, **Journal**, **Home** (the round button in the
+middle), **Goals** and **More**. More holds everything else, including **Settings**.
 
 ---
 
 ## Logging a mood
 
-Your mood is the heart of Daymark. You can log as many entries per day as you
-like.
+You can log as many entries a day as you like.
 
-**The fastest way** is the check-in row at the top of **Home**, under *"How are
-you, right now?"* — tap a face and the entry editor opens with that mood already
-picked, so you can save immediately or add a note first.
+**The quickest way** is the row of faces on Home. Tap one and the entry editor opens with that mood
+already picked, so you can save straight away or add more first.
 
-**To log a mood with everything filled in:**
+**To fill in everything:**
 
-1. From **Home**, tap **+** to open the entry editor.
-2. Pick how you feel from the 5-level scale: **Awful, Bad, Meh, Good, Rad**.
-3. (Optional) Adjust the **date and time** if you're logging for an earlier moment.
-4. (Optional) Tag any **activities** you did (see below).
-5. (Optional) Write a short **note** under *"Why do you feel this way?"*.
-6. (Optional) **Add a photo** (see below).
-7. Tap **Save**.
-
-Your entry appears under **Today** on Home. Everything you've ever logged lives
-under **All entries**, newest first — Home links to it at the bottom.
+1. On Home, tap **Entry**.
+2. Pick how you feel: **Awful, Bad, Meh, Good, Rad**.
+3. (Optional) Change the **date and time** if you're logging an earlier moment.
+4. (Optional) Tag **activities** under *"What have you been up to?"*.
+5. (Optional) Pick who you were with under *"Who were you with?"* (see *People and communities*).
+6. (Optional) Write a **note** under *"Why do you feel this way?"*.
+7. (Optional) **Add a photo**.
+8. Tap **Save**.
 
 ### What's on Home
 
-Home is the daily loop, not an archive. Top to bottom:
+Home is for today, not an archive. From the top:
 
-- **A greeting and today's date.**
-- **The check-in row** — *"How are you, right now?"* Tap a face to log in one tap.
-- **A glance** — how many entries you've written, and the last seven days as seven
-  small bars (an unlogged day shows as a faint stub; a week is allowed to have holes
-  in it). Home doesn't keep a count of how recently you've been here.
-- **One suggestion**, at most — the rest are under **More for you**, along with
-  your *"on this day"* memories. Every card can be dismissed.
-- **Today** — the entries you've logged today.
-- **More for you** and **All entries** — the two ways onward.
+- **The check-in row**: *"How are you, right now?"* Tap a face to start an entry with that mood.
+- **A glance**: how many entries you've written, and the last seven days as small bars. A day you
+  didn't log shows as a faint stub; a week is allowed to have holes in it. Home doesn't count how
+  many days in a row you've been here.
+- **One suggestion**, at most. The rest are under **More for you**, with your *On this day*
+  memories.
+- **Today**: the entries you've logged today.
+- **More for you** and **All entries**, the two ways onward. All entries is everything you've ever
+  logged, newest first.
+
+The search button at the top of Home looks through your entry notes. The Journal has its own search.
+
+### Reading an entry
+
+Tap any entry, anywhere in the app, and it opens on its own page: the mood word you chose, your
+activities, who you were with, your note and your photo. The page shows what you wrote and never
+comments on it. To change the entry, tap the pencil. **Mark this day** adds a life event on that
+entry's date (see *Your sky and life events*).
 
 ### Turning suggestions down, or off
 
 Every suggestion card has a **⋮** menu with five choices:
 
-- **Not right now** — it steps aside for this visit only. Nothing is remembered,
-  and it's back next time.
-- **Show less like this** — it drops down the running order and steps back for
-  three days.
-- **Remind me in a few hours** — it goes quiet for four hours.
-- **Not helpful — hide it** — it goes quiet for a month.
-- **Turn this suggestion off** — it stops entirely until you say otherwise.
+- **Not right now**: it steps aside for this visit only, and is back next time.
+- **Show less like this**: it moves down the order and steps back for three days.
+- **Remind me in a few hours**: it goes quiet for four hours.
+- **Not helpful — hide it**: it goes quiet for a month.
+- **Turn this suggestion off**: it stops until you turn it back on.
 
-All but "Not right now" are remembered — they survive closing the app.
-**Settings → Suggestions**
-lists every kind of suggestion under *On* and *Off*, tells you when a snoozed one
-comes back ("Snoozed · back in 2h"), and can bring it back right away. Turning
-one back on clears everything holding it back, so it can never be switched on and
-still invisible.
+All but "Not right now" are remembered. **Settings → Suggestions** lists every kind of suggestion
+under *On* and *Off*, tells you when a snoozed one comes back ("Snoozed · back in 2h"), and can bring
+it back right away. Turning one back on clears everything holding it back.
 
-Nothing is learned from what you tap. "Show less" subtracts a fixed amount from
-that suggestion's rank — the same amount, every time, for everyone.
-
-Three things stay put: the **check-in row** on Home (that's how you log, not a
-nudge), the **"what might help"** menu (you open that on purpose, so nothing
-there is pushed at you), and **crisis resources**, which stay reachable whatever
-you set here.
+Nothing is learned from what you tap. "Show less" moves a suggestion down by the same fixed amount
+every time, for everyone. Three things stay put: the check-in row on Home (it's how you log), the
+*"what might help"* menu (you open it on purpose), and crisis resources.
 
 ### Adding a photo
 
-You can attach one photo to a mood entry — a sunset, a meal, whatever marked the
-moment.
+You can attach one photo to an entry.
 
 1. In the entry editor, tap **Add photo**.
-2. Pick an image with the **Android Photo Picker**. Daymark doesn't need any
-   storage or media permission for this — the picker hands over just the one
-   image you choose.
-3. A thumbnail appears with a remove button; tap it to drop the photo.
+2. Pick an image with the **Android Photo Picker**. Daymark needs no storage or media permission for
+   this; the picker hands over only the image you choose.
+3. A thumbnail appears with a remove button.
 
-The photo is shrunk down and copied into Daymark's private storage, so it stays
-on your device. Thumbnails show under **All entries** and on a day's detail view,
-and photos are included when you export a JSON backup.
+Daymark keeps a smaller copy in its own private storage. Making that copy removes the photo's
+location and other hidden details. Photos show under **All entries** and on the entry's page, and
+they're included in a backup.
 
 ### Deleting an entry
 
-You can swipe an entry away under **Today** on Home or under **All entries** —
-but never by accident. Three things have to happen:
+You can swipe an entry away on Home or under **All entries**, but never by accident:
 
-1. **Swipe it left, and keep going.** The background stays muted and says *"Keep
-   swiping"* until you've dragged most of the row across; only then does it turn
-   and read *"Release to delete"*. A quick flick can still raise the question,
-   but the swipe by itself never removes anything.
-2. **Confirm.** A dialog asks *"Delete this entry?"* — choose **Keep it** and
-   nothing happens.
-3. **Undo, if you change your mind.** A 5-second **Undo** snackbar appears — tap
-   **Undo** to bring the entry back, with its activities intact. If you don't,
-   the entry and any photo on it are removed.
+1. **Swipe it left, and keep going.** It says *"Keep swiping"* until you've dragged most of the row
+   across; only then does it read *"Release to delete"*. A quick flick can still bring up the
+   question, but the swipe by itself never removes anything.
+2. **Confirm.** A dialog asks *"Delete this entry?"*. Choose **Keep it** and nothing happens.
+3. **Undo, if you change your mind.** An **Undo** button appears for a few seconds and brings the
+   entry back with its activities and people. If you let it go, the entry and any photo on it are
+   removed.
 
-You can also delete the entry you're editing from the 🗑 button in the entry
-editor. That one asks for confirmation too, but there's **no undo** behind it —
-it says so in the dialog.
+You can also delete an entry from its editor. That asks too, and says there's **no undo** behind it.
 
-### Mood note vs. Journal — what's the difference?
+### Mood note or Journal?
 
-This trips people up, so here's the simple version:
+- A **mood note** is the *"why"* on one entry: a sentence or two about that moment. It shows up in
+  your CSV export next to the mood and activities.
+- The **Journal** is a separate diary. Journal pages have a **title** and a longer **body**, and
+  they aren't tied to a mood.
 
-- A **mood note** is the *"why"* attached to a single mood entry. It answers
-  *"Why do I feel this way right now?"* — a sentence or two of context for that
-  moment. It lives with the mood and shows up in your CSV export alongside the
-  mood and activities.
-- The **Journal** is a *separate*, free-form diary. Journal entries have a
-  **title** and a longer **body**, and they are **not** tied to a mood. Use the
-  journal for longer reflections, gratitude lists, to-dos, or anything that
-  doesn't fit a single mood note.
+Think of the mood note as a caption and the Journal as the diary.
 
-Think of it this way: the **mood note** is a caption; the **Journal** is the
-diary.
+### On this day
+
+When you've been using Daymark for more than a year, **More for you** shows what you logged on
+today's date in earlier years. You can snooze it or turn it off like any suggestion.
 
 ---
 
-## Using activities
+## Activities
 
-Activities are tags for what you were doing or what was going on — like
-*Exercise*, *Work*, *Friends*, or *Sleep*. Over time they power your stats (so
-you can see, for example, which activities tend to go with your better days).
+Activities are tags for what you were doing: *Exercise*, *Work*, *Friends* and so on. Over time
+they show which activities tend to go with your better days.
 
-**To tag activities on an entry:**
+- **To tag an entry**, tap the chips under *"What have you been up to?"*. Tap again to unselect.
+- **To manage them**, go to **More → Activities** (or **Settings → Manage activities**). You can add
+  your own, pick from a **library** of about a hundred, rename them, change their icon, and
+  **archive** the ones you no longer use. Archived activities stay on your past entries.
 
-1. In the entry editor, find **"What have you been up to?"**.
-2. Tap any activity chips that apply — tap again to unselect.
-3. Save the entry as usual.
+---
 
-**To manage your activities:**
+## People and communities
 
-1. Go to **Settings → Manage activities**.
-2. Add, rename, reorder, or archive activities here.
+You can note who you were with, and keep a page about each person or community in your life.
 
-Archived activities stay attached to your past entries but won't clutter the
-list when you log something new.
+- **To add someone**, use *"Who were you with?"* in the entry editor, or **More → People and
+  communities**. Put them in a group (friends, family, partners, communities, other). Groups only
+  sort the list.
+- **A person's page** holds a line about who they are to you, notes you write about them over time,
+  and the entries that name them. It's all in your own words.
+- **Archive** someone to take them out of the picker. Their page, notes and entries stay.
+
+Daymark never puts people next to your moods, and never asks why you haven't mentioned someone.
+
+**Sharing** is off for everyone. **More → People and communities → Sharing with a clinician** lets
+you choose, by group or person, for when Daymark can share with a clinician. Today the app sends
+nothing anywhere, and no report includes people.
 
 ---
 
 ## The Journal
 
-The journal is your free-form diary, kept separate from mood notes.
+1. Open the **Journal** tab and tap **Write**.
+2. Add a **title** and write your **body**.
+3. Save.
 
-**To write a journal entry:**
+Use the **search** on the Journal screen to find old pages.
 
-1. Open the **Journal** tab.
-2. Tap **+** to start a new entry.
-3. Add a **title** and write your **body** text.
-4. Save.
+If a blank page is hard, a new page offers optional starters:
 
-**To find an old entry:**
+- **Three good things**: three things that went well, and why.
+- **Expressive writing**: write freely about what's weighing on you, for about fifteen minutes. It
+  shows a note that this can stir up hard feelings, with a link to crisis resources.
+- **Reflect on the day**: a few end-of-day questions.
 
-- Use the **search** on the Journal screen to look through your journal entries
-  by their text.
-
-### Writing templates (optional starters)
-
-If a blank page is hard, a fresh journal entry offers a few optional starters:
-
-- **Three Good Things** — jot down three things that went well (a gratitude
-  exercise).
-- **Expressive Writing** — a timed prompt for writing freely about something on
-  your mind. It shows a gentle note that this may surface hard feelings, with a
-  link to support.
-- **Reflect on the day** — a simple end-of-day prompt.
-
-Pick one to pre-fill the entry, then write in your own words — or ignore them and
-start from scratch.
+Pick one to fill in the page, then write in your own words, or ignore them.
 
 ---
 
-## Calendar & Year in Pixels
+## Insights
 
-The **Calendar** shows your moods at a glance.
+The **Insights** tab turns your entries into summaries. A **Week / Month / Year** switch sits at the
+top.
 
-- **Month view:** each day is tinted with the color of its mood, so a glance
-  shows you how the month is going. Warmer reddish tones lean toward tougher
-  days; greener tones lean toward better ones.
-- **Year in Pixels:** from the calendar, jump to the year view to see all 365
-  days as a grid of colored squares — a beautiful, big-picture look at your year.
+- **Entries** and **Avg mood** for everything you've logged.
+- **Days with an entry**, e.g. *12 of the last 30*. The days don't have to be in a row, so missing
+  one costs you that day and nothing else. If there are none in the last thirty days, the card isn't
+  there.
+- **Week** shows this week as bars. **Month** is a calendar where each day takes the colour of its
+  mood; tap a day to see its entries. **Year** shows the year as stars or as a grid of coloured
+  squares, and leads to **Review my year**, a short walk through the year, quarter by quarter. In
+  the calendar and the grid, a day with no entry is left plain.
+- **Mood over the last 30 days**, **mood distribution** and **average mood by activity**.
+- **What goes with your mood**: activities and trackers that tend to come with higher or lower
+  moods. An activity needs to be on at least five entries, and a tracker needs two weeks of values.
+  It shows association, not cause.
+- **By day of week**, **by time of day**, and **this week, month or year against the last**.
+- **In review**, a short summary, and **Logging consistency**, a heatmap of how many entries you
+  made each day.
 
-Days with no entry simply stay blank.
-
----
-
-## Reading your Stats
-
-The **Stats** tab turns your entries into a few friendly summaries:
-
-- **Average mood** — your overall mood score.
-- **Days with an entry** — e.g. *12 of the last 30*. The days don't have to be in
-  a row, so missing one costs you that day and nothing else. If there are none in
-  the last thirty days, the card simply isn't there.
-- **Mood over the last 30 days** — a trend line of how things have been going.
-- **Mood distribution** — how often each mood level shows up.
-- **Average mood by activity** — which activities tend to accompany your better
-  (or harder) days.
-
-You'll need a few entries logged before the stats have much to show.
+You'll need a few entries before there's much to show.
 
 ---
 
-## Setting Goals
+## Your sky and life events
 
-Goals are simple weekly habit targets — for example, *"Exercise 5× a week."*
+**More → Your sky** shows everything you've done as stars in a night sky: each mood entry, journal
+page, practice you used, project step, goal you marked reached and life event. A star's colour shows
+how long ago it was; the glow around a mood entry's star shows its mood. Days you didn't log are simply
+dark, never drawn as missing.
 
-**To create a goal:**
+- Pinch to zoom, and tap a star to see what it was. **Fit the whole sky** brings everything back
+  into view. **List** shows the same things as a list, which also works with a screen reader.
+- **Quiet sky**, **Field** and **Motion** change how it's drawn. Motion starts switched off if your
+  phone's "Remove animations" setting is on.
 
-1. Go to **Settings → Goals** (or the **Goals** screen).
-2. Tap **+** to add a goal.
-3. Give it a **title**, optionally link it to an **activity**, and set a
-   **target per week**.
-4. Save.
-
-If you link a goal to an activity, Daymark counts how many times you've tagged
-that activity this week and shows your **progress** toward the target. Goals you
-no longer want can be archived.
-
-### Implementation intentions ("when X, I will Y")
-
-When editing a goal you can add an optional **"when [cue], I will [routine]"**
-plan — for example, *"when I finish breakfast, I will go for a 10-minute walk."*
-Tying a new habit to an existing cue is a simple, well-evidenced way to follow
-through. Leave the fields blank to skip it; existing goals are unaffected.
+**Life events** are your own marks on your history, such as a move or a new job: one day and a few
+words. Add one from **Life events** on the sky, or with **Mark this day** on an entry's page.
+Nothing is ever added for you.
 
 ---
 
-## Wellbeing skills (More)
+## Goals and projects
 
-The **More** screen gathers a set of optional, self-help skills. None of these is
-treatment or a diagnosis, and — like everything in Daymark — nothing leaves your
-device.
+Open the **Goals** tab (or **Settings → Goals**) and tap **New goal**. A goal is one of two kinds:
 
-### Check-ins (PHQ-9 / GAD-7 / WHO-5)
+- **Weekly habit**, e.g. *"Exercise 3× a week"*. Pick the activity it tracks and a target per week.
+  Its progress counts the days this week with an entry tagged with that activity: *"3× per week · 2
+  of 3 done"*.
+- **Project**, a goal made of concrete steps. Add steps, then move them between **To do**, **Doing**
+  and **Done**. It shows *"3 of 7 steps done"*. There are no due dates.
 
-Three short, widely-used wellbeing self-checks you can take whenever you like.
+Any goal can have an optional **if-then plan**: *"When I finish breakfast, I will go for a
+10-minute walk."* Tying a new habit to something you already do is a simple, well-evidenced way to
+follow through.
+
+**Reached is yours to say.** Daymark never decides a goal is reached, even when every step is done.
+Turn on **Reached** when you feel it is, and turn it off again if you change your mind. A reached goal
+becomes a star in your sky. A goal you no longer want can be **archived**. That isn't counted as
+anything.
+
+---
+
+## Trackers
+
+**More → Trackers** lets you track anything next to your mood: a **scale** (like energy from 1 to
+5), a **number** with a unit (like glasses of water), or **yes / no** (like "took my meds"). Tap a
+tracker to log a value and see its history. After a couple of weeks, trackers appear in Insights
+under *What goes with your mood*. Do one thing and Move keep their own trackers for you.
+
+---
+
+## Customising your moods
+
+**Settings → Customize moods** lets you rename and recolour the five moods. Your names and colours
+show up everywhere, including the widget and the CSV export, and your past entries keep their place.
+
+---
+
+## Wellbeing skills
+
+**More** has a set of optional self-help skills. None of them is treatment or a diagnosis, and
+nothing leaves your device.
+
+### Check-ins (PHQ-9, GAD-7, WHO-5)
+
+Three short, widely used wellbeing self-checks.
 
 1. Open **More → Check-ins** and pick one.
-2. Answer the questions; Daymark shows your **score and band** and a small
-   **trend** of past scores.
+2. Answer the questions. Daymark shows your **score and band**, and a small **trend** of past scores.
 
-Only the score and band are saved — **not** your individual answers. These are
-**non-diagnostic** self-checks, not a clinical assessment. If the PHQ-9 self-harm
-question is anything other than "not at all", Daymark gently shows the offline
-crisis resources — it never makes a risk judgment about you. (Source/license
-details are in [INSTRUMENTS.md](INSTRUMENTS.md).)
+Only the score and band are saved, **not** your answers. If the PHQ-9 question about hurting
+yourself is anything other than "not at all", Daymark gently offers the crisis resources. It never
+makes a judgement about you. (Sources and licences: [INSTRUMENTS.md](INSTRUMENTS.md).)
 
-### Thought records (CBT)
+### Thought records
 
 A guided way to step back from an upsetting thought.
 
 1. Open **More → Thought records** and tap **+**.
-2. Note the **situation** and the **automatic thought**, optionally tag any
-   **thinking traps**, list **evidence for and against**, then write a more
-   **balanced thought**.
-3. Set your **mood before and after** to see whether anything shifted.
+2. Note the **situation** and the **automatic thought**, optionally tag any **thinking traps**,
+   list **evidence for and against**, then write a more **balanced thought**.
+3. Set your **mood before and after**.
 
-It's a reflection tool, not a verdict.
+### Do one thing
 
-### Do one thing (behavioral activation)
+A small, doable plan for a low day.
 
-A small, doable plan for low days.
-
-1. Open **More → Do one thing**.
-2. Pick a small activity (a suggestion or your own), optionally set a reminder.
-3. Afterwards, rate how much you **enjoyed** it and your sense of
-   **accomplishment** (mastery).
-
-Those ratings log to trackers, so they show up against your mood in Insights.
+1. Open **More → Do one thing** and pick something small (one of the ideas, or your own).
+2. Optionally set a reminder.
+3. Afterwards, rate how much you **enjoyed** it and your **sense of accomplishment**. These go to
+   trackers, so they show up against your mood.
 
 ### Move
 
-Gentle yoga/stretch and bodyweight interval routines you can follow with the
-phone face-up.
-
-1. Open **More → Move** and pick a routine.
-2. Follow the **hand-drawn pose figures** and the timer; a **vibration** cues each
-   step (and a double buzz at the end), so it works even with your eyes closed.
-
-Each finished session logs to a **"Movement minutes"** tracker, so movement shows
-up alongside your mood in Insights. There's no video and no network involved.
+Gentle stretches and bodyweight routines. Open **More → Move**, pick a routine, and follow the
+drawn figures and the timer. A **vibration** marks each step, and a double one the end, so it works
+with your eyes closed. Each session is logged as **Movement minutes**.
 
 ### My safety plan
 
-A few short lists you write **while things are steady**, so that a harder moment
-doesn't have to start from a blank page.
+A few short lists you write **while things are steady**, so a harder moment doesn't have to start
+from a blank page.
 
 1. Open **More → My safety plan**.
 2. Fill in as much or as little as you like:
-   - **Warning signs I notice** — what it looks like when things start to slip.
-   - **Things that help** — what has actually worked before.
-   - **People I can reach** — a name, and optionally who they are.
-3. There's a fourth, **optional** section — *"Reasons I want to stay"*. It isn't
-   there unless you ask for it, because a blank one sitting on the screen is the
-   last thing anyone needs on a bad day. Tap the card to add it.
+   - **Warning signs I notice**: what it looks like when things start to slip.
+   - **Things that help**: what has worked before.
+   - **People I can reach**: a name, and optionally who they are.
+3. There's a fourth, **optional** section, *"Reasons I want to stay"*. It isn't there unless you
+   ask for it, so a blank one never sits on the screen on a bad day. Tap the card to add it.
 
-There's no "save" step and no separate read mode — it's the same screen either
-way, so in a hard moment you don't have to go looking for an edit button. Tap the
-**✕** on any line to take it back out.
+There's no save button and no separate read mode, so in a hard moment you don't have to look for an
+edit button. Tap **✕** on a line to remove it.
 
-At the bottom is your **crisis line**. It starts as 988 (US) and you can change
-it to your own local line under **"Take a moment" → crisis resources**; whatever
-you save shows up here. Tapping it opens your saved resource — **Daymark can't
-call for you and isn't a crisis service.** A plan is not a person, and reaching
-one is the point.
+At the bottom is your **crisis line**. It starts as 988 (US); change it to your local line under
+**More → Gentle support → Crisis resources**. Tapping it opens the crisis screen. **Daymark can't
+call for you and isn't a crisis service.** A plan is not a person, and reaching one is the point.
 
-Where it shows up: under **More**, and as a quiet row inside **"Take a moment"**
-— but only once you've actually written something, since a link to an empty plan
-in a hard moment would be worse than no link at all. It is **never** suggested by
-a card on Home; nothing in the app decides from your mood that you need it.
+The plan appears under **More**, and as a quiet row in **Take a moment** once you've written
+something in it. It's never suggested by a card on Home: nothing in the app decides from your mood
+that you need it.
 
-> **What this is.** It's written in our own words and marked **Adapted** — it
-> draws on the general idea of safety planning, but it isn't the standard
-> clinical form, isn't validated, and isn't for diagnosis. It also never asks you
-> about means or methods. Write whatever you want in your own words; the app
-> simply doesn't prompt for that.
+> **What this is.** It's written in Daymark's own words and marked **Adapted**. It draws on the
+> general idea of safety planning, but it isn't the standard clinical form, isn't validated and
+> isn't for diagnosis. It never asks about means or methods.
 
-Everything stays on your phone and is included in your backups.
+It's included in your backups, and never leaves your phone otherwise.
 
 ---
 
-## Breathing pacer presets
+## Take a moment
 
-In the **"Take a moment"** support flow, the **breathing pacer** lets you pick a
-cadence:
+**Take a moment** is a calm space for a hard moment. It starts by acknowledging how you're doing,
+then offers a few gentle options: move a little, breathe, untangle a thought, write it out, do one
+small thing, your safety plan (once you've written one), and crisis resources. **Not right now** is
+always there, and choosing it is fine.
 
-- **Slow (~6 breaths/min)** — the gentle default.
-- **Box (4·4·4·4)** — equal in, hold, out, hold.
-- **4·7·8** — a longer exhale pattern.
+You can reach it:
 
-Each uses gentle in/out haptics so you can pace your breathing without watching
-the screen. It's a relaxation aid, not a medical treatment.
+- from the *"Want to take a moment?"* suggestion that can appear after you log Awful or Bad;
+- from **More → Gentle support → Preview it**;
+- and, if you turn on **Gentle support**, from a quiet **Take a moment** button that appears at the
+  top of the entry editor when you pick Awful or Bad. It just sits there; ignoring it costs nothing,
+  and it never moves you or interrupts your typing.
+
+### Gentle support settings
+
+**More → Gentle support** is off until you turn it on. Once it's on, **Being taken there** lets you
+choose whether Daymark may open the support space for you after you save a hard day:
+
+- **Never taken there** (the button is still in the corner if you want it)
+- **At most once a day** (the starting choice)
+- **At most once a week**
+- **Every time you log a hard day**
+
+Daymark never takes you there more often than you chose.
+
+### Breathing
+
+**Breathe with me** in Take a moment opens a breathing pacer with three rhythms:
+
+- **Slow (about 6 breaths a minute)**, the gentle default;
+- **Box (4·4·4·4)**: in, hold, out, hold;
+- **4·7·8**: a longer breath out.
+
+Gentle vibrations mark in and out, so you can follow it without watching the screen. It keeps true
+time even if you've turned animations off.
+
+### Crisis resources
+
+The crisis screen shows one resource, which starts as the **988 Suicide & Crisis Lifeline (US)**.
+Change it to your local line with **Use a different number**, or under **More → Gentle support →
+Crisis resources**. It's stored on your phone, so it works offline. If you're in immediate danger,
+call your local emergency number.
+
+---
+
+## Sleep check-ins
+
+**More → Sleep check-ins** gathers Daymark's sleep tools. They're self-checks, not a diagnosis:
+they can flag signs worth raising with a clinician, but they can't rule anything in or out, and
+Daymark will never tell you that you're fine.
+
+- **Sleep diary.** Tap **Log last night** and give rough times: when you got into and out of bed,
+  about how long it took to fall asleep, how long you were awake, and how the night was. After about
+  a week of nights, Daymark shows your average sleep and sleep efficiency.
+- **Sleep and mood.** Your average mood the day after better and rougher nights: a pattern, not
+  proof of cause.
+- **Self-checks** for sleep apnea signs, restless legs and insomnia signs.
+- **Treatments.** Mark the date something changed (CPAP, surgery, an oral appliance, positional
+  therapy, a medication, or something else) and compare your own sleep and mood before and since.
+  It shows what changed, not why, and it isn't a measure of whether a treatment works.
+- **Sleep setup.** A few questions about a bed partner, pets, noise and where your phone sits,
+  saved for sleep features to come.
+- **Breathing check (experimental).** Lie still with the phone flat on your chest for one to three
+  minutes. It uses the phone's motion sensor, not the microphone, and records nothing; it shows an
+  estimate of your breathing rate and flags any pauses. It isn't an apnea test.
 
 ---
 
 ## Reminders
 
-Gentle, optional notifications can nudge you to check in. You can set up **as
-many reminders as you like** — for example a morning and an evening nudge — each
-with its own time and label.
-
-**To add a reminder:**
+Optional notifications can remind you to check in. You can have **as many as you like**, each with
+its own time and label.
 
 1. Go to **Settings → Reminders**.
-2. Tap **Add reminder** (on Android 13+ you'll be asked to allow notifications
-   the first time).
-3. Pick a **time**, and optionally give it a **label** (e.g. "Morning check-in").
+2. Tap **Add reminder** (Android 13 and later ask to allow notifications the first time).
+3. Pick a **time**, and optionally a **label** (e.g. "Morning check-in").
 
-Each reminder has its own **on/off toggle**, and you can edit its time or label
-or **delete** it at any time. Daymark aims to deliver each one at the exact time
-you picked, and re-schedules them all automatically after you restart your phone.
-
-**Quick-log from a notification:**
-
-- Tapping a reminder notification — or its **Log now** action — opens a fresh
-  mood entry straight away, so you can check in without hunting for the app.
-
-> If you used a single daily reminder in an older version, it's moved into this
-> list automatically when you upgrade.
+Each reminder has its own **on/off switch**, and you can change or delete it any time. Daymark aims
+to deliver each at the exact time you picked, and sets them all again after your phone restarts.
+Tapping a reminder, or its **Log now** button, opens a new entry. Daymark never quietens a reminder
+you set because you didn't answer it.
 
 ---
 
 ## Your entries on this device
 
-Daymark encrypts your journal on your phone. It does this for everyone, from the
-first time you open the app — you don't turn it on and there is nothing to
-remember. The key is made on your phone and kept in the phone's own secure
-hardware, where it can't be copied off. Someone who took a copy of Daymark's
-storage would get a file they can't read.
+Daymark encrypts your journal on your phone, for everyone, from the first time you open it. You
+don't turn it on and there's nothing to remember. The key is made on your phone and kept in its own
+secure hardware, where it can't be copied off, so someone who copied Daymark's storage would get a
+file they can't read.
 
-Two things that are **not** covered, said plainly rather than left for you to
-find out:
+Not covered, said plainly:
 
-- **Photos** you attach to entries. They sit in Daymark's storage as ordinary
-  picture files.
-- **Backups, CSV files and PDF reports you make yourself.** Those are plain
-  files you asked for and put where you chose. See *Backing up & restoring*.
+- **Photos** attached to entries, which are ordinary picture files in Daymark's storage.
+- **A few settings kept outside the journal**: your custom mood names and colours, your crisis line,
+  your sleep setup answers and your latest sleep self-check results.
+- **Backups, CSV files and PDF reports you make yourself.** They're plain files you asked for and
+  put where you chose.
 
-If your phone ever loses that key — it's rare, and it happens after some
-firmware updates or a security reset — Daymark will tell you that the entries
-can't be opened and will offer to leave them alone or to start a new journal.
-It will never remove them on its own.
+If your phone ever loses that key (it's rare; it can happen after some system updates or a security
+reset), Daymark will say the entries can't be opened, and offer to leave them alone or start a new
+journal. It never removes them on its own.
 
-Settings shows which of these is true on your phone, under **Your entries on
-this device**.
+**Settings → Your entries on this device** tells you which is true on your phone.
 
 ---
 
-## App lock (PIN + biometrics)
+## App lock (PIN and biometrics)
 
-If you'd like to keep your entries private from anyone else who picks up your
-phone, you can lock the app.
+To keep your entries from anyone else who picks up your phone, you can lock the app.
 
-**The PIN guards the screen, not the file.** It's a door in front of Daymark, and
-it's a good one. It is *not* the key your entries are encrypted with — which
-means **forgetting your PIN does not lose your entries**; you just can't get past
-the lock screen until you remember it.
+**To set a PIN:** go to **Settings → App lock (PIN)**, switch it on, and enter a **6–12 digit PIN**
+twice. A longer one takes longer for someone else to guess. A PIN you set in an older version still
+works, however long it is.
 
-**To set a PIN:**
+**Biometrics:** with a PIN set, turn on **Unlock with biometrics** to use your fingerprint or face.
+The PIN always works too.
 
-1. Go to **Settings → App lock (PIN)** and switch it on.
-2. Enter a **6–12 digit PIN** and confirm it. Six is the shortest Daymark will
-   take, and a longer one takes longer for someone else to guess. A PIN you set
-   in an older version still works, however long it is — Daymark won't make you
-   change it.
-
-**To also unlock with biometrics:**
-
-- With a PIN set, turn on **Unlock with biometrics**. Daymark will offer your
-  fingerprint or face unlock when you open the app, and fall back to the PIN if
-  that doesn't work.
-
-**Auto-lock timeout:**
-
-- With the PIN lock on, an **Auto-lock** option appears in Settings. By default
-  Daymark re-locks **immediately** every time it goes to the background. If you'd
-  rather not re-enter your PIN after briefly switching apps, choose a grace
-  period of **1, 5, or 15 minutes** — Daymark only re-locks once that much time
-  has passed in the background.
+**Auto-lock:** by default Daymark locks **immediately** each time it leaves the screen. Under
+**Auto-lock** you can give it **1, 5 or 15 minutes** before it locks.
 
 **How the lock behaves:**
 
-- When locked, you'll see a *"Daymark is locked"* screen and must enter your PIN
-  (or use biometrics) to get in.
-- **Lockout after wrong guesses:** you get **5 free attempts**. After that, the
-  app makes you wait before trying again, and the wait grows each time you keep
-  missing — up to **5 minutes**. The screen shows a countdown so you know when
-  you can try again. A correct unlock resets the counter.
-- **Hidden from recents:** while the app is locked, its contents are hidden from
-  the app-switcher / recent-apps thumbnail (a screen flag called
-  `FLAG_SECURE`), so a quick peek can't reveal your data.
+- When locked, you see *"Daymark is locked"* and need your PIN or biometrics to get in.
+- **After 5 wrong tries**, Daymark makes you wait before trying again, a little longer each time, up
+  to **5 minutes**. A countdown shows when you can try again.
+- While the lock is on, Daymark's screen is hidden from screenshots and from the recent-apps view.
 
-> **Important:** there is no "forgot PIN" reset and no backdoor — that's the
-> point of a private, offline app. See the FAQ for what to do if you forget it.
-> Your **entries are not lost** if you forget it: the PIN is not what they are
-> encrypted with. What you lose is the way past the lock screen.
+> **If you forget your PIN.** The PIN guards the screen; it isn't the key your entries are
+> encrypted with, so the file itself isn't damaged. But there's no "forgot PIN" button. If you can't
+> unlock with biometrics either, the way back today is to reinstall Daymark, which erases its
+> storage, and restore a backup. **Keep a recent backup.** See the [FAQ](FAQ.md).
 
 ---
 
-## Backing up & restoring
+## Backing up and exporting
 
-Because Daymark stores everything locally and uses no cloud, **backups are how
-you keep your data safe** and how you move to a new phone. You decide where each
-backup file goes using your phone's file picker.
+Daymark keeps everything on your phone and uses no cloud, so **a backup is how you keep your data
+safe** and how you move to a new phone. You choose where each file goes.
 
 ### Export a backup (JSON)
 
-1. Go to **Settings → Export backup**.
-2. Choose where to save the file.
+**Settings → Export backup** writes one file with your entries, activities and people, your
+journal, goals and project steps, sleep logs and treatments, trackers, reminders, check-in scores,
+thought records, your safety plan, life events, your notes about people, your custom moods, and
+your photos (inside the file).
 
-This writes a single JSON file containing **everything** — moods, notes,
-activities, journal entries, goals (including any "when X, I will Y" plan),
-your reminders, **check-in scores**, **thought records**, movement and other
-tracker logs, and any **photos** you've attached (embedded in the file, so it
-stays one portable backup).
+A backup does not include: your suggestion settings, your crisis line, your sleep setup and sleep
+self-check results, your other settings, or your PIN. It also leaves out Daymark's own record of
+when it asked you things, which never leaves your phone.
 
-### Restore a backup (Replace vs. Merge)
+### Restore a backup
 
-1. Go to **Settings → Restore backup**.
-2. Pick a Daymark JSON file.
-3. Choose how to bring it in:
-   - **Replace all** — wipes your current data first, then loads the backup.
-     Use this when restoring onto a fresh install or a new phone.
-   - **Merge** — keeps what you already have and **adds** the backup's entries
-     alongside it. Use this to combine data from two devices without losing
-     anything. Merged entries are given fresh internal IDs so nothing collides.
+1. Go to **Settings → Restore backup** and pick a Daymark backup file.
+2. Choose:
+   - **Replace all**: wipes what's on this phone, then loads the backup. Use this on a new phone.
+   - **Merge**: keeps what you have and adds the backup's entries alongside.
 
-> A backup made by a **newer** version of Daymark can't be restored into an
-> older one — update the app first.
+A backup made by a **newer** version of Daymark can't be restored into an older one. Update first.
 
 ### Export as CSV
 
-1. Go to **Settings → Export as CSV**.
-2. Choose where to save the file.
+**Settings → Export as CSV** writes a spreadsheet of every entry: date, time, mood, activities and
+note. Use it for looking at your data; use the JSON backup to restore.
 
-The CSV is a spreadsheet-friendly list of every mood entry with its **date,
-time, mood, activities, and note** — handy for opening in a spreadsheet app.
-(CSV is for viewing/analysis; use the **JSON backup** to actually restore your
-data.)
+### Export a PDF report
 
-> **Please keep backups safe.** Backup and CSV files are **plaintext** — they
-> are not encrypted. Once a file leaves Daymark it's no longer protected by the
-> app, so store it somewhere private. See the FAQ for more.
+**Settings → Export PDF for therapist** makes a printable report you can choose to give a
+clinician. Pick a date range (the last 90 days to start with), and whether to include notes, charts
+and your journal pages from that range. Journal pages are left out unless you include them. The
+report ends with a fingerprint of the entries it was made from, which could show if they were
+changed later. It can't show that what you logged was accurate.
+
+> **Keep exports safe.** Backups, CSV files and PDF reports are **not encrypted**. Once a file
+> leaves Daymark, the app can't protect it, so keep it somewhere private.
 
 ---
 
 ## The home-screen widget
 
-Daymark includes a quick-log widget so you can record a mood without even
-opening the app.
-
-**To add it:**
-
 1. Long-press an empty spot on your home screen.
 2. Choose **Widgets**, find **Daymark**, and drag the widget out.
 
-**To use it:**
-
-- The widget asks *"How are you?"* and shows the five moods. **Tap a mood** and
-  Daymark opens a new entry with that mood already selected — just add any
-  details and save.
+The widget asks *"How are you?"* and shows the five moods. Tap one and Daymark opens a new entry
+with that mood chosen.
 
 ---
 
-## Light & dark theme
+## Light and dark
 
-Daymark's warm "modern paper" look comes in both **light** and **dark**, and
-follows your **system** light/dark setting automatically — so it matches the
-rest of your phone.
-
-- On **Android 12+**, you can turn on **Dynamic color** in **Settings** to tint
-  the app with colors drawn from your wallpaper.
+Daymark's "modern paper" look comes in **light** and **dark**, and follows your phone's setting.
+On Android 12 and later, **Settings → Dynamic color** tints the app with colours from your
+wallpaper; it starts switched on. Turn it off for Daymark's own paper colours. Your mood colours
+never change either way.
 
 ---
 
-## A note on privacy
+## Privacy
 
-Daymark is **offline and private by design**. Your moods, notes, journal,
-activities, and goals live only in the app's private storage on your device. The
-app has no internet permission in its core and makes no network connections.
-The **only** way your data leaves your phone is if **you** export a backup.
-
-For the full details, see the project's privacy statement.
+Daymark is offline and private by design. It has no internet permission and makes no network
+connections. The only way your data leaves your phone is a file **you** export. The full statement
+is [PRIVACY.md](../PRIVACY.md).

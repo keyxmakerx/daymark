@@ -1,1092 +1,430 @@
-# Daymark Companion — Deployment (Docker / Compose / Reverse Proxy)
+# Daymark Companion — deployment and operation
 
-> ## ⚠️ STATUS: DESIGN ONLY — NO CODE EXISTS YET
->
-> **Nothing in this document is implemented.** There is no `ghcr.io/daymark/companion`
-> image, no server binary, no `daymark-companion` container, no "Daymark Sync" build
-> flavor, and no published digest. Every `docker-compose.yml`, environment variable,
-> reverse-proxy snippet, ASCII diagram, and table below describes an **intended**
-> deployment design still under review. Image names, digests, env-var names, ports,
-> and defaults are **placeholders** and may change or be dropped entirely.
->
-> The flagship Daymark app remains **fully offline, declares no `INTERNET`
-> permission, and operates 100% on-device** (see [../PRIVACY.md](../PRIVACY.md) and
-> [../SECURITY.md](../SECURITY.md)). Everything in this document lives **only** in a
-> separate, opt-in **Daymark Sync** flavor and the self-hosted Companion container,
-> and never alters that default. Whether the owner→therapist sharing and game-plan
-> tracks ship at all in the first Companion release — or whether sync lands first —
-> is an unresolved sequencing decision; see [COMPANION_SCOPE.md](COMPANION_SCOPE.md).
->
-> **AS SHIPPED (updated 2026-08-09).** Code now exists, and where it differs from this
-> design document, the code wins. The two differences that matter here: there is **no
-> bundled reverse proxy** of any kind — `companion/docker-compose.yml` starts the
-> application and nothing else, published on `127.0.0.1:8080` for whatever proxy the
-> operator already runs (Cosmos Cloud, Caddy, Traefik, nginx) — and the internal-network
-> topology this document draws in §1.1 is the **opt-in** `docker-compose.no-egress.yml`,
-> used when that proxy is itself a container. It is opt-in because **published ports do
-> not work on Docker `internal:` networks** ([moby/moby#36174](https://github.com/moby/moby/issues/36174)),
-> so a host-side proxy cannot reach the app that way. The requirements the proxy must
-> satisfy are stated as a contract in
-> [COMPANION_DEPLOYMENT_HARDENING.md §3](COMPANION_DEPLOYMENT_HARDENING.md#3-your-reverse-proxy--the-contract);
-> §4 below is still good background on *why* those requirements exist.
->
-> This document is the **deployment / operations** track. For *what the Companion is*
-> see [COMPANION_SCOPE.md](COMPANION_SCOPE.md); for *how it is built* see
-> [COMPANION_ARCHITECTURE.md](COMPANION_ARCHITECTURE.md); for the *threat model and
-> crypto contract* see [COMPANION_SECURITY.md](COMPANION_SECURITY.md); for the
-> *clinician-facing surface* see [COMPANION_THERAPIST.md](COMPANION_THERAPIST.md).
+For whoever runs a Companion server. The live files are `companion/docker-compose.yml`,
+`companion/docker-compose.no-egress.yml`, `companion/Dockerfile` and `companion/.env.example`; where
+they and this guide disagree, the files win and this guide has a bug. Day-to-day operation — probes,
+logs, the runbook — is [COMPANION_OBSERVABILITY.md](COMPANION_OBSERVABILITY.md). The security model is
+[COMPANION_SECURITY.md](COMPANION_SECURITY.md). Image tags and a quick start are in
+[companion/README.md](../companion/README.md).
 
 ---
 
-## Contents
+## 0. What you are running
 
-- [0. Deployment principles](#0-deployment-principles-what-every-choice-optimizes-for)
-- [1. Topologies (LAN-only vs public)](#1-topologies-lan-only-vs-public)
-- [2. The canonical `docker-compose.yml` (Topology A)](#2-the-canonical-docker-composeyml-topology-a)
-- [3. Topology B & C variants (single container)](#3-topology-b--c-variants-single-container)
-- [4. Reverse-proxy worked examples (Caddy / Traefik / nginx)](#4-reverse-proxy-worked-examples)
-- [5. Configuration & secrets surface](#5-configuration--secrets-surface)
-- [6. Volume, backup & restore](#6-volume-backup--restore)
-- [7. Upgrades & migrations](#7-upgrades--migrations)
-- [8. Network egress lockdown](#8-network-egress-lockdown)
-- [9. First-run checklist](#9-first-run-checklist-topology-a)
-- [10. Hardening defaults (one table)](#10-hardening-defaults-one-table)
-- [11. What deployment hardening does NOT buy you](#11-what-deployment-hardening-does-not-buy-you-honesty-section)
+- **One container**: the server and the web consoles. It stores ciphertext it cannot read, routing
+  metadata, and some sign-in secrets (COMPANION_SECURITY.md §5.2). A stolen disk or backup leaks
+  metadata and those secrets — never journal content.
+- **No reverse proxy is bundled.** The app speaks plain HTTP; your proxy terminates TLS (§3).
+- **Three shapes**, chosen with `DAYMARK_THERAPIST_AUTH`: *Solo*, just you and your backup (`0`);
+  *Paired*, plus one clinician (`1`); *Practice*, a clinic runs the machine (`1`). With `0`, every
+  clinician, pairing and practice route answers 503.
+- **The server is a replica.** The journal lives on the owner's phone; losing the server loses
+  convenience, not the journal.
 
----
+## 1. Topologies
 
-## 0. Deployment principles (what every choice optimizes for)
+Two, and they differ only in how your proxy reaches the app.
 
-The Companion container is a **dumb, zero-knowledge ciphertext blob host + policy
-mediator**. It never holds a passphrase, a private key, a reading key, or any
-plaintext. Every hardening choice below is designed so that one sentence stays true:
+| | Default (`docker-compose.yml`) | No-egress override (add `docker-compose.no-egress.yml`) |
+|---|---|---|
+| For | a proxy running on the Docker host | a proxy running in a container (Cosmos Cloud, Traefik, Nginx Proxy Manager) |
+| Network | bridge `daymark-companion_back`, `10.89.0.0/24`, app at `10.89.0.3`, IP masquerading off | the same network with `internal: true` and no gateway |
+| Ingress | published on `127.0.0.1:8080` | your proxy joins `daymark-companion_back` and calls `http://daymark-companion:8080`; no published port |
+| Egress | packets leave but no reply ever comes back | dropped; there is no gateway |
+| Host services on the bridge gateway | still reachable from the container | nothing to reach them through |
 
-> **A full compromise of this container and its disk leaks only opaque ciphertext
-> blobs plus non-secret routing metadata** (blob ids, sizes, timestamps, version
-> counters, expiry/revoke flags, and per-relationship inbox tokens).
+Two topologies because **published ports do not work on Docker `internal:` networks**
+([moby/moby#36174](https://github.com/moby/moby/issues/36174)), so a proxy on the host cannot use the
+sealed network. The default is the weaker of the two and needs nothing from you. To close it fully,
+drop the bridge's traffic on the host — `iptables -I DOCKER-USER -i dmk-back -j DROP` — which keeps
+the published port working. CI boots both topologies on every change under `companion/` and proves
+egress fails from each.
 
-Note the deliberate phrasing — *"opaque ciphertext + non-secret metadata,"* **not**
-*"nothing."* The index reveals a relationship graph and traffic-analysis surface that
-no amount of container hardening hides; see [§11](#11-what-deployment-hardening-does-not-buy-you-honesty-section)
-and [COMPANION_SECURITY.md](COMPANION_SECURITY.md). With that boundary stated:
+**Publish on loopback only.** Docker's published ports bypass UFW's rules, so `0.0.0.0` would be
+reachable whatever your firewall says. Change `DAYMARK_BIND_IP` only if your proxy is on another
+machine and the link between them is already encrypted (a VPN, WireGuard, a private VLAN): the app
+speaks plain HTTP and authenticates with a bearer token.
 
-1. **Compose-first.** A single `docker-compose.yml` is the canonical install. One
-   auditable file documents the image, the (lack of) network egress, the volume, the
-   resource limits, and the entire config surface in one place.
-2. **Reverse-proxy-friendly, but proxy-optional.** The container terminates plain
-   HTTP on a single internal port and is happy behind Caddy / Traefik / nginx. It
-   also has a LAN-only self-signed mode for users with no proxy. TLS is **defense in
-   depth** — payloads are already end-to-end encrypted, so a broken TLS layer leaks
-   only ciphertext.
-3. **No outbound network by default.** The app needs zero egress. The compose file
-   puts the container on its **own** `internal: true` bridge so the no-telemetry
-   claim is enforced at the network layer, not merely promised. See [§8](#8-network-egress-lockdown)
-   for the structural-honesty caveat about *sharing* a network with the proxy.
-   **One deliberate exception:** owner-configured outbound **SMTP** for therapist
-   invite/notification links. It is **OFF unless `DAYMARK_SMTP_HOST` is set**; when
-   enabled it egresses only to the operator's configured mail server, requires TLS
-   (`DAYMARK_SMTP_TLS=starttls|implicit`), reads credentials via `DAYMARK_SMTP_PASS_FILE`,
-   and its emails carry **only** the invite/notification link — never any record or
-   plaintext content. Enabling it means the operator must open a narrow egress path to
-   exactly that mail host (see [§8](#8-network-egress-lockdown)); it does not reopen
-   general egress.
-4. **Least privilege at the container boundary.** Non-root, read-only rootfs, all
-   capabilities dropped, `no-new-privileges`, and a single writable named volume. A
-   bug in the API cannot write outside the blob store, escalate, or persist a webshell.
-5. **Env-driven, secret-safe config.** Everything is configured by environment
-   variables; every secret supports a `*_FILE` indirection so it can come from a
-   Docker secret or a mounted file, never baked into the image or surfaced in
-   `docker inspect`.
-6. **The server is a convenience replica.** The phone (native **Daymark Sync** flavor)
-   holds the authoritative copy. Backups, upgrades, and migrations are designed so
-   that losing the container never loses owner data, and an upgrade can never
-   silently mutate or re-encrypt ciphertext.
+**Prerequisites:** Docker Engine 29.7.2 or later (earlier 29.x releases lack security fixes); Docker
+Compose 2.24 or later (the override uses `!reset` and `!override`); buildx (Compose builds through
+it). `docker compose config` must parse cleanly before anything else.
 
----
+## 2. The compose file
 
-## 1. Topologies (LAN-only vs public)
+What `companion/docker-compose.yml` sets:
 
-Pick one. All three use the **same image and the same `companion` service**; they
-differ only in how TLS and ingress are handled.
+| Setting | Value | Why |
+|---|---|---|
+| Image | built from `companion/Dockerfile`, or `DAYMARK_IMAGE` | Distroless Java 21, digest-pinned, no shell or package manager |
+| User | `65532:65532` | Distroless's own non-root user |
+| Filesystem | read-only root; `/tmp` a 64 MiB tmpfs, `noexec,nosuid,nodev` | Only `/data` is writable |
+| Privileges | `cap_drop: [ALL]`, `no-new-privileges`, AppArmor `docker-default`, default seccomp, `init: true` | Nothing to escalate with |
+| Resources | 768 MiB, 1 CPU, 256 processes, 4096/8192 open files | A bug cannot take the host down |
+| Logs | `local` driver, 10 MiB × 3, compressed | `json-file` keeps logs without limit by default |
+| Health | `/usr/local/bin/healthcheck` probes `/readyz` every 30 s | Docker never restarts an unhealthy container on a single host, so watch it (COMPANION_OBSERVABILITY.md §6) |
+| JVM | `-XX:MaxRAMPercentage=70`, `-Djava.io.tmpdir=/tmp`, `-Dorg.sqlite.tmpdir=/data` | The SQLite driver unpacks a native library at start, and `/tmp` is `noexec` |
+| Bearer token | the host file `secrets/auth_token`, mounted at `/run/secrets/companion_auth_token` | Never in `environment:`, where `docker inspect` shows it |
 
-> **STATUS — WebAuthn/passkey + PRF is a config-pinned SCAFFOLD in this build.** The
-> server's `/v1/webauthn/register/*` and `/v1/webauthn/assert/*` endpoints return **501
-> Not Implemented** (attestation/assertion verification is out of scope for this slice;
-> see `TherapistAuthRoutes.kt` and the `Config.kt` "verification is scaffold-only"
-> note). **TOTP is the only functioning therapist auth path today.** The RP-ID / origin
-> columns and `DAYMARK_WEBAUTHN_*` rows below describe how the passkey path *will* be
-> pinned when implemented — they are **config plumbing, not a working login path yet**.
-> A hardware passkey (WebAuthn) is the stronger path when available; until this scaffold
-> is completed, plan for TOTP. (Mirrors the in-app LowerAssuranceBanner copy.)
+**Secret files must be readable by UID 65532 on the host.** Compose ignores the `uid`, `gid` and
+`mode` keys on secrets outside Swarm, so the container sees the host file's owner and mode:
+`sudo chown 65532:65532 secrets/auth_token && chmod 400 secrets/auth_token`. Otherwise the server
+stops at start with a message naming the file.
 
-| Topology | When | TLS | Network exposure | WebAuthn? |
-|---|---|---|---|---|
-| **A. Container + reverse proxy** (recommended, public or LAN) | You already run Caddy/Traefik/nginx, or want a real cert, a hostname, or a sub-path. | Terminated at the proxy (Let's Encrypt or internal CA). | Only the proxy is published; the companion listens on an internal-only network. | 🚧 Scaffold (501) — real origin *would* work once implemented; **use TOTP today.** |
-| **B. Single container, LAN-only self-signed** | Home LAN / NAS, no proxy, "just works." | Self-signed cert generated on first boot, or a static cert you mount. | Companion publishes `:8443` directly to the LAN. | 🚧 Scaffold (501) — and even once built, bare-IP / `.local` = **TOTP only** (see note). **Use TOTP today.** |
-| **C. Single container, loopback / behind host firewall** | Advanced; you front it with the host's own nginx or an SSH tunnel. | None in-container (plain HTTP bound to `127.0.0.1`). | Bound to loopback only; never reachable off-box without a tunnel/proxy. | 🚧 Scaffold (501). **Use TOTP today.** |
+## 3. Your reverse proxy — the contract
 
-**Default recommendation: Topology A.** It gives a real certificate, clean
-`X-Forwarded-*` handling, sub-path mounting, and keeps the companion off the
-published-port surface. Topology B is the documented fallback for proxy-less LAN
-users.
+Nothing in this section is shipped: it is what the app expects in front of it. The configs in
+[alternatives/](alternatives/README.md) illustrate it; where they disagree with this list, the list
+is right.
 
-> **WebAuthn / RP-ID reality (LAN & bare-IP self-hosters).** *(Applies once the
-> WebAuthn scaffold above is implemented — the endpoints return 501 in this build, so
-> today every deployment uses the TOTP path regardless of RP-ID.)* WebAuthn requires a
-> *secure origin* with a real registrable domain. Deployments on a bare IP
-> (`https://192.168.1.10`), an `.local` mDNS name, or a self-signed cert the OS does
-> not trust **cannot register passkeys** in most browsers. Those deployments are
-> **officially documented-as-unsupported for the WebAuthn-PRF path**; the therapist
-> must use the **TOTP fallback** (a weaker, server-stored-**cleartext** custody path,
-> honestly flagged in [COMPANION_SECURITY.md](COMPANION_SECURITY.md) §limits). The
-> RP-ID and origin allowlist are **config-pinned** (`DAYMARK_WEBAUTHN_RP_ID` +
-> origin allowlist), **never** derived from a client-controllable `Host` /
-> `X-Forwarded-Host`. Give the box a real hostname (even a LAN-internal one with an
-> internal-CA cert, Topology A) to keep passkeys working.
+### 3.1 What your proxy must do
 
-### 1.1 Picture
+1. **Terminate TLS.** The app speaks plain HTTP and authenticates with a bearer token; anything that
+   can read the wire can replay the token.
+2. **Add `Strict-Transport-Security`.** The app sends CSP, `X-Frame-Options`, `X-Content-Type-Options`,
+   `Referrer-Policy` and the cross-origin headers on every response, but not HSTS, because it cannot
+   know it is behind TLS. Suggested: `max-age=31536000; includeSubDomains`; add `preload` only when you
+   are sure, since it is effectively irreversible.
+3. **Replace or append `X-Forwarded-For`; never pass the client's value through.** The app reads the
+   header right to left, skipping trusted hops, so an appended chain is safe and a replaced one is
+   safe. A header copied from the client unchanged is not.
+4. **Tell the app who you are:** `DAYMARK_TRUSTED_PROXIES` (§4.0).
+5. **Refuse unknown `Host` and SNI** with a catch-all that answers an error. The app builds emailed
+   links from `DAYMARK_PUBLIC_BASE_URL`, which compose always sets; the catch-all means a poisoned
+   invitation link needs two mistakes, not one (#{O11}).
+6. **Serve the Companion at the root of its own hostname.** `DAYMARK_BASE_PATH` exists, but a sub-path
+   deployment does not work consistently: the API stays at `/v1` on the root while pages move under
+   the prefix (#{O10}).
+7. **Do not add your own `Content-Security-Policy`.** Two CSP headers are intersected by the browser,
+   not overridden, and one without `'wasm-unsafe-eval'` silently breaks every decryption in the
+   consoles. If your proxy has a "security headers" or "harden this route" switch, check what CSP it
+   sends. Caddy can set a header only if absent (a `?`-prefixed header); nginx's `add_header` cannot.
+8. **Point health checks at the right endpoint.** `/healthz` is liveness — the process is up.
+   `/readyz` also proves `/data` is writable and answers 503 when it is not; point monitoring there.
+   Think before pointing a load balancer at `/readyz`: with one backend, a failing readiness check turns
+   a degraded but readable server into an outage.
+9. **Cap request bodies and set timeouts.** Suggested: a body limit a little above 26 MiB; about 10 s
+   to read headers, 120 s to read a body, 120 s idle. The app has its own floor — 64 KiB for JSON
+   bodies, `DAYMARK_MAX_REQUEST_BYTES` for uploads, 120 s to read a request — but header-read timeouts
+   are the proxy's.
 
-```
-Topology A (proxy):                              Topology B (LAN self-signed):
+### 3.2 Worked examples
 
-  Internet / LAN                                  LAN
-       │ 443                                       │ 8443 (HTTPS, self-signed)
-  ┌────▼─────┐                              ┌──────▼─────────────┐
-  │  Caddy   │  edge net (egress-capable)   │ daymark-companion  │
-  │ /Traefik │═══════════════╗              │  (built-in TLS)    │
-  │ /nginx   │               ║ multi-homed  │  read-only rootfs  │
-  └────┬─────┘               ║              │  non-root, no egr. │
-       │  http://companion:8080             └─────────┬──────────┘
-  ┌────▼───────────────┐     ║                         │ volume
-  │ daymark-companion  │◀════╝               ┌─────────▼────────┐
-  │  companion-internal│                     │ blobs (named)    │
-  │  internal: true    │                     └──────────────────┘
-  │  NO route to gw    │
-  └────────┬───────────┘
-           │ volume
-  ┌────────▼────────┐
-  │ blobs (named)   │
-  └─────────────────┘
+The reference configs are in [alternatives/](alternatives/README.md). **Cosmos Cloud** (the
+maintainer's setup) is a proxy in a container, so it takes the no-egress override:
 
-  The proxy is MULTI-HOMED: it joins both the egress-capable 'edge' net AND the
-  companion's OWN 'companion-internal' (internal:true) net. The companion joins
-  ONLY 'companion-internal', so it has no path to the gateway. See §8.
+```sh
+docker compose -f docker-compose.yml -f docker-compose.no-egress.yml up -d --build
+docker network connect daymark-companion_back cosmos-server
 ```
 
----
+Add a route in the Cosmos interface with the target `http://daymark-companion:8080`, and set
+`DAYMARK_TRUSTED_PROXIES` to the address Cosmos got on that network (§4.0). Check on your install
+whether Cosmos adds its own CSP or HSTS (requirements 2 and 7), and whether its private-network feature
+creates a network of its own: use either that or `docker network connect`, never both, or the app sees
+whichever address Docker routes from (#{O22}).
 
-## 2. The canonical `docker-compose.yml` (Topology A)
+### 3.3 Rate limiting
 
-This is the reference compose file, behind an external reverse proxy. It encodes the
-[§10 hardening defaults](#10-hardening-defaults-one-table). Topology B/C variants
-follow in [§3](#3-topology-b--c-variants-single-container).
+Rate limiting lives in the app, per client address (the table is COMPANION_OBSERVABILITY.md §1.1), and
+works only if §4.0 is right. A proxy-level limit is optional: Traefik's `rateLimit`, nginx's
+`limit_req`, or Cosmos's per-route limiter. Stock Caddy has none; the third-party `caddy-ratelimit`
+module means building and maintaining your own Caddy. `fail2ban` needs a full per-request access log,
+which is exactly the record §10 asks you not to keep — decide that trade deliberately.
 
-```yaml
-# docker-compose.yml — Daymark Companion (Topology A: behind your reverse proxy)
-# DESIGN ONLY — image, digest, and env names are placeholders; no code exists yet.
-#
-# Zero-knowledge ciphertext host. The container never sees plaintext, keys, or the
-# passphrase. A full compromise of this container/volume must leak only opaque
-# blobs + non-secret metadata.
-
-services:
-  companion:
-    image: ghcr.io/daymark/companion@sha256:REPLACE_WITH_PINNED_DIGEST  # pin by DIGEST, never :latest
-    container_name: daymark-companion
-    restart: unless-stopped
-
-    # ---- Identity / privileges -------------------------------------------------
-    # Run as a fixed non-root UID:GID. Must match ownership of the named volume (§6.3).
-    user: "10001:10001"
-
-    # ---- Filesystem: read-only rootfs, single writable volume ------------------
-    read_only: true
-    volumes:
-      - blobs:/data                       # ONLY writable persistent path: ciphertext + SQLite index
-    tmpfs:
-      - /tmp:size=16m,mode=1777           # scratch (multipart spill, temp); never persisted
-      - /run:size=4m                      # for the secret mount + any runtime sockets
-
-    # ---- Hardening -------------------------------------------------------------
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL                               # the app binds an unprivileged port; needs no Linux caps
-    # cap_add: []                         # intentionally empty
-
-    # ---- Networking: NO egress by default --------------------------------------
-    # The companion joins ONLY its own internal:true network. The proxy is
-    # multi-homed (joins this net AND the egress-capable edge net). The companion
-    # therefore has no route to the gateway. See §8 for the structural-honesty note.
-    networks:
-      - companion-internal
-    expose:
-      - "8080"                            # documents the in-container HTTP port; NOT host-published
-    # NOTE: do NOT publish ports here in Topology A. The proxy reaches it over the internal net.
-
-    # ---- Configuration (env-driven; secrets via *_FILE, see §5) ----------------
-    environment:
-      DAYMARK_BIND_ADDR: "0.0.0.0"        # listen on all NICs *inside* the container only
-      DAYMARK_PORT: "8080"
-      DAYMARK_TLS_MODE: "off"             # proxy terminates TLS; container speaks plain HTTP internally
-      DAYMARK_DATA_DIR: "/data"
-      DAYMARK_BASE_PATH: "/"              # set to e.g. "/daymark" to serve under a sub-path (see §4.4)
-
-      # --- Trusted-proxy contract (see §4.0) ---
-      # DEFAULT IS TRUST-NONE. You MUST set this to the single narrow address/CIDR of
-      # your proxy on the internal net. There is NO broad default (a 172.16.0.0/12
-      # default would let any co-resident container forge X-Forwarded-*).
-      DAYMARK_TRUSTED_PROXIES: "10.89.0.2/32"     # <-- the proxy's IP on companion-internal; EXAMPLE ONLY
-      DAYMARK_FORWARDED_HEADERS: "x-forwarded"    # honor X-Forwarded-* ONLY from the pinned proxy
-
-      # --- WebAuthn: config-pinned, never client-derived (see §1 note, §4.4) ---
-      DAYMARK_WEBAUTHN_RP_ID: "daymark.example.com"
-      DAYMARK_WEBAUTHN_ORIGINS: "https://daymark.example.com"   # exact origin allowlist
-
-      # --- Server auth token (gates PUT/list/enumerate). Loaded from a file: ---
-      DAYMARK_AUTH_TOKEN_FILE: "/run/secrets/companion_auth_token"
-      DAYMARK_TOTP_ISSUER: "Daymark Companion"
-
-      # --- Limits / DoS hygiene (a token-holder is an integrity/availability weapon) ---
-      DAYMARK_MAX_BLOB_BYTES: "26214400"  # 25 MiB per blob
-      DAYMARK_MAX_REQUEST_BYTES: "27262976"
-      DAYMARK_MAX_VERSIONS: "200"         # append-only retention cap per snapshot lineage
-      DAYMARK_PER_TOKEN_QUOTA_BYTES: "5368709120"  # 5 GiB per-token storage quota; fail-closed on full
-      DAYMARK_RATE_LIMIT_RPS: "5"
-      DAYMARK_LINEAGE_CREATE_RPM: "10"    # cap lineage/version creation (anti monotonic-poisoning)
-      DAYMARK_AUTH_LOCKOUT_FAILS: "8"
-      DAYMARK_AUTH_LOCKOUT_SECONDS: "900"
-
-      # --- Sharing / retention (bounds the no-PFS harvest-now-decrypt-later window) ---
-      DAYMARK_SHARE_MAX_TTL_DAYS: "90"    # ceiling on share/game-plan expiry the owner can request
-      DAYMARK_BLOB_HARD_DELETE: "on-supersede-and-expiry"  # hard-delete superseded/expired blob BYTES
-      DAYMARK_SIZE_PADDING: "bucketed"    # pad blobs to fixed buckets BY DEFAULT (acuity/withdrawal anti-deanon)
-
-      # --- Audit (events not content; owner-readable; IP off-by-default) ---
-      DAYMARK_ACCESS_LOG_RETENTION_DAYS: "90"
-      DAYMARK_ACCESS_LOG_SOURCE_IP: "off" # IP geolocates the clinic; off by default
-      DAYMARK_LOG_LEVEL: "info"
-      TZ: "UTC"
-
-    # ---- Secrets ---------------------------------------------------------------
-    secrets:
-      - companion_auth_token              # mounted at /run/secrets/companion_auth_token (mode 0400)
-
-    # ---- Health ----------------------------------------------------------------
-    # Healthcheck hits an unauthenticated, content-free liveness endpoint returning
-    # 200 + {"ok":true}. Uses a tiny bundled static /healthcheck binary so the image
-    # ships no curl/wget and the probe leaks nothing.
-    healthcheck:
-      test: ["CMD", "/healthcheck", "http://127.0.0.1:8080/healthz"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 15s
-
-    # ---- Resource limits -------------------------------------------------------
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 256M
-        reservations:
-          memory: 64M
-    # Non-Swarm extras (honored by `docker compose`):
-    mem_limit: 256m
-    pids_limit: 256
-    ulimits:
-      nofile:
-        soft: 1024
-        hard: 2048
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "5"
-
-networks:
-  companion-internal:
-    # The companion's OWN network. internal:true → NO route to the gateway → no egress.
-    # The reverse proxy ALSO joins this network (multi-homed) to reach the companion,
-    # while keeping its public/egress NICs on a SEPARATE 'edge' network in ITS compose.
-    internal: true
-
-volumes:
-  blobs:
-    # Named volume → trivial backup (just files: ciphertext blobs + the SQLite index).
-
-secrets:
-  companion_auth_token:
-    file: ./secrets/companion_auth_token   # 0400 host file; or external/swarm secret (§5)
-```
-
-**Why these choices, briefly**
-
-- `read_only: true` + a single `blobs:/data` volume means the *only* place the
-  process can write is the ciphertext store. A compromised process cannot drop a
-  webshell into the asset dir or rewrite the binary.
-- The dedicated `internal: true` network is the structural enforcement of "no
-  telemetry, ever" — **but only if the companion does not also share an
-  egress-capable network**; see the honesty caveat in [§8](#8-network-egress-lockdown).
-- `cap_drop: ALL` + `no-new-privileges` + non-root UID = no privilege to abuse even
-  with code execution.
-- `tmpfs /tmp` keeps transient scratch off the persistent volume and out of backups.
-- Secrets via file mount keep the token out of `docker inspect`, image layers, and
-  process env dumps.
-- The DoS-hygiene limits exist because **a bare token-holder (no E2EE key) is an
-  integrity/availability weapon**: it can PUT garbage versions to evict real history
-  (append-only-prune eviction DoS), exhaust disk, or poison version counters. Per-token
-  quota + fail-closed-on-disk-full + lineage/version caps + server-derived blob paths
-  close those. See [COMPANION_SECURITY.md](COMPANION_SECURITY.md).
-
----
-
-## 3. Topology B & C variants (single container)
-
-### 3.1 Topology B — LAN-only, container-terminated self-signed TLS
-
-Use when there is no proxy. The container generates a self-signed cert on first boot
-(persisted to the volume) **or** you mount your own cert/key. Publish `8443` to the LAN.
-
-```yaml
-# docker-compose.lan.yml — Topology B: LAN-only, self-signed TLS, no proxy
-# DESIGN ONLY.
-services:
-  companion:
-    image: ghcr.io/daymark/companion@sha256:REPLACE_WITH_PINNED_DIGEST
-    container_name: daymark-companion
-    restart: unless-stopped
-    user: "10001:10001"
-    read_only: true
-    volumes:
-      - blobs:/data
-      - certs:/data/tls            # cert+key persist across restarts
-    tmpfs:
-      - /tmp:size=16m,mode=1777
-      - /run:size=4m
-    security_opt: ["no-new-privileges:true"]
-    cap_drop: ["ALL"]
-    ports:
-      - "8443:8443"                # published to the LAN; bind to a specific host IP if desired:
-      # - "192.168.1.10:8443:8443"
-    environment:
-      DAYMARK_BIND_ADDR: "0.0.0.0"
-      DAYMARK_PORT: "8443"
-      DAYMARK_TLS_MODE: "self-signed"   # 'self-signed' | 'static' | 'off'
-      DAYMARK_TLS_CERT_DIR: "/data/tls" # where self-signed (auto) or static (mounted) cert lives
-      DAYMARK_TLS_SAN: "daymark.lan,192.168.1.10"  # SANs baked into the auto cert
-      DAYMARK_DATA_DIR: "/data"
-      DAYMARK_BASE_PATH: "/"
-      # WebAuthn only works if 'daymark.lan' is a real, device-trusted name (see §1 note):
-      DAYMARK_WEBAUTHN_RP_ID: "daymark.lan"
-      DAYMARK_WEBAUTHN_ORIGINS: "https://daymark.lan:8443"
-      # No proxy here → trust NO forwarded headers from anyone:
-      DAYMARK_TRUSTED_PROXIES: ""
-      DAYMARK_FORWARDED_HEADERS: "none"
-      DAYMARK_AUTH_TOKEN_FILE: "/run/secrets/companion_auth_token"
-      DAYMARK_MAX_BLOB_BYTES: "26214400"
-      DAYMARK_SHARE_MAX_TTL_DAYS: "90"
-      TZ: "UTC"
-    secrets: ["companion_auth_token"]
-    healthcheck:
-      # self-signed → the checker accepts the local cert for a loopback liveness probe only
-      test: ["CMD", "/healthcheck", "--insecure", "https://127.0.0.1:8443/healthz"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 15s
-    mem_limit: 256m
-    pids_limit: 256
-
-volumes:
-  blobs:
-  certs:
-
-secrets:
-  companion_auth_token:
-    file: ./secrets/companion_auth_token
-```
-
-> **LAN self-signed caveat (stated honestly).** A self-signed cert means the
-> phone/browser must trust it (import the CA, or accept the fingerprint once). The
-> owner should verify the cert fingerprint **out-of-band** the first time, exactly
-> like the therapist-key TOFU pairing step (see
-> [COMPANION_SECURITY.md](COMPANION_SECURITY.md)). Self-signed protects against
-> *passive* LAN snooping but **not** against an active MITM who presents their own
-> self-signed cert — so **mount a real cert (`DAYMARK_TLS_MODE: static`) or use
-> Topology A for anything beyond a trusted home LAN.** Payloads are E2EE regardless,
-> so a broken TLS layer leaks only ciphertext.
-
-**Mounting your own cert (`static` mode):**
-
-```yaml
-    environment:
-      DAYMARK_TLS_MODE: "static"
-      DAYMARK_TLS_CERT_DIR: "/data/tls"
-    volumes:
-      - ./tls/fullchain.pem:/data/tls/fullchain.pem:ro
-      - ./tls/privkey.pem:/data/tls/privkey.pem:ro
-```
-
-### 3.2 Topology C — loopback only (front it with host nginx / SSH tunnel)
-
-```yaml
-# Fragment — Topology C: bind to loopback, front with host nginx or an SSH tunnel.
-    environment:
-      DAYMARK_TLS_MODE: "off"
-      DAYMARK_PORT: "8080"
-      DAYMARK_TRUSTED_PROXIES: "127.0.0.1/32"
-      DAYMARK_FORWARDED_HEADERS: "x-forwarded"
-    ports:
-      - "127.0.0.1:8080:8080"    # reachable only from the host; tunnel or host-nginx in front
-```
-
----
-
-## 4. Reverse-proxy worked examples
-
-All examples assume the companion is reachable from the proxy as
-`http://companion:8080` on the shared internal network. Each covers upstream TLS
-termination, `X-Forwarded-*` / trusted-proxy handling, and a sub-path mount variant.
-
-> **As shipped**, the container is named `daymark-companion`, so a containerised proxy on
-> the shared network reaches it at `http://daymark-companion:8080`, and a proxy running on
-> the Docker host reaches it at `http://127.0.0.1:8080` instead. Maintained versions of
-> these examples live in [`alternatives/`](alternatives/); the snippets below are the
-> design-time originals and are not kept in sync with them.
+## 4. Forwarded headers
 
 ### 4.0 Trusted-proxy contract (read first)
 
-> **Default is TRUST-NONE.** The companion derives the client's "secure?" state,
-> rate-limit identity, lockout key, and audit source-IP from the **socket peer** by
-> default. It honors `X-Forwarded-Proto`, `X-Forwarded-Host`, and `X-Forwarded-For`
-> **only** when the immediate peer is inside `DAYMARK_TRUSTED_PROXIES` — which you
-> must set explicitly to the single narrow address/CIDR of your proxy. **There is no
-> broad shipped default.** (An earlier draft shipped `172.16.0.0/12`; it is
-> **removed** because it lets any co-resident Docker container forge `X-Forwarded-*`.)
+- **The default trusts no forwarded header.** Every per-client lockout and rate limit keys on the
+  TCP peer. Behind a proxy, that peer is the proxy for every request, so every client shares one
+  bucket: eight bad bearer tokens from one attacker lock everyone out for 15 minutes, and three
+  recovery requests use up the hour for everybody.
+- **Set `DAYMARK_TRUSTED_PROXIES` to the proxy's address as the app sees it**, as a `/32`
+  (comma-separated addresses and CIDR blocks are accepted):
+  - a proxy on the host, forwarding to the published port: usually the `docker0` gateway, commonly
+    `172.17.0.1` — not the proxy's LAN address;
+  - a proxy container on `daymark-companion_back`: its address on that network. Read it with the
+    command below and take the `daymark-companion_back` row.
 
-The proxy MUST **strip** any inbound `X-Forwarded-For` / `X-Real-IP` /
-`X-Forwarded-Host` / `Forwarded` from clients before setting its own.
+  ```sh
+  docker inspect <proxy-container> \
+    --format '{{range $n, $c := .NetworkSettings.Networks}}{{$n}} {{$c.IPAddress}}{{"\n"}}{{end}}'
+  ```
 
-| Header | Companion uses it for (only when proxy is trusted) | Risk if spoofed (untrusted) |
+  Or let the app tell you: while the list is empty, the first request that arrives carrying
+  `X-Forwarded-For` produces one warning naming the address it came from
+  (`docker compose logs companion | grep X-Forwarded-For`).
+- **Never a broad range** such as `172.16.0.0/12` or a whole bridge: any container sharing it could
+  forge `X-Forwarded-For` and walk past the lockout.
+- **Write addresses, not names.** A name is resolved once, at start, and silently stops matching when
+  Docker gives the container a new address.
+- **What the app reads:** `X-Forwarded-For` only, only from a trusted peer, right to left, skipping
+  trusted hops. It never reads `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Forwarded-Prefix` or
+  `Forwarded`.
+- **A wrong but non-empty list fails silently** — no warning (#{O6}). Prove it with the
+  lockout-isolation test in COMPANION_OBSERVABILITY.md §1.7.
+
+## 5. Configuration
+
+### 5.1 Environment variables
+
+Read by the server (`Config.kt`, `mail/MailerConfig.kt`). "`_FILE`" means the value may instead be
+read from a file named by `NAME_FILE`, which wins.
+
+| Variable | Default | What it does |
 |---|---|---|
-| `X-Forwarded-Proto` | Deciding if the connection is "secure"; the HTTPS-required-for-non-loopback gate; `Secure` cookies / HSTS. | Bypass the no-plain-HTTP guard. |
-| `X-Forwarded-Host` | Building absolute URLs *only*. **NOT** the WebAuthn RP-ID/origin — those are config-pinned. | URL confusion (WebAuthn unaffected: pinned). |
-| `X-Forwarded-For` | Rate-limit & lockout keying; access-log source. | Evade lockout (the sole brute-force defense for the token) / poison the access log. |
+| `DAYMARK_BIND_ADDR` | `0.0.0.0` | Listen address inside the container |
+| `DAYMARK_PORT` | `8080` | Listen port inside the container |
+| `DAYMARK_DATA_DIR` | `/data` | The volume (§6) |
+| `DAYMARK_WEB_DIR` | `web` (the image sets `/app/web`) | The built consoles |
+| `DAYMARK_BASE_PATH` | `/` | Sub-path prefix; not supported yet (§3.1, requirement 6) |
+| `DAYMARK_LOG_LEVEL` | `info` (the image, compose and `.env.example` set `warn`) | Level of the app's own loggers (COMPANION_OBSERVABILITY.md §2.4) |
+| `DAYMARK_AUTH_TOKEN` (`_FILE`) | unset | The owner's bearer token. Unset: the sync API, owner routes, recovery and the clinician portal all answer 503 |
+| `DAYMARK_THERAPIST_AUTH` | off | `1` or `true` turns on the clinician portal, relationships, pairing, practices and the audit log |
+| `DAYMARK_PUBLIC_BASE_URL` | first `DAYMARK_WEBAUTHN_ORIGINS` entry | The external origin in emailed links |
+| `DAYMARK_WEBAUTHN_RP_ID` | unset | Kept for passkeys, which are not built (COMPANION_SECURITY.md §5.1) |
+| `DAYMARK_WEBAUTHN_ORIGINS` | unset | Comma-separated; also the fallback for `DAYMARK_PUBLIC_BASE_URL` |
+| `DAYMARK_TRUSTED_PROXIES` | empty: trust nothing | §4.0 |
+| `DAYMARK_MAX_BLOB_BYTES` | `26214400` (25 MiB) | Largest stored blob |
+| `DAYMARK_MAX_REQUEST_BYTES` | `27262976` (26 MiB) | Largest upload body |
+| `DAYMARK_MAX_VERSIONS` | `200` | Snapshot versions kept per lineage; older ones are deleted |
+| `DAYMARK_PER_TOKEN_QUOTA_BYTES` | `5368709120` (5 GiB) | Snapshot storage quota |
+| `DAYMARK_REL_MAX_VERSIONS` | `50` | Versions kept per relationship lineage |
+| `DAYMARK_REL_QUOTA_BYTES` | `268435456` (256 MiB) | Storage quota per relationship |
+| `DAYMARK_RATE_LIMIT_RPS` | `5` | Requests per second per address, on bearer-token routes only |
+| `DAYMARK_AUTH_LOCKOUT_FAILS`, `_SECONDS` | `8`, `900` | Bad bearer tokens before an address is locked out, and for how long |
+| `DAYMARK_TOTP_LOCKOUT_FAILS`, `_SECONDS` | `5`, `300` | Bad sign-in codes before a credential is locked, and for how long; also the backoff for wrong invitation secrets |
+| `DAYMARK_INVITE_TTL_SECONDS` | `259200` (72 h) | Invitation lifetime |
+| `DAYMARK_SESSION_IDLE_SECONDS`, `_ABSOLUTE_SECONDS` | `900`, `28800` | Clinician session lifetimes |
+| `DAYMARK_COOKIE_INSECURE` | off | Plain-HTTP testing only: drops `Secure` from the session cookie (#{O12}) |
+| `DAYMARK_ACCESS_LOG_RETENTION_DAYS` | `90` | Audit-log retention (COMPANION_SECURITY.md §9) |
+| `DAYMARK_ACCESS_LOG_SOURCE_IP` | off | Records the client address in audit entries |
+| `DAYMARK_REISSUE_MAX_PER_HOUR` | `3` | Recovery requests per address per hour |
+| `DAYMARK_REISSUE_CONFIRM_TTL_SECONDS` | `3600` | Lifetime of a recovery link |
+| `DAYMARK_SMTP_HOST` | unset | The one switch for outbound mail (§8) |
+| `DAYMARK_SMTP_PORT` | `587` | 587 for STARTTLS, 465 for implicit TLS |
+| `DAYMARK_SMTP_TLS` | `starttls` | `starttls` or `implicit`; `none` and anything unknown stop the server at start |
+| `DAYMARK_SMTP_FROM` | unset | Required when SMTP is on |
+| `DAYMARK_SMTP_USER` (`_FILE`), `DAYMARK_SMTP_PASS` (`_FILE`) | unset | Credentials; give the password as a file |
+| `DAYMARK_SMTP_ALLOW_INSECURE_LINKS` | off | Development only: allows `http://` links in mail |
 
-**Rule:** set `DAYMARK_TRUSTED_PROXIES` to the *narrowest* CIDR (ideally a `/32`)
-that contains your proxy's address on the internal network. WebAuthn RP-ID/origin is
-**never** taken from a forwarded header — it comes from
-`DAYMARK_WEBAUTHN_RP_ID` / `DAYMARK_WEBAUTHN_ORIGINS`.
+Read by compose only, from `.env`:
 
-### 4.1 Caddy
-
-Caddy sets the forwarded headers correctly by default and does ACME automatically.
-
-```caddyfile
-# Caddyfile — TLS termination + Let's Encrypt, reverse-proxy to the companion
-daymark.example.com {
-    encode zstd gzip
-
-    # Security headers at the edge (the app also sends a strict CSP; these reinforce it).
-    header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains"
-        X-Content-Type-Options "nosniff"
-        Referrer-Policy "no-referrer"
-        -Server
-    }
-
-    reverse_proxy companion:8080 {
-        # Caddy strips client-supplied X-Forwarded-* and sets its own from the real connection.
-        header_up X-Forwarded-Proto {scheme}
-        header_up X-Forwarded-Host  {host}
-    }
-}
-```
-
-**Sub-path mount (serve under `https://host/daymark`):**
-
-```caddyfile
-daymark.example.com {
-    handle_path /daymark/* {
-        reverse_proxy companion:8080 {
-            header_up X-Forwarded-Proto  {scheme}
-            header_up X-Forwarded-Host   {host}
-            header_up X-Forwarded-Prefix /daymark
-        }
-    }
-}
-```
-
-> Set `DAYMARK_BASE_PATH: "/daymark"` so the app emits asset URLs and portal routes
-> under that prefix. `handle_path` strips the prefix before proxying; the app re-adds
-> it via `BASE_PATH` / `X-Forwarded-Prefix` when generating links (see §4.4).
-
-For **internal-CA / LAN with a real hostname** (keeps WebAuthn working), point Caddy
-at its built-in CA instead of ACME:
-
-```caddyfile
-{
-    pki {
-        ca internal { }
-    }
-}
-daymark.lan {
-    tls internal              # Caddy's built-in CA; trust Caddy's root on your devices
-    reverse_proxy companion:8080
-}
-```
-
-### 4.2 Traefik
-
-Labels on the companion service; Traefik discovers it via the Docker provider.
-
-```yaml
-# traefik static config (traefik.yml) — relevant bits
-entryPoints:
-  websecure:
-    address: ":443"
-    forwardedHeaders:
-      # Mirror of DAYMARK_TRUSTED_PROXIES: trust X-Forwarded-* only from Traefik itself.
-      # Pin the NARROWEST address; do NOT use a broad bridge CIDR.
-      trustedIPs: ["10.89.0.2/32"]   # EXAMPLE: Traefik's address on the internal net
-certificatesResolvers:
-  le:
-    acme:
-      email: you@example.com
-      storage: /acme/acme.json
-      httpChallenge:
-        entryPoint: web
-providers:
-  docker:
-    exposedByDefault: false
-```
-
-```yaml
-# companion service labels (add to the compose service in §2)
-    labels:
-      traefik.enable: "true"
-      traefik.docker.network: "companion-internal"
-      traefik.http.routers.daymark.rule: "Host(`daymark.example.com`)"
-      traefik.http.routers.daymark.entrypoints: "websecure"
-      traefik.http.routers.daymark.tls.certresolver: "le"
-      traefik.http.services.daymark.loadbalancer.server.port: "8080"
-      # Security headers middleware:
-      traefik.http.middlewares.daymark-sec.headers.stsSeconds: "31536000"
-      traefik.http.middlewares.daymark-sec.headers.contentTypeNosniff: "true"
-      traefik.http.middlewares.daymark-sec.headers.referrerPolicy: "no-referrer"
-      traefik.http.routers.daymark.middlewares: "daymark-sec@docker"
-```
-
-**Sub-path mount (`/daymark`) — strip the prefix with a middleware:**
-
-```yaml
-    labels:
-      traefik.http.routers.daymark.rule: "Host(`daymark.example.com`) && PathPrefix(`/daymark`)"
-      traefik.http.middlewares.daymark-strip.stripprefix.prefixes: "/daymark"
-      traefik.http.routers.daymark.middlewares: "daymark-strip@docker,daymark-sec@docker"
-```
-
-> Traefik forwards `X-Forwarded-Prefix: /daymark` after stripping; the app reads it
-> (or `DAYMARK_BASE_PATH`) to rebuild absolute links. Set
-> `DAYMARK_BASE_PATH: "/daymark"` to match.
-> `entryPoints.websecure.forwardedHeaders.trustedIPs` is the Traefik-side mirror of
-> `DAYMARK_TRUSTED_PROXIES` — keep them consistent and **narrow**.
-
-### 4.3 nginx
-
-```nginx
-# /etc/nginx/conf.d/daymark.conf — TLS termination + reverse proxy
-# nginx IS the trust boundary here, so it SETS the forwarded headers, overwriting
-# any client-supplied values (the strip step).
-
-upstream daymark_companion {
-    server companion:8080;        # resolvable on the shared docker network, or 127.0.0.1:8080 on host
-    keepalive 16;
-}
-
-server {
-    listen 443 ssl;
-    http2 on;
-    server_name daymark.example.com;     # WebAuthn RP-ID is config-pinned to this; do NOT use $host
-
-    ssl_certificate     /etc/letsencrypt/live/daymark.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/daymark.example.com/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_prefer_server_ciphers off;
-
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header Referrer-Policy "no-referrer" always;
-    server_tokens off;
-
-    client_max_body_size 26m;     # must be >= DAYMARK_MAX_BLOB_BYTES (25 MiB) or PUTs 413
-
-    location / {
-        proxy_pass http://daymark_companion;
-        proxy_http_version 1.1;
-        proxy_set_header Connection "";
-
-        # Forwarded headers — nginx OVERWRITES any client-supplied values (the strip):
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $remote_addr;     # single trusted hop → use peer, not the chain
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host  $host;
-
-        # Allow time for large blob PUTs; the app streams to disk.
-        proxy_request_buffering off;
-        proxy_read_timeout 60s;
-    }
-}
-
-# Redirect plain HTTP → HTTPS (WebAuthn needs a secure origin)
-server {
-    listen 80;
-    server_name daymark.example.com;
-    return 308 https://$host$request_uri;
-}
-```
-
-**Sub-path mount (`/daymark`):**
-
-```nginx
-    location /daymark/ {
-        proxy_pass http://daymark_companion/;   # trailing slash strips the /daymark/ prefix
-        proxy_set_header X-Forwarded-Prefix /daymark;
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $remote_addr;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host  $host;
-    }
-```
-
-> Set `DAYMARK_BASE_PATH: "/daymark"`. The `proxy_pass …/` trailing-slash form strips
-> the prefix on the way in; `X-Forwarded-Prefix` lets the app re-add it when
-> generating absolute URLs.
->
-> **`X-Forwarded-For` note:** because nginx is the only trusted hop, set it to
-> `$remote_addr` (the real client) rather than `$proxy_add_x_forwarded_for` (which
-> *appends* to a possibly client-spoofed chain). `DAYMARK_TRUSTED_PROXIES` should be
-> just the nginx address (the internal-net IP, or `127.0.0.1/32` for host-nginx).
-
-### 4.4 Sub-path / base-path: the app's responsibilities
-
-Serving under a prefix is split between proxy and app:
-
-| Concern | Proxy does | App does (via `DAYMARK_BASE_PATH` / `X-Forwarded-Prefix`) |
+| Variable | Default | What it does |
 |---|---|---|
-| Route matching | `PathPrefix(/daymark)` / `location /daymark/` | Mounts all routes under `${BASE_PATH}`. |
-| Prefix stripping | `handle_path` / `stripprefix` / trailing-slash `proxy_pass` | Accepts the stripped path. |
-| Asset URLs | passes `X-Forwarded-Prefix` | Emits `<base href>` / asset `src` with the prefix so static JS/WASM load. |
-| WebAuthn origin | passes real `X-Forwarded-Proto`/`Host` for *URLs only* | Verifies the assertion origin against the **config-pinned** `DAYMARK_WEBAUTHN_ORIGINS`, **exactly** — not the forwarded header. |
-| Cookies / CSP | — | `Path=${BASE_PATH}` on the session cookie; CSP `base-uri 'self'`. |
+| `DAYMARK_DOMAIN` | required | The public hostname as clients type it; compose derives the public base URL and the passkey settings from it |
+| `DAYMARK_PUBLIC_SCHEME` | `https` | Scheme of that origin |
+| `DAYMARK_BIND_IP` | `127.0.0.1` | Host address the port is published on (§1) |
+| `DAYMARK_HOST_PORT` | `8080` | Host port |
+| `DAYMARK_IMAGE` | `daymark-companion:1.0.0` | The image to run; set a published digest to run CI's image |
 
-> **WebAuthn pitfall (most common proxy failure).** The RP-ID is a registrable
-> domain (`daymark.example.com`), independent of the sub-path, and is **pinned in
-> config**. The **origin** the app verifies an assertion against is also
-> **config-pinned** (`DAYMARK_WEBAUTHN_ORIGINS`), and must *exactly* equal what the
-> browser sends (scheme + host + port). If the pinned origin does not match the real
-> external URL, passkey registration/assertion fails with an origin-mismatch error.
-> Set `DAYMARK_WEBAUTHN_RP_ID` / `DAYMARK_WEBAUTHN_ORIGINS` to your real external
-> values; do **not** rely on the app inferring them from `Host` / `X-Forwarded-Host`
-> (which a client could control).
+Read by the healthcheck: `DAYMARK_HEALTHCHECK_URL`, default `http://127.0.0.1:8080/readyz`. Compose
+also sets `TZ=UTC` and the `JAVA_TOOL_OPTIONS` in §2.
 
----
+### 5.2 The bearer token
 
-## 5. Configuration & secrets surface
+- Create it before the first start:
 
-### 5.1 Full environment variable reference
+  ```sh
+  mkdir -p secrets && chmod 700 secrets
+  openssl rand -base64 48 | tr -d '\n' > secrets/auth_token
+  sudo chown 65532:65532 secrets/auth_token && chmod 400 secrets/auth_token
+  ```
 
-| Variable | Default | Purpose |
+- `_FILE` works for `DAYMARK_AUTH_TOKEN`, `DAYMARK_SMTP_USER` and `DAYMARK_SMTP_PASS` only. Never put
+  a secret in `environment:` or in a committed file.
+- **Rotating it:** replace the file and restart. At start the server compares the file with what it
+  stored, and a changed file wins over a token issued since by email recovery. Nothing encrypted
+  changes: the token gates access and is not a key.
+- The token is not the encryption key. Someone holding it can list and upload ciphertext and approve
+  pairings, but content routes also demand each relationship's inbox token, so they cannot read the
+  journal.
+
+## 6. Backup and restore
+
+### 6.1 What is on the volume
+
+The volume is `daymark-companion_blobs`, mounted at `/data`.
+
+| Path | Holds | Present when |
 |---|---|---|
-| `DAYMARK_BIND_ADDR` | `0.0.0.0` | Listen address *inside* the container. |
-| `DAYMARK_PORT` | `8080` | In-container listen port. |
-| `DAYMARK_DATA_DIR` | `/data` | Root of the writable volume (blobs + `index.sqlite`). |
-| `DAYMARK_BASE_PATH` | `/` | Sub-path prefix for routes/assets (e.g. `/daymark`). |
-| `DAYMARK_TLS_MODE` | `off` | `off` (proxy terminates) \| `self-signed` (auto cert) \| `static` (mounted cert). |
-| `DAYMARK_TLS_CERT_DIR` | `/data/tls` | Where the self-signed cert is generated or the static cert is read. |
-| `DAYMARK_TLS_SAN` | _(host)_ | Comma-list of SANs for the auto self-signed cert. |
-| `DAYMARK_TRUSTED_PROXIES` | _(empty = trust none)_ | CIDRs whose `X-Forwarded-*` are honored. **No broad default.** Pin a `/32`. |
-| `DAYMARK_FORWARDED_HEADERS` | `none` | `x-forwarded` \| `forwarded` \| `none`. |
-| `DAYMARK_WEBAUTHN_RP_ID` | _(SCAFFOLD — WebAuthn endpoints return 501; TOTP is the only working path today)_ | Config-pinned RP-ID; never client-derived. Pins the *future* passkey path so it can never regress to `Host`-header derivation. |
-| `DAYMARK_WEBAUTHN_ORIGINS` | _(SCAFFOLD — WebAuthn endpoints return 501; TOTP is the only working path today)_ | Exact origin allowlist for assertion verification (used once the scaffold is implemented). |
-| `DAYMARK_AUTH_TOKEN` / `…_FILE` | _(required)_ | Server access token (gates PUT/list/enumerate). Prefer `_FILE`. |
-| `DAYMARK_TOTP_ISSUER` | `Daymark Companion` | Issuer label for the therapist TOTP fallback. |
-| `DAYMARK_MAX_BLOB_BYTES` | `26214400` | Per-blob ciphertext cap (25 MiB). |
-| `DAYMARK_MAX_REQUEST_BYTES` | `27262976` | Hard request-body cap (≥ blob + envelope). |
-| `DAYMARK_MAX_VERSIONS` | `200` | Append-only retention cap per snapshot lineage; oldest pruned beyond this (only after a newer durable version is confirmed). |
-| `DAYMARK_PER_TOKEN_QUOTA_BYTES` | `5368709120` | Per-token storage quota (5 GiB); disk-full fails closed. |
-| `DAYMARK_RATE_LIMIT_RPS` | `5` | Request rate limit for bearer-token traffic only (sync and owner routes), keyed by trusted IP or socket peer. Anonymous pairing and report routes have their own limits (see `PairingRelayRoutes.kt`). |
-| `DAYMARK_LINEAGE_CREATE_RPM` | `10` | Cap on lineage/version creation (anti monotonic-poisoning / queue-flooding). |
-| `DAYMARK_AUTH_LOCKOUT_FAILS` | `8` | Failed-auth attempts before lockout. |
-| `DAYMARK_AUTH_LOCKOUT_SECONDS` | `900` | Lockout duration. |
-| `DAYMARK_THERAPIST_AUTH` | _(off)_ | Set `1`/`true` to enable the therapist portal (relationship blob channels + TOTP auth + invites). Fail-closed (503 on every portal path) when unset. |
-| `DAYMARK_INVITE_TTL_SECONDS` | `259200` | Single-use therapist-invite TTL (72 h). |
-| `DAYMARK_SESSION_IDLE_SECONDS` | `900` | Therapist session idle timeout (15 min). |
-| `DAYMARK_SESSION_ABSOLUTE_SECONDS` | `28800` | Therapist session absolute lifetime (8 h). |
-| `DAYMARK_TOTP_LOCKOUT_FAILS` | `5` | Bad TOTP codes (and bad invite-secret guesses) before lockout / capped backoff. |
-| `DAYMARK_TOTP_LOCKOUT_SECONDS` | `300` | TOTP lockout window / invite-redeem backoff base. |
-| `DAYMARK_REL_MAX_VERSIONS` | `50` | Append-only retention cap per relationship-channel lineage. |
-| `DAYMARK_REL_QUOTA_BYTES` | `268435456` | Per-relationship storage quota (256 MiB). |
-| `DAYMARK_COOKIE_INSECURE` | _(off)_ | Dev/test only: drop the `Secure` attribute on the session cookie (for a plain-HTTP origin). Leave unset in production — the portal requires a TLS origin. |
-| `DAYMARK_REISSUE_MAX_PER_HOUR` | `3` | Cap on `POST /v1/recovery/request` attempts per source per hour (email Option A access-token recovery; heavily rate-limited by design). |
-| `DAYMARK_REISSUE_CONFIRM_TTL_SECONDS` | `3600` | How long a minted access-token recovery confirmation link stays valid. |
-| `DAYMARK_PUBLIC_BASE_URL` | _(falls back to the first `DAYMARK_WEBAUTHN_ORIGINS` entry; unset = none)_ | The real external origin (e.g. `https://daymark.example.com`) used to build links in outbound email — invites, review notifications, and access-token recovery. **Required** for access-token recovery to actually send: unlike the invite link, the recovery link is never built from the request's `Host` header (that route is unauthenticated, so trusting a client-supplied header there would let an attacker redirect a real recovery token to a domain they control) — if this is unset, recovery requests are accepted but silently skip sending, logged as a warning. |
-| `DAYMARK_SHARE_MAX_TTL_DAYS` | `90` | Ceiling on owner-requested share/game-plan expiry (bounds the no-PFS harvest window). |
-| `DAYMARK_BLOB_HARD_DELETE` | `on-supersede-and-expiry` | Hard-delete superseded/expired blob **bytes** (not just flag). |
-| `DAYMARK_SIZE_PADDING` | `bucketed` | Pad blob sizes to fixed buckets (e.g. 4/16/64 KiB) **by default** (anti acuity/withdrawal de-anon). |
-| `DAYMARK_ACCESS_LOG_RETENTION_DAYS` | `90` | Owner-readable access-log retention before pruning. |
-| `DAYMARK_ACCESS_LOG_SOURCE_IP` | `off` | Log source IP? **Off by default** (IP geolocates the clinic). |
-| `DAYMARK_LOG_LEVEL` | `info` | `error`\|`warn`\|`info`\|`debug`. Never logs plaintext/keys/tokens. |
-| `TZ` | `UTC` | Timestamp timezone (logs/metadata only). |
+| `index.db` and `blobs/<lineage>/<version>.blob` | Snapshot ciphertext and its index | a bearer token is set |
+| `keyparams.json` | The owner's key-derivation parameters (salt and cost; public) | an owner has published them |
+| `owner-account.db` | The bearer-token digest, the notification email (plaintext), recovery-link digests | a bearer token is set |
+| `auth.db` | Invitations (Argon2id), sign-in code seeds (**in the clear**), session digests, attempt counters, public keys, relationship endings | `DAYMARK_THERAPIST_AUTH=1` |
+| `rel-index.db` and `rel/<relRef>/<channel>/<lineage>/<version>.blob` | Relationship ciphertext and its index | `DAYMARK_THERAPIST_AUTH=1` |
+| `audit.db`, `org-audit.db` | Audit chains, per relationship and per practice | `DAYMARK_THERAPIST_AUTH=1` |
+| `org.db` | Practices, members, roles | `DAYMARK_THERAPIST_AUTH=1` |
+| `pairing.db` | Pairing messages in transit | `DAYMARK_THERAPIST_AUTH=1` |
+| `tmp/` | Staging for atomic writes | with either blob store |
 
-> Any variable `X` may be supplied as `X_FILE` pointing at a file; the file form wins
-> and keeps the secret out of `docker inspect` / env dumps. This convention applies
-> uniformly to every secret-bearing variable.
+That is eight SQLite databases, all in WAL mode: each may have `-wal` and `-shm` files beside it, and
+those belong to it. Also present and not worth keeping: `.readyz` (the readiness probe's file) and the
+SQLite native library the server unpacks at every start.
 
-### 5.2 Secrets handling
+The volume holds **sign-in secrets**: anyone with a copy of `auth.db` can mint sign-in codes for every
+enrolled clinician (COMPANION_SECURITY.md §5.2). Protect backups like a password file — encrypted at
+rest, readable by few.
 
-**Option 1 — host file + `*_FILE` mount (compose-native, simplest).**
+### 6.2 Back up
 
-```bash
-# generate a strong token (host)
-mkdir -p ./secrets
-openssl rand -base64 48 > ./secrets/companion_auth_token
-chmod 600 ./secrets/companion_auth_token
+Stop the container for the few seconds a copy takes. Eight databases and their blob files must come
+from one moment, and the image has no shell or `sqlite3` to take a live copy.
+
+```sh
+cd companion
+docker compose stop companion
+docker run --rm -v daymark-companion_blobs:/data:ro -v "$PWD/backups:/backup" alpine:3 \
+  tar czf "/backup/daymark-$(date -u +%Y%m%dT%H%M%SZ).tar.gz" -C /data .
+docker compose start companion
 ```
 
-The compose `secrets:` block (§2) mounts it at `/run/secrets/companion_auth_token`
-read-only, and `DAYMARK_AUTH_TOKEN_FILE` points there. **Never** put the token
-directly in `environment:` or a committed `.env`.
+A filesystem snapshot of the whole volume at one instant (ZFS, btrfs, LVM) also works: SQLite treats
+it like a power cut. Keep `companion/.env` and `companion/secrets/` too — they are not on the volume.
+A backup you have never restored is a hypothesis; restore one somewhere once.
 
-**Option 2 — external / Swarm Docker secret (no host file in the repo).**
+### 6.3 Restore
 
-```yaml
-secrets:
-  companion_auth_token:
-    external: true   # created out-of-band:
-                     #   printf %s "$TOK" | docker secret create companion_auth_token -
-```
+Empty the volume first. A `-wal` file left over from a newer state and replayed onto an older database
+would corrupt it.
 
-**Option 3 — Podman / rootless.** The same compose works; for rootless add
-`userns_mode: "keep-id"` (or run as the rootless user's UID) so the `blobs` volume is
-writable. `cap_drop: ALL` and `no-new-privileges` carry over unchanged.
-
-**Hygiene rules**
-
-- The image contains **no** secrets and **no** default token — the app **refuses to
-  start** without `DAYMARK_AUTH_TOKEN[_FILE]`, so there is no insecure default.
-- `.gitignore` `secrets/` and `*.env`. Ship `secrets/.gitkeep` and a
-  `companion.env.example` only.
-- Rotating the token: replace the secret file/secret, `docker compose up -d` to
-  restart; existing blobs are unaffected (the token gates *access*, it is not a
-  crypto key).
-- The **server auth token is not the E2EE key.** Even if it leaks, an attacker can
-  list/PUT opaque blobs but still cannot read anything — zero-knowledge holds. It is
-  a network-enumeration / DoS guard, **not** a confidentiality boundary. (It *is* an
-  integrity/availability lever, which is why the §2 limits exist.)
-- The **WebAuthn-PRF reading key never reaches the server.** The token, the TOTP
-  fallback's **cleartext** secret (it cannot be hashed — the verifier must recompute the
-  code), and the bootstrap invite code are the only authenticating material the server stores — and the TOTP secret is honestly flagged
-  as a weaker parallel custody path in [COMPANION_SECURITY.md](COMPANION_SECURITY.md).
-
----
-
-## 6. Volume, backup & restore
-
-The entire persistent state is one named volume `blobs:` containing:
-
-```
-/data
-  index.sqlite           # NON-SECRET metadata: blob id, type, device label, createdAt,
-  index.sqlite-wal       # size (padded), content hash (server-computed), per-relationship
-  index.sqlite-shm       # inbox token, share expiry, revoke flag, version/lineage counters
-  blobs/<id>.bin         # opaque ciphertext (snapshots, share bundles, game plans)
-  tls/                   # (Topology B only) self-signed or mounted cert+key
-  access.log.sqlite      # coarse, owner-readable, EVENT-not-content access log
-```
-
-> **Metadata honesty.** "Non-secret" does **not** mean "harmless." The index is a
-> relationship/traffic-analysis surface — see
-> [§11](#11-what-deployment-hardening-does-not-buy-you-honesty-section) and
-> [COMPANION_SECURITY.md](COMPANION_SECURITY.md). It contains no plaintext and no
-> keys, so a stolen backup leaks only what a stolen disk would.
-
-Everything backed up is **ciphertext + non-secret metadata**, so backups inherit the
-zero-knowledge property. (Note the server **computes the content hash itself** over
-the opaque blob — any client-supplied `X-Content-Hash` is untrusted — and the
-`blob_path` is **server-derived and charset-validated**, never client-supplied, to
-close path-traversal on store/DELETE.)
-
-### 6.1 Backup (WAL-aware, consistent)
-
-The index is SQLite in WAL mode, so copy it with a SQLite-consistent method — not a
-raw `cp` of a live file.
-
-```bash
-# Consistent backup of the whole volume to a tar.gz
-TS=$(date -u +%Y%m%dT%H%M%SZ)
-
-# 1) Atomic, WAL-aware snapshot of the SQLite index from inside the running container.
-#    dm-admin uses `VACUUM INTO` / the SQLite backup API for a consistent copy.
-docker compose exec -T companion /app/dm-admin backup-index \
-  /data/index.sqlite /data/_backup/index.sqlite
-
-# 2) Snapshot the volume. Blob files are append-only & content-addressed (never
-#    mutated in place), so copying them live is safe; only the index needed step 1.
-docker run --rm \
-  -v daymark_blobs:/data:ro \
-  -v "$PWD/backups:/backup" \
-  alpine:3 sh -c "tar czf /backup/daymark-$TS.tar.gz -C /data ."
-```
-
-> Store backups encrypted at rest if your host isn't already (e.g. `age` / `gpg` the
-> tarball). The contents are already E2EE; defense in depth is cheap.
-
-### 6.2 Restore
-
-```bash
+```sh
+cd companion
 docker compose down
-docker volume create daymark_blobs
-docker run --rm -v daymark_blobs:/data -v "$PWD/backups:/backup" alpine:3 \
-  sh -c "cd /data && tar xzf /backup/daymark-<TS>.tar.gz"
-# fix ownership to the container UID:
-docker run --rm -v daymark_blobs:/data alpine:3 chown -R 10001:10001 /data
+docker run --rm -v daymark-companion_blobs:/data -v "$PWD/backups:/backup:ro" alpine:3 sh -c \
+  'find /data -mindepth 1 -delete && tar xzf /backup/daymark-<time>.tar.gz -C /data && chown -R 65532:65532 /data'
 docker compose up -d
 ```
 
-### 6.3 Volume ownership gotcha
+Add `-f docker-compose.yml -f docker-compose.no-egress.yml` to the `down` and `up` commands if you use
+the override. On a new host, run `docker compose create` first so Compose creates the volume, then
+restore into it.
 
-The named volume must be owned by the container UID (`10001`). On first creation the
-entrypoint `chown`s `/data` *if* it has permission; with a `read_only` rootfs +
-non-root user this can fail on a pre-existing volume and crash-loop the container. The
-documented fix is the one-shot `chown` above, or a tiny init service:
+After a restore the server is back at the moment of the backup: sign-ins, pairings and audit entries
+made since are gone, and clinicians enrolled since must be invited again. An owner who wrote down a
+newer audit-chain head will see the chain fall behind it (COMPANION_SECURITY.md §9) — tell them why.
+
+## 7. Upgrades
+
+1. Back up (§6.2).
+2. Build from source with `git pull` then `docker compose up -d --build`; or run the image CI
+   published: set `DAYMARK_IMAGE` to `ghcr.io/…/daymark-companion@sha256:…`, then `docker compose pull`
+   and `docker compose up -d`. Pin a digest, never `:latest`, in production: a moving tag lets a
+   registry swap the code that holds people's keys.
+3. Watch it come up: `docker compose ps` should reach `healthy`; then run the checks in
+   COMPANION_OBSERVABILITY.md §6.4.
+
+**Schema changes** are additive: each store creates missing tables and adds missing columns at start.
+There is no schema version and no automatic copy before a change, so the backup from step 1 is the way
+back (#{O17}). To roll back, run the previous image — and restore that backup if the new version
+changed a database.
+
+**Base images** are pinned by digest, and Dependabot proposes the bumps (`.github/dependabot.yml`).
+Nothing updates by itself: a running server keeps its operating system and Java runtime until you
+rebuild or pull.
+
+**Volumes from before the switch to UID 65532.** Older builds ran as UID 10001, and Docker copies
+ownership from the image only on the first mount of an empty volume. Once:
+
+```sh
+docker compose down
+docker run --rm -v daymark-companion_blobs:/data alpine:3 chown -R 65532:65532 /data
+docker compose up -d --build
+```
+
+## 8. Network egress lockdown and the SMTP exception
+
+The app makes no outbound connection except SMTP, and SMTP is off unless `DAYMARK_SMTP_HOST` is set;
+while it is off the mailer never opens a socket. Mail carries only invitation and notification links,
+never content (COMPANION_OBSERVABILITY.md §3.5). The no-egress override cannot send mail at all, and
+on the default network outbound connections get no reply, so turning SMTP on means giving it one
+narrow path out.
+
+On the default topology, write an override — `companion/docker-compose.smtp.yml` is not shipped;
+this file is yours:
 
 ```yaml
-  init-perms:
-    image: alpine:3
-    user: "0:0"
-    command: ["chown", "-R", "10001:10001", "/data"]
-    volumes: [ "blobs:/data" ]
-    restart: "no"
-    # run once: `docker compose run --rm init-perms`, then start `companion`.
+services:
+  companion:
+    networks:
+      back: { ipv4_address: 10.89.0.3 }
+      mail: { gw_priority: 1 }     # the default route must go through mail, not back
+    environment:
+      DAYMARK_SMTP_HOST: "${DAYMARK_SMTP_HOST}"
+      DAYMARK_SMTP_PORT: "587"
+      DAYMARK_SMTP_TLS:  "starttls"
+      DAYMARK_SMTP_FROM: "${DAYMARK_SMTP_FROM}"
+      DAYMARK_SMTP_USER: "${DAYMARK_SMTP_USER}"
+      DAYMARK_SMTP_PASS_FILE: "/run/secrets/companion_smtp_pass"
+    secrets:
+      - companion_smtp_pass
+networks:
+  mail:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: dmk-mail
+secrets:
+  companion_smtp_pass:
+    file: ./secrets/smtp_pass
 ```
 
----
+Make `secrets/smtp_pass` readable by UID 65532 (§2), start with
+`docker compose -f docker-compose.yml -f docker-compose.smtp.yml up -d`, and then allow only the mail
+server on the host. The order matters — each `-I` goes to the top, so the RETURN must be inserted last:
 
-## 7. Upgrades & migrations
-
-### 7.1 Image upgrade flow (pinned digests)
-
-```bash
-# 1) Back up first (always — see §6.1).
-# 2) Bump the pinned digest in docker-compose.yml to the new release's sha256.
-#    Releases publish provenance/SBOM (and optionally cosign signatures); verify the
-#    digest against the release notes before bumping.
-# 3) Pull + recreate:
-docker compose pull
-docker compose up -d
-# 4) Watch health + logs:
-docker compose ps            # STATUS should reach 'healthy'
-docker compose logs -f companion
-# 5) Roll back = revert the digest and `up -d` again; the volume is unchanged.
+```sh
+iptables -I DOCKER-USER -i dmk-mail -j DROP
+iptables -I DOCKER-USER -i dmk-mail -d <smtp-ip>/32 -p tcp --dport 587 -j RETURN
 ```
 
-- **Always pin by `@sha256:` digest, never `:latest`.** Reproducibility +
-  supply-chain integrity is a core principle; a floating tag would let a registry
-  compromise swap the image — and for the browser portal that would mean **tampered
-  in-browser crypto JS**. (This is exactly why owner secrets are native-phone-only and
-  the browser portal is documented as a *lower-assurance convenience path*, not a
-  zero-knowledge one — see [COMPANION_SECURITY.md](COMPANION_SECURITY.md).)
-- Optionally verify image signatures (cosign) before bumping the digest, if the
-  release ships them.
+`gw_priority` needs Compose 2.33 or later; without it Docker picks the default route itself and may
+pick the network with no reply path. Docker's nftables backend has **no** `DOCKER-USER` chain: there,
+add a table of your own with a base chain at the same hook and priority. None of this is tested by CI;
+check that a real email arrives (#{O22}).
 
-### 7.2 SQLite index migrations
+## 9. First run
 
-- The index holds **only non-secret metadata** — migrations rewrite columns/indices,
-  **never** touch blob ciphertext. A migration can therefore never corrupt or expose
-  owner data.
-- Migrations are **idempotent, forward-only, transactional**, run automatically at
-  startup, and guarded by a `schema_version` row. If a migration fails, the app
-  **refuses to start** and leaves the old DB intact (**fail-closed**) rather than
-  half-migrating.
-- The entrypoint takes an **automatic pre-migration copy** of `index.sqlite` to
-  `/data/_pre-migrate/index.<oldver>.sqlite` before applying, so a bad upgrade is
-  trivially reversible even without the §6 backup.
-- **Blob format is versioned in the blob header, not the DB.** New server versions
-  must keep reading old blob format versions (append-only history is sacred); the
-  server **never re-encrypts or rewrites** existing blobs. Format changes are
-  additive.
-- Because the **phone holds the authoritative copy** (and v1 sync is **single-writer,
-  last-snapshot-wins replication** — *not* row-level merge; see
-  [COMPANION_ARCHITECTURE.md](COMPANION_ARCHITECTURE.md)), the worst case of a botched
-  server migration is "re-init the volume and re-sync from the phone." That is the
-  documented ultimate fallback.
+1. `cp .env.example .env` in `companion/`; set `DAYMARK_DOMAIN`, and `DAYMARK_THERAPIST_AUTH=1` if a
+   clinician or a practice will use this server.
+2. Create the bearer token (§5.2).
+3. Pick the topology (§1) and start: `docker compose up -d --build`, adding the override if your proxy
+   is a container.
+4. Configure your proxy (§3), set `DAYMARK_TRUSTED_PROXIES` (§4.0), and restart.
+5. Run the checks in COMPANION_OBSERVABILITY.md §6.4, including the lockout-isolation test.
+6. Schedule backups (§6.2) and keep them off the host, encrypted.
 
-> **Roadmap note (no claim of v1 support).** True concurrent multi-device row-merge is
-> **gated** behind a prerequisite schema migration that adds stable cross-device UUIDs
-> and real `updatedAt` columns to every synced table (the current app schema has
-> neither — `grep` confirms zero `updatedAt`/`lastModified` columns). That migration
-> is deferred to a later phase and is **never claimed as working in v1**. Whether it
-> is ever undertaken (vs keeping sync permanently single-writer) is an open maintainer
-> decision in [COMPANION_SCOPE.md](COMPANION_SCOPE.md).
+## 10. Logging and retention policy
 
-### 7.3 Compatibility-matrix discipline
+Two records, kept for different readers:
 
-Each release documents: the minimum compatible **Daymark Sync** flavor app version,
-the blob-format versions it reads/writes, and the index `schema_version`. The app's
-Sync screen surfaces a clear "server too old / too new" message rather than silently
-misbehaving.
-
----
-
-## 8. Network egress lockdown
-
-`internal: true` on the companion's **own** network removes its route to the gateway.
-This is the structural enforcement of "no telemetry by default."
-
-> **The SMTP exception (the one deliberate egress path).** If — and only if — the owner
-> sets `DAYMARK_SMTP_HOST`, the companion sends therapist invite/notification **links**
-> (no record or plaintext content) to that one mail server over TLS, with credentials
-> from `*_FILE` secrets. To enable it you must give the container a **narrow** egress
-> path to exactly that `host:port` and nothing else — e.g. a second bridge that reaches
-> only the mail relay, or a host-firewall allow-rule scoped to the mail host — while
-> keeping `internal: true` on its primary network. Do **not** simply drop the container
-> onto a general egress-capable network; that reopens telemetry egress. If SMTP is left
-> unset (the default), the mailer never opens a socket and the "no outbound, ever" claim
-> holds unchanged.
-
-> **Structural-honesty caveat (do not get this wrong).** Putting the companion on a
-> network that it **shares with the internet-facing proxy** does **not** lock egress —
-> the companion can reach the gateway through that shared, egress-capable bridge. An
-> earlier draft claimed Topology-A egress was "structurally enforced" while the
-> companion shared the proxy's `edge` net; that claim was **false** and is corrected
-> here. The fix, used in §2, is:
->
-> 1. Give the companion its **own** `internal: true` network (`companion-internal`).
-> 2. Make the **proxy multi-homed**: it joins both `companion-internal` (to reach the
->    companion) **and** its separate egress-capable `edge` net (for public ingress).
-> 3. The companion joins **only** `companion-internal`, so it has no path to the
->    gateway.
->
-> If for some reason you keep the companion on an egress-capable network, **drop the
-> "structurally enforced" wording** and add a host-firewall egress-deny rule instead.
-
-**Verify zero egress at runtime:**
-
-```bash
-# From inside the container, any outbound connect must fail/timeout.
-docker compose exec companion /healthcheck --expect-fail https://example.com
-```
-
-> **CI caveat (scope honestly).** The project's `egress=0` CI test covers only the
-> **shipped image** (no outbound calls, web UI loads zero third-party origins —
-> enforced by a strict CSP + fully vendored assets). It does **not** validate the
-> operator's *runtime* compose/network choices. The command above is how you check
-> your own deployment. Separately, the flagship F-Droid build remains **provably
-> network-free** (declares no `INTERNET` permission); all server talk lives only in the
-> opt-in **Daymark Sync** flavor.
-
----
-
-## 9. First-run checklist (Topology A)
-
-1. `mkdir -p secrets && openssl rand -base64 48 > secrets/companion_auth_token && chmod 600 secrets/companion_auth_token`
-2. Create the `companion-internal` (`internal: true`) network and join **both** the
-   companion and the proxy to it; keep the proxy's public NIC on a separate `edge`
-   network (see §2, §8).
-3. `docker compose run --rm init-perms` (one-time volume `chown`).
-4. Set the pinned image **digest**, the real **hostname**, `DAYMARK_WEBAUTHN_RP_ID` /
-   `DAYMARK_WEBAUTHN_ORIGINS`, and `DAYMARK_TRUSTED_PROXIES` to your proxy's **narrow**
-   address.
-5. `docker compose up -d` → wait for `healthy`.
-6. Configure the proxy (Caddy/Traefik/nginx per §4); confirm HTTPS and that
-   `X-Forwarded-Proto` arrives correctly.
-7. Pair the phone **Daymark Sync** flavor (server URL + token + passphrase); confirm a
-   snapshot PUT round-trips. (Do **not** type the master passphrase into the browser
-   portal — that path is forbidden/strongly-discouraged; see
-   [COMPANION_SECURITY.md](COMPANION_SECURITY.md).)
-8. Verify zero egress (§8) and that the portal loads **no** third-party origins
-   (devtools → Network).
-9. Schedule the §6 backup (cron) and store backups **off-box** (encrypted at rest).
-
----
-
-## 10. Hardening defaults (one table)
-
-| Surface | Default | Guarantee |
+| | Container log | Audit log |
 |---|---|---|
-| Process user | non-root `10001` | No root inside the container. |
-| Rootfs | `read_only: true` | Only `/data` (volume) + `/tmp`, `/run` (tmpfs) writable. |
-| Capabilities | `cap_drop: ALL` | No Linux privileges to abuse. |
-| Privilege escalation | `no-new-privileges:true` | setuid binaries can't elevate. |
-| Egress | own `internal: true` network | No route to the internet → no telemetry possible (proxy multi-homed, §8). |
-| Ingress | proxy-only (Topology A) | Companion port never host-published. |
-| Secrets | `*_FILE` / docker secret; no default token | Token absent from image, env dumps, `docker inspect`; fail-closed if unset. |
-| Forwarded headers | honored **only** from pinned `TRUSTED_PROXIES`; default trust-none | No `X-Forwarded-*` spoofing of proto/IP; no rate-limit/lockout bypass. |
-| WebAuthn RP-ID / origin | config-pinned, exact match | No client `Host`/`X-Forwarded-Host` origin confusion. |
-| Limits | size / version / rate / lockout / per-token quota / lineage caps | DoS + eviction + monotonic-poisoning hygiene; disk-full fails closed. |
-| Blob paths & hashes | server-derived path, server-computed hash | No path traversal on store/DELETE; no client-forged content hash. |
-| Retention | bounded TTL + hard-delete of superseded/expired bytes | Finite harvest-now-decrypt-later window (no PFS — see §11). |
-| Size padding | bucketed by default | Mitigates acuity/withdrawal traffic-analysis de-anon. |
-| Audit log | events not content; owner-readable; IP off | No content leak; clinic not geolocated. |
-| Image | pinned `@sha256` + SBOM | Reproducible, verifiable supply chain. |
-| Data at rest | ciphertext + non-secret metadata only | Disk/backup theft leaks only opaque blobs + metadata. |
+| Where | Docker's `local` driver | SQLite: `audit.db`, `org-audit.db` |
+| About | The process | Actions in a relationship or a practice |
+| Read by | The operator | The owner (relationships); the practice's admin (practices) |
+| Content | The app's own lines (COMPANION_OBSERVABILITY.md §2.2) | Actor, action, an opaque object reference |
+| Integrity | None | A SHA-256 hash chain |
+| Retention | 3 × 10 MiB, compressed | `DAYMARK_ACCESS_LOG_RETENTION_DAYS` (90), applied lazily (#{O5}) |
 
----
+**Never log, at any level, in the app or your proxy:**
 
-## 11. What deployment hardening does NOT buy you (honesty section)
+- request or response bodies, or their sizes — length alone is a signal about a person;
+- `Authorization`, `Cookie`, `Set-Cookie`, `X-Rel-Token`, `X-CSRF-Token`, `X-Content-Hash`,
+  `X-Setting-Key`;
+- any concrete path parameter — `relRef`, channel, lineage, version, invitation id — only the route
+  template;
+- email addresses, sign-in codes, recovery and invitation secrets, credential ids;
+- stack traces on request paths.
 
-Container hardening protects the *host boundary*. It does **not** change the cryptographic
-trust model, and it would be dishonest to imply otherwise. The following limits are
-**not** fixable by any compose flag and are documented in full in
-[COMPANION_SECURITY.md](COMPANION_SECURITY.md):
+The app breaks two of these today: the unhandled-error line logs the request path with a stack trace,
+and the sync disk-full line logs a file path that contains a lineage id (#{O1}).
 
-- **No forward secrecy.** The sealed-box scheme (`crypto_box_seal` / X25519) provides
-  *confidentiality + sender anonymity*, **not** recipient forward secrecy. One
-  compromise of a recipient's long-term X25519 key (therapist for shares, owner for
-  game plans) retroactively decrypts **every** blob ever sealed to it. CEK rotation
-  does **not** mitigate this (all versions are sealed to the same long-term key).
-  Deployment only *bounds the window* via `DAYMARK_SHARE_MAX_TTL_DAYS` +
-  `DAYMARK_BLOB_HARD_DELETE` — it does not eliminate it.
-- **Revocation is honest-server-only.** Server-side expiry/revoke stops **future**
-  fetches against an **honest** server. An already-pushed share remains readable to a
-  colluding server because the wrapped CEK persists and the therapist key never rotates
-  on revoke. Real future-data revocation requires therapist **re-keying** (re-pair to a
-  new verified key). No compose setting changes this.
-- **The browser portal is not zero-knowledge against a malicious operator.** SRI/CSP
-  are inert when the same first-party origin serves both the HTML and the assets — a
-  hostile operator rewrites both together. Owner secrets are therefore **native-phone
-  only**; the browser portal is a lower-assurance convenience path. Pinning the image
-  by digest (§7.1) reduces but does not eliminate this risk.
-- **The relationship graph is visible to the server.** Even with size padding and
-  per-relationship inbox tokens (replacing raw recipient fingerprints in query
-  strings), the index reveals *that* relationships and traffic exist. Padding and
-  short log retention shrink this; they do not erase it.
-- **Audit suppression is only partially detectable.** Therapist-signed attestations
-  prevent forgery but, without a signed monotonic hash-chain, a hostile server can
-  silently *omit* an event. Until that chain ships, the "access cannot be hidden" claim
-  is **retracted**.
+**Your proxy's access log.** The app keeps none, deliberately. If your proxy keeps one, delete the
+client address and the User-Agent, or coarsen the address (Caddy: `ip_mask { ipv4 16 ipv6 32 }` —
+never `ip_mask 0`, which turns masking off); keep timestamps to the second, in UTC; and cap its size,
+since it shares the disk with `/data`.
 
-These are properties of the **multi-party design**, surfaced here so an operator does
-not over-trust a well-hardened container. The container being a *dumb ciphertext host*
-is a feature: it means none of the above leaks *plaintext* — but it does not make the
-server *trustless*.
-
----
-
-### Related documents
-
-- [COMPANION_SCOPE.md](COMPANION_SCOPE.md) — what the Companion is, and the unresolved
-  sequencing (sync-first vs sharing/game-plans).
-- [COMPANION_ARCHITECTURE.md](COMPANION_ARCHITECTURE.md) — internals, the API surface,
-  the `game_plans` schema (DB v13), single-writer sync.
-- [COMPANION_SECURITY.md](COMPANION_SECURITY.md) — the crypto contract
-  (XChaCha20-Poly1305 + Argon2id + X25519/Ed25519), the multi-party threat model,
-  retractions, and the full limits section referenced above.
-- [COMPANION_THERAPIST.md](COMPANION_THERAPIST.md) — the clinician-facing surface,
-  TOFU pairing, the non-diagnostic framing, and the TOTP fallback.
-- [../PRIVACY.md](../PRIVACY.md) / [../SECURITY.md](../SECURITY.md) — the flagship
-  fully-offline app this never alters.
+**Retention.** Container logs are size-bounded; the app writes no access log; audit entries default to
+90 days. A practice that is a HIPAA covered entity may owe six years of documentation, and whether that
+reaches raw audit logs is contested. The default stays short because a person hosting their own
+journal is not a covered entity; a practice needs its own counsel (#{C1}).

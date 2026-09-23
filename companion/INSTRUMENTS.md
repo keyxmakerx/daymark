@@ -1,7 +1,7 @@
 # Companion instrument ledger
 
 This ledger mirrors the flagship app's `docs/INSTRUMENTS.md` and is the single, auditable
-source of truth for the licence status and required attribution of every instrument the
+source of truth for the licence status and required attribution of every instrument and task the
 Companion ships.
 
 Every instrument the Companion offers MUST appear here before it can be enabled, and MUST be
@@ -12,11 +12,15 @@ definition references a ledger row that does not exist, is not non-diagnostic, c
 self-harm slot, names a forbidden source, or emits a clinical cutoff / positive-negative
 screening flag. Framing is always **non-diagnostic** ("a self-check, not a diagnosis").
 
-## Shipped (Milestone 3)
+A test reads this file as data: every catalogue definition's `ledgerRef` must name an `id="…"`
+anchor below. Rename an anchor and the build fails.
 
-Both current instruments are **self-authored** (original wording throughout), so no
-third-party notice is required. Licensed-with-attribution instruments (e.g. WHO-5, ASRS
-with its verbatim WHO notice) can be added later with their notice machinery.
+## Shipped
+
+All four catalogue tools and the one timed task are **self-authored** (original wording
+throughout), so no third-party notice is required. Whether instruments that are free with
+attribution (WHO-5, the ASRS with its verbatim WHO notice) should be added, with the notice shown
+and checked, is an open decision: #{W17}.
 
 <a id="wellbeing-selfcheck"></a>
 
@@ -49,10 +53,10 @@ with its verbatim WHO notice) can be added later with their notice machinery.
 - **Licence / source:** Self-authored, original wording. GPL-3.0. Draws on compassion-focused
   practice; reproduces no published script.
 - **Attribution:** none required (self-authored).
-- **Notes:** built to satisfy the rule in docs/EVIDENCE_REVIEW_2026-08.md §2 — never require the
-  person to assert a positive claim about themselves they do not believe. Nothing asks anyone to
-  say they are good or lovable, which is why it needs no gate before being offered to someone at
-  their lowest. No self-harm item.
+- **Notes:** built to satisfy the rule in `docs/DECISIONS.md` §D3 — never require the person to
+  assert a positive claim about themselves they do not believe. Nothing asks anyone to say they are
+  good or lovable, which is why it needs no gate before being offered to someone at their lowest.
+  No self-harm item.
 
 <a id="values-what-matters"></a>
 
@@ -67,4 +71,18 @@ with its verbatim WHO notice) can be added later with their notice machinery.
   about rather than about them, which is what keeps it clear of the positive-self-statement
   problem. No self-harm item.
 
-See `docs/COMPANION_FEATURES.md` for the engine design and the planned wider catalog.
+<a id="steady-attention"></a>
+
+### Steady Attention — `steady-attention`
+
+- **Type:** timed task (original CPT-style sustained-attention task: respond to the frequent
+  target, withhold on the rare non-target). Not a catalogue definition, so no `ledgerRef` points
+  here; it is listed because the ledger covers everything the Companion offers.
+- **Licence / source:** Self-authored — our own stimuli, timings and copy. GPL-3.0. **Not** TOVA,
+  Conners CPT or any licensed battery, and it reproduces no published task.
+- **Attribution:** none required (self-authored).
+- **Notes:** reports count-based results (omissions, commissions, accuracy) plus a caveated
+  reaction-time mean; flags its own lower-precision runs; no norms, no cutoffs. Its timing rules are
+  `docs/COMPANION_FEATURES.md` §3.
+
+See `docs/COMPANION_FEATURES.md` for the engine and its honesty gate.
