@@ -52,7 +52,7 @@ decryption the consoles exist for.
 ### 1.3 Checks on the built bundle
 
 Not built: CI checks that the built bundle names no external origin, contains no `eval` or
-`new Function` and no unhashed inline script, and builds reproducibly: #{B10}.
+`new Function` and no unhashed inline script, and builds reproducibly: #248.
 
 ## 2. Visual language — "modern paper, big screen"
 
@@ -83,7 +83,7 @@ On a console that means five working rules:
 5. **The serif is spent sparingly**, on the wordmark and on titles (§2.2) — never on navigation,
    labels, table heads or data.
 
-Not built: ⌘K search and a breadcrumb bar, proposed by an earlier console design: #{X7}.
+Not built: ⌘K search and a breadcrumb bar, proposed by an earlier console design: #263.
 
 ### 2.2 Typography
 
@@ -91,14 +91,14 @@ Not built: ⌘K search and a breadcrumb bar, proposed by an earlier console desi
 platform serif), `--font-text` (Inter, then `system-ui`) and `--font-mono`. Its two `@font-face` rules
 are commented out and no font file is bundled (see `companion/web/fonts/README.md`), so every console
 renders in the fallbacks and nothing is fetched. Not built: bundling Fraunces and Inter, or settling on
-system fonts for good: #{X3}.
+system fonts for good: #251.
 
 **Where the serif goes.** The display face is the content voice naming its subject: the wordmark, page
 titles (`PageHeader`), section, card and empty-state titles, and a few large display figures.
 Navigation items, labels, table heads, metadata and data are sans or mono, never serif.
 
 Sizes: a 16px body, `h1` 1.75rem, `h2` 1.3rem, `h3` 1.05rem; everything else is set per component.
-Not built: a named type scale (the `--fs-*` family): #{X7}.
+Not built: a named type scale (the `--fs-*` family): #263.
 
 ### 2.3 Colour and design tokens
 
@@ -293,7 +293,7 @@ recoloured to pass a check, and every mark carries a text label beside it; `--ha
 What holds these values: `ui/invariants.test.ts` group (a) pins the chrome, indigo, clay and amber
 values in both themes. No test pins `--border-strong` or `--focus-ring`, and nothing computes a ratio,
 so a green `pnpm test` is not evidence that this table holds or that a new pair passes — read
-`app.css`. Not built: a computed contrast check in CI: #{B11}.
+`app.css`. Not built: a computed contrast check in CI: #254.
 
 #### 2.3.7 The hairline is decorative; load-bearing edges use `--border-strong`
 
@@ -335,7 +335,7 @@ No third-party icon packs, no icon fonts, no emoji. The marks in use are text gl
 glyphs ✓ ◐ ✎, the sharing strip's ring — drawn in the surrounding text colour and never green. A
 decorative mark is `aria-hidden`; an icon-only button carries an accessible name (`ui/FieldHelp.svelte`
 names its "i" as a whole question). Not built: an original SVG icon set drawn with `currentColor`:
-#{X7}.
+#263.
 
 ### 2.6 Imagery
 
@@ -352,12 +352,12 @@ mental-health surface. The only images are the product's own mark and its charts
 | Dark | `@media (prefers-color-scheme: dark)` on `:root:not([data-theme="light"])` | built |
 | Dark, explicit | `:root[data-theme="dark"]` | built — redefines every themed role |
 | System | no attribute | built — the default |
-| High contrast | `prefers-contrast` | Not built: #{X4} |
+| High contrast | `prefers-contrast` | Not built: #253 |
 | Reduced motion | `@media (prefers-reduced-motion: reduce)` | built — global, in `app.css` |
 
 `:root[data-theme="light"]` and `:root[data-theme="dark"]` also set `color-scheme`, so the browser
 draws matching form controls and scrollbars. The admin console sets `data-theme="dark"` on mount and is
-dark in both themes. Not built: a light/dark choice in the consoles with no flash on load: #{X5}. When
+dark in both themes. Not built: a light/dark choice in the consoles with no flash on load: #256. When
 it is built, the pre-paint loader is an external `'self'` module (or, at most, a CSP-hashed script),
 never `'unsafe-inline'`.
 
@@ -367,7 +367,7 @@ Transitions are written per component and kept short (120–180 ms on background
 Nothing pulses or bounces: that would read as attention-seeking and contradict §2.1. The global block
 in `app.css` neutralises every animation and transition for anyone who asks for less motion, so the
 guarantee does not depend on each component opting in. Not built: motion tokens (`--ease-standard:`,
-`--ease-entrance:`, `--dur-fast:`, `--dur-base:`, `--dur-slow:`): #{X7}.
+`--ease-entrance:`, `--dur-fast:`, `--dur-base:`, `--dur-slow:`): #263.
 
 ## 4. Components
 
@@ -393,7 +393,7 @@ needed:
 instance script cannot export types. Feature components elsewhere in `src/lib/components/` — the
 questionnaire runner, the attention task, the trust and sharing strips, the banner pairs, the share
 builder — are screens, not a library. Not built: the wider component inventory the design once listed
-([old §4.1–4.8](https://github.com/keyxmakerx/daymark/blob/968638594f10f6a4424415f8a5c14fd8eb4aaa00/docs/COMPANION_DESIGN_SYSTEM.md?plain=1#L755-L840)): #{X7}.
+([old §4.1–4.8](https://github.com/keyxmakerx/daymark/blob/968638594f10f6a4424415f8a5c14fd8eb4aaa00/docs/COMPANION_DESIGN_SYSTEM.md?plain=1#L755-L840)): #263.
 
 ### 4.9 The stacking context belongs to `AppShell`
 
@@ -419,7 +419,7 @@ A chart of a person's mood is drawn on the mood ramp, because there **the ramp i
 "awful" bar must be the colour an awful day is everywhere else. A chart of something that is not mood
 (counts, durations) would need its own low-chroma, colour-blind-safe series palette that does not
 overlap the ramp's meaning; none exists yet. Every chart should have a text or table equivalent and
-print cleanly. Not built for every chart: #{X6}.
+print cleanly. Not built for every chart: #259.
 
 ## 6. Responsive and accessibility
 
@@ -434,7 +434,7 @@ The target is WCAG 2.2 AA. What the code holds: text at 4.5:1 and control edges 
 the grounds measured in §2.3.6; a `:focus-visible` outline in `--focus-ring`; colour never the only
 signal (§2.1 rule 4); decorative marks `aria-hidden`, with a visually hidden prefix where a sighted
 reader would get context from position. Not verified by any tool — there is no rendered accessibility
-check and no computed contrast: #{B11}.
+check and no computed contrast: #254.
 
 ### 6.3 What the tests enforce, and what they cannot
 

@@ -105,7 +105,7 @@ example. Break anything load-bearing on purpose and confirm the test that names 
 By contributing, you agree that your contributions are licensed under **GPL-3.0-only** (inbound =
 outbound). Sign off your commits (`git commit -s`) to certify the
 [DCO](https://developercertificate.org/). Whether to enforce this with a check is an open decision:
-#{D12}.
+#296.
 
 ## Where to start
 

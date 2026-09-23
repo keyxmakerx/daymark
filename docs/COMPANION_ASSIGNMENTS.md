@@ -99,10 +99,10 @@ version.
 
 What is not built:
 
-- The owner's decision is not saved yet, so the clinician never learns it: #{W4}.
-- The phone receives nothing yet, so nothing an owner accepts reaches the app: #{F3}.
+- The owner's decision is not saved yet, so the clinician never learns it: #234.
+- The phone receives nothing yet, so nothing an owner accepts reaches the app: #177.
 - Results of a self-check taken in the Companion stay on that device; they reach a clinician only
-  once they are saved into the encrypted snapshot and shared: #{W5}.
+  once they are saved into the encrypted snapshot and shared: #237.
 
 ## 3. The dashboard
 
@@ -116,7 +116,7 @@ activities and mood, labelled as association and not cause; self-check history, 
 trend per instrument; and a journal reader. Every panel keeps the non-diagnostic framing. A PDF or CSV
 export is not part of it.
 
-Year-in-pixels, brushing, journal search, sleep trends and export are not built: #{W8}.
+Year-in-pixels, brushing, journal search, sleep trends and export are not built: #245.
 
 ## 4. Security and consent
 

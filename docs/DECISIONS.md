@@ -47,7 +47,7 @@ can re-score after the fact how an offer landed.
   not gate reminders. The person chose those times, and there is no reminder-frequency setting for
   them to turn back up if an inference quietened them (`notifications/ReminderScheduler.kt`).
 - `Kind.COMPANION` and `Kind.ASSIGNMENT` have budgets and are called by nothing yet. Not built:
-  #{G4}.
+  #272.
 
 The invariant's tests, `InterruptionBudgetTest`, are property sweeps over kind, declared frequency,
 ledger, standing stop and clock. Four sweeps, each catching what the others miss:
@@ -99,7 +99,7 @@ concrete next steps. It may not:
 - **become the crisis path** — the safety plan stays the person's own; the companion may point at it.
 
 **As built:** the dialogue content, rules and web component exist. No page mounts the component
-(`companion/web/src/lib/docs.test.ts` asserts that), and there is no phone surface. Not built: #{G4}.
+(`companion/web/src/lib/docs.test.ts` asserts that), and there is no phone surface. Not built: #272.
 How it works: `docs/COMPANION_DIALOGUE.md`.
 
 ---
@@ -113,7 +113,7 @@ promises opacity, and it carries a liability in mental-health software in partic
 
 This is about the arbiter, not the companion (D1b), which may deserve a name.
 
-The clinician platform's name is still open: #{C14}. "Heimdall" was rejected. A well-known
+The clinician platform's name is still open: #310. "Heimdall" was rejected. A well-known
 self-hosted app owns it, and Heimdall's defining attribute is seeing and hearing everything, which is
 backwards for a product whose pitch is that it cannot see your data.
 
@@ -148,7 +148,7 @@ of it. The ban on location data is unchanged; it is why the stripping must be ve
 **As built:** `data/ImageStrip.kt` and `data/PhotoStore.kt`; photos attach to entries.
 
 The picture itself can still show a place (a street sign, a house number). That needs a one-time
-sentence to the person, and it is not built yet: #{P12}. The two device checks are in #147.
+sentence to the person, and it is not built yet: #188. The two device checks are in #147.
 
 ---
 
@@ -157,7 +157,7 @@ sentence to the person, and it is not built yet: #{P12}. The two device checks a
 Direction, from the evidence:
 
 - **Implementation intentions attach to the next concrete action**, not to the project. Whether steps
-  get an if-then cue is open: #{P11}.
+  get an if-then cue is open: #184.
 - **Learning projects score on process, not completion.** No target, no percentage.
 - **A project is a folder for steps**, not a standalone aspiration. Abstract goals are what people
   with depression already over-produce.
@@ -166,8 +166,8 @@ Direction, from the evidence:
 - **A declined suggestion is invisible to the clinician,** and suggestions are editable on acceptance.
 
 **As built:** goals are habits (a weekly count) or projects with a steps board, "I reached this" and
-archiving (`data/entity/Goal.kt`, `GoalStep.kt`). Not built: one-time and learning kinds (#{EX2}),
-and clinician-suggested goals (#{EX3}).
+archiving (`data/entity/Goal.kt`, `GoalStep.kt`). Not built: one-time and learning kinds (#285),
+and clinician-suggested goals (#286).
 
 ---
 
@@ -220,8 +220,8 @@ for a phone whose keystore lost the key. Those screens say what cannot be done, 
 only if a person chooses to (`security/DataKeyStore.kt`, `data/JournalEncryptionMigration.kt`).
 
 **Not covered:**
-- Entry photos: #{R8}.
-- Exports: a backup, CSV or PDF is a plain file the person asked for (#{R7}).
+- Entry photos: #239.
+- Exports: a backup, CSV or PDF is a plain file the person asked for (#236).
 
 **Open, in #109:** the PIN wrap and the written-down recovery code are built and tested
 (`security/DataKeyWraps.kt`, `security/RecoveryCode.kt`) but not armed. Arming them is a decision that
@@ -254,7 +254,7 @@ Worth asking about?"). It cites nothing and prescribes nothing. Where evidence i
 psychoeducation for the person, in the app.
 
 **As built:** `export/PdfReportGenerator.kt`, `export/ReportLayout.kt`, `stats/DiscussionPrompts.kt`.
-Seeing the report before export: #{P15}.
+Seeing the report before export: #198.
 Source: [the August plan §1](https://github.com/keyxmakerx/daymark/blob/968638594f10f6a4424415f8a5c14fd8eb4aaa00/docs/PLAN_2026-08-NEXT.md?plain=1#L9-L58).
 
 ---
@@ -276,7 +276,7 @@ The principles every clinical feature is judged against:
 
 **The compliance gate is non-negotiable.** Before any real patient's data is handled by a clinician
 using Daymark, it needs an external HIPAA Security-Rule assessment and an independent audit of the
-RBAC, key handling and recovery flows: #{C1}. Scope, editions and hosting are open: #{C2}. The
+RBAC, key handling and recovery flows: #284. Scope, editions and hosting are open: #288. The
 clinical layer's design is `docs/COMPANION_ACCESS_CONTROL.md`, and its work is tracked in #143.
 
 Source: [the July product direction](https://github.com/keyxmakerx/daymark/blob/968638594f10f6a4424415f8a5c14fd8eb4aaa00/docs/PRODUCT_DIRECTION.md).

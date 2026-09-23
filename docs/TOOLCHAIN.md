@@ -35,11 +35,11 @@ Room 2.8.4 ──► needs kotlinx-serialization-core 1.9.0 on the ksp* configur
 
 | Pin | Ceiling | Why | Unblocked by |
 |---|---|---|---|
-| **AGP** | `< 9.0.0` | AGP 9 enables built-in Kotlin by default and needs Gradle 9.1 or later. The Gradle part is already done (the wrapper is 9.3.1). Nothing in this repo uses the legacy variant API that AGP 9 removes. | Move B (#{B4}) |
+| **AGP** | `< 9.0.0` | AGP 9 enables built-in Kotlin by default and needs Gradle 9.1 or later. The Gradle part is already done (the wrapper is 9.3.1). Nothing in this repo uses the legacy variant API that AGP 9 removes. | Move B (#230) |
 | **Hilt / Dagger** | `< 2.59` | Dagger 2.59 makes AGP 9 a hard requirement for anyone applying the Hilt Gradle plugin, which this repo does. Hilt currency and AGP 9 are **one decision**. | Move B |
 | **Kotlin / KSP** | no major or minor bumps | They are version-locked (KSP publishes as `<kotlin>-<ksp>`), and Dependabot bumps them in *separate* pull requests, so a Kotlin-only bump cannot build. Kotlin 2.4.0 also changed module naming, and KSP 2.3.9 and earlier then emit invalid identifiers for **`internal`** Hilt provider methods (`google/ksp#2964`), which this repo has. | One hand-made change moving Kotlin and KSP together onto KSP 2.3.10 or later, with Hilt re-verified |
 | **androidx core / activity / lifecycle / androidx.hilt / navigation** | core `<1.19.0`, activity `<1.13.0`, lifecycle `<2.11.0`, androidx.hilt `<1.4.0`, navigation `<2.9.0` | These moved to an AGP 9.1 and compileSdk 37 floor. Bumping them once turned `main` red (`CheckAarMetadata`, 17 issues). The trap: `androidx.hilt` versions separately from `com.google.dagger`, so it looks unrelated. It is not. | **Move C**, not Move B (below) |
-| **lazysodium** | none now | 5.2.0's `lazysodium-java` is JVM-21-only. `:sync-crypto` now builds on JDK 21, so 5.2.0 is in. The two artifacts must stay on the same version: `SyncCrypto` compiles against the java copy of the shared types and runs against the android copy. The ignore rule in `dependabot.yml` still blocks everything from 5.2.0 up, which is now wrong: #{B2}. | — |
+| **lazysodium** | none now | 5.2.0's `lazysodium-java` is JVM-21-only. `:sync-crypto` now builds on JDK 21, so 5.2.0 is in. The two artifacts must stay on the same version: `SyncCrypto` compiles against the java copy of the shared types and runs against the android copy. The ignore rule in `dependabot.yml` still blocks everything from 5.2.0 up, which is now wrong: #223. | — |
 
 **GitHub Actions updates are deliberately unconstrained.** Those bumps do not fail, and an action's
 major version mostly changes its bundled Node runtime. Review and merge them normally.
@@ -50,13 +50,13 @@ major version mostly changes its bundled Node runtime. Review and merge them nor
 was pushed as its own commit, so a failure stayed attributable. That paid off: Room failed on a
 coupling nothing documents (below).
 
-**Move B (open, #{B4}): AGP 9, Kotlin/KSP and Hilt, together.** Hilt 2.59 or later forces AGP 9.
+**Move B (open, #230): AGP 9, Kotlin/KSP and Hilt, together.** Hilt 2.59 or later forces AGP 9.
 AGP 9 forces Kotlin 2.2.10 or later, and Kotlin drags KSP with it. Do it as one change, on a quiet
 week, verified in CI, ready to revert wholesale. Dagger publishes no Kotlin support matrix and has
 broken on new Kotlin metadata before (`google/dagger#5001`), so this is the least predictable work
 in the repo.
 
-**Move C (waiting on upstream, #{B5}): the androidx tier.** Move B does not unblock it:
+**Move C (waiting on upstream, #233): the androidx tier.** Move B does not unblock it:
 
 ```
 androidx tier   needs  compileSdk 37
@@ -89,7 +89,7 @@ The general lesson: "not gated on AGP" is not the same as "not gated".
   inert, because Room only *creates* a schema file when one is absent.
 - The schemas are also wired in as androidTest assets for `MigrationTestHelper`. Room 2.7 and later
   does this automatically, and the explicit line is kept on purpose.
-- CI compiles the instrumented tests but never runs them, because they need a device (#{B1}).
+- CI compiles the instrumented tests but never runs them, because they need a device (#220).
 - Schema policy: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## How this is verified

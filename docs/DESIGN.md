@@ -46,14 +46,14 @@ Two surfaces are always dark, whatever the theme.
   ground, and 4.5:1 is a hard floor. The full rules are in [SKY.md](SKY.md).
 - **The year view and Review my year** (`ui/components/YearInStarsGrid.kt`): ground `#16150F`, ink
   `#EBE5D8`, faint `#8E887A`. The two grounds differ, and are left apart on purpose while the year
-  view still sizes stars by mood ([FEATURES.md](FEATURES.md) §3, #134).
+  view still sizes stars by mood ([FEATURES.md](FEATURES.md) §3, #148).
 
 ## Typography (`ui/theme/Type.kt`)
 
 A **serif** for display, headlines, `titleLarge` and the italic diary-note style, and a clean
 **sans** for smaller titles, body, labels and numbers. The app uses the platform serif and sans;
 `res/font` does not exist. Bundling Fraunces and Inter, or settling on system fonts for good, is
-#{X3}.
+#251.
 
 ## Shape, spacing, elevation
 

@@ -33,10 +33,10 @@ is a side effect.
   again under the code, so either opens it. The cryptography is built and tested
   (`companion/web/src/lib/recovery/`), and the owner console already opens with such a key file and
   either secret. Wrapping an existing owner's sync key this way, and storing the file on the server
-  so a code works from a new device, are not built: #{W14}. Until then, the sentence above stands.
+  so a code works from a new device, are not built: #258. Until then, the sentence above stands.
 - **One copy, on one disk.** The server keeps what it is sent and copies it nowhere. The phone keeps
   its own local copy, which stays the primary one.
-- **Getting a copy there.** The phone cannot send one yet: #{F1}. Today a snapshot is pushed from an
+- **Getting a copy there.** The phone cannot send one yet: #168. Today a snapshot is pushed from an
   exported backup file with the command-line writer (`pnpm push` in `companion/web`), and read back in
   the browser.
 
@@ -63,8 +63,8 @@ is a side effect.
 - The first-run screen of the owner page asks which shape the machine is for and remembers the
   answer in that browser only. It changes nothing on the server.
 - What the Companion is for in the long run (hosting, editions, the smallest set of roles for a
-  pilot, whether the old one-clinician scope still holds) is an open decision: #{C2}. No real
-  patient's data belongs on a Practice deployment before an outside assessment: #{C1}.
+  pilot, whether the old one-clinician scope still holds) is an open decision: #288. No real
+  patient's data belongs on a Practice deployment before an outside assessment: #284.
 
 ## 3. Parties and trust
 
@@ -80,9 +80,9 @@ is a side effect.
   stored on the server as a digest. An optional recovery email can rotate it
   (COMPANION_SECURITY.md §6); it recovers server access only, never the passphrase. How the owner and
   the administrator should prove who they are — first-run claim, a credential for the admin console
-  (which today mounts with none), recovery as a second front door — is an open decision: #{I2}.
+  (which today mounts with none), recovery as a second front door — is an open decision: #208.
 - **Clinicians sign in with a six-digit TOTP code** and a session cookie. Passkeys are designed, and
-  the server's WebAuthn routes answer 501: #{I1}.
+  the server's WebAuthn routes answer 501: #205.
 - **The owner's browser is a lower-assurance client.** The owner console, the snapshot reader and the
   pairing ceremony all run in pages the server serves (§6). The console says so on every visit.
 
@@ -124,7 +124,7 @@ from its own origin; all cryptography runs in the browser (libsodium).
   today view, client record and calendar built from it; assign from the catalogue, author game
   plans, see what the owner allowed, leave.
 - **Server console** (`admin.html`): what an operator can check from a browser — health, readiness,
-  sign-in pressure, and audit-chain checks. It holds no credential of its own (#{I2}).
+  sign-in pressure, and audit-chain checks. It holds no credential of its own (#208).
 - **Practice console** (`practice.html`): membership, roles, removal, the practice log.
 
 ### 4.3 The phone
@@ -132,7 +132,7 @@ from its own origin; all cryptography runs in the browser (libsodium).
 The Android app has two build flavours. `foss`, the default and the one released, declares no
 `INTERNET` permission, and CI fails if it ever does. `sync` adds the permission and the Kotlin port of
 the sync and pairing cryptography (`sync-crypto/`, tested on a plain JVM). Nothing in `sync` talks to a
-server yet; COMPANION_PHONE.md lists what remains, starting with #{F1}.
+server yet; COMPANION_PHONE.md lists what remains, starting with #168.
 
 ## 5. The cryptography
 
@@ -151,7 +151,7 @@ One primitive set, the same on every client (libsodium in the browser, lazysodiu
 AES-GCM is not used anywhere: random 96-bit nonces under one long-lived key are not safe. On the
 server, secrets it only has to check are stored as hashes (invitation secrets with Argon2id, tokens
 and tickets as BLAKE2b digests); a clinician's TOTP seed is necessarily kept as it is, because the
-server computes codes from it. A startup self-test of the cryptography is not built: #{F13}.
+server computes codes from it. A startup self-test of the cryptography is not built: #201.
 
 **The flows.**
 
@@ -159,7 +159,7 @@ server computes codes from it. A startup self-test of the cryptography is not bu
   under a lineage and version; the version is bound into the encryption, so a blob moved to another
   path does not decrypt. Readers check integrity with the AEAD only. The signed manifest and the
   device-side watermark that would stop a server passing off an older snapshot as the newest are not
-  built: #{F4}.
+  built: #179.
 - **Grant (owner to clinician).** The owner's capability policy, signed and published. Every
   capability starts off (COMPANION_ASSIGNMENTS.md).
 - **Share (owner to clinician).** A curated bundle — check-in scores and bands, moods, journal, sleep,
@@ -170,8 +170,8 @@ server computes codes from it. A startup self-test of the cryptography is not bu
 - **Assignments and game plans (clinician to owner).** The clinician signs the payload, bound to a
   context string and the owner's fingerprint, then seals it to the owner. The owner's console opens
   assignments, verifies them against the pinned clinician key and checks them against the current
-  grant before anything applies. Receiving game plans in the owner's console is not built: #{W3}; on
-  the phone: #{F3}. Game plans never land in the app's `treatments` table; they are the clinician's
+  grant before anything applies. Receiving game plans in the owner's console is not built: #231; on
+  the phone: #177. Game plans never land in the app's `treatments` table; they are the clinician's
   words, kept separate and read-only.
 
 ## 6. Honest limits
@@ -181,14 +181,14 @@ rather than left to be discovered.
 
 | Limit | What it means | Where it stands |
 | --- | --- | --- |
-| **Metadata is visible** | Snapshot sizes, timing, how often someone syncs, how many relationships exist and how active each is, and the addresses requests come from. "Journalled daily for eight months, then nothing for nine days" is readable without decrypting anything | Disclosed, not mitigated. Padding sizes is an open decision, tracked in #139 |
-| **It can deny service** | Refuse writes, withhold or truncate the audit log, serve an older snapshot | Readers verify each blob, not freshness: #{F4} |
-| **It serves the web pages** | A compromised server can ship JavaScript that keeps a passphrase or a pairing code. Browser-delivered encryption is only as strong as the delivery of the code. The installed phone app does not have this weakness | Stated on every console. The owner's half of pairing moves to the phone with #{F2} |
-| **It writes the audit log about itself** | The hash chain shows internal consistency, never completeness: whoever can rewrite the entries can recompute the chain, and withholding an event is undetectable | The chain head is evidence only when anchored outside the server — a person's note today, the phone later: #{F5}. Signed attestations are an open decision, tracked in #139 |
-| **No forward secrecy for sealed items** | Anyone who later obtains a clinician's long-term key can open every share ever sealed to it that is still stored | Shares require an expiry (at most 366 days), each lineage keeps at most 50 versions, and withdrawal deletes the bytes; expiry alone does not. How long shared data should live is open: #{W2} |
-| **Revocation binds an honest server** | Expiry and withdrawal stop future fetches on an honest server. They do not un-send what was read, and a colluding server can keep serving what it holds | The real remedy is re-pairing with new keys. Whether to accept this as a permanent limit is open: #{I8} |
-| **The bearer token travels on every request** | On plain HTTP anyone on the wire can replay it (never the content: that is encrypted) | Signed requests replace it: #{F7} |
-| **The clinician's browser holds plaintext** | Keys are wrapped at rest and wiped when idle; extensions and screenshots are beyond any control | Telling clinicians plainly: #{W16}. A pinned client instead of a served page: #{I8} |
+| **Metadata is visible** | Snapshot sizes, timing, how often someone syncs, how many relationships exist and how active each is, and the addresses requests come from. "Journalled daily for eight months, then nothing for nine days" is readable without decrypting anything | Disclosed, not mitigated. Padding sizes is an open decision: #214 |
+| **It can deny service** | Refuse writes, withhold or truncate the audit log, serve an older snapshot | Readers verify each blob, not freshness: #179 |
+| **It serves the web pages** | A compromised server can ship JavaScript that keeps a passphrase or a pairing code. Browser-delivered encryption is only as strong as the delivery of the code. The installed phone app does not have this weakness | Stated on every console. The owner's half of pairing moves to the phone with #174 |
+| **It writes the audit log about itself** | The hash chain shows internal consistency, never completeness: whoever can rewrite the entries can recompute the chain, and withholding an event is undetectable | The chain head is evidence only when anchored outside the server — a person's note today, the phone later: #182. Signed attestations are an open decision: #217 |
+| **No forward secrecy for sealed items** | Anyone who later obtains a clinician's long-term key can open every share ever sealed to it that is still stored | Shares require an expiry (at most 366 days), each lineage keeps at most 50 versions, and withdrawal deletes the bytes; expiry alone does not. How long shared data should live is open: #228 |
+| **Revocation binds an honest server** | Expiry and withdrawal stop future fetches on an honest server. They do not un-send what was read, and a colluding server can keep serving what it holds | The real remedy is re-pairing with new keys. Whether to accept this as a permanent limit is open: #222 |
+| **The bearer token travels on every request** | On plain HTTP anyone on the wire can replay it (never the content: that is encrypted) | Signed requests replace it: #186 |
+| **The clinician's browser holds plaintext** | Keys are wrapped at rest and wiped when idle; extensions and screenshots are beyond any control | Telling clinicians plainly: #262. A pinned client instead of a served page: #222 |
 
 ## 7. Rules that hold everywhere
 

@@ -27,7 +27,7 @@ They are reserved on every platform; the next free id is 5. A recovery code open
 a wrapped-key file (`companion/web/src/lib/recovery/dataKey.ts`); wrapping an existing owner's
 passphrase-derived master (`companion/web/src/lib/recovery/migration.ts`) is what makes the code yield
 these same subkeys. Enrolling an existing owner that way, and a server route to store the file, are
-not built: #{W14}.
+not built: #258.
 
 ### 1.1 Snapshot envelope (the stored blob bytes)
 
@@ -82,7 +82,7 @@ Server-side version and hash checks are denial-of-service hygiene only.
 The signing and verifying primitives exist on both platforms and are tested. Nothing uses them yet:
 readers check each blob with the AEAD tag only, the server stores no manifest, and no client keeps a
 watermark. So a tampered or substituted blob fails to decrypt, but a malicious server can still
-present an older version as the newest. Not built: #{F4}.
+present an older version as the newest. Not built: #179.
 
 ## 2. HTTP API (`/v1`)
 
@@ -128,7 +128,7 @@ hard-deleted), `PER_TOKEN_QUOTA_BYTES` (5 GiB, fail-closed), `RATE_LIMIT_RPS` (5
 
 **Push (writer).** Ensure keyparams (GET, or create a fresh salt and PUT) → derive keys →
 `version = max(existing)+1` → encrypt → `PUT` the envelope. Today's writer is the command-line tool
-(`pnpm push` in `companion/web`); the phone's is not built: #{F1}.
+(`pnpm push` in `companion/web`); the phone's is not built: #168.
 
 **Pull (reader — the browser, or the CLI).** GET keyparams → derive keys → list versions → fetch the
 head → decrypt (the AEAD verifies integrity). A wrong passphrase makes decryption fail, with no
@@ -136,7 +136,7 @@ oracle beyond that.
 
 Sync is single-writer and last-snapshot-wins: the newest full snapshot is authoritative, and rows are
 never merged, because the app's schema has no per-row ids or timestamps. Whether that stays so is a
-decision: #{F12}.
+decision: #200.
 
 ## 4. Conformance
 

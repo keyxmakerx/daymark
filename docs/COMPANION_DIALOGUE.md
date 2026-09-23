@@ -19,7 +19,7 @@ properties that must hold when both the app and a clinician may author dialogue.
 **The companion is not mounted anywhere yet.** `Companion.svelte` renders the dialogue and is tested,
 but no page imports it, and three of its six destinations (check-in, journal, safety plan) do not
 exist in the web console; `CompanionSignals` has no production caller on the phone. Wiring it in, and
-checking the author partition at both ends when it is: #{G4}.
+checking the author partition at both ends when it is: #272.
 
 **The bridge.** `Answers` is `Record<string, unknown>`, so companion facts are injected as
 pseudo-answers. `{ ref: 'hardDaysLast7', op: 'gte', value: 3 }` evaluates with no engine changes.
@@ -75,7 +75,7 @@ is more common.
 **The rule: guided mode generates the format direct mode edits.** One artifact, two ways in. Two
 formats would fork the honesty gate, the signing path and the security partition, and would
 eventually disagree. The format and its validator exist; neither editor exists for dialogue: the
-guided editor is #{G5}.
+guided editor is #274.
 
 ## "Lots of data points" versus the security partition
 
@@ -84,7 +84,7 @@ permitted to see. **The partition is grant-driven, not fixed.** Its default is n
 modules, time of day, answers inside their own module, and whatever a `read.share` grant already
 covers — and the person could widen it per signal, explicitly and revocably, where they manage every
 other capability (*"Let your clinician's dialogue respond to how often you check in"*, off by
-default). `hasSafetyPlan` can never be widened. Per-signal consent is not built: #{G6}.
+default). `hasSafetyPlan` can never be widened. Per-signal consent is not built: #279.
 
 ## Robustness — the failure modes designed for
 
@@ -133,7 +133,7 @@ findings below were established by executing the code.
 **No HTML injection path.** There is no `{@html}` anywhere in `companion/web/src`; item text renders
 through Svelte interpolation, which escapes. Authored content cannot inject markup or script. Nothing
 yet asserts that `{@html}` stays absent, so this is a fact about today's tree rather than a guarantee
-about tomorrow's: #{G1}.
+about tomorrow's: #266.
 
 **No code execution.** The predicate language is data — `all` / `any` / `ref` / `op` / `value`. There
 is no `eval`, no function reference, no template execution. A definition can only ask comparison
@@ -221,18 +221,18 @@ recognise, because that value can arrive from stored or transmitted content. The
 `CompanionSignals` carries the same partition and is unit-tested. Today the rule is enforced at the
 authoring gate in the browser, which is the only place a definition can be validated: no transport
 carries a clinician's definition to a device, so there is no server-side check and no on-device
-re-check yet (#{G4}).
+re-check yet (#272).
 
 ## Finding 4 — authored dialogue needs the assignment signing path
 
 Companion dialogue is content that runs on a patient's device. It must travel the existing
 sign-then-seal path, be verified against the pinned clinician key, and be refused whole on a signature
 failure, exactly as a grant that fails verification renders nothing. Content that arrives unsigned or
-unverifiable is not degraded; it is not shown. Not built: #{G2}.
+unverifiable is not degraded; it is not shown. Not built: #268.
 
 ## Finding 5 — a capability of its own, and revocation that removes
 
 Authoring dialogue is a new capability, not a free rider on `authorGamePlan`: it places branching,
 interactive content in someone's app, which is different from sending a written plan. The person
 grants it, sees it in the allowed list, and can withdraw it, and withdrawal must remove dialogue
-already delivered, not merely stop new dialogue. Not built: #{G3}.
+already delivered, not merely stop new dialogue. Not built: #270.

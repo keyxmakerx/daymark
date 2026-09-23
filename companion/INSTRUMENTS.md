@@ -20,7 +20,7 @@ anchor below. Rename an anchor and the build fails.
 All four catalogue tools and the one timed task are **self-authored** (original wording
 throughout), so no third-party notice is required. Whether instruments that are free with
 attribution (WHO-5, the ASRS with its verbatim WHO notice) should be added, with the notice shown
-and checked, is an open decision: #{W17}.
+and checked, is an open decision: #264.
 
 <a id="wellbeing-selfcheck"></a>
 

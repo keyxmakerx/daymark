@@ -55,7 +55,7 @@ whole design**:
 **Status:** built: a practice with members, roles and its own audit chain (`routes/OrgRoutes.kt`,
 the practice console). Removing a member ends their membership and live sessions, not any patient's
 relationship ([COMPANION_THERAPIST.md](./COMPANION_THERAPIST.md) §9a). Not built: membership changes
-issuing or revoking grants (#{C3}, #{C7}); choosing a practice from a list (#{C8}).
+issuing or revoking grants (#289, #297); choosing a practice from a list (#298).
 
 Each relationship pairs one owner with one clinician, whatever practice the clinician belongs to. The
 clinical layer adds an **editable org**:
@@ -80,7 +80,7 @@ grant) are deliberately separate — see the three‑plane rule.
 
 **Status:** built as a server-enforced catalog of actions (`org/OrgRole.kt`), mirrored in the consoles
 (`practice/roles.ts`); the patient and the platform sysadmin are not practice roles. Not built: a
-scheduling surface for the front desk (#{C9}).
+scheduling surface for the front desk (#299).
 
 Roles gate **actions** (server‑enforced). Read capability is *separate* and comes
 only from a patient grant. "Can read clinical content?" below means *is normally
@@ -100,7 +100,7 @@ granted a key*, not *is technically permitted to hold one by role*.
 ## Consent model
 
 **Status:** built: per-person consent — the owner invites and pairs each clinician and chooses what to
-share with them. Not built: org-consent (#{C3}).
+share with them. Not built: org-consent (#289).
 
 - **Patient is always the root of consent.** Roles decide who *may request*
   access; the patient's grant is what *authorizes* it.
@@ -117,7 +117,7 @@ share with them. Not built: org-consent (#{C3}).
 
 ## Cross‑provider sharing & referrals
 
-**Status:** not built (#{C4}). Today each clinician needs their own invitation from the patient.
+**Status:** not built (#291). Today each clinician needs their own invitation from the patient.
 
 A therapist sharing with a psychiatrist (and vice versa) works, with one rule:
 **read access always flows from the patient's consent, never from one clinician
@@ -139,8 +139,8 @@ of consent while supporting real care‑team collaboration.
 
 **Status:** built: the server-side cutoff (a withdrawn share, or a re-signed `granted:false` grant; the
 server answers 410 from then on), the clinician's own exit, and removing a practice member. Not built:
-the cryptographic cutoff (#{C7}), the kill switch (#{C6}), and the owner ending a clinician's sign-in
-(#{I3}).
+the cryptographic cutoff (#297), the kill switch (#295), and the owner ending a clinician's sign-in
+(#210).
 
 Three things must all be possible:
 
@@ -158,8 +158,8 @@ Three things must all be possible:
 ## Key recovery
 
 **Status:** built: server-access recovery, and a recovery code that wraps the web archive's key in the
-browser (`lib/recovery/`). Not built: using that code from another device (#{W14}) and split recovery
-(#{W15}). On the phone, the journal key's PIN and recovery-code wraps are #109.
+browser (`lib/recovery/`). Not built: using that code from another device (#258) and split recovery
+(#261). On the phone, the journal key's PIN and recovery-code wraps are #109.
 
 E2E's hardest UX problem: a lost passphrase currently means lost data, and the
 design deliberately has **no key escrow** (no backdoor). We keep no‑escrow and
@@ -177,7 +177,7 @@ restores *server access*, never the encryption key.
 
 ## Behavioral guard (IDS)
 
-**Status:** not built (#{C5}).
+**Status:** not built (#293).
 
 Compatible with zero‑knowledge because it watches **behavior, not
 content**:
@@ -192,7 +192,7 @@ content**:
 
 ## HIPAA‑readiness checklist
 
-**Status:** a map, not a certification. Neither assessment in the gate below has happened (#{C1}).
+**Status:** a map, not a certification. Neither assessment in the gate below has happened (#284).
 
 Software is **HIPAA‑ready**; a *deployment + an organization* is what's
 *compliant*. This maps our safeguards to the Security Rule so a practice *can* be
@@ -203,22 +203,22 @@ compliant when they run it right.
 - **Audit controls** — the hash‑chained, metadata‑only audit log (shipped), per
   relationship and, separately, per practice for the org admin's review (shipped).
 - **Integrity** — signed grants (shipped); signed snapshot manifests (not built: #138);
-  clinician notes append‑only/amendable (not built: #{C10}).
-- **Person/entity authentication** — finish **WebAuthn** (today a 501 stub: #{I1}); MFA
+  clinician notes append‑only/amendable (not built: #300).
+- **Person/entity authentication** — finish **WebAuthn** (today a 501 stub: #205); MFA
   everywhere; step‑up for sensitive actions.
 - **Transmission security** — TLS at the proxy + E2E payloads (shipped).
 - **Administrative/physical** — *out of software's hands*: risk assessments,
   written policies, workforce training, **BAAs** (only if we ever host),
-  breach‑notification procedures. Document what the practice must own (#{C1}).
+  breach‑notification procedures. Document what the practice must own (#284).
 
 > **The gate:** an external HIPAA Security‑Rule assessment **and** an independent
-> crypto/RBAC audit **before any real patient** (#{C1}).
+> crypto/RBAC audit **before any real patient** (#284).
 
 ## The annoyance budget
 
 **Status:** the rule is encoded in the practice capability model (`practice/capabilities.ts`,
 `frictionRank`) and tested; a server-verified step-up does not exist yet, so nothing is charged
-"step-up" today (#{I1}).
+"step-up" today (#205).
 
 Least privilege **will** be annoying. There is no version of this that isn't, and pretending
 otherwise is how security designs get quietly gutted the first time someone important is
@@ -252,7 +252,7 @@ Corollaries that follow from the same principle:
 
 ## Clinician turnover: what a handover actually is
 
-**Status:** not built — no `care_relationships` table and no screen (#{C4}).
+**Status:** not built — no `care_relationships` table and no screen (#291).
 
 The org is **one practice**, so the motion that matters is not multi-tenancy — it is people moving:
 a GP referring out, a psychiatrist and a psychotherapist co-treating, someone covering a leave, and
@@ -317,7 +317,7 @@ Recurring questions, and where they were already settled:
 
 **Still open:** groups *finer than* an org — a specific care team, a therapy group cohort, or a
 client-defined circle that isn't a practice. Org-consent covers "my care team at Practice X"; it does
-not model a group whose membership the *client* curates, or one spanning two practices (#{C11}).
+not model a group whose membership the *client* curates, or one spanning two practices (#301).
 
 **Settled, and recorded elsewhere so it isn't reopened:** location/presence sharing is
 **permanently excluded on principle**; timed/video/puzzle test items are **not built on the phone**;

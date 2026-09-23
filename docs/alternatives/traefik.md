@@ -54,4 +54,4 @@ walk past the lockouts. Then prove it with the lockout-isolation test in
 ## Sub-path
 
 Serve the Companion at the root of its own hostname. Sub-path deployment does not work consistently
-yet (#{O10}).
+yet (#176).

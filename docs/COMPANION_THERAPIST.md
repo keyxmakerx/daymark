@@ -82,7 +82,7 @@ the owner opted in to that kind of notice.
 - **A wrong guess never burns an invitation.** Wrong secrets meet capped backoff; a rule that burned an
   invitation after N failures would let anyone holding the link lock the real clinician out. Only a
   human report ("I didn't expect this") burns one. The owner's console can make that report; the
-  clinician's acceptance page cannot yet (#{I4}).
+  clinician's acceptance page cannot yet (#213).
 - The relationship's inbox token is not in the invitation. The owner gives it out of band
   (COMPANION_SECURITY.md §4).
 
@@ -111,14 +111,14 @@ The owner console builds a self-contained bundle — a materialised copy of the 
 query into the archive — so minimisation is enforced by what is sealed, not by the viewer. The owner
 chooses the record types (check-in scores and bands, moods, journal entries, sleep) and whether to
 strip notes. Choosing a date range, leaving out single records and previewing the whole bundle are not
-built (#{W1}).
+built (#225).
 
 Each share version gets a fresh content key. The bundle is encrypted with XChaCha20-Poly1305, the
 content key is sealed to the clinician's pinned X25519 key, and the owner signs the transcript
 `context|shareId|version|recipientFp|expiry|ownerSigningFp`, which is also the associated data
 (`lib/share/sharecrypto.ts`). The expiry defaults to 30 days and can be set from 1 to 365 in the
 console; the server refuses a missing or past expiry and clamps anything beyond 366 days. How long
-shared data should live, and whether expired bytes are deleted, is open (#{W2}).
+shared data should live, and whether expired bytes are deleted, is open (#228).
 
 A share can be refreshed as the owner records more: each refresh is a new version (append-only), and
 the clinician always reads the newest. Its scope changes only by the owner's action, and nothing
@@ -147,7 +147,7 @@ and when idle. What cannot be revoked is therefore at most one session's worth o
 The server sees ciphertext, public keys and routing metadata, never a key, plaintext or which records a
 clinician looked at ([COMPANION_SECURITY.md](COMPANION_SECURITY.md) §2, §3 T1). The metadata still
 matters: the existence and rhythm of a relationship leak to whoever runs the server, and sizes are not
-padded (#{O25}).
+padded (#214).
 
 ## 7. Game plans — the clinician writes back
 
@@ -163,7 +163,7 @@ version; withdrawal is a signed tombstone. The server cannot withdraw a plan, or
 because it cannot sign.
 
 **Not built: the owner's side** — opening a plan, checking it, showing it as a proposal, and accepting
-or declining it — in the web console (#{W3}) or on the phone (#138). The check itself exists as
+or declining it — in the web console (#231) or on the phone (#138). The check itself exists as
 `openGamePlan`, with no production caller. When it is built, these rules hold:
 
 - **The proposal gate is mandatory.** Nothing takes effect until the owner accepts; it is both the
@@ -179,7 +179,7 @@ or declining it — in the web console (#{W3}) or on the phone (#138). The check
 ## 8. Authentication and sessions
 
 See [COMPANION_SECURITY.md](COMPANION_SECURITY.md) §5. In short: the six-digit code is the only
-sign-in; passkeys are not built (#{I1}); the code's seed is stored on the server **in the clear**, not
+sign-in; passkeys are not built (#205); the code's seed is stored on the server **in the clear**, not
 hashed, because a verifier must recompute codes; the code never unlocks the reading key; and sessions
 last 15 minutes idle and 8 hours at most.
 
@@ -197,7 +197,7 @@ make future access revocable against an honest server, and keep what remains min
 
 The three honest guarantees: future fetches stop on an honest server; data published after re-keying
 is unreadable to the old key; and plaintext already decrypted is never recallable, as with a printed
-page. Whether these stated limits are the permanent position: #{I8}. A clinician who loses their key
+page. Whether these stated limits are the permanent position: #222. A clinician who loses their key
 needs a fresh invitation and pairing; there is no escrow.
 
 ## 9a. The clinician's own exit, and the case it does not cover
@@ -246,7 +246,7 @@ Three places, none of them a message:
 | The next attempt to share with them | Refused before anything is sealed, naming the date and the two things the owner can do: withdraw what is still published, or invite them again |
 
 There is no email and no notification: a message saying a therapy connection ended, arriving at an
-inbox that may be shared or watched, is a safety trade-off about real people (#{I6}).
+inbox that may be shared or watched, is a safety trade-off about real people (#216).
 
 ### The case this does not cover: a clinician who is dismissed
 
@@ -270,7 +270,7 @@ remove-member confirmation says removal ends a standing in the practice and nobo
 
 See [COMPANION_SECURITY.md](COMPANION_SECURITY.md) §9: events, never content; owner-readable only;
 hash-chained by the server, so tampering is detectable and withholding is not; signed clinician
-attestations are not built (#{O26}).
+attestations are not built (#217).
 
 ## 11. Honest limits
 

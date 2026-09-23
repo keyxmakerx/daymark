@@ -38,13 +38,13 @@ project's releases. Android shows an "unknown app" or Play Protect warning for *
 outside the Play Store. It's a normal precaution, not a sign that something is wrong, and you can
 allow the install to continue.
 
-Publishing a checksum with each release, so you can verify a download, is tracked in #{R4}.
+Publishing a checksum with each release, so you can verify a download, is tracked in #226.
 
 ---
 
 ## Will Daymark be on the Play Store or F-Droid?
 
-**F-Droid** is the goal. Getting there needs a reproducible build and store metadata (#{R5}). For
+**F-Droid** is the goal. Getting there needs a reproducible build and store metadata (#229). For
 now, the official way to get Daymark is the project's
 [GitHub Releases](https://github.com/keyxmakerx/daymark/releases).
 
@@ -73,7 +73,7 @@ again on the new phone.
 your entries in readable form, and once it leaves Daymark the app can't protect it. Please keep
 backups somewhere private, and avoid shared or cloud folders unless that's a deliberate choice.
 
-Encrypted backups and exports are tracked in #{R7}.
+Encrypted backups and exports are tracked in #236.
 
 ---
 

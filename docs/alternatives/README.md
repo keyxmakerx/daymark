@@ -13,11 +13,11 @@ disagree, the contract is right.
 |---|---|---|
 | `Caddyfile` | A public deployment with Let's Encrypt. The most complete of the four: a catch-all refusing unknown `Host`, HSTS, a redaction filter on the access log, a body cap and timeouts, with the reasoning inline. | Written for a proxy in a container (the no-egress override). For a Caddy on the Docker host, change the upstream to `127.0.0.1:8080`. |
 | `Caddyfile.lan` | A LAN with no public DNS, using Caddy's internal CA. | Every device must trust Caddy's root certificate. |
-| `nginx.conf` | The nginx equivalent. | **No catch-all `default_server`**, and it forwards the client's `Host` — add a catch-all and pin the host, or requirement 5 (refuse unknown `Host`) is unmet (#{O23}). Its upstream name is `companion`, where the shipped container is `daymark-companion`. `add_header` cannot set a header only if absent, so do not emit a second CSP (requirement 7). |
+| `nginx.conf` | The nginx equivalent. | **No catch-all `default_server`**, and it forwards the client's `Host` — add a catch-all and pin the host, or requirement 5 (refuse unknown `Host`) is unmet (#209). Its upstream name is `companion`, where the shipped container is `daymark-companion`. `add_header` cannot set a header only if absent, so do not emit a second CSP (requirement 7). |
 | `traefik.md` | Label-driven Traefik. | Traefik's Docker provider wants `/var/run/docker.sock`. This deployment mounts no socket anywhere; adding one puts root-equivalent access to the host next to a server whose whole premise is that it is untrusted. |
 
 Serve the Companion at the root of its own hostname. The sub-path notes at the foot of `nginx.conf`
-predate the finding that sub-path deployment does not work consistently (#{O10}).
+predate the finding that sub-path deployment does not work consistently (#176).
 
 **Cosmos Cloud** has no file here because it is configured through its own interface; the two
 commands and the settings it needs are in

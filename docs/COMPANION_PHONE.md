@@ -32,14 +32,14 @@ libsodium and no emulator; the `sync` flavour wires it to the Android binding
 | --- | --- | --- | --- |
 | Argon2id floor (256 MiB, 3 passes), 16-byte salt, 32-byte master | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
 | Subkeys, context `dmsync01`: 1 sync key, 2 manifest seed | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
-| Subkeys 3 and 4: the owner's X25519 and Ed25519 seeds | `owner/identity.ts` | — | No: #{F2} |
+| Subkeys 3 and 4: the owner's X25519 and Ed25519 seeds | `owner/identity.ts` | — | No: #174 |
 | Snapshot envelope `DMS1 \| 0x01 \| nonce \| ciphertext`, AAD `daymark.snapshot.v1\|lineage\|version` | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
 | Manifest signing bytes | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
 | Base64: RFC 4648 §5, URL-safe, no padding | everywhere | `SyncCrypto.kt` (plain `java.util.Base64`, because lazysodium's own helper is standard base64) | Yes |
 | CPace (CPACE-RISTRETTO255-SHA512) | `pairing/cpace.ts` | `CpaceCrypto.kt` | Yes |
-| Pairing channel identifier and envelopes | `pairing/relay.ts`, `pairing/envelope.ts`, `pairing/payloads.ts` | — (`lvCat` exists, no builder) | No: #{F2} |
-| Assignment and game-plan opening: seal-open, then verify against the pinned clinician key, context and recipient fingerprint | `assignments/crypto.ts`, `therapist/gamePlan.ts` | — | No: #{F3} |
-| Share sealing | `share/sharecrypto.ts` | — | No: #{F2} |
+| Pairing channel identifier and envelopes | `pairing/relay.ts`, `pairing/envelope.ts`, `pairing/payloads.ts` | — (`lvCat` exists, no builder) | No: #174 |
+| Assignment and game-plan opening: seal-open, then verify against the pinned clinician key, context and recipient fingerprint | `assignments/crypto.ts`, `therapist/gamePlan.ts` | — | No: #177 |
+| Share sealing | `share/sharecrypto.ts` | — | No: #174 |
 
 The owner's key pair is derived from the master (subkeys 3 and 4), so the phone stores no separate
 owner identity; that is what makes the phone and the browser the same owner. The vector in
@@ -52,16 +52,16 @@ and cross-language vectors generated from `crypto.ts`. `CpaceCryptoTest` checks 
 (generator string, generator point, both messages, the key), a live exchange, and that a wrong code
 diverges silently. `LazySodiumParityTest` checks that the Java and Android bindings expose the same
 surface, since the tests run on one and the app on the other. The same checks on a real device are
-not built: #{F9}.
+not built: #192.
 
 ## 2. Sync of the owner's own data
 
 Settings → Sync: a server address, the bearer token and the sync passphrase; push the existing backup
 snapshot (`BackupManager`) as the plaintext, append-only, at `max(existing) + 1`; pull fetches the
 newest and decrypts it. Sync is single-writer, last-snapshot-wins: the schema has no per-row ids or
-timestamps, so rows are never merged. Not built: #{F1}. Whether it stays single-writer is a decision:
-#{F12}. Refusing an older snapshot presented as the newest needs a signed manifest and a watermark
-kept on the device: #{F4}.
+timestamps, so rows are never merged. Not built: #168. Whether it stays single-writer is a decision:
+#200. Refusing an older snapshot presented as the newest needs a signed manifest and a watermark
+kept on the device: #179.
 
 Neither the server nor anyone else can reset the app PIN or the sync passphrase. The owner's email
 recovery re-issues the server's bearer token and nothing else.
@@ -82,8 +82,8 @@ accept or decline.
   committed schema export and a `MigrationTest` hop, never a destructive fallback.
 - **Settings** apply only for the allowlisted keys (`visibleSelfChecks`, `reminderTime`,
   `reminderCadence`, `theme`), never PIN, lock, encryption or network settings.
-- Not built: #{F3}. The owner's console on the web has an assignment inbox, but it does not yet save a
-  decision: #{W4}.
+- Not built: #177. The owner's console on the web has an assignment inbox, but it does not yet save a
+  decision: #234.
 
 ## 4. Pairing: the phone as the owner's device
 
@@ -94,27 +94,27 @@ notification per invitation** when a reply does not open (issue #112) and nothin
 COMPANION_PAIRING.md §14.
 
 It also gains a screen listing its connections: who, since when, their key fingerprints, what they
-can see in plain words, and Revoke. Not built: #{F2}. The phone as the anchor for the audit chain's
-head: #{F5}. A heartbeat between phone and server: #{F6}. Signed requests instead of the bearer token:
-#{F7}. Pairing the phone with the server by QR code: #{F8}.
+can see in plain words, and Revoke. Not built: #174. The phone as the anchor for the audit chain's
+head: #182. A heartbeat between phone and server: #185. Signed requests instead of the bearer token:
+#186. Pairing the phone with the server by QR code: #189.
 
 ## 5. What CI checks
 
 `.github/workflows/build.yml` runs on every push. It builds both flavours in debug and release (so R8's
 shrinking, which JNA's reflection makes risky, is exercised for `sync`), runs the unit tests including
 `:sync-crypto`, runs the `foss` permission check, and compiles the instrumented tests without running
-them: no device runs in CI, so nothing has executed the ristretto code on a phone (#{F9}, #147).
+them: no device runs in CI, so nothing has executed the ristretto code on a phone (#192, #147).
 
-Only `foss` is released. How the `sync` build would be distributed is a decision: #{F10}. It needs its
-own privacy statement before it ships: #{F11}.
+Only `foss` is released. How the `sync` build would be distributed is a decision: #194. It needs its
+own privacy statement before it ships: #197.
 
 ## 6. The steps, in order
 
 1. The `sync` flavour, the crypto port and its host-JVM conformance tests, and CI. **Built.**
-2. Snapshot push and pull: #{F1}.
-3. The schema version with the game-plan, progress and assignment tables: #{F3}.
-4. Inbound assignments and game plans, with the acceptance inbox: #{F3}.
-5. The owner's half of pairing, grants and shares from the phone, and the connections screen: #{F2}.
-6. The anti-rollback watermark (#{F4}), the audit anchor (#{F5}), the heartbeat (#{F6}), signed
-   requests (#{F7}), QR pairing (#{F8}).
-7. The crypto tests on a real device: #{F9}.
+2. Snapshot push and pull: #168.
+3. The schema version with the game-plan, progress and assignment tables: #177.
+4. Inbound assignments and game plans, with the acceptance inbox: #177.
+5. The owner's half of pairing, grants and shares from the phone, and the connections screen: #174.
+6. The anti-rollback watermark (#179), the audit anchor (#182), the heartbeat (#185), signed
+   requests (#186), QR pairing (#189).
+7. The crypto tests on a real device: #192.

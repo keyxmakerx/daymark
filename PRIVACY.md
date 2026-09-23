@@ -5,7 +5,7 @@ Daymark is built so that **your data never leaves your device** unless you expor
 This describes the `foss` build of the Android app, which is the only build released. A separate,
 opt-in `sync` build can share data with a self-hosted Companion server. It is unreleased and has its
 own application id, so updating the `foss` build never installs it. It will get its own privacy
-statement before it is released (#{F11}).
+statement before it is released (#197).
 
 ## What we collect
 
@@ -35,7 +35,7 @@ log is ever sent anywhere by it.
   - the latest result of each sleep self-check.
 
   That file is protected by the Android sandbox and the device's own encryption, but **the app does
-  not encrypt it** the way it encrypts the database (#{N12}).
+  not encrypt it** the way it encrypts the database (#306).
 - **Other people's names.** People and communities you add are your own notes about them. They stay
   on the device like everything else, and sharing them is off by default.
 - **Check-ins store scores only.** For the PHQ-9, GAD-7 and WHO-5 check-ins only the **score and
@@ -61,7 +61,7 @@ log is ever sent anywhere by it.
 - **If the phone loses that key**, the entries cannot be read by anything or anybody. This is rare;
   it can happen after some firmware updates or a security reset. Daymark says so, offers to leave
   the entries alone first, and removes them only if you choose to.
-- **Photos you attach to entries are not encrypted by the app** (#{R8}). They are downscaled copies
+- **Photos you attach to entries are not encrypted by the app** (#239). They are downscaled copies
   in the same app-private storage and never leave your device on their own. The Android Photo Picker
   lets you choose one image **without granting any storage or media permission**.
 - `android:allowBackup="false"` is set, so the system does not copy your data into cloud or adb
@@ -105,7 +105,7 @@ A JSON backup contains every table you would miss, including your photos (embedd
 stays one portable file). It leaves out the record of when the app asked you something.
 
 Once exported, a file is outside Daymark's protection. Store it somewhere safe and treat it as
-sensitive. Encrypted backups and exports are not built (#{R7}).
+sensitive. Encrypted backups and exports are not built (#236).
 
 ## Not a medical device
 

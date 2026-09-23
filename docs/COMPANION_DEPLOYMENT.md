@@ -90,10 +90,10 @@ is right.
 4. **Tell the app who you are:** `DAYMARK_TRUSTED_PROXIES` (§4.0).
 5. **Refuse unknown `Host` and SNI** with a catch-all that answers an error. The app builds emailed
    links from `DAYMARK_PUBLIC_BASE_URL`, which compose always sets; the catch-all means a poisoned
-   invitation link needs two mistakes, not one (#{O11}).
+   invitation link needs two mistakes, not one (#180).
 6. **Serve the Companion at the root of its own hostname.** `DAYMARK_BASE_PATH` exists, but a sub-path
    deployment does not work consistently: the API stays at `/v1` on the root while pages move under
-   the prefix (#{O10}).
+   the prefix (#176).
 7. **Do not add your own `Content-Security-Policy`.** Two CSP headers are intersected by the browser,
    not overridden, and one without `'wasm-unsafe-eval'` silently breaks every decryption in the
    consoles. If your proxy has a "security headers" or "harden this route" switch, check what CSP it
@@ -121,7 +121,7 @@ Add a route in the Cosmos interface with the target `http://daymark-companion:80
 `DAYMARK_TRUSTED_PROXIES` to the address Cosmos got on that network (§4.0). Check on your install
 whether Cosmos adds its own CSP or HSTS (requirements 2 and 7), and whether its private-network feature
 creates a network of its own: use either that or `docker network connect`, never both, or the app sees
-whichever address Docker routes from (#{O22}).
+whichever address Docker routes from (#207).
 
 ### 3.3 Rate limiting
 
@@ -161,7 +161,7 @@ which is exactly the record §10 asks you not to keep — decide that trade deli
 - **What the app reads:** `X-Forwarded-For` only, only from a trusted peer, right to left, skipping
   trusted hops. It never reads `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Forwarded-Prefix` or
   `Forwarded`.
-- **A wrong but non-empty list fails silently** — no warning (#{O6}). Prove it with the
+- **A wrong but non-empty list fails silently** — no warning (#167). Prove it with the
   lockout-isolation test in COMPANION_OBSERVABILITY.md §1.7.
 
 ## 5. Configuration
@@ -196,7 +196,7 @@ read from a file named by `NAME_FILE`, which wins.
 | `DAYMARK_TOTP_LOCKOUT_FAILS`, `_SECONDS` | `5`, `300` | Bad sign-in codes before a credential is locked, and for how long; also the backoff for wrong invitation secrets |
 | `DAYMARK_INVITE_TTL_SECONDS` | `259200` (72 h) | Invitation lifetime |
 | `DAYMARK_SESSION_IDLE_SECONDS`, `_ABSOLUTE_SECONDS` | `900`, `28800` | Clinician session lifetimes |
-| `DAYMARK_COOKIE_INSECURE` | off | Plain-HTTP testing only: drops `Secure` from the session cookie (#{O12}) |
+| `DAYMARK_COOKIE_INSECURE` | off | Plain-HTTP testing only: drops `Secure` from the session cookie (#181) |
 | `DAYMARK_ACCESS_LOG_RETENTION_DAYS` | `90` | Audit-log retention (COMPANION_SECURITY.md §9) |
 | `DAYMARK_ACCESS_LOG_SOURCE_IP` | off | Records the client address in audit entries |
 | `DAYMARK_REISSUE_MAX_PER_HOUR` | `3` | Recovery requests per address per hour |
@@ -316,7 +316,7 @@ newer audit-chain head will see the chain fall behind it (COMPANION_SECURITY.md 
 
 **Schema changes** are additive: each store creates missing tables and adds missing columns at start.
 There is no schema version and no automatic copy before a change, so the backup from step 1 is the way
-back (#{O17}). To roll back, run the previous image — and restore that backup if the new version
+back (#193). To roll back, run the previous image — and restore that backup if the new version
 changed a database.
 
 **Base images** are pinned by digest, and Dependabot proposes the bumps (`.github/dependabot.yml`).
@@ -380,7 +380,7 @@ iptables -I DOCKER-USER -i dmk-mail -d <smtp-ip>/32 -p tcp --dport 587 -j RETURN
 `gw_priority` needs Compose 2.33 or later; without it Docker picks the default route itself and may
 pick the network with no reply path. Docker's nftables backend has **no** `DOCKER-USER` chain: there,
 add a table of your own with a base chain at the same hook and priority. None of this is tested by CI;
-check that a real email arrives (#{O22}).
+check that a real email arrives (#207).
 
 ## 9. First run
 
@@ -404,7 +404,7 @@ Two records, kept for different readers:
 | Read by | The operator | The owner (relationships); the practice's admin (practices) |
 | Content | The app's own lines (COMPANION_OBSERVABILITY.md §2.2) | Actor, action, an opaque object reference |
 | Integrity | None | A SHA-256 hash chain |
-| Retention | 3 × 10 MiB, compressed | `DAYMARK_ACCESS_LOG_RETENTION_DAYS` (90), applied lazily (#{O5}) |
+| Retention | 3 × 10 MiB, compressed | `DAYMARK_ACCESS_LOG_RETENTION_DAYS` (90), applied lazily (#165) |
 
 **Never log, at any level, in the app or your proxy:**
 
@@ -417,7 +417,7 @@ Two records, kept for different readers:
 - stack traces on request paths.
 
 The app breaks two of these today: the unhandled-error line logs the request path with a stack trace,
-and the sync disk-full line logs a file path that contains a lineage id (#{O1}).
+and the sync disk-full line logs a file path that contains a lineage id (#160).
 
 **Your proxy's access log.** The app keeps none, deliberately. If your proxy keeps one, delete the
 client address and the User-Agent, or coarsen the address (Caddy: `ip_mask { ipv4 16 ipv6 32 }` —
@@ -427,4 +427,4 @@ since it shares the disk with `/data`.
 **Retention.** Container logs are size-bounded; the app writes no access log; audit entries default to
 90 days. A practice that is a HIPAA covered entity may owe six years of documentation, and whether that
 reaches raw audit logs is contested. The default stays short because a person hosting their own
-journal is not a covered entity; a practice needs its own counsel (#{C1}).
+journal is not a covered entity; a practice needs its own counsel (#284).

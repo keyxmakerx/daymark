@@ -33,7 +33,7 @@ the issue.
 - **Moods can be renamed and recoloured** (Settings → Customize moods). The level 1–5 is what is
   stored, so entries keep their place. Custom names and colours appear everywhere, including the
   widget and the CSV, and travel in backups. Not built: a scale with a different number of steps:
-  #{P17}.
+  #206.
 - **Activities.** A library of 103 ready-made activities in 12 categories, plus the person's own.
   They can be added, renamed, given an icon, archived and restored. An archived activity stays on
   past entries.
@@ -41,7 +41,7 @@ the issue.
   downscaled and re-encoded, which drops its location and every other piece of metadata
   (`data/ImageStrip.kt`), and kept in app-private storage. The app does not encrypt photos (§16).
   Not built: telling the person, once, that a photo's content can still show where they were:
-  #{P12}.
+  #188.
 
 ### 1.2 Home
 
@@ -92,8 +92,8 @@ it back at once; turning one on clears everything that held it back. Nothing is 
 the person taps. Home's check-in row, the "what might help" menu and crisis resources cannot be
 switched off.
 
-Not built: suggestion settings come back after a restore: #{P13}. A suggestion to make a goal from a
-factor opens a blank goal editor rather than one with the factor filled in: #{P10}.
+Not built: suggestion settings come back after a restore: #191. A suggestion to make a goal from a
+factor opens a blank goal editor rather than one with the factor filled in: #178.
 
 ### 1.6 On this day
 
@@ -123,7 +123,7 @@ entries are stars in the Sky (§4), and reach the PDF report only when the perso
   never reach it (§11.2).
 - **By day of week**, **by time of day**, and **this week, month or year against the last**.
 - **In review** (a short recap written by fixed rules) and **Logging consistency** (a heatmap of
-  entries per day). Whether these two read as grades is #{P16}.
+  entries per day). Whether these two read as grades is #203.
 - Suggestion cards sit at the top (§1.5).
 - **Review my year** is a full-screen walk-through: an introduction, one page per quarter, and a
   finale with at most two facts, the mood chosen most often (in the person's own word for it) and
@@ -132,7 +132,7 @@ entries are stars in the Sky (§4), and reach the PDF report only when the perso
   make.
 - The year view's stars and the review's quarter pages still size a day's star by its mood and draw
   a day with no entry as a faint speck, against the Sky's rules. Redrawing or removing them is in
-  #134.
+  #148.
 
 ## 4. Your sky and life events
 
@@ -158,7 +158,7 @@ on one day in the person's own words, added from the Sky's life-events list or w
 - A project's board has no due dates, no percentage, no count of steps still to do, and no column
   that is the good end. Every move between columns is allowed in both directions
   (`goals/GoalBoard.kt`).
-- Whether a step should carry its own "when… then…" cue is #{P11}.
+- Whether a step should carry its own "when… then…" cue is #184.
 
 ## 6. Trackers
 
@@ -226,11 +226,11 @@ Never offered: generic affirmations, cold-water immersion, or a comparison with 
 earlier, better days. The screen and rules 1–3 disagree today: "Not right now" comes last, the
 options drift on endless animations with no reduced-motion check, and the opening line puts a
 feeling into words. Which gives way, and whether any default should depend on a condition the
-person reports (the app records none), is #{P6}.
+person reports (the app records none), is #166.
 
 Not built: more techniques (progressive muscle relaxation, cognitive defusion, brief mindfulness, a
-self-compassion break, naming the feeling, 5-4-3-2-1 grounding, a calm game): #{P7}. A clinician
-recommending, never setting, how often the support space is offered: #{P8}.
+self-compassion break, naming the feeling, 5-4-3-2-1 grounding, a calm game): #170. A clinician
+recommending, never setting, how often the support space is offered: #172.
 
 ### 7.3 Crisis resources and the crisis floor
 
@@ -273,7 +273,7 @@ recommending, never setting, how often the support space is offered: #{P8}.
   contain a comma. It is in backups and never synced. If sharing it ever ships, it is an
   owner-created, time-boxed, revocable share and never automatic
   ([COMPANION_ACCESS_CONTROL.md](COMPANION_ACCESS_CONTROL.md)).
-- A link back from the crisis screen to the plan, and printing or exporting the plan, are #{P9}.
+- A link back from the crisis screen to the plan, and printing or exporting the plan, are #175.
 
 ## 9. Sleep
 
@@ -293,7 +293,7 @@ More → Sleep check-ins:
   and mood before and since. It shows what changed, not why, and is not a measure of whether a
   treatment works.
 - **Sleep setup.** Saved answers about a bed partner, pets, where the phone lies, background noise
-  and sleep position. Nothing reads them yet; they are for sensing that is not built (#{Z1}).
+  and sleep position. Nothing reads them yet; they are for sensing that is not built (#212).
 - **The breathing check** (§10).
 
 The rules:
@@ -311,7 +311,7 @@ The rules:
 The diary says "Around 85% efficiency or more is a common good-sleep mark — a reference, not a
 verdict." Whether that sits with the rule above, and which of the unbuilt sensing tiers are still
 wanted (a sleep window from phone use, movement plus light, microphone events, sonar, coping nudges,
-CPAP adherence, a multi-night view), is #{Z1}. Any tier would be rules-based signal processing: no
+CPAP adherence, a multi-night view), is #212. Any tier would be rules-based signal processing: no
 machine-learning classifier ([CLAUDE.md](../CLAUDE.md) §0).
 
 ## 10. The breathing check
@@ -330,7 +330,7 @@ The result is "About N breaths/min", with a note when the signal is faint. Flagg
 "worth a clinician's look. This is an experimental reading, not a diagnosis." A failed reading says
 "Couldn't get a clear reading". With no pauses it says only that none were flagged in this reading.
 
-Not built: overnight capture: #{Z2}. It waits on the two-minute check on a real phone in #147.
+Not built: overnight capture: #218. It waits on the two-minute check on a real phone in #147.
 
 ## 11. People and communities
 
@@ -360,7 +360,7 @@ be.
 
 Prompts about people read only tags and dates, never mood, and ask the arbiter before speaking. Two
 are allowed: an entry names someone who has no page, so offer one, once; someone has come up several
-times and has no page, so offer once. Not built: #{P1}.
+times and has no page, so offer once. Not built: #156.
 
 **Never: "you haven't written about X in a while."** A gap is never a prompt. A page may state
 *Last note: June* as a fact when the person opens it.
@@ -373,10 +373,10 @@ times and has no page, so offer once. Not built: #{P1}.
 - What a clinician would see is exactly the words written about someone and the entries that name
   them. Someone not shared would show as *with one person, not shared*, never as a blank. Sharing
   stays off even under an accept-all grant.
-- Nothing reads these switches yet: no export, report or sync path uses them. Not built: #{P2}
+- Nothing reads these switches yet: no export, report or sync path uses them. Not built: #157
   (which also depends on #138).
 - The word is **clinician**: a therapist, a doctor and a psychiatrist are one role to the app. Some
-  screens still say "therapist", such as Settings → Export PDF for therapist: #{P3}.
+  screens still say "therapist", such as Settings → Export PDF for therapist: #158.
 - People, notes, *with* links and group defaults travel in backups. A restore never turns sharing on
   for someone already on the phone.
 
@@ -391,7 +391,7 @@ times and has no page, so offer once. Not built: #{P1}.
   gate it: quietening something they scheduled would override them, and there is no reminder
   setting for them to turn back up (`notifications/ReminderScheduler.kt`). Every firing still
   writes a line in the reception ledger (§13.2).
-- Not built: answering a reminder with "this time works", "try later" or "stop asking": #{P14}.
+- Not built: answering a reminder with "this time works", "try later" or "stop asking": #195.
 
 ## 13. Why it asks: the arbiter, the reception ledger and the timing layer
 
@@ -428,7 +428,7 @@ before schema v18 have no hour or weekday, and none is ever worked out for them.
 - **Today placement decides nothing, and the pool is never spoken.** A reminder is at a time the
   person chose, and the support offer is made while they are already in the app, so neither is an
   ask an hour should be chosen for. No rotation is stored. Keeping both dormant, giving them a job,
-  or removing them is #{P4}.
+  or removing them is #159.
 
 ### 13.4 The debug screen: "Why it asks"
 
@@ -439,7 +439,7 @@ gate is holding back. It also shows the hour-by-weekday grid and the phrase pool
 nothing itself: every value comes from the same engines the app uses. An unanswered hour is drawn as
 an hour with nothing in it, with no red and no warning. Only the support offer has a frequency the
 person set; for the others the screen says the value is a default. Not built: a history of past
-decisions rather than a reading of the current moment: #{P5}.
+decisions rather than a reading of the current moment: #162.
 
 ## 14. Backup and export
 
@@ -448,7 +448,7 @@ decisions rather than a reading of the current moment: #{P5}.
   reminders, check-in scores, thought records, the safety plan, life events, people and the notes
   about them, group sharing defaults, custom mood names and colours, and photos embedded in the
   file.
-- **Not in a backup:** the reception ledger, by design (§13.2); suggestion settings (#{P13}); the
+- **Not in a backup:** the reception ledger, by design (§13.2); suggestion settings (#191); the
   crisis resource, the sleep setup answers and the latest sleep self-check results; app settings and
   the PIN.
 - **Restore** (Settings → Restore backup) either replaces everything or merges the file alongside
@@ -463,9 +463,9 @@ decisions rather than a reading of the current moment: #{P5}.
   date range (90 days by default), notes, charts, and the journal for that range, all of it or
   none, off by default. A screen for choosing journal entries one at a time exists
   (`ui/export/JournalPickerScreen.kt`), but nothing opens it yet. Not built: a preview before
-  exporting: #{P15}.
+  exporting: #198.
 - Every export is a plain, unencrypted file, made by the person's own act. Not built: encrypted
-  backups and exports: #{R7}.
+  backups and exports: #236.
 
 ## 15. The widget
 
@@ -481,7 +481,7 @@ mood opens a new entry with it chosen; nothing is saved until the person saves.
   or the phone cannot hold a key. If the phone ever loses the key, the app says the entries cannot
   be opened and offers to leave them or to start a new journal. It never removes them on its own.
   How it works: [ARCHITECTURE.md](ARCHITECTURE.md) §4.
-- **Not covered:** photos (#{R8}); the settings file, which also holds custom mood names, the crisis
+- **Not covered:** photos (#239); the settings file, which also holds custom mood names, the crisis
   resource, the sleep setup answers and the latest sleep self-check results; and exports (§14).
 - **The app lock** is an optional PIN of 6 to 12 digits, offered during first-run setup. A PIN set
   by an older version keeps working at its length. Only a PBKDF2 hash is kept, in an encrypted

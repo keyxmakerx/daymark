@@ -102,7 +102,7 @@ Rules the code and tests hold:
   screener. These are not in the encrypted database.
 - **The secure store** (`EncryptedSharedPreferences`): the PIN hash and the wrapped data key.
 - **Photos**: JPEGs in `filesDir/entry_photos`, written by `data/PhotoStore.kt`, which also guards
-  against path traversal. Not encrypted by the app: #{R8}.
+  against path traversal. Not encrypted by the app: #239.
 
 ### 3.3 Migrations
 
@@ -117,7 +117,7 @@ Known gap: `1.json` / `2.json` do not exist (export was enabled at v3), so `MIGR
 
 `app/src/androidTest/.../MigrationTest.kt` reads the current version and the migration list from
 `AppDatabase` by reflection, and checks every hop from v3 plus a full chain from v3 to the latest. It
-is an instrumented test: CI compiles it and never runs it (#144). The committed schemas reach it as
+is an instrumented test: CI compiles it and never runs it (#220). The committed schemas reach it as
 androidTest assets, wired by hand in `app/build.gradle.kts`.
 
 ### 3.4 The backup format
@@ -150,7 +150,7 @@ sharing on for someone already on the phone. What a backup leaves out is listed 
   no `-wal`, `-shm` or `-journal` file survived. A crash between the delete and the rename is
   detected and finished on the next start.
 - **Not covered:** photos, the preferences in §3.2, and exports, which are plain files the person
-  makes (#{R7}).
+  makes (#236).
 - **The PIN is not a key.** `security/PinManager.kt` keeps a PBKDF2-HMAC-SHA256 hash (210,000
   iterations, random 16-byte salt) in the secure store. Five free attempts, then a wait that doubles
   from 15 seconds up to 5 minutes. The wait is timed on both the wall clock and a clock that cannot
@@ -211,7 +211,7 @@ reads the store directly; a new self-drawn card must do the same.
 - **Unit tests** live in `app/src/test/` and run in CI with `./gradlew test`.
 - **Instrumented tests** (`MigrationTest`, `JournalEncryptionMigrationInstrumentedTest`) live in
   `app/src/androidTest/`. CI compiles them and never runs them, so a green build says nothing about
-  migrations or the encryption conversion on a device (#144).
+  migrations or the encryption conversion on a device (#220).
 - **The root `./gradlew` does not run in the development container.** Anything with an Android
   import is checked by CI only.
 - **`tools/jvm-tests.sh <package>`** compiles and runs one Android-free package's tests on a plain
@@ -231,9 +231,9 @@ APKs of both (exercising R8), compiles the instrumented tests, checks that the `
 `INTERNET` permission, and regenerates the current schema with the build cache bypassed, failing if
 it differs from the committed file. It uploads the regenerated schemas and both debug APKs.
 
-It does **not** run the instrumented tests or Android lint (#144).
+It does **not** run the instrumented tests or Android lint (#220).
 
 `.github/workflows/release.yml` runs on a pushed `v*` tag. It builds the signed `foss` release APK,
 checks it for `INTERNET`, and creates the GitHub release with the APK attached. Without the signing
-secrets it falls back to debug signing instead of failing: #{R3}. Publishing the APK's SHA-256 is
-#{R4}. `.github/workflows/companion.yml` covers `companion/**`.
+secrets it falls back to debug signing instead of failing: #224. Publishing the APK's SHA-256 is
+#226. `.github/workflows/companion.yml` covers `companion/**`.

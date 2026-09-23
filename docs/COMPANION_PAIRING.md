@@ -7,7 +7,7 @@ both devices turn that code into the same key through a password-authenticated k
 everything and learns neither the code nor the key.
 
 As built, both halves run in the browser: the owner's in the owner console, the clinician's on the
-acceptance page. The phone's half is specified in §14 and not built: #{F2}. Pairing grants access
+acceptance page. The phone's half is specified in §14 and not built: #174. Pairing grants access
 to nothing (§10).
 
 Code: `companion/web/src/lib/pairing/`, `companion/web/src/lib/therapist/pairingAccept.ts`,
@@ -21,7 +21,7 @@ The server is the adversary the design excludes: it holds no code and no key, so
 exchange itself and sit in the middle. The emailed link alone is worthless, because the code travels
 by another channel.
 
-| Threat | As built (both halves in the browser) | Owner's half on the phone (#{F2}) |
+| Threat | As built (both halves in the browser) | Owner's half on the phone (#174) |
 | --- | --- | --- |
 | Someone intercepts the invitation email | Prevented: the link without the code opens nothing | Prevented |
 | A network attacker between the two people | Prevented | Prevented |
@@ -34,7 +34,7 @@ server is the one serving that code. That bottom row is the reason the owner's h
 phone; it is a strengthening against the worst case, not a precondition for the rest.
 
 **Who starts a pairing.** The owner, always. The owner's device opens every run and is the CPace
-initiator. Whether a clinician may start one too is an open decision: #{I5}.
+initiator. Whether a clinician may start one too is an open decision: #215.
 
 **Post-quantum.** Not now, by decision: hybrid post-quantum PAKEs are early drafts, and nothing in
 this threat model justifies tracking one.
@@ -176,9 +176,9 @@ not me" is a report. Only a report ends an invitation.
   and answers 204 to every anonymous call whatever happened, so it cannot be used to learn whether an
   invitation exists or is live. The owner's report (with the bearer token) answers plainly.
 - The owner sees wrong-secret attempts counted on the invitation and, one row each, in the access
-  log. No alert is sent when they pass a threshold: not built, tracked in #139.
+  log. No alert is sent when they pass a threshold: not built: #190.
 - The clinician's "I didn't expect this" is accepted by the server but no clinician screen offers it
-  yet: #{I4}.
+  yet: #213.
 
 ## 8. The invitation and its runs
 
@@ -259,7 +259,7 @@ attack on the pairing yields an empty connection.
 | Sharing, later | What they may actually see |
 
 A QR code would carry the address and invitation id only, never a secret, and the typed path must stay
-able to do everything the scan does: not built, #{F8}.
+able to do everything the scan does: not built, #189.
 
 ## 11. Ending a connection: Leave and Revoke
 
@@ -270,10 +270,10 @@ material, a stolen clinician credential would be a way to destroy someone else's
 - **Leave (clinician), built.** `POST /v1/relations/{relRef}/ending` writes one insert-only ending
   row, cuts every live session of that credential, makes TOTP refuse it from then on, and appends one
   audit line the owner reads. It withdraws no share, deletes no blob, alters no grant, rotates no key.
-  It cannot reach what the clinician already decrypted. The owner is not emailed: #{I6}.
+  It cannot reach what the clinician already decrypted. The owner is not emailed: #216.
 - **Revoke (owner).** The owner withdraws a share lineage (future fetches answer 410) or turns
   capabilities off in a re-signed grant, and can stop an invitation. The owner cannot yet end a
-  clinician's sign-in or live sessions: #{I3}.
+  clinician's sign-in or live sessions: #210.
 - **"Revoking does not un-send what was already read."** That sentence appears verbatim at the point
   of every revoke.
 - **A revoke is not a message.** The clinician has no push channel, and the owner's screen says "the
@@ -299,7 +299,7 @@ passphrase screen names the three people who cannot reset it (`PASSPHRASE_NO_RES
 
 The owner's side is the same: the passphrase is the key, and nobody can reset it
 (COMPANION_ARCHITECTURE.md §1). The recovery code is the owner's own second way in, never someone
-else's reset; what it can recover today is limited, and the rest is #{W14}.
+else's reset; what it can recover today is limited, and the rest is #258.
 
 ## 13. The wire contract
 
@@ -384,8 +384,8 @@ The clinician polls status every 45 seconds (`PAIRING_STATUS_POLL_MS` on the web
 
 ## 14. The phone's half
 
-Not built: #{F2}. The protocol does not change; only the device running the owner's half does. Until
-the phone can talk to the server at all (#{F1}), no Companion screen may claim the phone will show or
+Not built: #174. The protocol does not change; only the device running the owner's half does. Until
+the phone can talk to the server at all (#168), no Companion screen may claim the phone will show or
 approve anything.
 
 - **Identity is derived, not generated.** `crypto_kdf_derive_from_key` over the owner's master with

@@ -13,7 +13,7 @@ Code: `companion/web/src/lib/instruments/` (types, predicate, scoring, validate,
 `AttentionTask.svelte`, `Assessments.svelte` and `ToolBuilder.svelte`.
 
 **Results stay on this device.** A result can be downloaded as JSON and nothing more: it is not saved
-into the encrypted snapshot, so it neither syncs nor reaches a clinician. Not built: #{W5}.
+into the encrypted snapshot, so it neither syncs nor reaches a clinician. Not built: #237.
 
 ## 0. Rules this engine keeps
 
@@ -26,7 +26,7 @@ A definition, task or screen that breaks one of these does not ship.
 2. **No AI, no generated content.** Every word is fixed, human-written text with the person's own
    numbers slotted in. Scoring is deterministic arithmetic over a declarative definition.
 3. **The server sees nothing.** Everything is computed in the browser. When results are saved into
-   the snapshot (#{W5}) they will reach the server only as ciphertext.
+   the snapshot (#237) they will reach the server only as ciphertext.
 4. **Vendored and same-origin.** No CDN, no web-font service, no analytics, no third-party origin;
    the served Content-Security-Policy is quoted in [COMPANION_SECURITY.md](COMPANION_SECURITY.md) §6.
    The timed task uses only `requestAnimationFrame`, `performance.now()` and the DOM already on the
@@ -138,7 +138,7 @@ sentence:
 
 A definition failing any check does not load. The tool builder (`ToolBuilder.svelte`, "Build a
 self-check of your own") compiles a draft through the same gate. Publishing a built tool to the
-catalogue or assigning it is not built: its "Publish" downloads JSON (#{W13}).
+catalogue or assigning it is not built: its "Publish" downloads JSON (#255).
 
 ## 3. Timed tasks
 
@@ -151,7 +151,7 @@ a stimulus shown for 250 ms with a 1500 ms interval jittered by ±250 ms; three 
 target (●), to be answered with Space or a tap, and the rest (■) are to be left alone. It reports
 omissions, commissions, accuracy, and a reaction-time mean, plus a variability figure under the
 conditions in §3.4. Working-memory (n-back-style) and interference (Stroop-style) tasks are not
-built: #{W6}.
+built: #240.
 
 ### 3.2 Browser timing: honest about its own precision
 
@@ -167,11 +167,11 @@ A browser is not a laboratory clock. The rules, and where each stands:
    within-person, within-session counts stay meaningful and absolute reaction time across machines
    is not comparable; the result says so. Built as the result's own caveat.
 5. **Onset and input timestamps.** Stimulus onset taken from the frame that actually paints it, and
-   the key press from the event's own `timeStamp`, to avoid main-thread skew. Not built: #{W7}.
+   the key press from the event's own `timeStamp`, to avoid main-thread skew. Not built: #242.
 6. **No background contention.** Full screen, and a run invalidated when the tab loses focus. Not
-   built: #{W7}.
+   built: #242.
 7. **Reproducible runs.** The trial sequence drawn from a recorded seed, and a practice block first.
-   Not built: the sequence uses `Math.random` (#{W7}).
+   Not built: the sequence uses `Math.random` (#242).
 
 ### 3.4 Keeping results meaningful but not diagnostic
 
@@ -186,7 +186,7 @@ variability is exactly the figure a jittery clock manufactures. Therefore:
   fixed template: counts, a mean, a caveat.
 
 Comparing a run with the same person's earlier runs, naming practice effects on early runs, and
-optional context notes (sleep, caffeine, time of day) all need results that are kept: #{W5}.
+optional context notes (sleep, caffeine, time of day) all need results that are kept: #237.
 
 ## 4. The catalogue
 
@@ -194,7 +194,7 @@ The catalogue is four self-authored tools — two scored self-checks and two gui
 Steady Attention. The ledger with each one's licence and anchor is
 [companion/INSTRUMENTS.md](../companion/INSTRUMENTS.md). The phone keeps its own check-ins (PHQ-9,
 GAD-7, WHO-5; see [INSTRUMENTS.md](INSTRUMENTS.md)). Whether the Companion should also carry
-instruments that are free with attribution, with their notices, is a decision: #{W17}.
+instruments that are free with attribution, with their notices, is a decision: #264.
 
 ### 4.2 Explicitly excluded (never add)
 
@@ -219,7 +219,7 @@ with word-boundary matching so ordinary words do not trip it.
    `instrumentVersion`, so a result can always be attributed to the definition that produced it.
 4. **The ledger is law.** Only public-domain, openly licensed or self-authored content; never alter
    validated wording; self-authored tools say so. An instrument that needs a verbatim notice needs the
-   notice shown and checked before it can be added (#{W17}).
+   notice shown and checked before it can be added (#264).
 5. **"Self-check, not a diagnosis" cannot be switched off** by a definition: the validator requires
    the framing, and the screens around the runner are fixed text.
 6. **Original tasks stay original.** A new timed task is self-authored — our stimuli, timings and

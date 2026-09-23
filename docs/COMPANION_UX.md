@@ -36,15 +36,15 @@ been built differently. The old text is
    share less, for less time (§9).
 5. **Every surface says what it is for.** The owner console shares, pairs, opens a backup and runs
    self-checks. Not built: the fuller desk-side viewer an earlier design proposed — a year view,
-   period comparison, journal search, printing a report — and whether to build it is #{W9}.
+   period comparison, journal search, printing a report — and whether to build it is #247.
 6. **Nothing from anywhere else.** No CDNs, remote fonts, analytics or third-party origins; the page
    may talk only to the server that served it ([COMPANION_SECURITY.md](COMPANION_SECURITY.md) §6).
 
 ## 7. Key flows
 
 Only flows that are built and carry fixed copy are kept here. Not built: limiting a share to a date
-range, leaving out single records and previewing it before it goes: #{W1}; receiving, checking and
-accepting or declining a game plan in the owner console: #{W3}.
+range, leaving out single records and previewing it before it goes: #225; receiving, checking and
+accepting or declining a game plan in the owner console: #231.
 
 ### 7.6 Revoking access (owner)
 
@@ -138,11 +138,11 @@ unchecked, each with its count; *"Strip free-text notes (recommended)"* on by de
 as scores and bands only; an expiry of 1–365 days. The share is signed and sealed to the clinician's
 pinned key in the browser. No instrument in the Companion has a self-harm item — the honesty gate
 refuses one. The defaults are an open decision: the design asked for a short expiry (about 14 days)
-over the last 30 days, and the code offers 30 days over everything: #{W2}.
+over the last 30 days, and the code offers 30 days over everything: #228.
 
 ### 9.2 The consent screen
 
-Not built: #{W1}. Before anything is sealed, it states in plain words what is going (counts per type
+Not built: #225. Before anything is sealed, it states in plain words what is going (counts per type
 and the window, "scores and bands only — no individual answers"), to whom, and the date access ends;
 then, with **Cancel** and **Share this** equally weighted:
 
@@ -181,7 +181,7 @@ the posture of the surface you are on (`trust/posture.ts` decides which):
 - It never claims the page "makes no network requests" or that data "never leaves this device".
 - Enforced by `components/trustbar.test.ts`.
 - Not built: anything to verify the build against. The `local` sentence asks for a check nothing yet
-  lets a person make, and the drop zone opens only plaintext JSON: #{W12}.
+  lets a person make, and the drop zone opens only plaintext JSON: #252.
 
 **The sharing strip** (`owner/SharingStrip.svelte`) is the owner's standing notice that someone can
 read what they share. It is rendered per relationship above the tab content, so changing tab does not
@@ -212,7 +212,7 @@ the pin record, `therapist/pinStore.ts`), and checks the one exemption: the clin
 ### 10.2 What the server can and cannot see
 
 Not built: an owner-side panel, reachable from every owner screen, that says plainly what the server
-can and cannot see and the limits that follow from it: #{W10}. The clinician sign-in already states its
+can and cannot see and the limits that follow from it: #249. The clinician sign-in already states its
 half (§10.4); the owner's panel must not contradict it, nor the honest limits in
 [COMPANION_ARCHITECTURE.md](COMPANION_ARCHITECTURE.md).
 
@@ -284,6 +284,6 @@ shown to be checked somewhere that is not this page. "Copied" is a word, not a t
 - **Motion.** The global `prefers-reduced-motion` block in `app.css` neutralises every transition.
   Nothing on a consent or security screen moves in a way that could read as pressure.
 - **Language.** Every string is a constant in a module, not a catalogue, so nothing is translatable
-  yet; whether to translate, and who checks a translation, is open under #145.
-- Not built: a text or table equivalent for every chart: #{X6}; a rendered accessibility check and
-  computed contrast in CI: #{B11}; a high-contrast mode: #{X4}.
+  yet; whether to translate, and who checks a translation, is open: #246.
+- Not built: a text or table equivalent for every chart: #259; a rendered accessibility check and
+  computed contrast in CI: #254; a high-contrast mode: #253.

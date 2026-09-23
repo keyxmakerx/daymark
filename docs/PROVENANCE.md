@@ -53,12 +53,12 @@ definition that fails any check does not load.
 3. **Validated means faithful.** A Validated tool must name its source and an `INSTRUMENTS.md` ledger
    entry (`ledgerRef`); an Adapted tool must name its method and a ledger entry. Not built: checking a
    Validated tool's items, scoring and bands against the registered instrument, and downgrading drift
-   to Adapted — no Validated tool exists in the Companion yet: #{W13}.
+   to Adapted — no Validated tool exists in the Companion yet: #255.
 4. **No self-harm item slot** in any tier's shareable output. The gate refuses any item whose id,
    prompt, body or option labels refer to self-harm or suicide.
 5. **The label is fixed per version.** Changing a Validated or Adapted tool's wording or scoring
    forces a re-classification. Not built: nothing publishes a changed tool yet, so nothing checks
-   this: #{W13}.
+   this: #255.
 
 ## The provenance field (schema)
 
@@ -94,7 +94,7 @@ vetted catalogue; Custom tools by anyone, always labelled and disclaimed
 ([COMPANION_ACCESS_CONTROL.md](COMPANION_ACCESS_CONTROL.md)). Not built: the Companion's tool builder
 lets an author pick any tier and runs the same gate live, but its **Publish…** button only downloads
 the definition as JSON — nothing publishes to a catalogue, assigns a built tool, or checks a role:
-#{W13}.
+#255.
 
 ## Relationship to the honesty gate and the ledger
 

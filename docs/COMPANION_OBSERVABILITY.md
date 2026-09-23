@@ -34,8 +34,8 @@ lookup, no "enriching" a source address. That is a product constraint, not a def
 | HTTP access log | **No.** Ktor's `CallLogging` is not installed | `Application.module` installs `ProxyMisconfigWarning`, `ContentNegotiation`, `SecurityHeaders` and `StatusPages` only |
 | Structured or JSON log | **No.** Plain text | `logback.xml` |
 | Request ids | **No.** Nothing creates or passes one | — |
-| Security-event log and alerts | **No.** `SecurityLog`, `SecurityEvent` and `AlertRules` in `observability/` have no callers (#{O15}) | — |
-| Administrator identity | **No.** No setting or route authenticates an administrator, and the admin page loads without a credential (#{I2}) | `Config.kt` |
+| Security-event log and alerts | **No.** `SecurityLog`, `SecurityEvent` and `AlertRules` in `observability/` have no callers (#190) | — |
+| Administrator identity | **No.** No setting or route authenticates an administrator, and the admin page loads without a credential (#208) | `Config.kt` |
 
 The admin console reaches the same conclusion independently: `lib/admin/health.ts` shows each missing
 counter as "this build exposes no counter for X" rather than substituting something nearby.
@@ -104,7 +104,7 @@ Per proxy:
 
 - **nginx.** `$remote_addr` replaces; `$proxy_add_x_forwarded_for` appends; `$http_x_forwarded_for`
   passes through — the bug. `docs/alternatives/nginx.conf` replaces, but it has no catch-all
-  `default_server` and forwards the client's `Host` (#{O23}).
+  `default_server` and forwards the client's `Host` (#209).
 - **Caddy.** `reverse_proxy` appends by default; `docs/alternatives/Caddyfile` pins the replace form
   with `header_up X-Forwarded-For {client_ip}`. Do not set Caddy's own `trusted_proxies` when Caddy is
   the edge, and do not let Caddy add a CSP — the app sends one, and two are intersected.
@@ -127,7 +127,7 @@ an allowlist of names silently stops matching after Docker recreates a container
 | Mistake | What the app does | What you will see | Detected? |
 |---|---|---|---|
 | **A. Unset, behind a proxy** | Every control keys on the proxy | One user's bad token locks everyone out for 900 s; 5 requests per second becomes a ceiling for all bearer traffic, so a large sync hits 429s; recovery allows 3 attempts an hour for the whole server | **Yes** — a warning once per start (§1.6) |
-| **B. Set to the wrong address** (the proxy's LAN address; a stale container address; a name that has since moved) | The peer is not trusted, so the same as A | The same as A | **No.** Silent (#{O6}) |
+| **B. Set to the wrong address** (the proxy's LAN address; a stale container address; a name that has since moved) | The peer is not trusted, so the same as A | The same as A | **No.** Silent (#167) |
 | **C. Set too broadly** (`172.16.0.0/12`, a whole bridge, a CDN's ranges) | Anything in the range is believed | Lockouts never engage; eventually "AuthGuard is tracking N active sources … and a sweep freed none"; the bearer token can be guessed at line rate | Only under a flood |
 | **D. The proxy passes the client's header through** | The whole chain is attacker-written | The same as C, for anyone, with one header | **No** |
 
@@ -173,7 +173,7 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 
 Source A stays locked out for `DAYMARK_AUTH_LOCKOUT_SECONDS`; restarting the container clears it. No
 endpoint tells an owner which address the server sees for them, which would replace this destructive
-test with one request (#{O6}).
+test with one request (#167).
 
 ## 2. What the logs contain, and what they cannot
 
@@ -195,7 +195,7 @@ the code has changed.
 | WARN | `com.daymark.companion` | `DAYMARK_AUTH_TOKEN is not set — the /v1 sync API is DISABLED…` (`main`) | Nothing |
 | INFO | `com.daymark.companion` | `Outbound SMTP is ENABLED … host={} port={} tls={}` (`main`) | Configuration only; never the password — `MailerConfig.toString` and `Config.toString` redact |
 | WARN | `com.daymark.companion` | `DAYMARK_TRUSTED_PROXIES is unset…` (`Application.module`) | Nothing |
-| **ERROR** | `com.daymark.companion` | `unhandled error on {}` **with a full stack trace** (`Application.module`, `StatusPages`) | **The resolved request path** — on the relationship routes, a raw `relRef` and lineage id (#{O1}) |
+| **ERROR** | `com.daymark.companion` | `unhandled error on {}` **with a full stack trace** (`Application.module`, `StatusPages`) | **The resolved request path** — on the relationship routes, a raw `relRef` and lineage id (#160) |
 | WARN | `com.daymark.companion` | `Web directory '{}' not found…` (`Application.module`) | A filesystem path |
 | INFO | `…companion.readiness` | `readiness restored: {} is writable` (`Readiness`) | `DAYMARK_DATA_DIR` |
 | ERROR | `…companion.readiness` | `NOT READY: {}` (`Readiness`) | `DAYMARK_DATA_DIR` and an I/O error's class and message |
@@ -206,12 +206,12 @@ the code has changed.
 | WARN | `…mail.Mailer` | `mail send failed (kind={}): {}` (`Mailer.send`) | A kind and an exception class name |
 | WARN | `…mail.OwnerNotifier` | `owner notification failed (event={}): {}` (`OwnerNotifier.notify`) | An event name and an exception class name |
 | WARN | `…routes.RecoveryRoutes` | `recovery email failed to send: {}`, `token-reissued receipt failed to send: {}` (`recoveryRoutes`) | An exception class name |
-| WARN | `…routes.RecoveryRoutes` | `access-token recovery was requested but no public base URL is configured…` (`recoveryRoutes`) | Nothing — but it fires only when the address matched (#{O1}) |
+| WARN | `…routes.RecoveryRoutes` | `access-token recovery was requested but no public base URL is configured…` (`recoveryRoutes`) | Nothing — but it fires only when the address matched (#160) |
 | WARN | `…companion.audit` | `audit log append failed` **with a stack trace** (`auditSafely` in the relationship, auth, key, ending and pairing routes) | Fixed messages and column names today; a stack trace all the same |
 | WARN | `…companion.audit` | `org audit append failed` with a stack trace (`orgRoutes`) | The same |
-| WARN | `…companion.routes` | `blob store I/O error: {}` (`failBlob` in `SyncRoutes.kt`, on a full disk) | **A file path containing the lineage id** (#{O1}) |
+| WARN | `…companion.routes` | `blob store I/O error: {}` (`failBlob` in `SyncRoutes.kt`, on a full disk) | **A file path containing the lineage id** (#160) |
 
-A full disk on the relationship store answers 507 and logs nothing (#{O2}).
+A full disk on the relationship store answers 507 and logs nothing (#161).
 
 ### 2.3 What can never appear
 
@@ -222,7 +222,7 @@ audit log's actors, actions or object references, which are never copied to stdo
 counts; and any location field.
 
 What you will find that is still personal data: **a raw peer address**, once per start, in the proxy
-warning; and **a raw `relRef` and lineage id** in the two lines marked #{O1}. Treat those lines as
+warning; and **a raw `relRef` and lineage id** in the two lines marked #160. Treat those lines as
 sensitive and redact them before sharing. An address is personal data, and the audit log records one
 only when you turn on `DAYMARK_ACCESS_LOG_SOURCE_IP` — which also changes the retention story (§4).
 
@@ -235,8 +235,8 @@ restored`, so a readiness outage looks permanent in the log after it clears; and
 lines.
 
 `logback.xml` pins `io.ktor` at INFO and `io.netty` at WARN, and `DAYMARK_LOG_LEVEL` changes neither
-(#{O7}). **Run at `info`** unless volume is a real problem: there is no per-request logging, so `info`
-costs a handful of lines per start. Whether `info` should be the default: #{O8}.
+(#169). **Run at `info`** unless volume is a real problem: there is no per-request logging, so `info`
+costs a handful of lines per start. Whether `info` should be the default: #171.
 
 ## 3. SMTP — the one deliberate outbound connection
 
@@ -292,7 +292,7 @@ before a transport sees it.
 and never appears in a `Referer`. It is still plaintext in an email at rest at your mail provider:
 treat an invitation mailbox accordingly. `/portal/invite` redirects to `/therapist` and the browser
 carries the fragment along; no route serves `/recover` yet, so the recovery link does not open a page
-(#{O9}).
+(#173).
 
 The guard scans the rendered subject and body for record-like words (`MailContentGuard`'s sentinel
 list) with the link cut out first, so a server hosted at, say, `mood.example.org`, or a random token
@@ -341,10 +341,10 @@ Limits worth an operator's attention:
    inbox token and the owner's bearer token together; an administrator holds neither.
 2. **Retention runs only on write.** Entries older than `DAYMARK_ACCESS_LOG_RETENTION_DAYS` are deleted
    on the relationship's next append, so a quiet or ended relationship — and any `sourceIp` it carries
-   — is kept indefinitely (#{O5}).
+   — is kept indefinitely (#165).
 3. **Pruning leaves no marker.** After a prune, the oldest surviving entry points at a row that is gone.
    `verifyChain` takes it as given rather than reporting a break, which also means routine pruning
-   looks exactly like a server cutting off history (#{O5}).
+   looks exactly like a server cutting off history (#165).
 
 ## 5. Known-bad, stated not buried
 
@@ -355,7 +355,7 @@ Conditions of the deployment, not incidents. If you run this server, you have ac
 The `/v1/webauthn/*` routes answer `501 Not Implemented` (`therapistAuthRoutes`, `webauthnStub`).
 What exists is the configuration pinning: `DAYMARK_WEBAUTHN_RP_ID` and `DAYMARK_WEBAUTHN_ORIGINS` are
 read into `Config` so that a later implementation cannot derive the relying party from a `Host` header
-(#{I1}). Consequences: the six-digit code is the only second factor a clinician can have, and it is
+(#205). Consequences: the six-digit code is the only second factor a clinician can have, and it is
 phishable where a hardware passkey is not; and the step-up the design asks for before sensitive
 actions cannot be obtained, so those rest on the session cookie and its CSRF token.
 `DAYMARK_WEBAUTHN_ORIGINS` is still the fallback for `DAYMARK_PUBLIC_BASE_URL`, so do not delete it on
@@ -412,8 +412,8 @@ docker system df -v | grep daymark-companion_blobs
 | `Received X-Forwarded-For from … DAYMARK_TRUSTED_PROXIES is EMPTY` | Something is proxying and the app is ignoring it; all clients share one lockout bucket | Set `DAYMARK_TRUSTED_PROXIES` to the address in the line, as a `/32`; restart; run §1.7 |
 | `DAYMARK_TRUSTED_PROXIES is unset` (at start) | A hint, not evidence: unset is right for a server reached directly | Behind a proxy, fix it; otherwise ignore it |
 | `AuthGuard is tracking N active sources … a sweep freed none` | A wide flood, or an allowlist that matches something varying per request (§1.5 C or D) | Check the allowlist is not a broad range; look at your proxy's own limits |
-| `unhandled error on <path>` with a stack trace | A 500. **The path can hold a raw `relRef` and lineage id** | Treat the line as sensitive; redact the path before sharing it (#{O1}) |
-| `blob store I/O error: disk write failed: …` | The snapshot store could not write. **The message can hold a lineage id** | Free space or permissions; redact before sharing. The relationship store's equivalent logs nothing (#{O2}) |
+| `unhandled error on <path>` with a stack trace | A 500. **The path can hold a raw `relRef` and lineage id** | Treat the line as sensitive; redact the path before sharing it (#160) |
+| `blob store I/O error: disk write failed: …` | The snapshot store could not write. **The message can hold a lineage id** | Free space or permissions; redact before sharing. The relationship store's equivalent logs nothing (#161) |
 | `refusing to send: content guard rejected message` | Something tried to put non-template text into an email; nothing was sent | Investigate as a bug or an attack |
 | `mail send failed (kind=…)` | The one outbound path is broken; the owner is not hearing about invitations, reviews or token re-issues | §3.6 |
 | `audit log append failed`, `org audit append failed` | Access is still served but no longer recorded. The owner's log is now incomplete, and nothing in the chain will ever show it | The most urgent storage error: check the data directory. The append never blocks a request (`auditSafely`), which is right, and is why only you see this |
@@ -421,7 +421,7 @@ docker system df -v | grep daymark-companion_blobs
 | `DAYMARK_AUTH_TOKEN is not set` | The sync API and every owner route answer 503 | Create the secret (COMPANION_DEPLOYMENT.md §5.2) |
 
 Also watch for something that logs nothing: a token re-issue by email recovery leaves no log line and
-no audit entry, so on a server without SMTP it is completely silent (#{O3}).
+no audit entry, so on a server without SMTP it is completely silent (#163).
 
 ### 6.4 After any change — the checklist
 

@@ -175,7 +175,7 @@ A life event is a few words and a date, written by the person, and nothing else.
   and a life event is not good or bad.
 - **Deleted at any time, leaving nothing behind.** There is no edit in place: the person deletes and
   adds again.
-- **One day, not a range.** Whether ranges should exist is #{S8}.
+- **One day, not a range.** Whether ranges should exist is #155.
 - **The one star allowed to be louder** (§3.4): prominence follows *authorship*, not scoring.
 
 ### 2.3 The date a star sits on
@@ -265,9 +265,9 @@ days into kinds of act at exactly the zoom where they see a stretch of their lif
   kinds apart. A life event looks different at every zoom, but that is its light (§3.4), not a mark.
 - **The project thread is the only line on the Sky.** Each step carries its stub (§0.3 finding 3);
   the hairline joining steps of one project is not built, as it needs a project identity the layout
-  deliberately does not carry: #{S5}.
+  deliberately does not carry: #152.
 - **A key** naming the forms is not built; whether it should exist now that colour means age is
-  #{S7}.
+  #154.
 
 ### 3.4 Mood is the character of the light, never its amount
 
@@ -325,7 +325,7 @@ count, so each star has its own beat, forever. Kind matters only in that every l
 
 The twinkle multiplies age brightness, so no star is twinkled past a younger one. There is no dial,
 only the Motion switch (§7.4). Two `SkyTwinkle` functions have no caller, `scaleAt` (a 2% size
-breathe, which a sub-pixel sprite would only blur) and `glintFringeScale`: #{S6}.
+breathe, which a sub-pixel sprite would only blur) and `glintFringeScale`: #153.
 
 ### 3.7 The decorative field
 
@@ -340,7 +340,7 @@ is invisible to assistive technology and absent from the list.
 never re-derived: a background that changed when that record was deleted would be a shape the
 deletion left (§2.1). The same seed shapes the clumps (§3.1).
 
-Not built: a sparser, smaller, fainter field when zoomed out, #{S3}.
+Not built: a sparser, smaller, fainter field when zoomed out, #150.
 
 ---
 
@@ -409,7 +409,7 @@ is no exclamation mark on this surface. Any disclaimer or privacy sentence near 
 existing constants verbatim.
 
 Not built: each kind introducing itself once, ever, the first time one of its stars appears (on
-opening the Sky, never mid-entry; one per visit; dismissed by use), #{S2}.
+opening the Sky, never mid-entry; one per visit; dismissed by use), #149.
 
 ---
 
@@ -517,7 +517,7 @@ adds no second colour axis, and does not double mood up in shape: shape is kind.
 - **No live regions.**
 
 Not built: stars focusable one at a time when zoomed in, in time order (never by position), with the
-same name and action as a tap, #{S4}.
+same name and action as a tap, #151.
 
 ### 7.4 Motion
 
@@ -551,7 +551,7 @@ would be worse than admitting it is not.
 ### 7.6 Cognitive and situational
 
 No time limits, no auto-advance, nothing that pulls the eye; the Sky waits. No dead ends: Fit the
-whole sky, the list and the back arrow are always one tap away. Not built: a key (§3.3), #{S7}.
+whole sky, the list and the back arrow are always one tap away. Not built: a key (§3.3), #154.
 
 ---
 
@@ -601,7 +601,7 @@ Two older components draw a year as a night sky on their own rules, which break 
 **Stars** view of the year in Insights (`ui/components/YearInStarsGrid.kt`) and the year review's
 quarter pages (`ui/insights/ReviewYearScreen.kt`). There, star size and glints follow mood, a day with
 no entry is a faint speck, and the ground is still `#16150F`. The year review borrows `SkyField` for
-its backdrop and nothing else. What to do about them is #{S1}.
+its backdrop and nothing else. What to do about them is #148.
 
 ---
 
@@ -620,7 +620,7 @@ check is first shown to catch a planted violation (`CLAUDE.md` §5).
 | **P6** | Colour and brightness are age and identity, never mood | Built: `SkyGlyphTest`, `SkySurfaceSourceTest` |
 | **P7** | Kind survives monochrome | Built as geometry (`SkyGlyphTest`); drawn pixels are not compared |
 | **P8** | No content leaves the record | Built: `SkyProjectionSourceTest` |
-| **P9** | Each kind introduces itself once, ever | Not built: #{S2} |
+| **P9** | Each kind introduces itself once, ever | Not built: #149 |
 | **P10** | The list skips empty months | Built: `SkyTest` |
 | **P11** | No aggregate count is rendered | Built: the only count is a month heading's (`SkyPresentationTest`) |
 | **P12** | Deletion is complete | Built: `SkyTest`, against a layout computed as if the record never existed |
@@ -635,10 +635,10 @@ check is first shown to catch a planted violation (`CLAUDE.md` §5).
 1. **Where the Sky lives:** the More hub, not a tab. It is the most identifying surface in the
    product (§6.5), so reaching it is a deliberate act.
 2. **An export:** none. The year review's "Save keepsake" was removed; §6.4 governs any future one.
-3. **Life events spanning dates:** open, #{S8}.
+3. **Life events spanning dates:** open, #155.
 4. **Mood colours in a custom palette:** equalised (§7.1).
 5. **The year review against these rules:** it changed; its finale shows two facts that rank nothing,
    the mood chosen most often and the date the person started. Its quarter pages are §9.
-6. **Very small screens:** asked about month rows, which no longer exist; restate or close, #{S8}.
+6. **Very small screens:** asked about month rows, which no longer exist; restate or close, #155.
 
-A north star, a value the person names that is never reached and never brighter, is deferred: #{S8}.
+A north star, a value the person names that is never reached and never brighter, is deferred: #155.

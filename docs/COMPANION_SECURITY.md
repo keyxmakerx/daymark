@@ -64,8 +64,8 @@ Each adversary: what it can do, what it cannot while the defences hold, and the 
   BLAKE2b digest is the `relRef`; no fingerprint appears in any URL. The owner bearer token, session
   ids and inbox tokens are stored as digests and invitation secrets as Argon2id hashes. The audit
   log's source address is off by default.
-- **Not built:** padding stored sizes to fixed buckets (#{O25}); deleting the bytes of expired shares
-  and game plans — withdrawing a share deletes its bytes, but expiry only blocks reads (#{W2}).
+- **Not built:** padding stored sizes to fixed buckets (#214); deleting the bytes of expired shares
+  and game plans — withdrawing a share deletes its bytes, but expiry only blocks reads (#228).
 
 Mood-tracking cadence is mental-health data. Size and timing are the leak that remains.
 
@@ -92,10 +92,10 @@ signatures stop forgery. Rollback protection is not built (§8).
   SRI protect against third parties and never against the origin itself. Every console that handles
   keys therefore shows a fixed lower-assurance banner; its wording is asserted character for
   character by `components/invariants.tree.test.ts`. The answers are not built: the phone as the
-  owner's secret-handling path (#138), a pinned or installed clinician client (#{I8}), and a
-  published hash of each release's web bundle (#{B8}).
+  owner's secret-handling path (#138), a pinned or installed clinician client (#222), and a
+  published hash of each release's web bundle (#241).
 - The owner-side check of a game plan exists (`openGamePlan` in `lib/therapist/gamePlan.ts`), but no
-  screen calls it yet (#{W3}).
+  screen calls it yet (#231).
 
 ### T4 — Malicious clinician, or a stolen clinician device
 
@@ -117,7 +117,7 @@ never overwritten, and a version that retention would delete at once is refused)
 paths from `^[A-Za-z0-9_-]{1,64}$` plus an integer version; a server-computed SHA-256 (a
 client-supplied hash is never trusted); a full disk fails closed with 507. There is no decrypt
 endpoint to coerce. The plain sync API has one bearer token and lists every lineage, which is right
-for one owner per server and wrong the day a server holds two (#{I7}).
+for one owner per server and wrong the day a server holds two (#219).
 
 ### T6 — Supply chain
 
@@ -146,7 +146,7 @@ the JVM (lazysodium). No custom crypto. The server's own hashing, in the last ro
 | Encrypting to a recipient | X25519 sealed box | Confidentiality and sender anonymity; no forward secrecy (R2). |
 | Signing | Ed25519 | The owner signs shares and grants; the clinician signs game plans and assignments. |
 | Fingerprints | BLAKE2b over the raw public key | Shown as words for comparison. |
-| Clinician key custody | Argon2id-wrapped under a reading passphrase that is not the sign-in code | Stored only in the clinician's own browser; the server never holds it, so a cleared browser loses the keys. A passkey (PRF) wrap is not built (#{I1}). |
+| Clinician key custody | Argon2id-wrapped under a reading passphrase that is not the sign-in code | Stored only in the clinician's own browser; the server never holds it, so a cleared browser loses the keys. A passkey (PRF) wrap is not built (#205). |
 | Inbox token | 256-bit random, base64url | Minted by the owner console when a clinician is added (`lib/owner/inboxToken.ts`), shown once, delivered out of band. The invitation cannot carry it: the server only ever sees its digest. |
 | Server-side hashing | Argon2id (invitation secrets); BLAKE2b-256 (session ids, inbox tokens, the owner bearer token) | `auth/Secrets.kt`. Constant-time comparisons. |
 
@@ -189,8 +189,8 @@ nothing that decrypts a record or authors content.
 - **No escrow (O6).** Forget the passphrase and have no recovery code, and the data is gone: nobody —
   not the maintainer, not the operator — can get it back. That is what makes it safe and what makes it
   unforgiving. A recovery code can wrap the master in the browser (`lib/recovery/`), but the wrapped
-  key has nowhere to live yet, so the code cannot be used from another device (#{W14}); the format has
-  room for more slots, such as a passkey (#{I1}). A lost clinician key means a fresh invitation and
+  key has nowhere to live yet, so the code cannot be used from another device (#258); the format has
+  room for more slots, such as a passkey (#205). A lost clinician key means a fresh invitation and
   re-pairing.
 - **The browser consoles are the convenience path.** The phone is meant to become the secret-handling
   path (#138); until then the lower-assurance banner says so wherever keys are handled.
@@ -199,7 +199,7 @@ nothing that decrypts a record or authors content.
 
 ### 5.1 Passkeys (WebAuthn)
 
-Not built: #{I1}. The four `/v1/webauthn/*` routes answer 501. `DAYMARK_WEBAUTHN_RP_ID` and
+Not built: #205. The four `/v1/webauthn/*` routes answer 501. `DAYMARK_WEBAUTHN_RP_ID` and
 `DAYMARK_WEBAUTHN_ORIGINS` are read from configuration now, so a later implementation cannot fall
 back to a client-supplied `Host` header. The design used a discoverable credential with user
 verification, and its PRF output as the key that unwraps the clinician's keys, so that signing in and
@@ -221,11 +221,11 @@ per-address budget sits in front.
 - **There is no way to replace a seed.** `totp` is insert-only, with one credential per relationship
   (`idx_totp_rel_ref`). If a seed may have leaked, withdraw what is shared and start a new relationship
   with a fresh invitation. The clinician can close the old credential themselves (§9a); the owner
-  cannot yet (#{I3}).
+  cannot yet (#210).
 
 ### 5.3 Step-up for sensitive actions
 
-Not built: #{I1}. `StepUpDialog.svelte` is a confirmation in the browser, not a server-verified
+Not built: #205. `StepUpDialog.svelte` is a confirmation in the browser, not a server-verified
 assertion, so sensitive actions rest on the session cookie and its CSRF token. The design asks for a
 fresh, single-use assertion bound to the live session before opening a share, publishing a game plan
 or rotating a key — and never before revoking, because the safe direction stays cheap
@@ -235,7 +235,7 @@ or rotating a key — and never before revoking, because the safe direction stay
 
 | Control | As built |
 |---|---|
-| Token | An opaque 256-bit session id in the cookie `daymark_session`, `HttpOnly; Secure; SameSite=Strict; Path=/`. The server stores only its digest. `DAYMARK_COOKIE_INSECURE` drops `Secure`, for plain-HTTP testing only (a startup refusal alongside an https address: #{O12}). |
+| Token | An opaque 256-bit session id in the cookie `daymark_session`, `HttpOnly; Secure; SameSite=Strict; Path=/`. The server stores only its digest. `DAYMARK_COOKIE_INSECURE` drops `Secure`, for plain-HTTP testing only (a startup refusal alongside an https address: #181). |
 | Lifetime | 15 minutes idle, 8 hours absolute. |
 | Binding | Each session belongs to one credential and one relationship; every request re-checks both, and a session presented for another relationship is refused. |
 | CSRF | `SameSite=Strict` plus a per-session token, required as `X-CSRF-Token` on every state-changing request. |
@@ -248,9 +248,9 @@ or rotating a key — and never before revoking, because the safe direction stay
 - Links in email are built from `DAYMARK_PUBLIC_BASE_URL`, falling back to the first
   `DAYMARK_WEBAUTHN_ORIGINS` entry. The unauthenticated recovery route goes no further. Routes that
   need an owner token or a clinician session fall back to the request's `Host` as a last resort, which
-  compose makes unreachable by always setting the base URL; refusing to start without it is #{O11}.
+  compose makes unreachable by always setting the base URL; refusing to start without it is #180.
 - Serving under a sub-path (`DAYMARK_BASE_PATH` other than `/`) is not supported: pages move under the
-  prefix, but the API stays at `/v1` on the root and the consoles call it there (#{O10}).
+  prefix, but the API stays at `/v1` on the root and the consoles call it there (#176).
 
 ### 5.6 Pairing
 
@@ -277,12 +277,12 @@ relies on:
 
 - No escrow on the server. Server-access recovery (§6) restores the bearer token and nothing else.
 - The owner can withdraw a share: the server marks it withdrawn, deletes its bytes, records
-  `share.revoke`, and answers 410 to every later read. This binds an honest server only (R3, #{I8}).
+  `share.revoke`, and answers 410 to every later read. This binds an honest server only (R3, #222).
 - A clinician can end their own relationship (§9a). The owner cannot yet end a clinician's sign-in
-  (#{I3}). Rotating the owner's data key for whoever remains authorised is not built (#{C7}).
+  (#210). Rotating the owner's data key for whoever remains authorised is not built (#297).
 - One sign-in credential per relationship. An owner may hold several relationships, one per
   clinician, each with its own inbox token. Practices add a control plane and never a key. Whether
-  that is the scope the product wants: #{C2}.
+  that is the scope the product wants: #288.
 
 ## 6. Server hardening defaults
 
@@ -321,7 +321,7 @@ third-party origin. The app sends no `Strict-Transport-Security`, because it can
 TLS; the proxy must add it, and must not add a second CSP, which the browser would intersect with this
 one ([COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md) §3). Error responses are generic and carry no
 stack trace; the server's own log line for an unhandled error does not yet meet that standard
-(#{O1}).
+(#160).
 
 ### Deliberately not changed
 
@@ -329,7 +329,7 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
   fields work across origins — the server has no CORS support, so every authenticated cross-origin
   call fails its preflight anyway — and it is the exfiltration boundary for a page holding a decrypted
   journal and unwrapped keys. The fix belongs in the consoles: stop offering another origin, and stop
-  reporting the browser's refusal as an unreachable server (#{W11}).
+  reporting the browser's refusal as an unreachable server (#250).
 - **`X-Setting-Key` is not a control.** The server's allowlist (`SETTING_ALLOWLIST` in
   `storage/RelationStore.kt`) constrains a cleartext routing tag the clinician chooses. The setting an
   assignment changes is inside the sealed body, and the shipping clinician client never sends the
@@ -361,12 +361,12 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
   take the same time. Addresses compare case-insensitively.
 - The recovery link is built only from `DAYMARK_PUBLIC_BASE_URL` (or `DAYMARK_WEBAUTHN_ORIGINS`) and
   never from the request's `Host`; with neither set, the request is accepted and nothing is sent. The
-  link points at `/recover#t=…`, which no route serves yet (#{O9}).
+  link points at `/recover#t=…`, which no route serves yet (#173).
 - `POST /v1/recovery/confirm` replaces the token at once, with no overlap, and returns the new one in
   the response — once, never by mail. A "your access token was re-issued" notice then goes to the
   registered address. The confirm writes no audit entry and no log line and has no rate limit
-  (#{O3}).
-- An email when a lockout starts: not built (#{O15}).
+  (#163).
+- An email when a lockout starts: not built (#190).
 
 ## 7. Reverse proxy and trusted proxies
 
@@ -380,10 +380,10 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
   unchanged is the one configuration that breaks every lockout.
 - A misconfiguration fails quiet: with an empty or wrong list behind a proxy, all clients share one
   bucket. The app warns once when a forwarded header arrives while the list is empty; a wrong
-  non-empty list produces no warning (#{O6}).
+  non-empty list produces no warning (#167).
 - The operator's side: [COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md) §3 and §4.0. Symptoms and
   the test: [COMPANION_OBSERVABILITY.md](COMPANION_OBSERVABILITY.md) §1. The example nginx config still
-  forwards the client's `Host` and has no catch-all server (#{O23}).
+  forwards the client's `Host` and has no catch-all server (#209).
 
 ## 8. Anti-rollback and integrity (client-anchored)
 
@@ -415,7 +415,7 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
 - **The source address is off by default** (`DAYMARK_ACCESS_LOG_SOURCE_IP`): an address geolocates the
   clinic.
 - **Retention** is `DAYMARK_ACCESS_LOG_RETENTION_DAYS` (90), applied only on a relationship's next
-  append — so a quiet relationship is never pruned — and pruning leaves no marker (#{O5}).
+  append — so a quiet relationship is never pruned — and pruning leaves no marker (#165).
 - **Reading.** The owner reads a relationship's log at `GET /v1/rel/{relRef}/audit` with both the inbox
   token (`X-Rel-Token`) and the bearer token. A clinician can neither read nor write it; an operator
   holds neither credential. `GET /v1/relations/{relRef}/audit-chain` (bearer token) recomputes the
@@ -426,11 +426,11 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
   appends an event, or cuts the tail off, leaves a chain that checks out. "Access cannot be hidden"
   holds for tampering, not for withholding, and every surface that shows a verdict says so (the owner's
   audit caveat; `CHAIN_CAVEAT` in the admin console). What outlives a lying server is the head hash,
-  written down somewhere it cannot reach. Signed clinician attestations: #{O26}. The phone keeping its
+  written down somewhere it cannot reach. Signed clinician attestations: #217. The phone keeping its
   own copy of the head: #138.
 - **Missing events:** a refused read of an expired or withdrawn share (`SHARE_DENIED` is declared and
-  never written: #{O4}); the token re-issue, invitations minted or expired, reads of the log itself,
-  bulk reads, and changes to logging policy (#{O14}).
+  never written: #164); the token re-issue, invitations minted or expired, reads of the log itself,
+  bulk reads, and changes to logging policy (#187).
 
 ## 9a. Closing a credential without deleting one
 
@@ -487,8 +487,8 @@ leave "signed out, not ended", which looks like a completed exit and is not one.
   own compose changes (R7).
 - The server is built with the validated wrapper (`./gradlew`), not the builder image's Gradle.
 - Not built: an SBOM, provenance and a signature for the image, a published hash of the web bundle, and
-  an arm64 image (#{B8}); a checksum for the Gradle wrapper, dependency verification, pnpm's minimum
-  release age and actions pinned by commit (#{B9}); dependency audits and lints in CI (#{B12}).
+  an arm64 image (#241); a checksum for the Gradle wrapper, dependency verification, pnpm's minimum
+  release age and actions pinned by commit (#244); dependency audits and lints in CI (#257).
 
 ## 11. Out of scope and honest limits
 
@@ -497,15 +497,15 @@ leave "signed out, not ended", which looks like a completed exit and is not one.
 - **No forward secrecy on sealed boxes (R2).** A compromise of a recipient's long-term X25519 key —
   the clinician's for shares, the owner's for game plans — decrypts everything ever sealed to it.
   Rotating CEKs does not help. Deleting old bytes shortens the window; withdrawing a share does, but
-  expiry does not yet (#{W2}).
+  expiry does not yet (#228).
 - **Revocation binds an honest server only (R3).** Honestly: future fetches stop on an honest server;
   data published after re-keying is unreadable to the old key; plaintext already decrypted is never
-  recallable. Real revocation is re-pairing to new keys (#{I8}).
+  recallable. Real revocation is re-pairing to new keys (#222).
 - **The browser consoles are not zero-knowledge against a malicious server (R5)**, because the server
   serves the code that holds the keys (§3 T3).
 - **Anti-rollback is client-side and not built** (§8). **Sync is single-writer** (R11).
 - **Metadata leaks.** The existence, cadence and size of relationships and snapshots are visible to the
-  server (§3 T1). Padding would reduce, not remove, this (#{O25}).
+  server (§3 T1). Padding would reduce, not remove, this (#214).
 - **Sign-in codes are phishable and stored in the clear on the server** (§5.2). A breach lets an
   attacker sign in as a clinician. It never lets them decrypt.
 - **Withholding audit events is undetectable** (R12, §9).
