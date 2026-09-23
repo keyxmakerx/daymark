@@ -11,12 +11,12 @@
  * therapist-keys read is. Not because a head hash opens anything — it opens nothing — but because
  * a head plus an entry count, served per relRef to anyone who asked, answers "does this
  * relationship exist on this server, and how active has it been" for any reference an anonymous
- * caller cares to probe. That is exactly the relationship metadata the plan documents a
- * compromised server as able to take (PLAN_2026-08-COMPANION-NEXT.md 1.2: how many relationships
- * exist, how often someone syncs), and this server does not volunteer it to callers who present
- * nothing. On a self-hosted box the operator and the owner are usually the same person, which is
- * why this panel lives on the admin console at all; an administrator who is NOT the owner does
- * not hold this token and this panel is not an invitation to obtain it.
+ * caller cares to probe. That is exactly the relationship metadata a compromised server is
+ * documented as able to take (COMPANION_ARCHITECTURE.md §6, "Metadata is visible": how many
+ * relationships exist, how often someone syncs), and this server does not volunteer it to callers
+ * who present nothing. On a self-hosted box the operator and the owner are usually the same
+ * person, which is why this panel lives on the admin console at all; an administrator who is NOT
+ * the owner does not hold this token and this panel is not an invitation to obtain it.
  *
  * WHAT THE VERDICT IS WORTH, stated before anything else because it is less than it looks. The
  * check runs ON the server, over rows the server holds, and this module renders what the server
@@ -30,8 +30,8 @@
  * WHAT SURVIVES EVEN A LYING SERVER: the head hash, once it is anchored somewhere the server
  * cannot reach. A server that rewrites or truncates history it has already served must change
  * its head, so a head that still matches a note taken earlier is one point of history the server
- * remains committed to. The plan's eventual answer is the phone recording the head on an
- * interval (PLAN_2026-08-COMPANION-NEXT.md 3.9.7 — the chain is only evidence if its head is
+ * remains committed to. The eventual answer is the phone recording the head on an interval
+ * (not built: #182; COMPANION_ARCHITECTURE.md §6 — the chain is only evidence if its head is
  * anchored beyond the server's reach); until that exists, the anchor is a person writing the
  * digest down, which is why this module renders it in reading groups a person can copy by hand
  * and compare group by group later, the same four-character chunks the key-fingerprint ceremonies
@@ -205,7 +205,7 @@ export const HEAD_PURPOSE =
   'log should have been quiet, the head should not have moved at all. A head that contradicts ' +
   'your note is worth asking hard questions about, and your note is the only party in that ' +
   'comparison the server cannot edit. This is also the exact value a future phone anchor would ' +
-  'record on an interval and hold against the server (the plan’s 3.9.7); until that ' +
+  'record on an interval and hold against the server; until that ' +
   'exists, the note is the anchor.'
 
 /**

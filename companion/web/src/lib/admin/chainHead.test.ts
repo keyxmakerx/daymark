@@ -116,11 +116,10 @@ describe('reading the response', () => {
     expect(v.headline).toMatch(/6 entries, sequence 1 to 6/)
     expect(v.headGroups.join('')).toBe(HEAD)
     // The digest is rendered WITH its use, or nobody writes it down: the purpose names the
-    // note-taking, the comparison, and the plan's phone anchor it stands in for.
+    // note-taking, the comparison, and the phone anchor it stands in for (#182).
     expect(v.headNote).toBe(HEAD_PURPOSE)
     expect(HEAD_PURPOSE).toMatch(/write it down/i)
     expect(HEAD_PURPOSE).toMatch(/cannot reach/i)
-    expect(HEAD_PURPOSE).toMatch(/3\.9\.7/)
     expect(HEAD_PURPOSE).toMatch(/phone anchor/i)
     // Provenance travels on the view: the server reported this about itself.
     expect(v.notes.some((n) => /said about itself/i.test(n))).toBe(true)
