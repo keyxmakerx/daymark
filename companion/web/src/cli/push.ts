@@ -8,9 +8,14 @@
  *     --server http://localhost:8080 --token "$TOKEN" --lineage laptop --backup backup.json
  *
  * The passphrase is read from DAYMARK_SYNC_PASSPHRASE (never passed on the command line).
+ *
+ * The snapshot is padded before it is encrypted (#315). If the padded snapshot is larger than
+ * --max-blob-bytes (default: the server's default limit, 25 MiB), nothing is sent and the reason is
+ * printed; it is never sent unpadded instead. Pass --max-blob-bytes when your server's operator has
+ * set DAYMARK_MAX_BLOB_BYTES to something larger.
  */
 import { readFileSync } from 'node:fs'
-import { SyncClient } from '../lib/sync/client'
+import { DEFAULT_MAX_BLOB_BYTES, SnapshotTooLargeError, SyncClient } from '../lib/sync/client'
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`)
@@ -24,10 +29,16 @@ async function main() {
   const backupPath = arg('backup')
   const passphrase = process.env.DAYMARK_SYNC_PASSPHRASE
 
+  const maxBlobArg = arg('max-blob-bytes')
+
   if (!token) throw new Error('missing --token (the server access token)')
   if (!backupPath) throw new Error('missing --backup <path to a Daymark backup .json>')
   if (!passphrase) throw new Error('set DAYMARK_SYNC_PASSPHRASE in the environment')
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(lineage)) throw new Error('--lineage must be 1–64 chars of [A-Za-z0-9_-]')
+  if (maxBlobArg !== undefined && !/^[1-9][0-9]{0,14}$/.test(maxBlobArg)) {
+    throw new Error('--max-blob-bytes must be a whole number of bytes, such as 26214400')
+  }
+  const maxBlobBytes = maxBlobArg === undefined ? DEFAULT_MAX_BLOB_BYTES : Number(maxBlobArg)
 
   const plaintext = readFileSync(backupPath)
   // Validate it is JSON before encrypting (fail early on the wrong file).
@@ -37,7 +48,9 @@ async function main() {
     throw new Error(`${backupPath} is not valid JSON — expected a Daymark backup export`)
   }
 
-  const client = new SyncClient(server, token)
+  const client = new SyncClient(server, token, undefined, { maxBlobBytes })
+  // Before the first request, so that a refusal's "Nothing was sent" is true of this whole run.
+  client.assertSnapshotFits(plaintext.length)
   const existing = await client.listVersions(lineage).catch(() => [])
   const nextVersion = existing.length ? Math.max(...existing.map((v) => v.version)) + 1 : 0
 
@@ -48,5 +61,11 @@ async function main() {
 
 main().catch((e) => {
   process.stderr.write(`push failed: ${e instanceof Error ? e.message : String(e)}\n`)
+  if (e instanceof SnapshotTooLargeError && e.limitBytes !== null) {
+    process.stderr.write(
+      'If your server accepts larger snapshots (its DAYMARK_MAX_BLOB_BYTES), run this again with ' +
+        '--max-blob-bytes set to the same number.\n',
+    )
+  }
   process.exit(1)
 })

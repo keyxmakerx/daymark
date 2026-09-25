@@ -12,7 +12,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { SyncClient, SyncError } from './client'
+import { DEFAULT_MAX_BLOB_BYTES, SnapshotTooLargeError, SyncClient, SyncError } from './client'
 
 const JAR = process.env.DAYMARK_SERVER_JAR || resolve(process.cwd(), '../server/build/libs/daymark-companion.jar')
 const HAVE_JAR = existsSync(JAR)
@@ -107,4 +107,36 @@ describe.skipIf(!HAVE_JAR)('sync integration (real server)', () => {
     await client.pushSnapshot('devD', 0, enc.encode('{"x":1}'), PASS)
     await expect(client.pullLatest('devD', 'WRONG-passphrase')).rejects.toBeTruthy()
   }, 60000)
+
+  it('stores snapshots padded: two lengths in one size bucket are stored at one size (#315)', async () => {
+    const client = new SyncClient(BASE, TOKEN)
+    const longer = JSON.stringify({ note: 'a'.repeat(3000) })
+    const shortMeta = await client.pushSnapshot('devE', 0, enc.encode('{"v":0}'), PASS)
+    const longMeta = await client.pushSnapshot('devE', 1, enc.encode(longer), PASS)
+    expect(shortMeta.size).toBe(4141) // 29-byte header, the 4096-byte padded body, the 16-byte tag
+    expect(longMeta.size).toBe(shortMeta.size)
+    const pulled = await client.pullLatest('devE', PASS)
+    expect(dec.decode(pulled.plaintext)).toBe(longer)
+  }, 60000)
+
+  it('a snapshot that fits only unpadded is never stored, and the writer says why (#315)', async () => {
+    const plaintext = new Uint8Array(25_690_109) // padded, one bucket over the default 25 MiB limit
+    const atDefault = new SyncClient(BASE, TOKEN)
+    const refused = await atDefault.pushSnapshot('devF', 0, plaintext, PASS).catch((e: unknown) => e)
+    expect(refused).toBeInstanceOf(SnapshotTooLargeError)
+    expect((refused as SnapshotTooLargeError).limitBytes).toBe(DEFAULT_MAX_BLOB_BYTES)
+    expect(await atDefault.listVersions('devF')).toEqual([])
+
+    // Told its server accepts more than this one does, the writer sends it, and this server's own
+    // limit refuses it: reported as the server's answer, with both sizes.
+    const toldMore = new SyncClient(BASE, TOKEN, undefined, { maxBlobBytes: 64 * 1024 * 1024 })
+    const answered = await toldMore.pushSnapshot('devF', 0, plaintext, PASS).catch((e: unknown) => e)
+    expect(answered).toBeInstanceOf(SnapshotTooLargeError)
+    expect((answered as SnapshotTooLargeError).status).toBe(413)
+    expect((answered as Error).message).toBe(
+      'Nothing was stored. The server answered that this snapshot is larger than it accepts. ' +
+        'Padded, it is 26,214,445 bytes; unpadded it would have been 25,690,154.',
+    )
+    expect(await toldMore.listVersions('devF')).toEqual([])
+  }, 120000)
 })

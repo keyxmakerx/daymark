@@ -8,12 +8,28 @@
  *   passphrase ──Argon2id(salt, mem≥256MiB, ops≥3)──▶ master(32)
  *   master ──crypto_kdf(ctx="dmsync01")──┬─ id 1 ▶ SYNC_KEY        (XChaCha20-Poly1305)
  *                                        └─ id 2 ▶ MANIFEST_SEED   (Ed25519 signing seed)
- *   snapshot blob = MAGIC("DMS1") | FMT(1) | nonce(24) | XChaCha20Poly1305(plaintext, AAD, nonce, SYNC_KEY)
- *   AAD = utf8("daymark.snapshot.v1|" + lineage + "|" + version)
+ *   snapshot blob = MAGIC("DMS1") | FMT | nonce(24) | XChaCha20Poly1305(body, AAD, nonce, SYNC_KEY)
+ *     FMT 0x02, the only format written:  body = pad(plaintext)   AAD = utf8("daymark.snapshot.v2|" + lineage + "|" + version)
+ *     FMT 0x01, still read, never written: body = plaintext        AAD = utf8("daymark.snapshot.v1|" + lineage + "|" + version)
  *
  * The server never sees the passphrase, the keys, or the plaintext — only opaque blobs.
+ *
+ * PADDED SNAPSHOTS (#315). A snapshot is padded by ../padding.ts before it is encrypted, so the
+ * stored size says which size bucket it falls in and not how much was written between two syncs.
+ * Padding hides how much, never when: the server still sees when each version arrives.
+ *
+ * The format byte sits outside the ciphertext, where the server can change it, so each format
+ * names itself in the associated data as well. A server that turns 0x02 into 0x01 to make a reader
+ * skip unpadding (or 0x01 into 0x02) changes the associated data the reader authenticates against,
+ * and the envelope fails to open instead of opening in the wrong form. Unpadding happens only after
+ * the AEAD has authenticated the body; it is strict, so a writer that pads wrongly is refused
+ * loudly rather than read loosely.
+ *
+ * Format 1 is opened and never written: every snapshot stored before #315 is in it, and nothing
+ * about it is unsound except that it tells the server exact sizes.
  */
 import _sodium from 'libsodium-wrappers-sumo'
+import { pad, paddedLength, unpad, PaddingError } from '../padding'
 
 export type Sodium = typeof _sodium
 let sodium: Sodium | null = null
@@ -41,7 +57,22 @@ export interface KdfParams {
 export const DEFAULT_KDF: KdfParams = { alg: 'argon2id', memMiB: 256, ops: 3 }
 
 export const MAGIC = new Uint8Array([0x44, 0x4d, 0x53, 0x31]) // "DMS1"
-export const FMT = 0x01
+/** The unpadded format of every snapshot stored before #315. Opened, never written. */
+export const FMT_UNPADDED = 0x01
+/** The padded format (#315): the only one encryptSnapshot writes. */
+export const FMT_PADDED = 0x02
+/** Each format's name in the associated data, so the format byte cannot be changed on its own. */
+const AAD_CONTEXT: Readonly<Record<number, string>> = {
+  [FMT_UNPADDED]: 'daymark.snapshot.v1',
+  [FMT_PADDED]: 'daymark.snapshot.v2',
+}
+// Fixed by the algorithm (crypto_aead_xchacha20poly1305_ietf_NPUBBYTES and _ABYTES). Written out
+// so a snapshot's stored size can be worked out before libsodium has loaded.
+const NONCE_BYTES = 24
+const TAG_BYTES = 16
+const HEADER_BYTES = MAGIC.length + 1 + NONCE_BYTES
+/** The u32 length prefix ../padding.ts puts in front of the plaintext (its LAYOUT). */
+const PAD_PREFIX_BYTES = 4
 const KDF_CONTEXT = 'dmsync01' // exactly 8 bytes, per crypto_kdf
 const SUBKEY_SYNC = 1
 const SUBKEY_MANIFEST = 2
@@ -72,33 +103,57 @@ export function deriveKeys(passphrase: string, salt: Uint8Array, params: KdfPara
   return { syncKey, manifestSeed }
 }
 
-function aad(lineage: string, version: number | bigint): Uint8Array {
-  return s().from_string(`daymark.snapshot.v1|${lineage}|${version}`)
+function aad(format: number, lineage: string, version: number | bigint): Uint8Array {
+  return s().from_string(`${AAD_CONTEXT[format]}|${lineage}|${version}`)
 }
 
-/** plaintext (e.g. a BackupData JSON, UTF-8) → opaque envelope bytes for the server. */
+/**
+ * The size of the blob encryptSnapshot writes for a plaintext of `plaintextLength` bytes: the
+ * header, the padded body and the tag. Needs no libsodium, so a writer can check a snapshot
+ * against a size limit before it derives a key or sends anything.
+ */
+export function snapshotBlobLength(plaintextLength: number): number {
+  return HEADER_BYTES + paddedLength(PAD_PREFIX_BYTES + plaintextLength) + TAG_BYTES
+}
+
+/** The size the same snapshot had in format 1, unpadded. Only ever reported, never written. */
+export function unpaddedSnapshotBlobLength(plaintextLength: number): number {
+  return HEADER_BYTES + plaintextLength + TAG_BYTES
+}
+
+/** plaintext (e.g. a BackupData JSON, UTF-8) → opaque envelope bytes for the server, padded (format 2). */
 export function encryptSnapshot(plaintext: Uint8Array, syncKey: Uint8Array, lineage: string, version: number | bigint): Uint8Array {
   const so = s()
-  const nonce = so.randombytes_buf(so.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES)
-  const ct = so.crypto_aead_xchacha20poly1305_ietf_encrypt(plaintext, aad(lineage, version), null, nonce, syncKey)
-  const out = new Uint8Array(MAGIC.length + 1 + nonce.length + ct.length)
+  const nonce = so.randombytes_buf(NONCE_BYTES)
+  const ct = so.crypto_aead_xchacha20poly1305_ietf_encrypt(pad(plaintext), aad(FMT_PADDED, lineage, version), null, nonce, syncKey)
+  const out = new Uint8Array(HEADER_BYTES + ct.length)
   out.set(MAGIC, 0)
-  out[MAGIC.length] = FMT
+  out[MAGIC.length] = FMT_PADDED
   out.set(nonce, MAGIC.length + 1)
-  out.set(ct, MAGIC.length + 1 + nonce.length)
+  out.set(ct, HEADER_BYTES)
   return out
 }
 
-/** Opaque envelope bytes → plaintext. Throws if tampered, wrong key, or wrong lineage/version. */
+/**
+ * Opaque envelope bytes → plaintext, from either format. Throws if tampered, wrong key, wrong
+ * lineage/version, or the format byte was changed (the associated data names the format).
+ */
 export function decryptSnapshot(envelope: Uint8Array, syncKey: Uint8Array, lineage: string, version: number | bigint): Uint8Array {
   const so = s()
-  const nb = so.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES
-  if (envelope.length < MAGIC.length + 1 + nb) throw new Error('envelope too short')
+  if (envelope.length < HEADER_BYTES) throw new Error('envelope too short')
   for (let i = 0; i < MAGIC.length; i++) if (envelope[i] !== MAGIC[i]) throw new Error('bad magic — not a Daymark snapshot envelope')
-  if (envelope[MAGIC.length] !== FMT) throw new Error(`unsupported envelope format ${envelope[MAGIC.length]}`)
-  const nonce = envelope.subarray(MAGIC.length + 1, MAGIC.length + 1 + nb)
-  const ct = envelope.subarray(MAGIC.length + 1 + nb)
-  return so.crypto_aead_xchacha20poly1305_ietf_decrypt(null, ct, aad(lineage, version), nonce, syncKey)
+  const format = envelope[MAGIC.length]!
+  if (format !== FMT_PADDED && format !== FMT_UNPADDED) throw new Error(`unsupported envelope format ${format}`)
+  const nonce = envelope.subarray(MAGIC.length + 1, HEADER_BYTES)
+  const ct = envelope.subarray(HEADER_BYTES)
+  const body = so.crypto_aead_xchacha20poly1305_ietf_decrypt(null, ct, aad(format, lineage, version), nonce, syncKey)
+  if (format === FMT_UNPADDED) return body
+  try {
+    return unpad(body)
+  } catch (e) {
+    if (e instanceof PaddingError) throw new Error('snapshot opened, but its padding is not in the standard form')
+    throw e
+  }
 }
 
 /** SHA-256 hex over arbitrary bytes (matches the server's X-Content-Hash). */

@@ -393,6 +393,30 @@ describe('the copy on this screen makes no claim this product cannot keep', () =
   })
 })
 
+describe('what the server sees of the blobs themselves (#315)', () => {
+  // Every blob is padded before it is encrypted, so the server learns a rounded size. Padding
+  // hides how much, never when.
+  const shape = SIGN_IN_CONTRACT.find((c) => c.id === 'sees.shape')
+
+  it('says the size is only roughly known, and that timing and order are seen', () => {
+    expect(shape?.section).toBe('serverSees')
+    expect(shape!.text).toContain('roughly how big they are')
+    expect(shape!.text).toMatch(/\btiming\b/)
+    expect(shape!.text).toMatch(/\border\b/)
+  })
+
+  it('and nothing under "cannot see" mentions timing, order or size, which padding does not hide', () => {
+    const mentionsShape = /\b(?:timing|timed|when|order|size|sizes|how big)\b/i
+    // The detector sees the subject on a planted sentence, and on the real clause that does name it.
+    expect(mentionsShape.test('When each blob arrives, and how big it is.')).toBe(true)
+    expect(mentionsShape.test(shape!.text)).toBe(true)
+    expect(mentionsShape.test('Your reading passphrase, which is not sent anywhere.')).toBe(false)
+    const cannot = SIGN_IN_CONTRACT.filter((c) => c.section === 'serverCannotSee')
+    expect(cannot.length).toBeGreaterThan(0)
+    for (const clause of cannot) expect(mentionsShape.test(clause.text), clause.id).toBe(false)
+  })
+})
+
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
    The fixed assurance banner
    ═══════════════════════════════════════════════════════════════════════════════════════════ */

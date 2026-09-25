@@ -295,9 +295,12 @@ export const SIGN_IN_CONTRACT: readonly ContractClause[] = [
   {
     id: 'sees.shape',
     section: 'serverSees',
+    // Every blob is padded before it is encrypted (#315), so the server learns a rounded size,
+    // never an exact one. Padding hides how much, never when, so timing and order stay listed
+    // among what the server sees, and no clause may say or imply that they are hidden.
     text:
-      'The size, timing and order of the encrypted blobs that move between you and the person ' +
-      'who shared them.',
+      'The timing and order of the encrypted blobs that move between you and the person who ' +
+      'shared them, and roughly how big they are.',
   },
   {
     id: 'sees.audit',

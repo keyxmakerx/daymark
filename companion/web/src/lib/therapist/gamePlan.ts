@@ -1,7 +1,12 @@
 /*
  * GAME PLAN authoring (therapist → owner). A written plan (goals/exercises/tasks/notes) the
  * therapist composes and sends to the owner. Same sign-then-seal primitive as assignments:
- *   payload ──Ed25519.sign(therapist)──▶ signed ──crypto_box_seal(owner X25519 pub)──▶ blob
+ *   payload ──Ed25519.sign(therapist)──▶ signed ──pad──▶ crypto_box_seal(owner X25519 pub)──▶ blob
+ *
+ * The signed envelope is padded inside the sealed box (#315), and a plan sealed unpadded before
+ * that still opens: both through padEnvelope/openedEnvelope, whose header in
+ * ../assignments/crypto.ts says how the two forms are told apart and why the signature covers the
+ * same bytes in both.
  *
  * The owner opens the sealed box and verifies the signature against the PINNED therapist key. The
  * payload carries context 'daymark.gameplan.v1' + recipientOwnerFp + lineageId/version/supersedes
@@ -13,7 +18,7 @@
  */
 import _sodium from 'libsodium-wrappers-sumo'
 import type { Cadence } from '../assignments/types'
-import { fingerprint, type SignKeyPair } from '../assignments/crypto'
+import { fingerprint, openedEnvelope, padEnvelope, type SignKeyPair } from '../assignments/crypto'
 
 const URLSAFE = () => _sodium.base64_variants.URLSAFE_NO_PADDING
 const enc = new TextEncoder()
@@ -76,7 +81,7 @@ export function sealGamePlan(p: GamePlanPayload, therapistSign: SignKeyPair, own
   const payloadJson = dec.decode(canonicalize(p))
   const sig = _sodium.crypto_sign_detached(enc.encode(payloadJson), therapistSign.privateKey)
   const envelope = enc.encode(JSON.stringify({ payloadJson, sigB64: _sodium.to_base64(sig, URLSAFE()) }))
-  return _sodium.crypto_box_seal(envelope, ownerBoxPub)
+  return _sodium.crypto_box_seal(padEnvelope(envelope), ownerBoxPub)
 }
 
 /**
@@ -97,7 +102,7 @@ export function openGamePlan(
   }
   let env: { payloadJson?: string; sigB64?: string }
   try {
-    env = JSON.parse(dec.decode(openedBytes))
+    env = JSON.parse(dec.decode(openedEnvelope(openedBytes)))
   } catch {
     throw new GamePlanOpenError('malformed game plan envelope')
   }
