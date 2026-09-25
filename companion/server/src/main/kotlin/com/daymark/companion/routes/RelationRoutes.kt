@@ -574,7 +574,8 @@ private suspend fun ApplicationCall.failRel(e: RelationStoreException) {
          * 410 means "it was here, it is deliberately gone." True of an elapsed deadline, a share a
          * newer version replaced, and a withdrawal, and already this codebase's word for it (a
          * consumed invite returns Gone). All of them share one message on purpose — see
-         * RelationStoreException.Kind.GONE.
+         * RelationStoreException.Kind.GONE. The sweep that deletes an ended item's bytes keeps its
+         * row, so an item whose bytes are gone is still answered here, never with the 404 above.
          */
         RelationStoreException.Kind.GONE -> HttpStatusCode.Gone to "no longer available"
     }

@@ -26,6 +26,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationStopping
 import io.ktor.server.application.install
 import io.ktor.server.engine.connector
 import io.ktor.server.engine.embeddedServer
@@ -126,6 +127,11 @@ fun Application.module(
      * 90 days without sleeping; a caller that passes its own [relationStore] gives it the same clock.
      */
     relationClock: () -> Long = { System.currentTimeMillis() },
+    /**
+     * The scheduler for the server's chores ([Housekeeping]). Injectable so a test can drive its
+     * ticker; this module registers the jobs on it, starts it, and stops it as the application stops.
+     */
+    housekeeping: Housekeeping? = null,
 ) {
     // Publish the trusted-proxy allowlist before any route runs: every per-client lockout and rate
     // limit reads it via ApplicationCall.clientAddress(). Empty (the default) means forwarded
@@ -211,6 +217,18 @@ fun Application.module(
     val pairing = if (config.therapistAuthEnabled) {
         pairingStore ?: PairingStore(config.dataDir)
     } else null
+
+    // The server's scheduled chores (Housekeeping): each runs now, before a request is taken, and
+    // then on its interval. Only the relationship store is swept; the sync API's snapshots are the
+    // owner's own backups and have no end (#338). Ending a relationship deletes nothing by itself —
+    // its items follow the same clock as everyone's.
+    val chores = housekeeping ?: Housekeeping()
+    if (relStore != null) {
+        chores.every("relationship sweep", RELATION_SWEEP_INTERVAL_MS) { sweepRelationships(relStore) }
+    }
+    // Stopped as the application stops, before anything a chore uses can be closed under it.
+    monitor.subscribe(ApplicationStopping) { chores.close() }
+    chores.start()
 
     routing {
         // Unauthenticated, content-free LIVENESS probe — never under the base path.

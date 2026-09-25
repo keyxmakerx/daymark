@@ -33,7 +33,8 @@ data class RelMeta(
 
 /**
  * Everything the ending rule ([RelationStore.hasEnded]) reads about one stored item. Every field
- * comes from the index rows themselves, so whatever asks the rule is reading the same facts.
+ * comes from the index rows themselves, so the read gate and the sweep, which both ask the rule,
+ * are reading the same facts.
  */
 internal data class ItemFacts(
     val channel: Channel,
@@ -78,8 +79,9 @@ class RelationStoreException(message: String, val kind: Kind) : Exception(messag
  * client does not send it, and the setting itself is inside the sealed body. The check that
  * binds is the owner's, on the decrypted item. See docs/COMPANION_ASSIGNMENTS.md §2.2.
  *
- * EVERY ITEM BUT A GRANT ENDS, by one rule ([hasEnded], #332), and both read paths refuse an ended
- * item as GONE.
+ * EVERY ITEM BUT A GRANT ENDS, by one rule ([hasEnded], #332), and [sweepEnded] deletes the stored
+ * copy of each item that has ended (#338). The index row outlives its bytes, so version numbers
+ * keep counting and a read of an ended item answers GONE, never NOT_FOUND.
  */
 class RelationStore(
     dataDir: String,
@@ -143,9 +145,13 @@ class RelationStore(
              *           never means "forever" — see [hasEnded].
              * `revoked` 1 once the owner withdraws the lineage. NOT NULL DEFAULT 0 because SQLite
              *           requires a default to add a NOT NULL column to a populated table.
+             * `held`    1 while this row's ciphertext file is on the volume, 0 once withdrawal or the
+             *           sweep has removed it. The quota counts held rows only (#338). DEFAULT 1 is
+             *           true of every older row except a withdrawn one whose file is already gone;
+             *           those have ended, so the start-up sweep finds them and clears the flag.
              *
-             * Both are NON-SECRET routing metadata, like `size` and `content_hash`. The server still
-             * never decrypts anything; this is access control over ciphertext, not over keys.
+             * All three are NON-SECRET routing metadata, like `size` and `content_hash`. The server
+             * still never decrypts anything; this is access control over ciphertext, not over keys.
              *
              * The `runCatching` swallows the duplicate-column error on every start after the first
              * (the same idiom as AuthStore's session columns). But swallowing ALL errors here would
@@ -156,12 +162,14 @@ class RelationStore(
              */
             runCatching { st.execute("ALTER TABLE rel_blobs ADD COLUMN expiry INTEGER") }
             runCatching { st.execute("ALTER TABLE rel_blobs ADD COLUMN revoked INTEGER NOT NULL DEFAULT 0") }
+            runCatching { st.execute("ALTER TABLE rel_blobs ADD COLUMN held INTEGER NOT NULL DEFAULT 1") }
             try {
-                st.executeQuery("SELECT expiry, revoked FROM rel_blobs LIMIT 0").close()
+                st.executeQuery("SELECT expiry, revoked, held FROM rel_blobs LIMIT 0").close()
             } catch (e: java.sql.SQLException) {
                 throw IllegalStateException(
-                    "rel_blobs is missing the expiry/revoked columns and they could not be added: ${e.message}. " +
-                        "Refusing to start: without them the server cannot tell when an item has ended.",
+                    "rel_blobs is missing the expiry/revoked/held columns and they could not be added: ${e.message}. " +
+                        "Refusing to start: without them the server cannot tell when an item has ended, " +
+                        "or which stored bytes it still holds.",
                     e,
                 )
             }
@@ -231,8 +239,8 @@ class RelationStore(
             conn.autoCommit = false
             try {
                 conn.prepareStatement(
-                    "INSERT INTO rel_blobs(rel_ref, channel, lineage, version, size, content_hash, setting_key, created_at, expiry, revoked) " +
-                        "VALUES (?,?,?,?,?,?,?,?,?,0)",
+                    "INSERT INTO rel_blobs(rel_ref, channel, lineage, version, size, content_hash, setting_key, created_at, expiry, revoked, held) " +
+                        "VALUES (?,?,?,?,?,?,?,?,?,0,1)",
                 ).use { ps ->
                     ps.setString(1, relRef)
                     ps.setString(2, channel.wire)
@@ -269,17 +277,27 @@ class RelationStore(
     }
 
     /**
-     * Refuse to serve an item that has ended ([hasEnded]).
+     * Refuse to serve an item that has ended ([hasEnded]), or whose stored copy is gone.
      *
      * ## Why this lives in the store rather than in the route
      *
      * It runs inside the same `synchronized(lock)` that already guards the row read, so a
-     * concurrent [revokeLineage] cannot slip past a check that has already succeeded — there is no
-     * window between "this is servable" and "these are the bytes". It is also the same query that
-     * establishes existence, so the two answers cannot disagree. And any future route built on
-     * [fetch] or [fetchCurrent] inherits it; a gate written in the routes layer would protect only
-     * the two handlers that exist today. The original defect was precisely a guard applied to some
-     * of the doors.
+     * concurrent [revokeLineage] or [sweepEnded] cannot slip past a check that has already
+     * succeeded — there is no window between "this is servable" and "these are the bytes". It is
+     * also the same query that establishes existence, so the two answers cannot disagree. And any
+     * future route built on [fetch] or [fetchCurrent] inherits it; a gate written in the routes
+     * layer would protect only the two handlers that exist today. The original defect was
+     * precisely a guard applied to some of the doors.
+     *
+     * ## The gate and the sweep ask one rule
+     *
+     * [sweepEnded] deletes the file of exactly the rows [hasEnded] calls ended, and this gate
+     * refuses exactly those rows, so a row whose bytes the sweep removed is always answered GONE.
+     * Were the two ever to use different rules, a row with no file would fall through to the
+     * NOT_FOUND in [fetch], and the clinician's screen reads a 404 as "nothing was ever shared"
+     * (the comment on `failRel` in RelationRoutes.kt). A row whose copy is gone is refused as GONE
+     * even when the rule would now call it live — a wall clock can step backwards — which closes
+     * that fall-through from the other side too.
      *
      * A row with no recorded expiry, which an older build could write on the shares channel, is
      * not exempt: the rule measures the 90-day ceiling from `created_at`, which every row has.
@@ -287,14 +305,17 @@ class RelationStore(
     private fun gateLocked(relRef: String, channel: Channel, lineage: String, version: Long) {
         val item = itemLocked(relRef, channel, lineage, version)
             ?: throw RelationStoreException("not found", RelationStoreException.Kind.NOT_FOUND)
-        if (hasEnded(item, clock())) {
+        if (!item.held || hasEnded(item.facts, clock())) {
             throw RelationStoreException("no longer available", RelationStoreException.Kind.GONE)
         }
     }
 
-    private fun itemLocked(relRef: String, channel: Channel, lineage: String, version: Long): ItemFacts? {
+    /** One index row as the gate reads it: the rule's facts, and whether its file is still held. */
+    private class StoredItem(val facts: ItemFacts, val held: Boolean)
+
+    private fun itemLocked(relRef: String, channel: Channel, lineage: String, version: Long): StoredItem? {
         conn.prepareStatement(
-            "SELECT b.created_at, b.expiry, b.revoked, ($NEWEST_IN_LINEAGE) FROM rel_blobs b " +
+            "SELECT b.created_at, b.expiry, b.revoked, b.held, ($NEWEST_IN_LINEAGE) FROM rel_blobs b " +
                 "WHERE b.rel_ref=? AND b.channel=? AND b.lineage=? AND b.version=?",
         ).use { ps ->
             ps.setString(1, relRef); ps.setString(2, channel.wire); ps.setString(3, lineage); ps.setLong(4, version)
@@ -305,8 +326,9 @@ class RelationStore(
                 // read — otherwise a NULL expiry reads as epoch 0 and the item as ended in 1970.
                 val expiry = rs.getLong(2).takeUnless { rs.wasNull() }
                 val revoked = rs.getInt(3) != 0
-                val newest = rs.getLong(4)
-                return ItemFacts(channel, version, newest, createdAt, expiry, revoked)
+                val held = rs.getInt(4) != 0
+                val newest = rs.getLong(5)
+                return StoredItem(ItemFacts(channel, version, newest, createdAt, expiry, revoked), held)
             }
         }
     }
@@ -323,10 +345,10 @@ class RelationStore(
      * Withdraw every version of a lineage.
      *
      * Marks all versions, not just the newest. A share version below the newest is already refused
-     * as replaced ([hasEnded]), but its file is still on the volume, and a withdrawal is the owner
-     * taking the whole lineage back now: every copy goes at once. Marking only the head would also
-     * leave older versions to a rule that could change — the same partial-guard shape as the
-     * original bug.
+     * as replaced ([hasEnded]), but its file stays on the volume until the next sweep, and a
+     * withdrawal is the owner taking the whole lineage back now: every copy goes at once. Marking
+     * only the head would also leave older versions to a rule that could change — the same
+     * partial-guard shape as the original bug.
      *
      * The ciphertext is deleted too. Keeping withdrawn bytes on the volume is live exposure against
      * a compromised-server threat model for data the owner has explicitly taken back, and nothing
@@ -337,6 +359,9 @@ class RelationStore(
      * slip, or a stray directory left "withdrawn" reading as complete while the bytes stayed. If the
      * directory cannot even be listed, every marked version is reported as undeletable, because
      * that is what is known.
+     *
+     * A withdrawn row whose file is gone stops counting against its writer's quota at once (#338);
+     * one whose file would not delete keeps counting, and the next sweep tries it again.
      */
     fun revokeLineage(relRef: String, channel: Channel, lineage: String): RevokeOutcome = synchronized(lock) {
         requireName(relRef)
@@ -350,6 +375,7 @@ class RelationStore(
         val dir = relDir.resolve(relRef).resolve(channel.wire).resolve(lineage)
         if (!Files.isDirectory(dir)) {
             // Nothing was ever written under this lineage (or it was already cleared): no copies to remove.
+            releaseAbsentLocked(relRef, channel, lineage)
             return@synchronized RevokeOutcome(marked, deleted = 0, undeletable = 0)
         }
         val blobs = try {
@@ -366,8 +392,118 @@ class RelationStore(
                 undeletable++
             }
         }
+        releaseAbsentLocked(relRef, channel, lineage)
         RevokeOutcome(marked, deleted, undeletable)
     }
+
+    /**
+     * Stop counting every held row of this lineage whose file is confirmed absent. `notExists`
+     * rather than `!exists`: a file whose presence cannot be checked is still held, and still
+     * counted, because that is what is known.
+     */
+    private fun releaseAbsentLocked(relRef: String, channel: Channel, lineage: String) {
+        val versions = mutableListOf<Long>()
+        conn.prepareStatement("SELECT version FROM rel_blobs WHERE rel_ref=? AND channel=? AND lineage=? AND held=1").use { ps ->
+            ps.setString(1, relRef); ps.setString(2, channel.wire); ps.setString(3, lineage)
+            ps.executeQuery().use { rs -> while (rs.next()) versions += rs.getLong(1) }
+        }
+        for (v in versions) {
+            if (Files.notExists(blobPath(relRef, channel, lineage, v))) markReleasedLocked(relRef, channel, lineage, v)
+        }
+    }
+
+    private fun markReleasedLocked(relRef: String, channel: Channel, lineage: String, version: Long) {
+        conn.prepareStatement("UPDATE rel_blobs SET held=0 WHERE rel_ref=? AND channel=? AND lineage=? AND version=?").use { ps ->
+            ps.setString(1, relRef); ps.setString(2, channel.wire); ps.setString(3, lineage); ps.setLong(4, version)
+            ps.executeUpdate()
+        }
+    }
+
+    private fun blobPath(relRef: String, channel: Channel, lineage: String, version: Long): Path =
+        relDir.resolve(relRef).resolve(channel.wire).resolve(lineage).resolve("$version.blob")
+
+    /**
+     * What one sweep did, as counts only: stored copies removed; rows whose copy was already gone
+     * (a withdrawal removed it before the store tracked which bytes it holds), now no longer
+     * counted; and copies that would not delete, which stay counted and are tried again next sweep.
+     */
+    data class SweepOutcome(val removed: Int, val alreadyGone: Int, val notRemoved: Int)
+
+    /**
+     * Delete the stored copy of every item that has ended (#338): expired, past the 90-day
+     * ceiling, replaced by a newer share, or withdrawn.
+     *
+     * The row stays, marked as no longer held, so version numbers keep counting, the quota stops
+     * counting the bytes, and a read still answers GONE rather than NOT_FOUND. Which rows have
+     * ended is [hasEnded]'s answer and nothing else's — the gate asks the same function — so the
+     * sweep can never remove the bytes of an item the gate would still serve.
+     *
+     * A copy that will not delete is COUNTED, not swallowed, the way [revokeLineage] reports it:
+     * its row stays held, so the bytes it still occupies are still counted, and the next sweep
+     * tries it again. Only held rows are read, so a row whose copy is gone is never visited again.
+     * The sync API's snapshots live in another store and are out of this one's reach entirely.
+     *
+     * Runs under the store's lock, like every read, so no fetch can find a row servable and then
+     * its file missing. The files go first and the rows are marked after, in one transaction: a
+     * crash in between leaves rows that have ended (so the gate already refuses them) still counted,
+     * and the next sweep finds their files gone and clears them.
+     */
+    fun sweepEnded(): SweepOutcome = synchronized(lock) {
+        val now = clock()
+        val ended = mutableListOf<EndedRow>()
+        conn.prepareStatement(
+            "SELECT b.rel_ref, b.channel, b.lineage, b.version, b.created_at, b.expiry, b.revoked, ($NEWEST_IN_LINEAGE) " +
+                "FROM rel_blobs b WHERE b.held=1",
+        ).use { ps ->
+            ps.executeQuery().use { rs ->
+                while (rs.next()) {
+                    val relRef = rs.getString(1)
+                    val lineage = rs.getString(3)
+                    // A path to delete is only ever built from names this store would have written,
+                    // and a channel it does not know is not its to judge.
+                    val channel = Channel.fromWire(rs.getString(2)) ?: continue
+                    if (!NAME.matches(relRef) || !NAME.matches(lineage)) continue
+                    val version = rs.getLong(4)
+                    val createdAt = rs.getLong(5)
+                    val expiry = rs.getLong(6).takeUnless { rs.wasNull() }
+                    val revoked = rs.getInt(7) != 0
+                    val newest = rs.getLong(8)
+                    if (hasEnded(ItemFacts(channel, version, newest, createdAt, expiry, revoked), now)) {
+                        ended += EndedRow(relRef, channel, lineage, version)
+                    }
+                }
+            }
+        }
+        var removed = 0
+        var alreadyGone = 0
+        var notRemoved = 0
+        val released = mutableListOf<EndedRow>()
+        for (row in ended) {
+            val existed = try {
+                Files.deleteIfExists(blobPath(row.relRef, row.channel, row.lineage, row.version))
+            } catch (e: IOException) {
+                notRemoved++
+                continue
+            }
+            released += row
+            if (existed) removed++ else alreadyGone++
+        }
+        if (released.isNotEmpty()) {
+            conn.autoCommit = false
+            try {
+                for (row in released) markReleasedLocked(row.relRef, row.channel, row.lineage, row.version)
+                conn.commit()
+            } catch (e: Throwable) {
+                runCatching { conn.rollback() }
+                throw e
+            } finally {
+                conn.autoCommit = true
+            }
+        }
+        SweepOutcome(removed, alreadyGone, notRemoved)
+    }
+
+    private class EndedRow(val relRef: String, val channel: Channel, val lineage: String, val version: Long)
 
     fun fetch(relRef: String, channel: Channel, lineage: String, version: Long): ByteArray = synchronized(lock) {
         requireName(relRef)
@@ -376,7 +512,7 @@ class RelationStore(
             throw RelationStoreException("not found", RelationStoreException.Kind.NOT_FOUND)
         }
         gateLocked(relRef, channel, lineage, version)
-        val file = relDir.resolve(relRef).resolve(channel.wire).resolve(lineage).resolve("$version.blob")
+        val file = blobPath(relRef, channel, lineage, version)
         if (!file.exists()) throw RelationStoreException("not found", RelationStoreException.Kind.NOT_FOUND)
         Files.readAllBytes(file)
     }
@@ -390,7 +526,7 @@ class RelationStore(
         // share the newest replaced, or one the owner also withdrew — the opposite of what
         // publishing anew and withdrawing mean.
         gateLocked(relRef, channel, lineage, v)
-        val file = relDir.resolve(relRef).resolve(channel.wire).resolve(lineage).resolve("$v.blob")
+        val file = blobPath(relRef, channel, lineage, v)
         if (!file.exists()) throw RelationStoreException("not found", RelationStoreException.Kind.NOT_FOUND)
         v to Files.readAllBytes(file)
     }
@@ -433,11 +569,17 @@ class RelationStore(
         }
     }
 
-    /** Bytes the channels written by [writer] hold for this relationship. */
+    /**
+     * Bytes the server still holds on the channels [writer] writes, for this relationship.
+     *
+     * Held rows only (#338). A row whose file withdrawal or the sweep removed occupies nothing, and
+     * counting it would refuse an owner who refreshes a share often the space they no longer use.
+     * A copy that would not delete is still held, and still counted.
+     */
     private fun usedBytesLocked(relRef: String, writer: Writer): Long {
         val channels = Channel.entries.filter { it.writer == writer }
         val marks = channels.joinToString(",") { "?" }
-        val sql = "SELECT COALESCE(SUM(size),0) FROM rel_blobs WHERE rel_ref=? AND channel IN ($marks)"
+        val sql = "SELECT COALESCE(SUM(size),0) FROM rel_blobs WHERE rel_ref=? AND held=1 AND channel IN ($marks)"
         conn.prepareStatement(sql).use { ps ->
             ps.setString(1, relRef)
             channels.forEachIndexed { i, c -> ps.setString(i + 2, c.wire) }
@@ -491,8 +633,8 @@ class RelationStore(
 
         /**
          * THE ONE RULE FOR WHEN A RELATIONSHIP ITEM HAS ENDED (#332). The read gate refuses what it
-         * calls ended, and nothing else decides it: anything that must know whether an item has
-         * ended asks this function rather than restating the rule.
+         * calls ended and the sweep deletes the bytes of what it calls ended (#338); nothing else
+         * decides either, so the two cannot disagree.
          *
          * - A withdrawn item has ended, on every channel.
          * - A grant ends only at an end recorded for it, which the routes never record: the

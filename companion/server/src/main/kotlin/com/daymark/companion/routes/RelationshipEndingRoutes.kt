@@ -67,7 +67,9 @@ private fun auditSafely(block: () -> Unit) {
  * all belonging to the owner moves. Their entries, the material they shared, and their record of
  * having shared it are exactly as they were. A clinician leaving must never be a route to reaching
  * into somebody else's records, and the way that is guaranteed is that the code to do it is not
- * here to be called.
+ * here to be called. What the ending leaves in place still ends on the one clock every relationship
+ * item follows (RelationStore.hasEnded, #332), and the sweep removes its stored copy then (#338),
+ * exactly as it would had the relationship not ended.
  *
  * ─── AND WHAT IT CANNOT DO, WHICH THE COPY HAS TO SAY ───────────────────────────────────────────
  *
