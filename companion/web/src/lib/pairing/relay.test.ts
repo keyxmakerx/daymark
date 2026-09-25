@@ -636,9 +636,12 @@ describe('the offer and the approval', () => {
 
     // A byte turned in the ciphertext, and bytes that are not base64url at all: the same null.
     const mine = sealOwnerKeys(therapist.isk, opened.sidB64, OWNER_KEYS)
-    expect(
-      ownerKeysFromEnvelope(stored, mine.slice(0, -3) + (mine.endsWith('A') ? 'B' : 'A') + mine.slice(-2)),
-    ).toBeNull()
+    // The replacement is chosen from the character it replaces (CLAUDE.md §5): choosing it from
+    // another one left this a no-op about one run in 64, and a valid envelope then failed the test.
+    const at = mine.length - 3
+    const turned = mine.slice(0, at) + (mine[at] === 'A' ? 'B' : 'A') + mine.slice(at + 1)
+    expect(turned).not.toBe(mine)
+    expect(ownerKeysFromEnvelope(stored, turned)).toBeNull()
     expect(ownerKeysFromEnvelope(stored, '!!not-base64!!')).toBeNull()
 
     // The therapist's OWN envelope, reflected back at them: sealed under the same ISK but in the
