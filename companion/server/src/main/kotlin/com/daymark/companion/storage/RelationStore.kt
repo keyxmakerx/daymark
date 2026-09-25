@@ -601,21 +601,38 @@ class RelationStore(
         }
     }
 
+    /**
+     * Keep-last-N: only the newest [maxVersions] versions of a lineage stay servable. An older one
+     * is ENDED, not forgotten (#374). Its row is marked `revoked`, which [hasEnded] already reads
+     * as ended, so every read answers GONE and never NOT_FOUND. Its file is deleted now, and the
+     * row stops counting once the file is confirmed gone. A file that will not delete stays
+     * counted, and the next sweep tries it again. Deleting the row as well, as this used to, left
+     * such a file on the volume with nothing pointing at it, where no sweep would ever find it.
+     *
+     * Only rows not already ended this way count toward the N, so no row is pruned twice. This is
+     * retention, not a withdrawal, and writes no audit entry.
+     */
     private fun pruneLocked(relRef: String, channel: Channel, lineage: String) {
         val versions = mutableListOf<Long>()
-        conn.prepareStatement("SELECT version FROM rel_blobs WHERE rel_ref=? AND channel=? AND lineage=? ORDER BY version DESC").use { ps ->
+        conn.prepareStatement(
+            "SELECT version FROM rel_blobs WHERE rel_ref=? AND channel=? AND lineage=? AND revoked=0 ORDER BY version DESC",
+        ).use { ps ->
             ps.setString(1, relRef); ps.setString(2, channel.wire); ps.setString(3, lineage)
             ps.executeQuery().use { rs -> while (rs.next()) versions += rs.getLong(1) }
         }
         if (versions.size <= maxVersions) return
         for (v in versions.drop(maxVersions)) {
-            try {
-                Files.deleteIfExists(relDir.resolve(relRef).resolve(channel.wire).resolve(lineage).resolve("$v.blob"))
-            } catch (_: IOException) { /* best-effort */ }
-            conn.prepareStatement("DELETE FROM rel_blobs WHERE rel_ref=? AND channel=? AND lineage=? AND version=?").use { ps ->
+            conn.prepareStatement("UPDATE rel_blobs SET revoked=1 WHERE rel_ref=? AND channel=? AND lineage=? AND version=?").use { ps ->
                 ps.setString(1, relRef); ps.setString(2, channel.wire); ps.setString(3, lineage); ps.setLong(4, v)
                 ps.executeUpdate()
             }
+            val path = blobPath(relRef, channel, lineage, v)
+            try {
+                Files.deleteIfExists(path)
+            } catch (_: IOException) {
+                // Still held, so still counted; the next sweep tries it again.
+            }
+            if (Files.notExists(path)) markReleasedLocked(relRef, channel, lineage, v)
         }
     }
 
