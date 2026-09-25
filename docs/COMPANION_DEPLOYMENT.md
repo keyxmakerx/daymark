@@ -193,7 +193,7 @@ read from a file named by `NAME_FILE`, which wins.
 | `DAYMARK_WEBAUTHN_RP_ID` | unset | The passkey relying-party id. Passkeys sign people in on an `https` address with a hostname, and never unlock keys (#205); not built: #326 (COMPANION_SECURITY.md §5.1) |
 | `DAYMARK_WEBAUTHN_ORIGINS` | unset | Comma-separated; also the fallback for `DAYMARK_PUBLIC_BASE_URL` |
 | `DAYMARK_TRUSTED_PROXIES` | empty: trust nothing | §4.0 |
-| `DAYMARK_MAX_BLOB_BYTES` | `26214400` (25 MiB) | Largest stored blob |
+| `DAYMARK_MAX_BLOB_BYTES` | `26214400` (25 MiB) | Largest stored blob. Snapshots are padded before they are sent, and the command-line writer refuses one whose padded size is over 26,214,400 bytes; after raising this, pass the same number to it with `--max-blob-bytes` |
 | `DAYMARK_MAX_REQUEST_BYTES` | `27262976` (26 MiB) | Largest upload body |
 | `DAYMARK_MAX_VERSIONS` | `200` | Snapshot versions kept per lineage; older ones are deleted |
 | `DAYMARK_PER_TOKEN_QUOTA_BYTES` | `5368709120` (5 GiB) | Snapshot storage quota |

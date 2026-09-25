@@ -53,24 +53,26 @@ Each adversary: what it can do, what it cannot while the defences hold, and the 
 
 ### T1 — Stolen server or stolen disk
 
-- **Can:** read the whole volume: every blob, every lineage id and version, exact sizes and
-  timestamps (so journalling cadence, gaps and bursts), the relationship graph, which channel each
-  write went to, cleartext `X-Setting-Key` tags, 90 days of audit entries, the notification email,
-  and the sign-in code seeds — enough to sign in as any enrolled clinician (§5.2).
+- **Can:** read the whole volume: every blob, every lineage id and version, sizes rounded to a
+  bucket, exact timestamps (so journalling cadence, gaps and bursts), the relationship graph, which
+  channel each write went to, cleartext `X-Setting-Key` tags, 90 days of audit entries, the
+  notification email, and the sign-in code seeds — enough to sign in as any enrolled clinician
+  (§5.2).
 - **Cannot:** read a record, share or game plan; derive a key; recover a passphrase (Argon2id,
   client-side, §4).
 - **Defences:** every stored blob is XChaCha20-Poly1305 ciphertext or a sealed box, and the indexes
-  have no plaintext columns. Relationships are routed by an opaque per-relationship inbox token whose
-  BLAKE2b digest is the `relRef`; no fingerprint appears in any URL. The owner bearer token, session
-  ids and inbox tokens are stored as digests and invitation secrets as Argon2id hashes. The audit
-  log's source address is off by default.
-- **Not built:** padding snapshots, game plans and assignments on the device as shares already are
-  (`lib/padding.ts`), so the server stores only a rounded size (#315, decided in #214); and, decided
-  in #228, ending every shared item within 90 days, with a newer share ending the one before it
-  (#332), and deleting the bytes of whatever has ended (#338). Withdrawing a share deletes its bytes
-  today; expiry only blocks reads.
+  have no plaintext columns. Relationships are routed by an opaque per-relationship inbox token
+  whose BLAKE2b digest is the `relRef`; no fingerprint appears in any URL. The owner bearer token,
+  session ids and inbox tokens are stored as digests and invitation secrets as Argon2id hashes. The
+  audit log's source address is off by default. Every encrypted item (snapshots, shares, game plans
+  and assignments) is padded on the device before it is encrypted (`lib/padding.ts`, decided in
+  #214), so the server stores a size rounded to a bucket, never an exact one.
+- **Not built:** decided in #228, ending every shared item within 90 days, with a newer share ending
+  the one before it (#332), and deleting the bytes of whatever has ended (#338). Withdrawing a share
+  deletes its bytes today; expiry only blocks reads.
 
-Mood-tracking cadence is mental-health data. Size and timing are the leak that remains.
+Mood-tracking cadence is mental-health data. Timing is the leak that remains, and size to the
+nearest bucket.
 
 ### T2 — Network attacker (LAN, Wi-Fi, on-path)
 
@@ -549,7 +551,7 @@ leave "signed out, not ended", which looks like a completed exit and is not one.
 - **Anti-rollback is client-side and not built** (§8). **Sync is single-writer** (R11).
 - **Metadata leaks.** The existence, cadence and size of relationships and snapshots are visible to the
   server (§3 T1). Padding, decided in #214, rounds each item's size on the device and leaves timing
-  visible. Shares are padded; snapshots, game plans and assignments are not yet: #315.
+  visible. Every encrypted item is padded (#315).
 - **Sign-in codes are phishable and stored in the clear on the server** (§5.2). A breach lets an
   attacker sign in as a clinician. It never lets them decrypt. A passkey cannot be phished, and an
   account that closes its code leaves nothing on the server that signs it in (#205). Not built:

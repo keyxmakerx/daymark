@@ -160,11 +160,11 @@ and when idle. What cannot be revoked is therefore at most one session's worth o
 | The share's provenance: id, scope, the owner's fingerprint, when it was made | The owner's passphrase or private keys |
 | Game plans and assignments they wrote themselves | Any other patient's data; anything published after they were re-keyed out |
 
-The server sees ciphertext, public keys and routing metadata, never a key, plaintext or which records a
-clinician looked at ([COMPANION_SECURITY.md](COMPANION_SECURITY.md) §2, §3 T1). The metadata still
-matters: the existence and rhythm of a relationship leak to whoever runs the server. A share is
-padded to a standard size before it is encrypted; game plans and assignments are not padded yet (Not
-built: #315).
+The server sees ciphertext, public keys and routing metadata, never a key, plaintext or which
+records a clinician looked at ([COMPANION_SECURITY.md](COMPANION_SECURITY.md) §2, §3 T1). The
+metadata still matters: the existence and rhythm of a relationship leak to whoever runs the server.
+Shares, game plans and assignments are padded to a standard size before they are encrypted, so their
+sizes are rounded (#315); when they are sent is not hidden.
 
 ## 7. Game plans — the clinician writes back
 

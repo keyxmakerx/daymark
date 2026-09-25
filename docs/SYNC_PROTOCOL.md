@@ -37,17 +37,26 @@ not built: #258.
 │ 4 B    │ 1 B │  24 B     │  variable (incl. 16 B tag)   │
 └────────┴─────┴───────────┴──────────────────────────────┘
 MAGIC = ASCII "DMS1" = 0x44 0x4D 0x53 0x31
-FMT   = 0x01
-ciphertext = XChaCha20Poly1305_encrypt(plaintext, AAD, nonce, SYNC_KEY)
-AAD   = utf8("daymark.snapshot.v1|" + lineage + "|" + version)
+FMT   = 0x02 (the only format written)
+ciphertext = XChaCha20Poly1305_encrypt(pad(plaintext), AAD, nonce, SYNC_KEY)
+AAD   = utf8("daymark.snapshot.v2|" + lineage + "|" + version)
+pad(p) = u32 big-endian length(p) || p || zero bytes, paddedLength(4 + length(p)) in all
 plaintext = the Daymark BackupData JSON, UTF-8
+
+FMT 0x01, read and never written: no padding, AAD = utf8("daymark.snapshot.v1|" + lineage + "|" + version)
 ```
 
-The AAD binds the blob to its `lineage` and `version`, so a blob served under the wrong
-path fails to decrypt. Both fields are recoverable from the request path, so a reader can
-always reconstruct the AAD.
+The AAD binds the blob to its `lineage` and `version`, so a blob served under the wrong path fails
+to decrypt. Both fields are recoverable from the request path, so a reader can always reconstruct
+the AAD. The AAD also names the format, so a server that changes the format byte makes the envelope
+fail to open instead of opening in the wrong form. Unpadding happens only after the AEAD has
+authenticated the body, and it is strict.
 
-Not built: a padded envelope, so the server stores only a rounded size (#315, decided in #214).
+Padding (decided in #214; `companion/web/src/lib/padding.ts`): `paddedLength(x)` is 4 KiB up to 4
+KiB, then the next power of two up to 1 MiB, then the Padmé length, which is never more than about
+12% larger. A snapshot of n bytes is stored as 45 + `paddedLength(4 + n)` bytes, so anything up to
+4,092 bytes is stored as 4,141. Padding hides how much was written, never when: the server still
+sees when each version arrives.
 
 ### 1.2 Key params (non-secret, published)
 
@@ -132,9 +141,14 @@ hard-deleted), `PER_TOKEN_QUOTA_BYTES` (5 GiB, fail-closed), `RATE_LIMIT_RPS` (5
 
 ## 3. Client flows
 
-**Push (writer).** Ensure keyparams (GET, or create a fresh salt and PUT) → derive keys →
-`version = max(existing)+1` → encrypt → `PUT` the envelope. Today's writer is the command-line tool
-(`pnpm push` in `companion/web`); the phone's is not built: #168.
+**Push (writer).** Ensure keyparams (GET, or create a fresh salt and PUT) → derive keys → `version =
+max(existing)+1` → pad and encrypt → `PUT` the envelope. Before it derives a key or sends anything,
+the writer refuses a snapshot whose padded envelope is larger than the server accepts, and says so;
+it never falls back to an unpadded write. The limit it assumes is the server's default, 26,214,400
+bytes; for a server whose operator raised `DAYMARK_MAX_BLOB_BYTES`, pass the same number with
+`--max-blob-bytes`. A 413 from the server is reported as the server's answer. Today's writer is the
+command-line tool (`pnpm push` in `companion/web`), which does not start at the moment: #373. The
+phone's is not built: #168.
 
 **Pull (reader — the browser, or the CLI).** GET keyparams → derive keys → list versions → fetch the
 head → decrypt (the AEAD verifies integrity). A wrong passphrase makes decryption fail, with no
@@ -151,7 +165,11 @@ phone taking records in (#346), and the refusal to replace a copy it has not see
 ## 4. Conformance
 
 A second implementation reproduces the Argon2id parameters, the `crypto_kdf` context and subkey ids,
-the exact envelope layout and AAD string, the keyparams JSON, and the base64 variant. The crypto and
-integration tests in `companion/web/src/lib/sync/` are the oracle: an envelope made elsewhere must
-decrypt there, and the other way round. The Kotlin port is held to it by `SyncCryptoTest`, which
-includes cross-language vectors generated from `crypto.ts`; see [COMPANION_PHONE.md](COMPANION_PHONE.md) §1.
+the exact envelope layout and AAD string, the padding, the keyparams JSON, and the base64 variant.
+The crypto and integration tests in `companion/web/src/lib/sync/` are the oracle: an envelope made
+elsewhere must decrypt there, and the other way round. The Kotlin port is held to it by
+`SyncCryptoTest`, which includes cross-language vectors generated from `crypto.ts`; see
+[COMPANION_PHONE.md](COMPANION_PHONE.md) §1. The format-2 vector in `sync/crypto.test.ts` (key from
+the passphrase `conformance-vector`, salt 0x00..0x0f, 8 MiB and 2 passes; nonce 0x01..0x18; lineage
+`devA`, version 7; plaintext `{"hello":"daymark"}`; 4,141 bytes) is not in `SyncCryptoTest` yet, and
+the Kotlin reader still refuses format 2: #316.

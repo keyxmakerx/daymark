@@ -146,6 +146,11 @@ DAYMARK_SYNC_PASSPHRASE='your sync passphrase' \
               --lineage laptop --backup ~/Downloads/daymark-backup.json
 ```
 
+The snapshot is padded before it is encrypted, so the server learns only roughly how big it is. If
+your server accepts larger blobs than the default (`DAYMARK_MAX_BLOB_BYTES`), add `--max-blob-bytes`
+with the same number, or the writer refuses a snapshot that is only too large once padded. The
+command does not start at the moment: #373.
+
 Read it back in the browser: open the portal → **Connect to your sync server** → the token, the
 lineage and the passphrase. The snapshot is fetched and decrypted in your browser.
 

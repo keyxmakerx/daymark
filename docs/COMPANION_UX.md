@@ -157,7 +157,7 @@ then, with **Cancel** and **Share this** equally weighted:
   them."*
 - *"You can revoke anytime. That blocks future access on an honest server. For the strongest
   protection against a tampered server, re-pair with a new key."*
-- *"Your server can see that a share exists, how big it is and when it was sent — not what is in
+- *"Your server can see that a share exists, roughly how big it is and when it was sent — not what is in
   it. It cannot hide that you share with someone."*
 
 It says what a share is in the share builder's own words (#337), never by likening it to a report,

@@ -202,6 +202,13 @@ All notable changes to this project are documented here. The format is based on
   both jobs.
 
 ### Changed
+- **A share lasts 14 days unless you choose otherwise, and never more than 90.** The share builder
+  used to start at 30 days and allow a year. Beside the number you now read the date the share ends:
+  *Ends on {date}. The server then deletes its copy. Anything read before then has already been
+  seen.* (#228, #339)
+- **The assignment inbox no longer fails as a whole when one item has ended.** The server keeps what
+  a clinician sends for 90 days. An item it no longer keeps now shows as one line, *Sent by {name}
+  on {date}. The server keeps items for 90 days.*, and everything else still loads. (#339)
 - **Planning moved to GitHub, and the documents describe only what exists.** Work to do, bugs and
   open decisions had been spread across plans, session logs, dated audits and to-do comments, and
   several of those had gone stale in ways that told a reader something false. They are now GitHub
@@ -736,6 +743,22 @@ All notable changes to this project are documented here. The format is based on
   lineage or version from the one signed inside it, so an old assignment cannot be shown again as a
   new one. A clinician who re-pairs with new keys keeps what was granted, re-bound to the new key;
   before, every assignment they sent after re-pairing was refused.
+- **Backups, game plans and assignments are padded before they are encrypted, as shares already
+  are.** The server stores each one at a size rounded up to a standard bucket (at least 4 KiB, then
+  powers of two up to 1 MiB, then never more than about 12% larger), so it can no longer tell from
+  sizes how much you wrote between two backups, or how long a plan or a task was. Padding hides how
+  much, never when: the server still sees when each one arrives, and the clinician's sign-in page
+  now says so in those words. Everything already stored unpadded still opens. The command-line
+  backup writer checks the padded size before it sends anything and says plainly when a backup is
+  too large once padded; a server that accepts larger blobs is matched with `--max-blob-bytes`.
+  (#315)
+- **A copy of a share sealed before one the clinician has already opened stays closed.** A server
+  restored from a backup, or anything able to change what a server stores, could have handed the
+  clinician an older share as the current one. The clinician's browser now remembers when the newest
+  share it opened was sealed (the owner's own time, signed into the share) and refuses an older
+  copy: *This copy was sealed before one you have already opened, so it stays closed. Ask for a
+  fresh one.* It cannot catch the first share a browser opens, or a server that changes the page
+  itself.
 - **The phone's actual cryptography moves from 2019 to 2024.** The C library doing the encrypting
   on the phone was libsodium 1.0.18, bundled inside a wrapper whose version number said nothing
   about it; 1.0.20 brings five years of hardening (AEAD MAC memory fences, optimizer blockers,
