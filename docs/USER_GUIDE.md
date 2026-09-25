@@ -205,7 +205,7 @@ You'll need a few entries before there's much to show.
 ## Your sky and life events
 
 **More → Your sky** shows everything you've done as stars in a night sky: each mood entry, journal
-page, practice you used, project step, goal you marked reached and life event. A star's colour shows
+page, thought record, project step, goal you marked reached and life event. A star's colour shows
 how long ago it was; the glow around a mood entry's star shows its mood. Days you didn't log are simply
 dark, never drawn as missing.
 
@@ -390,9 +390,10 @@ Daymark will never tell you that you're fine.
 - **Self-checks** for sleep apnea signs, restless legs and insomnia signs.
 - **Treatments.** Mark the date something changed (CPAP, surgery, an oral appliance, positional
   therapy, a medication, or something else) and compare your own sleep and mood before and since.
-  It shows what changed, not why, and it isn't a measure of whether a treatment works.
-- **Sleep setup.** A few questions about a bed partner, pets, noise and where your phone sits,
-  saved for sleep features to come.
+  It shows what changed, not why, and it isn't a measure of whether a treatment works. To keep a
+  record of the nights you used CPAP, make a **yes / no** tracker (see *Trackers*).
+- **Sleep setup.** A few questions about a bed partner, pets, noise and where your phone sits.
+  Nothing reads your answers, and nothing will: the sleep features they were for won't be built.
 - **Breathing check (experimental).** Lie still with the phone flat on your chest for one to three
   minutes. It uses the phone's motion sensor, not the microphone, and records nothing; it shows an
   estimate of your breathing rate and flags any pauses. It isn't an apnea test.

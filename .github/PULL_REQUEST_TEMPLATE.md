@@ -13,4 +13,4 @@
 - [ ] No proprietary or tracker dependencies added
 - [ ] `CHANGELOG.md` updated under *Unreleased*
 - [ ] Anything deferred or found along the way is a GitHub issue, not a note in a document or a comment
-- [ ] Commits are signed off (DCO: `git commit -s`)
+- [ ] Contributors from outside the project: every commit is signed off (DCO: `git commit -s`)

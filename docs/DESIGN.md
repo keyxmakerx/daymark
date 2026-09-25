@@ -51,9 +51,10 @@ Two surfaces are always dark, whatever the theme.
 ## Typography (`ui/theme/Type.kt`)
 
 A **serif** for display, headlines, `titleLarge` and the italic diary-note style, and a clean
-**sans** for smaller titles, body, labels and numbers. The app uses the platform serif and sans;
-`res/font` does not exist. Bundling Fraunces and Inter, or settling on system fonts for good, is
-#251.
+**sans** for smaller titles, body, labels and numbers. The serif is Fraunces, bundled in the app and
+never fetched; all other text uses the platform sans, for good, and there is no Inter (#251). Not
+built: bundling Fraunces, so the serif roles use the platform serif and `res/font` does not exist:
+#363.
 
 ## Shape, spacing, elevation
 

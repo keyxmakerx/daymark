@@ -24,7 +24,7 @@ mood-tracking app.**
 
 - **Mood and journal.** Quick entries on a five-level scale, with activities, people, a photo and a
   note. There is a separate free-form journal, search for both, and "on this day".
-- **Your sky.** Each check-in, journal entry, practice you used, project step, reached goal and life
+- **Your sky.** Each check-in, journal entry, thought record, project step, reached goal and life
   event you mark becomes a star in a sky that fills as you go. It never marks a missing day as a
   failure. See [docs/SKY.md](docs/SKY.md).
 - **Insights.** Mood over time, by weekday and time of day, what goes with your mood (always
@@ -53,10 +53,11 @@ every permission, is [PRIVACY.md](PRIVACY.md).
 
 ## The Companion (optional, self-hosted)
 
-The Companion is a small server you run yourself (Docker). It comes with web consoles for the owner,
-a clinician and an administrator. Everything stored on it is encrypted end to end, so the server
-never sees content. The owner pairs with a clinician using a code read aloud once. The owner decides
-what is shared and for how long, and can withdraw it. Operator guide:
+The Companion is a small server (Docker) that a person or an office runs for itself; there is no
+hosted Daymark service (#288). It comes with web consoles for the owner, a clinician and an
+administrator. Everything stored on it is encrypted end to end, so the server never sees content.
+The owner pairs with a clinician using a code read aloud once. The owner decides what is shared and
+for how long, and can withdraw it. Operator guide:
 [companion/README.md](companion/README.md). Design: [docs/COMPANION_ARCHITECTURE.md](docs/COMPANION_ARCHITECTURE.md).
 
 ## Installing

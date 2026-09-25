@@ -33,8 +33,9 @@ A PAKE excludes the server from the protocol, not from the code that runs the pr
 server is the one serving that code. That bottom row is the reason the owner's half belongs on the
 phone; it is a strengthening against the worst case, not a precondition for the rest.
 
-**Who starts a pairing.** The owner, always. The owner's device opens every run and is the CPace
-initiator. Whether a clinician may start one too is an open decision: #215.
+**Who starts a pairing.** The owner, or a clinician through a short-lived connection request that
+carries no secret (#215). Either way the owner's device opens every run, is the CPace initiator,
+draws the code and approves. The clinician-started path is not built: #328.
 
 **Post-quantum.** Not now, by decision: hybrid post-quantum PAKEs are early drafts, and nothing in
 this threat model justifies tracking one.
@@ -259,7 +260,9 @@ attack on the pairing yields an empty connection.
 | Sharing, later | What they may actually see |
 
 A QR code would carry the address and invitation id only, never a secret, and the typed path must stay
-able to do everything the scan does: not built, #189.
+able to do everything the scan does: not built, #189. A clinician's connection request is shown the
+same way, as a QR code and a short typed form, with this server's address and no secret (#215): not
+built, #328.
 
 ## 11. Ending a connection: Leave and Revoke
 
@@ -270,7 +273,8 @@ material, a stolen clinician credential would be a way to destroy someone else's
 - **Leave (clinician), built.** `POST /v1/relations/{relRef}/ending` writes one insert-only ending
   row, cuts every live session of that credential, makes TOTP refuse it from then on, and appends one
   audit line the owner reads. It withdraws no share, deletes no blob, alters no grant, rotates no key.
-  It cannot reach what the clinician already decrypted. The owner is not emailed: #216.
+  It cannot reach what the clinician already decrypted. The owner is not emailed; an opt-in email,
+  off by default, is decided in #216 and not built: #329.
 - **Revoke (owner).** The owner withdraws a share lineage (future fetches answer 410) or turns
   capabilities off in a re-signed grant, and can stop an invitation. The owner cannot yet end a
   clinician's sign-in or live sessions: #210.

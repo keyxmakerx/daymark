@@ -18,6 +18,9 @@ the issue.
 - **No scores, streaks, badges or congratulation.** Continuity is counted without requiring days in
   a row ("12 of the last 30") and is left out entirely at zero. A gap in someone's data is never
   drawn as a failure ([DECISIONS.md](DECISIONS.md) §D6).
+- **A person's own views describe what was logged and never mark it.** No mood average as a
+  headline or "out of 5", and no period judged better or worse than another (#203). Not built: the
+  Insights views and suggestion cards that still do (§1.5, §3): #354, #358, #360.
 - **Offers, not demands.** An offer the person can ignore for free is an offer. Anything that moves
   them somewhere they did not ask to go is a demand, and the app makes offers. The one exception is
   one the person switches on themselves (§7.2).
@@ -123,7 +126,8 @@ entries are stars in the Sky (§4), and reach the PDF report only when the perso
   never reach it (§11.2).
 - **By day of week**, **by time of day**, and **this week, month or year against the last**.
 - **In review** (a short recap written by fixed rules) and **Logging consistency** (a heatmap of
-  entries per day). Whether these two read as grades is #203.
+  entries per day). Both read as grades, and "Days with an entry" is the one figure for how often
+  someone logs (#203). Not built: removing both, with nothing in their place: #354.
 - Suggestion cards sit at the top (§1.5).
 - **Review my year** is a full-screen walk-through: an introduction, one page per quarter, and a
   finale with at most two facts, the mood chosen most often (in the person's own word for it) and
@@ -131,16 +135,17 @@ entries are stars in the Sky (§4), and reach the PDF report only when the perso
   export: a year of someone's moods as a single file is the most identifying thing the app could
   make.
 - The year view's stars and the review's quarter pages still size a day's star by its mood and draw
-  a day with no entry as a faint speck, against the Sky's rules. Redrawing or removing them is in
-  #148.
+  a day with no entry as a faint speck, against the Sky's rules. Not built: one year sky in place of
+  both, on the Sky's rules (#148; [SKY.md](SKY.md) §9): #347, #349, #350, #351.
 
 ## 4. Your sky and life events
 
 **Your sky** (More → Your sky) draws everything the person did as stars in a night sky: mood
-entries, journal pages, practices used, project steps done, goals marked reached, and life events. A star's
-colour is its age; mood moves only its halo; a missing day is never drawn. A **life event** is a mark
-on one day in the person's own words, added from the Sky's life-events list or with Mark this day
-(§1.3). Every rule the Sky keeps is in [SKY.md](SKY.md).
+entries, journal pages, thought records (the one practice that keeps its own dated record, #283),
+project steps done, goals marked reached, and life events. A star's colour is its age; mood moves
+only its halo; a missing day is never drawn. A **life event** is a mark on one day in the person's
+own words, added from the Sky's life-events list or with Mark this day (§1.3). Every rule the Sky
+keeps is in [SKY.md](SKY.md).
 
 ## 5. Goals and projects
 
@@ -158,7 +163,8 @@ on one day in the person's own words, added from the Sky's life-events list or w
 - A project's board has no due dates, no percentage, no count of steps still to do, and no column
   that is the good end. Every move between columns is allowed in both directions
   (`goals/GoalBoard.kt`).
-- Whether a step should carry its own "when… then…" cue is #184.
+- Not built: an optional "When…" line on each project step, which replaces the project-level plan on
+  new projects (#184): #348.
 
 ## 6. Trackers
 
@@ -213,20 +219,22 @@ the person turns it on. When it is on:
 
 The rules it keeps, condensed from the design research:
 
-1. Acknowledge first. Never cheer a low mood.
+1. Acknowledge first, without saying how the person feels or how their day was. Never cheer a low
+   mood.
 2. A menu the person chooses from, and "Not right now" is always the first option. No single forced
    exercise.
-3. Calm and low in stimulation: muted, slow, little motion.
+3. Calm and low in stimulation: muted, slow, little motion. Nothing on the screen moves on its own.
 4. Offer, never force: a small action the person reaches for, never a takeover they did not choose.
 5. Any default is stated plainly and can be turned off in one tap.
 6. Honest about effect: general wellness support that points toward real care, never treatment.
 7. A crisis floor under all of it (§7.3).
 
 Never offered: generic affirmations, cold-water immersion, or a comparison with the person's
-earlier, better days. The screen and rules 1–3 disagree today: "Not right now" comes last, the
-options drift on endless animations with no reduced-motion check, and the opening line puts a
-feeling into words. Which gives way, and whether any default should depend on a condition the
-person reports (the app records none), is #166.
+earlier, better days. Every default is the same for everyone. Daymark never asks what someone uses
+it for, or records a condition, to set one (#166). The screen and rules 1–3 disagree today: "Not
+right now" comes last, the options drift on endless animations with no reduced-motion check, and
+the opening line puts a feeling into words. Not built: #352 (the order and the motion), #353 (the
+opening lines).
 
 Not built: more techniques (progressive muscle relaxation, cognitive defusion, brief mindfulness, a
 self-compassion break, naming the feeling, 5-4-3-2-1 grounding, a calm game): #170. A clinician
@@ -273,7 +281,9 @@ recommending, never setting, how often the support space is offered: #172.
   contain a comma. It is in backups and never synced. If sharing it ever ships, it is an
   owner-created, time-boxed, revocable share and never automatic
   ([COMPANION_ACCESS_CONTROL.md](COMPANION_ACCESS_CONTROL.md)).
-- A link back from the crisis screen to the plan, and printing or exporting the plan, are #175.
+- Not built: a quiet link to the plan from the crisis screen, once the plan has something in it
+  (#357), and a printed or saved copy behind a warning shown every time (#359), both decided in
+  #175.
 
 ## 9. Sleep
 
@@ -293,7 +303,8 @@ More → Sleep check-ins:
   and mood before and since. It shows what changed, not why, and is not a measure of whether a
   treatment works.
 - **Sleep setup.** Saved answers about a bed partner, pets, where the phone lies, background noise
-  and sleep position. Nothing reads them yet; they are for sensing that is not built (#212).
+  and sleep position. Nothing reads them, and nothing will: the sensing they were for is ruled out
+  (#212). Not built: removing the screen and its answers: #356.
 - **The breathing check** (§10).
 
 The rules:
@@ -308,11 +319,12 @@ The rules:
   overnight blood oxygen; sleep stages; whose snore or movement it was, from one bedside microphone;
   reliable restless-legs or limb-movement detection from a phone on the mattress.
 
+Sleep sensing stops at the breathing check and its overnight version (§10; Not built: #218). There
+is no sleep window from phone use, no microphone, no sonar and no sleep nudges (#212). Any sensing
+is rules-based signal processing, never machine learning ([CLAUDE.md](../CLAUDE.md) §0).
+
 The diary says "Around 85% efficiency or more is a common good-sleep mark — a reference, not a
-verdict." Whether that sits with the rule above, and which of the unbuilt sensing tiers are still
-wanted (a sleep window from phone use, movement plus light, microphone events, sonar, coping nudges,
-CPAP adherence, a multi-night view), is #212. Any tier would be rules-based signal processing: no
-machine-learning classifier ([CLAUDE.md](../CLAUDE.md) §0).
+verdict." Not built: saying what efficiency is instead, with no mark: #355.
 
 ## 10. The breathing check
 
@@ -427,8 +439,9 @@ before schema v18 have no hour or weekday, and none is ever worked out for them.
   for mornings and one for evenings. The draw is blind to mood.
 - **Today placement decides nothing, and the pool is never spoken.** A reminder is at a time the
   person chose, and the support offer is made while they are already in the app, so neither is an
-  ask an hour should be chosen for. No rotation is stored. Keeping both dormant, giving them a job,
-  or removing them is #159.
+  ask an hour should be chosen for. No rotation is stored. Both stay dormant until Daymark starts an
+  ask of its own, such as the companion surfacing itself (#272), and are never applied to a reminder
+  or to the support offer (#159).
 
 ### 13.4 The debug screen: "Why it asks"
 
@@ -463,7 +476,9 @@ decisions rather than a reading of the current moment: #162.
   date range (90 days by default), notes, charts, and the journal for that range, all of it or
   none, off by default. A screen for choosing journal entries one at a time exists
   (`ui/export/JournalPickerScreen.kt`), but nothing opens it yet. Not built: a preview before
-  exporting: #198.
+  exporting: #198. Not built: mood notes left out until the person switches them on, and the dialog
+  saying that a report is a copy the person hands over, which Daymark cannot take back (#305):
+  #336.
 - Every export is a plain, unencrypted file, made by the person's own act. Not built: encrypted
   backups and exports: #236.
 

@@ -150,9 +150,9 @@ All notable changes to this project are documented here. The format is based on
   and what you can do — take back what is still published to them, or invite them again. And the
   access log for that connection carries a line.
 
-  **No email is sent, and that is deliberate but not settled.** An email saying a therapy connection
-  has ended could land in an inbox somebody else reads. Whether to offer one is a decision about
-  your users' safety and is left open rather than guessed at.
+  **No email is sent.** An email saying a therapy connection has ended could land in an inbox
+  somebody else reads. #216 has since decided an opt-in email, off by default, that never says what
+  happened; it is not built yet (#329).
 
 - **Companion — the practice console now says what removing somebody does, and what it does not.**
   Removing a member ends their standing in the practice. It does not end any patient's relationship

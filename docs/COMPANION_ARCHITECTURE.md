@@ -1,9 +1,10 @@
 # Daymark Companion — architecture
 
-The Companion is an optional, self-hosted server and a set of web consoles that a person runs on
-their own machine. It keeps an end-to-end-encrypted copy of their Daymark journal, lets them read it
-on a bigger screen, and lets them show chosen slices to one clinician and receive guidance back. The
-server stores ciphertext it cannot read and metadata it can. There is no Daymark-operated service.
+The Companion is an optional, self-hosted server and a set of web consoles, run by a person on their
+own machine or by an office on its own (#288). It keeps an end-to-end-encrypted copy of a person's
+Daymark journal, lets them read it on a bigger screen, and lets them show chosen slices to the
+clinicians they choose and receive guidance back. The server stores ciphertext it cannot read and
+metadata it can. There is no Daymark-operated service.
 
 This document describes what is built, who trusts whom, and what a compromised server can still do.
 The phone app works fully without any of it: the default build has no network permission at all.
@@ -45,12 +46,13 @@ is a side effect.
 | Shape | Who owns the machine | Whose data is on it |
 | --- | --- | --- |
 | **Solo** | the person | theirs |
-| **Paired** | the person | theirs, some of it shown to one clinician they invited |
-| **Practice** | a clinic | many people's, as tenants |
+| **Paired** | the person | theirs, some of it shown to the clinicians they invited |
+| **Practice** | a clinic | many people's, as tenants (not built: #318, #331) |
 
-- **Solo and Paired are one product with a flag.** Same trust model, same threat model; the
-  clinician surfaces switch on with `DAYMARK_THERAPIST_AUTH=1`. With it off, every relationship route
-  answers 503.
+- **One product in three shapes** (#288). Solo and Paired have the same trust model and the same
+  threat model. Today one flag, `DAYMARK_THERAPIST_AUTH=1`, switches the clinician and practice
+  surfaces on together; with it off, every relationship route answers 503. Not built: the shape as a
+  server setting, `DAYMARK_SETUP_MODE`, that switches on only what that shape needs: #330.
 - **Practice inverts the arrangement.** In Solo and Paired the journal sits on its owner's hardware.
   In Practice the clinic owns the machine and the person is a tenant on it. That is a different
   posture, not a bigger deployment. What exists for it: the practice model on the server (three
@@ -58,13 +60,19 @@ is a side effect.
   presets over capabilities; membership and a separate practice audit chain) and the practice console
   (`practice.html`). A role never carries a key: what a clinician can read comes only from a grant the
   owner signed. The model is specified in COMPANION_ACCESS_CONTROL.md, which marks what is built.
+  A server has one owner credential today, so it serves one owner (#219). Not built: several
+  people's journals on one server, each reachable only by its own owner (#324, #318), and each
+  person's relationships kept to that person (#331).
 - The question that gates Practice — who may reset a forgotten passphrase — is answered: nobody
   (COMPANION_PAIRING.md §12).
-- The first-run screen of the owner page asks which shape the machine is for and remembers the
+- The first-run screen of the owner console asks which shape the machine is for and remembers the
   answer in that browser only. It changes nothing on the server.
-- What the Companion is for in the long run (hosting, editions, the smallest set of roles for a
-  pilot, whether the old one-clinician scope still holds) is an open decision: #288. No real
-  patient's data belongs on a Practice deployment before an outside assessment: #284.
+- **Who runs it** (#288). A person runs their own server, or an office runs its own; Daymark runs
+  none (§8). The old one-clinician scope is retired. An office grows in steps: one clinician, then a
+  receptionist, then several clinicians, receptionists and doctors who assess and refer, and every
+  referral is a person's decision. Not built: a sign-in for each member of staff, #314; the front
+  desk's calendar, #299; referrals, #291. No real patient's data belongs on a Practice deployment
+  before an outside assessment: #284.
 
 ## 3. Parties and trust
 
@@ -74,15 +82,20 @@ is a side effect.
 | **Clinician** (invited by the owner) | Their own keys, wrapped under a reading passphrase in their browser; a TOTP credential | Reading what the owner shares with them, for as long as the owner allows |
 | **Server** (the Companion container) | Ciphertext, public keys, metadata, the audit log | Availability only. Never for confidentiality, never to vouch for a key |
 | **Operator** (runs the container; often the owner) | The host, the environment, the logs | Keeping it running. Holding the host is not holding anyone's key |
-| **Practice administrator** | Membership and roles, on the control plane | Administration. No role reaches data |
+| **Practice administrator** | Membership and roles, on the control plane | Administration. No role, the administrator's included, reaches anyone's credentials, keys or content (#288) |
 
-- **The owner has no account.** The owner's credential is the bearer token (`DAYMARK_AUTH_TOKEN`),
-  stored on the server as a digest. An optional recovery email can rotate it
-  (COMPANION_SECURITY.md §6); it recovers server access only, never the passphrase. How the owner and
-  the administrator should prove who they are — first-run claim, a credential for the admin console
-  (which today mounts with none), recovery as a second front door — is an open decision: #208.
-- **Clinicians sign in with a six-digit TOTP code** and a session cookie. Passkeys are designed, and
-  the server's WebAuthn routes answer 501: #205.
+- **The owner has no account yet.** The owner's credential is the bearer token
+  (`DAYMARK_AUTH_TOKEN`), stored on the server as a digest. An optional recovery email can rotate it
+  (COMPANION_SECURITY.md §6); it recovers server access only, never the passphrase.
+- **Everyone signs in as themselves** (#208). The owner, an administrator, each clinician and each
+  receptionist has an account of their own, and the shared token stops being anyone's sign-in (not
+  built: #324, #314). A new server is claimed with a one-time setup code it prints to its own log,
+  and the server console, which today mounts with no credential, sits behind an administrator's own
+  sign-in (not built: #322). A lost sign-in comes back by proving the owner's own key, never by
+  email (not built: #325).
+- **Clinicians sign in with a six-digit TOTP code** and a session cookie. Passkeys sign people in
+  where the address is `https` with a hostname, codes stay as the fallback, and a passkey never
+  unlocks a key (#205). Not built: #326; the server's WebAuthn routes answer 501.
 - **The owner's browser is a lower-assurance client.** The owner console, the snapshot reader and the
   pairing ceremony all run in pages the server serves (§6). The console says so on every visit.
 
@@ -112,19 +125,23 @@ keys, endings and the access log (`/v1/relations/{relRef}/…`); owner notificat
 ### 4.2 The web consoles
 
 Svelte and TypeScript, built by Vite into one static bundle the server serves. Every page loads only
-from its own origin; all cryptography runs in the browser (libsodium).
+from its own origin; all cryptography runs in the browser (libsodium). Each page is named for who
+uses it, and all four are Daymark Companion, with no separate brand (#310). Not built: page titles
+to match, which today read "Report viewer", "Therapist portal" and "Server admin": #158.
 
-- **Owner page** (`index.html`): open an exported backup file; read the encrypted copy from the
+- **Owner console** (`index.html`): open an exported backup file; read the encrypted copy from the
   server; the self-check engine and a focus task (COMPANION_FEATURES.md); the tool builder; access
-  recovery; and the **owner console** — unlock with a key file and the passphrase or recovery code,
-  invite and pair a clinician, grant capabilities, build shares, review assignments, read the access
-  log, set notifications.
-- **Clinician page** (`therapist.html`, at `/therapist`; invitation links arrive at `/portal/invite`
-  and are redirected there): accept an invitation, sign in, a dashboard of what was shared, and a
-  today view, client record and calendar built from it; assign from the catalogue, author game
-  plans, see what the owner allowed, leave.
+  recovery; and, unlocked with a key file and the passphrase or recovery code, invite and pair a
+  clinician, grant capabilities, build shares, review assignments, read the access log, set
+  notifications.
+- **Clinician console** (`therapist.html`, at `/therapist`; invitation links arrive at
+  `/portal/invite` and are redirected there): accept an invitation, sign in, a dashboard of what was
+  shared, and a today view, client record and calendar built from it; assign from the catalogue,
+  author game plans, see what the owner allowed, leave.
 - **Server console** (`admin.html`): what an operator can check from a browser — health, readiness,
-  sign-in pressure, and audit-chain checks. It holds no credential of its own (#208).
+  sign-in pressure, and audit-chain checks. It holds no credential of its own yet. By decision it
+  sits behind an administrator's own sign-in, optionally on an address of its own (#208); not
+  built: #322, #323.
 - **Practice console** (`practice.html`): membership, roles, removal, the practice log.
 
 ### 4.3 The phone
@@ -181,14 +198,14 @@ rather than left to be discovered.
 
 | Limit | What it means | Where it stands |
 | --- | --- | --- |
-| **Metadata is visible** | Snapshot sizes, timing, how often someone syncs, how many relationships exist and how active each is, and the addresses requests come from. "Journalled daily for eight months, then nothing for nine days" is readable without decrypting anything | Disclosed, not mitigated. Padding sizes is an open decision: #214 |
+| **Metadata is visible** | Snapshot sizes, timing, how often someone syncs, how many relationships exist and how active each is, and the addresses requests come from. "Journalled daily for eight months, then nothing for nine days" is readable without decrypting anything | Disclosed, not yet mitigated. By decision, every encrypted item is padded on the device so the server learns only a rounded size (#214); not built: #315. Timing and how often someone syncs stay visible |
 | **It can deny service** | Refuse writes, withhold or truncate the audit log, serve an older snapshot | Readers verify each blob, not freshness: #179 |
-| **It serves the web pages** | A compromised server can ship JavaScript that keeps a passphrase or a pairing code. Browser-delivered encryption is only as strong as the delivery of the code. The installed phone app does not have this weakness | Stated on every console. The owner's half of pairing moves to the phone with #174 |
-| **It writes the audit log about itself** | The hash chain shows internal consistency, never completeness: whoever can rewrite the entries can recompute the chain, and withholding an event is undetectable | The chain head is evidence only when anchored outside the server — a person's note today, the phone later: #182. Signed attestations are an open decision: #217 |
-| **No forward secrecy for sealed items** | Anyone who later obtains a clinician's long-term key can open every share ever sealed to it that is still stored | Shares require an expiry (at most 366 days), each lineage keeps at most 50 versions, and withdrawal deletes the bytes; expiry alone does not. How long shared data should live is open: #228 |
-| **Revocation binds an honest server** | Expiry and withdrawal stop future fetches on an honest server. They do not un-send what was read, and a colluding server can keep serving what it holds | The real remedy is re-pairing with new keys. Whether to accept this as a permanent limit is open: #222 |
+| **It serves the web pages** | A compromised server can ship JavaScript that keeps a passphrase or a pairing code. Browser-delivered encryption is only as strong as the delivery of the code. The installed phone app does not have this weakness | Stated on every console. The owner's half of pairing moves to the phone with #174. Not built: a clinician client the server cannot change, which a Practice deployment needs before it holds a real patient's data (#222): #319 |
+| **It writes the audit log about itself** | The hash chain shows internal consistency, never completeness: whoever can rewrite the entries can recompute the chain, and withholding an event is undetectable | The chain head is evidence only when anchored outside the server — a person's note today, the phone later: #182. Signed clinician attestations are not planned (#217): a console the server serves would only report what an honest one did |
+| **No forward secrecy for sealed items** | Anyone who later obtains a clinician's long-term key can open every share ever sealed to it that is still stored | Shares require an expiry (at most 366 days today), each lineage keeps at most 50 versions, and withdrawal deletes the bytes; expiry alone does not. By decision, nothing the owner and a clinician send each other is served past 90 days, a newer share ends the one before it, and the server deletes whatever has ended (#228); not built: #332, #338 |
+| **Revocation binds an honest server** | Expiry and withdrawal stop future fetches on an honest server. They do not un-send what was read, and a colluding server can keep serving what it holds | A permanent, stated limit (#222); re-pairing with new keys protects what is sent afterwards |
 | **The bearer token travels on every request** | On plain HTTP anyone on the wire can replay it (never the content: that is encrypted) | Signed requests replace it: #186 |
-| **The clinician's browser holds plaintext** | Keys are wrapped at rest and wiped when idle; extensions and screenshots are beyond any control | Telling clinicians plainly: #262. A pinned client instead of a served page: #222 |
+| **The clinician's browser holds plaintext** | Keys are wrapped at rest and wiped when idle; extensions and screenshots are beyond any control | Telling clinicians plainly: #262. Not built: a clinician client the server cannot change, which a Practice deployment needs before it holds a real patient's data (#222): #319 |
 
 ## 7. Rules that hold everywhere
 
@@ -226,9 +243,13 @@ Excluded on principle, not deferred.
   signs, inside a capability the owner granted: assignments that name catalogue items, and, not yet
   built, dialogue that the sandboxed evaluator reads as data (COMPANION_DIALOGUE.md, Findings 4
   and 5).
-- **Be a Daymark-run service**, hold a key in escrow, reset a passphrase, phone home, or carry
-  telemetry, analytics or third-party origins.
+- **Hold a key in escrow**, reset a passphrase, phone home, or carry telemetry, analytics or
+  third-party origins.
 - **Diagnose, score risk, or carry a self-harm answer.** The phone stores check-ins as scores only,
   so the answer to the PHQ-9 self-harm item is never kept; share bundles and catalogue tools have no
   slot for one, and the catalogue's validator rejects any definition that tries.
 - **Become the source of truth.** It is a replica; the phone keeps its own copy.
+
+Hosting is not on this list. Daymark runs no service: every server is run by the person or the
+office it serves (#288). A hosted service would be a decision of its own, because it costs money and
+brings legal duties.

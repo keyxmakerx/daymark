@@ -147,6 +147,9 @@ Six kinds, exactly: **check-in**, **practice** (a therapeutic practice, never ph
 which is a goal), **journal entry**, **goal reached**, **project step**, and **life event** (§2.2).
 Sources are in §0.4. The list is closed; a seventh kind is a design decision, not a feature detail.
 
+A practice joins only when it keeps its own dated record, one the person can open and delete; today
+that is thought records alone (#283). Nothing is logged just so a star can exist.
+
 **Every kind is an act the person performed.** Nothing on the Sky is derived, detected, scored,
 inferred or synthesised. If a star is there, the person did the thing. That sentence is what makes
 the surface defensible.
@@ -175,7 +178,9 @@ A life event is a few words and a date, written by the person, and nothing else.
   and a life event is not good or bad.
 - **Deleted at any time, leaving nothing behind.** There is no edit in place: the person deletes and
   adds again.
-- **One day, not a range.** Whether ranges should exist is #155.
+- **One day, not a range.** In a sky where position is not time, there is no honest way to draw a
+  length (#155). A stretch is marked on a day the person picks, and their words can say how long it
+  lasted.
 - **The one star allowed to be louder** (§3.4): prominence follows *authorship*, not scoring.
 
 ### 2.3 The date a star sits on
@@ -266,8 +271,11 @@ days into kinds of act at exactly the zoom where they see a stretch of their lif
 - **The project thread is the only line on the Sky.** Each step carries its stub (§0.3 finding 3);
   the hairline joining steps of one project is not built, as it needs a project identity the layout
   deliberately does not carry: #152.
-- **A key** naming the forms is not built; whether it should exist now that colour means age is
-  #154.
+- **A key**, one tap away at every zoom, says in fixed words what the Sky's marks mean: where a star
+  sits means nothing; colour and brightness are age, and red means old, never bad; the spread of the
+  glow is the mood recorded with the star, if any, and every star gives the same light; the six
+  forms, each drawn beside its introduction line (§5.1); the bigger white star is a mark the person
+  placed; and the faint specks are sky, not the person's stars (#154). Not built: #362.
 
 ### 3.4 Mood is the character of the light, never its amount
 
@@ -409,7 +417,8 @@ is no exclamation mark on this surface. Any disclaimer or privacy sentence near 
 existing constants verbatim.
 
 Not built: each kind introducing itself once, ever, the first time one of its stars appears (on
-opening the Sky, never mid-entry; one per visit; dismissed by use), #149.
+opening the Sky, never mid-entry; one per visit; dismissed by use), #149; and the key (§3.3)
+carrying all six lines, for anyone who missed one, #362.
 
 ---
 
@@ -551,7 +560,7 @@ would be worse than admitting it is not.
 ### 7.6 Cognitive and situational
 
 No time limits, no auto-advance, nothing that pulls the eye; the Sky waits. No dead ends: Fit the
-whole sky, the list and the back arrow are always one tap away. Not built: a key (§3.3), #154.
+whole sky, the list and the back arrow are always one tap away. Not built: a key (§3.3), #362.
 
 ---
 
@@ -601,7 +610,9 @@ Two older components draw a year as a night sky on their own rules, which break 
 **Stars** view of the year in Insights (`ui/components/YearInStarsGrid.kt`) and the year review's
 quarter pages (`ui/insights/ReviewYearScreen.kt`). There, star size and glints follow mood, a day with
 no entry is a faint speck, and the ground is still `#16150F`. The year review borrows `SkyField` for
-its backdrop and nothing else. What to do about them is #148.
+its backdrop and nothing else. Not built: one year sky in place of both, on this document's rules
+(#148): its look, signed off from a prototype first, #347; its rules in `sky/`, #349; the year
+view, #350; and Review my year, #351.
 
 ---
 
@@ -635,10 +646,13 @@ check is first shown to catch a planted violation (`CLAUDE.md` §5).
 1. **Where the Sky lives:** the More hub, not a tab. It is the most identifying surface in the
    product (§6.5), so reaching it is a deliberate act.
 2. **An export:** none. The year review's "Save keepsake" was removed; §6.4 governs any future one.
-3. **Life events spanning dates:** open, #155.
+3. **Life events spanning dates:** none. A life event is one day (§2.2, #155).
 4. **Mood colours in a custom palette:** equalised (§7.1).
 5. **The year review against these rules:** it changed; its finale shows two facts that rank nothing,
    the mood chosen most often and the date the person started. Its quarter pages are §9.
-6. **Very small screens:** asked about month rows, which no longer exist; restate or close, #155.
+6. **Very small screens:** closed (#155). It asked about month rows, which no longer exist.
+   Overlapping stars are separated by zoom, a tap picks the nearest (§4), and the list reaches every
+   star (§7.5).
 
-A north star, a value the person names that is never reached and never brighter, is deferred: #155.
+There is no north star, a value the person names that is never reached and never brighter: every
+star is an act the person performed (§2, #155).

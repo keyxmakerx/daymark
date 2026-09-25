@@ -47,6 +47,8 @@ The AAD binds the blob to its `lineage` and `version`, so a blob served under th
 path fails to decrypt. Both fields are recoverable from the request path, so a reader can
 always reconstruct the AAD.
 
+Not built: a padded envelope, so the server stores only a rounded size (#315, decided in #214).
+
 ### 1.2 Key params (non-secret, published)
 
 `PUT /v1/keyparams` stores this JSON verbatim; readers `GET` it to learn the salt:
@@ -92,6 +94,10 @@ rotated token, and the old one stops working at once. If the operator later chan
 `DAYMARK_AUTH_TOKEN`, the new environment value is accepted from the next start. The server stores
 only a digest of the accepted token.
 
+A server serves one owner: the token belongs to that owner, and whoever holds it reaches every
+lineage and the one `keyparams` on the server. Each stored journal belongs to exactly one owner,
+with its own key parameters, by decision (#219). Not built: #318.
+
 Rate limiting and lockout key on the client address: the socket peer, unless that peer is a proxy
 named in `DAYMARK_TRUSTED_PROXIES`, in which case the nearest `X-Forwarded-For` entry that is not
 itself a trusted proxy. With the setting empty (the default) behind a proxy, every client shares one
@@ -135,8 +141,12 @@ head → decrypt (the AEAD verifies integrity). A wrong passphrase makes decrypt
 oracle beyond that.
 
 Sync is single-writer and last-snapshot-wins: the newest full snapshot is authoritative, and rows are
-never merged, because the app's schema has no per-row ids or timestamps. Whether that stays so is a
-decision: #200.
+never merged, because the app's schema has no per-row ids or timestamps. That is settled (#200): the
+phone is the journal's one writer (until it syncs, the command-line tool uploads its exported
+backup), and other devices read it. What the web console creates travels as new records, each with a
+random id, in a separate, add-only encrypted lane, and the phone takes each record in exactly once.
+No device silently replaces a copy it has not seen. Not built: the lane and its format (#345), the
+phone taking records in (#346), and the refusal to replace a copy it has not seen (#344).
 
 ## 4. Conformance
 

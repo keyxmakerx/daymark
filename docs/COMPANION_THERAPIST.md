@@ -73,6 +73,9 @@ the owner opted in to that kind of notice.
 - Only the owner mints an invitation (`POST /v1/invite`, bearer token): a random 256-bit invitation id
   and secret for one relationship, lasting 72 hours by default. The server stores the secret only as
   an Argon2id hash.
+- A clinician may also start a connection ("connect a patient"): a request that lasts about ten
+  minutes and carries no secret. The patient's own device then mints the invitation and runs the
+  same pairing, drawing the code and approving (#215). Not built: #328.
 - The link, `{base}/portal/invite#id=…&s=…`, carries both values in the fragment, which browsers never
   send to a server — so they reach no request line, proxy log or `Referer`.
 - The owner console shows the link for the owner to pass on out of band. If SMTP is configured and the
@@ -117,12 +120,15 @@ Each share version gets a fresh content key. The bundle is encrypted with XChaCh
 content key is sealed to the clinician's pinned X25519 key, and the owner signs the transcript
 `context|shareId|version|recipientFp|expiry|ownerSigningFp`, which is also the associated data
 (`lib/share/sharecrypto.ts`). The expiry defaults to 30 days and can be set from 1 to 365 in the
-console; the server refuses a missing or past expiry and clamps anything beyond 366 days. How long
-shared data should live, and whether expired bytes are deleted, is open (#228).
+console; the server refuses a missing or past expiry and clamps anything beyond 366 days. By
+decision (#228), a new share covers the last 30 days and ends after 14 days unless the owner
+chooses otherwise, never later than 90 days, and the server deletes the bytes of whatever has
+ended. Not built: #339 in the console, #332 and #338 on the server, and the 30-day window, #225.
 
 A share can be refreshed as the owner records more: each refresh is a new version (append-only), and
-the clinician always reads the newest. Its scope changes only by the owner's action, and nothing
-renews itself.
+the clinician always reads the newest. Older versions stay readable by number until their own
+expiry; by decision, a newer version ends the earlier ones (#228). Not built: #332. Its scope
+changes only by the owner's action, and nothing renews itself.
 
 ### 5.4 The clinician reads
 
@@ -147,7 +153,7 @@ and when idle. What cannot be revoked is therefore at most one session's worth o
 The server sees ciphertext, public keys and routing metadata, never a key, plaintext or which records a
 clinician looked at ([COMPANION_SECURITY.md](COMPANION_SECURITY.md) §2, §3 T1). The metadata still
 matters: the existence and rhythm of a relationship leak to whoever runs the server, and sizes are not
-padded (#214).
+padded yet (Not built: #315).
 
 ## 7. Game plans — the clinician writes back
 
@@ -179,9 +185,10 @@ or declining it — in the web console (#231) or on the phone (#138). The check 
 ## 8. Authentication and sessions
 
 See [COMPANION_SECURITY.md](COMPANION_SECURITY.md) §5. In short: the six-digit code is the only
-sign-in; passkeys are not built (#205); the code's seed is stored on the server **in the clear**, not
-hashed, because a verifier must recompute codes; the code never unlocks the reading key; and sessions
-last 15 minutes idle and 8 hours at most.
+sign-in; passkeys sign people in and never unlock keys, with codes kept as the fallback (#205; not
+built: #326); the code's seed is stored on the server **in the clear**, not hashed, because a
+verifier must recompute codes; the code never unlocks the reading key; reading a share and
+publishing need only the session, by design; and sessions last 15 minutes idle and 8 hours at most.
 
 ## 9. Revocation, expiry and re-keying
 
@@ -190,15 +197,16 @@ make future access revocable against an honest server, and keep what remains min
 
 | Mechanism | What it does | Against a colluding server? |
 |---|---|---|
-| Expiry | After the deadline the server answers 410 | No — an honest server only |
+| Expiry | After the deadline the server answers 410. Deleting the bytes of whatever has ended is decided (#228); not built: #338 | No — an honest server only |
+| Replacement | A newer share ends the ones before it, by decision (#228). Not built: #332 | No — an honest server only |
 | Withdrawal ("Revoke" in the owner console) | The server marks the share withdrawn, deletes its bytes, answers 410 and records `share.revoke` | No — an honest server only |
 | A new content key per version | Protects later versions only from someone holding an old content key | Not against the clinician's own key |
 | Re-pairing to new keys | Future shares are sealed to the new key only | **Yes — the only real revocation** (R3) |
 
 The three honest guarantees: future fetches stop on an honest server; data published after re-keying
 is unreadable to the old key; and plaintext already decrypted is never recallable, as with a printed
-page. Whether these stated limits are the permanent position: #222. A clinician who loses their key
-needs a fresh invitation and pairing; there is no escrow.
+page. They are the permanent position (#222). A clinician who loses their key needs a fresh
+invitation and pairing; there is no escrow.
 
 ## 9a. The clinician's own exit, and the case it does not cover
 
@@ -245,8 +253,10 @@ Three places, none of them a message:
 | The sharing strip on every owner screen | *…ended their access on {date}. Nothing you send now would be read.* — replacing the "Sharing real entries with…" line |
 | The next attempt to share with them | Refused before anything is sealed, naming the date and the two things the owner can do: withdraw what is still published, or invite them again |
 
-There is no email and no notification: a message saying a therapy connection ended, arriving at an
-inbox that may be shared or watched, is a safety trade-off about real people (#216).
+There is no email and no notification today. An owner may opt in to one email when a clinician ends
+their access: the existing "something to review" notice, which names no event, person or
+relationship, because a message saying a therapy connection ended could arrive at an inbox that is
+shared or watched (#216). Not built: #329.
 
 ### The case this does not cover: a clinician who is dismissed
 
@@ -270,10 +280,12 @@ remove-member confirmation says removal ends a standing in the practice and nobo
 
 See [COMPANION_SECURITY.md](COMPANION_SECURITY.md) §9: events, never content; owner-readable only;
 hash-chained by the server, so tampering is detectable and withholding is not; signed clinician
-attestations are not built (#217).
+attestations are not planned (#217).
 
 ## 11. Honest limits
 
 See [COMPANION_SECURITY.md](COMPANION_SECURITY.md) §11. The ones a clinician meets first: the portal
-is a lower-assurance path, because the server serves the code that unwraps their keys; revocation
-binds an honest server only; and the sign-in code is a phishable secret the server holds in the clear.
+is a lower-assurance path, because the server serves the code that unwraps their keys, and a
+clinician client whose code the server cannot change is not built (#319, decided in #222);
+revocation binds an honest server only; and the sign-in code is a phishable secret the server holds
+in the clear.

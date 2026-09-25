@@ -85,7 +85,9 @@ provenance: {
 - **Shares and exports:** no score is shown without its label. The clinician's views look each shared
   result's tier up in the catalogue, and mark a result from an instrument they do not know as unknown
   rather than guess; the phone's PDF report lists every tool with its tier and prints the Custom
-  disclaimer.
+  disclaimer. The phone's three check-ins (PHQ-9, GAD-7, WHO-5) are known by name for display only,
+  never run, assigned or published in the Companion (#264). Not built: #340; until then a shared
+  result from one of them is marked unknown.
 
 ## Who may publish what
 

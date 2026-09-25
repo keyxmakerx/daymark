@@ -98,16 +98,24 @@ example. Break anything load-bearing on purpose and confirm the test that names 
   someone who was not there.
 - One focused change per pull request. Say what and why, include screenshots for UI changes, update
   `CHANGELOG.md` under *Unreleased*, and name the issue it closes.
-- Automated agents work on `claude/*` branches and never push to `main`.
+- Automated agents work on `claude/*` branches, never push to `main`, and never add a
+  `Signed-off-by` line (see below).
 
 ## Developer Certificate of Origin
 
 By contributing, you agree that your contributions are licensed under **GPL-3.0-only** (inbound =
-outbound). Sign off your commits (`git commit -s`) to certify the
-[DCO](https://developercertificate.org/). Whether to enforce this with a check is an open decision:
-#296.
+outbound). If you contribute from outside the project, sign off every commit (`git commit -s`) to
+certify the [DCO](https://developercertificate.org/): your own statement that the code is yours to
+give. Not built: a check on pull requests from forks that names any commit without one (#368).
+
+Automated sessions never sign off. The sign-off certifies where code came from, which only a person
+can do, and a session must never make that statement in the maintainer's name. The project's own
+commits carry none; the maintainer merging them stands in for it (#296).
 
 ## Where to start
 
 Issues in the [roadmap](https://github.com/keyxmakerx/daymark/issues/132) without `needs-decision`
 or `needs-a-person` are ready to pick up. Small ones say so in their title or body.
+
+Translations are not taken yet. Offering a language takes a translator and a separate reviewer, both
+people fluent in English and that language; machine translation is never used (#246).

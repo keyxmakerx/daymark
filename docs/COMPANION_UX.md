@@ -1,11 +1,12 @@
 # Daymark Companion — UX and copy rules
 
-How the Companion's web consoles behave and what they say: the owner console, the clinician portal,
-the practice console and the server admin console, all built from `companion/web/`. Every sentence a
-person reads there is fixed copy written by a person and held as a constant — `pairing/copy.ts`,
-`owner/sharing.ts`, `therapist/leave.ts`, `practice/copy.ts` and their siblings — so a test can read
-it and a reviewer can find it (CLAUDE.md §0). Visual rules: [COMPANION_DESIGN_SYSTEM.md](COMPANION_DESIGN_SYSTEM.md).
-Threat model: [COMPANION_SECURITY.md](COMPANION_SECURITY.md). Pairing:
+How the Companion's web consoles behave and what they say: the owner console, the clinician console,
+the practice console and the server console, each named for who uses it (#310) and all built from
+`companion/web/`. Every sentence a person reads there is fixed copy written by a person and held as
+a constant — `pairing/copy.ts`, `owner/sharing.ts`, `therapist/leave.ts`, `practice/copy.ts` and
+their siblings — so a test can read it and a reviewer can find it (CLAUDE.md §0). Visual rules:
+[COMPANION_DESIGN_SYSTEM.md](COMPANION_DESIGN_SYSTEM.md). Threat model:
+[COMPANION_SECURITY.md](COMPANION_SECURITY.md). Pairing:
 [COMPANION_PAIRING.md](COMPANION_PAIRING.md).
 
 Section numbers are kept from the earlier, longer design because code cites them, so the gaps are
@@ -24,9 +25,10 @@ been built differently. The old text is
    line.
 2. **Honesty is a feature, not fine print.** Every limit the security model admits has a plain
    sentence at the moment it matters: the revoke caveat at the revoke click (§10.1), "it does not
-   reach copies" when a clinician leaves (§7.7). No page polices itself — trust in a page comes from
-   something outside it (the image digest on the sign-in screen, §10.4), never from the page's own
-   claim about its behaviour.
+   reach copies" when a clinician leaves (§7.7). No page polices itself. Trust in a page comes only
+   from code the server does not deliver, or from the operator checking what they run against a
+   signed release (not built: #241), never from what the page reports about itself — the image
+   digest on the sign-in screen included (§10.4, #222).
 3. **Non-diagnostic, everywhere.** Every score, band, plan and self-check surface carries fixed,
    client-rendered "a self-check, not a diagnosis" framing, and the honesty gate refuses an instrument
    definition without it. No risk verdicts, no cut-offs, no automatic escalation; a correlation is
@@ -35,8 +37,10 @@ been built differently. The old text is
    all", no dimmed "decline", no urgency, no "your clinician is waiting". The safe default is to
    share less, for less time (§9).
 5. **Every surface says what it is for.** The owner console shares, pairs, opens a backup and runs
-   self-checks. Not built: the fuller desk-side viewer an earlier design proposed — a year view,
-   period comparison, journal search, printing a report — and whether to build it is #247.
+   self-checks. It is a desk-side complement to the phone (#247): printing first, then bigger
+   read-only views, and no view grades a day. Writing and the Sky stay on the phone. Not built:
+   printing or saving the report from the browser, #334; a month calendar of the person's own
+   entries, #335; journal search, sleep trends and the dashboard's other views, #245.
 6. **Nothing from anywhere else.** No CDNs, remote fonts, analytics or third-party origins; the page
    may talk only to the server that served it ([COMPANION_SECURITY.md](COMPANION_SECURITY.md) §6).
 
@@ -137,8 +141,11 @@ As built (`owner/ShareBuilder.svelte`): four record types — self-checks, moods
 unchecked, each with its count; *"Strip free-text notes (recommended)"* on by default; self-checks go
 as scores and bands only; an expiry of 1–365 days. The share is signed and sealed to the clinician's
 pinned key in the browser. No instrument in the Companion has a self-harm item — the honesty gate
-refuses one. The defaults are an open decision: the design asked for a short expiry (about 14 days)
-over the last 30 days, and the code offers 30 days over everything: #228.
+refuses one. The defaults are decided (#228): a new share covers the last 30 days and ends after 14
+days unless the owner chooses otherwise, and never later than 90; the code still offers 30 days over
+everything. Not built: those defaults in the console, #339, and the 30-day window, #225. A share is
+named where it is built, as access that ends on its date or when revoked, where a report is a copy
+handed over (#305). Not built: #337.
 
 ### 9.2 The consent screen
 
@@ -146,12 +153,15 @@ Not built: #225. Before anything is sealed, it states in plain words what is goi
 and the window, "scores and bands only — no individual answers"), to whom, and the date access ends;
 then, with **Cancel** and **Share this** equally weighted:
 
-- *"You're sending real entries to another person. Once they open it, you can't un-see it for them —
-  like a PDF you hand over."*
+- *"You're sending real entries to another person. Once they open it, you can't un-see it for
+  them."*
 - *"You can revoke anytime. That blocks future access on an honest server. For the strongest
   protection against a tampered server, re-pair with a new key."*
 - *"Your server can see that a share exists, how big it is and when it was sent — not what is in
   it. It cannot hide that you share with someone."*
+
+It says what a share is in the share builder's own words (#337), never by likening it to a report,
+which is a copy handed over (#305).
 
 ## 10. Privacy microcopy and trust signals
 
@@ -247,10 +257,14 @@ sections — *What you are being trusted with*, *What the server can see*, *What
 section loses its only clause, if a clause makes an assurance claim, or if one paraphrases the
 lower-assurance banner, which renders unconditionally and is retyped nowhere.
 
-The digest of the image serving the page is a control, not a footnote: it sits above the credential
-fields, whole (a truncated hash cannot be compared), in mono, copyable in one click. The page never
-compares it and never says it is right — a tampered page would report that it matched — so it is
-shown to be checked somewhere that is not this page. "Copied" is a word, not a tick.
+The digest of the image serving the page sits above the credential fields, whole (a truncated hash
+cannot be compared), in mono, copyable in one click. It is the page's own report: information for
+whoever runs the server, never a control or a source of trust, because a changed page can print the
+right value (#222). The page never compares it and never says it is right — a tampered page would
+report that it matched. Trust in a page comes only from code the server does not deliver, or from
+the operator checking what they run against a signed release (not built: #241). "Copied" is a word,
+not a tick. Not built: dropping the contract clause that calls the digest a control, and the
+banner's request to verify it: #320.
 
 ## 11. Empty, loading, error and refusal states
 
@@ -283,7 +297,10 @@ shown to be checked somewhere that is not this page. "Copied" is a word, not a t
   `StatusPill` differ by form as well as hue.
 - **Motion.** The global `prefers-reduced-motion` block in `app.css` neutralises every transition.
   Nothing on a consent or security screen moves in a way that could read as pressure.
-- **Language.** Every string is a constant in a module, not a catalogue, so nothing is translatable
-  yet; whether to translate, and who checks a translation, is open: #246.
+- **Language.** English only, for now (#246). Every string is a constant in a module, not a
+  catalogue. A language is added only when a named human translator and a separate named human
+  reviewer, both fluent in English and that language, have checked every string. Machine
+  translation is never used, and the questionnaires appear only in their official published
+  translations.
 - Not built: a text or table equivalent for every chart: #259; a rendered accessibility check and
   computed contrast in CI: #254; a high-contrast mode: #253.

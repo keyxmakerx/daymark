@@ -193,8 +193,8 @@ optional context notes (sleep, caffeine, time of day) all need results that are 
 The catalogue is four self-authored tools — two scored self-checks and two guided exercises — and
 Steady Attention. The ledger with each one's licence and anchor is
 [companion/INSTRUMENTS.md](../companion/INSTRUMENTS.md). The phone keeps its own check-ins (PHQ-9,
-GAD-7, WHO-5; see [INSTRUMENTS.md](INSTRUMENTS.md)). Whether the Companion should also carry
-instruments that are free with attribution, with their notices, is a decision: #264.
+GAD-7, WHO-5; see [INSTRUMENTS.md](INSTRUMENTS.md)). The Companion's catalogue stays self-written:
+it adds no published questionnaire, even one that is free with attribution (#264).
 
 ### 4.2 Explicitly excluded (never add)
 
@@ -218,8 +218,8 @@ with word-boundary matching so ordinary words do not trip it.
 3. **Version discipline.** Any change to a definition, even to its wording, bumps
    `instrumentVersion`, so a result can always be attributed to the definition that produced it.
 4. **The ledger is law.** Only public-domain, openly licensed or self-authored content; never alter
-   validated wording; self-authored tools say so. An instrument that needs a verbatim notice needs the
-   notice shown and checked before it can be added (#264).
+   validated wording; self-authored tools say so. The catalogue itself is self-written, so it adds
+   no published instrument and no verbatim notice to show (#264).
 5. **"Self-check, not a diagnosis" cannot be switched off** by a definition: the validator requires
    the framing, and the screens around the runner are fixed text.
 6. **Original tasks stay original.** A new timed task is self-authored — our stimuli, timings and

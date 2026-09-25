@@ -18,9 +18,9 @@ anchor below. Rename an anchor and the build fails.
 ## Shipped
 
 All four catalogue tools and the one timed task are **self-authored** (original wording
-throughout), so no third-party notice is required. Whether instruments that are free with
-attribution (WHO-5, the ASRS with its verbatim WHO notice) should be added, with the notice shown
-and checked, is an open decision: #264.
+throughout), so no third-party notice is required. The catalogue stays self-written (#264): it
+adds no published instrument, even one that is free with attribution (WHO-5, the ASRS with its
+verbatim WHO notice).
 
 <a id="wellbeing-selfcheck"></a>
 

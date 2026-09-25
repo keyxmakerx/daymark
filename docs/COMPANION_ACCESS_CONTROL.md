@@ -97,6 +97,16 @@ granted a key*, not *is technically permitted to hold one by role*.
 | **Org admin** | practice membership, roles, revocation, audit review | **No** — control/monitoring only |
 | **Platform sysadmin** | runs the server/infra | **No — by design.** Ciphertext + ops metadata only |
 
+In an office's own words (#288): the receptionist is the **Front desk**, the office administrator is
+the **Org admin**, and a doctor is a **Psychologist / clinician** or a **Psychiatrist**. A doctor
+who assesses someone and refers them on does so in an *assessing* care relationship, not in a role
+of its own ([Cross‑provider sharing & referrals](#cross-provider-sharing--referrals)).
+
+On a server that runs one practice, one person may hold the platform sysadmin role and the org admin
+role, as two separate roles (#208). That is not the god admin: neither role carries a key, and
+content still needs a patient's grant. Not built: #314 and #322, which give an administrator an
+account of their own.
+
 ## Consent model
 
 **Status:** built: per-person consent — the owner invites and pairs each clinician and chooses what to
@@ -129,8 +139,15 @@ handing another their key.**
 - **Read** — the second provider can decrypt only once they hold a **grant**: the
   patient (or the care‑team org‑consent) put them on the team. Then a specific
   assessment/summary/note can be shared to them.
-- **Bidirectional and audited** — the same both ways, and every open is recorded
-  in the patient‑readable audit log.
+- **Bidirectional and audited** — the same both ways, and opens are recorded by
+  the server in the patient‑readable log, which shows tampering, never what was
+  left out (#217).
+- **Made by people, never by software** — a doctor who assesses someone and
+  recommends a therapist does so in an **assessing** care relationship, which
+  ends by itself once the person has accepted or declined, unless they keep that
+  doctor on. The assessing clinician chooses whom to recommend and the person
+  decides; the Companion never suggests, ranks, filters or matches clinicians,
+  and has nothing to match on (#288).
 
 Referrals are free; **reading requires a grant.** This keeps the patient the root
 of consent while supporting real care‑team collaboration.
@@ -204,21 +221,28 @@ compliant when they run it right.
   relationship and, separately, per practice for the org admin's review (shipped).
 - **Integrity** — signed grants (shipped); signed snapshot manifests (not built: #138);
   clinician notes append‑only/amendable (not built: #300).
-- **Person/entity authentication** — finish **WebAuthn** (today a 501 stub: #205); MFA
-  everywhere; step‑up for sensitive actions.
+- **Person/entity authentication** — a six‑digit code at sign‑in (shipped);
+  passkey sign‑in for every account, with codes kept as the fallback (#205; not
+  built: #326); a fresh code, checked by the server, before a member is added or a
+  role changed (shipped).
 - **Transmission security** — TLS at the proxy + E2E payloads (shipped).
 - **Administrative/physical** — *out of software's hands*: risk assessments,
   written policies, workforce training, **BAAs** (only if we ever host),
   breach‑notification procedures. Document what the practice must own (#284).
 
 > **The gate:** an external HIPAA Security‑Rule assessment **and** an independent
-> crypto/RBAC audit **before any real patient** (#284).
+> crypto/RBAC audit **before any real patient** (#284). Practice use with real
+> patients also needs a clinician client the office's server cannot change
+> (#319), and no patient typing their passphrase into a page the office serves
+> (#174, #321), as decided in #222.
 
 ## The annoyance budget
 
 **Status:** the rule is encoded in the practice capability model (`practice/capabilities.ts`,
-`frictionRank`) and tested; a server-verified step-up does not exist yet, so nothing is charged
-"step-up" today (#205).
+`frictionRank`) and tested. A server-checked step-up is built for adding members and changing roles:
+a fresh, unspent six-digit code (`routes/OrgRoutes.kt`). Opening a share and publishing need the
+session only, by decision (#205). Not built: a passkey as step-up (#326), and step-up for admitting
+someone to a care team (#289).
 
 Least privilege **will** be annoying. There is no version of this that isn't, and pretending
 otherwise is how security designs get quietly gutted the first time someone important is
@@ -233,10 +257,10 @@ to the practice" has mispriced both — and users will route around the expensiv
 |---|---|---|
 | Read content you already hold a grant for | **None** — session auth only | The grant *was* the decision; charging again teaches people to hate the system |
 | Author a note / game plan | None beyond session | Routine clinical work, auditable, reversible |
-| Grant, extend, or widen a share | **Step-up (MFA)** | Creates new read capability — the actual risk |
+| Grant, extend, or widen a share | **Step-up (MFA)** when a clinician admits someone to a care team (#289); for the owner, their signature on the grant is the decision | Creates new read capability — the actual risk |
 | Add/remove a practice member, change roles | **Step-up (MFA)** | Changes who *can* be granted |
 | Revoke / kill switch | **Deliberately cheap** | Never make the safe direction expensive |
-| Break-glass / emergency access | **Maximum** — justification + loud, immediate notification | Should feel like breaking glass |
+| Break-glass / emergency access | **Maximum** — justification + loud, immediate notification | Should feel like breaking glass. It never opens content, a key or anyone's credentials to an administrator (#288) |
 
 Corollaries that follow from the same principle:
 
@@ -260,15 +284,18 @@ a clinician **departing** with clients who must not be stranded.
 
 **A referral and a transfer are the same control-plane object at two points in its life, and
 neither moves a key.** One `care_relationships` table (patient, member, `care_role` of
-primary/co-treating/covering/supervising, status, `ended_reason`). A referral *proposes* a
-relationship; a transfer *ends* one and proposes another. Because none of it mints read capability,
-reassignment stays cheap — session auth and an audit entry, no step-up. That cheapness is the payoff
-for keeping roles and keys independent in the first place.
+primary/co-treating/covering/supervising/assessing, status, `ended_reason`). A referral *proposes* a
+relationship, and a person always makes it, never software (#288); a transfer *ends* one and
+proposes another. Because none of it mints read capability, reassignment stays cheap — session auth
+and an audit entry, no step-up. That cheapness is the payoff for keeping roles and keys independent
+in the first place.
 
-Two hard edges:
+Three hard edges:
 
 - **`covering` must auto-expire.** Without a hard end date, covering a two-week leave quietly
   becomes permanent access.
+- **`assessing` ends by itself too**, once the person has accepted or declined the referral, unless
+  they choose to keep that doctor on, for example as co-treating (#288).
 - **A transfer must never route through break-glass.** A planned departure is not an emergency, and
   that is the one door this design must not let it open.
 
@@ -315,9 +342,9 @@ Recurring questions, and where they were already settled:
 | "Least privilege without a god admin?" | The **three-plane rule** — admins live in control + monitoring, **never** the data plane | [Three planes](#the-three-planes) |
 | "Can a specialist see the safety plan?" | Not today (no `INTERNET` in the default build). If ever: an owner-created, curated, revocable share like anything else — never automatic | This table |
 
-**Still open:** groups *finer than* an org — a specific care team, a therapy group cohort, or a
-client-defined circle that isn't a practice. Org-consent covers "my care team at Practice X"; it does
-not model a group whose membership the *client* curates, or one spanning two practices (#301).
+**Groups smaller than a practice** (decided in #301): the one group smaller than a practice is a
+person's own care team (#289). There is no group of patients, and none spanning two practices. A
+person's circle is their own list of connections (#174).
 
 **Settled, and recorded elsewhere so it isn't reopened:** location/presence sharing is
 **permanently excluded on principle**; timed/video/puzzle test items are **not built on the phone**;
@@ -334,5 +361,7 @@ in and a reasoned one doesn't.
 - **Revocation can't un‑read** already‑decrypted content.
 - **The browser portal is not zero‑knowledge against a hostile server** that
   serves malicious JS — an inherent web‑crypto limit, documented in
-  [COMPANION_SECURITY.md](./COMPANION_SECURITY.md).
+  [COMPANION_SECURITY.md](./COMPANION_SECURITY.md). Practice use with real
+  patients therefore needs a clinician client the server cannot change (#222;
+  not built: #319).
 - **"Compliant" is the org's, not the software's.** We provide safeguards.

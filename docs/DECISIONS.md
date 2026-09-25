@@ -113,9 +113,11 @@ promises opacity, and it carries a liability in mental-health software in partic
 
 This is about the arbiter, not the companion (D1b), which may deserve a name.
 
-The clinician platform's name is still open: #310. "Heimdall" was rejected. A well-known
-self-hosted app owns it, and Heimdall's defining attribute is seeing and hearing everything, which is
-backwards for a product whose pitch is that it cannot see your data.
+The clinician platform has no separate brand (#310). It is Daymark Companion, and each of its four
+pages is named for who uses it: the owner console, the clinician console, the practice console and
+the server console. "Heimdall" was rejected. A well-known self-hosted app owns it, and Heimdall's
+defining attribute is seeing and hearing everything, which is backwards for a product whose pitch is
+that it cannot see your data.
 
 ---
 
@@ -156,8 +158,9 @@ sentence to the person, and it is not built yet: #188. The two device checks are
 
 Direction, from the evidence:
 
-- **Implementation intentions attach to the next concrete action**, not to the project. Whether steps
-  get an if-then cue is open: #184.
+- **Implementation intentions attach to the next concrete action**, not to the project. Each step
+  can carry an optional "When…" line in the person's own words, and the step itself is the action
+  (#184). The line is never a reminder or a deadline. Not built: #348.
 - **Learning projects score on process, not completion.** No target, no percentage.
 - **A project is a folder for steps**, not a standalone aspiration. Abstract goals are what people
   with depression already over-produce.
@@ -183,6 +186,7 @@ Recorded so they are not re-proposed as obvious wins.
 | **Note excerpts in the Companion** | Non-disclosure in therapy is normal and driven by the fear of being seen. This protects a place to write without an audience. |
 | **Inferring reminder quality from app opens** | A notification alone makes opening far likelier. That metric moves with nothing underneath improving. The signal must be declared by the person. |
 | **Lapse-referencing notifications** | "You haven't written in 3 days" is the only documented harm signal in the notification literature. |
+| **Sleep sensing by microphone, sonar or phone use** | An all-night microphone asks for more trust than a mood journal should. Snore detection misses quiet sleepers, and the classifier proposed for it was machine learning. A sleep window guessed from phone use is inferred, where the diary is declared (#212). |
 | **A free-text chat box in the companion** | See D1b. |
 | **Inferring clinical state from usage** | See D1a. |
 | **Any signal that makes the arbiter ask more** | See D1a. |
@@ -276,8 +280,21 @@ The principles every clinical feature is judged against:
 
 **The compliance gate is non-negotiable.** Before any real patient's data is handled by a clinician
 using Daymark, it needs an external HIPAA Security-Rule assessment and an independent audit of the
-RBAC, key handling and recovery flows: #284. Scope, editions and hosting are open: #288. The
+RBAC, key handling and recovery flows: #284. It also needs a clinician client the office's server
+cannot change, and no patient typing their passphrase into a page the office serves (#222). Not
+built: the clinician client (#319), and pairing and sharing from the phone (#174, #321). The
 clinical layer's design is `docs/COMPANION_ACCESS_CONTROL.md`, and its work is tracked in #143.
+
+**What the Companion is for (#288).** It is self-hosted: a person may run their own, and each office
+runs its own behind its own reverse proxy. Daymark runs no service; a hosted one would need a
+decision of its own. It is one product in three shapes (Solo, Paired and Practice), and each
+server's shape is a setting that switches on only what that shape needs. An office may be one
+clinician, or several clinicians with receptionists, an administrator, and doctors who assess and
+refer. Every referral is a person's decision, never software's. No role, the administrator's
+included, reaches anyone's credentials, keys or content. The old one-clinician scope lock is
+retired, and the gate above still stands. Not built: the shape setting (#330), each person's own
+credential on an office server (#331), one sign-in per clinician (#314), and the admin console on
+an address of its own (#323).
 
 Source: [the July product direction](https://github.com/keyxmakerx/daymark/blob/968638594f10f6a4424415f8a5c14fd8eb4aaa00/docs/PRODUCT_DIRECTION.md).
 
@@ -296,5 +313,51 @@ Smaller decisions were made in GitHub issues and are recorded there:
 - **#110:** the pairing rate limit is split.
 - **#111:** a matching code on a fresh invitation can replace a pinned key.
 - **#112:** one local notice per invitation.
+- **#148:** the year view and Review my year become one year sky on the Sky's rules.
+- **#154:** the Sky gets a key one tap away, which says red means old, never bad.
+- **#155:** a life event stays one day, small screens need nothing new, and there is no north star.
+- **#159:** placement and the phrase pool stay dormant until Daymark starts an ask of its own.
+- **#166:** "Take a moment" lists "Not right now" first, stays still, and never says how the
+  person's day was.
+- **#171:** the Companion logs at `info` by default.
+- **#175:** the crisis screen links to the safety plan, and the plan can be printed behind a
+  warning.
+- **#184:** a project step can carry an optional "When…" line in the person's own words, never a
+  reminder.
+- **#194:** the sync build ships on GitHub releases first, then as its own F-Droid listing.
+- **#200:** sync stays single-writer, and other devices only add records through an add-only lane.
+- **#203:** a person's own views describe what was logged and never mark it.
+- **#205:** passkeys sign people in, with codes as the fallback, and never unlock keys.
+- **#208:** everyone signs in with their own account, and access comes back through the person's own
+  key, never by email.
+- **#212:** sleep sensing stops at the on-body breathing check and its overnight version.
+- **#214:** every encrypted item is padded on the device, so the server learns only a rounded size.
+- **#215:** a clinician may start a connection, and the owner's device always approves it.
+- **#216:** a clinician's ending is emailed only on opt-in, and the email names no event.
+- **#217:** no signed clinician attestations, and every surface says the access log proves
+  tampering, never completeness.
+- **#219:** each stored journal belongs to exactly one owner, and no other credential can reach it.
+- **#222:** revoking binds only an honest server, for good, and real patients wait for clients the
+  office's server cannot change.
+- **#228:** a share lasts 14 days by default and at most 90, and the server deletes what has ended.
+- **#232:** the name stays Daymark, and the application id becomes `io.github.keyxmakerx.daymark`
+  before the first public release.
+- **#246:** English only, until a named human translator and a separate human reviewer take on a
+  language.
+- **#247:** the owner's web console adds printing and bigger read-only views, never writing or the
+  Sky.
+- **#251:** titles use a bundled Fraunces, and all other text keeps the platform's own sans.
+- **#263:** the consoles get a type scale and motion tokens, and no icon set or global search.
+- **#264:** the Companion offers only self-written questionnaires and names the phone's published
+  ones when shared.
+- **#283:** only a practice that keeps its own dated record becomes a star, which today means
+  thought records.
+- **#288:** the Companion is self-hosted, one product in three shapes, and no office role reaches
+  anyone's credentials, keys or content.
+- **#294:** conduct reports use GitHub's own tools, and no email address is published.
+- **#296:** outside contributors sign off their commits, and automated sessions never do.
+- **#301:** the one group smaller than a practice is a person's own care team.
+- **#305:** a report is a copy you hand over, and a share is access you can end.
+- **#310:** it stays Daymark Companion, with each page named for who uses it.
 
-How pairing works, including those rules, is in `docs/COMPANION_PAIRING.md`.
+How pairing works, including the pairing rules above, is in `docs/COMPANION_PAIRING.md`.

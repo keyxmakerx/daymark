@@ -38,11 +38,11 @@
  * A component that reaches for a --c-* primitive has skipped the layer where the
  * meaning lives, and should be treated as a bug.
  *
- * Fonts: the design calls for self-hosted Fraunces (display) + Inter (text) variable
- * woff2, subset and served 'self'. Until those binaries are vendored into web/fonts/
- * (see web/fonts/README.md), we fall back to a high-quality system stack so the build
- * stays fully offline and CSP-clean. Drop the woff2 files in and uncomment @font-face.
- * No CDN, no remote fonts.
+ * Fonts: by design (#251), the wordmark and titles use Fraunces, bundled and served
+ * 'self', and all other text uses the platform's own sans; Inter is not part of it. No
+ * font file is bundled yet and --font-text still names Inter (#364), so display type falls
+ * back to a system serif stack and the build stays fully offline and CSP-clean. No CDN,
+ * no remote fonts.
  */
 
 /*

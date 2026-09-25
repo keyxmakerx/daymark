@@ -36,7 +36,7 @@ drafts made that were false (R1–R12); code cites them by number.
 | Owner, in the browser console (the phone later: #138) | The passphrase, the master key and the owner's X25519 and Ed25519 private keys (derived, §4), and plaintext — in memory while unlocked | The clinician's private keys |
 | Clinician, in the browser portal | Their X25519 and Ed25519 private keys, wrapped under a reading passphrase in their own browser; share plaintext in memory only | The owner's passphrase or keys; any other patient's data |
 | Server | Ciphertext, sealed content keys, signatures, public keys, token digests, sign-in code seeds (§5.2), routing metadata, audit chains | Any private key, unwrapped content key, passphrase or plaintext |
-| Practice administrator | Membership and roles | Any key or content ([COMPANION_ACCESS_CONTROL.md](COMPANION_ACCESS_CONTROL.md)) |
+| Practice administrator | Membership and roles. Every administrator, of a practice or of the server, signs in with an account of their own that holds no key (#208; not built: #314, #322) | Any key or content ([COMPANION_ACCESS_CONTROL.md](COMPANION_ACCESS_CONTROL.md)) |
 | Operator | The container, its volume, its logs | Nothing beyond what the server holds |
 
 **Assets, most sensitive first:** the owner's passphrase and private keys; the owner's plaintext; the
@@ -64,8 +64,10 @@ Each adversary: what it can do, what it cannot while the defences hold, and the 
   BLAKE2b digest is the `relRef`; no fingerprint appears in any URL. The owner bearer token, session
   ids and inbox tokens are stored as digests and invitation secrets as Argon2id hashes. The audit
   log's source address is off by default.
-- **Not built:** padding stored sizes to fixed buckets (#214); deleting the bytes of expired shares
-  and game plans — withdrawing a share deletes its bytes, but expiry only blocks reads (#228).
+- **Not built:** padding every encrypted item on the device, so the server stores only a rounded
+  size (#315, decided in #214); and, decided in #228, ending every shared item within 90 days, with
+  a newer share ending the one before it (#332), and deleting the bytes of whatever has ended
+  (#338). Withdrawing a share deletes its bytes today; expiry only blocks reads.
 
 Mood-tracking cadence is mental-health data. Size and timing are the leak that remains.
 
@@ -92,8 +94,8 @@ signatures stop forgery. Rollback protection is not built (§8).
   SRI protect against third parties and never against the origin itself. Every console that handles
   keys therefore shows a fixed lower-assurance banner; its wording is asserted character for
   character by `components/invariants.tree.test.ts`. The answers are not built: the phone as the
-  owner's secret-handling path (#138), a pinned or installed clinician client (#222), and a
-  published hash of each release's web bundle (#241).
+  owner's secret-handling path (#138), a clinician client whose code the server cannot change
+  (#319, decided in #222), and a published hash of each release's web bundle (#241).
 - The owner-side check of a game plan exists (`openGamePlan` in `lib/therapist/gamePlan.ts`), but no
   screen calls it yet (#231).
 
@@ -117,7 +119,8 @@ never overwritten, and a version that retention would delete at once is refused)
 paths from `^[A-Za-z0-9_-]{1,64}$` plus an integer version; a server-computed SHA-256 (a
 client-supplied hash is never trusted); a full disk fails closed with 507. There is no decrypt
 endpoint to coerce. The plain sync API has one bearer token and lists every lineage, which is right
-for one owner per server and wrong the day a server holds two (#219).
+for one owner per server, so a server serves one owner. Each stored journal belongs to exactly one
+owner, and no other credential can reach it (#219). Not built: #318.
 
 ### T6 — Supply chain
 
@@ -146,7 +149,7 @@ the JVM (lazysodium). No custom crypto. The server's own hashing, in the last ro
 | Encrypting to a recipient | X25519 sealed box | Confidentiality and sender anonymity; no forward secrecy (R2). |
 | Signing | Ed25519 | The owner signs shares and grants; the clinician signs game plans and assignments. |
 | Fingerprints | BLAKE2b over the raw public key | Shown as words for comparison. |
-| Clinician key custody | Argon2id-wrapped under a reading passphrase that is not the sign-in code | Stored only in the clinician's own browser; the server never holds it, so a cleared browser loses the keys. A passkey (PRF) wrap is not built (#205). |
+| Clinician key custody | Argon2id-wrapped under a reading passphrase that is not the sign-in code | Stored only in the clinician's own browser; the server never holds it, so a cleared browser loses the keys. The reading passphrase is the only wrap, by decision: a passkey signs in and never unwraps keys (#205). |
 | Inbox token | 256-bit random, base64url | Minted by the owner console when a clinician is added (`lib/owner/inboxToken.ts`), shown once, delivered out of band. The invitation cannot carry it: the server only ever sees its digest. |
 | Server-side hashing | Argon2id (invitation secrets); BLAKE2b-256 (session ids, inbox tokens, the owner bearer token) | `auth/Secrets.kt`. Constant-time comparisons. |
 
@@ -190,20 +193,26 @@ nothing that decrypts a record or authors content.
   not the maintainer, not the operator — can get it back. That is what makes it safe and what makes it
   unforgiving. A recovery code can wrap the master in the browser (`lib/recovery/`), but the wrapped
   key has nowhere to live yet, so the code cannot be used from another device (#258); the format has
-  room for more slots, such as a passkey (#205). A lost clinician key means a fresh invitation and
-  re-pairing.
+  room for more slots, though a passkey is not one, because it only signs in (#205). A lost
+  clinician key means a fresh invitation and re-pairing.
 - **The browser consoles are the convenience path.** The phone is meant to become the secret-handling
   path (#138); until then the lower-assurance banner says so wherever keys are handled.
 
 ## 5. Sign-in, key custody and sessions
 
+Each person who uses a server signs in with an account of their own — the owner, an administrator,
+each clinician and each member of the front desk — and the shared `DAYMARK_AUTH_TOKEN` is nobody's
+sign-in (#208). Not built: #314 for staff, #324 for owners. As built, a clinician signs in with a
+code per relationship (§5.2), and the owner presents the bearer token (§6).
+
 ### 5.1 Passkeys (WebAuthn)
 
-Not built: #205. The four `/v1/webauthn/*` routes answer 501. `DAYMARK_WEBAUTHN_RP_ID` and
-`DAYMARK_WEBAUTHN_ORIGINS` are read from configuration now, so a later implementation cannot fall
-back to a client-supplied `Host` header. The design used a discoverable credential with user
-verification, and its PRF output as the key that unwraps the clinician's keys, so that signing in and
-being able to decrypt would be one gate.
+A passkey signs a person in and never unlocks a key: a clinician still unwraps their keys with the
+reading passphrase (§4). Six-digit codes stay everywhere as the fallback, and are the only way in on
+a server reached by an IP address or by a name the browser does not trust, because a passkey needs
+`https` and a hostname (#205). Not built: #326. The four `/v1/webauthn/*` routes answer 501.
+`DAYMARK_WEBAUTHN_RP_ID` and `DAYMARK_WEBAUTHN_ORIGINS` are read from configuration now, so a later
+implementation cannot fall back to a client-supplied `Host` header.
 
 ### 5.2 Six-digit sign-in codes (TOTP)
 
@@ -225,11 +234,13 @@ per-address budget sits in front.
 
 ### 5.3 Step-up for sensitive actions
 
-Not built: #205. `StepUpDialog.svelte` is a confirmation in the browser, not a server-verified
-assertion, so sensitive actions rest on the session cookie and its CSRF token. The design asks for a
-fresh, single-use assertion bound to the live session before opening a share, publishing a game plan
-or rotating a key — and never before revoking, because the safe direction stays cheap
-([COMPANION_ACCESS_CONTROL.md](COMPANION_ACCESS_CONTROL.md), The annoyance budget).
+Step-up is charged only where the annoyance budget charges it
+([COMPANION_ACCESS_CONTROL.md](COMPANION_ACCESS_CONTROL.md), The annoyance budget; #205). Adding a
+practice member and changing a role need a fresh, unspent six-digit code, which the server checks
+(`routes/OrgRoutes.kt`); admitting someone to a care team is charged the same (not built: #289).
+Opening a share and publishing a game plan or an assignment need only the session, by design, and
+revoking never needs more, because the safe direction stays cheap. `StepUpDialog.svelte` is a
+confirmation in the browser, not a step-up. A fresh passkey as step-up: not built, #326.
 
 ### 5.4 Sessions
 
@@ -277,12 +288,14 @@ relies on:
 
 - No escrow on the server. Server-access recovery (§6) restores the bearer token and nothing else.
 - The owner can withdraw a share: the server marks it withdrawn, deletes its bytes, records
-  `share.revoke`, and answers 410 to every later read. This binds an honest server only (R3, #222).
+  `share.revoke`, and answers 410 to every later read. This binds an honest server only, a
+  permanent and stated limit (R3, #222).
 - A clinician can end their own relationship (§9a). The owner cannot yet end a clinician's sign-in
   (#210). Rotating the owner's data key for whoever remains authorised is not built (#297).
-- One sign-in credential per relationship. An owner may hold several relationships, one per
-  clinician, each with its own inbox token. Practices add a control plane and never a key. Whether
-  that is the scope the product wants: #288.
+- One sign-in credential per relationship, as built. An owner may hold several relationships, one
+  per clinician, each with its own inbox token. Practices add a control plane and never a key. An
+  office needs one sign-in per clinician, however many relationships they hold (#288). Not built:
+  #314.
 
 ## 6. Server hardening defaults
 
@@ -356,6 +369,9 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
   (`DAYMARK_AUTH_TOKEN` itself remains the operator's secret file.) The token alone can approve a
   pairing and so enrol a clinician, which is why it may not sit in the clear. Content routes also
   demand the relationship's inbox token, whose digest is all the server holds.
+- **Access comes back by proving the owner's own key, never by email** (#208): a key derived from
+  the passphrase or recovery code signs a fresh challenge, so control of the registered mailbox
+  opens nothing. Not built: #325. Until it is, the emailed re-issue below is how access comes back.
 - `POST /v1/recovery/request` is unauthenticated by necessity. It is limited per address (3 an hour),
   always answers 202, and sends mail from a background task, so a matching and a non-matching address
   take the same time. Addresses compare case-insensitively.
@@ -384,6 +400,11 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
 - The operator's side: [COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md) §3 and §4.0. Symptoms and
   the test: [COMPANION_OBSERVABILITY.md](COMPANION_OBSERVABILITY.md) §1. The example nginx config still
   forwards the client's `Host` and has no catch-all server (#209).
+- **The admin boundary does not depend on `Host`.** By decision, the admin console and every route
+  only an administrator may call can be served on a second port, which the operator's proxy
+  publishes only on an admin hostname or over a VPN. The server tells the two apart by listener,
+  never by `Host` or `X-Forwarded-Host` (#208). It is a second lock beside the administrator's own
+  sign-in, never a replacement for it. Not built: #323.
 
 ## 8. Anti-rollback and integrity (client-anchored)
 
@@ -397,6 +418,9 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
   the trust anchor, and a change is indistinguishable from a server swapping the signing identity.
 - **Sync is single-writer, last-snapshot-wins (R11).** The newest full snapshot is authoritative.
   There is no row-level merge: no synced table has stable cross-device ids or per-row timestamps.
+  That is settled (#200): the phone is the journal's only writer, what another device creates
+  travels as new records in a separate, add-only lane, and no device silently replaces a copy it has
+  not seen. Not built: #344, #345, #346.
 
 ## 9. Audit-logging posture
 
@@ -426,8 +450,8 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
   appends an event, or cuts the tail off, leaves a chain that checks out. "Access cannot be hidden"
   holds for tampering, not for withholding, and every surface that shows a verdict says so (the owner's
   audit caveat; `CHAIN_CAVEAT` in the admin console). What outlives a lying server is the head hash,
-  written down somewhere it cannot reach. Signed clinician attestations: #217. The phone keeping its
-  own copy of the head: #138.
+  written down somewhere it cannot reach. Signed clinician attestations were weighed and not adopted
+  (#217). The phone keeping its own copy of the head: #138.
 - **Missing events:** a refused read of an expired or withdrawn share (`SHARE_DENIED` is declared and
   never written: #164); the token re-issue, invitations minted or expired, reads of the log itself,
   bulk reads, and changes to logging policy (#187).
@@ -496,18 +520,24 @@ leave "signed out, not ended", which looks like a completed exit and is not one.
   everything here, as it does for the flagship app.
 - **No forward secrecy on sealed boxes (R2).** A compromise of a recipient's long-term X25519 key —
   the clinician's for shares, the owner's for game plans — decrypts everything ever sealed to it.
-  Rotating CEKs does not help. Deleting old bytes shortens the window; withdrawing a share does, but
-  expiry does not yet (#228).
+  Rotating CEKs does not help. Keeping less, for less time, is what limits the window: no share,
+  game plan or assignment is served past 90 days, and the server deletes the bytes of whatever has
+  ended (#228). Withdrawing a share deletes its bytes today; the 90-day limit and deletion on expiry
+  or replacement are not built: #332, #338.
 - **Revocation binds an honest server only (R3).** Honestly: future fetches stop on an honest server;
   data published after re-keying is unreadable to the old key; plaintext already decrypted is never
-  recallable. Real revocation is re-pairing to new keys (#222).
+  recallable. Real revocation is re-pairing to new keys. The limit is permanent and stated, not
+  solved (#222): no software can make a server delete what it chose to keep.
 - **The browser consoles are not zero-knowledge against a malicious server (R5)**, because the server
   serves the code that holds the keys (§3 T3).
 - **Anti-rollback is client-side and not built** (§8). **Sync is single-writer** (R11).
 - **Metadata leaks.** The existence, cadence and size of relationships and snapshots are visible to the
-  server (§3 T1). Padding would reduce, not remove, this (#214).
+  server (§3 T1). Padding, decided in #214, rounds each item's size on the device and leaves timing
+  visible. Not built: #315.
 - **Sign-in codes are phishable and stored in the clear on the server** (§5.2). A breach lets an
-  attacker sign in as a clinician. It never lets them decrypt.
+  attacker sign in as a clinician. It never lets them decrypt. A passkey cannot be phished, and an
+  account that closes its code leaves nothing on the server that signs it in (#205). Not built:
+  #326.
 - **Withholding audit events is undetectable** (R12, §9).
 - **No escrow and no recovery by the server**, by design (O6).
 - **Non-diagnostic by framing, not by construction.** Game-plan bodies are free text the schema cannot
@@ -532,4 +562,4 @@ leave "signed out, not ended", which looks like a completed exit and is not one.
 | R9 | Trust `172.16.0.0/12` as the default proxy range | Removed: the default trusts nothing (§7). |
 | R10 | Game plans land in the phone's `treatments` table | Removed: `treatments` is owner-authored and non-evaluative. Game plans get their own table when the phone side is built (#138). |
 | R11 | A three-way, row-level merge with per-row timestamps | Not implementable: sync is single-writer, last-snapshot-wins (§8). |
-| R12 | Clinician-signed attestations make access impossible to hide | Partly retracted: a server-computed chain makes tampering detectable, not withholding (§9). |
+| R12 | Clinician-signed attestations make access impossible to hide | Partly retracted: a server-computed chain makes tampering detectable, not withholding (§9). Signed clinician attestations were weighed and not adopted (#217). |

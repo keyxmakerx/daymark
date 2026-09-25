@@ -34,6 +34,7 @@ libsodium and no emulator; the `sync` flavour wires it to the Android binding
 | Subkeys, context `dmsync01`: 1 sync key, 2 manifest seed | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
 | Subkeys 3 and 4: the owner's X25519 and Ed25519 seeds | `owner/identity.ts` | — | No: #174 |
 | Snapshot envelope `DMS1 \| 0x01 \| nonce \| ciphertext`, AAD `daymark.snapshot.v1\|lineage\|version` | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
+| Padded snapshot envelope: the plaintext rounded up to a standard size before encryption (#214) | `sync/crypto.ts` (not built: #315) | — | No: #316 |
 | Manifest signing bytes | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
 | Base64: RFC 4648 §5, URL-safe, no padding | everywhere | `SyncCrypto.kt` (plain `java.util.Base64`, because lazysodium's own helper is standard base64) | Yes |
 | CPace (CPACE-RISTRETTO255-SHA512) | `pairing/cpace.ts` | `CpaceCrypto.kt` | Yes |
@@ -56,12 +57,17 @@ not built: #192.
 
 ## 2. Sync of the owner's own data
 
-Settings → Sync: a server address, the bearer token and the sync passphrase; push the existing backup
-snapshot (`BackupManager`) as the plaintext, append-only, at `max(existing) + 1`; pull fetches the
-newest and decrypts it. Sync is single-writer, last-snapshot-wins: the schema has no per-row ids or
-timestamps, so rows are never merged. Not built: #168. Whether it stays single-writer is a decision:
-#200. Refusing an older snapshot presented as the newest needs a signed manifest and a watermark
-kept on the device: #179.
+Settings → Sync: a server address and the sync passphrase, and no bearer token: the phone signs in
+with its own per-device key (#189, #186), because the shared token stops being anyone's sign-in
+(#208; not built: #324). Push the existing backup snapshot (`BackupManager`) as the plaintext,
+append-only, at `max(existing) + 1`; pull fetches the newest and decrypts it. Not built: #168.
+
+Sync is single-writer, last-snapshot-wins, for good (#200): the phone is the only device that writes
+the journal's encrypted copy, the schema has no per-row ids or timestamps, and rows are never
+merged. What the web console creates arrives as new records in a separate, add-only encrypted lane,
+which the phone takes in once each, by its id, and sync never replaces a journal without asking. Not
+built: the lane, #345; taking its records in, #346; asking before replacing, #344. Refusing an older
+snapshot presented as the newest needs a signed manifest and a watermark kept on the device: #179.
 
 Neither the server nor anyone else can reset the app PIN or the sync passphrase. The owner's email
 recovery re-issues the server's bearer token and nothing else.
@@ -105,8 +111,10 @@ shrinking, which JNA's reflection makes risky, is exercised for `sync`), runs th
 `:sync-crypto`, runs the `foss` permission check, and compiles the instrumented tests without running
 them: no device runs in CI, so nothing has executed the ristretto code on a phone (#192, #147).
 
-Only `foss` is released. How the `sync` build would be distributed is a decision: #194. It needs its
-own privacy statement before it ships: #197.
+Only `foss` is released. The `sync` build ships first as a second file on each GitHub release,
+signed with the same key, and later as its own F-Droid listing, once the offline app has one with a
+reproducible build (#229); the offline app's listing never carries it (#194). Not built: #342,
+#343. It needs its own privacy statement before it ships: #197.
 
 ## 6. The steps, in order
 

@@ -15,9 +15,11 @@ logs, the runbook — is [COMPANION_OBSERVABILITY.md](COMPANION_OBSERVABILITY.md
   metadata, and some sign-in secrets (COMPANION_SECURITY.md §5.2). A stolen disk or backup leaks
   metadata and those secrets — never journal content.
 - **No reverse proxy is bundled.** The app speaks plain HTTP; your proxy terminates TLS (§3).
-- **Three shapes**, chosen with `DAYMARK_THERAPIST_AUTH`: *Solo*, just you and your backup (`0`);
-  *Paired*, plus one clinician (`1`); *Practice*, a clinic runs the machine (`1`). With `0`, every
-  clinician, pairing and practice route answers 503.
+- **Three shapes of one product**, chosen with `DAYMARK_THERAPIST_AUTH`: *Solo*, just you and your
+  backup (`0`); *Paired*, plus the clinicians you invite (`1`); *Practice*, a clinic runs the
+  machine (`1`). With `0`, every clinician, pairing and practice route answers 503. The shape is a
+  server setting, `DAYMARK_SETUP_MODE`, that switches on only what each shape needs (#288). Not
+  built: #330.
 - **The server is a replica.** The journal lives on the owner's phone; losing the server loses
   convenience, not the journal.
 
@@ -107,6 +109,12 @@ is right.
    bodies, `DAYMARK_MAX_REQUEST_BYTES` for uploads, 120 s to read a request — but header-read timeouts
    are the proxy's.
 
+**The admin console on an address of its own.** By decision, the admin console and every route only
+an administrator may call can be served on a second port, which your proxy publishes only on an
+admin hostname such as `admin.example.org`, reachable only over the office VPN if you want (#208).
+The server tells the two apart by port, never by `Host`. Prefer a hostname to a path: a path needs
+sub-paths to work first (#176). Not built: #323.
+
 ### 3.2 Worked examples
 
 The reference configs are in [alternatives/](alternatives/README.md). **Cosmos Cloud** (the
@@ -182,7 +190,7 @@ read from a file named by `NAME_FILE`, which wins.
 | `DAYMARK_AUTH_TOKEN` (`_FILE`) | unset | The owner's bearer token. Unset: the sync API, owner routes, recovery and the clinician portal all answer 503 |
 | `DAYMARK_THERAPIST_AUTH` | off | `1` or `true` turns on the clinician portal, relationships, pairing, practices and the audit log |
 | `DAYMARK_PUBLIC_BASE_URL` | first `DAYMARK_WEBAUTHN_ORIGINS` entry | The external origin in emailed links |
-| `DAYMARK_WEBAUTHN_RP_ID` | unset | Kept for passkeys, which are not built (COMPANION_SECURITY.md §5.1) |
+| `DAYMARK_WEBAUTHN_RP_ID` | unset | The passkey relying-party id. Passkeys sign people in on an `https` address with a hostname, and never unlock keys (#205); not built: #326 (COMPANION_SECURITY.md §5.1) |
 | `DAYMARK_WEBAUTHN_ORIGINS` | unset | Comma-separated; also the fallback for `DAYMARK_PUBLIC_BASE_URL` |
 | `DAYMARK_TRUSTED_PROXIES` | empty: trust nothing | §4.0 |
 | `DAYMARK_MAX_BLOB_BYTES` | `26214400` (25 MiB) | Largest stored blob |
@@ -239,6 +247,12 @@ also sets `TZ=UTC` and the `JAVA_TOOL_OPTIONS` in §2.
 - The token is not the encryption key. Someone holding it can list and upload ciphertext and approve
   pairings, but content routes also demand each relationship's inbox token, so they cannot read the
   journal.
+- **A server serves one owner.** Never give its token to a second person: whoever holds it can list
+  and download every encrypted copy on the server and push a newer version of each. Each stored
+  journal belongs to one owner (#219); several people's journals on one server: not built, #318.
+- By decision, a new server is claimed with a one-time setup code it writes to its own log, and each
+  person signs in with an account of their own, so no token is created (#208). Not built: #322,
+  #324.
 
 ## 6. Backup and restore
 
@@ -386,7 +400,8 @@ check that a real email arrives (#207).
 
 1. `cp .env.example .env` in `companion/`; set `DAYMARK_DOMAIN`, and `DAYMARK_THERAPIST_AUTH=1` if a
    clinician or a practice will use this server.
-2. Create the bearer token (§5.2).
+2. Create the bearer token (§5.2). By decision, a one-time setup code from the server's own log
+   replaces this step (#208); not built: #322.
 3. Pick the topology (§1) and start: `docker compose up -d --build`, adding the override if your proxy
    is a container.
 4. Configure your proxy (§3), set `DAYMARK_TRUSTED_PROXIES` (§4.0), and restart.
@@ -427,4 +442,6 @@ since it shares the disk with `/data`.
 **Retention.** Container logs are size-bounded; the app writes no access log; audit entries default to
 90 days. A practice that is a HIPAA covered entity may owe six years of documentation, and whether that
 reaches raw audit logs is contested. The default stays short because a person hosting their own
-journal is not a covered entity; a practice needs its own counsel (#284).
+journal is not a covered entity; a practice needs its own counsel (#284). Shared items (shares, game
+plans and assignments) are kept at most 90 days, and the server deletes the bytes of each once it
+has ended (#228). Not built: #332, #338; today only withdrawing a share deletes its bytes.

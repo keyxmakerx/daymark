@@ -48,6 +48,11 @@ Publishing a checksum with each release, so you can verify a download, is tracke
 now, the official way to get Daymark is the project's
 [GitHub Releases](https://github.com/keyxmakerx/daymark/releases).
 
+The **sync build**, a separate app that can connect to a Companion server, is not released yet.
+Once it is ready, it is attached to each GitHub release beside the offline app. Once the offline app
+is on F-Droid, the sync build gets a listing of its own there; the offline app's listing never
+carries it (#194). Not built: #342, #343.
+
 ---
 
 ## How do I move my data to a new phone?

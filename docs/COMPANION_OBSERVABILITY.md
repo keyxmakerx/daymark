@@ -35,7 +35,7 @@ lookup, no "enriching" a source address. That is a product constraint, not a def
 | Structured or JSON log | **No.** Plain text | `logback.xml` |
 | Request ids | **No.** Nothing creates or passes one | — |
 | Security-event log and alerts | **No.** `SecurityLog`, `SecurityEvent` and `AlertRules` in `observability/` have no callers (#190) | — |
-| Administrator identity | **No.** No setting or route authenticates an administrator, and the admin page loads without a credential (#208) | `Config.kt` |
+| Administrator identity | **No.** No setting or route authenticates an administrator, and the admin page loads without a credential. By decision, an administrator signs in with an account of their own (#208); not built: #322 | `Config.kt` |
 
 The admin console reaches the same conclusion independently: `lib/admin/health.ts` shows each missing
 counter as "this build exposes no counter for X" rather than substituting something nearby.
@@ -230,13 +230,14 @@ only when you turn on `DAYMARK_ACCESS_LOG_SOURCE_IP` — which also changes the 
 
 `DAYMARK_LOG_LEVEL` is `warn` in the image, the compose file and `.env.example`. `applyLogLevel` applies
 it to the `com.daymark.companion` loggers at start. At `warn` you never see: the startup banner — the
-only place the live address, base path and flags are reported; the SMTP-enabled line; `readiness
-restored`, so a readiness outage looks permanent in the log after it clears; and the mailer's success
-lines.
+only place the live address, base path and flags are reported; the SMTP-enabled line; and `readiness
+restored`, so a readiness outage looks permanent in the log after it clears. The mailer's success
+lines are DEBUG, so neither `warn` nor `info` shows them.
 
 `logback.xml` pins `io.ktor` at INFO and `io.netty` at WARN, and `DAYMARK_LOG_LEVEL` changes neither
 (#169). **Run at `info`** unless volume is a real problem: there is no per-request logging, so `info`
-costs a handful of lines per start. Whether `info` should be the default: #171.
+costs a handful of lines per start. `info` is the default by decision, as it already is in the code
+(#171). Not built: #367, which sets it in the image, the compose file and `.env.example`.
 
 ## 3. SMTP — the one deliberate outbound connection
 
@@ -283,9 +284,12 @@ before a transport sees it.
 | Kind | Recipient | Contents | Sent by |
 |---|---|---|---|
 | `TherapistInvite` | An address the **owner** gives when minting an invitation | Fixed template, the invitation link, its expiry, an optional display name | `therapistAuthRoutes`, `POST /v1/invite` |
-| `ReviewNotification` | The owner's **registered** address, only for the kinds they opted into | Fixed template and the console's address; the kind does not change the body, so nothing reveals what arrived | `OwnerNotifier.notify` |
+| `ReviewNotification` | The owner's **registered** address, only for the kinds they opted into. One more kind, a clinician ending their access, is decided (#216); not built: #329 | Fixed template and the console's address; the kind does not change the body, so nothing reveals what arrived | `OwnerNotifier.notify` |
 | `AccessRecovery` | The **registered** address — never the requester's | Fixed template, a single-use confirmation link, its expiry | `recoveryRoutes` |
 | `SecurityNotice(TOKEN_REISSUED)` | The registered address, **always** — not subject to the opt-in, as a password-reset receipt is not | Fixed template, no link | `recoveryRoutes` |
+
+The decided design removes the emailed access recovery that `AccessRecovery` and `TOKEN_REISSUED`
+serve: access comes back by proving the owner's own key, never by email (#208). Not built: #325.
 
 **Both secret-bearing links put the secret in the URL fragment** — `…/portal/invite#id=…&s=…` and
 `…/recover#t=…` — so it is never sent to a server in a request line, never reaches a proxy's access log,
@@ -355,9 +359,10 @@ Conditions of the deployment, not incidents. If you run this server, you have ac
 The `/v1/webauthn/*` routes answer `501 Not Implemented` (`therapistAuthRoutes`, `webauthnStub`).
 What exists is the configuration pinning: `DAYMARK_WEBAUTHN_RP_ID` and `DAYMARK_WEBAUTHN_ORIGINS` are
 read into `Config` so that a later implementation cannot derive the relying party from a `Host` header
-(#205). Consequences: the six-digit code is the only second factor a clinician can have, and it is
-phishable where a hardware passkey is not; and the step-up the design asks for before sensitive
-actions cannot be obtained, so those rest on the session cookie and its CSRF token.
+(passkey sign-in, decided in #205, is not built: #326). Consequences: the six-digit code is the only
+second factor a clinician can have, and it is phishable where a hardware passkey is not. Step-up
+does not wait for passkeys: adding a practice member or changing a role already needs a fresh code
+that the server checks, and opening a share or publishing needs only the session, by design (#205).
 `DAYMARK_WEBAUTHN_ORIGINS` is still the fallback for `DAYMARK_PUBLIC_BASE_URL`, so do not delete it on
 the grounds that passkeys are a stub.
 
@@ -402,7 +407,9 @@ docker system df -v | grep daymark-companion_blobs
 - **Image freshness:** every `FROM` is digest-pinned, so nothing updates by itself. Look at the open
   Dependabot pull requests, and rebuild or pull (COMPANION_DEPLOYMENT.md §7).
 - **The audit chain,** if clinicians are active: in the admin console, check a relationship's chain,
-  write down its head, and read the verdict together with its caveat (§4).
+  write down its head, and read the verdict together with its caveat (§4). By decision the check
+  belongs in the owner's own console, and the admin console never asks for the owner's token (#208).
+  Not built: #322.
 
 ### 6.3 What each log pattern means
 

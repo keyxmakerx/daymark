@@ -62,8 +62,9 @@ import androidx.room.PrimaryKey
  * - **No body text.** If someone wants to write about it, that is a journal entry, which has its own
  *   surface and its own rules. This is the pin in the map, not the page. A second free-text field
  *   here would split a person's writing across two places that treat it differently.
- * - **No end date or range.** `docs/SKY.md` §2.2 keeps one day, and whether ranges should exist is
- *   open (#155); a nullable `endEpochDay` can be added later without rewriting a row.
+ * - **No end date or range.** `docs/SKY.md` §2.2 keeps one day (#155): in a sky where position is
+ *   not time, there is no honest way to draw a length. A stretch is marked on a day the person
+ *   picks, and [label] can say how long it lasted.
  *
  * ## The index
  *

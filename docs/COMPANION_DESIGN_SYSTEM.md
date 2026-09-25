@@ -83,22 +83,25 @@ On a console that means five working rules:
 5. **The serif is spent sparingly**, on the wordmark and on titles (§2.2) — never on navigation,
    labels, table heads or data.
 
-Not built: ⌘K search and a breadcrumb bar, proposed by an earlier console design: #263.
+The consoles have no global search and no breadcrumb bar (#263): search lives inside the screen
+whose data it searches (#245).
 
 ### 2.2 Typography
 
-`app.css` declares three stacks: `--font-display` (Fraunces, then Iowan Old Style, Georgia and the
-platform serif), `--font-text` (Inter, then `system-ui`) and `--font-mono`. Its two `@font-face` rules
-are commented out and no font file is bundled (see `companion/web/fonts/README.md`), so every console
-renders in the fallbacks and nothing is fetched. Not built: bundling Fraunces and Inter, or settling on
-system fonts for good: #251.
+`app.css` declares three stacks: `--font-display`, `--font-text` and `--font-mono`. The display
+face is Fraunces, bundled and served from the Companion's own origin, and all other text is the
+platform's own sans (`system-ui` and its fallbacks), for good; Inter is dropped (#251). Not built:
+#364. Today no font file is bundled and the two `@font-face` rules are commented out, so
+`--font-display` renders in its fallbacks (Iowan Old Style, Georgia and the platform serif),
+`--font-text` still names Inter ahead of `system-ui`, and nothing is fetched.
 
 **Where the serif goes.** The display face is the content voice naming its subject: the wordmark, page
 titles (`PageHeader`), section, card and empty-state titles, and a few large display figures.
 Navigation items, labels, table heads, metadata and data are sans or mono, never serif.
 
 Sizes: a 16px body, `h1` 1.75rem, `h2` 1.3rem, `h3` 1.05rem; everything else is set per component.
-Not built: a named type scale (the `--fs-*` family): #263.
+Not built: a named type scale (the `--fs-*` family) in rem, with body text at 1rem and nothing below
+0.75rem: #365.
 
 ### 2.3 Colour and design tokens
 
@@ -331,11 +334,11 @@ shift, the chrome/content ground shift and a single modal scrim.
 
 ### 2.5 Icons
 
-No third-party icon packs, no icon fonts, no emoji. The marks in use are text glyphs — the provenance
-glyphs ✓ ◐ ✎, the sharing strip's ring — drawn in the surrounding text colour and never green. A
-decorative mark is `aria-hidden`; an icon-only button carries an accessible name (`ui/FieldHelp.svelte`
-names its "i" as a whole question). Not built: an original SVG icon set drawn with `currentColor`:
-#263.
+There is no icon set, sprite, pack or icon font, and no emoji (#263). Marks are text glyphs — the
+provenance glyphs ✓ ◐ ✎, the sharing strip's ring — drawn in the surrounding text colour and never
+green. A screen that needs a mark no glyph can make draws a small inline SVG in `currentColor`,
+beside a word and `aria-hidden`. A decorative mark is `aria-hidden`; an icon-only button carries an
+accessible name (`ui/FieldHelp.svelte` names its "i" as a whole question).
 
 ### 2.6 Imagery
 
@@ -367,7 +370,7 @@ Transitions are written per component and kept short (120–180 ms on background
 Nothing pulses or bounces: that would read as attention-seeking and contradict §2.1. The global block
 in `app.css` neutralises every animation and transition for anyone who asks for less motion, so the
 guarantee does not depend on each component opting in. Not built: motion tokens (`--ease-standard:`,
-`--ease-entrance:`, `--dur-fast:`, `--dur-base:`, `--dur-slow:`): #263.
+`--ease-entrance:`, `--dur-fast:`, `--dur-base:`, `--dur-slow:`): #366.
 
 ## 4. Components
 
@@ -392,8 +395,8 @@ needed:
 `index.ts` is the barrel; `status.ts`, `nav.ts` and `table.ts` exist as plain `.ts` because a Svelte 5
 instance script cannot export types. Feature components elsewhere in `src/lib/components/` — the
 questionnaire runner, the attention task, the trust and sharing strips, the banner pairs, the share
-builder — are screens, not a library. Not built: the wider component inventory the design once listed
-([old §4.1–4.8](https://github.com/keyxmakerx/daymark/blob/968638594f10f6a4424415f8a5c14fd8eb4aaa00/docs/COMPANION_DESIGN_SYSTEM.md?plain=1#L755-L840)): #263.
+builder — are screens, not a library. A piece moves into `ui/` when a second screen needs it, and
+not before (#263).
 
 ### 4.9 The stacking context belongs to `AppShell`
 

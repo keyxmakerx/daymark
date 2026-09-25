@@ -1,10 +1,11 @@
 # Daymark Companion
 
 The optional, **self-hosted** companion server for Daymark — run on your own machine (NAS, home
-server, mini-PC) with Docker. It keeps an end-to-end-encrypted copy of your journal, lets you read it
-on a bigger screen, and, if you want, lets you show chosen slices to one clinician. The server stores
-ciphertext it cannot read. The phone app works fully without it and its default build has no network
-access at all; the Companion is a convenience, never a requirement.
+server, mini-PC) with Docker, or by an office on its own server. It keeps an end-to-end-encrypted
+copy of your journal, lets you read it on a bigger screen, and, if you want, lets you show chosen
+slices to the clinicians you choose. The server stores ciphertext it cannot read. The phone app
+works fully without it and its default build has no network access at all; the Companion is a
+convenience, never a requirement.
 
 How it fits together, and what a compromised server could still do:
 [`../docs/COMPANION_ARCHITECTURE.md`](../docs/COMPANION_ARCHITECTURE.md). The operator's full guide —
@@ -26,11 +27,13 @@ topology, the proxy contract, every setting, backup and restore:
   clinician's portal (sign-in with a six-digit authenticator code, the shared-data dashboard,
   assignments, game plans, leaving); and the practice console.
 - **Optional email (SMTP)**, off unless configured: invitation links, owner notifications, and
-  recovery of the owner's access token. Emails carry links and event names, never record content.
+  recovery of the owner's access token, which the decided design replaces with proving the owner's
+  own key (#208; not built: #325). Emails carry links and event names, never record content.
 
-Not built, among others: passkeys (the WebAuthn routes answer 501; the six-digit code is the
-clinician's sign-in), and the phone's side of sync and pairing (issue #138). The build state of each
-feature is in the documents under [`../docs/`](../docs/), and the open work is in the issues.
+Not built, among others: passkey sign-in, decided in #205 with the six-digit code kept as the
+fallback (#326; today the WebAuthn routes answer 501 and the code is the clinician's sign-in), and
+the phone's side of sync and pairing (issue #138). The build state of each feature is in the
+documents under [`../docs/`](../docs/), and the open work is in the issues.
 
 ## Quick start (Docker)
 
@@ -46,6 +49,9 @@ docker compose up -d --build
 
 For one person and their own backup (Solo), leave `DAYMARK_THERAPIST_AUTH=0`. Set it to `1` only if a
 clinician or a practice will use this machine; with it at 0 every relationship route answers 503.
+Solo, Paired and Practice are shapes of one product, and the shape is a server setting,
+`DAYMARK_SETUP_MODE`, that switches on only what each shape needs (#288). Not built: #330. A
+Practice server holds no real patient's data until the compliance gate is passed (#284).
 
 ## The access token, which switches sync on
 
@@ -59,6 +65,14 @@ The token is the owner's credential: every client presents it, and it gates who 
 blobs. It decrypts nothing — the passphrase does that, and it never leaves your devices. If an owner
 recovers access by email, the server rotates the token and the old one stops working; changing
 `DAYMARK_AUTH_TOKEN` and restarting makes the new value the accepted one again.
+
+A server serves one owner. Never give its token to a second person: whoever holds it can list and
+download every encrypted copy on the server and push a newer version of each. Each stored journal
+belongs to one owner (#219); several people's journals on one server: not built, #318.
+
+The decided design replaces the shared token (#208): each person signs in with an account of their
+own, a new server is claimed with a one-time code from its own log, and access comes back by proving
+the owner's own key, never by email. Not built: #322, #324, #325.
 
 ## Health checks
 
