@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { evaluateBlob, buildInbox, canApply, type PinnedTherapist, type RawAssignmentBlob } from './inbox'
 import {
   initAssignmentCrypto, newSignKeyPair, newBoxKeyPair, sealAssignment, fingerprint,
@@ -93,6 +95,21 @@ describe('inbox — security: rejected / untrusted never applyable', () => {
     expect(canApply(item)).toBe(false)
   })
 
+  it('OPEN_FAILED when a signed assignment is served under another lineage or version', () => {
+    const g = setCapability(emptyGrant(therapistFp), 'assign.questionnaire', true, 'propose')
+    const b = blob(assignment())
+    // Positive control: under the label it was signed with, the same bytes are VERIFIED.
+    expect(evaluateBlob(b, pinned(g), owner).verdict).toBe('VERIFIED')
+    const lineage = b.lineage === 'l2' ? 'l3' : 'l2'
+    expect(lineage).not.toBe(b.lineage)
+    const relabelled = evaluateBlob({ ...b, lineage }, pinned(g), owner)
+    expect(relabelled.verdict).toBe('OPEN_FAILED')
+    expect(canApply(relabelled)).toBe(false)
+    const renumbered = evaluateBlob({ ...b, version: b.version + 1 }, pinned(g), owner)
+    expect(renumbered.verdict).toBe('OPEN_FAILED')
+    expect(canApply(renumbered)).toBe(false)
+  })
+
   it('REJECTED when the capability is not currently granted', () => {
     const g = emptyGrant(therapistFp) // nothing granted
     const item = evaluateBlob(blob(assignment()), pinned(g), owner)
@@ -129,5 +146,21 @@ describe('buildInbox', () => {
     const items = buildInbox([older, newer, orphan], [t], owner)
     expect(items.length).toBe(2) // orphan skipped
     expect(items[0].assignment?.assignmentId).toBe('new')
+  })
+})
+
+describe('a clinician who re-paired with new keys', () => {
+  it('is refused under a grant still naming the old key, and verified once it is re-bound', () => {
+    // What keysArrived in OwnerConsole does on re-pairing: keep the grant, re-bind it to the key.
+    const oldGrant = setCapability(emptyGrant('old-key-fp'), 'assign.questionnaire', true, 'propose')
+    expect(oldGrant.therapistFingerprint).not.toBe(therapistFp)
+    expect(evaluateBlob(blob(assignment()), pinned(oldGrant), owner).verdict).toBe('REJECTED')
+    const rebound = { ...oldGrant, therapistFingerprint: therapistFp }
+    expect(evaluateBlob(blob(assignment()), pinned(rebound), owner).verdict).toBe('VERIFIED')
+  })
+
+  it('keeps their grant in the owner console, re-bound to the new signing key', () => {
+    const src = readFileSync(resolve(process.cwd(), 'src/lib/components/owner/OwnerConsole.svelte'), 'utf8')
+    expect(src).toContain('{ ...cur.grant, therapistFingerprint: id }')
   })
 })

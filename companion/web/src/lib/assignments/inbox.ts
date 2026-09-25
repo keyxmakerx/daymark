@@ -77,6 +77,19 @@ export function evaluateBlob(raw: RawAssignmentBlob, therapist: PinnedTherapist,
     }
   }
 
+  // The lineage and version the server files an item under are not signed; the ones inside it
+  // are. An item served under another label is a signed assignment re-presented as something it
+  // is not (an old one shown as new, or one shown twice), so it is refused like a tampered one.
+  if (assignment.lineageId !== raw.lineage || assignment.version !== raw.version) {
+    return {
+      ...base,
+      verdict: 'OPEN_FAILED',
+      requiresAccept: false,
+      preview: 'Could not open this item (not addressed to you, or tampered) — refused.',
+      errors: ['assignment is filed under a different lineage or version than it was signed with'],
+    }
+  }
+
   const check = validateAssignment(assignment, therapist.grant)
   const preview = describeAssignment(assignment)
 

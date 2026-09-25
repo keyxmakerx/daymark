@@ -269,3 +269,44 @@ describe('(d) the ended state', () => {
     expect(builder).toContain('shareRefusedBecauseEnded')
   })
 })
+
+describe('the builder signs a share with the version it publishes it as', () => {
+  // The portal refuses a share whose signed version differs from the one it is served under, so a
+  // builder that signed one number and published another would fail closed on every share after
+  // the first, and no test that calls buildShare directly would notice.
+  const builder = readFileSync(
+    fileURLToPath(new URL('../components/owner/ShareBuilder.svelte', import.meta.url)),
+    'utf8',
+  )
+  const codeOnly = (src: string) =>
+    src.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(?<!:)\/\/[^\n]*/g, '')
+
+  /** One `version`, looked up before anything is sealed, is both signed and published. */
+  function signsWhatItPublishes(src: string): boolean {
+    const code = codeOnly(src)
+    const assignments = code.match(/\bversion\s*=(?!=)/g) ?? []
+    const lookedUp = code.indexOf('version = existing.reduce')
+    const sealed = code.indexOf('buildShare(')
+    return (
+      assignments.length === 2 && // `let version = 0`, then the lookup; nothing else moves it
+      lookedUp !== -1 &&
+      sealed !== -1 &&
+      lookedUp < sealed &&
+      /const shareMeta: ShareMeta = \{[^}]*\bversion,/.test(code) &&
+      code.includes("putBlob(therapist.inboxToken, 'shares', lineage, version,")
+    )
+  }
+
+  it('holds for the builder as written', () => {
+    expect(signsWhatItPublishes(builder)).toBe(true)
+  })
+
+  it('fails when the builder publishes a different number, or moves it after signing (positive control)', () => {
+    const published = builder.replace("'shares', lineage, version,", "'shares', lineage, version + 1,")
+    expect(published).not.toBe(builder)
+    expect(signsWhatItPublishes(published)).toBe(false)
+    const moved = builder.replace('const shareMeta: ShareMeta = {', 'version = 0\n      const shareMeta: ShareMeta = {')
+    expect(moved).not.toBe(builder)
+    expect(signsWhatItPublishes(moved)).toBe(false)
+  })
+})

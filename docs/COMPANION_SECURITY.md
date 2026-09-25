@@ -94,8 +94,11 @@ signatures stop forgery. Rollback protection is not built (§8).
   spliced onto another ciphertext, and a bundle cannot be re-pointed at another owner. The clinician
   verifies against the owner key pinned at pairing before opening anything, refuses a share whose
   signed version is not the version it was served as, and refuses format 1, which signed the
-  transcript alone (`lib/share/sharecrypto.ts`). Game plans name their recipient and context inside
-  the signed payload. Pinned keys are insert-only on both sides (§4).
+  transcript alone (`lib/share/sharecrypto.ts`). Game plans and assignments name their recipient and
+  context inside the signed payload, and the owner refuses an assignment the server files under a
+  lineage or version other than the ones signed inside it. A grant names the clinician it is for,
+  and the portal refuses one written for another key (`lib/therapist/grant.ts`). Pinned keys are
+  insert-only on both sides (§4).
 - **The hole a browser cannot close (R5).** The server serves the page that holds the keys, so CSP and
   SRI protect against third parties and never against the origin itself. Every console that handles
   keys therefore shows a fixed lower-assurance banner; its wording is asserted character for

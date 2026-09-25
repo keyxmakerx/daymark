@@ -97,6 +97,18 @@ describe('one bundle, opened deliberately, cleared with the session', () => {
   })
 })
 
+describe('the grant the portal trusts is the one written for this clinician', () => {
+  it('checks the grant against the signing key this portal holds', () => {
+    expect(codeOnly(PORTAL)).toContain('verifyGrantBlob(current.bytes, c.pinnedOwnerSignPub, c.therapistFp)')
+  })
+
+  it('does not report another clinician\'s grant as a failed signature', () => {
+    // Both refusals show nothing, but they send the clinician to different places: a failed
+    // signature is not theirs to fix, and a grant for another key is the owner's to re-publish.
+    expect(codeOnly(PORTAL)).toContain('e instanceof GrantAddressError')
+  })
+})
+
 describe('the dated screens are given a ticking clock, not left to read one', () => {
   it('passes `now` as a value and ticks it in an $effect', () => {
     // `$derived` tracks only what it reads; a Date.now() inside a callee is invisible to it. That

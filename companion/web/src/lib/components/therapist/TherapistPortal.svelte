@@ -9,7 +9,7 @@
    * blob as untrusted until the owner signature checks against the pinned key.
    */
   import type { Grant } from '../../assignments/types'
-  import { verifyGrantBlob, hasCapability } from '../../therapist/grant'
+  import { verifyGrantBlob, hasCapability, GrantAddressError } from '../../therapist/grant'
   import { isLive, touch } from '../../therapist/session'
   import { zeroize } from '../../therapist/keyStore'
   import type { UnlockedContext } from '../../therapist/context'
@@ -74,11 +74,15 @@
         grantError = 'No grant has been published for you. The owner grants capabilities from their console.'
         return
       }
-      grant = verifyGrantBlob(current.bytes, c.pinnedOwnerSignPub)
-    } catch {
-      // Refuse to trust: an unverifiable grant yields no capabilities.
+      grant = verifyGrantBlob(current.bytes, c.pinnedOwnerSignPub, c.therapistFp)
+    } catch (e) {
+      // Refuse to trust: an unverifiable grant, or one written for someone else, yields no
+      // capabilities.
       grant = null
-      grantError = 'Refused to trust the grant — it did not verify against the pinned owner key.'
+      grantError =
+        e instanceof GrantAddressError
+          ? 'This grant names a different clinician key than the one on this device, so none of it is shown. The owner can publish a grant for this key from their console.'
+          : 'Refused to trust the grant — it did not verify against the pinned owner key.'
     }
   }
 

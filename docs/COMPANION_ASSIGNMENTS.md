@@ -40,12 +40,15 @@ only root of trust, and everything a clinician sends is signed and sealed to the
   example "let my clinician choose which self-checks appear". **`suggest.setting` never applies
   automatically**, whatever its mode says (`shouldAutoApply`).
 
-The grant records `{capability → {granted, apply}}`, is signed by the owner (Ed25519 over its canonical
-JSON) and published as a new append-only version on the grants channel; the clinician verifies it
-against the pinned owner key before trusting it. Revoking sets `granted: false` in a new version. That
-stops future delivery through an honest server; a true cutoff for material already delivered is
-re-pairing with new keys (COMPANION_SECURITY.md R3). "Revoking does not un-send what was already
-read."
+The grant records `{capability → {granted, apply}}` and the fingerprint of the clinician's signing
+key it is for. It is signed by the owner (Ed25519 over its canonical JSON) and published as a new
+append-only version on the grants channel; the clinician verifies it against the pinned owner key,
+and checks that it names their own key, before trusting it. The owner signs every clinician's grant
+with the same key, so the name inside is what says who a grant is for. A clinician who re-pairs with
+new keys keeps what was granted, re-bound to the new key. Revoking sets `granted: false` in a new
+version. That stops future delivery through an honest server; a true cutoff for material already
+delivered is re-pairing with new keys (COMPANION_SECURITY.md R3). "Revoking does not un-send what
+was already read."
 
 ## 2. The assignment channel (clinician to owner)
 
@@ -53,8 +56,9 @@ Assignments reuse the game-plan shape exactly, so there is one write-back primit
 signs the payload together with a context string (`daymark.assignment.v1`) and the fingerprint of the
 owner key it is sealed to, then seals it to the owner's X25519 key with `crypto_box_seal`. The server
 stores an opaque blob. The owner's console opens it, verifies the signature against the **pinned**
-clinician key (never a key from the blob), refuses a wrong context or another owner's fingerprint, and
-checks it against the current grant.
+clinician key (never a key from the blob), refuses a wrong context or another owner's fingerprint,
+refuses an item the server files under a lineage or version other than the ones signed inside it,
+and checks it against the current grant.
 
 ### 2.1 The assignment object (inside the signature)
 
@@ -123,7 +127,8 @@ Year-in-pixels, brushing, journal search, sleep trends and export are not built:
 - **The server stays zero-knowledge.** Grants, shares, assignments and game plans are opaque signed
   and sealed blobs. The server enforces size caps, per-relationship quotas, version retention, rate
   limits, and which side may write each channel: the owner writes grants and shares, the clinician
-  writes assignments and game plans.
+  writes assignments and game plans. Each side has its own share of the quota, a quarter for the
+  clinician, so nothing the clinician writes can stop the owner publishing a grant.
 - **Capability-bounded and owner-accepted.** The owner's console rejects any item whose capability
   is not currently granted, and applies nothing in `propose` mode without an explicit yes.
 - **Mutual pinning.** Each side verifies the other's signatures against keys pinned in the pairing

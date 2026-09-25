@@ -99,6 +99,10 @@
    * its grant is bound to that id, so a pending entry (whose id was a placeholder) cannot keep
    * either. Name, inbox token and pinnedAt survive; the SAS words are computed now that there are
    * finally two identities to compute them over.
+   *
+   * A clinician who re-paired with new keys keeps what was granted, re-bound to the new id. The
+   * grant names the key it is for: the clinician's portal refuses one that names another key, and
+   * the inbox refuses an assignment whose author is not the key the grant names.
    */
   function keysArrived(record: { signPub: Uint8Array; boxPub: Uint8Array }) {
     if (!session || !selectedId) return
@@ -116,7 +120,7 @@
       id,
       signPub,
       boxPub,
-      grant: cur.keysPending ? emptyGrant(id) : cur.grant,
+      grant: cur.keysPending ? emptyGrant(id) : { ...cur.grant, therapistFingerprint: id },
       fingerprintWords: words,
       keysPending: false,
     }

@@ -726,6 +726,16 @@ All notable changes to this project are documented here. The format is based on
   including a grant that takes a permission away from that clinician. Each direction now has its own
   allowance: what the clinician writes may use a quarter of `DAYMARK_REL_QUOTA_BYTES` (64 MiB of the
   default 256 MiB), and what the owner writes the rest. The total is unchanged.
+- **A clinician's portal trusts only the grant written for them, and the owner's inbox only an
+  assignment filed under the label it was signed with.** The owner signs every clinician's grant
+  with the same key, so the signature said who wrote a grant but not whom it was for, and a server
+  could have shown one clinician the permissions granted to another. The portal now checks the name
+  inside as well. Nothing depended on that screen, because the owner's console checks every
+  assignment against its own copy of the grant, but a clinician should never be shown permissions
+  they do not have. The owner's inbox now refuses an assignment the server files under a different
+  lineage or version from the one signed inside it, so an old assignment cannot be shown again as a
+  new one. A clinician who re-pairs with new keys keeps what was granted, re-bound to the new key;
+  before, every assignment they sent after re-pairing was refused.
 - **The phone's actual cryptography moves from 2019 to 2024.** The C library doing the encrypting
   on the phone was libsodium 1.0.18, bundled inside a wrapper whose version number said nothing
   about it; 1.0.20 brings five years of hardening (AEAD MAC memory fences, optimizer blockers,
