@@ -138,14 +138,14 @@ The owner decides; the interface makes the safe choice the easy one.
 | The self-harm item is absent by construction, never a toggle. | It cannot be shared by mistake. |
 
 As built (`owner/ShareBuilder.svelte`): four record types — self-checks, moods, journal, sleep — all
-unchecked, each with its count; *"Strip free-text notes (recommended)"* on by default; self-checks go
-as scores and bands only; an expiry of 1–365 days. The share is signed and sealed to the clinician's
-pinned key in the browser. No instrument in the Companion has a self-harm item — the honesty gate
-refuses one. The defaults are decided (#228): a new share covers the last 30 days and ends after 14
-days unless the owner chooses otherwise, and never later than 90; the code still offers 30 days over
-everything. Not built: those defaults in the console, #339, and the 30-day window, #225. A share is
-named where it is built, as access that ends on its date or when revoked, where a report is a copy
-handed over (#305). Not built: #337.
+unchecked, each with its count; *"Strip free-text notes (recommended)"* on by default; self-checks
+go as scores and bands only; an end of 1–90 days, 14 by default (decided in #228), with the date
+beside the field: *"Ends on {date}. The server then deletes its copy. Anything read before then has
+already been seen."* The share is signed and sealed to the clinician's pinned key in the browser. No
+instrument in the Companion has a self-harm item — the honesty gate refuses one. By the same
+decision a new share covers only the last 30 days; the code still offers everything. Not built: the
+30-day window, #225. A share is named where it is built, as access that ends on its date or when
+revoked, where a report is a copy handed over (#305). Not built: #337.
 
 ### 9.2 The consent screen
 
@@ -285,6 +285,8 @@ banner's request to verify it: #320.
 | Sharing check failed | Owner, sharing strip | *"This console could not check whether sharing is active. Nothing has changed."* A failed check never reads as "not sharing". |
 | Copies left behind | Owner, after revoking | *"Sharing is ended and nothing further will be delivered. {n} copies of what was already shared could not be removed from the server, so they are still on its disk. Whoever runs the server can remove them."* |
 | Leave refused | Clinician | *"Nothing has changed. Your keys are still in this browser, you are still signed in, and nothing was sent to the person who invited you. You can try again."* |
+| An older copy of a share | Clinician, shared data | *"This copy was sealed before one you have already opened, so it stays closed. Ask for a fresh one."* It says nothing about the server, which the portal cannot know about. |
+| An item the server no longer keeps | Owner, assignment inbox | *"Sent by {name} on {date}. The server keeps items for 90 days."* One line in ink among the rest: the normal end of an item, never an error. |
 
 ## 12. Accessibility, language, motion
 

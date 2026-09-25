@@ -86,19 +86,21 @@ signatures stop forgery. Rollback protection is not built (§8).
   plan (the clinician signs it); pass off a substituted key once pairing has bound the real one
   (§5.6).
 - **Defences:** the owner Ed25519-signs every share over the transcript
-  `context|shareId|version|recipientFp|expiry|ownerSigningFp` together with the encrypted body and
-  the sealed content key; the transcript is also the AEAD's associated data. The whole envelope is
-  signed because a sealed box is anonymous: anyone holding the clinician's public key can seal a
-  content key to it, so a signature over the transcript alone would vouch for whatever body and key
-  sat beside it. As signed, no part of a share can be replaced, a sealed content key cannot be
-  spliced onto another ciphertext, and a bundle cannot be re-pointed at another owner. The clinician
-  verifies against the owner key pinned at pairing before opening anything, refuses a share whose
-  signed version is not the version it was served as, and refuses format 1, which signed the
-  transcript alone (`lib/share/sharecrypto.ts`). Game plans and assignments name their recipient and
-  context inside the signed payload, and the owner refuses an assignment the server files under a
-  lineage or version other than the ones signed inside it. A grant names the clinician it is for,
-  and the portal refuses one written for another key (`lib/therapist/grant.ts`). Pinned keys are
-  insert-only on both sides (§4).
+  `context|shareId|version|recipientFp|createdAt|expiry|ownerSigningFp` together with the encrypted
+  body and the sealed content key; the transcript is also the AEAD's associated data. The whole
+  envelope is signed because a sealed box is anonymous: anyone holding the clinician's public key
+  can seal a content key to it, so a signature over the transcript alone would vouch for whatever
+  body and key sat beside it. As signed, no part of a share can be replaced, a sealed content key
+  cannot be spliced onto another ciphertext, and a bundle cannot be re-pointed at another owner. The
+  clinician verifies against the owner key pinned at pairing before opening anything, refuses a
+  share whose signed version is not the version it was served as, and refuses format 1, which signed
+  the transcript alone (`lib/share/sharecrypto.ts`). It also refuses a copy sealed before the newest
+  share that browser has opened (`lib/therapist/shareSeen.ts`), which catches an older share served
+  as the current one, though not from a server that also changes the page (R5). Game plans and
+  assignments name their recipient and context inside the signed payload, and the owner refuses an
+  assignment the server files under a lineage or version other than the ones signed inside it. A
+  grant names the clinician it is for, and the portal refuses one written for another key
+  (`lib/therapist/grant.ts`). Pinned keys are insert-only on both sides (§4).
 - **The hole a browser cannot close (R5).** The server serves the page that holds the keys, so CSP and
   SRI protect against third parties and never against the origin itself. Every console that handles
   keys therefore shows a fixed lower-assurance banner; its wording is asserted character for

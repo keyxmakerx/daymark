@@ -118,31 +118,35 @@ built (#225).
 
 Each share version gets a fresh content key. The bundle is padded to a standard size
 (`lib/padding.ts`, decided in #214), then encrypted with XChaCha20-Poly1305 under that key, with the
-transcript `context|shareId|version|recipientFp|expiry|ownerSigningFp` as associated data, and the
-content key is sealed to the clinician's pinned X25519 key. The owner signs the transcript together
-with the encrypted body and the sealed key, so no part of a share can be replaced without breaking
-the signature, and the version signed is the version the share is published as
-(`lib/share/sharecrypto.ts`, format 2). The expiry defaults to 30 days and can be set from 1 to 365
-in the console; the server refuses a missing or past expiry and clamps anything beyond 366 days. By
-decision (#228), a new share covers the last 30 days and ends after 14 days unless the owner chooses
-otherwise, never later than 90 days, and the server deletes the bytes of whatever has ended. Not
-built: #339 in the console, #332 and #338 on the server, and the 30-day window, #225.
+transcript `context|shareId|version|recipientFp|createdAt|expiry|ownerSigningFp` as associated data,
+and the content key is sealed to the clinician's pinned X25519 key. The owner signs the transcript
+together with the encrypted body and the sealed key, so no part of a share can be replaced without
+breaking the signature, and the version signed is the version the share is published as
+(`lib/share/sharecrypto.ts`, format 2). A share ends after 14 days unless the owner chooses
+otherwise, from 1 to 90 days, and the console shows the date it ends (`lib/owner/sharing.ts`,
+decided in #228). The server refuses a missing or past expiry, clamps anything beyond 90 days after
+publishing (#332), and deletes the bytes of whatever has ended (#338). Not built: the 30-day window,
+#225.
 
 A share can be refreshed as the owner records more: each refresh is a new version (append-only), and
-the clinician always reads the newest. Older versions stay readable by number until their own
-expiry; by decision, a newer version ends the earlier ones (#228). Not built: #332. Its scope
-changes only by the owner's action, and nothing renews itself.
+the clinician always reads the newest. A newer version ends the ones before it, and the server
+answers 410 for them (#332, decided in #228). Its scope changes only by the owner's action, and
+nothing renews itself.
 
 ### 5.4 The clinician reads
 
 The portal fetches `/v1/rel/{relRef}/shares/{lineage}/current` with the session cookie and the inbox
-token. The server checks that the session belongs to this relationship and that the share has neither
-expired nor been withdrawn; if it has, the answer is **410 Gone** — expiry and withdrawal deliberately
-give the same answer. In the browser, the portal checks that the share names the version it was
-served as, then checks the owner's signature against the pinned owner key, and only then unseals the
-content key and decrypts; any failure refuses to render. A share in format 1, whose signature
-covered the transcript alone, stays closed, and the portal tells the clinician to ask for a fresh
-one (`lib/therapist/shareClient.ts`).
+token. The server checks that the session belongs to this relationship and that the share has
+neither expired nor been withdrawn; if it has, the answer is **410 Gone** — expiry and withdrawal
+deliberately give the same answer. In the browser, the portal checks that the share names the
+version it was served as, then checks the owner's signature against the pinned owner key, and only
+then unseals the content key and decrypts; any failure refuses to render. A share in format 1, whose
+signature covered the transcript alone, stays closed, and the portal tells the clinician to ask for
+a fresh one (`lib/therapist/shareClient.ts`). So does a copy sealed before the newest share this
+browser has already opened: the portal keeps, for each relationship, when that share was sealed,
+itself sealed to the relationship's own key (`lib/therapist/shareSeen.ts`). It cannot catch the
+first share a browser opens, or a server that changes the page itself
+([COMPANION_SECURITY.md](COMPANION_SECURITY.md) R5).
 
 Responses are `Cache-Control: no-store`, and decrypted content lives in memory only, wiped on logout
 and when idle. What cannot be revoked is therefore at most one session's worth of what was shared.

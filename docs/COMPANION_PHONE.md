@@ -41,7 +41,7 @@ libsodium and no emulator; the `sync` flavour wires it to the Android binding
 | CPace (CPACE-RISTRETTO255-SHA512) | `pairing/cpace.ts` | `CpaceCrypto.kt` | Yes |
 | Pairing channel identifier and envelopes | `pairing/relay.ts`, `pairing/envelope.ts`, `pairing/payloads.ts` | — (`lvCat` exists, no builder) | No: #174 |
 | Assignment and game-plan opening: seal-open, then verify against the pinned clinician key, context and recipient fingerprint | `assignments/crypto.ts`, `therapist/gamePlan.ts` | — | No: #177 |
-| Share sealing, format 2: padded, and signed over the transcript, the encrypted body and the sealed key, at the version the share is published as | `share/sharecrypto.ts` | — | No: #174 |
+| Share sealing, format 2: padded, and signed over the transcript, the encrypted body and the sealed key, at the version the share is published as and with the time it was sealed | `share/sharecrypto.ts` | — | No: #174 |
 
 The owner's key pair is derived from the master (subkeys 3 and 4), so the phone stores no separate
 owner identity; that is what makes the phone and the browser the same owner. The vector in
