@@ -109,7 +109,7 @@
       const meta: ShareBundleMeta = { shareId, version, createdAt, ownerFp, expiry }
       const finalBundle = buildShareBundle(data, sel, meta)
       const shareMeta: ShareMeta = {
-        context: SHARE_CONTEXT, shareId, version, recipientFp, expiry, ownerSigningFp: ownerFp,
+        context: SHARE_CONTEXT, shareId, version, recipientFp, createdAt, expiry, ownerSigningFp: ownerFp,
       }
       const sealed: SealedShare = buildShare(finalBundle, shareMeta, therapist.boxPub, session.ownerSign, ed25519Fp, pins)
 
@@ -140,7 +140,7 @@
   /** Encode a SealedShare to opaque bytes (Uint8Arrays → base64url in a small JSON envelope). */
   function encodeSealed(s: SealedShare): Uint8Array {
     const obj = {
-      fmt: s.fmt, shareId: s.shareId, version: s.version, expiry: s.expiry,
+      fmt: s.fmt, shareId: s.shareId, version: s.version, createdAt: s.createdAt, expiry: s.expiry,
       recipientFp: s.recipientFp, ownerSigningFp: s.ownerSigningFp,
       body: toBase64(s.body), wrappedCEK: toBase64(s.wrappedCEK), ownerSig: toBase64(s.ownerSig),
     }

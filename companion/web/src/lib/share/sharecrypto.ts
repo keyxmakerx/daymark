@@ -4,7 +4,7 @@
  *   plaintext  = pad(serialize(ShareBundle))                 // curated subset, padded (../padding.ts)
  *   CEK        = randombytes_buf(32)                         // fresh random key per share
  *   nonce      = randombytes_buf(24)
- *   aad        = transcript(shareId, version, recipientFp, expiry, ownerSigningFp)
+ *   aad        = transcript(shareId, version, recipientFp, createdAt, expiry, ownerSigningFp)
  *   body       = nonce || xchacha20poly1305_encrypt(plaintext, aad, nonce, CEK)
  *   wrappedCEK = crypto_box_seal(CEK, therapistX25519Pub)    // anonymity only, NO forward secrecy
  *   ownerSig   = crypto_sign_detached(signedMessage(aad, body, wrappedCEK), ownerEd25519Sk)
@@ -22,6 +22,11 @@
  * server sees only the envelope: nonce||ciphertext, the sealed CEK, the signature, and metadata —
  * it can decrypt none of it, and the padding means the body's length says only which size bucket
  * the share falls in.
+ *
+ * WHEN IT WAS SEALED IS SIGNED TOO. `createdAt` is in the transcript, so the portal can refuse a
+ * copy sealed before the newest one it has already opened (therapist/shareSeen.ts) — by the
+ * owner's own clock, not by version numbers, which an honest server restored from a backup could
+ * hand out again.
  *
  * FORMAT 1 IS REFUSED, not read. A format-1 share was signed over its transcript only, so its
  * contents cannot be checked, and accepting it would keep the forgery above open for as long as
@@ -49,6 +54,7 @@ export interface ShareMeta {
   shareId: string
   version: number
   recipientFp: string // therapist X25519 fingerprint
+  createdAt: number // epoch ms, when the owner sealed it
   expiry: number // epoch ms
   ownerSigningFp: string // owner Ed25519 fingerprint (pinned by therapist)
 }
@@ -74,6 +80,7 @@ export interface SealedShare {
   fmt: typeof SHARE_FORMAT
   shareId: string
   version: number
+  createdAt: number
   expiry: number
   recipientFp: string
   ownerSigningFp: string
@@ -86,17 +93,19 @@ export class ShareOpenError extends Error {}
 export class ShareExpiredError extends ShareOpenError {}
 /** A share in a format this console does not open (format 1 cannot be checked, see the header). */
 export class ShareFormatError extends ShareOpenError {}
+/** A share sealed before the newest one this browser has already opened for the relationship. */
+export class ShareOlderError extends ShareOpenError {}
 export class ShareUnpinnedError extends PairingError {}
 
 /**
- * Canonical AAD bytes: context|shareId|version|recipientFp|expiry|ownerSigningFp, '|'-joined,
+ * Canonical AAD bytes: context|shareId|version|recipientFp|createdAt|expiry|ownerSigningFp, '|'-joined,
  * UTF-8 (a wire contract). The fields are unambiguous because openShare refuses any envelope whose
  * ids fall outside [A-Za-z0-9_-] (so none contains '|') and whose numbers are not non-negative safe
  * integers written in base 10.
  */
 export function transcript(m: ShareMeta): Uint8Array {
   return enc.encode(
-    `${SHARE_CONTEXT}|${m.shareId}|${m.version}|${m.recipientFp}|${m.expiry}|${m.ownerSigningFp}`,
+    `${SHARE_CONTEXT}|${m.shareId}|${m.version}|${m.recipientFp}|${m.createdAt}|${m.expiry}|${m.ownerSigningFp}`,
   )
 }
 
@@ -166,8 +175,8 @@ export function buildShare(
   if (meta.ownerSigningFp !== fingerprint(owner.publicKey)) {
     throw new PairingError('meta.ownerSigningFp does not match the owner signing key')
   }
-  if (!ID.test(meta.shareId) || !isCount(meta.version) || !isCount(meta.expiry)) {
-    throw new PairingError('share id, version or expiry is not in the form a therapist accepts')
+  if (!ID.test(meta.shareId) || !isCount(meta.version) || !isCount(meta.createdAt) || !isCount(meta.expiry)) {
+    throw new PairingError('share id, version, creation time or expiry is not in the form a therapist accepts')
   }
   if (bundle.shareId !== meta.shareId || bundle.ownerFp !== meta.ownerSigningFp) {
     throw new PairingError('the bundle names a different share or owner than its envelope')
@@ -186,6 +195,7 @@ export function buildShare(
       fmt: SHARE_FORMAT,
       shareId: meta.shareId,
       version: meta.version,
+      createdAt: meta.createdAt,
       expiry: meta.expiry,
       recipientFp: meta.recipientFp,
       ownerSigningFp: meta.ownerSigningFp,
@@ -206,8 +216,9 @@ export function buildShare(
  *      envelope is addressed to this therapist's X25519 key
  *   3. verify ownerSig over signedMessage(transcript, body, wrappedCEK)
  *   4. check now < expiry
- *   5. unseal the CEK, AEAD-decrypt with the transcript as associated data, unpad
- *   6. the decrypted bundle must name the same share and owner as its envelope
+ *   5. refuse a share sealed before `notBefore`, the newest one already opened (therapist/shareSeen.ts)
+ *   6. unseal the CEK, AEAD-decrypt with the transcript as associated data, unpad
+ *   7. the decrypted bundle must name the same share and owner as its envelope
  * Only then return the bundle. Never renders on any failure.
  */
 export function openShare(
@@ -216,6 +227,7 @@ export function openShare(
   ownerSigningPub: Uint8Array,
   pinnedOwnerSigningFp: string,
   now: number,
+  notBefore?: number,
 ): ShareBundle {
   // 1. format and shape (the envelope's fields are attacker-settable until step 3)
   if ((sealed as { fmt: unknown }).fmt !== SHARE_FORMAT) {
@@ -224,7 +236,7 @@ export function openShare(
   const nb = _sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES
   if (
     !ID.test(sealed.shareId) || !ID.test(sealed.recipientFp) || !ID.test(sealed.ownerSigningFp) ||
-    !isCount(sealed.version) || !isCount(sealed.expiry) ||
+    !isCount(sealed.version) || !isCount(sealed.createdAt) || !isCount(sealed.expiry) ||
     sealed.body.length < nb + _sodium.crypto_aead_xchacha20poly1305_ietf_ABYTES ||
     sealed.wrappedCEK.length !== _sodium.crypto_box_SEALBYTES + _sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES ||
     sealed.ownerSig.length !== _sodium.crypto_sign_BYTES
@@ -247,6 +259,7 @@ export function openShare(
     shareId: sealed.shareId,
     version: sealed.version,
     recipientFp: sealed.recipientFp,
+    createdAt: sealed.createdAt,
     expiry: sealed.expiry,
     ownerSigningFp: sealed.ownerSigningFp,
   })
@@ -256,7 +269,12 @@ export function openShare(
   // 4. expiry (client re-check; the server also enforces on the honest path)
   if (!(now < sealed.expiry)) throw new ShareExpiredError('share has expired')
 
-  // 5. unseal, decrypt, unpad
+  // 5. not older than one already opened; decided on the signed time, before anything is decrypted
+  if (notBefore !== undefined && sealed.createdAt < notBefore) {
+    throw new ShareOlderError('share was sealed before one already opened')
+  }
+
+  // 6. unseal, decrypt, unpad
   let cek: Uint8Array
   try {
     cek = _sodium.crypto_box_seal_open(sealed.wrappedCEK, therapist.publicKey, therapist.privateKey)
@@ -283,7 +301,7 @@ export function openShare(
     _sodium.memzero(cek)
   }
 
-  // 6. the contents belong to this envelope
+  // 7. the contents belong to this envelope
   if (bundle.shareId !== sealed.shareId || bundle.ownerFp !== sealed.ownerSigningFp) {
     throw new ShareOpenError('share contents name a different share or owner than their envelope')
   }

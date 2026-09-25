@@ -109,6 +109,14 @@ describe('the grant the portal trusts is the one written for this clinician', ()
   })
 })
 
+describe('an older copy of a share is refused in words of its own', () => {
+  it('names it apart from a failed signature, in the same voice as the other closed shares', () => {
+    const code = codeOnly(SHARED_VIEW)
+    expect(code).toContain('e instanceof ShareOlderError')
+    expect(code).toContain('This copy was sealed before one you have already opened, so it stays closed. Ask for a fresh one.')
+  })
+})
+
 describe('the dated screens are given a ticking clock, not left to read one', () => {
   it('passes `now` as a value and ticks it in an $effect', () => {
     // `$derived` tracks only what it reads; a Date.now() inside a callee is invisible to it. That

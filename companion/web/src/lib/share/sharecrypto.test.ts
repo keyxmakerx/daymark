@@ -9,6 +9,7 @@ import {
   ShareOpenError,
   ShareExpiredError,
   ShareFormatError,
+  ShareOlderError,
   ShareUnpinnedError,
   SHARE_CONTEXT,
   type SealedShare,
@@ -81,6 +82,7 @@ describe('share crypto — build/seal/open + negative cases', () => {
       context: SHARE_CONTEXT,
       shareId: 'share-1',
       version: 1,
+      createdAt: 1_000,
       recipientFp: therX25519Fp,
       expiry: 10_000,
       ownerSigningFp,
@@ -246,9 +248,51 @@ describe('share crypto — build/seal/open + negative cases', () => {
     expect(deserializeBundle(bytes1)).toEqual(b)
   })
 
+  it('11. THE SEALING TIME is signed: changing it breaks the owner signature', () => {
+    const s = sealed()
+    const later = s.createdAt + 1
+    expect(later).not.toBe(s.createdAt)
+    expect(() => open({ ...s, createdAt: later })).toThrow(/signature/)
+    expect(() => open(s)).not.toThrow() // positive control: the untouched envelope opens
+  })
+
+  describe('12. OLDER THAN ONE ALREADY OPENED (therapist/shareSeen.ts)', () => {
+    const openAfter = (s: SealedShare, notBefore: number | undefined, box = ther.x25519) =>
+      openShare(s, box, owner.ed25519.publicKey, ownerSigningFp, 5_000, notBefore)
+
+    it('refuses a share sealed before the newest one already opened', () => {
+      const s = sealed()
+      expect(() => openAfter(s, s.createdAt + 1)).toThrow(ShareOlderError)
+    })
+
+    it('opens the same share again, and anything sealed later (positive control)', () => {
+      const s = sealed()
+      expect(openAfter(s, s.createdAt).shareId).toBe('share-1')
+      expect(openAfter(s, s.createdAt - 1).shareId).toBe('share-1')
+      expect(openAfter(s, undefined).shareId).toBe('share-1')
+    })
+
+    it('decides before anything is decrypted', () => {
+      // The right public key with the wrong private key passes every check up to the unseal.
+      const s = sealed()
+      const cannotUnseal = { publicKey: ther.x25519.publicKey, privateKey: newIdentity().x25519.privateKey }
+      expect(() => openAfter(s, s.createdAt + 1, cannotUnseal)).toThrow(ShareOlderError)
+      // Without the mark, the same call gets as far as the unseal and fails there instead.
+      let reached: unknown
+      try {
+        openAfter(s, undefined, cannotUnseal)
+      } catch (e) {
+        reached = e
+      }
+      expect(reached).toBeInstanceOf(ShareOpenError)
+      expect(reached).not.toBeInstanceOf(ShareOlderError)
+      expect(String((reached as Error).message)).toMatch(/sealed CEK could not be opened/)
+    })
+  })
+
   it('transcript is a fixed wire contract (conformance vector)', () => {
-    const m: ShareMeta = { context: SHARE_CONTEXT, shareId: 'abc', version: 2, recipientFp: 'RFP', expiry: 42, ownerSigningFp: 'OFP' }
-    expect(new TextDecoder().decode(transcript(m))).toBe('daymark.share.v2|abc|2|RFP|42|OFP')
+    const m: ShareMeta = { context: SHARE_CONTEXT, shareId: 'abc', version: 2, recipientFp: 'RFP', createdAt: 7, expiry: 42, ownerSigningFp: 'OFP' }
+    expect(new TextDecoder().decode(transcript(m))).toBe('daymark.share.v2|abc|2|RFP|7|42|OFP')
   })
 
   it('the signed message is a fixed wire contract: domain, zero byte, three BLAKE2b-256 hashes', () => {

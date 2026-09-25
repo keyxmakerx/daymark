@@ -71,6 +71,7 @@ describe('owner console pin gate', () => {
       context: 'daymark.share.v2',
       shareId: 'share-1',
       version: 0,
+      createdAt: 1_000,
       recipientFp: fingerprint(boxPub),
       expiry: 10_000,
       ownerSigningFp: ownerFp,

@@ -7,14 +7,20 @@
  * share, or on one sealed in format 1, whose contents cannot be checked).
  *
  * The signed version must be the version the server serves the share under, so a server cannot
- * hand one version of a lineage out as another.
+ * hand one version of a lineage out as another. And a share sealed before the newest one this
+ * browser has already opened stays closed (shareSeen.ts): the signed creation time decides, before
+ * anything is decrypted.
  *
  * The decrypted ShareBundle is curated (scores/bands/aggregates only, self-harm slot structurally
  * absent). bundleToBackupData() adapts it into the BackupData shape the existing Dashboard renders.
  * In-memory only; re-fetched per session (thin viewer).
  */
 import _sodium from 'libsodium-wrappers-sumo'
-import { openShare, ShareOpenError, ShareExpiredError, ShareFormatError, SHARE_FORMAT, type SealedShare, type ShareBundle } from '../share/sharecrypto'
+import {
+  openShare, ShareOpenError, ShareExpiredError, ShareFormatError, ShareOlderError, SHARE_FORMAT,
+  type SealedShare, type ShareBundle,
+} from '../share/sharecrypto'
+import { newestOpened, rememberOpened, defaultSeenStorage, type SeenStorage } from './shareSeen'
 import type { BoxKeyPair } from '../assignments/crypto'
 import type { BackupData } from '../backup'
 import type { PortalClient, SessionInfo } from './session'
@@ -22,7 +28,7 @@ import type { PortalClient, SessionInfo } from './session'
 const URLSAFE = () => _sodium.base64_variants.URLSAFE_NO_PADDING
 const dec = new TextDecoder()
 
-export { ShareOpenError, ShareExpiredError, ShareFormatError }
+export { ShareOpenError, ShareExpiredError, ShareFormatError, ShareOlderError }
 export type { ShareBundle }
 
 /**
@@ -40,7 +46,8 @@ export function decodeSealed(bytes: Uint8Array): SealedShare {
   if (o === null || typeof o !== 'object') throw new ShareOpenError('malformed sealed-share envelope')
   if (o.fmt !== SHARE_FORMAT) throw new ShareFormatError('share is not in format 2')
   const strings = ['shareId', 'recipientFp', 'ownerSigningFp', 'body', 'wrappedCEK', 'ownerSig'] as const
-  if (strings.some((k) => typeof o[k] !== 'string') || typeof o.version !== 'number' || typeof o.expiry !== 'number') {
+  if (strings.some((k) => typeof o[k] !== 'string') || typeof o.version !== 'number' ||
+    typeof o.createdAt !== 'number' || typeof o.expiry !== 'number') {
     throw new ShareOpenError('malformed sealed-share envelope')
   }
   try {
@@ -48,6 +55,7 @@ export function decodeSealed(bytes: Uint8Array): SealedShare {
       fmt: SHARE_FORMAT,
       shareId: o.shareId as string,
       version: o.version as number,
+      createdAt: o.createdAt as number,
       expiry: o.expiry as number,
       recipientFp: o.recipientFp as string,
       ownerSigningFp: o.ownerSigningFp as string,
@@ -62,8 +70,8 @@ export function decodeSealed(bytes: Uint8Array): SealedShare {
 
 /**
  * Fetch + open the current share for this session. Returns the verified ShareBundle. THROWS
- * (ShareOpenError / ShareExpiredError) on any verification failure — the caller must not render.
- * Returns null when there is simply no share yet.
+ * (ShareOpenError and its kinds: expired, older format, older than one already opened) on any
+ * failure — the caller must not render. Returns null when there is simply no share yet.
  */
 export async function fetchShare(
   client: PortalClient,
@@ -72,6 +80,7 @@ export async function fetchShare(
   pinnedOwnerSignPub: Uint8Array,
   pinnedOwnerSigningFp: string,
   now: number = Date.now(),
+  seen: SeenStorage | null = defaultSeenStorage(),
 ): Promise<ShareBundle | null> {
   const current = await client.getCurrent(session, 'shares', 'share')
   if (!current) return null
@@ -81,7 +90,11 @@ export async function fetchShare(
   }
   // openShare throws on any failure; we deliberately do NOT catch here so the UI shows a
   // refuse-to-render error rather than a (possibly forged) bundle.
-  return openShare(sealed, therapistBox, pinnedOwnerSignPub, pinnedOwnerSigningFp, now)
+  const notBefore = newestOpened(session.relRef, therapistBox, seen) ?? undefined
+  const bundle = openShare(sealed, therapistBox, pinnedOwnerSignPub, pinnedOwnerSigningFp, now, notBefore)
+  // Remembered only once the share has opened: a refused share never moves the mark.
+  rememberOpened(session.relRef, sealed.createdAt, therapistBox, seen)
+  return bundle
 }
 
 /**

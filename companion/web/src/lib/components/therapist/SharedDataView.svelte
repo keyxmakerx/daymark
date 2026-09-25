@@ -7,7 +7,7 @@
    * expired) fetchShare THROWS and we show a refuse-to-render error — we NEVER hand a bundle to the
    * Dashboard. The bundle is curated (scores/bands/aggregates only); nothing raw ever appears.
    */
-  import { fetchShare, bundleToBackupData, ShareExpiredError, ShareFormatError } from '../../therapist/shareClient'
+  import { fetchShare, bundleToBackupData, ShareExpiredError, ShareFormatError, ShareOlderError } from '../../therapist/shareClient'
   import type { BackupData } from '../../backup'
   import type { UnlockedContext } from '../../therapist/context'
   import Dashboard from '../Dashboard.svelte'
@@ -55,7 +55,9 @@
           ? 'This share has expired. Ask for a fresh one.'
           : e instanceof ShareFormatError
             ? 'This share was sealed in an older format whose contents cannot be checked, so it stays closed. Ask for a fresh one.'
-            : 'Refused to open this share — it did not verify against the pinned owner key, or it was tampered with.'
+            : e instanceof ShareOlderError
+              ? 'This copy was sealed before one you have already opened, so it stays closed. Ask for a fresh one.'
+              : 'Refused to open this share — it did not verify against the pinned owner key, or it was tampered with.'
     } finally {
       busy = false
       loaded = true
