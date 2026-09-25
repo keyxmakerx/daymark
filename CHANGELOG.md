@@ -743,6 +743,15 @@ All notable changes to this project are documented here. The format is based on
   lineage or version from the one signed inside it, so an old assignment cannot be shown again as a
   new one. A clinician who re-pairs with new keys keeps what was granted, re-bound to the new key;
   before, every assignment they sent after re-pairing was refused.
+- **What you share with a clinician no longer outlives its end.** A share is served until the end
+  you chose and never more than 90 days after you publish it (it was a year), and publishing a new
+  share ends the ones before it, so narrowing a share really narrows it. Assignments and game plans
+  end 90 days after they arrive. Within the hour after anything ends, the server deletes its stored
+  copy and keeps only a record that it existed. Before, an expired share was only refused, and its
+  bytes stayed on the disk for good. Only what the server still holds counts against a
+  relationship's storage now. Items already stored follow the same rule from the first start after
+  upgrading; nothing had been publicly released, so no one's chosen end date is cut short. (#228,
+  #332, #338)
 - **Backups, game plans and assignments are padded before they are encrypted, as shares already
   are.** The server stores each one at a size rounded up to a standard bucket (at least 4 KiB, then
   powers of two up to 1 MiB, then never more than about 12% larger), so it can no longer tell from

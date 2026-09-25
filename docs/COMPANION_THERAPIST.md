@@ -208,8 +208,8 @@ make future access revocable against an honest server, and keep what remains min
 
 | Mechanism | What it does | Against a colluding server? |
 |---|---|---|
-| Expiry | After the deadline the server answers 410. Deleting the bytes of whatever has ended is decided (#228); not built: #338 | No — an honest server only |
-| Replacement | A newer share ends the ones before it, by decision (#228). Not built: #332 | No — an honest server only |
+| Expiry | After the deadline, and never later than 90 days after publishing, the server answers 410; within the hour a sweep deletes the bytes (#332, #338) | No — an honest server only |
+| Replacement | A newer share ends the ones before it: the server answers 410 for them and the sweep deletes their bytes (#332, #338) | No — an honest server only |
 | Withdrawal ("Revoke" in the owner console) | The server marks the share withdrawn, deletes its bytes, answers 410 and records `share.revoke` | No — an honest server only |
 | A new content key per version | Protects later versions only from someone holding an old content key | Not against the clinician's own key |
 | Re-pairing to new keys | Future shares are sealed to the new key only | **Yes — the only real revocation** (R3) |

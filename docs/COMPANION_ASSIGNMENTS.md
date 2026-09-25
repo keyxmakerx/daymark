@@ -125,10 +125,11 @@ Year-in-pixels, brushing, journal search, sleep trends and export are not built:
 ## 4. Security and consent
 
 - **The server stays zero-knowledge.** Grants, shares, assignments and game plans are opaque signed
-  and sealed blobs. The server enforces size caps, per-relationship quotas, version retention, rate
-  limits, and which side may write each channel: the owner writes grants and shares, the clinician
-  writes assignments and game plans. Each side has its own share of the quota, a quarter for the
-  clinician, so nothing the clinician writes can stop the owner publishing a grant.
+  and sealed blobs. The server enforces size caps, per-relationship quotas, version retention, a
+  90-day life for assignments and game plans (#332), rate limits, and which side may write each
+  channel: the owner writes grants and shares, the clinician writes assignments and game plans. Each
+  side has its own share of the quota, a quarter for the clinician, so nothing the clinician writes
+  can stop the owner publishing a grant.
 - **Capability-bounded and owner-accepted.** The owner's console rejects any item whose capability
   is not currently granted, and applies nothing in `propose` mode without an explicit yes.
 - **Mutual pinning.** Each side verifies the other's signatures against keys pinned in the pairing

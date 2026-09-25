@@ -210,6 +210,10 @@ the code has changed.
 | WARN | `…companion.audit` | `audit log append failed` **with a stack trace** (`auditSafely` in the relationship, auth, key, ending and pairing routes) | Fixed messages and column names today; a stack trace all the same |
 | WARN | `…companion.audit` | `org audit append failed` with a stack trace (`orgRoutes`) | The same |
 | WARN | `…companion.routes` | `blob store I/O error: {}` (`failBlob` in `SyncRoutes.kt`, on a full disk) | **A file path containing the lineage id** (#160) |
+| INFO, or WARN when any copy could not be removed | `…companion.housekeeping` | `relationship sweep: {} stored copies removed, {} already gone, {} could not be removed and are retried next sweep` (`Housekeeping`, at start-up and hourly; #338) | Three counts; never a `relRef`, channel, lineage, version or size |
+| DEBUG | `…companion.housekeeping` | `relationship sweep: nothing had ended` | Nothing |
+| WARN | `…companion.housekeeping` | `housekeeping job failed (job={}): {}` | A job name and an exception class name |
+| ERROR | `…companion.housekeeping` | `housekeeping pass failed: {}` | An exception class name |
 
 A full disk on the relationship store answers 507 and logs nothing (#161).
 
@@ -426,6 +430,8 @@ docker system df -v | grep daymark-companion_blobs
 | `audit log append failed`, `org audit append failed` | Access is still served but no longer recorded. The owner's log is now incomplete, and nothing in the chain will ever show it | The most urgent storage error: check the data directory. The append never blocks a request (`auditSafely`), which is right, and is why only you see this |
 | `Web directory '…' not found` | The consoles will 404 | Check `DAYMARK_WEB_DIR` |
 | `DAYMARK_AUTH_TOKEN is not set` | The sync API and every owner route answer 503 | Create the secret (COMPANION_DEPLOYMENT.md §5.2) |
+| `relationship sweep: … N could not be removed and are retried next sweep` (WARN) | Copies of shared items that have ended are still on the volume; reads of them are refused, but the bytes are there | Check the volume's ownership (UID 65532), a read-only mount, or a stray directory in `rel/`; the sweep retries every hour |
+| `housekeeping job failed` or `housekeeping pass failed` | A scheduled sweep threw; ended copies may be accumulating | Look for the storage error around it; the next pass runs within the hour |
 
 Also watch for something that logs nothing: a token re-issue by email recovery leaves no log line and
 no audit entry, so on a server without SMTP it is completely silent (#163).

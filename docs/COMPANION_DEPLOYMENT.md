@@ -198,7 +198,7 @@ read from a file named by `NAME_FILE`, which wins.
 | `DAYMARK_MAX_VERSIONS` | `200` | Snapshot versions kept per lineage; older ones are deleted |
 | `DAYMARK_PER_TOKEN_QUOTA_BYTES` | `5368709120` (5 GiB) | Snapshot storage quota |
 | `DAYMARK_REL_MAX_VERSIONS` | `50` | Versions kept per relationship lineage |
-| `DAYMARK_REL_QUOTA_BYTES` | `268435456` (256 MiB) | Storage quota per relationship. What the clinician writes may use a quarter of it and what the owner writes the rest, so neither can crowd out the other |
+| `DAYMARK_REL_QUOTA_BYTES` | `268435456` (256 MiB) | Storage quota per relationship. What the clinician writes may use a quarter of it and what the owner writes the rest, so neither can crowd out the other. Only bytes the server still holds count: a withdrawn share stops counting at once, an ended item once the hourly sweep has removed it |
 | `DAYMARK_RATE_LIMIT_RPS` | `5` | Requests per second per address, on bearer-token routes only |
 | `DAYMARK_AUTH_LOCKOUT_FAILS`, `_SECONDS` | `8`, `900` | Bad bearer tokens before an address is locked out, and for how long |
 | `DAYMARK_TOTP_LOCKOUT_FAILS`, `_SECONDS` | `5`, `300` | Bad sign-in codes before a credential is locked, and for how long; also the backoff for wrong invitation secrets |
@@ -439,9 +439,13 @@ client address and the User-Agent, or coarsen the address (Caddy: `ip_mask { ipv
 never `ip_mask 0`, which turns masking off); keep timestamps to the second, in UTC; and cap its size,
 since it shares the disk with `/data`.
 
-**Retention.** Container logs are size-bounded; the app writes no access log; audit entries default to
-90 days. A practice that is a HIPAA covered entity may owe six years of documentation, and whether that
-reaches raw audit logs is contested. The default stays short because a person hosting their own
-journal is not a covered entity; a practice needs its own counsel (#284). Shared items (shares, game
-plans and assignments) are kept at most 90 days, and the server deletes the bytes of each once it
-has ended (#228). Not built: #332, #338; today only withdrawing a share deletes its bytes.
+**Retention.** Container logs are size-bounded; the app writes no access log; audit entries default
+to 90 days. A practice that is a HIPAA covered entity may owe six years of documentation, and
+whether that reaches raw audit logs is contested. The default stays short because a person hosting
+their own journal is not a covered entity; a practice needs its own counsel (#284). Shared items
+(shares, game plans and assignments) are kept at most 90 days (#228). A sweep at start-up and then
+every hour deletes the stored copy of every item that has ended — expired, past 90 days, replaced by
+a newer share, or withdrawn — and keeps its index row, so a read still answers 410 and version
+numbers keep counting (#332, #338). The first start after upgrading adds a column to `rel-index.db`
+and sweeps whatever has already ended; the server refuses to start if it cannot add the column.
+Snapshots are never swept.

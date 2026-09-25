@@ -66,10 +66,10 @@ Each adversary: what it can do, what it cannot while the defences hold, and the 
   session ids and inbox tokens are stored as digests and invitation secrets as Argon2id hashes. The
   audit log's source address is off by default. Every encrypted item (snapshots, shares, game plans
   and assignments) is padded on the device before it is encrypted (`lib/padding.ts`, decided in
-  #214), so the server stores a size rounded to a bucket, never an exact one.
-- **Not built:** decided in #228, ending every shared item within 90 days, with a newer share ending
-  the one before it (#332), and deleting the bytes of whatever has ended (#338). Withdrawing a share
-  deletes its bytes today; expiry only blocks reads.
+  #214), so the server stores a size rounded to a bucket, never an exact one. Every shared item ends
+  within 90 days, a newer share ends the one before it, and within the hour after an item ends a
+  sweep deletes its bytes and keeps only its index row (#228, #332, #338), so a stolen disk holds at
+  most 90 days of what was shared.
 
 Mood-tracking cadence is mental-health data. Timing is the leak that remains, and size to the
 nearest bucket.
@@ -375,8 +375,8 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
 - Caps: blobs of at most 25 MiB, upload bodies of at most 26 MiB, JSON bodies of at most 64 KiB, and
   a 120-second limit on reading a request; the newest 200 versions kept per snapshot lineage and 50
   per relationship lineage; 5 GiB of snapshots per token and 256 MiB per relationship, of which what
-  the clinician writes may use a quarter and what the owner writes the rest (§3 T4). All are
-  configurable ([COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md) §5).
+  the clinician writes may use a quarter and what the owner writes the rest (§3 T4), counting only
+  bytes still held. All are configurable ([COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md) §5).
 
 ### Owner notifications and server-access recovery
 
@@ -539,9 +539,8 @@ leave "signed out, not ended", which looks like a completed exit and is not one.
 - **No forward secrecy on sealed boxes (R2).** A compromise of a recipient's long-term X25519 key —
   the clinician's for shares, the owner's for game plans — decrypts everything ever sealed to it.
   Rotating CEKs does not help. Keeping less, for less time, is what limits the window: no share,
-  game plan or assignment is served past 90 days, and the server deletes the bytes of whatever has
-  ended (#228). Withdrawing a share deletes its bytes today; the 90-day limit and deletion on expiry
-  or replacement are not built: #332, #338.
+  game plan or assignment is served past 90 days, a newer share ends the one before it, and within
+  the hour after an item ends the server deletes its bytes (#228, #332, #338).
 - **Revocation binds an honest server only (R3).** Honestly: future fetches stop on an honest server;
   data published after re-keying is unreadable to the old key; plaintext already decrypted is never
   recallable. Real revocation is re-pairing to new keys. The limit is permanent and stated, not
