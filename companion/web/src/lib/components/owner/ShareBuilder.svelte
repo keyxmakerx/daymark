@@ -4,7 +4,7 @@
   import { fingerprint } from '../../assignments/crypto'
   import { loadPins, savePins, pinOnFirstUse } from '../../therapist/pinStore'
   import type { ShareMeta, SealedShare } from '../../share/sharecrypto'
-  import { toBase64 } from '../../share/sharecrypto'
+  import { toBase64, SHARE_CONTEXT } from '../../share/sharecrypto'
   import NonDiagnosticBanner from './NonDiagnosticBanner.svelte'
   import InvitePanel from './InvitePanel.svelte'
   import type { OwnerSession, PinnedTherapist } from './session'
@@ -57,9 +57,6 @@
       const expiry = createdAt + expiryDays * 24 * 60 * 60 * 1000
       const recipientFp = fingerprint(therapist.boxPub)
 
-      const meta: ShareBundleMeta = { shareId, version: 0, createdAt, ownerFp, expiry }
-      const finalBundle = buildShareBundle(data, sel, meta)
-
       // Pin gate. The pins come from storage, NOT from `therapist`: this block used to build an
       // empty PinStore and pin the same keys it was about to seal to, so buildShare compared each
       // value against itself and could not refuse anything. See ../../therapist/pinStore.ts.
@@ -69,34 +66,42 @@
       }
       const ed25519Fp = fingerprint(therapist.signPub)
 
-      const shareMeta: ShareMeta = {
-        context: 'daymark.share.v1', shareId, version: 0, recipientFp, expiry, ownerSigningFp: ownerFp,
-      }
-      const sealed: SealedShare = buildShare(finalBundle, shareMeta, therapist.boxPub, session.ownerSign, ed25519Fp, pins)
-
+      /*
+       * THEY ENDED IT, AND NOTHING SENT NOW WOULD BE READ (issue #91).
+       *
+       * Checked BEFORE anything is sealed, so the refusal can say "nothing was sealed or sent"
+       * and have it be literally true. The server refuses the publish too, and that is the rule
+       * that actually binds — but a 410 from a route is not a sentence a person can act on, and
+       * this is the moment where the owner can still do something about it.
+       *
+       * A FAILED CHECK IS NOT AN ENDING, and the catch says so by continuing. An unreachable
+       * server tells this console nothing about whether the clinician left, and refusing to
+       * share on a timeout would stop somebody sending their journal to a therapist who is
+       * perfectly well still there. If it really has ended, the publish below meets the server's
+       * own refusal and this screen shows that instead.
+       */
+      const lineage = 'share'
+      let version = 0
       if (client) {
-        /*
-         * THEY ENDED IT, AND NOTHING SENT NOW WOULD BE READ (issue #91).
-         *
-         * Checked BEFORE anything is sealed, so the refusal can say "nothing was sealed or sent"
-         * and have it be literally true. The server refuses the publish too, and that is the rule
-         * that actually binds — but a 410 from a route is not a sentence a person can act on, and
-         * this is the moment where the owner can still do something about it.
-         *
-         * A FAILED CHECK IS NOT AN ENDING, and the catch says so by continuing. An unreachable
-         * server tells this console nothing about whether the clinician left, and refusing to
-         * share on a timeout would stop somebody sending their journal to a therapist who is
-         * perfectly well still there. If it really has ended, the publish below meets the server's
-         * own refusal and this screen shows that instead.
-         */
         const ending = await client.relationshipEnding(await relRefOf(therapist.inboxToken)).catch(() => null)
         if (ending) {
           error = shareRefusedBecauseEnded(therapist.displayName, new Date(ending.endedAt).toLocaleDateString())
           return
         }
-        const lineage = 'share'
         const existing = await client.listVersions(therapist.inboxToken, 'shares', lineage).catch(() => [])
-        const version = existing.reduce((m, v) => Math.max(m, v.version), -1) + 1
+        version = existing.reduce((m, v) => Math.max(m, v.version), -1) + 1
+      }
+
+      // Sealed with the version it is published as: the therapist refuses a share whose signed
+      // version differs from the one the server serves it under.
+      const meta: ShareBundleMeta = { shareId, version, createdAt, ownerFp, expiry }
+      const finalBundle = buildShareBundle(data, sel, meta)
+      const shareMeta: ShareMeta = {
+        context: SHARE_CONTEXT, shareId, version, recipientFp, expiry, ownerSigningFp: ownerFp,
+      }
+      const sealed: SealedShare = buildShare(finalBundle, shareMeta, therapist.boxPub, session.ownerSign, ed25519Fp, pins)
+
+      if (client) {
         const body = encodeSealed(sealed)
         await client.putBlob(therapist.inboxToken, 'shares', lineage, version, body, {
           'X-Share-Meta': toBase64(new TextEncoder().encode(JSON.stringify({ shareId, version, expiry, ownerSigningFp: ownerFp }))),

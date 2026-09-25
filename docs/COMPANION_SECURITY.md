@@ -64,10 +64,11 @@ Each adversary: what it can do, what it cannot while the defences hold, and the 
   BLAKE2b digest is the `relRef`; no fingerprint appears in any URL. The owner bearer token, session
   ids and inbox tokens are stored as digests and invitation secrets as Argon2id hashes. The audit
   log's source address is off by default.
-- **Not built:** padding every encrypted item on the device, so the server stores only a rounded
-  size (#315, decided in #214); and, decided in #228, ending every shared item within 90 days, with
-  a newer share ending the one before it (#332), and deleting the bytes of whatever has ended
-  (#338). Withdrawing a share deletes its bytes today; expiry only blocks reads.
+- **Not built:** padding snapshots, game plans and assignments on the device as shares already are
+  (`lib/padding.ts`), so the server stores only a rounded size (#315, decided in #214); and, decided
+  in #228, ending every shared item within 90 days, with a newer share ending the one before it
+  (#332), and deleting the bytes of whatever has ended (#338). Withdrawing a share deletes its bytes
+  today; expiry only blocks reads.
 
 Mood-tracking cadence is mental-health data. Size and timing are the leak that remains.
 
@@ -85,11 +86,16 @@ signatures stop forgery. Rollback protection is not built (§8).
   plan (the clinician signs it); pass off a substituted key once pairing has bound the real one
   (§5.6).
 - **Defences:** the owner Ed25519-signs every share over the transcript
-  `context|shareId|version|recipientFp|expiry|ownerSigningFp`, which is also the AEAD's associated
-  data, so a sealed content key cannot be spliced onto another ciphertext and a bundle cannot be
-  re-pointed at another owner. The clinician verifies against the owner key pinned at pairing before
-  rendering anything. Game plans name their recipient and context inside the signed payload. Pinned
-  keys are insert-only on both sides (§4).
+  `context|shareId|version|recipientFp|expiry|ownerSigningFp` together with the encrypted body and
+  the sealed content key; the transcript is also the AEAD's associated data. The whole envelope is
+  signed because a sealed box is anonymous: anyone holding the clinician's public key can seal a
+  content key to it, so a signature over the transcript alone would vouch for whatever body and key
+  sat beside it. As signed, no part of a share can be replaced, a sealed content key cannot be
+  spliced onto another ciphertext, and a bundle cannot be re-pointed at another owner. The clinician
+  verifies against the owner key pinned at pairing before opening anything, refuses a share whose
+  signed version is not the version it was served as, and refuses format 1, which signed the
+  transcript alone (`lib/share/sharecrypto.ts`). Game plans name their recipient and context inside
+  the signed payload. Pinned keys are insert-only on both sides (§4).
 - **The hole a browser cannot close (R5).** The server serves the page that holds the keys, so CSP and
   SRI protect against third parties and never against the origin itself. Every console that handles
   keys therefore shows a fixed lower-assurance banner; its wording is asserted character for
@@ -168,9 +174,10 @@ CLINICIAN
   X25519 + Ed25519 private keys, wrapped in their browser ──▶ public halves pinned by the owner at pairing
 
 SHARE (owner → clinician)
-  subset ──XChaCha20-Poly1305(CEK, AAD = transcript)──▶ ciphertext
+  subset ──padded──▶ XChaCha20-Poly1305(CEK, AAD = transcript) ──▶ ciphertext
   CEK ──sealed box(clinician X25519)──▶ wrapped CEK
-  transcript ──Ed25519(owner)──▶ signature        (verified against the PINNED owner key)
+  transcript + ciphertext + wrapped CEK ──Ed25519(owner)──▶ signature
+                                           (verified against the PINNED owner key before anything opens)
 
 GAME PLAN / ASSIGNMENT (clinician → owner)
   payload ──Ed25519(clinician)──▶ signed ──sealed box(owner X25519)──▶ blob
@@ -537,7 +544,7 @@ leave "signed out, not ended", which looks like a completed exit and is not one.
 - **Anti-rollback is client-side and not built** (§8). **Sync is single-writer** (R11).
 - **Metadata leaks.** The existence, cadence and size of relationships and snapshots are visible to the
   server (§3 T1). Padding, decided in #214, rounds each item's size on the device and leaves timing
-  visible. Not built: #315.
+  visible. Shares are padded; snapshots, game plans and assignments are not yet: #315.
 - **Sign-in codes are phishable and stored in the clear on the server** (§5.2). A breach lets an
   attacker sign in as a clinician. It never lets them decrypt. A passkey cannot be phished, and an
   account that closes its code leaves nothing on the server that signs it in (#205). Not built:
@@ -558,7 +565,7 @@ leave "signed out, not ended", which looks like a completed exit and is not one.
 | R1 | AES-256-GCM is an equivalent for sync | Removed: random 96-bit nonces under one long-lived key risk reuse. XChaCha20-Poly1305 everywhere. |
 | R2 | A sealed box gives forward secrecy | False: it gives sender anonymity only (§11). |
 | R3 | Rotating content keys defeats a colluding server's revocation | Retracted: revocation binds an honest server only; re-keying is the real revocation. |
-| R4 | A sealed box authenticates the owner | False: the owner signs every share and the clinician verifies against the pinned key before rendering. |
+| R4 | A sealed box authenticates the owner | False: a sealed box is anonymous, so the owner signs every share over its transcript, its encrypted body and its sealed key together, and the clinician verifies against the pinned key before opening anything. |
 | R5 | SRI and CSP make the browser consoles zero-knowledge | False: they are a lower-assurance path (§3 T3). |
 | R6 | Server-side version chains give anti-rollback | Retracted: only a signed manifest checked against a local watermark does (§8). |
 | R7 | `internal: true` enforced "no egress" in the original topology | False then: the app shared an egress-capable network with the proxy. What holds now is in §6. |

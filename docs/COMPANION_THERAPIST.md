@@ -116,14 +116,17 @@ chooses the record types (check-in scores and bands, moods, journal entries, sle
 strip notes. Choosing a date range, leaving out single records and previewing the whole bundle are not
 built (#225).
 
-Each share version gets a fresh content key. The bundle is encrypted with XChaCha20-Poly1305, the
-content key is sealed to the clinician's pinned X25519 key, and the owner signs the transcript
-`context|shareId|version|recipientFp|expiry|ownerSigningFp`, which is also the associated data
-(`lib/share/sharecrypto.ts`). The expiry defaults to 30 days and can be set from 1 to 365 in the
-console; the server refuses a missing or past expiry and clamps anything beyond 366 days. By
-decision (#228), a new share covers the last 30 days and ends after 14 days unless the owner
-chooses otherwise, never later than 90 days, and the server deletes the bytes of whatever has
-ended. Not built: #339 in the console, #332 and #338 on the server, and the 30-day window, #225.
+Each share version gets a fresh content key. The bundle is padded to a standard size
+(`lib/padding.ts`, decided in #214), then encrypted with XChaCha20-Poly1305 under that key, with the
+transcript `context|shareId|version|recipientFp|expiry|ownerSigningFp` as associated data, and the
+content key is sealed to the clinician's pinned X25519 key. The owner signs the transcript together
+with the encrypted body and the sealed key, so no part of a share can be replaced without breaking
+the signature, and the version signed is the version the share is published as
+(`lib/share/sharecrypto.ts`, format 2). The expiry defaults to 30 days and can be set from 1 to 365
+in the console; the server refuses a missing or past expiry and clamps anything beyond 366 days. By
+decision (#228), a new share covers the last 30 days and ends after 14 days unless the owner chooses
+otherwise, never later than 90 days, and the server deletes the bytes of whatever has ended. Not
+built: #339 in the console, #332 and #338 on the server, and the 30-day window, #225.
 
 A share can be refreshed as the owner records more: each refresh is a new version (append-only), and
 the clinician always reads the newest. Older versions stay readable by number until their own
@@ -135,8 +138,11 @@ changes only by the owner's action, and nothing renews itself.
 The portal fetches `/v1/rel/{relRef}/shares/{lineage}/current` with the session cookie and the inbox
 token. The server checks that the session belongs to this relationship and that the share has neither
 expired nor been withdrawn; if it has, the answer is **410 Gone** — expiry and withdrawal deliberately
-give the same answer. In the browser, the portal unseals the content key, checks the owner's
-signature against the pinned owner key, and only then decrypts; any failure refuses to render.
+give the same answer. In the browser, the portal checks that the share names the version it was
+served as, then checks the owner's signature against the pinned owner key, and only then unseals the
+content key and decrypts; any failure refuses to render. A share in format 1, whose signature
+covered the transcript alone, stays closed, and the portal tells the clinician to ask for a fresh
+one (`lib/therapist/shareClient.ts`).
 
 Responses are `Cache-Control: no-store`, and decrypted content lives in memory only, wiped on logout
 and when idle. What cannot be revoked is therefore at most one session's worth of what was shared.
@@ -152,8 +158,9 @@ and when idle. What cannot be revoked is therefore at most one session's worth o
 
 The server sees ciphertext, public keys and routing metadata, never a key, plaintext or which records a
 clinician looked at ([COMPANION_SECURITY.md](COMPANION_SECURITY.md) §2, §3 T1). The metadata still
-matters: the existence and rhythm of a relationship leak to whoever runs the server, and sizes are not
-padded yet (Not built: #315).
+matters: the existence and rhythm of a relationship leak to whoever runs the server. A share is
+padded to a standard size before it is encrypted; game plans and assignments are not padded yet (Not
+built: #315).
 
 ## 7. Game plans — the clinician writes back
 

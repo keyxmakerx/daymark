@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { decodeSealed, bundleToBackupData, ShareOpenError } from './shareClient'
+import { decodeSealed, fetchShare, bundleToBackupData, ShareOpenError, ShareFormatError } from './shareClient'
+import type { PortalClient, SessionInfo } from './session'
 import { openShare } from '../share/sharecrypto'
 import { buildShare, type ShareBundle, type ShareMeta, type SealedShare } from '../share/sharecrypto'
 import { PinStore } from '../share/pairing'
@@ -40,7 +41,7 @@ describe('therapist share reader', () => {
       checkIns: [{ instrumentId: 'wellbeing-selfcheck', at: 150, score: 12, band: 'moderate' }],
       moods: [{ at: 120, level: 3 }],
     }
-    const meta: ShareMeta = { context: 'daymark.share.v1', shareId: 's1', version: 0, recipientFp, expiry: 9e15, ownerSigningFp }
+    const meta: ShareMeta = { context: 'daymark.share.v2', shareId: 's1', version: 0, recipientFp, expiry: 9e15, ownerSigningFp }
     const pins = new PinStore()
     pins.pin({ x25519Pub: ther.publicKey, ed25519Pub: newSignKeyPair().publicKey })
     // pin gate needs the recipient's ed25519 fp; buildShare checks the therapist ed key is pinned.
@@ -75,6 +76,32 @@ describe('therapist share reader', () => {
   it('rejects a malformed envelope', () => {
     const bad = new TextEncoder().encode(JSON.stringify({ fmt: 9 }))
     expect(() => decodeSealed(bad)).toThrow(ShareOpenError)
+    expect(() => decodeSealed(new TextEncoder().encode('not json'))).toThrow(ShareOpenError)
+    const o = JSON.parse(new TextDecoder().decode(encodeSealed(sealed)))
+    expect(() => decodeSealed(new TextEncoder().encode(JSON.stringify({ ...o, body: '***' })))).toThrow(ShareOpenError)
+    expect(() => decodeSealed(new TextEncoder().encode(JSON.stringify({ ...o, version: '0' })))).toThrow(ShareOpenError)
+  })
+
+  it('refuses a format-1 envelope as a format, so the screen can say so', () => {
+    const o = JSON.parse(new TextDecoder().decode(encodeSealed(sealed)))
+    expect(o.fmt).toBe(2) // so setting 1 really is a change
+    expect(() => decodeSealed(new TextEncoder().encode(JSON.stringify({ ...o, fmt: 1 })))).toThrow(ShareFormatError)
+  })
+
+  describe('the signed version must be the version the server serves it under', () => {
+    const client = (version: number) =>
+      ({ getCurrent: async () => ({ version, bytes: encodeSealed(sealed) }) }) as unknown as PortalClient
+    const session = {} as SessionInfo
+
+    it('opens when they match (positive control)', async () => {
+      expect(sealed.version).toBe(0)
+      const opened = await fetchShare(client(0), session, ther, owner.publicKey, ownerSigningFp, Date.now())
+      expect(opened?.checkIns).toEqual(bundle.checkIns)
+    })
+
+    it('refuses when the server serves it as another version', async () => {
+      await expect(fetchShare(client(3), session, ther, owner.publicKey, ownerSigningFp, Date.now())).rejects.toThrow(/different version/)
+    })
   })
 
   it('bundleToBackupData materializes only curated fields (scores/bands, no raw items)', () => {

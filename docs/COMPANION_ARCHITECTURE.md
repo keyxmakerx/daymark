@@ -179,11 +179,12 @@ server computes codes from it. A startup self-test of the cryptography is not bu
   built: #179.
 - **Grant (owner to clinician).** The owner's capability policy, signed and published. Every
   capability starts off (COMPANION_ASSIGNMENTS.md).
-- **Share (owner to clinician).** A curated bundle — check-in scores and bands, moods, journal, sleep,
-  with notes stripped by default and never a raw answer or a self-harm item — encrypted under a fresh
-  key that is sealed to the pinned clinician. The owner signs the share's header (share id, version,
-  recipient, expiry, owner fingerprint), and the clinician refuses to open anything whose signature
-  does not verify against the pinned owner key. The server refuses reads after expiry or withdrawal.
+- **Share (owner to clinician).** A curated bundle — check-in scores and bands, moods, journal,
+  sleep, with notes stripped by default and never a raw answer or a self-harm item — padded to a
+  standard size and encrypted under a fresh key that is sealed to the pinned clinician. The owner
+  signs the share's header (share id, version, recipient, expiry, owner fingerprint) together with
+  its encrypted contents, and the clinician refuses to open anything whose signature does not verify
+  against the pinned owner key. The server refuses reads after expiry or withdrawal.
 - **Assignments and game plans (clinician to owner).** The clinician signs the payload, bound to a
   context string and the owner's fingerprint, then seals it to the owner. The owner's console opens
   assignments, verifies them against the pinned clinician key and checks them against the current
@@ -198,7 +199,7 @@ rather than left to be discovered.
 
 | Limit | What it means | Where it stands |
 | --- | --- | --- |
-| **Metadata is visible** | Snapshot sizes, timing, how often someone syncs, how many relationships exist and how active each is, and the addresses requests come from. "Journalled daily for eight months, then nothing for nine days" is readable without decrypting anything | Disclosed, not yet mitigated. By decision, every encrypted item is padded on the device so the server learns only a rounded size (#214); not built: #315. Timing and how often someone syncs stay visible |
+| **Metadata is visible** | Snapshot sizes, timing, how often someone syncs, how many relationships exist and how active each is, and the addresses requests come from. "Journalled daily for eight months, then nothing for nine days" is readable without decrypting anything | Disclosed, not yet mitigated. By decision, every encrypted item is padded on the device so the server learns only a rounded size (#214); shares are padded, and snapshots, game plans and assignments are not yet: #315. Timing and how often someone syncs stay visible |
 | **It can deny service** | Refuse writes, withhold or truncate the audit log, serve an older snapshot | Readers verify each blob, not freshness: #179 |
 | **It serves the web pages** | A compromised server can ship JavaScript that keeps a passphrase or a pairing code. Browser-delivered encryption is only as strong as the delivery of the code. The installed phone app does not have this weakness | Stated on every console. The owner's half of pairing moves to the phone with #174. Not built: a clinician client the server cannot change, which a Practice deployment needs before it holds a real patient's data (#222): #319 |
 | **It writes the audit log about itself** | The hash chain shows internal consistency, never completeness: whoever can rewrite the entries can recompute the chain, and withholding an event is undetectable | The chain head is evidence only when anchored outside the server — a person's note today, the phone later: #182. Signed clinician attestations are not planned (#217): a console the server serves would only report what an honest one did |

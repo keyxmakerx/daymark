@@ -48,7 +48,7 @@ export function fingerprint(publicKey: Uint8Array): string {
 
 /**
  * Assignment binding context. Bound into the SIGNED payload (like game plans' GAMEPLAN_CONTEXT
- * and shares' 'daymark.share.v1') so a signed assignment cannot be replayed as a different
+ * and shares' 'daymark.share.v2') so a signed assignment cannot be replayed as a different
  * message type, and — together with recipientOwnerFp — cannot be re-pointed at a different owner
  * and still verify.
  */

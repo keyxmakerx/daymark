@@ -96,7 +96,7 @@ describe('buildShare — seal to pinned therapist, therapist opens', () => {
     const bundle = buildShareBundle(sampleData(), sel, { shareId: 's1', version: 1, createdAt: 1000, ownerFp, expiry: 9_000_000_000_000 })
 
     const shareMeta: ShareMeta = {
-      context: 'daymark.share.v1', shareId: 's1', version: 1,
+      context: 'daymark.share.v2', shareId: 's1', version: 1,
       recipientFp: tFps.x25519Fp, expiry: 9_000_000_000_000, ownerSigningFp: ownerFp,
     }
     const sealed = buildShare(bundle, shareMeta, therapist.x25519.publicKey, ownerSign, tFps.ed25519Fp, pins)
@@ -115,7 +115,7 @@ describe('buildShare — seal to pinned therapist, therapist opens', () => {
 
     const bundle = buildShareBundle(sampleData(), { ...emptySelection(), types: { checkIns: true, moods: false, journal: false, sleep: false } }, meta)
     const shareMeta: ShareMeta = {
-      context: 'daymark.share.v1', shareId: 's1', version: 1,
+      context: 'daymark.share.v2', shareId: 's1', version: 1,
       recipientFp: tFps.x25519Fp, expiry: 9_000_000_000_000, ownerSigningFp: ownerFp,
     }
     expect(() => buildShare(bundle, shareMeta, therapist.x25519.publicKey, ownerSign, tFps.ed25519Fp, pins)).toThrow(ShareUnpinnedError)

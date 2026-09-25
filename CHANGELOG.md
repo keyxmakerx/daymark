@@ -707,6 +707,19 @@ All notable changes to this project are documented here. The format is based on
   browser, which is now part of how this repository verifies itself.
 
 ### Security
+- **A share's signature now covers everything in it, so nobody holding a share can change what it
+  says.** The key that opens a share is sealed to the clinician with a sealed box, which anyone who
+  knows the clinician's public key can make, and the owner's signature covered only the share's
+  label: its id, version, recipient, expiry and owner. Whoever held one share, the server that
+  stores it included, could keep the signed label and put different contents under it, and the
+  clinician's portal would have shown those contents as the owner's. The signature now covers the
+  label, the encrypted contents and the sealed key together, and the portal checks it before it
+  opens anything. **Shares made before this change no longer open.** The clinician sees *This share
+  was sealed in an older format whose contents cannot be checked, so it stays closed. Ask for a
+  fresh one.* The version a share is signed as is now the version it is published as, and the portal
+  refuses one that says otherwise. Shares are also padded before they are encrypted, so the server
+  learns only a rounded size: up to 1 MiB, the next power of two and never less than 4 KiB; above
+  that, never more than about 12% larger. Snapshots, game plans and assignments follow (#315).
 - **A clinician can no longer use up the space the owner needs.** Everything in a relationship, the
   owner's grants and shares and the clinician's assignments and game plans, drew on one storage
   allowance, so a clinician who wrote enough could leave the owner unable to publish anything,

@@ -68,7 +68,7 @@ describe('owner console pin gate', () => {
   /** Exactly what ShareBuilder.seal() does: address the share to whatever box key it was handed. */
   function seal(boxPub: Uint8Array, pins: PinStore) {
     const meta: ShareMeta = {
-      context: 'daymark.share.v1',
+      context: 'daymark.share.v2',
       shareId: 'share-1',
       version: 0,
       recipientFp: fingerprint(boxPub),

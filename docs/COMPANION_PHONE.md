@@ -34,13 +34,14 @@ libsodium and no emulator; the `sync` flavour wires it to the Android binding
 | Subkeys, context `dmsync01`: 1 sync key, 2 manifest seed | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
 | Subkeys 3 and 4: the owner's X25519 and Ed25519 seeds | `owner/identity.ts` | — | No: #174 |
 | Snapshot envelope `DMS1 \| 0x01 \| nonce \| ciphertext`, AAD `daymark.snapshot.v1\|lineage\|version` | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
+| Padding before encryption: a `u32` big-endian length, the plaintext, then zeros up to the standard size (#214) | `lib/padding.ts`, with the vector in `lib/padding.test.ts` | — | No: #316 |
 | Padded snapshot envelope: the plaintext rounded up to a standard size before encryption (#214) | `sync/crypto.ts` (not built: #315) | — | No: #316 |
 | Manifest signing bytes | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
 | Base64: RFC 4648 §5, URL-safe, no padding | everywhere | `SyncCrypto.kt` (plain `java.util.Base64`, because lazysodium's own helper is standard base64) | Yes |
 | CPace (CPACE-RISTRETTO255-SHA512) | `pairing/cpace.ts` | `CpaceCrypto.kt` | Yes |
 | Pairing channel identifier and envelopes | `pairing/relay.ts`, `pairing/envelope.ts`, `pairing/payloads.ts` | — (`lvCat` exists, no builder) | No: #174 |
 | Assignment and game-plan opening: seal-open, then verify against the pinned clinician key, context and recipient fingerprint | `assignments/crypto.ts`, `therapist/gamePlan.ts` | — | No: #177 |
-| Share sealing | `share/sharecrypto.ts` | — | No: #174 |
+| Share sealing, format 2: padded, and signed over the transcript, the encrypted body and the sealed key, at the version the share is published as | `share/sharecrypto.ts` | — | No: #174 |
 
 The owner's key pair is derived from the master (subkeys 3 and 4), so the phone stores no separate
 owner identity; that is what makes the phone and the browser the same owner. The vector in
