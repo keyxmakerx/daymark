@@ -38,10 +38,18 @@
   const DAY_MS = 24 * 60 * 60 * 1000
   // Null while the field holds anything the server would not honour; the line then says so.
   const days = $derived(shareDays(expiryDays))
+  // The date moves with the clock: read once, it would show the day before the real end on a page
+  // left open past midnight. Times are absolute (epoch ms) throughout; only this display is local,
+  // so time zones and daylight saving change how the date is written, never which instant it is.
+  let now = $state(Date.now())
+  $effect(() => {
+    const id = setInterval(() => (now = Date.now()), 60_000)
+    return () => clearInterval(id)
+  })
   const endsOn = $derived(
     days === null
       ? null
-      : new Date(Date.now() + days * DAY_MS).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }),
+      : new Date(now + days * DAY_MS).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }),
   )
 
   const bundle = $derived(

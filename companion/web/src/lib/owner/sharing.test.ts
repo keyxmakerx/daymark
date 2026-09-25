@@ -343,6 +343,11 @@ describe('how long a share lasts (#228, #339)', () => {
     expect('let expiryDays = $state<number | null>(30)').toMatch(/\$state(<[^>]*>)?\(\d+\)/)
   })
 
+  it('shows the end date from a clock that ticks, so a page left open overnight stays right', () => {
+    expect(builder).toContain('new Date(now + days * DAY_MS)')
+    expect(builder).toMatch(/\$effect\(\(\) => \{\s*const id = setInterval\(\(\) => \(now = Date\.now\(\)\), 60_000\)\s*return \(\) => clearInterval\(id\)/)
+  })
+
   it('refuses a length the server would not honour before anything is sealed', () => {
     const refusal = builder.indexOf('if (days === null)')
     expect(refusal).toBeGreaterThan(-1)
