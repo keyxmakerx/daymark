@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { buildInbox, type InboxItem, type RawAssignmentBlob, type Decision } from '../../assignments/inbox'
+  import { buildInbox, fetchInbox, goneItemLine, type InboxItem, type GoneItem, type Decision } from '../../assignments/inbox'
   import AssignmentCard from './AssignmentCard.svelte'
   import NonDiagnosticBanner from './NonDiagnosticBanner.svelte'
   import type { OwnerSession, PinnedTherapist } from './session'
@@ -15,6 +15,7 @@
   } = $props()
 
   let items = $state<InboxItem[]>([])
+  let gone = $state<GoneItem[]>([])
   let busy = $state(false)
   let error = $state('')
   let loaded = $state(false)
@@ -27,19 +28,10 @@
     error = ''
     busy = true
     try {
-      const blobs: RawAssignmentBlob[] = []
-      for (const t of session.pinned) {
-        const lineages = await client.listLineages(t.inboxToken, 'assignments').catch(() => [])
-        for (const lineage of lineages) {
-          const versions = await client.listVersions(t.inboxToken, 'assignments', lineage)
-          // Only surface the head of each lineage (append-only supersede).
-          const head = versions.reduce((a, b) => (b.version > a.version ? b : a), versions[0])
-          if (!head) continue
-          const bytes = await client.getBlob(t.inboxToken, 'assignments', lineage, head.version)
-          blobs.push({ therapistId: t.id, lineage, version: head.version, bytes })
-        }
-      }
-      items = buildInbox(blobs, session.pinned as PinnedTherapist[], session.ownerBox)
+      // Item by item: an item the server no longer keeps becomes one line, not a failed inbox.
+      const fetched = await fetchInbox(client, session.pinned)
+      items = buildInbox(fetched.blobs, session.pinned as PinnedTherapist[], session.ownerBox)
+      gone = fetched.gone
       loaded = true
     } catch (e) {
       error = e instanceof Error ? e.message : 'Could not load the inbox.'
@@ -69,7 +61,7 @@
 
   {#if !loaded && !busy}
     <EmptyState title="Refresh to fetch assignments from your therapists." />
-  {:else if loaded && items.length === 0}
+  {:else if loaded && items.length === 0 && gone.length === 0}
     <EmptyState title="No assignments to review." />
   {:else}
     <div class="cards">
@@ -81,6 +73,9 @@
           onsnooze={() => decide(idx, 'snoozed')}
         />
       {/each}
+      {#each gone as g (g.lineage + ':' + g.version)}
+        <p class="gone">{goneItemLine(g.therapistName, new Date(g.sentAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }))}</p>
+      {/each}
     </div>
   {/if}
 </section>
@@ -90,4 +85,5 @@
   .bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
   .bar h3 { margin: 0; }
   .cards { display: flex; flex-direction: column; gap: var(--space-3); }
+  .gone { margin: 0; color: var(--ink-text); font-size: 0.9rem; }
 </style>

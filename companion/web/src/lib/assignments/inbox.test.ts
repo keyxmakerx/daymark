@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { evaluateBlob, buildInbox, canApply, type PinnedTherapist, type RawAssignmentBlob } from './inbox'
+import {
+  evaluateBlob, buildInbox, canApply, fetchInbox, goneItemLine,
+  type PinnedTherapist, type RawAssignmentBlob, type InboxSource,
+} from './inbox'
+import { PortalError, type RelMeta } from '../sync/portal'
 import {
   initAssignmentCrypto, newSignKeyPair, newBoxKeyPair, sealAssignment, fingerprint,
   type BoxKeyPair, type SignKeyPair,
@@ -164,3 +168,51 @@ describe('a clinician who re-paired with new keys', () => {
     expect(src).toContain('{ ...cur.grant, therapistFingerprint: id }')
   })
 })
+
+describe('fetching the inbox item by item (#339)', () => {
+  const sender = { id: 't1', displayName: 'Dr. Example', inboxToken: 'tok' }
+  const meta = (version: number, createdAt: number): RelMeta => ({ version, size: 1, contentHash: 'h', createdAt })
+
+  /** A server with these lineages; `status` makes a lineage's item answer that instead of bytes. */
+  function source(lineages: Record<string, { createdAt: number; status?: number }>): InboxSource {
+    return {
+      listLineages: async () => Object.keys(lineages),
+      listVersions: async (_t, _c, lineage) => [meta(0, lineages[lineage].createdAt)],
+      getBlob: async (_t, _c, lineage) => {
+        const status = lineages[lineage].status
+        if (status !== undefined) throw new PortalError('blob fetch failed', status)
+        return new Uint8Array([lineage.charCodeAt(0)])
+      },
+    }
+  }
+
+  it('lists the live item, and one line for an item the server no longer keeps', async () => {
+    const { blobs, gone } = await fetchInbox(source({ a: { createdAt: 1000 }, b: { createdAt: 2000, status: 410 } }), [sender])
+    expect(blobs.map((b) => b.lineage)).toEqual(['a'])
+    expect(gone).toEqual([{ therapistName: 'Dr. Example', sentAt: 2000, lineage: 'b', version: 0 }])
+  })
+
+  it('lists both when both are live (positive control)', async () => {
+    const { blobs, gone } = await fetchInbox(source({ a: { createdAt: 1000 }, b: { createdAt: 2000 } }), [sender])
+    expect(blobs.map((b) => b.lineage)).toEqual(['a', 'b'])
+    expect(gone).toEqual([])
+  })
+
+  it('still fails the load on any other refusal, which says nothing about the item', async () => {
+    await expect(fetchInbox(source({ a: { createdAt: 1000, status: 500 } }), [sender])).rejects.toThrow(PortalError)
+  })
+
+  it('the line says who and when, and nothing about what or why', () => {
+    expect(goneItemLine('Dr. Example', '9 October 2026')).toBe('Sent by Dr. Example on 9 October 2026. The server keeps items for 90 days.')
+  })
+
+  it('the inbox screen fetches through it and draws the line in ink, not the alarm hue', () => {
+    const src = readFileSync(resolve(process.cwd(), 'src/lib/components/owner/AssignmentInbox.svelte'), 'utf8')
+    expect(src).toContain('fetchInbox(client, session.pinned)')
+    expect(src).toContain('goneItemLine(')
+    const goneRule = src.match(/\.gone \{[^}]*\}/)?.[0] ?? ''
+    expect(goneRule).toContain('--ink-text')
+    expect(goneRule).not.toContain('--clay')
+  })
+})
+

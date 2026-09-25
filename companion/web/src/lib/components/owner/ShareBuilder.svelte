@@ -9,7 +9,9 @@
   import InvitePanel from './InvitePanel.svelte'
   import type { OwnerSession, PinnedTherapist } from './session'
   import { PortalClient, relRefOf } from '../../sync/portal'
-  import { shareRefusedBecauseEnded } from '../../owner/sharing'
+  import {
+    shareRefusedBecauseEnded, SHARE_DAYS_DEFAULT, SHARE_DAYS_MAX, SHARE_DAYS_OUT_OF_RANGE, shareDays, shareEndsLine,
+  } from '../../owner/sharing'
 
   let {
     session,
@@ -26,12 +28,21 @@
   } = $props()
 
   let sel = $state<ShareSelection>(emptySelection())
-  let expiryDays = $state(30)
+  let expiryDays = $state<number | null>(SHARE_DAYS_DEFAULT)
   let busy = $state(false)
   let status = $state('')
   let error = $state('')
 
   const ownerFp = $derived(fingerprint(session.ownerSign.publicKey))
+
+  const DAY_MS = 24 * 60 * 60 * 1000
+  // Null while the field holds anything the server would not honour; the line then says so.
+  const days = $derived(shareDays(expiryDays))
+  const endsOn = $derived(
+    days === null
+      ? null
+      : new Date(Date.now() + days * DAY_MS).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }),
+  )
 
   const bundle = $derived(
     data
@@ -48,13 +59,14 @@
 
   async function seal() {
     if (!data) { error = 'Load your own backup first (via the sync source).'; return }
+    if (days === null) { error = `${SHARE_DAYS_OUT_OF_RANGE} Nothing was sealed or sent.`; return }
     error = ''
     status = ''
     busy = true
     try {
       const shareId = crypto.randomUUID()
       const createdAt = Date.now()
-      const expiry = createdAt + expiryDays * 24 * 60 * 60 * 1000
+      const expiry = createdAt + days * DAY_MS
       const recipientFp = fingerprint(therapist.boxPub)
 
       // Pin gate. The pins come from storage, NOT from `therapist`: this block used to build an
@@ -158,9 +170,10 @@
   </label>
 
   <label class="expiry">
-    <span>Expires after (days)</span>
-    <input type="number" min="1" max="365" bind:value={expiryDays} />
+    <span>Ends after (days)</span>
+    <input type="number" min="1" max={SHARE_DAYS_MAX} step="1" bind:value={expiryDays} />
   </label>
+  <p class="ends">{endsOn ? shareEndsLine(endsOn) : SHARE_DAYS_OUT_OF_RANGE}</p>
 
   <div class="actions">
     <button class="primary" onclick={seal} disabled={busy || !data}>{busy ? 'Sealing…' : 'Seal & publish share'}</button>
@@ -178,6 +191,7 @@
   .types legend { padding: 0 var(--space-2); color: var(--ink-soft); font-size: 0.85rem; }
   .types label, .strip { display: flex; align-items: center; gap: var(--space-2); font-size: 0.9rem; }
   .expiry { display: flex; flex-direction: column; gap: var(--space-1); font-size: 0.85rem; max-width: 12rem; }
+  .ends { margin: 0; color: var(--ink-text); font-size: 0.85rem; }
   .expiry input { font: inherit; padding: var(--space-1) var(--space-2); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-bg); color: var(--ink-text); }
   .actions { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
   /* Confirmation is solid ink, never green — a green tick would be a claim this product cannot

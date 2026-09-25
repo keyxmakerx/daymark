@@ -13,6 +13,11 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import {
+  SHARE_DAYS_DEFAULT,
+  SHARE_DAYS_MAX,
+  SHARE_DAYS_OUT_OF_RANGE,
+  shareDays,
+  shareEndsLine,
   ENDED_LABEL,
   KEEP_SHARING,
   REVOKE_ACTION,
@@ -310,3 +315,55 @@ describe('the builder signs a share with the version it publishes it as', () => 
     expect(signsWhatItPublishes(moved)).toBe(false)
   })
 })
+
+describe('how long a share lasts (#228, #339)', () => {
+  const builder = readFileSync(
+    fileURLToPath(new URL('../components/owner/ShareBuilder.svelte', import.meta.url)),
+    'utf8',
+  )
+
+  it('starts at 14 days and never offers more than 90, the ceiling the server clamps to (#332)', () => {
+    expect(SHARE_DAYS_DEFAULT).toBe(14)
+    expect(SHARE_DAYS_MAX).toBe(90)
+  })
+
+  it('the builder takes both numbers from here rather than writing its own', () => {
+    expect(builder).toContain('$state<number | null>(SHARE_DAYS_DEFAULT)')
+    expect(builder).toContain('max={SHARE_DAYS_MAX}')
+    expect(builder).toContain('const expiry = createdAt + days * DAY_MS')
+    // A literal would drift from the server's ceiling without either test noticing.
+    expect(builder).not.toMatch(/max="\d+"/)
+    expect(builder).not.toMatch(/\$state(<[^>]*>)?\(\d+\)/)
+  })
+
+  it('those two absence checks can fail (positive control)', () => {
+    expect('<input max="365" />').toMatch(/max="\d+"/)
+    expect('let expiryDays = $state(30)').toMatch(/\$state(<[^>]*>)?\(\d+\)/)
+    expect('let expiryDays = $state<number | null>(30)').toMatch(/\$state(<[^>]*>)?\(\d+\)/)
+  })
+
+  it('refuses a length the server would not honour before anything is sealed', () => {
+    const refusal = builder.indexOf('if (days === null)')
+    expect(refusal).toBeGreaterThan(-1)
+    expect(refusal).toBeLessThan(builder.indexOf('buildShare('))
+    expect(builder).toContain('`${SHARE_DAYS_OUT_OF_RANGE} Nothing was sealed or sent.`')
+  })
+
+  it('accepts whole days from 1 to 90, and nothing else', () => {
+    expect(shareDays(1)).toBe(1)
+    expect(shareDays(14)).toBe(14)
+    expect(shareDays(90)).toBe(90)
+    expect(shareDays('30')).toBe(30)
+    for (const bad of [0, 91, 365, -1, 14.5, Number.NaN, '', null, undefined, 'abc']) {
+      expect(shareDays(bad)).toBeNull()
+    }
+  })
+
+  it('says the date, then what the server does on it, and never borrows the revoke sentence', () => {
+    const line = shareEndsLine('9 October 2026')
+    expect(line).toBe('Ends on 9 October 2026. The server then deletes its copy. Anything read before then has already been seen.')
+    expect(line).not.toMatch(/un-send|revok/i)
+    expect(SHARE_DAYS_OUT_OF_RANGE).toBe('Choose from 1 to 90 whole days.')
+  })
+})
+
