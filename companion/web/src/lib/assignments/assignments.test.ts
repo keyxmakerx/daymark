@@ -301,6 +301,16 @@ describe('assignments are padded inside the sealed box (#315)', () => {
     ) as unknown as Uint8Array
     expect(() => padEnvelope(tooLong)).toThrow(PaddingError)
   })
+
+  it('reads a padded envelope of 16 MiB or more as padded, where its first byte is no longer 0', () => {
+    // Below 16 MiB every padded envelope starts with 0, so a rule of "0 means padded" would pass
+    // every smaller test; this size is where only "{ means unpadded" gives the right answer.
+    const big = new Uint8Array(16 * 1024 * 1024 + 3).fill(0x20)
+    const padded = padEnvelope(big)
+    expect(padded[0]).not.toBe(0)
+    expect(padded[0]).not.toBe(0x7b)
+    expect(sameBytes(openedEnvelope(padded), big)).toBe(true)
+  })
 })
 
 describe('an assignment sealed unpadded, before #315, still opens', () => {

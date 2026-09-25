@@ -14,11 +14,17 @@
  *    (COMPANION_SECURITY.md R5). A clinician client the server cannot change is #319;
  *  - a withdrawn share that a dishonest server kept, which is not older than itself (R3).
  *
+ * THE MARK NEVER RUNS AHEAD OF THIS BROWSER'S CLOCK. fetchShare records the earlier of the share's
+ * creation time and its own clock, so a share sealed on a device whose clock ran ahead cannot
+ * refuse every later share until that date comes round.
+ *
  * WHAT GOES INTO STORAGE. For each relationship, the creation time of the newest share opened,
  * sealed to that relationship's own X25519 key (crypto_box_seal), under the relRef that the key
  * record already keeps in the clear (therapist/inviteAccept.ts). Someone looking through the
  * device learns that a share was opened in this browser, never when it was sealed, and the portal
- * reads the time back only while the keys are unlocked.
+ * reads the time back only while the keys are unlocked. The seal keeps the time private; it does
+ * not make it tamper-proof, since sealing needs only the public key. Whatever can write this
+ * storage is code running in the page, which could skip the check anyway (R5).
  *
  * UNREADABLE IS ABSENT: bad JSON, a record sealed to keys this browser no longer holds (after
  * re-pairing), or storage the browser will not hand over. The next share opened writes a fresh

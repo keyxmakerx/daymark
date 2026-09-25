@@ -332,12 +332,13 @@ describe('how long a share lasts (#228, #339)', () => {
     expect(builder).toContain('max={SHARE_DAYS_MAX}')
     expect(builder).toContain('const expiry = createdAt + days * DAY_MS')
     // A literal would drift from the server's ceiling without either test noticing.
-    expect(builder).not.toMatch(/max="\d+"/)
+    expect(builder).not.toMatch(/max=(?:"\s*\d+\s*"|\{\s*\d+\s*\})/)
     expect(builder).not.toMatch(/\$state(<[^>]*>)?\(\d+\)/)
   })
 
   it('those two absence checks can fail (positive control)', () => {
-    expect('<input max="365" />').toMatch(/max="\d+"/)
+    expect('<input max="365" />').toMatch(/max=(?:"\s*\d+\s*"|\{\s*\d+\s*\})/)
+    expect('<input max={365} />').toMatch(/max=(?:"\s*\d+\s*"|\{\s*\d+\s*\})/)
     expect('let expiryDays = $state(30)').toMatch(/\$state(<[^>]*>)?\(\d+\)/)
     expect('let expiryDays = $state<number | null>(30)').toMatch(/\$state(<[^>]*>)?\(\d+\)/)
   })

@@ -156,6 +156,19 @@ describe('therapist share reader', () => {
       expect((await fetchWith(genuine, seen))?.shareId).toBe('s1') // the genuine newer share still opens
     })
 
+    it('a share sealed on a device whose clock ran ahead cannot lock out the shares after it', async () => {
+      const seen = memory()
+      const now = 1_800_000_000_000
+      const yearAhead = now + 365 * 24 * 60 * 60 * 1000
+      const openAt = (c: PortalClient, at: number) => fetchShare(c, session, ther, owner.publicKey, ownerSigningFp, at, seen)
+      expect((await openAt(served(yearAhead, 1), now))?.shareId).toBe('s1')
+      expect(newestOpened('rel-1', ther, seen)).toBe(now) // the mark stops at this browser's clock
+      // Sealed after the owner's clock was put right: later than the mark, so it opens.
+      expect((await openAt(served(now + 5_000, 2), now + 10_000))?.shareId).toBe('s1')
+      // The guard itself still holds (positive control).
+      await expect(openAt(served(now - 1, 3), now + 20_000)).rejects.toThrow(ShareOlderError)
+    })
+
     it('goes by when it was sealed, not by version number, which a restored server could reuse', async () => {
       const seen = memory()
       await fetchWith(served(2_000, 5), seen)

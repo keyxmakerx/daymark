@@ -92,8 +92,10 @@ export async function fetchShare(
   // refuse-to-render error rather than a (possibly forged) bundle.
   const notBefore = newestOpened(session.relRef, therapistBox, seen) ?? undefined
   const bundle = openShare(sealed, therapistBox, pinnedOwnerSignPub, pinnedOwnerSigningFp, now, notBefore)
-  // Remembered only once the share has opened: a refused share never moves the mark.
-  rememberOpened(session.relRef, sealed.createdAt, therapistBox, seen)
+  // Remembered only once the share has opened: a refused share never moves the mark. And never
+  // later than this browser's own clock: a share sealed on a device whose clock ran ahead would
+  // otherwise refuse every later share until that date came round.
+  rememberOpened(session.relRef, Math.min(sealed.createdAt, now), therapistBox, seen)
   return bundle
 }
 

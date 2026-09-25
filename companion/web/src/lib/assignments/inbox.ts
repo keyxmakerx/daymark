@@ -178,7 +178,13 @@ export async function fetchInbox(
   const blobs: RawAssignmentBlob[] = []
   const gone: GoneItem[] = []
   for (const t of senders) {
-    const lineages = await source.listLineages(t.inboxToken, 'assignments').catch(() => [])
+    // Nothing to list (404) or a relationship the server no longer serves (410) is an empty list.
+    // Any other failure fails the load: drawn as "No assignments to review", it would be a claim
+    // about the clinician that the console does not know to be true.
+    const lineages = await source.listLineages(t.inboxToken, 'assignments').catch((e: unknown) => {
+      if (e instanceof PortalError && (e.status === 404 || e.status === 410)) return [] as string[]
+      throw e
+    })
     for (const lineage of lineages) {
       const versions = await source.listVersions(t.inboxToken, 'assignments', lineage)
       // Only the head of each lineage is surfaced (append-only supersede).

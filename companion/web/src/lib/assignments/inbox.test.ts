@@ -202,6 +202,18 @@ describe('fetching the inbox item by item (#339)', () => {
     await expect(fetchInbox(source({ a: { createdAt: 1000, status: 500 } }), [sender])).rejects.toThrow(PortalError)
   })
 
+  it('a failed listing fails the load, rather than reading as an empty inbox', async () => {
+    const failing: InboxSource = { ...source({ a: { createdAt: 1000 } }), listLineages: async () => { throw new PortalError('list lineages failed', 500) } }
+    await expect(fetchInbox(failing, [sender])).rejects.toThrow(PortalError)
+  })
+
+  it('nothing to list, or a relationship no longer served, is an empty list (positive control)', async () => {
+    for (const status of [404, 410]) {
+      const empty: InboxSource = { ...source({}), listLineages: async () => { throw new PortalError('list lineages failed', status) } }
+      await expect(fetchInbox(empty, [sender])).resolves.toEqual({ blobs: [], gone: [] })
+    }
+  })
+
   it('the line says who and when, and nothing about what or why', () => {
     expect(goneItemLine('Dr. Example', '9 October 2026')).toBe('Sent by Dr. Example on 9 October 2026. The server keeps items for 90 days.')
   })
