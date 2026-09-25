@@ -31,19 +31,35 @@ data class RelMeta(
     val createdAt: Long,
 )
 
+/**
+ * Everything the ending rule ([RelationStore.hasEnded]) reads about one stored item. Every field
+ * comes from the index rows themselves, so whatever asks the rule is reading the same facts.
+ */
+internal data class ItemFacts(
+    val channel: Channel,
+    val version: Long,
+    /** The highest version stored in this item's lineage; a share below it has been replaced. */
+    val newestVersion: Long,
+    val createdAt: Long,
+    /** The end the writer chose, or null when they chose none. */
+    val expiry: Long?,
+    val revoked: Boolean,
+)
+
 class RelationStoreException(message: String, val kind: Kind) : Exception(message) {
     enum class Kind {
         BAD_NAME, CONFLICT, TOO_OLD, TOO_LARGE, QUOTA, DISK_FULL, NOT_FOUND, SETTING_KEY_NOT_ALLOWED,
 
         /**
-         * The blob exists but must not be served: its expiry has passed, or the owner withdrew it.
+         * The item exists but has ended ([RelationStore.hasEnded]): the end the owner chose has
+         * passed, or 90 days have, or a newer share replaced it, or the owner withdrew it.
          *
-         * **One kind for both on purpose.** Whether the owner *actively withdrew* rather than simply
-         * let a deadline lapse is a social fact about the owner's intent, and the server should not
-         * announce it to the party being restricted. Collapsing them here rather than at the HTTP
-         * layer means the route physically cannot leak the difference — there is no second value to
-         * accidentally map to a second status code. The owner can tell them apart from their own
-         * audit log, which is the correct place for it.
+         * **One kind for all of them on purpose.** Whether the owner *actively withdrew*, published
+         * a newer share, or simply let a deadline lapse is a social fact about the owner's intent,
+         * and the server should not announce it to the party being restricted. Collapsing them here
+         * rather than at the HTTP layer means the route physically cannot leak the difference —
+         * there is no second value to accidentally map to a second status code. The owner can tell
+         * a withdrawal apart from their own audit log, which is the correct place for it.
          */
         GONE,
     }
@@ -61,6 +77,9 @@ class RelationStoreException(message: String, val kind: Kind) : Exception(messag
  * nothing about the setting: the tag is a second claim by the same author, the shipped clinician
  * client does not send it, and the setting itself is inside the sealed body. The check that
  * binds is the owner's, on the decrypted item. See docs/COMPANION_ASSIGNMENTS.md §2.2.
+ *
+ * EVERY ITEM BUT A GRANT ENDS, by one rule ([hasEnded], #332), and both read paths refuse an ended
+ * item as GONE.
  */
 class RelationStore(
     dataDir: String,
@@ -119,9 +138,9 @@ class RelationStore(
             /*
              * ACCESS STATE — added after the fact, so it arrives by ALTER for existing databases.
              *
-             * `expiry`  epoch ms after which this blob must not be served. NULL means "no deadline
-             *           recorded", which is only reachable for non-share channels and for rows
-             *           written before this column existed (see the grandfather note on `gateLocked`).
+             * `expiry`  epoch ms of the end the writer chose, or NULL when they chose none: the
+             *           non-share channels, and shares written before this column existed. A NULL
+             *           never means "forever" — see [hasEnded].
              * `revoked` 1 once the owner withdraws the lineage. NOT NULL DEFAULT 0 because SQLite
              *           requires a default to add a NOT NULL column to a populated table.
              *
@@ -142,7 +161,7 @@ class RelationStore(
             } catch (e: java.sql.SQLException) {
                 throw IllegalStateException(
                     "rel_blobs is missing the expiry/revoked columns and they could not be added: ${e.message}. " +
-                        "Refusing to start: without them the server cannot enforce share expiry or revocation.",
+                        "Refusing to start: without them the server cannot tell when an item has ended.",
                     e,
                 )
             }
@@ -157,7 +176,10 @@ class RelationStore(
         bytes: ByteArray,
         settingKey: String?,
         /**
-         * Epoch ms after which this blob must not be served, or null for "no deadline".
+         * The end the writer chose, in epoch ms, or null when they chose none.
+         *
+         * One input to [hasEnded], never the whole answer: whatever is recorded here, an item on
+         * any channel but grants still ends [ITEM_LIFETIME_MS] after it was written (#332).
          *
          * Deliberately has NO default. A default would let every existing and future call site
          * compile unchanged and then fail at runtime on the one channel where it matters; the
@@ -247,7 +269,7 @@ class RelationStore(
     }
 
     /**
-     * Refuse to serve a blob whose deadline has passed or which the owner withdrew.
+     * Refuse to serve an item that has ended ([hasEnded]).
      *
      * ## Why this lives in the store rather than in the route
      *
@@ -259,31 +281,32 @@ class RelationStore(
      * the two handlers that exist today. The original defect was precisely a guard applied to some
      * of the doors.
      *
-     * ## The grandfather rule
-     *
-     * A NULL `expiry` never expires. Rows written before this column existed have one, and locking
-     * every already-published share out on upgrade would be an outage delivered as a security fix.
-     * That is bounded rather than open-ended because the PUT path now *requires* the expiry header
-     * on the shares channel — so after this change, "no expiry recorded" can only mean "written by
-     * an older build", never "written today without one".
-     *
-     * `revoked` has no such carve-out: it defaults to 0, which is exactly right for old rows.
+     * A row with no recorded expiry, which an older build could write on the shares channel, is
+     * not exempt: the rule measures the 90-day ceiling from `created_at`, which every row has.
      */
     private fun gateLocked(relRef: String, channel: Channel, lineage: String, version: Long) {
+        val item = itemLocked(relRef, channel, lineage, version)
+            ?: throw RelationStoreException("not found", RelationStoreException.Kind.NOT_FOUND)
+        if (hasEnded(item, clock())) {
+            throw RelationStoreException("no longer available", RelationStoreException.Kind.GONE)
+        }
+    }
+
+    private fun itemLocked(relRef: String, channel: Channel, lineage: String, version: Long): ItemFacts? {
         conn.prepareStatement(
-            "SELECT expiry, revoked FROM rel_blobs WHERE rel_ref=? AND channel=? AND lineage=? AND version=?",
+            "SELECT b.created_at, b.expiry, b.revoked, ($NEWEST_IN_LINEAGE) FROM rel_blobs b " +
+                "WHERE b.rel_ref=? AND b.channel=? AND b.lineage=? AND b.version=?",
         ).use { ps ->
             ps.setString(1, relRef); ps.setString(2, channel.wire); ps.setString(3, lineage); ps.setLong(4, version)
             ps.executeQuery().use { rs ->
-                if (!rs.next()) throw RelationStoreException("not found", RelationStoreException.Kind.NOT_FOUND)
-                if (rs.getInt(2) != 0) throw RelationStoreException("withdrawn", RelationStoreException.Kind.GONE)
-                // getLong returns 0 for SQL NULL, so wasNull() must be consulted BEFORE the value is
-                // used — otherwise a NULL expiry reads as epoch 0 and every grandfathered row is
-                // instantly expired, which is the outage this rule exists to avoid.
-                val expiry = rs.getLong(1)
-                if (!rs.wasNull() && clock() >= expiry) {
-                    throw RelationStoreException("expired", RelationStoreException.Kind.GONE)
-                }
+                if (!rs.next()) return null
+                val createdAt = rs.getLong(1)
+                // getLong returns 0 for SQL NULL, so wasNull() must be consulted straight after the
+                // read — otherwise a NULL expiry reads as epoch 0 and the item as ended in 1970.
+                val expiry = rs.getLong(2).takeUnless { rs.wasNull() }
+                val revoked = rs.getInt(3) != 0
+                val newest = rs.getLong(4)
+                return ItemFacts(channel, version, newest, createdAt, expiry, revoked)
             }
         }
     }
@@ -299,10 +322,11 @@ class RelationStore(
     /**
      * Withdraw every version of a lineage.
      *
-     * Marks all versions, not just the newest: prior versions stay on disk up to the retention
-     * window and are individually fetchable by `GET /{lineage}/{version}`, so withdrawing only the
-     * head would leave the previous share readable — the same partial-guard shape as the original
-     * bug.
+     * Marks all versions, not just the newest. A share version below the newest is already refused
+     * as replaced ([hasEnded]), but its file is still on the volume, and a withdrawal is the owner
+     * taking the whole lineage back now: every copy goes at once. Marking only the head would also
+     * leave older versions to a rule that could change — the same partial-guard shape as the
+     * original bug.
      *
      * The ciphertext is deleted too. Keeping withdrawn bytes on the volume is live exposure against
      * a compromised-server threat model for data the owner has explicitly taken back, and nothing
@@ -362,8 +386,9 @@ class RelationStore(
         requireName(lineage)
         val v = highestVersion(relRef, channel, lineage)
             ?: throw RelationStoreException("not found", RelationStoreException.Kind.NOT_FOUND)
-        // No fallback to an older version: "current" stays MAX(version). Falling back would serve
-        // a previous share the owner also withdrew, which is the opposite of what withdrawing means.
+        // No fallback to an older version: "current" stays MAX(version). Falling back would serve a
+        // share the newest replaced, or one the owner also withdrew — the opposite of what
+        // publishing anew and withdrawing mean.
         gateLocked(relRef, channel, lineage, v)
         val file = relDir.resolve(relRef).resolve(channel.wire).resolve(lineage).resolve("$v.blob")
         if (!file.exists()) throw RelationStoreException("not found", RelationStoreException.Kind.NOT_FOUND)
@@ -455,6 +480,47 @@ class RelationStore(
     override fun close() = synchronized(lock) { conn.close() }
 
     companion object {
+        /**
+         * The longest the server serves anything the owner and the clinician send each other: 90
+         * days after it was written (#332, decided in #228). The sealing has no forward secrecy
+         * (COMPANION_SECURITY.md §11), so time is the only limit on what a stolen clinician key
+         * could open. The owner console must offer no end later than this (#339); its tests and
+         * this server's tests each pin 90 days, and change together.
+         */
+        const val ITEM_LIFETIME_MS: Long = 90L * 24 * 60 * 60 * 1000
+
+        /**
+         * THE ONE RULE FOR WHEN A RELATIONSHIP ITEM HAS ENDED (#332). The read gate refuses what it
+         * calls ended, and nothing else decides it: anything that must know whether an item has
+         * ended asks this function rather than restating the rule.
+         *
+         * - A withdrawn item has ended, on every channel.
+         * - A grant ends only at an end recorded for it, which the routes never record: the
+         *   clinician needs the current grant for as long as the relationship lasts, and it is
+         *   signed, not sealed (COMPANION_THERAPIST.md §5).
+         * - A share version below the newest of its lineage has ended: publishing a new share ends
+         *   the ones before it, so an owner who narrows a share has narrowed it. Read from the rows
+         *   themselves, so it needs no column of its own, and it is not a withdrawal — it writes no
+         *   `share.revoke` entry. Shares only: nothing says a newer assignment ends an older one.
+         * - Anything else ends at the end its writer chose or [ITEM_LIFETIME_MS] after it was
+         *   written, whichever comes first. A row with no recorded end — an assignment, a game plan,
+         *   or a share an older build wrote — ends at the ceiling rather than never.
+         *
+         * Refusal is at `now >= end`, matching the client's `now < expiry`.
+         */
+        internal fun hasEnded(item: ItemFacts, now: Long): Boolean {
+            if (item.revoked) return true
+            if (item.channel == Channel.GRANTS) return item.expiry != null && now >= item.expiry
+            if (item.channel == Channel.SHARES && item.version < item.newestVersion) return true
+            val ceiling = item.createdAt + ITEM_LIFETIME_MS
+            val end = if (item.expiry == null) ceiling else minOf(item.expiry, ceiling)
+            return now >= end
+        }
+
+        /** The newest version of the lineage of the row aliased `b`, for [hasEnded]'s replacement test. */
+        private const val NEWEST_IN_LINEAGE =
+            "SELECT MAX(n.version) FROM rel_blobs n WHERE n.rel_ref=b.rel_ref AND n.channel=b.channel AND n.lineage=b.lineage"
+
         /**
          * The fixed server-side setting-key allowlist. Mirrors
          * companion/web/src/lib/assignments/types.ts SETTING_ALLOWLIST. Nothing

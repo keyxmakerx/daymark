@@ -60,9 +60,9 @@ class RelationStoreGateTest {
     @Test
     fun `revoking marks every retained version, not just the newest`() {
         /*
-         * Prior versions stay on disk up to the retention window and are individually fetchable, so
-         * withdrawing only the head would leave the previous share readable — the same partial-guard
-         * shape as the original defect.
+         * Version 0 is already refused as replaced once version 1 exists, but its file is still on
+         * the volume, and a withdrawal takes the whole lineage back now: both rows are marked and
+         * both files removed. `marked == 2` is the assertion that sees the difference.
          */
         val s = store()
         s.put(rel, Channel.SHARES, "share", 0, body, null, expiry = now + 100_000)
@@ -141,18 +141,30 @@ class RelationStoreGateTest {
     }
 
     @Test
-    fun `a null expiry never expires — the grandfather rule`() {
+    fun `a share with no recorded expiry ends 90 days after it was written, not never (#332)`() {
         /*
-         * Rows written before the expiry column existed have NULL, and locking every already-published
-         * share out on upgrade would be an outage delivered as a security fix. Asserted on the SHARES
-         * channel specifically, because that is where the upgrade case actually lives — testing it on
-         * a channel that never carries an expiry would pass against an implementation that special-cased
-         * shares-with-null into GONE, i.e. against the exact outage it claims to rule out.
+         * An older build could store a share with no end at all. Such a row now ends at the same
+         * ceiling as everything else, measured from when it was written. Asserted on the SHARES
+         * channel specifically, because that is where the upgrade case actually lives. The day-89
+         * read is the control: without it, an implementation that refused every NULL-expiry share
+         * outright would pass, which is an outage rather than the rule.
          */
+        val day = 24L * 60 * 60 * 1000
         val s = store()
         s.put(rel, Channel.SHARES, "share", 0, body, null, expiry = null)
-        now += 10L * 365 * 24 * 60 * 60 * 1000
-        assertTrue(s.fetchCurrent(rel, Channel.SHARES, "share").second.contentEquals(body))
+        now += 89 * day
+        assertTrue(s.fetchCurrent(rel, Channel.SHARES, "share").second.contentEquals(body), "served on day 89")
+        now += day
+        assertEquals(
+            RelationStoreException.Kind.GONE,
+            assertFailsWith<RelationStoreException> { s.fetchCurrent(rel, Channel.SHARES, "share") }.kind,
+            "refused on day 90",
+        )
+        assertEquals(
+            RelationStoreException.Kind.GONE,
+            assertFailsWith<RelationStoreException> { s.fetch(rel, Channel.SHARES, "share", 0) }.kind,
+            "and by version",
+        )
     }
 
     @Test
@@ -172,7 +184,9 @@ class RelationStoreGateTest {
     }
 
     @Test
-    fun `other channels are unaffected by expiry they never carry`() {
+    fun `an item with no chosen end is served inside the 90 days`() {
+        // The NULL is not read as epoch 0: an item that carries no end is not refused as if it had
+        // ended in 1970.
         val s = store()
         s.put(rel, Channel.ASSIGNMENTS, "a", 0, body, null, expiry = null)
         now += 10_000_000

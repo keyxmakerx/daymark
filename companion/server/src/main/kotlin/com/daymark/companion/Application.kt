@@ -120,6 +120,12 @@ fun Application.module(
     orgStore: OrgStore? = null,
     orgAuditStore: AuditStore? = null,
     pairingStore: PairingStore? = null,
+    /**
+     * The relationship surface's clock: it reads a share's end against it, and the relationship
+     * store built here dates each item by it and ends it by it (#332). Injectable so a test can move
+     * 90 days without sleeping; a caller that passes its own [relationStore] gives it the same clock.
+     */
+    relationClock: () -> Long = { System.currentTimeMillis() },
 ) {
     // Publish the trusted-proxy allowlist before any route runs: every per-client lockout and rate
     // limit reads it via ApplicationCall.clientAddress(). Empty (the default) means forwarded
@@ -179,7 +185,7 @@ fun Application.module(
     // Therapist portal: relationship blob channels + auth. Gated on DAYMARK_THERAPIST_AUTH and
     // (for the owner-write direction / mint route) the owner bearer token being configured.
     val relStore = if (config.therapistAuthEnabled) {
-        relationStore ?: RelationStore(config.dataDir, config.maxBlobBytes, config.relMaxVersions, config.relQuotaBytes)
+        relationStore ?: RelationStore(config.dataDir, config.maxBlobBytes, config.relMaxVersions, config.relQuotaBytes, relationClock)
     } else null
     val auth = if (config.therapistAuthEnabled) {
         authStore ?: AuthStore(config.dataDir)
@@ -262,6 +268,7 @@ fun Application.module(
                 relStore, guard, auth, config.sessionIdleSeconds, config.maxRequestBytes,
                 auditStore = audit, auditSourceIp = config.auditSourceIpEnabled,
                 notifier = notifier, publicBaseUrl = config.publicBaseUrl,
+                clock = relationClock,
             )
             therapistAuthRoutes(
                 authStore = auth,

@@ -305,6 +305,9 @@ fun Route.relationRoutes(
                     return@put
                 }
             } else {
+                // No chosen end on the other channels. The store's one rule (RelationStore.hasEnded)
+                // ends an assignment or a game plan 90 days after it arrives, and leaves a grant for
+                // as long as the relationship lasts (#332).
                 expiry = null
             }
             val body = call.readCappedRel(maxRequestBytes) ?: return@put
@@ -511,16 +514,19 @@ private suspend fun ApplicationCall.readCappedRel(max: Long): ByteArray? {
  *
  * Returns null — meaning "reject this publish" on the shares channel — for absent, oversized,
  * un-decodable, non-JSON, missing-field, non-integer, non-positive, and already-past values. Failing
- * closed here is what keeps the grandfather rule in `gateLocked` bounded: after this change a share
- * row with no expiry can only be one an older build wrote, never one written today.
+ * closed here means every share written today records an end.
  *
  * A past expiry is rejected rather than stored because the alternative is silent: the owner sees
  * "published" and the therapist sees 410 forever, with nothing anywhere saying why.
  *
+ * An end further out than [RelationStore.ITEM_LIFETIME_MS] (90 days) is clamped to it (#332). The
+ * store also ends every share that long after it was written, whatever is recorded, so the clamp
+ * keeps the stored end honest rather than being the only thing enforcing it.
+ *
  * URL-safe base64 without padding, because that is what the client's `toBase64` (libsodium
  * URLSAFE_NO_PADDING) emits. The standard decoder would reject it.
  */
-internal fun parseShareExpiry(header: String?, now: Long, maxAheadMs: Long = 366L * 24 * 60 * 60 * 1000): Long? {
+internal fun parseShareExpiry(header: String?, now: Long, maxAheadMs: Long = RelationStore.ITEM_LIFETIME_MS): Long? {
     val raw = header?.trim() ?: return null
     if (raw.isEmpty() || raw.length > 4096) return null // don't base64-decode an attacker-sized header
     val json = runCatching { String(java.util.Base64.getUrlDecoder().decode(raw), Charsets.UTF_8) }.getOrNull() ?: return null
@@ -538,8 +544,9 @@ internal fun parseShareExpiry(header: String?, now: Long, maxAheadMs: Long = 366
             ?.toLongOrNull()
     }.getOrNull() ?: return null
     if (expiry <= 0 || expiry <= now) return null
-    // Clamp rather than reject: only a modified client can exceed the UI's 365-day ceiling, and
-    // clamping keeps "effectively no expiry" from being reachable by writing a huge number.
+    // Clamp rather than reject: the share is still published and served for as long as the server
+    // serves anything, and clamping keeps "effectively no expiry" from being reachable by writing a
+    // huge number.
     return minOf(expiry, now + maxAheadMs)
 }
 
@@ -564,9 +571,10 @@ private suspend fun ApplicationCall.failRel(e: RelationStoreException) {
          * and re-authenticating cannot help. It is also already spoken for on this surface ("wrong
          * direction for this channel").
          *
-         * 410 means "it was here, it is deliberately gone." True of both an elapsed deadline and a
-         * withdrawal, and already this codebase's word for it (a consumed invite returns Gone).
-         * Expired and revoked share one message on purpose — see RelationStoreException.Kind.GONE.
+         * 410 means "it was here, it is deliberately gone." True of an elapsed deadline, a share a
+         * newer version replaced, and a withdrawal, and already this codebase's word for it (a
+         * consumed invite returns Gone). All of them share one message on purpose — see
+         * RelationStoreException.Kind.GONE.
          */
         RelationStoreException.Kind.GONE -> HttpStatusCode.Gone to "no longer available"
     }
