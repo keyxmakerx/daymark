@@ -707,6 +707,12 @@ All notable changes to this project are documented here. The format is based on
   browser, which is now part of how this repository verifies itself.
 
 ### Security
+- **A clinician can no longer use up the space the owner needs.** Everything in a relationship, the
+  owner's grants and shares and the clinician's assignments and game plans, drew on one storage
+  allowance, so a clinician who wrote enough could leave the owner unable to publish anything,
+  including a grant that takes a permission away from that clinician. Each direction now has its own
+  allowance: what the clinician writes may use a quarter of `DAYMARK_REL_QUOTA_BYTES` (64 MiB of the
+  default 256 MiB), and what the owner writes the rest. The total is unchanged.
 - **The phone's actual cryptography moves from 2019 to 2024.** The C library doing the encrypting
   on the phone was libsodium 1.0.18, bundled inside a wrapper whose version number said nothing
   about it; 1.0.20 brings five years of hardening (AEAD MAC memory fences, optimizer blockers,

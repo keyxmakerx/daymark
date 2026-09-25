@@ -12,6 +12,7 @@ import com.daymark.companion.storage.AuditAction
 import com.daymark.companion.storage.AuditStore
 import com.daymark.companion.storage.Channel
 import com.daymark.companion.storage.RelMeta
+import com.daymark.companion.storage.Writer
 import com.daymark.companion.storage.RelationStore
 import com.daymark.companion.storage.RelationStoreException
 import io.ktor.http.ContentType
@@ -373,9 +374,9 @@ private fun auditSafely(block: () -> Unit) {
     }
 }
 
-private fun writerRole(channel: Channel): Role = when (channel) {
-    Channel.GRANTS, Channel.SHARES -> Role.OWNER
-    Channel.ASSIGNMENTS, Channel.GAMEPLANS -> Role.THERAPIST
+private fun writerRole(channel: Channel): Role = when (channel.writer) {
+    Writer.OWNER -> Role.OWNER
+    Writer.CLINICIAN -> Role.THERAPIST
 }
 
 /** Which owner-facing notification (if any) a successful therapist PUT to this channel triggers. */

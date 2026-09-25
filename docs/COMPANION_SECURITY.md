@@ -106,8 +106,11 @@ signatures stop forgery. Rollback protection is not built (§8).
   the idle wipe.
 - **Cannot:** read the owner's archive or anything not sealed to them; reach another patient's
   relationship (each session is bound to one `relRef`, and content routes also demand that
-  relationship's inbox token); forge the owner's data; keep decrypted plaintext by default (reads are
-  `Cache-Control: no-store`, and the portal holds plaintext in memory only).
+  relationship's inbox token); forge the owner's data; keep decrypted plaintext by default (reads
+  are `Cache-Control: no-store`, and the portal holds plaintext in memory only); or fill the owner's
+  storage. What a clinician writes has its own quarter of the relationship's quota, so nothing they
+  write can stop the owner publishing a grant that narrows what they may do, or a new share
+  (`storage/RelationStore.kt`).
 - **Honest limit:** decrypted plaintext is never recallable. Real future revocation is re-pairing to
   new keys (R3).
 
@@ -355,9 +358,10 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
   decrypts nothing.
 - Per-address limits, keyed on the trusted client address (§7), are tabled in
   [COMPANION_OBSERVABILITY.md](COMPANION_OBSERVABILITY.md) §1.1. Comparisons are constant-time.
-- Caps: blobs of at most 25 MiB, upload bodies of at most 26 MiB, JSON bodies of at most 64 KiB, and a
-  120-second limit on reading a request; the newest 200 versions kept per snapshot lineage and 50 per
-  relationship lineage; 5 GiB of snapshots per token and 256 MiB per relationship. All are
+- Caps: blobs of at most 25 MiB, upload bodies of at most 26 MiB, JSON bodies of at most 64 KiB, and
+  a 120-second limit on reading a request; the newest 200 versions kept per snapshot lineage and 50
+  per relationship lineage; 5 GiB of snapshots per token and 256 MiB per relationship, of which what
+  the clinician writes may use a quarter and what the owner writes the rest (§3 T4). All are
   configurable ([COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md) §5).
 
 ### Owner notifications and server-access recovery

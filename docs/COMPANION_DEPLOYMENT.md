@@ -198,7 +198,7 @@ read from a file named by `NAME_FILE`, which wins.
 | `DAYMARK_MAX_VERSIONS` | `200` | Snapshot versions kept per lineage; older ones are deleted |
 | `DAYMARK_PER_TOKEN_QUOTA_BYTES` | `5368709120` (5 GiB) | Snapshot storage quota |
 | `DAYMARK_REL_MAX_VERSIONS` | `50` | Versions kept per relationship lineage |
-| `DAYMARK_REL_QUOTA_BYTES` | `268435456` (256 MiB) | Storage quota per relationship |
+| `DAYMARK_REL_QUOTA_BYTES` | `268435456` (256 MiB) | Storage quota per relationship. What the clinician writes may use a quarter of it and what the owner writes the rest, so neither can crowd out the other |
 | `DAYMARK_RATE_LIMIT_RPS` | `5` | Requests per second per address, on bearer-token routes only |
 | `DAYMARK_AUTH_LOCKOUT_FAILS`, `_SECONDS` | `8`, `900` | Bad bearer tokens before an address is locked out, and for how long |
 | `DAYMARK_TOTP_LOCKOUT_FAILS`, `_SECONDS` | `5`, `300` | Bad sign-in codes before a credential is locked, and for how long; also the backoff for wrong invitation secrets |

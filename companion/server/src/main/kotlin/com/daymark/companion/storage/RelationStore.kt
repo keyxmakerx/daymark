@@ -8,12 +8,15 @@ import java.sql.Connection
 import java.sql.DriverManager
 import kotlin.io.path.exists
 
+/** Who writes a channel. The routes enforce it by role; the store budgets storage by it. */
+enum class Writer { OWNER, CLINICIAN }
+
 /** The four zero-knowledge per-relationship blob channels. */
-enum class Channel(val wire: String) {
-    GRANTS("grants"),
-    ASSIGNMENTS("assignments"),
-    SHARES("shares"),
-    GAMEPLANS("gameplans");
+enum class Channel(val wire: String, val writer: Writer) {
+    GRANTS("grants", Writer.OWNER),
+    ASSIGNMENTS("assignments", Writer.CLINICIAN),
+    SHARES("shares", Writer.OWNER),
+    GAMEPLANS("gameplans", Writer.CLINICIAN);
 
     companion object {
         fun fromWire(s: String): Channel? = entries.firstOrNull { it.wire == s }
@@ -66,6 +69,22 @@ class RelationStore(
     private val perRelQuotaBytes: Long,
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) : AutoCloseable {
+
+    /*
+     * EACH WRITING DIRECTION HAS ITS OWN BUDGET, carved out of the one configured quota: the
+     * clinician's channels may hold at most a quarter of it, and the other three quarters are the
+     * owner's alone. With a single shared budget, a clinician's own assignments and game plans could
+     * fill it, and the owner's next grant or share to that relationship would be refused, including
+     * a grant written to narrow what that clinician may do. Nothing one direction writes can now
+     * refuse the other's. The total stays what the operator configured (DAYMARK_REL_QUOTA_BYTES).
+     */
+    private val clinicianQuotaBytes: Long = perRelQuotaBytes / 4
+    private val ownerQuotaBytes: Long = perRelQuotaBytes - clinicianQuotaBytes
+
+    private fun quotaFor(writer: Writer): Long = when (writer) {
+        Writer.OWNER -> ownerQuotaBytes
+        Writer.CLINICIAN -> clinicianQuotaBytes
+    }
 
     private val root: Path = Path.of(dataDir).toAbsolutePath().normalize()
     private val relDir: Path = root.resolve("rel")
@@ -165,7 +184,7 @@ class RelationStore(
         if (countVersionsAbove(relRef, channel, lineage, version) >= maxVersions) {
             throw RelationStoreException("version below retention window", RelationStoreException.Kind.TOO_OLD)
         }
-        if (usedBytesLocked(relRef) + bytes.size > perRelQuotaBytes) {
+        if (usedBytesLocked(relRef, channel.writer) + bytes.size > quotaFor(channel.writer)) {
             throw RelationStoreException("storage quota exceeded", RelationStoreException.Kind.QUOTA)
         }
 
@@ -389,9 +408,14 @@ class RelationStore(
         }
     }
 
-    private fun usedBytesLocked(relRef: String): Long {
-        conn.prepareStatement("SELECT COALESCE(SUM(size),0) FROM rel_blobs WHERE rel_ref=?").use { ps ->
+    /** Bytes the channels written by [writer] hold for this relationship. */
+    private fun usedBytesLocked(relRef: String, writer: Writer): Long {
+        val channels = Channel.entries.filter { it.writer == writer }
+        val marks = channels.joinToString(",") { "?" }
+        val sql = "SELECT COALESCE(SUM(size),0) FROM rel_blobs WHERE rel_ref=? AND channel IN ($marks)"
+        conn.prepareStatement(sql).use { ps ->
             ps.setString(1, relRef)
+            channels.forEachIndexed { i, c -> ps.setString(i + 2, c.wire) }
             ps.executeQuery().use { rs -> return if (rs.next()) rs.getLong(1) else 0L }
         }
     }

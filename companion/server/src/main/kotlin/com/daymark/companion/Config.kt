@@ -54,7 +54,7 @@ data class Config(
     val totpLockoutSeconds: Long = 300L,
     /** Per-relationship blob channel retention + quota. */
     val relMaxVersions: Int = 50,
-    val relQuotaBytes: Long = 268_435_456L, // 256 MiB per relationship
+    val relQuotaBytes: Long = 268_435_456L, // 256 MiB per relationship; a clinician may write a quarter (RelationStore)
     /** Owner-readable audit log (COMPANION_SECURITY.md §9): retention window, IP off by default. */
     val auditRetentionDays: Long = 90L,
     val auditSourceIpEnabled: Boolean = false,
