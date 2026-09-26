@@ -210,6 +210,13 @@ All notable changes to this project are documented here. The format is based on
   both jobs.
 
 ### Changed
+- **Companion — a solo server's owner page has no owner console, and its "Recover access" card sets
+  the recovery email.** The console's clinician and sharing routes are off on a solo server, so its
+  card is hidden there. Its Notifications tab was the only place to register the email a recovery
+  link is sent to, so on a solo server the "Recover access" card now holds that setting, in two
+  parts, "Before you need it" and "If you have lost your access token", using the access token the
+  sync card proved on that page. On paired and practice servers the card points to the console's
+  Notifications tab. (#330)
 - **Companion — the owner's page follows the server's shape.** Where the server publishes its shape
   (`DAYMARK_SETUP_MODE`), the owner's page links only the consoles that shape serves: on a solo
   server it shows no card or link for the clinician console, and the practice console is linked only

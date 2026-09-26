@@ -94,7 +94,8 @@ is a side effect.
 
 - **The owner has no account yet.** The owner's credential is the bearer token
   (`DAYMARK_AUTH_TOKEN`), stored on the server as a digest. An optional recovery email can rotate it
-  (COMPANION_SECURITY.md §6); it recovers server access only, never the passphrase.
+  (COMPANION_SECURITY.md §6); it is registered in the owner console's Notifications tab, or, on a
+  solo server, on the "Recover access" card; it recovers server access only, never the passphrase.
 - **Everyone signs in as themselves** (#208). The owner, an administrator, each clinician and each
   receptionist has an account of their own, and the shared token stops being anyone's sign-in (not
   built: #324, #314). A new server is claimed with a one-time setup code it prints to its own log,

@@ -383,6 +383,10 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
 - There are no owner accounts or passwords, and the server can never reset a passphrase or PIN.
 - **The notification email is stored in plaintext**, because the server must read it to send. A leak
   shows that an owner exists at that address, not any content.
+- The address is set through `PUT /v1/owner/notifications`, which every shape serves: in the owner
+  console's Notifications tab, or, on a solo server, which withholds that console, on the owner
+  page's "Recover access" card, with the token a sync pull proved on that page. Setting it keeps the
+  chosen notifications, and both fields say it is stored in plaintext.
 - **The owner bearer token is stored as a BLAKE2b digest** in `owner-account.db`, never as the token.
   (`DAYMARK_AUTH_TOKEN` itself remains the operator's secret file.) The token alone can approve a
   pairing and so enrol a clinician, which is why it may not sit in the clear. Content routes also
