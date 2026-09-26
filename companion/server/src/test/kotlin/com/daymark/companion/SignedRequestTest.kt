@@ -187,6 +187,12 @@ class SignedRequestTest {
             val status = client.send(c.method, c.target, c.headers, c.body).status
             assertTrue(status != HttpStatusCode.Unauthorized, "control: ${c.method.value} ${c.target} was taken ($status)")
         }
+        // And requests the person on the path held back, so their nonces were never used.
+        val withheld = listOf(
+            Captured(HttpMethod.Get, "/v1/snapshots/devA", null, phone.headers("GET", "/v1/snapshots/devA", timeSeconds = server.seconds)),
+            Captured(HttpMethod.Put, "/v1/snapshots/devA/5", blob, phone.headers("PUT", "/v1/snapshots/devA/5", blob, server.seconds)),
+        )
+        val everything = capture + withheld
 
         // Paths the capture never named, each tried with every captured set of headers and body.
         val unseen = listOf(
@@ -196,13 +202,16 @@ class SignedRequestTest {
             HttpMethod.Get to "/v1/owner/audit",
         )
         for ((method, target) in unseen) {
-            assertTrue(capture.none { it.method == method && it.target == target }, "$target is unseen")
-            for (c in capture) {
+            assertTrue(everything.none { it.method == method && it.target == target }, "$target is unseen")
+            for (c in everything) {
                 assertEquals(unauthorized, client.send(method, target, c.headers, c.body).answer(), "${method.value} $target with the headers of ${c.method.value} ${c.target}")
             }
         }
         val versions = server.signedGet(client, phone, "/v1/snapshots/devA").bodyAsText()
         assertTrue("\"version\":2" !in versions, "no version 2 was written: $versions")
+        // Control: a held-back request is still good for exactly what it names.
+        val held = withheld.last()
+        assertEquals(HttpStatusCode.Created, client.send(held.method, held.target, held.headers, held.body).status)
         // Control: the phone itself can make each of them.
         assertEquals(HttpStatusCode.OK, server.signedGet(client, phone, "/v1/snapshots/devA/1").status)
     }
