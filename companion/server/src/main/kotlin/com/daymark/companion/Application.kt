@@ -41,19 +41,31 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import io.ktor.server.routing.Route
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.nio.file.Files
 import kotlin.system.exitProcess
 
 private val log = LoggerFactory.getLogger("com.daymark.companion")
 
-/** The single non-secret capability flag the owner portal reads from /v1/config. */
+/** The non-secret facts the consoles read from /v1/config. */
 @kotlinx.serialization.Serializable
-data class ServerConfigDto(val smtpEnabled: Boolean)
+data class ServerConfigDto(
+    val smtpEnabled: Boolean,
+    /**
+     * The shape the operator chose with `DAYMARK_SETUP_MODE` — `solo`, `paired` or `practice`, the
+     * field and ids the first-run screen reads (`companion/web/src/lib/setup/shape.ts`) — so the
+     * screen stops asking (#330). Absent when none was chosen: the screen reads a published shape as
+     * the configuration having answered, and a shape the server assumed is not that. The body is then
+     * the one it was before the setting existed.
+     */
+    val setupMode: String? = null,
+)
 
 /** The exit status of a [StartupRefusal]: `EX_CONFIG` in sysexits.h, a configuration error. */
 internal const val EXIT_CONFIG = 78
@@ -199,34 +211,42 @@ fun Application.module(
     val mail = mailer ?: Mailer.forConfig(config.mailer)
     val notifier = account?.let { OwnerNotifier(it, mail) }
 
-    // Therapist portal: relationship blob channels + auth. Gated on DAYMARK_THERAPIST_AUTH and
-    // (for the owner-write direction / mint route) the owner bearer token being configured.
-    val relStore = if (config.therapistAuthEnabled) {
+    // The shape (#330): which route groups and pages this server serves, and so which stores it
+    // opens. A group's stores are opened only in a shape that serves the group, so a solo server
+    // writes no relationship, sign-in, audit or pairing file to the volume, and a paired one no
+    // practice file. One line per start says which shape, and whether it was chosen or assumed.
+    val shape = config.shape
+    log.info(shapeLogLine(config))
+
+    // The clinician group's stores: relationship blob channels and sign-in. Its routes also need the
+    // owner bearer token (the owner-write direction, the mint route); without one they answer 503.
+    val relStore = if (shape.clinicianGroup) {
         relationStore ?: RelationStore(config.dataDir, config.maxBlobBytes, config.relMaxVersions, config.relQuotaBytes, relationClock)
     } else null
-    val auth = if (config.therapistAuthEnabled) {
+    val auth = if (shape.clinicianGroup) {
         authStore ?: AuthStore(config.dataDir)
     } else null
-    // Owner-readable audit log (COMPANION_SECURITY.md §9). Same feature gate as the rest of the
-    // therapist portal — it only makes sense once relationships/sessions exist.
-    val audit = if (config.therapistAuthEnabled) {
+    // Owner-readable audit log (COMPANION_SECURITY.md §9). Same group as the rest of the clinician
+    // portal — it only makes sense once relationships/sessions exist.
+    val audit = if (shape.clinicianGroup) {
         auditStore ?: AuditStore(config.dataDir, config.auditRetentionDays * 86_400L)
     } else null
-    // The org / practice control plane, under the same feature gate as the rest of the portal: it
-    // authorises on portal sessions, so it has no meaning in a deployment that has none.
-    val orgs = if (config.therapistAuthEnabled) {
+    // Store-and-forward state for the CPace pairing exchange (COMPANION_PAIRING.md §4). Same
+    // group: an exchange belongs to an invite, and invites only exist when the portal is on.
+    val pairing = if (shape.clinicianGroup) {
+        pairingStore ?: PairingStore(config.dataDir)
+    } else null
+    // The practice group's stores, in the practice shape only. The control plane authorises on
+    // clinician portal sessions, so it has no meaning without the clinician group, which every shape
+    // with the practice group also has.
+    val orgs = if (shape.practiceGroup) {
         orgStore ?: OrgStore(config.dataDir)
     } else null
     // A SECOND audit chain, in its own database file. Same class, same hash chain, same
     // metadata-only contract — and a separate file so that a practice's membership history and a
     // patient's access history can never be keyed into the same table. See AuditStore's `dbName`.
-    val orgAudit = if (config.therapistAuthEnabled) {
+    val orgAudit = if (shape.practiceGroup) {
         orgAuditStore ?: AuditStore(config.dataDir, config.auditRetentionDays * 86_400L, dbName = "org-audit.db")
-    } else null
-    // Store-and-forward state for the CPace pairing exchange (COMPANION_PAIRING.md §4). Same
-    // feature gate: an exchange belongs to an invite, and invites only exist when the portal is on.
-    val pairing = if (config.therapistAuthEnabled) {
-        pairingStore ?: PairingStore(config.dataDir)
     } else null
 
     // The server's scheduled chores (Housekeeping): each runs now, before a request is taken, and
@@ -269,11 +289,13 @@ fun Application.module(
             }
         }
 
-        // Unauthenticated capability probe. Reveals ONLY whether the operator enabled outbound
-        // SMTP, so the owner portal knows whether to offer the "send email invite" button. No
-        // secrets, no config values — just the single boolean the UI needs.
+        // Unauthenticated capability probe. Reveals whether the operator enabled outbound SMTP, so
+        // the owner portal knows whether to offer the "send email invite" button, and the shape the
+        // operator chose, so the first-run screen does not ask (#330). No secrets and no value the
+        // operator typed: the shape is one of three fixed words, and anyone who can reach the server
+        // can already read it from the routes.
         get("/v1/config") {
-            call.respond(ServerConfigDto(smtpEnabled = config.smtpEnabled))
+            call.respond(ServerConfigDto(smtpEnabled = config.smtpEnabled, setupMode = config.setupMode?.wire))
         }
 
         if (store != null && guard != null) {
@@ -288,10 +310,12 @@ fun Application.module(
             put("/v1/keyparams") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
         }
 
-        // Therapist portal. Fail-closed: 503 on every portal path when the feature is off, so a
-        // probe cannot tell configured-but-empty from not-configured.
+        // The clinician group (#330): on in paired and practice. Fail-closed: when it is off, every
+        // path it answers answers 503 instead (clinicianGroupOff), so a probe cannot tell
+        // configured-but-empty from not-configured. The group is all or nothing: a store missing
+        // here would leave its routes answered by nothing at all rather than by the 503.
         if (relStore != null && auth != null && guard != null && audit != null && notifier != null &&
-            orgs != null && orgAudit != null
+            pairing != null
         ) {
             relationRoutes(
                 relStore, guard, auth, config.sessionIdleSeconds, config.maxRequestBytes,
@@ -345,25 +369,29 @@ fun Application.module(
             )
             // The CPace relay: opaque pairing blobs between the owner and a holder of the invite
             // link. The server never has the code and never parses a message — see the routes file.
-            if (pairing != null) {
-                pairingRelayRoutes(
-                    authStore = auth,
-                    pairingStore = pairing,
-                    ownerGuard = guard,
-                    auditStore = audit,
-                    totpLockoutFails = config.totpLockoutFails,
-                    totpLockoutSeconds = config.totpLockoutSeconds,
-                    auditSourceIp = config.auditSourceIpEnabled,
-                )
-            }
+            pairingRelayRoutes(
+                authStore = auth,
+                pairingStore = pairing,
+                ownerGuard = guard,
+                auditStore = audit,
+                totpLockoutFails = config.totpLockoutFails,
+                totpLockoutSeconds = config.totpLockoutSeconds,
+                auditSourceIp = config.auditSourceIpEnabled,
+            )
             auditRoutes(audit, guard)
             // The chain's own check: recompute the stored audit chain for one relationship and
             // report its head. Owner bearer token, same gate as the therapist-keys read — a head
             // plus a count per relRef is exactly the relationship metadata this server does not
             // hand to anonymous callers. See routes/AuditChainRoutes.kt for the whole argument.
             auditChainRoutes(audit, guard)
-            // The org / practice control plane. Membership and roles only — it holds no key, serves
-            // no ciphertext, and cannot mint a grant. See routes/OrgRoutes.kt for the whole argument.
+        } else {
+            clinicianGroupOff()
+        }
+
+        // The practice group (#330): on in practice only, and fail-closed the same way. The org /
+        // practice control plane: membership and roles only — it holds no key, serves no
+        // ciphertext, and cannot mint a grant. See routes/OrgRoutes.kt for the whole argument.
+        if (orgs != null && orgAudit != null && auth != null && guard != null) {
             orgRoutes(
                 orgStore = orgs,
                 authStore = auth,
@@ -373,24 +401,7 @@ fun Application.module(
                 auditSourceIp = config.auditSourceIpEnabled,
             )
         } else {
-            get("/v1/rel/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            put("/v1/rel/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            post("/v1/invite") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            post("/v1/invite/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            post("/v1/totp/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            post("/v1/session/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            post("/v1/webauthn/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            // Both halves of the therapist-key exchange, so a probe cannot tell "configured but
-            // nobody has registered yet" (404) from "this deployment has no portal at all" (503).
-            get("/v1/relations/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            post("/v1/relations/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            // Every method the org control plane answers, so a probe cannot tell "this practice has
-            // no such member" (404) from "this deployment has no practices at all" (503).
-            get("/v1/orgs") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            post("/v1/orgs") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            get("/v1/orgs/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            post("/v1/orgs/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            delete("/v1/orgs/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
+            practiceGroupOff()
         }
 
         // The owner's email (COMPANION_SECURITY.md §6, "Owner notifications and server-access
@@ -416,8 +427,9 @@ fun Application.module(
         // The therapist portal is a SEPARATE surface served at its own route. Map the clean path
         // "/therapist" to the second SPA entry (therapist.html), distinct from the owner viewer's
         // default (index.html). The bundled therapist.html is also reachable directly via static
-        // serving; this route just gives it a clean URL. Same CSP headers apply.
-        val therapistEntry = File(webRoot, "therapist.html")
+        // serving; this route just gives it a clean URL. Same CSP headers apply. Both are served only
+        // in a shape with the clinician group (pageRoutes).
+        val therapistEntry = File(webRoot, Pages.CLINICIAN)
         val serveTherapist: suspend io.ktor.server.routing.RoutingContext.() -> Unit = {
             if (therapistEntry.isFile) call.respondFile(therapistEntry)
             else call.respond(HttpStatusCode.NotFound, ErrorDto("therapist portal not built"))
@@ -432,12 +444,11 @@ fun Application.module(
          * why the therapist half of the product could not be used and why the sign-in form ended up
          * asking a clinician to paste nine values by hand.
          *
-         * It serves the therapist entry, not the owner's: `staticFiles`' `default` applies to
-         * DIRECTORY requests, so an unmatched path like this one would not fall through to a SPA
-         * shell, and if it ever did it would land on index.html — the owner's viewer, the wrong
-         * surface entirely. The fragment carrying the invitation is never sent to the server
-         * (deliberately — see buildInviteLink), so this route sees only the path and hands back the
-         * page that knows how to read the rest client-side.
+         * It serves the therapist entry, not the owner's: `staticFiles`' `default` answers every
+         * path that names no file with index.html, so without this route the link would land on the
+         * owner's viewer, the wrong surface entirely. The fragment carrying the invitation is never
+         * sent to the server (deliberately — see buildInviteLink), so this route sees only the path
+         * and hands back the page that knows how to read the rest client-side.
          */
         val invitePaths = listOf("/portal/invite", "/portal/invite/")
 
@@ -470,15 +481,135 @@ fun Application.module(
         }
 
         if (config.basePath == "/") {
-            get("/therapist") { serveTherapist() }
-            invitePaths.forEach { p -> get(p) { redirectToTherapist() } }
-            staticFiles("/", webRoot) { default("index.html") }
+            pageRoutes(shape, webRoot, invitePaths, serveTherapist, redirectToTherapist)
         } else {
             route(config.basePath) {
-                get("/therapist") { serveTherapist() }
-                invitePaths.forEach { p -> get(p) { redirectToTherapist() } }
-                staticFiles("/", webRoot) { default("index.html") }
+                pageRoutes(shape, webRoot, invitePaths, serveTherapist, redirectToTherapist)
             }
         }
     }
+}
+
+/**
+ * The one line a start logs about its shape (#330), at info. It names the shape and the settings that
+ * decided it, never a value the operator typed, and it is logged once per start, never per request.
+ */
+internal fun shapeLogLine(config: Config): String {
+    val shape = config.shape
+    return if (config.setupMode != null) {
+        "Serving the ${shape.wire} shape, as DAYMARK_SETUP_MODE says: ${shape.serves}."
+    } else {
+        "Serving the ${shape.wire} shape, assumed because DAYMARK_SETUP_MODE is not set and " +
+            "DAYMARK_THERAPIST_AUTH is ${if (config.therapistAuthEnabled) "on" else "off"}: ${shape.serves}. " +
+            "Set DAYMARK_SETUP_MODE to solo, paired or practice to choose; see docs/COMPANION_DEPLOYMENT.md §0."
+    }
+}
+
+/**
+ * The one answer every route of a group that is off gives (#330): exactly what every clinician,
+ * pairing and practice route answered with `DAYMARK_THERAPIST_AUTH` off, before the groups were split,
+ * whichever group is off and in whichever shape. So a probe learns nothing from a group being off
+ * that the old switch did not already tell it, and the body says "therapist portal" for the practice
+ * group too, for that reason.
+ */
+private const val GROUP_OFF_ERROR = "therapist portal not configured"
+
+private val groupOff: suspend io.ktor.server.routing.RoutingContext.() -> Unit = {
+    call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto(GROUP_OFF_ERROR))
+}
+
+/**
+ * The clinician group, off: every method and path the group answers when it is on — relationship
+ * channels and their revocation, the owner's access log, invitations, pairing, sign-in, the passkey
+ * scaffold, keys and endings — answers 503 instead. A probe cannot tell "configured but nobody has
+ * registered yet" (404) or "not signed in" (401) from "this shape has no clinicians" (503).
+ * ShapeRoutingTest walks the routes of a server with the group on and asks every one of them here.
+ */
+private fun Route.clinicianGroupOff() {
+    get("/v1/rel/{...}", groupOff)
+    put("/v1/rel/{...}", groupOff)
+    post("/v1/rel/{...}", groupOff)
+    post("/v1/invite", groupOff)
+    post("/v1/invite/{...}", groupOff)
+    post("/v1/totp/{...}", groupOff)
+    post("/v1/session/{...}", groupOff)
+    get("/v1/webauthn/{...}", groupOff)
+    post("/v1/webauthn/{...}", groupOff)
+    get("/v1/relations/{...}", groupOff)
+    post("/v1/relations/{...}", groupOff)
+}
+
+/**
+ * The practice group, off: every method the org control plane answers, so a probe cannot tell "this
+ * practice has no such member" (404) from "this shape has no practices" (503).
+ */
+private fun Route.practiceGroupOff() {
+    get("/v1/orgs", groupOff)
+    post("/v1/orgs", groupOff)
+    get("/v1/orgs/{...}", groupOff)
+    post("/v1/orgs/{...}", groupOff)
+    delete("/v1/orgs/{...}", groupOff)
+}
+
+/**
+ * The web build's pages, and the shapes that serve each (#330). The owner's page and the server
+ * console are served in every shape; the clinician's page with the clinician group; the practice page
+ * with the practice group. A page of the build that is not named here is served in every shape by the
+ * static handler, which is why ShapeRoutingTest fails on a page it has not classified.
+ */
+internal object Pages {
+    const val OWNER = "index.html"
+    const val SERVER_CONSOLE = "admin.html"
+    const val CLINICIAN = "therapist.html"
+    const val PRACTICE = "practice.html"
+
+    /** The page files [shape] does not serve. */
+    fun notServed(shape: SetupMode): List<String> = listOfNotNull(
+        CLINICIAN.takeUnless { shape.clinicianGroup },
+        PRACTICE.takeUnless { shape.practiceGroup },
+    )
+}
+
+/**
+ * The pages, under the base path (#330).
+ *
+ * A page the shape does not serve is REFUSED AT THE FILE, not at a path. The static handler resolves
+ * `/therapist.html/`, `/./therapist.html`, `/x/../therapist.html` and `/%2Ftherapist.html` to the same
+ * file as `/therapist.html`, so a route on that one spelling would leave the others serving the page.
+ * `exclude` sees the file the handler resolved, whatever the spelling, and the handler answers it 403
+ * with no body. The clean paths that lead to the clinician's page — `/therapist` and the invitation
+ * link's `/portal/invite` — answer the same 403, so "not served in this shape" has one answer, apart
+ * from "not in this build", which `/therapist` answers 404.
+ */
+private fun Route.pageRoutes(
+    shape: SetupMode,
+    webRoot: File,
+    invitePaths: List<String>,
+    serveTherapist: suspend io.ktor.server.routing.RoutingContext.() -> Unit,
+    redirectToTherapist: suspend io.ktor.server.routing.RoutingContext.() -> Unit,
+) {
+    if (shape.clinicianGroup) {
+        get("/therapist") { serveTherapist() }
+        invitePaths.forEach { p -> get(p) { redirectToTherapist() } }
+    } else {
+        val refused: suspend io.ktor.server.routing.RoutingContext.() -> Unit = { call.respond(HttpStatusCode.Forbidden) }
+        get("/therapist", refused)
+        invitePaths.forEach { p -> get(p, refused) }
+    }
+    val notServed = Pages.notServed(shape).map { File(webRoot, it) }
+    staticFiles("/", webRoot) {
+        default(Pages.OWNER)
+        exclude { requested -> notServed.any { page -> isSamePage(requested, page) } }
+    }
+}
+
+/**
+ * Whether [requested] is the file [page], as the filesystem sees it: by identity rather than by name,
+ * so another spelling of the same file — another case on a case-insensitive disk, a link — is the
+ * same page. Two files that cannot be compared count as the same, so a failure refuses rather than
+ * serves. Nothing is there to serve, or to refuse, when either is not a file.
+ */
+private fun isSamePage(requested: File, page: File): Boolean {
+    if (!requested.isFile || !page.isFile) return false
+    return runCatching { Files.isSameFile(requested.toPath(), page.toPath()) }.getOrDefault(true)
 }

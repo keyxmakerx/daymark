@@ -9,8 +9,10 @@ import java.net.URI
  * with [EXIT_CONFIG], so an operator reads the setting to change rather than a stack trace, and
  * reads it again on every restart until it is changed (#180).
  *
- * The message names settings and says what to set. It never repeats a configured value: logs carry
- * no content or identifiers, and a value can be a hostname, a path or a secret.
+ * The message names settings and says what to set. It never repeats a value as the operator wrote
+ * it: logs carry no content or identifiers, and a value can be a hostname, a path or a secret. What
+ * it may say back is which of a setting's fixed choices the server read, in the server's own
+ * spelling — `DAYMARK_SETUP_MODE is paired` — since that is none of those (#330).
  */
 class StartupRefusal(override val message: String) : Exception(message) {
     init {
@@ -44,7 +46,11 @@ data class Config(
     /** SMTP config. Disabled unless DAYMARK_SMTP_HOST is set. See docs/COMPANION_SECURITY.md §6. */
     val mailer: MailerConfig = MailerConfig.fromEnv(emptyMap()),
     // --- Therapist portal (Milestone: server slice) ---
-    /** Feature gate for the therapist auth + relationship-blob channels. Off unless DAYMARK_THERAPIST_AUTH=1. */
+    /**
+     * `DAYMARK_THERAPIST_AUTH`: on for `1` or `true`, off for anything else. The switch the setup mode
+     * replaces (#330): it decides [shape] only when no [setupMode] is chosen, and with one chosen
+     * [fromEnv] refuses a value that disagrees with it.
+     */
     val therapistAuthEnabled: Boolean = false,
     /** WebAuthn RP-ID / origins are config-pinned NOW even though verification is scaffold-only. */
     val webauthnRpId: String? = null,
@@ -106,6 +112,13 @@ data class Config(
      * lock out every user. See [ClientAddress].
      */
     val trustedProxies: List<ClientAddress.Range> = emptyList(),
+    /**
+     * The shape the operator chose with `DAYMARK_SETUP_MODE`, or null when they chose none (#330).
+     * Null is not a fourth shape: [shape] resolves it. Only a chosen shape is published on
+     * `/v1/config`, because the first-run screen reads a published one as the configuration having
+     * answered its question (`companion/web/src/lib/setup/shape.ts`).
+     */
+    val setupMode: SetupMode? = null,
 ) {
     /** True when the sync API has a configured access token and may serve /v1. */
     val syncEnabled: Boolean get() = !authToken.isNullOrBlank()
@@ -114,11 +127,21 @@ data class Config(
     val smtpEnabled: Boolean get() = mailer.enabled
 
     /**
+     * The shape this server serves (#330): the one the operator chose or, with none chosen, the one
+     * `DAYMARK_THERAPIST_AUTH` already meant. On, it switches the clinician and practice routes on
+     * together and every page is served, which is [SetupMode.PRACTICE] exactly. Off, every clinician,
+     * pairing and practice route answers 503, which is [SetupMode.SOLO]; a solo server also stops
+     * serving the clinician and practice pages, whose every call answered 503 on it. `module` logs
+     * which shape it assumed.
+     */
+    val shape: SetupMode get() = setupMode ?: if (therapistAuthEnabled) SetupMode.PRACTICE else SetupMode.SOLO
+
+    /**
      * True when links to this server leave it: the clinician portal hands the owner invitation
      * links, and outbound email carries notification and recovery links. Either one makes
-     * [publicBaseUrl] required at start (#180).
+     * [publicBaseUrl] required at start (#180), whichever setting switched the portal on (#330).
      */
-    val buildsLinks: Boolean get() = therapistAuthEnabled || smtpEnabled
+    val buildsLinks: Boolean get() = shape.clinicianGroup || smtpEnabled
 
     /**
      * A data class's generated `toString()` prints every property — including [authToken], the
@@ -132,7 +155,8 @@ data class Config(
     override fun toString(): String =
         "Config(bindAddr=$bindAddr, port=$port, dataDir=$dataDir, basePath=$basePath, " +
             "webDir=$webDir, logLevel=$logLevel, syncEnabled=$syncEnabled, smtpEnabled=$smtpEnabled, " +
-            "therapistAuthEnabled=$therapistAuthEnabled, trustedProxies=${trustedProxies.size} entries, " +
+            "therapistAuthEnabled=$therapistAuthEnabled, setupMode=${setupMode?.wire ?: "unset"}, " +
+            "shape=${shape.wire}, trustedProxies=${trustedProxies.size} entries, " +
             "authToken=${if (authToken.isNullOrBlank()) "unset" else "REDACTED"})"
 
     companion object {
@@ -147,6 +171,15 @@ data class Config(
          * starts, and a deployment never does.
          */
         fun fromEnv(env: Map<String, String> = System.getenv()): Config {
+            val therapistAuthRaw = env["DAYMARK_THERAPIST_AUTH"]?.trim().orEmpty()
+            val therapistAuthOn = therapistAuthRaw == "1" || therapistAuthRaw.equals("true", true)
+            // First, because every other check depends on the shape: a refusal about the public
+            // address means nothing for a mode the server cannot read.
+            val setupMode = readSetupMode(
+                env["DAYMARK_SETUP_MODE"],
+                therapistAuthSet = therapistAuthRaw.isNotEmpty(),
+                therapistAuthOn = therapistAuthOn,
+            )
             val basePathRaw = env["DAYMARK_BASE_PATH"]?.trim().orEmpty().ifEmpty { "/" }
             val webauthnOrigins = env["DAYMARK_WEBAUTHN_ORIGINS"]?.split(',')
                 ?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
@@ -167,7 +200,8 @@ data class Config(
                 authLockoutSeconds = env["DAYMARK_AUTH_LOCKOUT_SECONDS"]?.trim()?.toLongOrNull() ?: 900L,
                 rateLimitRps = env["DAYMARK_RATE_LIMIT_RPS"]?.trim()?.toIntOrNull() ?: 5,
                 mailer = MailerConfig.fromEnv(env),
-                therapistAuthEnabled = env["DAYMARK_THERAPIST_AUTH"]?.trim().let { it == "1" || it.equals("true", true) },
+                therapistAuthEnabled = therapistAuthOn,
+                setupMode = setupMode,
                 webauthnRpId = env["DAYMARK_WEBAUTHN_RP_ID"]?.trim()?.ifBlank { null },
                 webauthnOrigins = webauthnOrigins,
                 publicBaseUrl = explicitBaseUrl ?: webauthnOrigins.firstOrNull(),
@@ -198,6 +232,42 @@ data class Config(
         }
 
         /**
+         * The shape `DAYMARK_SETUP_MODE` names, or null when it is unset or blank (#330). Blank is
+         * unset because compose passes every setting it names, empty when `.env` leaves it out.
+         *
+         * Refused, each in one line naming the settings:
+         * - A value that names none of the three. It is never read as a shape — least of all as
+         *   "everything on" — and never repeated back, since a mistyped value can be anything.
+         * - A shape `DAYMARK_THERAPIST_AUTH` contradicts. The mode replaces that switch: with a mode
+         *   chosen the switch may be left out, and when it is set it must agree, on for paired and
+         *   practice and off for solo. A value other than `1` or `true` has always meant off.
+         */
+        private fun readSetupMode(raw: String?, therapistAuthSet: Boolean, therapistAuthOn: Boolean): SetupMode? {
+            val value = raw?.trim().orEmpty()
+            if (value.isEmpty()) return null
+            val mode = SetupMode.parse(value) ?: throw StartupRefusal(
+                "Refusing to start: DAYMARK_SETUP_MODE is not one of solo, paired or practice. " +
+                    "Set it to the one this server is for.",
+            )
+            if (!mode.clinicianGroup && therapistAuthOn) {
+                throw StartupRefusal(
+                    "Refusing to start: DAYMARK_SETUP_MODE is ${mode.wire} while DAYMARK_THERAPIST_AUTH is on, " +
+                        "and a ${mode.wire} server has no clinician portal. Remove DAYMARK_THERAPIST_AUTH, which " +
+                        "the setup mode replaces, or set DAYMARK_SETUP_MODE to paired or practice.",
+                )
+            }
+            if (mode.clinicianGroup && therapistAuthSet && !therapistAuthOn) {
+                throw StartupRefusal(
+                    "Refusing to start: DAYMARK_SETUP_MODE is ${mode.wire}, which turns the clinician portal on, " +
+                        "while DAYMARK_THERAPIST_AUTH is set to turn it off (anything but 1 or true is off). " +
+                        "Remove DAYMARK_THERAPIST_AUTH, which the setup mode replaces, or set " +
+                        "DAYMARK_SETUP_MODE to solo.",
+                )
+            }
+            return mode
+        }
+
+        /**
          * Throws a [StartupRefusal] for a configuration the server must not run with.
          * [addressSetting] names where [publicBaseUrl] was read from, so a refusal points at the
          * setting the operator actually wrote.
@@ -218,10 +288,15 @@ data class Config(
             val address = config.publicBaseUrl
             val use = "Set DAYMARK_PUBLIC_BASE_URL to the address people type, for example $EXAMPLE_PUBLIC_BASE_URL"
             if (address == null) {
-                val on = listOfNotNull(
-                    "DAYMARK_THERAPIST_AUTH is on".takeIf { config.therapistAuthEnabled },
-                    "DAYMARK_SMTP_HOST is set".takeIf { config.smtpEnabled },
-                ).joinToString(" and ")
+                // The setting that switched the portal on: the setup mode when one is chosen, else
+                // the switch it replaces (#330).
+                val portal = when {
+                    !config.shape.clinicianGroup -> null
+                    config.setupMode != null -> "DAYMARK_SETUP_MODE is ${config.setupMode.wire}"
+                    else -> "DAYMARK_THERAPIST_AUTH is on"
+                }
+                val on = listOfNotNull(portal, "DAYMARK_SMTP_HOST is set".takeIf { config.smtpEnabled })
+                    .joinToString(" and ")
                 throw StartupRefusal(
                     "Refusing to start: DAYMARK_PUBLIC_BASE_URL is not set. $on, so this server sends " +
                         "links to itself, and it will not take its own address from a request. $use",

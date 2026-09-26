@@ -68,6 +68,37 @@ class StartupProcessTest {
     }
 
     @Test
+    fun `an unknown setup mode exits 78 with one line naming the setting, never the value`() {
+        // Everything else is correct, so the mode is the only thing it can be refusing (#330).
+        val dataDir = Files.createTempDirectory("startup-refused-mode").toFile()
+        try {
+            val run = launch(
+                settings(
+                    dataDir,
+                    "DAYMARK_PUBLIC_BASE_URL" to "https://daymark.example.com",
+                    "DAYMARK_SETUP_MODE" to "zqx-everything",
+                ),
+            )
+            val exited = run.process.waitFor(60, TimeUnit.SECONDS)
+            if (!exited) run.process.destroyForcibly()
+            run.reader.join(10_000)
+            assertTrue(exited, "an unknown setup mode must exit, not serve: ${run.lines}")
+            assertEquals(EXIT_CONFIG, run.process.exitValue(), "${run.lines}")
+            val out = run.lines.filter { it.isNotBlank() }
+            assertEquals(1, out.size, "exactly one line: $out")
+            assertTrue(
+                "ERROR" in out.single() &&
+                    "Refusing to start: DAYMARK_SETUP_MODE is not one of solo, paired or practice." in out.single(),
+                out.single(),
+            )
+            assertTrue("zqx" !in out.single(), "the value is never repeated back: ${out.single()}")
+            assertEquals(emptyList(), dataDir.list()!!.toList(), "it refuses before it touches the volume")
+        } finally {
+            dataDir.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `a correct configuration gets past every refusal and serves`() {
         val dataDir = Files.createTempDirectory("startup-serves").toFile()
         val run = launch(
@@ -86,6 +117,15 @@ class StartupProcessTest {
             assertTrue(run.process.isAlive, "and keep serving: ${run.lines}")
             assertTrue(run.lines.any { "Daymark Companion starting on" in it }, "${run.lines}")
             assertTrue(run.lines.none { "Refusing to start" in it }, "${run.lines}")
+            // No DAYMARK_SETUP_MODE and the switch on: the shape it assumed, said once, at info (#330).
+            val shape = run.lines.filter { "DAYMARK_SETUP_MODE" in it }
+            assertEquals(1, shape.size, "one line about the shape: ${run.lines}")
+            assertTrue(" INFO " in shape.single(), shape.single())
+            assertTrue(
+                "Serving the practice shape, assumed because DAYMARK_SETUP_MODE is not set and " +
+                    "DAYMARK_THERAPIST_AUTH is on" in shape.single(),
+                shape.single(),
+            )
         } finally {
             run.process.destroy()
             if (!run.process.waitFor(15, TimeUnit.SECONDS)) run.process.destroyForcibly().waitFor()
