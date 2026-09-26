@@ -212,7 +212,10 @@ describe('what the screen says', () => {
     expect(OWNER_COPY.attemptsLeft(6)).toBe('6 of 8 tries left on this invitation.')
     expect(OWNER_COPY.wrongLinkTried(1)).toMatch(/^One wrong invitation link/)
     expect(OWNER_COPY.wrongLinkTried(3)).toMatch(/^3 wrong invitation links/)
-    expect(OWNER_COPY.wrongLinkAdvice).toMatch(/if that was not your therapist/i)
+    expect(OWNER_COPY.wrongLinkAdvice).toBe('If that was not your clinician, you can stop this invitation.')
+    expect(OWNER_COPY.wrongLinkAdvice).not.toMatch(/therapist/i)
+    // Control: the word planted back into the real sentence is seen.
+    expect(OWNER_COPY.wrongLinkAdvice.replace('clinician', 'therapist')).toMatch(/therapist/i)
     expect(OWNER_COPY.wrongLinkAdvice).not.toMatch(/attack|must|immediately/i)
   })
 })

@@ -91,7 +91,7 @@ granted a key*, not *is technically permitted to hold one by role*.
 | **Patient / owner** | their own keys, grants, consent, audit view | Their own data — root of trust |
 | **Psychologist / clinician** | assignments, notes, plans for granted clients | Yes — for clients who granted them |
 | **Psychiatrist** | same as clinician; may publish Validated/Adapted tools | Yes — for granted clients |
-| **Therapist assistant** | supports a clinician's work | Narrowed — only what's granted |
+| **Clinical assistant** | supports a clinician's work | Narrowed — only what's granted |
 | **Front desk** | scheduling, invites, membership logistics | **No** — scheduling metadata only, no notes |
 | **Supervisor** | oversees a team of clinicians | **Only via explicit, consented grant** (clinical supervision), never by title |
 | **Org admin** | practice membership, roles, revocation, audit review | **No** — control/monitoring only |

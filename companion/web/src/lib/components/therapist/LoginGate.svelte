@@ -312,7 +312,7 @@
 
 <section class="gate">
   {#if standalone}<LowerAssuranceBanner />{/if}
-  {#if standalone}<h2>Therapist portal — sign in</h2>{/if}
+  {#if standalone}<h2>Clinician console — sign in</h2>{/if}
 
   <!--
     A real form, so the Go key on a phone and Enter in the last field submit it. `novalidate`

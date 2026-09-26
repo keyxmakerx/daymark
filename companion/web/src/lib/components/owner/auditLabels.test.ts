@@ -39,8 +39,13 @@ describe('audit label mapping', () => {
     expect('Your therapist left the practice').toMatch(/revoked|left the|quit|resigned|removed/i)
   })
 
-  it('labels actor roles', () => {
+  it('labels actor roles, calling the professional a clinician (#158)', () => {
     expect(auditActorLabel('owner')).toBe('You')
-    expect(auditActorLabel('therapist')).toBe('Your therapist')
+    // The actor VALUE stays 'therapist': it is what the server stores and sends. Only the word the
+    // owner reads changed.
+    expect(auditActorLabel('therapist')).toBe('Your clinician')
+    expect(auditActorLabel('therapist')).not.toMatch(/therapist/i)
+    // Control: the word planted back into the real label is seen.
+    expect(auditActorLabel('therapist').replace('clinician', 'therapist')).toMatch(/therapist/i)
   })
 })

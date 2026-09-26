@@ -95,14 +95,18 @@ function styleOf(path: string): string | null {
  * sentence, exactly as it renders), whitespace collapsed so the assertions are indifferent to
  * how the markup happens to wrap.
  */
-function proseOf(path: string): string {
-  return (source.get(path) ?? '')
+function proseOfText(text: string): string {
+  return text
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<script[\s\S]*?<\/script>/g, '')
     .replace(/<style[\s\S]*?<\/style>/g, '')
     .replace(/<[^>]*>/g, '')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+function proseOf(path: string): string {
+  return proseOfText(source.get(path) ?? '')
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -495,7 +499,7 @@ const FIXED_COPY: { path: string; label: string; sentences: string[] }[] = [
     path: 'src/lib/components/owner/NonDiagnosticBanner.svelte',
     label: 'non-diagnostic banner (owner)',
     sentences: [
-      'Non-diagnostic. Self-checks are self-tracking tools, not medical assessments. Scores and bands are descriptive, not clinical thresholds. Anything a therapist assigns or shares here is guidance from your real clinician — never a diagnosis.',
+      'Non-diagnostic. Self-checks are self-tracking tools, not medical assessments. Scores and bands are descriptive, not clinical thresholds. Anything a clinician assigns or shares here is guidance from them — never a diagnosis.',
     ],
   },
   {
@@ -636,4 +640,48 @@ describe('(e) the fixed honesty copy is intact', () => {
       'Read the curated data you choose to share (scores and bands only — never raw entries).',
     )
   })
+})
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   (f) Retired copy stays retired.
+
+   The other half of (e). When a fixed sentence is reworded on purpose, its replacement is pinned
+   above and the sentence it replaced is listed here, in the file that used to render it, so the
+   old wording cannot come back beside the new one — or instead of it, by a revert nobody meant.
+   Each entry names the issue that retired it. The absence check is proven first against a copy
+   of the retired sentence planted into that same file, run through the same extractor: a check
+   that could not see it there would pass on every file forever.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const RETIRED_COPY: { path: string; issue: string; sentences: string[] }[] = [
+  {
+    path: 'src/lib/components/owner/NonDiagnosticBanner.svelte',
+    issue: '#158',
+    sentences: [
+      'Anything a therapist assigns or shares here is guidance from your real clinician — never a diagnosis.',
+    ],
+  },
+]
+
+describe('(f) retired copy stays retired', () => {
+  it('every entry names a real file, and the check sees a planted copy of each retired sentence', () => {
+    expect(RETIRED_COPY.length).toBeGreaterThan(0)
+    for (const { path, sentences } of RETIRED_COPY) {
+      expect(paths, `${path} is missing`).toContain(path)
+      expect(sentences.length, path).toBeGreaterThan(0)
+      // Planted after the style block, where the extractor must still find it as prose.
+      const planted = `${source.get(path)}\n<p>\n  ${sentences.join('\n  ')}\n</p>\n`
+      for (const sentence of sentences) {
+        expect(proseOfText(planted), `${path}: a planted copy was not seen`).toContain(sentence)
+      }
+    }
+  })
+
+  for (const { path, issue, sentences } of RETIRED_COPY) {
+    it(`${path} no longer says what ${issue} retired`, () => {
+      const prose = proseOf(path)
+      expect(prose.length, `${path} rendered no prose`).toBeGreaterThan(20)
+      for (const sentence of sentences) expect(prose, `${path}: retired copy is back`).not.toContain(sentence)
+    })
+  }
 })

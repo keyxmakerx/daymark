@@ -162,21 +162,21 @@ export function buildShare(
   pins: PinStore,
 ): SealedShare {
   if (!pins.isPinned(therapistEd25519Fp)) {
-    throw new ShareUnpinnedError('refusing to seal a share to an unpinned therapist')
+    throw new ShareUnpinnedError('refusing to seal a share to an unpinned clinician')
   }
   const actualRecipientFp = fingerprint(therapistX25519Pub)
   if (meta.recipientFp !== actualRecipientFp) {
-    throw new ShareUnpinnedError('meta.recipientFp does not match the therapist X25519 key')
+    throw new ShareUnpinnedError('meta.recipientFp does not match the clinician X25519 key')
   }
   const pinnedX = pins.pinnedX25519Fp(therapistEd25519Fp)
   if (pinnedX !== actualRecipientFp) {
-    throw new ShareUnpinnedError('therapist X25519 key is not the pinned one for this relationship')
+    throw new ShareUnpinnedError('the clinician X25519 key is not the pinned one for this relationship')
   }
   if (meta.ownerSigningFp !== fingerprint(owner.publicKey)) {
     throw new PairingError('meta.ownerSigningFp does not match the owner signing key')
   }
   if (!ID.test(meta.shareId) || !isCount(meta.version) || !isCount(meta.createdAt) || !isCount(meta.expiry)) {
-    throw new PairingError('share id, version, creation time or expiry is not in the form a therapist accepts')
+    throw new PairingError('share id, version, creation time or expiry is not in the form a clinician accepts')
   }
   if (bundle.shareId !== meta.shareId || bundle.ownerFp !== meta.ownerSigningFp) {
     throw new PairingError('the bundle names a different share or owner than its envelope')
@@ -250,7 +250,7 @@ export function openShare(
     throw new ShareOpenError('owner signing key does not match the pinned owner fingerprint')
   }
   if (sealed.recipientFp !== fingerprint(therapist.publicKey)) {
-    throw new ShareOpenError('share is addressed to a different therapist key')
+    throw new ShareOpenError('share is addressed to a different clinician key')
   }
 
   // 3. the owner's signature over every byte used below
@@ -279,7 +279,7 @@ export function openShare(
   try {
     cek = _sodium.crypto_box_seal_open(sealed.wrappedCEK, therapist.publicKey, therapist.privateKey)
   } catch {
-    throw new ShareOpenError('sealed CEK could not be opened (not addressed to this therapist)')
+    throw new ShareOpenError('sealed CEK could not be opened (not addressed to this clinician)')
   }
   let bundle: ShareBundle
   try {

@@ -143,7 +143,7 @@ export const OWNER_COPY = {
     n === 1
       ? 'One wrong invitation link has been tried against this invitation.'
       : `${n} wrong invitation links have been tried against this invitation.`,
-  wrongLinkAdvice: 'If that was not your therapist, you can stop this invitation.',
+  wrongLinkAdvice: 'If that was not your clinician, you can stop this invitation.',
 
   /** Ending an invitation: what it does, and the two things it does not do. */
   stopLabel: 'Stop this invitation',

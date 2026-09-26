@@ -138,7 +138,7 @@
       <span class="mark" aria-hidden="true"></span>
       <div>
         <p class="wordmark">Daymark Companion</p>
-        <p class="muted tagline">Therapist portal</p>
+        <p class="muted tagline">Clinician console</p>
       </div>
     </div>
   </header>

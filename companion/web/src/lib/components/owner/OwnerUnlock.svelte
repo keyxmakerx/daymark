@@ -322,7 +322,7 @@
       {:else}
         <p class="fp">Your owner fingerprint: <code>{ownerFp}</code></p>
         <p class="hint">{FINGERPRINT_IS_STABLE}</p>
-        <p class="pub faint">Share your public keys with therapists out-of-band to pin:
+        <p class="pub faint">Share your public keys with clinicians out-of-band to pin:
           sign <code>{toBase64(ownerIdentity.ed25519.publicKey)}</code>,
           box <code>{toBase64(ownerIdentity.x25519.publicKey)}</code>
         </p>

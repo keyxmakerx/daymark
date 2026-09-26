@@ -218,7 +218,7 @@
   <section class="portal">
     <LowerAssuranceBanner />
     <div class="topline">
-      <nav class="tabs" aria-label="Therapist portal section">
+      <nav class="tabs" aria-label="Clinician console section">
         <button class:active={tab === 'allowed'} aria-pressed={tab === 'allowed'} onclick={() => (tab = 'allowed')}>Allowed</button>
         {#if canAssign}
           <button class:active={tab === 'assign'} aria-pressed={tab === 'assign'} onclick={() => (tab = 'assign')}>Assign</button>

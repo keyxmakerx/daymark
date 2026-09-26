@@ -60,7 +60,7 @@
   {/if}
 
   {#if !loaded && !busy}
-    <EmptyState title="Refresh to fetch assignments from your therapists." />
+    <EmptyState title="Refresh to fetch assignments from your clinicians." />
   {:else if loaded && items.length === 0 && gone.length === 0}
     <EmptyState title="No assignments to review." />
   {:else}

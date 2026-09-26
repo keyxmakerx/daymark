@@ -214,7 +214,7 @@ export const HEAD_PURPOSE =
  * token is theirs to type.
  */
 export const CHAIN_HEAD_GATE =
-  'This check is gated on the owner bearer token, exactly as reading the therapist’s ' +
+  'This check is gated on the owner bearer token, exactly as reading the clinician’s ' +
   'published keys is — not because a chain head opens anything, but because a head plus an ' +
   'entry count, served per relationship to anyone who asked, would tell an anonymous caller ' +
   'which relationships exist on this server and how active each one is. That is relationship ' +
@@ -305,7 +305,7 @@ export function readChainHead(res: ChainHeadResponse): ChainHeadView {
   if (res.status === 503) {
     return view(
       'not-configured',
-      'The server answered that the therapist portal is not configured on this deployment, so ' +
+      'The server answered that the clinician console is not configured on this deployment, so ' +
         'there are no relationships here and no chain to check.',
     )
   }

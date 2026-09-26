@@ -337,7 +337,7 @@ export const AUTH_PRESSURE: readonly StatedGap[] = [
   },
   {
     id: 'totp-lockouts',
-    subject: 'Therapist credentials locked out on TOTP failures',
+    subject: 'Clinician credentials locked out on TOTP failures',
     statement: 'This build exposes no counter for TOTP lockouts.',
     heldAt:
       'auth.db, table totp, columns fail_count and locked_until — one row per enrolled ' +
@@ -345,7 +345,7 @@ export const AUTH_PRESSURE: readonly StatedGap[] = [
   },
   {
     id: 'live-sessions',
-    subject: 'Live therapist sessions',
+    subject: 'Live clinician sessions',
     statement: 'This build exposes no counter for live sessions.',
     heldAt:
       'auth.db, table sessions — one row per session with its idle and absolute expiry and a ' +
@@ -883,13 +883,13 @@ export const STANDING_FACTS: readonly StandingFact[] = [
     id: 'totp-seed-cleartext',
     title: 'The TOTP seed is stored in the clear',
     body:
-      'The auth database holds each enrolled therapist’s TOTP seed as base64 in the totp ' +
+      'The auth database holds each enrolled clinician’s TOTP seed as base64 in the totp ' +
       'table, column secret_b64 — not as a hash. This is structural rather than an oversight: a ' +
       'TOTP verifier has to recompute the code, so it has to hold the shared secret. Invite ' +
       'codes, session identifiers and inbox tokens on this server are hashed; this one cannot be.',
     consequence:
       'Anyone who can read the data directory, or any backup or snapshot of it, can mint valid ' +
-      'second-factor codes for every enrolled therapist. Treat that directory as holding an ' +
+      'second-factor codes for every enrolled clinician. Treat that directory as holding an ' +
       'authenticating secret, not only ciphertext: its backups need the protection you would give ' +
       'a password file, and a restored copy is as good as the original.',
     evidence: 'companion/server auth/AuthStore.kt (CREATE TABLE totp); docs/COMPANION_SECURITY.md 5.2',
@@ -904,7 +904,7 @@ export const STANDING_FACTS: readonly StandingFact[] = [
       'configuration so an eventual implementation cannot regress to deriving them from the Host ' +
       'header, and that pinning is the entire extent of what exists.',
     consequence:
-      'TOTP is the only second factor a therapist can enrol here, and TOTP is phishable in a way a ' +
+      'TOTP is the only second factor a clinician can enrol here, and TOTP is phishable in a way a ' +
       'hardware passkey is not. The fresh, action-scoped step-up assertion that sensitive actions ' +
       'are specified to require cannot be obtained on this build, so those actions rest on the ' +
       'session alone.',
@@ -945,7 +945,7 @@ export const CONSOLE_WITHHELD: readonly WithheldSubject[] = [
       'The console never decrypts and holds no key.',
   },
   {
-    subject: 'Client and therapist identities',
+    subject: 'Client and clinician identities',
     reason:
       'Relationships are addressed by opaque references. Nothing on this screen names a person, ' +
       'and nothing on it should be used to work out who a reference belongs to.',

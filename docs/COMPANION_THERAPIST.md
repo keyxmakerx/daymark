@@ -260,7 +260,7 @@ Three places, none of them a message:
 
 | Where | What it says |
 |---|---|
-| The relationship's access log | *Your therapist · Ended their access to what you share* |
+| The relationship's access log | *Your clinician · Ended their access to what you share* |
 | The sharing strip on every owner screen | *…ended their access on {date}. Nothing you send now would be read.* — replacing the "Sharing real entries with…" line |
 | The next attempt to share with them | Refused before anything is sealed, naming the date and the two things the owner can do: withdraw what is still published, or invite them again |
 

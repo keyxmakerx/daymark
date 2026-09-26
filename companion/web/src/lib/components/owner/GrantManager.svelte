@@ -79,7 +79,7 @@
 <section class="grants card">
   <h3>What {therapist.displayName} can do</h3>
   <p class="hint">
-    Grants are like app permissions: default OFF, you turn on exactly what this therapist may do.
+    Grants are like app permissions: default OFF, you turn on exactly what this clinician may do.
     Each grant is signed by you — nobody can forge or edit it. Publishing appends a new version.
   </p>
 

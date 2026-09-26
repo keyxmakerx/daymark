@@ -107,7 +107,7 @@ No message is sent. Three surfaces carry the fact where it can still be acted on
 |---|---|---|
 | Sharing strip (every owner screen) | *"{Name} ended their access on {date}. Nothing you send now would be read."* under an **ACCESS ENDED** label | Chrome with the same indigo rule as the live strip, never clay: a clinician's ordinary decision is none of clay's meanings, and an alarm would read as an accusation nobody made. It **replaces** the "Sharing real entries with…" line, because both cannot be true at once. Revoke stays while anything is still published to them. |
 | Seal & publish share | *"Nothing was sealed or sent. {Name} ended their access on {date}, so nothing sent now would be read. You can revoke what is still published to them, or invite them again if they are coming back."* | A refusal, so clay. Checked before anything is uploaded; it names the consequence and the two ways out, and no cause the server cannot know. A failed check is not treated as an ending. |
-| Access log | *Your therapist · Ended their access to what you share* | A line like any other. Not "left" (a story about why, which nothing here knows) and not "revoked" (the owner's own word for their own act). |
+| Access log | *Your clinician · Ended their access to what you share* | A line like any other. Not "left" (a story about why, which nothing here knows) and not "revoked" (the owner's own word for their own act). |
 
 ### 7.9 Removing a member from a practice (admin)
 

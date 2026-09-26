@@ -164,8 +164,8 @@ export const SHAPES: readonly DeploymentShape[] = [
     ranking: 'Choose this if you are showing some of your own journal to one clinician.',
     buildState: 'built',
     buildNote:
-      'The pairing path is wired: you mint the invitation, they accept it on the therapist page, ' +
-      'and you confirm their key fingerprint and pin it before any share goes out.',
+      'The pairing path is wired: you mint the invitation, they accept it on the clinician ' +
+      'console, and you confirm their key fingerprint and pin it before any share goes out.',
     primary: 'owner',
   },
   {

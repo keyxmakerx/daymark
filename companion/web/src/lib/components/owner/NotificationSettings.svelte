@@ -12,9 +12,9 @@
   let { client }: { client: PortalClient | null } = $props()
 
   const EVENTS: { key: string; label: string }[] = [
-    { key: 'THERAPIST_ENROLLED', label: 'A therapist finishes enrolling' },
-    { key: 'NEW_ASSIGNMENT', label: 'A therapist assigns something new' },
-    { key: 'NEW_GAMEPLAN', label: 'A therapist publishes a new game plan' },
+    { key: 'THERAPIST_ENROLLED', label: 'A clinician finishes enrolling' },
+    { key: 'NEW_ASSIGNMENT', label: 'A clinician assigns something new' },
+    { key: 'NEW_GAMEPLAN', label: 'A clinician publishes a new game plan' },
   ]
 
   let email = $state('')

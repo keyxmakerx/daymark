@@ -619,7 +619,14 @@ describe('the fingerprint is read out, not compared on screen', () => {
     expect(all).toContain('encryption key')
     expect(all).toContain('signing key')
     expect(KEY_CHECK_COPY.both).toMatch(/both/i)
-    expect(KEY_CHECK_COPY.both).toMatch(/half a record/i)
+    // A key pair is half a record without its other key — said of the clinician's record, not of
+    // the clinician (#158).
+    const now = 'a clinician’s record, it is half of one.'
+    const retired = 'a therapist, it is half a record.'
+    expect(KEY_CHECK_COPY.both).toContain(`is not ${now}`)
+    expect(KEY_CHECK_COPY.both).not.toContain(retired)
+    // Control: the retired clause planted back into the real sentence is seen.
+    expect(KEY_CHECK_COPY.both.replace(now, retired)).toContain(retired)
   })
 })
 

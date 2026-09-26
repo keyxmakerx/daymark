@@ -181,7 +181,7 @@
       } else {
         // 'differs-from-pin'. Said plainly rather than as a failure: nothing is wrong with what the
         // owner just did, and the next step is a different screen with a heavier ceremony.
-        error = `This console already holds a different encryption key for ${therapist.displayName}, so nothing was recorded and nothing has been sealed to the key above. A therapist who changed their keys and someone substituting their own look identical from here. The Pinned keys tab shows the two side by side and can replace the old one after you have checked the new one with them.`
+        error = `This console already holds a different encryption key for ${therapist.displayName}, so nothing was recorded and nothing has been sealed to the key above. A clinician who changed their keys and someone substituting their own look identical from here. The Pinned keys tab shows the two side by side and can replace the old one after you have checked the new one with them.`
       }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Could not record these keys.'
@@ -205,12 +205,12 @@
     <div class="stack">
       <h4>Keys {therapist.displayName} published</h4>
       <p class="hint">
-        Your therapist's portal publishes their two public keys to the server, and this reads them
-        back. What it shows you are their FINGERPRINTS — a short value worked out from each key,
-        short enough that two people can read it to each other and different for every key. The
-        server carries the keys and does not vouch for them: it cannot tell your therapist's real
-        key from one substituted for it, and neither can this page. What tells the two apart is the
-        check below, which happens off this screen entirely.
+        Your clinician's clinician console publishes their two public keys to the server, and this
+        reads them back. What it shows you are their FINGERPRINTS — a short value worked out from
+        each key, short enough that two people can read it to each other and different for every
+        key. The server carries the keys and does not vouch for them: it cannot tell your
+        clinician's real key from one substituted for it, and neither can this page. What tells the
+        two apart is the check below, which happens off this screen entirely.
       </p>
 
       {#if !endpoint}

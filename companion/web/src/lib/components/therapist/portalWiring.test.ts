@@ -227,7 +227,11 @@ describe('the sign-in screen sits where the other surfaces sit', () => {
     const block = SCREEN_MARKUP.slice(brand, title)
     expect(block).toContain('<span class="mark" aria-hidden="true"></span>')
     expect(block).toContain('Daymark Companion')
-    expect(block).toContain('<p class="muted tagline">Therapist portal</p>')
+    // The page is named for who uses it, with the same noun as the other three (#158, #310).
+    expect(block).toContain('<p class="muted tagline">Clinician console</p>')
+    expect(block).not.toContain('Therapist portal')
+    // Control: the retired name planted back into the real masthead is seen.
+    expect(block.replace('Clinician console', 'Therapist portal')).toContain('Therapist portal')
     // The pattern is the owner viewer's, read from its source rather than retyped.
     expect(OWNER_APP).toContain('<div class="brand">')
     expect(OWNER_APP).toContain('<span class="mark" aria-hidden="true"></span>')

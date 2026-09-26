@@ -35,10 +35,10 @@ export function validateAssignment(a: Assignment, grant: Grant): AssignmentCheck
 
   // 2. The owner must currently grant this capability.
   const cap = grant.capabilities[a.capability]
-  if (!cap?.granted) fail(`capability "${a.capability}" is not granted to this therapist`)
+  if (!cap?.granted) fail(`capability "${a.capability}" is not granted to this clinician`)
 
   // 3. Author must match the therapist this grant is for (defense in depth; signature is verified separately).
-  if (a.authorFingerprint !== grant.therapistFingerprint) fail('assignment author does not match the granted therapist')
+  if (a.authorFingerprint !== grant.therapistFingerprint) fail('assignment author does not match the granted clinician')
 
   // 4. Payload bounds.
   const p = a.payload as Record<string, unknown>

@@ -703,7 +703,7 @@ export const KEY_CHECK_COPY = {
   both:
     'Both of them, not just the interesting one. They travelled together, sealed under the same ' +
     'code, and their console recorded the pair — an encryption key without its signing key is not ' +
-    'a therapist, it is half a record.',
+    'a clinician’s record, it is half of one.',
   mismatch:
     'If what they have does not match what you read, stop and say so. Do not send anything, and do ' +
     'not accept a new invitation until you have worked out why, on a channel that is not this ' +

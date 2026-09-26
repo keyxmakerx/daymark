@@ -120,7 +120,7 @@
       <div class="email">
         <label>
           <span>Send by email <em>(optional convenience — link only, no records)</em></span>
-          <input type="email" bind:value={email} placeholder="therapist@example.com" autocomplete="off" />
+          <input type="email" bind:value={email} placeholder="clinician@example.com" autocomplete="off" />
         </label>
         <button onclick={() => mint(true)} disabled={busy || !email}>Send email invite</button>
       </div>

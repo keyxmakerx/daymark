@@ -27,7 +27,7 @@ const ACTION_LABELS: Record<string, string> = {
    * here knows; revoked is the owner's own word for their own act and would read as something they
    * did. This says what happened and nothing about what it meant.
    *
-   * The actor label already reads "Your therapist", so the two together say the whole fact.
+   * The actor label already reads "Your clinician", so the two together say the whole fact.
    */
   'relationship.ended': 'Ended their access to what you share',
 }
@@ -37,5 +37,5 @@ export function auditActionLabel(action: string): string {
 }
 
 export function auditActorLabel(actor: string): string {
-  return actor === 'owner' ? 'You' : 'Your therapist'
+  return actor === 'owner' ? 'You' : 'Your clinician'
 }

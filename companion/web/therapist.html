@@ -25,8 +25,8 @@
       the fragment is what the invitation actually lives in. Serving the file directly at that path
       works too, but only if the assets are reachable from it.
     -->
-    <title>Daymark Companion — Therapist portal</title>
-    <meta name="description" content="Capability-scoped therapist portal for a self-hosted Daymark Companion. Owner-granted access only; nothing is a diagnosis." />
+    <title>Daymark Companion — clinician console</title>
+    <meta name="description" content="Clinician console for a self-hosted Daymark Companion. Access is what each person granted; nothing in it is a diagnosis." />
   </head>
   <body>
     <div id="therapist-app"></div>
@@ -34,8 +34,8 @@
       <!-- No inline style: strict CSP (style-src 'self') blocks inline styles; this fallback is
            intentionally unstyled, which is fine and accessible. -->
       <p>
-        The Daymark Companion therapist portal needs JavaScript. It runs entirely in your browser and
-        talks only to the self-hosted server you signed in to.
+        The Daymark Companion clinician console needs JavaScript. It runs in your browser and talks
+        only to the server you signed in to.
       </p>
     </noscript>
     <script type="module" src="/src/therapist.ts"></script>

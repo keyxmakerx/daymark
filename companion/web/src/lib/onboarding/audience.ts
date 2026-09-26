@@ -115,7 +115,7 @@ export const AUDIENCES: readonly Audience[] = [
       'You were invited by the person whose data it is, and you hold the key they pinned for you. ' +
       'Your portal is a different page from this one.',
     href: './therapist.html',
-    linkLabel: 'the therapist portal',
+    linkLabel: 'the clinician console',
     entryCondition:
       'You need an invitation from the person whose data it is. There is no sign-up on that page ' +
       'and no way to request access from here — without an invitation there is nothing for you to ' +

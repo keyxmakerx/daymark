@@ -342,11 +342,11 @@ const offer: DialogueNode = {
   lines: [
     {
       when: OFFER_LADDER[0],
-      text: "There's the hard-moment exercise your therapist set up. About four minutes, nothing scored, and nothing you write in it leaves the phone.",
+      text: "There's the hard-moment exercise your clinician set up. About four minutes, nothing scored, and nothing you write in it leaves the phone.",
     },
     {
       when: OFFER_LADDER[1],
-      text: "There's the writing exercise your therapist set up, about what matters to you. Five minutes or so, nothing scored, nothing shared.",
+      text: "There's the writing exercise your clinician set up, about what matters to you. Five minutes or so, nothing scored, nothing shared.",
     },
     {
       when: OFFER_LADDER[2],

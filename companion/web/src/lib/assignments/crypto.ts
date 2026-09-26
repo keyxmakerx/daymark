@@ -153,7 +153,7 @@ export function openAssignment(blob: Uint8Array, ownerBox: BoxKeyPair, pinnedThe
     throw new AssignmentOpenError('assignment envelope missing fields')
   }
   const ok = so.crypto_sign_verify_detached(so.from_base64(env.sigB64, B()), so.from_string(env.payloadJson), pinnedTherapistSignPub)
-  if (!ok) throw new AssignmentOpenError('assignment signature does not match the pinned therapist key')
+  if (!ok) throw new AssignmentOpenError('assignment signature does not match the pinned clinician key')
   const signed = JSON.parse(env.payloadJson) as SignedAssignment
   if (signed.context !== ASSIGNMENT_CONTEXT) {
     throw new AssignmentOpenError('unexpected assignment context')

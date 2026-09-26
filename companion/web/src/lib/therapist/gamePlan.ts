@@ -110,7 +110,7 @@ export function openGamePlan(
     throw new GamePlanOpenError('game plan envelope missing fields')
   }
   const ok = _sodium.crypto_sign_verify_detached(_sodium.from_base64(env.sigB64, URLSAFE()), enc.encode(env.payloadJson), pinnedTherapistSignPub)
-  if (!ok) throw new GamePlanOpenError('game plan signature does not match the pinned therapist key')
+  if (!ok) throw new GamePlanOpenError('game plan signature does not match the pinned clinician key')
   const p = JSON.parse(env.payloadJson) as GamePlanPayload
   if (p.context !== GAMEPLAN_CONTEXT) throw new GamePlanOpenError('unexpected game plan context')
   const ownerFp = fingerprint(ownerBox.publicKey)

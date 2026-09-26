@@ -162,7 +162,7 @@
     clearMessages()
     try {
       forgetAllPins()
-      status = 'This browser no longer holds a record of any therapist keys.'
+      status = 'This browser no longer holds a record of any clinician keys.'
       confirmingForgetAll = false
       confirmingForget = null
       rotatingFp = null
@@ -187,7 +187,7 @@
     <div class="stack">
       <h4>Pinned keys</h4>
       <p class="hint">
-        The first time you seal a share to a therapist, this browser writes down the fingerprints of
+        The first time you seal a share to a clinician, this browser writes down the fingerprints of
         the two public keys you used. Every later share is checked against that note, so a key that
         changes without you knowing is refused rather than sealed to. The note lives in this browser
         only — it holds fingerprints and dates, never keys, names or anything you have written.
@@ -197,14 +197,14 @@
         <Callout tone="critical" title="The stored record could not be read">{loadError}</Callout>
       {:else if rows.length === 0}
         <p class="empty faint">
-          Nothing recorded. The first share you seal to a therapist writes their fingerprints here.
+          Nothing recorded. The first share you seal to a clinician writes their fingerprints here.
         </p>
       {/if}
 
       {#each rows as row (row.pin.ed25519Fp)}
         <div class="row">
           <p class="who">
-            <strong>{row.therapist?.displayName ?? 'A therapist not entered in this session'}</strong>
+            <strong>{row.therapist?.displayName ?? 'A clinician not entered in this session'}</strong>
             <span class="faint">· {recordedOn(row.pin.pinnedAt)}</span>
           </p>
           <dl class="fps">
@@ -217,7 +217,7 @@
           {#if row.rotation && row.therapist}
             <Callout tone="warn" title="This is not the key on file">
               The console is holding a different encryption key for {row.therapist.displayName} than
-              the one recorded here. A therapist who changed their keys looks exactly like someone
+              the one recorded here. A clinician who changed their keys looks exactly like someone
               substituting their own, and this browser cannot tell the two apart. Nothing has been
               sealed to the new key, and nothing will be until you accept it.
             </Callout>
@@ -300,11 +300,11 @@
           <p>
             This erases the list above from this browser: the fingerprints, and the dates they were
             first written down. It does not reach the server, which has never held this record, and
-            it does not reach your therapists. {REVOKE_CAVEAT}
+            it does not reach your clinicians. {REVOKE_CAVEAT}
           </p>
           <p>
             It also gives up what the record was for. With nothing on file, the next share you seal
-            to a therapist trusts whatever key it is handed, the way the first one did — so if a key
+            to a clinician trusts whatever key it is handed, the way the first one did — so if a key
             has been substituted in the meantime, this console will not notice.
           </p>
           {#if confirmingForgetAll}

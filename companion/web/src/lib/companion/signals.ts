@@ -175,7 +175,7 @@ export function assertRefsAllowed(refs: readonly string[], author: SignalAuthor)
   if (author !== 'app' && author !== 'therapist') {
     return [
       `unknown author role \`${String(author)}\` — no signal may be referenced. ` +
-        `Dialogue is authored either by the app or by a therapist.`,
+        `Dialogue is authored either by the app or by a clinician.`,
     ]
   }
 

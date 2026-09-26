@@ -72,7 +72,7 @@ export function evaluateBlob(raw: RawAssignmentBlob, therapist: PinnedTherapist,
       verdict: untrusted ? 'UNTRUSTED_KEY' : 'OPEN_FAILED',
       requiresAccept: false,
       preview: untrusted
-        ? 'Could not verify authorship against the pinned therapist key — refused.'
+        ? 'Could not verify authorship against the pinned clinician key — refused.'
         : 'Could not open this item (not addressed to you, or tampered) — refused.',
       errors: [e instanceof Error ? e.message : 'open failed'],
     }
