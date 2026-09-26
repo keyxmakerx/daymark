@@ -186,8 +186,9 @@ top.
 - **Days with an entry**, e.g. *12 of the last 30*. The days don't have to be in a row, so missing
   one costs you that day and nothing else. If there are none in the last thirty days, the card isn't
   there.
-- **Week** shows this week as bars. **Month** is a calendar where each day takes the colour of its
-  mood; tap a day to see its entries. **Year** shows the year as stars or as a grid of coloured
+- **Week** shows this week as bars. **Month** is a calendar where each entry is a small dot under its
+  date, in that mood's colour, in the order you made them (up to six on a day, always including every
+  mood you logged that day); tap a day to see all its entries. **Year** shows the year as stars or as a grid of coloured
   squares, and leads to **Review my year**, a short walk through the year, quarter by quarter. In
   the calendar and the grid, a day with no entry is left plain.
 - **Mood over the last 30 days**, **mood distribution** and **average mood by activity**.

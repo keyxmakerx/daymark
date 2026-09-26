@@ -117,9 +117,14 @@ entries are stars in the Sky (§4), and reach the PDF report only when the perso
 - One tab with a **Week / Month / Year** switch. Always shown: the number of entries, the average
   mood, "Days with an entry: 12 of the last 30" (days need not be in a row, and the card is absent
   at zero), mood over the last 30 days, mood distribution, and average mood by activity.
-- **Week** shows this week as bars. **Month** is a calendar tinted by mood; tapping a day opens its
-  entries. **Year** is either a night-card of stars or a grid of coloured squares (Year in Pixels,
-  also under More), and leads to **Review my year**.
+- **Week** shows this week as bars. **Month** is a calendar of plain days: every day is the same
+  square with its number in ink, and each entry that day is a dot under the number in its own mood
+  colour, in time order, at most six (a fuller day keeps one of every mood it holds; its own page
+  lists every entry). Nothing is averaged or blended, and a day with no entry is the same square with
+  no dots. A screen reader hears the date and each dot's mood in the person's own words ("3
+  September: Good, Meh"), or "nothing recorded". Tapping a day opens its entries. **Year** is either a
+  night-card of stars or a grid of coloured squares (Year in Pixels, also under More), and leads to
+  **Review my year**.
 - **What goes with your mood** ranks activities that appear in at least 5 entries into "Lifts you
   up" and "Weighs you down", and lists trackers that have values on at least 14 days with a mood.
   It is computed on the phone and always labelled "association, not cause". People and communities

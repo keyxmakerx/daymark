@@ -240,6 +240,16 @@ All notable changes to this project are documented here. The format is based on
   both jobs.
 
 ### Changed
+- **The month calendar in Insights shows each entry as its own dot, and no longer paints a day with
+  an average.** Each day used to be filled with a colour mixed from the average of that day's moods,
+  so a day with one bad moment and one good one came out in a colour you never chose, and the date on
+  it was hard to read. Now every day is the same plain square with its date in dark ink, easy to read
+  in light and dark mode, and under the date there is a small dot for each entry, in that mood's own
+  colour (your own colours if you have changed them), in the order you made them. A day with nothing
+  logged looks like any other day, just without dots. A busy day shows at most six dots, always
+  including every mood you logged that day, and tapping the day shows every entry. A screen reader
+  reads each day as its date and its moods in order, for example "3 September: Good, Meh", or
+  "nothing recorded". (#397)
 - **Your own data in the web console no longer shows an average mood.** The owner console and an
   opened backup still show how many of the last 30 days have an entry. A clinician reading what you
   share still sees the average, labelled "average of what was logged", as in the PDF report.

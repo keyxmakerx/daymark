@@ -16,7 +16,7 @@ faint `#7C7568` · lines `#34312A` · the accent inverts to `#EBE5D8` (text on i
 `#CB8473` on `#3A2C28`.
 
 **Mood scale (Awful → Rad):** `#AE5747` · `#C27C46` · `#C6A24E` · `#8FA268` · `#5E8A66`, each with
-a lighter "wash" for calendar tints in light mode and a darker one in dark mode.
+a lighter "wash" in light mode and a darker one in dark mode.
 
 - Mood colours live in a `MoodColors` holder (`LocalMoodColors`, read as
   `MaterialTheme.moodColors.forLevel(1..5)`) and mood names in `LocalMoodLabels`, because they sit
@@ -25,6 +25,10 @@ a lighter "wash" for calendar tints in light mode and a darker one in dark mode.
 - The level 1–5 is the stable key in the database. Names and colours are presentation.
 - A mood colour is data, the value the person logged. It is never a status, success or warning
   colour, and wallpaper colours never recolour it.
+- A mood colour is only ever one entry's own. Nothing blends two mood colours or colours a day by
+  its average: Insights → Month draws one dot per entry on plain paper, with the day number in ink
+  (`ui/calendar/CalendarDays.kt`, `MonthGridSourceTest`). The Week bars and Home's week strip still
+  colour a day by its average: not built, #411.
 
 `ui/theme/Theme.kt` maps the tokens onto the Material 3 `ColorScheme`. `surfaceTint` is transparent
 and tonal elevation is avoided, to keep surfaces flat.
@@ -41,8 +45,9 @@ on, the system supplies every role, the error roles included (#309).
 **The faint ink never carries words.** Faint (`tertiary`) measures 2.61:1 on the sheet and is for
 decoration only: rules and empty marks. A word that steps back takes the soft ink
 (`onSurfaceVariant`), which clears 4.5:1 on the sheet, the paper and a menu in both themes.
-`FaintInkSourceTest` fails when the faint ink reaches words. Three small labels on the hairline fill
-measure 4.36:1 in the light theme: not built, #408.
+`FaintInkSourceTest` fails when the faint ink reaches words. Two small labels on the hairline fill, the
+provenance badge and the swipe row's "Keep swiping", measure 4.36:1 in the light theme: not built,
+#408.
 
 **Dynamic colour** is a Settings switch on Android 12 and later. The stored setting defaults to on
 (`data/SettingsRepository.kt`), so a fresh install on those phones takes its colours from the
