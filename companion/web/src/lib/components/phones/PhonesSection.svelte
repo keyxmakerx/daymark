@@ -22,10 +22,13 @@
   import { devicesApi } from '../../phones/devices'
   import {
     POLL_EVERY_MS,
+    askDisconnect,
     back,
     discard,
+    disconnect,
     expire,
     initialState,
+    keepPaired,
     loadList,
     mint,
     pairThisPhone,
@@ -37,6 +40,7 @@
     type PhonesPorts,
     type PhonesState,
   } from '../../phones/ceremony'
+  import { DISCONNECT } from '../../phones/copy'
 
   let {
     /** The server address and access token the sync card proved in this visit, or null. */
@@ -150,6 +154,41 @@
     <p class="notice">{view.notice}</p>
   {/if}
 
+  {#if view.rows}
+    {#if view.empty}
+      <p class="empty">{view.empty}</p>
+    {:else}
+      <ul class="rows">
+        {#each view.rows as row (row.keyId)}
+          <li class="row" class:gone={!row.connected}>
+            <div class="row-line">
+              <div class="row-text">
+                <span class="row-words">{row.words}</span>
+                <span class="row-dates">{row.dates}</span>
+              </div>
+              {#if row.connected && !row.confirm}
+                <button type="button" onclick={() => set(askDisconnect(phones, row.keyId))} disabled={busy}>{DISCONNECT}</button>
+              {/if}
+            </div>
+            {#if row.confirm}
+              <!-- The destructive act's confirm: clay, beneath its row, the way out first. -->
+              <div class="confirm" role="group" aria-labelledby="{uid}-confirm-{row.keyId}">
+                <p class="confirm-question" id="{uid}-confirm-{row.keyId}">{row.confirm.question}</p>
+                <p class="confirm-consequence">{row.confirm.consequence}</p>
+                <div class="actions">
+                  <button type="button" onclick={() => set(keepPaired(phones))} disabled={busy}>{row.confirm.keep}</button>
+                  <button type="button" onclick={() => act((p, s) => disconnect(p, s, row.keyId))} disabled={busy}>
+                    {row.confirm.disconnect}
+                  </button>
+                </div>
+              </div>
+            {/if}
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  {/if}
+
   {#if view.pairButton}
     <button type="button" class="pair" onclick={() => act(mint)} disabled={busy}>{view.pairButton}</button>
   {/if}
@@ -211,6 +250,29 @@
   h3 { margin: 0; font-size: 1.05rem; color: var(--ink-text); }
   .lede { margin: 0; font-size: 0.9rem; line-height: 1.55; color: var(--ink-soft); }
   .notice { margin: 0; font-size: 0.9rem; color: var(--ink-text); }
+  .empty { margin: 0; font-size: 0.9rem; color: var(--ink-soft); }
+
+  .rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); align-self: stretch; }
+  .row { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: 1px solid var(--hairline); }
+  .row-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+  .row-text { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+  .row-words { font-size: 0.95rem; color: var(--ink-text); overflow-wrap: anywhere; }
+  .row-dates { font-size: 0.8rem; color: var(--ink-soft); }
+  /* A disconnected phone stays in the list, in the soft ink, with nothing to press. */
+  .row.gone .row-words { color: var(--ink-soft); }
+
+  /* The one clay on the section: the confirm of the act that cannot be taken back. */
+  .confirm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--clay);
+    border-radius: var(--radius-sm);
+    background: var(--clay-wash);
+  }
+  .confirm-question { margin: 0; font-size: 0.9rem; font-weight: 600; color: var(--clay); }
+  .confirm-consequence { margin: 0; font-size: 0.9rem; line-height: 1.55; color: var(--ink-soft); }
 
   .area { display: flex; flex-direction: column; gap: var(--space-3); align-self: stretch; }
   .para { margin: 0; font-size: 0.9rem; line-height: 1.55; color: var(--ink-text); }

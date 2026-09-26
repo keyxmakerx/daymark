@@ -560,6 +560,138 @@ describe('the owner phone routes, as the section calls them', () => {
   })
 })
 
+describe('the list, and Disconnect', () => {
+  /** Local noon on a day, so the date reads the same in any time zone the test runs in. */
+  const day = (y: number, m: number, d: number) => new Date(y, m - 1, d, 12, 0, 0).getTime()
+
+  const records = (): DeviceRecord[] => [
+    { keyId: ID_B, publicKey: KEY_B, pairedAt: day(2026, 3, 1), revokedAt: day(2026, 3, 20) },
+    { keyId: ID_A, publicKey: KEY_A, pairedAt: day(2026, 3, 12), revokedAt: null },
+  ]
+
+  it('a row is its six words and its dates, and no name', async () => {
+    const h = harness({ listDevices: records })
+    const v = phonesView(await ready(h), 0)
+    expect(v.rows).toEqual([
+      { keyId: ID_A, words: 'hotel · cedar · earth · coral · nacho · hotel', dates: 'Paired 12 March 2026', connected: true, confirm: null },
+      {
+        keyId: ID_B,
+        words: 'inlet · arrow · cedar · cobra · crisp · fault',
+        dates: 'Paired 1 March 2026 · Disconnected 20 March 2026',
+        connected: false,
+        confirm: null,
+      },
+    ])
+    expect(v.empty).toBeNull()
+    // Everything the section shows beside the list, as in ready.
+    expect(v.pairButton).toBe('Pair a phone')
+  })
+
+  it('shows connected phones first, newest first, then the disconnected ones', async () => {
+    const at = (n: number) => day(2026, 1, n)
+    const shuffled: DeviceRecord[] = [
+      { keyId: ID_B, publicKey: KEY_B, pairedAt: at(2), revokedAt: at(9) },
+      { keyId: ID_A, publicKey: KEY_A, pairedAt: at(1), revokedAt: null },
+    ]
+    const h = harness({ listDevices: () => shuffled })
+    expect((await ready(h)).list!.map((r) => r.keyId)).toEqual([ID_A, ID_B])
+    const { sortRows } = await import('./ceremony')
+    const rows = sortRows([
+      { keyId: 'old', words: [], pairedAt: at(1), disconnectedAt: null },
+      { keyId: 'gone-early', words: [], pairedAt: at(2), disconnectedAt: at(5) },
+      { keyId: 'new', words: [], pairedAt: at(3), disconnectedAt: null },
+      { keyId: 'gone-late', words: [], pairedAt: at(1), disconnectedAt: at(8) },
+    ])
+    expect(rows.map((r) => r.keyId)).toEqual(['new', 'old', 'gone-late', 'gone-early'])
+  })
+
+  it('an empty list the server read out says so; a list not read says nothing about phones', async () => {
+    const h = harness()
+    expect(phonesView(await ready(h), 0).empty).toBe('No phone is paired with this server.')
+    // Not read, or the read did not reach the server: no list and no "no phone", which would be a
+    // gap drawn as a fact.
+    const unread = phonesView(initialState(true), 0)
+    expect(unread.rows).toBeNull()
+    expect(unread.empty).toBeNull()
+    const lost = harness({ listDevices: () => { throw new PhonesFault('unreachable') } })
+    const v = phonesView(await ready(lost), 0)
+    expect(v.rows).toBeNull()
+    expect(v.empty).toBeNull()
+    expect(allText(v)).not.toContain('No phone is paired')
+  })
+
+  it('refuses a list whose row names a key other than its own, so Disconnect names only the phone shown', async () => {
+    const h = harness({ listDevices: () => [{ keyId: ID_B, publicKey: KEY_A, pairedAt: 1, revokedAt: null }] })
+    const s = await ready(h)
+    expect(s.list).toBeNull()
+    expect(s.pairing.step).toBe('refused')
+  })
+
+  it('Disconnect opens the clay confirm beneath its row, in its words, and asks nothing', async () => {
+    const h = harness({ listDevices: records })
+    const s = await ready(h)
+    const before = [...h.calls]
+    const { askDisconnect, keepPaired } = await import('./ceremony')
+    const asking = askDisconnect(s, ID_A)
+    expect(phonesView(asking, 0).rows![0]!.confirm).toEqual({
+      question: 'Disconnect this phone?',
+      consequence:
+        'It is refused from its next sync. Nothing on the phone is erased, and what it already sent stays on this server. To sync again it must pair again.',
+      keep: 'Keep it paired',
+      disconnect: 'Disconnect this phone',
+    })
+    // "Keep it paired" closes it, and neither called anything.
+    expect(phonesView(keepPaired(asking), 0).rows![0]!.confirm).toBeNull()
+    expect(h.calls).toEqual(before)
+    // A disconnected phone has nothing to press, and cannot be asked about.
+    expect(askDisconnect(s, ID_B)).toBe(s)
+  })
+
+  it('"Disconnect this phone" disconnects exactly that phone, moves it down, and says so above the list', async () => {
+    const h = harness({ listDevices: records })
+    const { askDisconnect, disconnect } = await import('./ceremony')
+    const asking = askDisconnect(await ready(h), ID_A)
+    h.clock.t = day(2026, 3, 21)
+    const s = await disconnect(h.ports, asking, ID_A)
+    expect(h.calls.at(-1)).toBe(`revoke ${ID_A}`)
+    const v = phonesView(s, 0)
+    expect(v.notice).toBe('Disconnected a phone.')
+    expect(v.rows!.map((r) => [r.keyId, r.connected, r.dates])).toEqual([
+      [ID_A, false, 'Paired 12 March 2026 · Disconnected 21 March 2026'],
+      [ID_B, false, 'Paired 1 March 2026 · Disconnected 20 March 2026'],
+    ])
+    expect(v.rows!.every((r) => r.confirm === null)).toBe(true)
+  })
+
+  it('a disconnect that does not reach the server is tried again for the same phone', async () => {
+    let fail = true
+    const h = harness({
+      listDevices: records,
+      revoke: () => {
+        if (fail) throw new PhonesFault('unreachable')
+      },
+    })
+    const { disconnect } = await import('./ceremony')
+    const lost = await disconnect(h.ports, await ready(h), ID_A)
+    expect(phonesView(lost, 0).area).toMatchObject({ sentence: 'This server could not be reached. Nothing changed.' })
+    expect(phonesView(lost, 0).rows![0]!.connected).toBe(true)
+    fail = false
+    const s = await tryAgain(h.ports, lost)
+    expect(h.calls.filter((c) => c.startsWith('revoke'))).toEqual([`revoke ${ID_A}`, `revoke ${ID_A}`])
+    expect(s.notice).toBe('disconnected')
+  })
+
+  it('a phone just paired goes to the top of the list, with the words that were compared', async () => {
+    const h = harness({ listDevices: () => [{ keyId: ID_B, publicKey: KEY_B, pairedAt: 1, revokedAt: null }] })
+    h.ports.api.codeState = async () => redeemedBy(KEY_A, ID_A)()
+    const s = await pairThisPhone(h.ports, await poll(h.ports, await codeShown(h)))
+    expect(phonesView(s, 0).rows!.map((r) => [r.keyId, r.words])).toEqual([
+      [ID_A, 'hotel · cedar · earth · coral · nacho · hotel'],
+      [ID_B, 'inlet · arrow · cedar · cobra · crisp · fault'],
+    ])
+  })
+})
+
 describe('the clock', () => {
   it('reads minutes and seconds, never below zero', () => {
     expect(COPY.clock(120)).toBe('2:00')

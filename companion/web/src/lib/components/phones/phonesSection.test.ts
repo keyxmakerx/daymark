@@ -68,10 +68,40 @@ describe('the buttons that must not ask the server, do not', () => {
     expect(/if \(id === 'back'\) set\(back\(phones\)\)/.test(SOURCE)).toBe(true)
   })
 
+  it('"Disconnect" and "Keep it paired" only open and close the confirm; only "Disconnect this phone" asks', () => {
+    expect(handlerOf('DISCONNECT').exec(SOURCE)?.slice(1, 3)).toEqual(['set', 'askDisconnect(phones, row.keyId))'])
+    expect(handlerOf('row.confirm.keep').exec(SOURCE)?.slice(1, 3)).toEqual(['set', 'keepPaired(phones))'])
+    expect(handlerOf('row.confirm.disconnect').exec(SOURCE)?.slice(1, 3)).toEqual(['act', '(p, s) => disconnect(p, s, row.keyId))'])
+  })
+
   it('the reading sees a handler that asks (positive control)', () => {
     const asks = SOURCE.replace('set(wordsDontMatch(phones))', 'act(wordsDontMatch)')
     expect(asks).not.toBe(SOURCE)
     expect(handlerOf('area.mismatch').exec(asks)?.[1]).toBe('act')
+  })
+})
+
+describe('colour', () => {
+  /** Each rule of the style block, comments removed, as [selector, body]. */
+  const rules = (src = SOURCE) =>
+    [...(/<style>([\s\S]*?)<\/style>/.exec(src)?.[1] ?? '').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(
+      (m) => [m[1]!.trim(), m[2]!] as const,
+    )
+  const clayOn = (src?: string) => rules(src).filter(([, body]) => /--clay/.test(body)).map(([selector]) => selector)
+
+  it('clay is spent on the Disconnect confirm and nowhere else', () => {
+    const clay = clayOn()
+    expect(clay.length).toBeGreaterThan(0)
+    expect(clay.every((s) => s.startsWith('.confirm'))).toBe(true)
+    // Positive control: a refusal painted clay is seen.
+    const planted = SOURCE.replace('.ended { color: var(--ink-text); }', '.ended { color: var(--clay); }')
+    expect(planted).not.toBe(SOURCE)
+    expect(clayOn(planted)).toContain('.ended')
+  })
+
+  it('indigo is the structure: the code, the words, and the confirm button', () => {
+    const indigo = rules().filter(([, body]) => /--indigo/.test(body)).map(([selector]) => selector)
+    expect(indigo.sort()).toEqual(['.code', '.words', 'button.indigo'])
   })
 })
 
