@@ -78,6 +78,8 @@
   }
 
   function lock() {
+    // The sync key the lane is read and written with goes with the session (#345).
+    session?.lane.syncKey.fill(0)
     session = null
     client = null
     endpoint = null

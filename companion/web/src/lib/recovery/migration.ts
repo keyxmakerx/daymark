@@ -122,6 +122,16 @@ export function subkeysFromMaster(master: Uint8Array): OwnerKeys {
 }
 
 /**
+ * master -> subkey 1 alone: the sync key, for a console that keeps it while it is open to read and
+ * add to the owner's lane (lane/lane.ts, #345) and needs nothing else of the master. The caller
+ * wipes it when the console locks.
+ */
+export function syncKeyFromMaster(master: Uint8Array): Uint8Array {
+  if (master.length !== DATA_KEY_BYTES) throw new DataKeyError('master key must be exactly 32 bytes')
+  return _sodium.crypto_kdf_derive_from_key(32, SUBKEY_SYNC, KDF_CONTEXT, master)
+}
+
+/**
  * Reproduce an existing owner's master from their passphrase and their published keyparams.
  *
  * The parameters are the ones the SERVER published, so they are hostile input and get the same

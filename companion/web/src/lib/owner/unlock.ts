@@ -41,6 +41,7 @@ import {
 } from '../recovery/dataKey'
 import { RecoveryCodeError, RECOVERY_FAULT_TEXT, type RecoveryCodeFault } from '../recovery/recoveryCode'
 import { ownerIdentityFromMaster } from './identity'
+import { syncKeyFromMaster } from '../recovery/migration'
 import type { Identity } from '../share/pairing'
 
 /** Which of the two secrets the owner is offering. */
@@ -55,7 +56,11 @@ export type UnlockFault =
   | 'didNotOpen'
   | RecoveryCodeFault
 
-export type UnlockResult = { ok: true; identity: Identity } | { ok: false; fault: UnlockFault; at?: number }
+/**
+ * An unlock's result. `syncKey` is subkey 1 of the same master, for the console's lane (#345); the
+ * caller wipes it when the console locks.
+ */
+export type UnlockResult = { ok: true; identity: Identity; syncKey: Uint8Array } | { ok: false; fault: UnlockFault; at?: number }
 
 /**
  * What to show for each fault.
@@ -129,7 +134,7 @@ export async function unlockFromBlob(
   }
 
   try {
-    return { ok: true, identity: ownerIdentityFromMaster(master) }
+    return { ok: true, identity: ownerIdentityFromMaster(master), syncKey: syncKeyFromMaster(master) }
   } catch {
     // A master that opened but is the wrong length is a corrupt blob, not a wrong secret.
     return { ok: false, fault: 'didNotOpen' }

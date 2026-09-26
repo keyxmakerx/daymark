@@ -10,6 +10,7 @@
 import type { BoxKeyPair, SignKeyPair } from '../../assignments/crypto'
 import type { Grant } from '../../assignments/types'
 import type { PinnedTherapist as InboxTherapist } from '../../assignments/inbox'
+import type { LaneKey } from '../../lane/lane'
 
 /** A pinned therapist for the owner console: OOB-verified keys + SAS words + the current grant. */
 export interface PinnedTherapist extends InboxTherapist {
@@ -38,6 +39,11 @@ export interface OwnerSession {
   ownerBox: BoxKeyPair // X25519 — opens sealed assignments
   ownerSign: SignKeyPair // Ed25519 — signs grants + shares
   pinned: PinnedTherapist[]
+  /**
+   * The sync key of the same master, with the ETag of the key document it was opened from: what the
+   * console reads and adds to the owner's lane with (lane/lane.ts, #345). Wiped when it locks.
+   */
+  lane: LaneKey
 }
 
 /** Update a therapist's grant within the session (returns a new session for reactive updates). */

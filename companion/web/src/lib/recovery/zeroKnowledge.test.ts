@@ -251,10 +251,13 @@ describe('a server holding EVERY published blob and no secret recovers nothing',
       'wrapExistingDataKey',
       'zeroizeDataKey',
     ])
+    // syncKeyFromMaster publishes nothing: it derives subkey 1 from a master already open, for the
+    // console's lane (#345), as subkeysFromMaster does.
     expect(exportedFunctions(migrationModule)).toEqual([
       'enrolExistingOwner',
       'masterFromPassphrase',
       'subkeysFromMaster',
+      'syncKeyFromMaster',
     ])
     // wrapExistingDataKey is the one publisher not listed by name in SERVER.blobs, and it is
     // covered twice over: createRecoverableDataKey and enrolExistingOwner are both a call to it.

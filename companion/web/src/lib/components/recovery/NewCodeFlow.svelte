@@ -53,6 +53,7 @@
   import type { RecoverableDataKey } from '../../recovery/dataKey'
   import type { RecoveryCode } from '../../recovery/recoveryCode'
   import type { Identity } from '../../share/pairing'
+  import type { LaneKey } from '../../lane/lane'
   import {
     ALREADY_LOCKED_HERE,
     CODE_CAN_ACT_AS_YOU,
@@ -150,9 +151,11 @@
    * code first, before anything else can fail — the server holds the lock it opens, and a code that
    * never reached the screen would be a recovery slot nobody holds.
    */
-  async function keyStored(stored: { recoveryCode: RecoveryCode; identity: Identity }) {
+  async function keyStored(stored: { recoveryCode: RecoveryCode; identity: Identity; lane: LaneKey }) {
     code = stored.recoveryCode
     step = 'showing'
+    // This screen writes no lane (#345): the sync key it was handed goes at once.
+    stored.lane.syncKey.fill(0)
     const { zeroizeOwnerIdentity } = await import('../../owner/identity')
     zeroizeOwnerIdentity(stored.identity)
   }

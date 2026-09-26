@@ -49,6 +49,7 @@ import { decryptSnapshot, fromBase64, initCrypto } from '../sync/crypto'
 import type { CreateAgainst, KeyDocument, SyncClient } from '../sync/client'
 import { paced, pause, type Wait } from '../sync/paced'
 import { isLaneLineage } from '../lane/lineage'
+import type { LaneKey } from '../lane/lane'
 import {
   createRecoverableDataKey,
   replacePassphrase,
@@ -57,7 +58,7 @@ import {
   zeroizeDataKey,
   type RecoverableDataKey,
 } from './dataKey'
-import { enrolExistingOwner, masterFromPassphrase, subkeysFromMaster } from './migration'
+import { enrolExistingOwner, masterFromPassphrase, subkeysFromMaster, syncKeyFromMaster } from './migration'
 import type { RecoveryCode } from './recoveryCode'
 import { ownerIdentityFromMaster } from '../owner/identity'
 import type { Identity } from '../share/pairing'
@@ -101,8 +102,13 @@ export type SetUpFault =
   | 'alreadyLocked'
 
 export type SetUpResult =
-  /** Created, read back and opened. The recovery code is here once, for the screen to show. */
-  | { kind: 'stored'; recoveryCode: RecoveryCode; identity: Identity }
+  /**
+   * Created, read back and opened. The recovery code is here once, for the screen to show. `lane` is
+   * subkey 1 of the master the read-back opened to, with the ETag of that read-back, for the
+   * console's lane (lane/lane.ts, #345); the caller wipes its key when the console locks, or at once
+   * if it has no lane to write.
+   */
+  | { kind: 'stored'; recoveryCode: RecoveryCode; identity: Identity; lane: LaneKey }
   /**
    * The server took the create (201), and it could not be read back afterwards, however many times
    * it was asked. The lock the code opens is on the server, so the code is here to be shown: it is
@@ -283,8 +289,13 @@ async function store(
   let opened: Uint8Array | null = null
   try {
     if (back.kind === 'wrapped') opened = await unwrapWithPassphrase(back.wrapped, passphrase).catch(() => null)
-    if (!opened || !same(opened, master)) return created === 'created' ? { kind: 'unchecked' } : { kind: 'failed' }
-    return { kind: 'stored', recoveryCode, identity: ownerIdentityFromMaster(opened) }
+    if (back.kind !== 'wrapped' || !opened || !same(opened, master)) return created === 'created' ? { kind: 'unchecked' } : { kind: 'failed' }
+    return {
+      kind: 'stored',
+      recoveryCode,
+      identity: ownerIdentityFromMaster(opened),
+      lane: { syncKey: syncKeyFromMaster(opened), keyDocumentEtag: back.etag },
+    }
   } finally {
     zeroizeDataKey(opened)
   }
@@ -292,8 +303,8 @@ async function store(
 
 /** What a later read of the key document says about a document this tab sent and could not read back. */
 export type StoredCheck =
-  /** The server holds exactly the document that was sent. `wrapped` is it, as read back. */
-  | { kind: 'held'; wrapped: RecoverableDataKey }
+  /** The server holds exactly the document that was sent. `wrapped` is it, as read back, and `etag` its ETag. */
+  | { kind: 'held'; wrapped: RecoverableDataKey; etag: string }
   /** The server answered with something else, which is `now`: what was sent is not what it serves. */
   | { kind: 'other'; now: KeyDocument }
   /** The server could not be read this time either. */
@@ -315,7 +326,7 @@ export async function confirmStored(ports: ServerKeyPorts, sent: RecoverableData
     return { kind: 'unread' }
   }
   return back.kind === 'wrapped' && JSON.stringify(back.wrapped) === JSON.stringify(sent)
-    ? { kind: 'held', wrapped: back.wrapped }
+    ? { kind: 'held', wrapped: back.wrapped, etag: back.etag }
     : { kind: 'other', now: back }
 }
 

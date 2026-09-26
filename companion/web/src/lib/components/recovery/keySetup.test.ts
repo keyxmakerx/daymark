@@ -28,7 +28,7 @@ describe('what the form does', () => {
 
   it('shows no code itself: it hands the code and the identity to its caller', () => {
     expect(code).not.toContain('<CodeSheet')
-    expect(code).toContain('onstored({ recoveryCode: out.recoveryCode, identity: out.identity })')
+    expect(code).toContain('onstored({ recoveryCode: out.recoveryCode, identity: out.identity, lane: out.lane })')
   })
 
   it('forgets a typed passphrase on every way out but a refusal', () => {

@@ -194,6 +194,15 @@ describe('(a) a server holding nothing: a first run', () => {
     expect(b64(ownerIdentityFromMaster(viaPass).x25519.publicKey)).toBe(b64(result.identity.x25519.publicKey))
   }, 60_000)
 
+  it('hands back the sync key of that same master, with the ETag of the read-back it opened, for the lane (#345)', async () => {
+    if (result.kind !== 'stored') throw new Error('not stored')
+    const viaPass = await unwrapWithPassphrase(server.state.wrapped[0]!, PASS)
+    expect(b64(result.lane.syncKey)).toBe(b64(subkeysFromMaster(viaPass).syncKey))
+    expect(result.lane.keyDocumentEtag).toBe('"v1"')
+    // Control: another master's sync key is another key.
+    expect(b64(result.lane.syncKey)).not.toBe(b64(subkeysFromMaster(direct).syncKey))
+  }, 60_000)
+
   it('asks for the passphrase twice: once, or two different ones, writes nothing', async () => {
     const s = fakeServer()
     spy.log.length = 0
@@ -251,6 +260,8 @@ describe('(b) key parameters only: an enrolment', () => {
     expect(b64(await unwrapWithRecoveryCode(stored, result.recoveryCode.canonical))).toBe(b64(direct))
     // So the identity is the one the archive already had, and a clinician sees no stranger.
     expect(b64(result.identity.ed25519.publicKey)).toBe(b64(ownerIdentityFromMaster(direct).ed25519.publicKey))
+    // And the lane is written under the sync key the archive's snapshots are written under.
+    expect(b64(result.lane.syncKey)).toBe(b64(subkeysFromMaster(direct).syncKey))
   }, 60_000)
 
   it('the anchor: a passphrase that does not open the newest snapshot is refused, and nothing is written', async () => {
@@ -515,7 +526,7 @@ describe('(g) a create with no trustworthy answer, and a read-back that cannot b
     expect(spy.log).toEqual(['replace 2'])
     if (out.kind !== 'unread') return
     expect(b64(await unwrapWithPassphrase(out.sent, NEW))).toBe(b64(made.dataKey))
-    expect(await confirmStored(landed.ports, out.sent)).toEqual({ kind: 'held', wrapped: out.sent })
+    expect(await confirmStored(landed.ports, out.sent)).toEqual({ kind: 'held', wrapped: out.sent, etag: expect.any(String) })
 
     const lost = fakeServer({ wrapped: [made.blob] })
     lost.state.replaceFails = 'lost'
@@ -532,7 +543,7 @@ describe('(g) a create with no trustworthy answer, and a read-back that cannot b
     expect(JSON.stringify(theirs)).not.toBe(JSON.stringify(mine))
 
     const holding = fakeServer({ wrapped: [mine] })
-    expect(await confirmStored(holding.ports, mine)).toEqual({ kind: 'held', wrapped: mine })
+    expect(await confirmStored(holding.ports, mine)).toEqual({ kind: 'held', wrapped: mine, etag: expect.any(String) })
     // Byte for byte, as the server stored it: a document parsed back from its own JSON is the same.
     expect(await confirmStored(holding.ports, JSON.parse(JSON.stringify(mine)))).toMatchObject({ kind: 'held' })
 

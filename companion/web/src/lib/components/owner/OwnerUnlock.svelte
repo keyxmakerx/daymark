@@ -78,6 +78,7 @@
   import type { RecoverableDataKey } from '../../recovery/dataKey'
   import type { RecoveryCode } from '../../recovery/recoveryCode'
   import type { OwnerConnection } from '../../owner/recoveryEmail'
+  import type { LaneKey } from '../../lane/lane'
 
   let { onunlock }: { onunlock: (session: OwnerSession, connection: OwnerConnection) => void } = $props()
 
@@ -123,6 +124,8 @@
    * it came from was wiped inside serverKey.ts and never reaches this component.
    */
   let setUpIdentity: Identity | null = null
+  /** The sync key of the same set-up's master, with its read-back's ETag, held beside it (#345). */
+  let setUpLane: LaneKey | null = null
   /**
    * A create the server took (201) whose read-back could not be read: what was sent, kept until a
    * later read finds the server holding exactly it. While it is set, no identity exists, and the
@@ -145,6 +148,12 @@
    */
   let ownerIdentity = $state<Identity | null>(null)
   let ownerFp = $state('')
+  /**
+   * The sync key of the same master, with the ETag of the key document it was opened from: what the
+   * console reads and adds to the owner's lane with (lane/lane.ts, #345). Set beside the identity by
+   * the same unlock or set-up, never on its own, and handed to the console with it.
+   */
+  let laneKey: LaneKey | null = null
 
   const messageId = $props.id()
   /** Derived from the one id this component may ask for — `$props.id()` is once per component. */
@@ -228,10 +237,11 @@
    * would be a recovery slot nobody holds. The identity waits until the code is confirmed written
    * down.
    */
-  function keyStored(stored: { recoveryCode: RecoveryCode; identity: Identity }) {
+  function keyStored(stored: { recoveryCode: RecoveryCode; identity: Identity; lane: LaneKey }) {
     error = ''
     notice = ''
     setUpIdentity = stored.identity
+    setUpLane = stored.lane
     newCode = stored.recoveryCode
     codeStep = 'showing'
   }
@@ -270,6 +280,7 @@
         const back = await unlockFromBlob(out.wrapped, newCode.canonical, 'recovery')
         if (back.ok) {
           setUpIdentity = back.identity
+          setUpLane = { syncKey: back.syncKey, keyDocumentEtag: out.etag }
           unreadSent = null
           return
         }
@@ -311,7 +322,9 @@
     // The fingerprint needs the assignment crypto ready, which an unlock readies too.
     await initAssignmentCrypto()
     opened(setUpIdentity)
+    laneKey = setUpLane
     setUpIdentity = null
+    setUpLane = null
   }
 
   /** The one place the session's identity is set: from an unlock, or from a set-up's read-back. */
@@ -341,6 +354,9 @@
     error = ''
     problem = null
     if (!held || held.kind !== 'wrapped') return
+    // The document this unlock opens, named by its ETag: the lane sends nothing once the server
+    // serves another (lane/lane.ts).
+    const keyDocumentEtag = held.etag
 
     /*
      * The check symbol runs here, before anything expensive: a single mistyped character comes back
@@ -366,6 +382,7 @@
         return
       }
       opened(out.identity)
+      laneKey = { syncKey: out.syncKey, keyDocumentEtag }
       // Neither secret is needed again, and neither should outlive the click that used it.
       passphrase = ''
       groups = emptyGroups()
@@ -464,8 +481,8 @@
   }
 
   function enter() {
-    if (!ownerIdentity || !readWith) return
-    onunlock({ ownerBox: ownerIdentity.x25519, ownerSign: ownerIdentity.ed25519, pinned: [...pinned] }, readWith)
+    if (!ownerIdentity || !readWith || !laneKey) return
+    onunlock({ ownerBox: ownerIdentity.x25519, ownerSign: ownerIdentity.ed25519, pinned: [...pinned], lane: laneKey }, readWith)
   }
 </script>
 
