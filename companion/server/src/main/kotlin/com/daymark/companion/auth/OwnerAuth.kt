@@ -44,6 +44,8 @@ data class OwnerPrincipal(val ownerId: String, val kind: CredentialKind, val cre
  *   cannot turn the owner's log into a disk-filler.
  * - A KEY AWAITING ITS CONSOLE'S CONFIRMATION authenticates nothing. The one exception is
  *   [checkRegistration], which answers such a key "pending" and nothing more.
+ * - A REGISTERED KEY reaches every owner route but those in [phoneRefusedRoutes], which the routes'
+ *   gate answers 403 once the key has authenticated.
  *
  * Nothing here logs, and no refusal repeats a header, a signature, a nonce or a code.
  */
@@ -52,6 +54,11 @@ class OwnerAuth(
     val devices: DeviceKeyStore,
     /** The largest body a signed request may carry: `DAYMARK_MAX_REQUEST_BYTES`, the most any route takes. */
     private val maxBodyBytes: Long,
+    /**
+     * The routes, `METHOD /path`, that answer a registered phone 403: `PHONE_REFUSED_ROUTES` in
+     * `routes/OwnerCredentials.kt`, the one list. A parameter so a test can plant a route in it.
+     */
+    val phoneRefusedRoutes: Set<String>,
     /** Called when a failure from [source] arms a lockout; [credential] names what was tried. */
     private val onLockoutArmed: (source: String, credential: String) -> Unit = { _, _ -> },
 ) {

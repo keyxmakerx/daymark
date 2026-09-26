@@ -222,7 +222,7 @@ class PairingCodeRoutesTest {
             contentType(ContentType.Application.Json)
             setBody(body)
         }
-        assertEquals(HttpStatusCode.Forbidden to """{"error":"devices are managed from the owner console"}""", byDevice.status to byDevice.bodyAsText())
+        assertEquals(HttpStatusCode.Forbidden to """{"error":"a paired phone cannot do this"}""", byDevice.status to byDevice.bodyAsText())
         assertNull(server.account.devices.registeredKey(phone.keyId), "a device's confirmation wrote nothing")
 
         // Naming another key than the one that redeemed confirms nothing.

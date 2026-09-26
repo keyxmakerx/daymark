@@ -1,7 +1,11 @@
 package com.daymark.companion
 
+import com.daymark.companion.auth.AuthGuard
+import com.daymark.companion.auth.OwnerAuth
 import com.daymark.companion.auth.Secrets
 import com.daymark.companion.routes.ErrorDto
+import com.daymark.companion.routes.PHONE_REFUSED_ROUTES
+import com.daymark.companion.routes.owner
 import io.ktor.client.HttpClient
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -18,6 +22,7 @@ import io.ktor.server.application.Application
 import io.ktor.server.response.respond
 import io.ktor.server.routing.get
 import io.ktor.server.routing.getAllRoutes
+import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
@@ -27,26 +32,27 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * A revoked phone is refused everywhere, at once (#186).
+ * A revoked phone is refused everywhere, at once (#186), and a registered one reaches every owner route
+ * but those the one list keeps from it (#189).
  *
  * The routes are not listed here. [walk] reads them from the running server's route tree and asks
  * each which credentials it takes: a route that answers a wrong token 401 and either the owner's token
- * or a registered phone's signature something else authenticates the owner. Every such route must
- * take the phone's signature (or, where the owner console alone manages devices, answer it 403), and
- * once the console revokes the phone, must answer each of its requests — fresh time, fresh nonce —
- * the one 401 every refusal gets. A route added later is walked without anyone listing it, and the
- * planted route in the positive control shows that a route taking only the token is caught.
+ * or a registered phone's signature something else authenticates the owner. Which of those must refuse
+ * the phone is not listed here either: it is `PHONE_REFUSED_ROUTES`, the list the gate itself reads.
+ * Each route on it must answer the phone the one 403, every other owner route must take it, and every
+ * route on it must be one the server mounts, so a renamed route cannot leave the list pointing at
+ * nothing. Once the console revokes the phone, every owner route must answer each of its requests —
+ * fresh time, fresh nonce — the one 401 every refusal gets.
+ *
+ * A route added later is walked without anyone listing it. The positive control plants three: one
+ * taking only the token, which is caught; an operator route on the gate's list, which is walked and
+ * answers the phone 403; and one the list names but whose handler lets the phone through, which is
+ * caught.
  */
 class DeviceKeyRevocationTest {
 
     private val unauthorized = HttpStatusCode.Unauthorized to """{"error":"unauthorized"}"""
-    private val consoleOnly = HttpStatusCode.Forbidden to """{"error":"devices are managed from the owner console"}"""
-
-    /** The routes only the owner console may call: device management (#189). */
-    private val consoleRoutes = setOf(
-        "GET /v1/devices", "POST /v1/devices/pairing", "GET /v1/devices/pairing/{codeId}",
-        "POST /v1/devices/pairing/{codeId}/confirm", "POST /v1/devices/{keyId}/revoke",
-    )
+    private val phoneRefused = HttpStatusCode.Forbidden to """{"error":"a paired phone cannot do this"}"""
 
     /** A relationship's inbox token, so the routes behind one are asked past it. */
     private val inboxToken = "inbox-token-for-the-route-walk-0123456789"
@@ -100,9 +106,10 @@ class DeviceKeyRevocationTest {
     /**
      * Every route of the running [app], asked with a wrong token, the owner's token and [phone]'s
      * signature. A route that answers the wrong token 401 and either of the others anything else
-     * authenticates the owner; for each, what is wrong with how it treats the registered phone.
+     * authenticates the owner; for each, what is wrong with how it treats the registered phone, held
+     * to [refused]: the routes that must answer it the one 403, and no others.
      */
-    private suspend fun ApplicationTestBuilder.walk(app: Application, server: DeviceServer, phone: TestPhone): Walk {
+    private suspend fun ApplicationTestBuilder.walk(app: Application, server: DeviceServer, phone: TestPhone, refused: Set<String>): Walk {
         val routes = app.routing { }.getAllRoutes().mapNotNull { mounted(it.toString()) }.distinct()
         val ownerRoutes = mutableListOf<Mounted>()
         val problems = mutableListOf<String>()
@@ -114,14 +121,18 @@ class DeviceKeyRevocationTest {
                 (token.first != HttpStatusCode.Unauthorized || signed.first != HttpStatusCode.Unauthorized)
             if (!authenticatesOwner) continue
             ownerRoutes += route
-            val expected = if (route.toString() in consoleRoutes) consoleOnly else null
+            val listed = route.toString() in refused
             when {
-                expected != null && signed != expected ->
-                    problems += "$route answered the phone ${signed.first.value} ${signed.second}, not the console's 403"
-                expected == null && (signed.first == HttpStatusCode.Unauthorized || signed.first == HttpStatusCode.TooManyRequests) ->
+                listed && signed != phoneRefused ->
+                    problems += "$route is on the list, and answered the phone ${signed.first.value} ${signed.second}"
+                !listed && (signed.first == HttpStatusCode.Unauthorized || signed.first == HttpStatusCode.TooManyRequests) ->
                     problems += "$route refused a registered phone: ${signed.first.value} ${signed.second}"
+                !listed && signed == phoneRefused ->
+                    problems += "$route answered the phone the list's 403, and is not on the list"
             }
         }
+        val walked = ownerRoutes.map { it.toString() }.toSet()
+        for (entry in refused - walked) problems += "$entry is on the list, and the server mounts no such owner route"
         return Walk(ownerRoutes, problems, routes.map { it.toString() })
     }
 
@@ -145,17 +156,19 @@ class DeviceKeyRevocationTest {
             val phone = TestPhone()
             server.pair(client, phone)
 
-            val before = walk(app, server, phone)
-            assertEquals(emptyList(), before.problems, "a registered phone reaches every route the token does, but the console's")
-            // The walk is not empty: it found the owner's routes of every group, the console's among them.
+            val before = walk(app, server, phone, PHONE_REFUSED_ROUTES)
+            assertEquals(emptyList(), before.problems, "a registered phone reaches every owner route but those on the list, which answer it 403")
+            // The walk is not empty: it found the owner's routes of every group, and the list's among them
+            // (the walk itself fails for an entry it did not find).
             val found = before.ownerRoutes.map { it.toString() }
             for (expected in listOf(
                 "GET /v1/snapshots", "PUT /v1/keydoc/{version}", "POST /v1/invite", "GET /v1/rel/{relRef}/{channel}/{lineage}",
-                "POST /v1/relations/{relRef}/pairing", "POST /v1/orgs", "PUT /v1/owner/notifications", "GET /v1/owner/audit",
+                "POST /v1/relations/{relRef}/pairing", "GET /v1/owner/notifications", "GET /v1/owner/audit",
                 "GET /v1/devices/registration",
-            ) + consoleRoutes) {
+            )) {
                 assertTrue(expected in found, "the walk must find $expected among the owner's routes: $found")
             }
+            assertTrue(PHONE_REFUSED_ROUTES.isNotEmpty() && found.containsAll(PHONE_REFUSED_ROUTES), "control: the list is walked")
 
             // The owner console's Revoke.
             val revoke = client.post("/v1/devices/${phone.keyId}/revoke") { header(HttpHeaders.Authorization, "Bearer ${server.authToken}") }
@@ -187,14 +200,21 @@ class DeviceKeyRevocationTest {
     }
 
     @Test
-    fun `positive control - a planted route that takes only the token is found and caught`() {
+    fun `positive control - planted routes are walked, a new operator route is held to the 403, and each wrong one is caught`() {
         val server = server()
+        val operator = "POST /v1/planted-operator"
+        val ungated = "POST /v1/planted-operator-ungated"
         testApplication {
             lateinit var app: Application
             server.start(this)
             application {
                 app = this
+                // The gate with the one list and a new operator route on it, as a route added to the list
+                // in the code would be. Its own budget; the same owner, keys and nonces as the server's.
+                val guard = AuthGuard(server.account.currentTokenHash(), 100_000, 900_000L, 100_000)
+                val gate = OwnerAuth(guard, server.account.devices, 2_097_152L, PHONE_REFUSED_ROUTES + operator)
                 routing {
+                    // Takes the token and knows nothing of phones: a route that missed the change.
                     get("/v1/planted-token-only") {
                         if (call.request.headers[HttpHeaders.Authorization] == "Bearer ${server.authToken}") {
                             call.respond(HttpStatusCode.OK)
@@ -202,16 +222,47 @@ class DeviceKeyRevocationTest {
                             call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized"))
                         }
                     }
+                    // A new operator route, on the gate's list: the phone must get the 403.
+                    post("/v1/planted-operator") {
+                        call.owner(gate) ?: return@post
+                        call.respond(HttpStatusCode.Created)
+                    }
+                    // A route the list names whose handler lets any owner credential through.
+                    post("/v1/planted-operator-ungated") {
+                        if (gate.check(call) !is OwnerAuth.Outcome.Ok) return@post call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized"))
+                        call.respond(HttpStatusCode.Created)
+                    }
                 }
             }
             startApplication()
             val phone = TestPhone()
             server.pair(client, phone)
-            val walked = walk(app, server, phone)
-            assertTrue("GET /v1/planted-token-only" in walked.all, "the walk reads the real tree: ${walked.all}")
-            assertTrue("GET /v1/planted-token-only" in walked.ownerRoutes.map { it.toString() }, "and asks it as an owner route")
-            assertEquals(1, walked.problems.size, "exactly the planted route is caught: ${walked.problems}")
-            assertTrue(walked.problems.single().startsWith("GET /v1/planted-token-only refused a registered phone: 401"), walked.problems.single())
+            val walked = walk(app, server, phone, PHONE_REFUSED_ROUTES + operator + ungated)
+            val owners = walked.ownerRoutes.map { it.toString() }
+            for (planted in listOf("GET /v1/planted-token-only", operator, ungated)) {
+                assertTrue(planted in walked.all, "the walk reads the real tree: $planted in ${walked.all}")
+                assertTrue(planted in owners, "and asks $planted as an owner route")
+            }
+            assertEquals(
+                listOf(
+                    "GET /v1/planted-token-only refused a registered phone: 401",
+                    "$ungated is on the list, and answered the phone 201",
+                ),
+                walked.problems.map { it.substringBefore(" {").trimEnd() }.sorted(),
+                "exactly the two wrong planted routes are caught, and the new operator route is not: ${walked.problems}",
+            )
+            // The new operator route answers the phone the one 403, and the owner's token as before.
+            val byPhone = client.post("/v1/planted-operator") { signedWith(phone.headers("POST", "/v1/planted-operator", timeSeconds = server.seconds)) }
+            assertEquals(phoneRefused, byPhone.status to byPhone.bodyAsText())
+            val byToken = client.post("/v1/planted-operator") { header(HttpHeaders.Authorization, "Bearer ${server.authToken}") }
+            assertEquals(HttpStatusCode.Created, byToken.status)
+
+            // A list entry the server mounts no route for is caught too: a renamed route is not left open.
+            val stale = walk(app, server, phone, PHONE_REFUSED_ROUTES + operator + "POST /v1/planted-no-such-route")
+            assertTrue(
+                "POST /v1/planted-no-such-route is on the list, and the server mounts no such owner route" in stale.problems,
+                "a stale entry is named: ${stale.problems}",
+            )
         }
     }
 

@@ -10,6 +10,7 @@ import com.daymark.companion.mail.OwnerNotifier
 import com.daymark.companion.org.OrgStore
 import com.daymark.companion.routes.DEVICE_REVOKED_BY_REISSUE
 import com.daymark.companion.routes.ErrorDto
+import com.daymark.companion.routes.PHONE_REFUSED_ROUTES
 import com.daymark.companion.routes.auditChainRoutes
 import com.daymark.companion.routes.auditDevice
 import com.daymark.companion.routes.auditLockout
@@ -243,7 +244,7 @@ fun Application.module(
     // id. Every owner route below takes this, never the token's digest.
     val ownerAuth = if (account != null && guard != null && ownerAudit != null) {
         // One row when a lockout is armed, never per probe; OwnerAuth spaces them out server-wide.
-        OwnerAuth(guard, account.devices, config.maxRequestBytes) { source, credential ->
+        OwnerAuth(guard, account.devices, config.maxRequestBytes, PHONE_REFUSED_ROUTES) { source, credential ->
             auditLockout(ownerAudit, account.devices.ownerId, credential, source.takeIf { config.auditSourceIpEnabled })
         }
     } else {

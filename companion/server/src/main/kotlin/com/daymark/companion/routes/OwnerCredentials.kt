@@ -6,12 +6,50 @@ import com.daymark.companion.auth.OwnerPrincipal
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respond
+import io.ktor.server.routing.HttpMethodRouteSelector
+import io.ktor.server.routing.PathSegmentConstantRouteSelector
+import io.ktor.server.routing.PathSegmentParameterRouteSelector
+import io.ktor.server.routing.RootRouteSelector
+import io.ktor.server.routing.RoutePathComponent
+import io.ktor.server.routing.RoutingCall
+import io.ktor.server.routing.RoutingNode
 
 /** The one body every refused owner credential gets, whichever check said no (#186). */
 const val UNAUTHORIZED_MESSAGE = "unauthorized"
 
-/** The answer to a registered phone on a route only the owner console may use (#189). */
-const val CONSOLE_ONLY_MESSAGE = "devices are managed from the owner console"
+/**
+ * The one answer, 403, a registered phone gets on every route in [PHONE_REFUSED_ROUTES]. It names the
+ * credential rather than a page, because the pages these routes belong to differ: device management
+ * and the recovery address are the owner console's, practice provisioning the practice console's.
+ */
+const val PHONE_REFUSED_MESSAGE = "a paired phone cannot do this"
+
+/**
+ * The routes a paired phone may not use, by method and path as the route tree names them (#186, #189):
+ * the one list, read by [owner] on every request and by DeviceKeyRevocationTest's walk of the route tree.
+ *
+ * A phone is the owner's journal device, not the server operator's console. It is kept off:
+ *  - DEVICE MANAGEMENT: minting a pairing code and reading one, confirming one, the device list and
+ *    Revoke. The console is the side already trusted, and a phone may not add a device, so revoking a
+ *    phone can never leave behind another it made.
+ *  - PROVISIONING: creating a practice and seating its first admin, which is the operator's act (its
+ *    audit actor is `platform`), not the journal owner's.
+ *  - CREDENTIAL RECOVERY: changing the address the token's re-issue link is mailed to. A phone that
+ *    could set it could have the token re-issued to itself and outlive its own revocation. Reading the
+ *    address changes nothing, and stays open.
+ *
+ * Every other owner route takes a registered phone exactly as it takes the token, on the same owner
+ * id. A route added here is refused to phones from then on; nothing else needs to change.
+ */
+internal val PHONE_REFUSED_ROUTES: Set<String> = setOf(
+    "GET /v1/devices",
+    "POST /v1/devices/pairing",
+    "GET /v1/devices/pairing/{codeId}",
+    "POST /v1/devices/pairing/{codeId}/confirm",
+    "POST /v1/devices/{keyId}/revoke",
+    "POST /v1/orgs",
+    "PUT /v1/owner/notifications",
+)
 
 /**
  * The owner behind this request, or null once it has been answered: the gate every owner route shares,
@@ -19,34 +57,50 @@ const val CONSOLE_ONLY_MESSAGE = "devices are managed from the owner console"
  * non-enumerating: 401 for any credential that does not pass, 429 for a source over its rate or locked
  * out, 413 for a signed body larger than any route takes.
  *
- * THE RULE FOR WHICH ROUTES A DEVICE REACHES. Every route that takes the owner's token takes a
- * registered, unrevoked device key in its place, on the same owner id — except the routes that manage
- * devices ([ownerConsole]), which take the owner console's credential only.
+ * THE RULE FOR WHICH ROUTES A DEVICE REACHES: every owner route but those in the gate's
+ * [OwnerAuth.phoneRefusedRoutes] ([PHONE_REFUSED_ROUTES] in a running server), which answer a phone that
+ * has authenticated 403 [PHONE_REFUSED_MESSAGE]. A revoked or pending key never gets that far: it is
+ * answered the 401 every route gives it. A route whose name cannot be read is refused to a phone,
+ * never opened to one.
  */
-internal suspend fun ApplicationCall.owner(auth: OwnerAuth): OwnerPrincipal? = when (val outcome = auth.check(this)) {
-    is OwnerAuth.Outcome.Ok -> outcome.principal
-    else -> {
-        refuse(outcome)
-        null
+internal suspend fun ApplicationCall.owner(auth: OwnerAuth): OwnerPrincipal? {
+    val principal = when (val outcome = auth.check(this)) {
+        is OwnerAuth.Outcome.Ok -> outcome.principal
+        else -> {
+            refuse(outcome)
+            return null
+        }
     }
+    if (principal.kind == CredentialKind.DEVICE) {
+        val route = (this as? RoutingCall)?.route?.let(::routeKey)
+        if (route == null || route in auth.phoneRefusedRoutes) {
+            respond(HttpStatusCode.Forbidden, ErrorDto(PHONE_REFUSED_MESSAGE))
+            return null
+        }
+    }
+    return principal
 }
 
 /** [owner], for the routes that need only to know the caller is the owner. */
 internal suspend fun ApplicationCall.ownerAuthorized(auth: OwnerAuth): Boolean = owner(auth) != null
 
 /**
- * [owner], for the routes that manage devices: minting and confirming a pairing code, the device list,
- * revoking. The owner console is the side already trusted; a phone may not add a device or extend its
- * own reach, so a device key is answered 403 here once it has authenticated. A revoked or pending key
- * never gets that far: it is answered the 401 every other route gives it.
+ * A route as [PHONE_REFUSED_ROUTES] names it, `POST /v1/devices/{keyId}/revoke`: its method, then the
+ * path segments from the root, a parameter as `{name}`. Read from the route tree's own selectors, so
+ * the name is the one the router matched. Null for a node that is no method's.
  */
-internal suspend fun ApplicationCall.ownerConsole(auth: OwnerAuth): OwnerPrincipal? {
-    val principal = owner(auth) ?: return null
-    if (principal.kind == CredentialKind.DEVICE) {
-        respond(HttpStatusCode.Forbidden, ErrorDto(CONSOLE_ONLY_MESSAGE))
-        return null
-    }
-    return principal
+internal fun routeKey(node: RoutingNode): String? {
+    val method = (node.selector as? HttpMethodRouteSelector)?.method ?: return null
+    val segments = generateSequence(node.parent) { it.parent }.toList().asReversed().mapNotNull { ancestor ->
+        when (val selector = ancestor.selector) {
+            is RootRouteSelector -> null
+            is PathSegmentConstantRouteSelector -> selector.value
+            is PathSegmentParameterRouteSelector -> "${selector.prefix.orEmpty()}{${selector.name}}${selector.suffix.orEmpty()}"
+            is RoutePathComponent -> selector.toString()
+            else -> null
+        }
+    }.filter { it.isNotEmpty() }
+    return "${method.value} /${segments.joinToString("/")}"
 }
 
 /** The fixed answer for each way an owner credential can be refused. */

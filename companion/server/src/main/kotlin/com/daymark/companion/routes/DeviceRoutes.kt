@@ -117,10 +117,10 @@ internal fun auditDevice(ownerAudit: AuditStore, ownerId: String, action: AuditA
  * match. The phone must refuse an http QR itself, since it is the one party the network cannot
  * rewrite (#189); this is the depth behind that.
  *
- * THE CONSOLE'S, NOT THE PHONE'S. Minting, reading a code, confirming, the list and Revoke take the
- * owner console's credential only ([ownerConsole]): the console is the side already trusted, and a
- * phone may not add a device. The phone has two routes of its own: redeem, which takes no credential,
- * and the registration poll, which its key signs.
+ * THE CONSOLE'S, NOT THE PHONE'S. Minting, reading a code, confirming, the list and Revoke are in
+ * [PHONE_REFUSED_ROUTES], so the gate answers a phone 403 there: the console is the side already
+ * trusted, and a phone may not add a device. The phone has two routes of its own: redeem, which takes
+ * no credential, and the registration poll, which its key signs.
  *
  * ONE REFUSAL for every code that is not a live one of this owner's, 404 [NO_SUCH_CODE_MESSAGE]: a
  * code never minted, lapsed, taken by another key, or asked for under http. A wrong code burns
@@ -146,13 +146,13 @@ fun Route.deviceRoutes(
         // The device list: every phone paired to this owner, with the date it was paired and its key,
         // revoked ones with the date they were. No free-text name: the server stores no content.
         get {
-            val owner = call.ownerConsole(auth) ?: return@get
+            val owner = call.owner(auth) ?: return@get
             call.respond(DeviceList(devices.devices(owner.ownerId).map { DeviceDto(it.keyId, it.publicKeyB64, it.pairedAt, it.revokedAt) }))
         }
 
         // Mint a code, good for two minutes and one redemption. Under http, nothing is minted.
         post("/pairing") {
-            val owner = call.ownerConsole(auth) ?: return@post
+            val owner = call.owner(auth) ?: return@post
             if (!pairingOpen || publicBaseUrl == null) {
                 return@post call.respond(HttpStatusCode.Conflict, ErrorDto(PAIRING_NEEDS_HTTPS_MESSAGE))
             }
@@ -163,7 +163,7 @@ fun Route.deviceRoutes(
 
         // Where one of the owner's codes stands: what the console polls while the phone redeems it.
         get("/pairing/{codeId}") {
-            val owner = call.ownerConsole(auth) ?: return@get
+            val owner = call.owner(auth) ?: return@get
             val codeId = call.parameters["codeId"]
             val state = if (pairingOpen && codeId != null) devices.codeState(owner.ownerId, codeId) else null
             when (state) {
@@ -180,7 +180,7 @@ fun Route.deviceRoutes(
 
         // The person compared the words and confirmed: the one thing that registers a key.
         post("/pairing/{codeId}/confirm") {
-            val owner = call.ownerConsole(auth) ?: return@post
+            val owner = call.owner(auth) ?: return@post
             val codeId = call.parameters["codeId"]
             val req = call.receiveCappedJson<PairingConfirmRequest>() ?: return@post
             val result = if (pairingOpen && codeId != null) {
@@ -203,7 +203,7 @@ fun Route.deviceRoutes(
         // Revoke a phone: every request it signs is refused from the next one on. A second Revoke
         // changes nothing and writes no second row.
         post("/{keyId}/revoke") {
-            val owner = call.ownerConsole(auth) ?: return@post
+            val owner = call.owner(auth) ?: return@post
             val keyId = call.parameters["keyId"]
             when (keyId?.let { devices.revoke(owner.ownerId, it) }) {
                 null -> call.respond(HttpStatusCode.NotFound, ErrorDto(NO_SUCH_DEVICE_MESSAGE))
