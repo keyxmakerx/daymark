@@ -71,7 +71,7 @@
     describeDay,
     describeWeek,
     epochDayLocal,
-    formatClock,
+    eventTime,
     formatDayLong,
     formatDayShort,
     formatMonthTitle,
@@ -228,7 +228,8 @@
                 <div class="row-head">
                   <CalendarMark shape={KIND_SHAPE[event.kind]} />
                   <span class="u-label kind">{KIND_LABEL[event.kind]}</span>
-                  <span class="u-mono when">{formatClock(event.at)}</span>
+                  <!-- A sleep log's bed and wake times; never a clock read off its date (#416). -->
+                  <span class="u-mono when">{eventTime(event)}</span>
                 </div>
                 <p class="row-title">{event.title}</p>
                 {#if event.detail}

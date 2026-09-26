@@ -36,6 +36,7 @@ import {
   describeWeek,
   epochDayLocal,
   epochDayUtc,
+  eventTime,
   formatClock,
   formatDayLong,
   formatDayShort,
@@ -659,5 +660,52 @@ describe('formatting', () => {
     expect(formatDayLong(daysFromCivil(2024, 2, 29))).toBe('Thu 29 Feb 2024')
     expect(formatDayShort(AUG_16_2026)).toBe('16 Aug')
     expect(MONTH_NAMES.length).toBe(12)
+  })
+})
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   The time a day's list shows.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+describe('the time a day’s list shows (#416)', () => {
+  const night = {
+    id: 3,
+    night: AUG_16_2026 - 1,
+    bedTime: at(AUG_16_2026 - 1, 23),
+    wakeTime: at(AUG_16_2026, 6) + 20 * 60_000,
+    sleepLatencyMin: 0,
+    awakeMin: 0,
+    quality: 3,
+    note: '',
+  }
+  const events = buildEvents(
+    bundle({ entries: [{ id: 1, dateTime: at(AUG_16_2026, 9), moodLevel: 3, note: '' }], sleepLogs: [night] }),
+    epochDayUtc,
+  )
+  const sleep = events.find((e) => e.kind === 'sleep')!
+  const checkin = events.find((e) => e.kind === 'checkin')!
+
+  it('shows a sleep log as the bed and wake times the person logged', () => {
+    expect(eventTime(sleep, 'utc')).toBe('23:00–06:20')
+    // Local time, by shape: two clock times joined, whatever the machine's zone.
+    expect(eventTime(sleep)).toMatch(/^([01]\d|2[0-3]):[0-5]\d–([01]\d|2[0-3]):[0-5]\d$/)
+  })
+
+  it('never shows a clock read off a sleep log’s date', () => {
+    // The night's marker is the UTC midnight of its date: as a clock, a bedtime nobody logged.
+    const offTheDate = formatClock(sleep.at, 'utc')
+    expect(offTheDate).toBe('00:00')
+    expect(eventTime(sleep, 'utc')).not.toContain(offTheDate)
+  })
+
+  it('shows every other kind at the time it was made', () => {
+    expect(eventTime(checkin, 'utc')).toBe('09:00')
+    expect(eventTime(checkin, 'utc')).toBe(formatClock(checkin.at, 'utc'))
+  })
+
+  it('shows no time for a night whose file holds no bed or wake time, rather than one made up', () => {
+    const unknown = buildEvents(bundle({ sleepLogs: [{ ...night, bedTime: Number.NaN }] }), epochDayUtc)
+    expect(unknown.map((e) => e.kind)).toEqual(['sleep'])
+    expect(eventTime(unknown[0]!, 'utc')).toBe('')
   })
 })

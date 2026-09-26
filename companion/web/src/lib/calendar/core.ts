@@ -300,7 +300,10 @@ export interface EventMeasure {
 export interface CalendarEvent {
   kind: EventKind
   day: EpochDay
-  /** Epoch millis of the underlying record; drives the within-day ordering and the agenda's clock. */
+  /**
+   * Epoch millis of the underlying record; drives the within-day ordering, and the time a day's
+   * list shows for every kind but a sleep log, which shows its bed and wake times ({@link eventTime}).
+   */
   at: number
   /** Stable across rebuilds — `kind:id` — so a keyed each block does not re-create rows. */
   key: string
@@ -352,6 +355,21 @@ export function formatClock(ms: number, zone: 'local' | 'utc' = 'local'): string
   const h = zone === 'utc' ? d.getUTCHours() : d.getHours()
   const m = zone === 'utc' ? d.getUTCMinutes() : d.getMinutes()
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+/**
+ * The time a record shows in a day's list: "09:14"; a sleep log's bed and wake times, "23:10–07:05".
+ *
+ * A sleep log is never timed by `at`. Its `at` is the UTC midnight of its night, a marker for
+ * ordering and not a time anybody recorded, and shown as a clock it reads as the hour they went to
+ * bed — "02:00" in Central Europe (#416). A night whose file holds no bed or wake time shows no
+ * time at all rather than one made up. Both calendars' day lists read this.
+ */
+export function eventTime(ev: CalendarEvent, zone: 'local' | 'utc' = 'local'): string {
+  if (ev.kind !== 'sleep') return formatClock(ev.at, zone)
+  const s = ev.sleep
+  if (!s || !Number.isFinite(s.bedTime) || !Number.isFinite(s.wakeTime)) return ''
+  return `${formatClock(s.bedTime, zone)}–${formatClock(s.wakeTime, zone)}`
 }
 
 /** "August 2026". */

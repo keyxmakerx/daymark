@@ -35,7 +35,7 @@ import {
   KIND_LABEL,
   NOTHING_RECORDED,
   buildMonthGrid,
-  formatClock,
+  eventTime,
   formatDayLong,
   formatMonthTitle,
   moodWord,
@@ -180,19 +180,12 @@ export function buildOwnMonth(
   return { year, month, title: formatMonthTitle(year, month), weekdayLabels: grid.weekdayLabels, weeks }
 }
 
-/** A sleep log's time: when it began and ended, "23:10–07:05"; empty where either is not a time. */
-function sleepTime(ev: CalendarEvent, zone: 'local' | 'utc'): string {
-  const s = ev.sleep
-  if (!s || !Number.isFinite(s.bedTime) || !Number.isFinite(s.wakeTime)) return ''
-  return `${formatClock(s.bedTime, zone)}–${formatClock(s.wakeTime, zone)}`
-}
-
 /** Every record of one day, in the order made, for the day panel. */
 export function dayRecords(events: CalendarEvent[], labels: unknown, zone: 'local' | 'utc' = 'local'): DayRecord[] {
   return [...events].sort(byMoment).map((ev) => ({
     key: ev.key,
     kind: ev.kind,
-    time: ev.kind === 'sleep' ? sleepTime(ev, zone) : formatClock(ev.at, zone),
+    time: eventTime(ev, zone),
     mood: ev.kind === 'checkin' ? moodOf(ev, labels) : null,
     text: ev.kind === 'selfcheck' ? [ev.title, ev.band].filter(Boolean).join(' · ') : '',
   }))
