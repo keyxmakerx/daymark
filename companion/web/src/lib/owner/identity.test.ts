@@ -21,7 +21,7 @@ import _sodium from 'libsodium-wrappers-sumo'
 
 import { ownerIdentityFromMaster, zeroizeOwnerIdentity, SUBKEY_OWNER_BOX, SUBKEY_OWNER_SIGN } from './identity'
 import { DataKeyError, createRecoverableDataKey, unwrapWithPassphrase, unwrapWithRecoveryCode } from '../recovery/dataKey'
-import { subkeysFromMaster, enrolExistingOwner } from '../recovery/migration'
+import { subkeysFromMaster, enrolExistingOwner, masterFromPassphrase } from '../recovery/migration'
 import { initCrypto, newSalt } from '../sync/crypto'
 
 /** Argon2id at the production floor takes seconds per call; these are the test-only params. */
@@ -268,5 +268,73 @@ describe('(f) a pinned vector holds the derivation still', () => {
     expect(MASTER_0_TO_31.every((b) => b === 0)).toBe(false)
     const zeroed = ownerIdentityFromMaster(new Uint8Array(32))
     expect(Buffer.from(zeroed.ed25519.publicKey).toString('base64url')).not.toBe(SIGN_PUB)
+  })
+})
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   (g) Three doors, one identity (#258).
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+describe('(g) three doors, one identity', () => {
+  /*
+   * The one test the decision on #258 asked for. An owner with an archive reaches their master by
+   * three doors once the console reads their key from the server: the passphrase through the
+   * published key parameters, the enrolled document opened with the passphrase, and the same
+   * document opened with the recovery code. The pairing identity (subkeys 3 and 4) and the manifest
+   * identity (subkey 2) through all three must be the same bytes, or enrolling would show the
+   * owner's clinician a stranger and every reader of the manifest a swapped signing key.
+   *
+   * Pinned to bytes as (f) is, for the reason (f) gives: three doors that all moved together — a
+   * changed context string, a changed KDF step — would still agree with each other. The master
+   * comes out of Argon2id here, so the vector is the passphrase's rather than (f)'s master, and the
+   * master-to-identity step it goes through is the one (f) pins.
+   */
+  const PASSPHRASE = 'three doors, one identity'
+  const SALT_0_TO_15 = Uint8Array.from({ length: 16 }, (_, i) => i)
+  const PINNED = {
+    box: 'WGc_HcM4jPmDveXzt_yvkUTGkROEAjpGDBg9tHsSdkw',
+    sign: 'E96lpNtoQl0nKx2hCZDUsCRpHG5S3poxtRLGzXJ2G3k',
+    manifest: 'lpcj9uZX2rE_5zYiXPmYwwCVnSRp59_eYlm94COkVZc',
+  }
+  const keysOf = (master: Uint8Array) => {
+    const id = ownerIdentityFromMaster(master)
+    return {
+      box: Buffer.from(id.x25519.publicKey).toString('base64url'),
+      sign: Buffer.from(id.ed25519.publicKey).toString('base64url'),
+      manifest: Buffer.from(_sodium.crypto_sign_seed_keypair(subkeysFromMaster(master).manifestSeed).publicKey).toString('base64url'),
+    }
+  }
+
+  let passphraseDirectly: ReturnType<typeof keysOf>
+  let documentWithPassphrase: ReturnType<typeof keysOf>
+  let documentWithCode: ReturnType<typeof keysOf>
+  let randomDocument: ReturnType<typeof keysOf>
+
+  beforeAll(async () => {
+    const params = { alg: 'argon2id' as const, memMiB: 256, ops: 3 }
+    passphraseDirectly = keysOf(await masterFromPassphrase(PASSPHRASE, SALT_0_TO_15, params))
+    const enrolled = await enrolExistingOwner(PASSPHRASE, SALT_0_TO_15, params)
+    documentWithPassphrase = keysOf(await unwrapWithPassphrase(enrolled.blob, PASSPHRASE))
+    documentWithCode = keysOf(await unwrapWithRecoveryCode(enrolled.blob, enrolled.recoveryCode.canonical))
+    // Today's bug, as the positive control: the random-key path, for the same passphrase.
+    const random = await createRecoverableDataKey(PASSPHRASE, params)
+    randomDocument = keysOf(await unwrapWithPassphrase(random.blob, PASSPHRASE))
+  }, 180_000)
+
+  it('the passphrase directly, the document with the passphrase and the document with the code give the same keys', () => {
+    expect(documentWithPassphrase).toEqual(passphraseDirectly)
+    expect(documentWithCode).toEqual(passphraseDirectly)
+  })
+
+  it('and they are the pinned bytes', () => {
+    expect(passphraseDirectly).toEqual(PINNED)
+    expect(documentWithPassphrase).toEqual(PINNED)
+    expect(documentWithCode).toEqual(PINNED)
+  })
+
+  it('positive control: a document made by the random-key path gives a different identity for the same passphrase', () => {
+    expect(randomDocument.sign).not.toBe(PINNED.sign)
+    expect(randomDocument.box).not.toBe(PINNED.box)
+    expect(randomDocument.manifest).not.toBe(PINNED.manifest)
   })
 })

@@ -164,9 +164,11 @@ describe('(c) what it says when it does not open', () => {
   it('names a consequence when the secret is simply wrong, and does not guess which input was', async () => {
     const out = await unlockOwnerIdentity(fileText, 'not the passphrase', 'passphrase')
     expect(out).toEqual({ ok: false, fault: 'didNotOpen' })
-    // The wrong file, the wrong passphrase, and an edited file are one outcome here, not three.
-    expect(UNLOCK_FAULT_TEXT.didNotOpen).toContain('the file you chose')
+    // The wrong passphrase and a key edited on the server are one outcome here, not two: the
+    // sentence names the key it did not open and points at the one input, and guesses at neither.
+    expect(UNLOCK_FAULT_TEXT.didNotOpen).toContain('did not open the key this server holds')
     expect(UNLOCK_FAULT_TEXT.didNotOpen).toContain('what you typed')
+    expect(UNLOCK_FAULT_TEXT.didNotOpen).not.toMatch(/wrong|incorrect/i)
   }, 30_000)
 
   it('says so when the file carries no copy opened that way', async () => {

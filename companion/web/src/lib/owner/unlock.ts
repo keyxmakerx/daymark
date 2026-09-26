@@ -79,8 +79,8 @@ export const UNLOCK_FAULT_TEXT: Record<UnlockFault, string> = {
   ...RECOVERY_FAULT_TEXT,
   noFile: 'No key file has been chosen.',
   noSecret: 'Nothing was entered.',
-  noSlotOfThatKind: 'That file does not carry a copy of the key opened this way.',
-  didNotOpen: 'That did not open this key. It is worth checking both the file you chose and what you typed.',
+  noSlotOfThatKind: 'The key this server holds has no copy locked that way.',
+  didNotOpen: 'That did not open the key this server holds. It is worth checking what you typed.',
 }
 
 /**
@@ -116,6 +116,7 @@ export async function unlockFromBlob(
   secret: string,
   kind: SecretKind,
 ): Promise<UnlockResult> {
+  if (!secret.trim()) return { ok: false, fault: 'noSecret' }
   let master: Uint8Array | null = null
   try {
     master =

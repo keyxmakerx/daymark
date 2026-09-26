@@ -9,14 +9,24 @@
    * no route to a usable key that does not go through the owner's own key, because a usable key
    * from nowhere is the defect.
    *
-   * What it asks for instead is the wrapped-key file the Recovery code screen saves, and one of the
-   * two secrets that open it. From there owner/unlock.ts derives the identity and wipes the master.
+   * WHERE THE KEY COMES FROM (#258). The server keeps the owner's master locked under the passphrase
+   * and under the recovery code (docs/SYNC_PROTOCOL.md §1.2), and this door reads what it holds with
+   * the owner's access token. There are three answers, each with its own form below:
    *
-   * WHY THE FILE, EVERY VISIT. There is nowhere to keep it. components/recovery/session.ts argues
-   * at length against browser storage for key material on a page the server serves, and no endpoint
-   * holds the blob. So the door holds nothing between visits, and says so rather than letting
-   * someone discover it by being asked again and reading that as a fault. This console already asks
-   * for a bearer token by hand every visit; this is the same posture, not a new one.
+   *   nothing          a first run makes the key, here, and stores only its two locks;
+   *   key parameters   an enrolment locks the key the passphrase already derives, after proving the
+   *                    passphrase on the newest stored snapshot;
+   *   a locked key     an unlock, with the passphrase or with the recovery code.
+   *
+   * The order inside each — what is proved before anything is written, what a create names, what is
+   * read back before an identity exists — is recovery/serverKey.ts's, where it is a node test, and the
+   * set-up form is the Recovery code screen's own (recovery/KeySetup.svelte). This component holds
+   * only what is on screen. A new recovery code is shown once and checked as written down before the
+   * console opens, as the Recovery code screen does.
+   *
+   * Nothing is kept between visits: not the key, not the identity, not the token. The address and
+   * token the key was read with are handed to the console with the session, so it does not ask for
+   * them twice.
    */
   import { initAssignmentCrypto, fingerprint } from '../../assignments/crypto'
   import { sasWords, publicOf, type Identity } from '../../share/pairing'
@@ -24,14 +34,22 @@
   import { fromBase64, toBase64 } from '../../share/sharecrypto'
   import LowerAssuranceBanner from './LowerAssuranceBanner.svelte'
   import GroupEntry from '../recovery/GroupEntry.svelte'
+  import CodeSheet from '../recovery/CodeSheet.svelte'
+  import WriteDownCheck from '../recovery/WriteDownCheck.svelte'
+  import KeySetup from '../recovery/KeySetup.svelte'
   import { emptyGroups, firstGroupProblem, groupsToTyped, type GroupProblem } from '../recovery/groups'
-  import { HOW_ENTRY_WORKS } from '../recovery/copy'
+  import { HOW_ENTRY_WORKS, KEY_CHANGED_ON_SERVER, WRITE_IT_ON_PAPER } from '../recovery/copy'
   import {
     UNLOCK_LEDE,
     NOTHING_IS_KEPT,
-    KEY_FILE_LABEL,
-    KEY_FILE_HINT,
-    NO_KEY_FILE_YET,
+    KEY_IS_ON_THE_SERVER,
+    CONNECT_ACTION,
+    CONNECT_BUSY,
+    CONNECT_NO_TOKEN,
+    CONNECT_REFUSED,
+    CONNECT_FAILED,
+    HOLDS_A_LOCKED_KEY,
+    KEY_STORED_WITH_THIS_CODE,
     USE_CODE_INSTEAD,
     USE_PASSPHRASE_INSTEAD,
     CODE_OPENS_THIS_SESSION,
@@ -46,28 +64,60 @@
   import { mintInboxToken } from '../../owner/inboxToken'
   import { Card, Callout } from '../ui'
   import type { OwnerSession, PinnedTherapist } from './session'
+  import type { KeyDocument } from '../../sync/client'
+  import type { EnrolmentCheck, ServerKeyPorts } from '../../recovery/serverKey'
+  import type { RecoveryCode } from '../../recovery/recoveryCode'
+  import type { OwnerConnection } from '../../owner/recoveryEmail'
 
-  let { onunlock }: { onunlock: (session: OwnerSession) => void } = $props()
+  let { onunlock }: { onunlock: (session: OwnerSession, connection: OwnerConnection) => void } = $props()
 
   let busy = $state(false)
   let error = $state('')
+  /** A statement about what happened that is not a refusal: the server's key changed under a set-up. */
+  let notice = $state('')
 
-  /*
-   * The owner's identity for this session. Derived, never generated; null until they unlock. The
-   * master it came from is wiped inside unlock.ts and never reaches this component.
+  /* ── The server, and what it holds ──────────────────────────────────────────────────────── */
+
+  let serverUrl = $state('')
+  let token = $state('')
+  /**
+   * What the server held when last read with the address and token above; null until then. Raw,
+   * because it is replaced whole and never edited, and the locked key in it is handed to the crypto
+   * as the server sent it.
    */
-  let ownerIdentity = $state<Identity | null>(null)
-  let ownerFp = $state('')
+  let held = $state.raw<KeyDocument | null>(null)
+  /** For key parameters: whether the passphrase is proved on a snapshot or typed twice. */
+  let check = $state<EnrolmentCheck | null>(null)
+  /** The reads and writes, bound to the address and token the key was read with. */
+  let ports = $state.raw<ServerKeyPorts | null>(null)
+  /** That address and token, captured at the read, for the console to connect with. */
+  let readWith: OwnerConnection | null = null
 
-  /** The chosen key file, as text. Read on selection so the unlock itself has nothing to await. */
-  let keyFileText = $state('')
-  let keyFileName = $state('')
+  /* ── A set-up: nothing held, or key parameters only (recovery/KeySetup.svelte) ───────────── */
+
+  /** A new recovery code, from the moment the server took the key until it is confirmed written down. */
+  let newCode = $state<RecoveryCode | null>(null)
+  let codeStep = $state<'showing' | 'confirm'>('showing')
+  /**
+   * The identity a set-up derived, held until the new code is confirmed written down. The master
+   * it came from was wiped inside serverKey.ts and never reaches this component.
+   */
+  let setUpIdentity: Identity | null = null
+
+  /* ── An unlock: a locked key held ───────────────────────────────────────────────────────── */
 
   /** Which secret is being offered. The passphrase is the everyday one; the code is on paper. */
   let secretMode = $state<'passphrase' | 'recovery'>('passphrase')
   let passphrase = $state('')
   let groups = $state(emptyGroups())
   let problem = $state<GroupProblem | null>(null)
+
+  /*
+   * The owner's identity for this session. Derived, never generated; null until they unlock. The
+   * master it came from is wiped inside unlock.ts or serverKey.ts and never reaches this component.
+   */
+  let ownerIdentity = $state<Identity | null>(null)
+  let ownerFp = $state('')
 
   const messageId = $props.id()
   /** Derived from the one id this component may ask for — `$props.id()` is once per component. */
@@ -104,22 +154,88 @@
    */
   let pendingSeq = 0
 
-  async function chooseFile(event: Event) {
+  /** Editing where the key is read from makes what was read from there stale. */
+  function connectionEdited() {
+    held = null
+    check = null
+    ports = null
+    readWith = null
+    notice = ''
     error = ''
-    const input = event.currentTarget as HTMLInputElement
-    const file = input.files?.[0]
-    if (!file) {
-      keyFileText = ''
-      keyFileName = ''
+  }
+
+  /** Read what the server holds. Nothing is written here. */
+  async function connect() {
+    error = ''
+    notice = ''
+    if (!token) {
+      error = CONNECT_NO_TOKEN
       return
     }
-    keyFileName = file.name
+    busy = true
     try {
-      keyFileText = await file.text()
+      const { SyncClient, SyncError } = await import('../../sync/client')
+      const { serverKeyPorts, enrolmentCheck } = await import('../../recovery/serverKey')
+      const reading = serverKeyPorts(new SyncClient(serverUrl, token))
+      try {
+        const doc = await reading.read()
+        check = doc.kind === 'keyparams' ? await enrolmentCheck(reading) : null
+        held = doc
+        ports = reading
+        readWith = { serverUrl, token }
+      } catch (e) {
+        connectionEdited()
+        error = e instanceof SyncError && e.status === 401 ? CONNECT_REFUSED : CONNECT_FAILED
+      }
     } catch {
-      keyFileText = ''
-      error = 'That file could not be read from disk. Nothing has been unlocked.'
+      connectionEdited()
+      error = CONNECT_FAILED
+    } finally {
+      busy = false
     }
+  }
+
+  /**
+   * The server took the key, read it back and opened it. The code is shown at once, before anything
+   * else can fail: the server holds the lock it opens, and a code that never reached the screen
+   * would be a recovery slot nobody holds. The identity waits until the code is confirmed written
+   * down.
+   */
+  function keyStored(stored: { recoveryCode: RecoveryCode; identity: Identity }) {
+    error = ''
+    notice = ''
+    setUpIdentity = stored.identity
+    newCode = stored.recoveryCode
+    codeStep = 'showing'
+  }
+
+  /** The server's key changed between the read and the create: show what it holds now. */
+  function keyMoved(now: KeyDocument, nowCheck: EnrolmentCheck | null) {
+    error = ''
+    held = now
+    check = nowCheck
+    notice = KEY_CHANGED_ON_SERVER
+  }
+
+  /** Where things stand is not known here any more: read the server again, from the start. */
+  function keyLost(message: string) {
+    connectionEdited()
+    error = message
+  }
+
+  /** The new code is on paper: drop it, and open the console with the identity the set-up derived. */
+  async function codeWrittenDown() {
+    newCode = null
+    // The fingerprint needs the assignment crypto ready, which an unlock readies too.
+    await initAssignmentCrypto()
+    if (setUpIdentity) opened(setUpIdentity)
+    setUpIdentity = null
+  }
+
+  /** The one place the session's identity is set: from an unlock, or from a set-up's read-back. */
+  function opened(identity: Identity) {
+    ownerIdentity = identity
+    ownerFp = fingerprint(identity.ed25519.publicKey)
   }
 
   function switchSecret(mode: 'passphrase' | 'recovery') {
@@ -138,9 +254,11 @@
     error = ''
   }
 
+  /** A locked key held: open it with the passphrase or the recovery code. */
   async function unlock() {
     error = ''
     problem = null
+    if (!held || held.kind !== 'wrapped') return
 
     /*
      * The check symbol runs here, before anything expensive: a single mistyped character comes back
@@ -158,15 +276,14 @@
     busy = true
     try {
       await initAssignmentCrypto()
-      const { unlockOwnerIdentity, UNLOCK_FAULT_TEXT } = await import('../../owner/unlock')
+      const { unlockFromBlob, UNLOCK_FAULT_TEXT } = await import('../../owner/unlock')
       const secret = secretMode === 'passphrase' ? passphrase : groupsToTyped(groups)
-      const out = await unlockOwnerIdentity(keyFileText, secret, secretMode)
+      const out = await unlockFromBlob(held.wrapped, secret, secretMode)
       if (!out.ok) {
         error = UNLOCK_FAULT_TEXT[out.fault]
         return
       }
-      ownerIdentity = out.identity
-      ownerFp = fingerprint(out.identity.ed25519.publicKey)
+      opened(out.identity)
       // Neither secret is needed again, and neither should outlive the click that used it.
       passphrase = ''
       groups = emptyGroups()
@@ -265,8 +382,8 @@
   }
 
   function enter() {
-    if (!ownerIdentity) return
-    onunlock({ ownerBox: ownerIdentity.x25519, ownerSign: ownerIdentity.ed25519, pinned: [...pinned] })
+    if (!ownerIdentity || !readWith) return
+    onunlock({ ownerBox: ownerIdentity.x25519, ownerSign: ownerIdentity.ed25519, pinned: [...pinned] }, readWith)
   }
 </script>
 
@@ -279,46 +396,93 @@
         <p class="hint">{UNLOCK_LEDE}</p>
         <p class="hint">{NOTHING_IS_KEPT}</p>
 
-        <fieldset class="add">
-          <legend>Your key</legend>
-
-          <label>
-            <span>{KEY_FILE_LABEL}</span>
-            <input type="file" accept="application/json,.json" onchange={chooseFile} disabled={busy} />
-          </label>
-          {#if keyFileName}<p class="hint">Chosen: {keyFileName}</p>{/if}
-          <p class="hint">{KEY_FILE_HINT}</p>
-          <p class="hint">{NO_KEY_FILE_YET}</p>
-
-          {#if secretMode === 'passphrase'}
+        {#if newCode}
+          <!--
+            THE NEW CODE, ONCE. The server has taken the key, read it back and opened it; the code
+            is on screen until it is confirmed written down, and then it is gone. The same two
+            components the Recovery code screen uses, so the code looks and is checked the same
+            wherever it is made.
+          -->
+          <fieldset class="add">
+            <legend>Your recovery code</legend>
+            {#if codeStep === 'showing'}
+              <p class="hint">{KEY_STORED_WITH_THIS_CODE}</p>
+              <p class="hint">{WRITE_IT_ON_PAPER}</p>
+              <CodeSheet display={newCode.display} />
+              <button class="primary" type="button" onclick={() => (codeStep = 'confirm')}>I have written it down</button>
+            {:else}
+              <WriteDownCheck
+                canonical={newCode.canonical}
+                onconfirmed={codeWrittenDown}
+                onshowagain={() => (codeStep = 'showing')}
+              />
+            {/if}
+          </fieldset>
+        {:else}
+          <fieldset class="add">
+            <legend>Your server</legend>
+            <p class="hint">{KEY_IS_ON_THE_SERVER}</p>
             <label>
-              <span>Passphrase</span>
-              <input type="password" bind:value={passphrase} autocomplete="current-password" disabled={busy} />
+              <span>Server URL <em>(blank = this server)</em></span>
+              <input type="url" bind:value={serverUrl} oninput={connectionEdited} placeholder="https://daymark.example.com" autocomplete="off" disabled={busy} />
             </label>
-            <button type="button" class="swap" onclick={() => switchSecret('recovery')} disabled={busy}>
-              {USE_CODE_INSTEAD}
-            </button>
-          {:else}
-            <GroupEntry
-              {groups}
-              onchange={updateGroups}
-              problemGroup={problem?.group ?? null}
-              describedBy={messageId}
-              disabled={busy}
-              legend="The six groups of your recovery code"
-            />
-            <div class="message" id={messageId} role="status" aria-live="polite">
-              {#if problem}{problem.message}{/if}
-            </div>
-            <p class="hint">{HOW_ENTRY_WORKS}</p>
-            <p class="hint">{CODE_OPENS_THIS_SESSION}</p>
-            <button type="button" class="swap" onclick={() => switchSecret('passphrase')} disabled={busy}>
-              {USE_PASSPHRASE_INSTEAD}
-            </button>
-          {/if}
-        </fieldset>
+            <label>
+              <span>Owner access token</span>
+              <input type="password" bind:value={token} oninput={connectionEdited} autocomplete="off" disabled={busy} />
+            </label>
+            {#if !held}
+              <button type="button" onclick={connect} disabled={busy}>{busy ? CONNECT_BUSY : CONNECT_ACTION}</button>
+            {/if}
+          </fieldset>
 
-        <button class="primary" onclick={unlock} disabled={busy}>{busy ? UNLOCK_BUSY : UNLOCK_ACTION}</button>
+          {#if notice}<p class="hint notice" role="status">{notice}</p>{/if}
+
+          {#if held?.kind === 'wrapped'}
+            <fieldset class="add">
+              <legend>Your key</legend>
+              <p class="hint">{HOLDS_A_LOCKED_KEY}</p>
+
+              {#if secretMode === 'passphrase'}
+                <label>
+                  <span>Passphrase</span>
+                  <input type="password" bind:value={passphrase} autocomplete="current-password" disabled={busy} />
+                </label>
+                <button type="button" class="swap" onclick={() => switchSecret('recovery')} disabled={busy}>
+                  {USE_CODE_INSTEAD}
+                </button>
+              {:else}
+                <GroupEntry
+                  {groups}
+                  onchange={updateGroups}
+                  problemGroup={problem?.group ?? null}
+                  describedBy={messageId}
+                  disabled={busy}
+                  legend="The six groups of your recovery code"
+                />
+                <div class="message" id={messageId} role="status" aria-live="polite">
+                  {#if problem}{problem.message}{/if}
+                </div>
+                <p class="hint">{HOW_ENTRY_WORKS}</p>
+                <p class="hint">{CODE_OPENS_THIS_SESSION}</p>
+                <button type="button" class="swap" onclick={() => switchSecret('passphrase')} disabled={busy}>
+                  {USE_PASSPHRASE_INSTEAD}
+                </button>
+              {/if}
+            </fieldset>
+
+            <button class="primary" onclick={unlock} disabled={busy}>{busy ? UNLOCK_BUSY : UNLOCK_ACTION}</button>
+          {:else if held && ports}
+            <KeySetup
+              {ports}
+              {held}
+              {check}
+              onstored={keyStored}
+              onmoved={keyMoved}
+              onlost={keyLost}
+              onbusy={(b) => (busy = b)}
+            />
+          {/if}
+        {/if}
       {:else}
         <p class="fp">Your owner fingerprint: <code>{ownerFp}</code></p>
         <p class="hint">{FINGERPRINT_IS_STABLE}</p>
@@ -380,12 +544,15 @@
   .unlock { max-width: 40rem; }
   .stack { display: flex; flex-direction: column; gap: var(--space-3); }
   .hint { margin: 0; color: var(--ink-soft); font-size: 0.9rem; }
+  .notice { color: var(--ink-text); }
   .fp code, .pub code { font-family: var(--font-mono); font-size: 0.75rem; word-break: break-all; }
   .pub { margin: 0; font-size: 0.8rem; }
   .add { display: flex; flex-direction: column; gap: var(--space-2); border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: var(--space-3); }
   .add legend { padding: 0 var(--space-2); color: var(--ink-soft); font-size: 0.85rem; }
   .add label { display: flex; flex-direction: column; gap: var(--space-1); font-size: 0.85rem; }
   .add label span { color: var(--ink-soft); }
+  .add label em { color: var(--text-subtle); font-style: normal; }
+  .add > button { align-self: flex-start; }
   .swap { align-self: flex-start; background: none; border: none; padding: 0; color: var(--ink-text); font: inherit; font-size: 0.85rem; text-decoration: underline; cursor: pointer; }
   .message { min-height: 1.25rem; font-size: 0.85rem; color: var(--ink-soft); }
   input { font: inherit; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-bg); color: var(--ink-text); }

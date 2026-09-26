@@ -20,6 +20,7 @@
   import { sasWords } from '../../share/pairing'
   import { PortalClient } from '../../sync/portal'
   import type { OwnerEndpoint } from '../../owner/therapistKeys'
+  import type { OwnerConnection } from '../../owner/recoveryEmail'
   import type { Grant } from '../../assignments/types'
 
   let { data }: { data: BackupData | null } = $props()
@@ -63,9 +64,17 @@
 
   const selected = $derived(session?.pinned.find((t) => t.id === selectedId) ?? null)
 
-  function unlock(s: OwnerSession) {
+  /*
+   * The door read the owner's key from the server with this address and token, so the server has
+   * already accepted them: the console connects with them rather than asking for the token again
+   * (#258). The connection panel below still takes another, for a person who wants one.
+   */
+  function unlock(s: OwnerSession, connection: OwnerConnection) {
     session = s
     selectedId = s.pinned[0]?.id ?? null
+    serverUrl = connection.serverUrl
+    token = connection.token
+    void connect()
   }
 
   function lock() {

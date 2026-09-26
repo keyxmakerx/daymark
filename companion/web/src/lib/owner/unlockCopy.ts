@@ -8,42 +8,55 @@
  * The register is set by components/recovery/copy.ts, which already says most of this product's
  * hard things about keys, and constants are imported from there rather than restated wherever they
  * fit. Two screens describing the same object in two voices is how a person ends up believing they
- * are two objects.
+ * are two objects. The set-up form's words — for a server holding no key yet, or only key
+ * parameters — are that module's too, because the Recovery code screen shows the same form.
  */
 
 /** What the console does with the key, and why it is asking. */
 export const UNLOCK_LEDE =
-  'This console signs what you send to a clinician, and it signs with an identity derived from the ' +
-  'key in your key file. To act as you it needs that key, for this session only.'
+  'This console signs what you send to a clinician, and it signs with an identity derived from your ' +
+  'key. To act as you it needs that key, for this session only.'
 
 /**
  * That nothing survives the tab.
  *
  * Said at the door rather than in a footnote, because the alternative is someone discovering it by
- * being asked for the file again and reading that as a fault.
+ * being asked again and reading that as a fault.
  */
 export const NOTHING_IS_KEPT =
-  'Nothing here is kept between visits. Not the file, not the key, not the identity. When this tab ' +
-  'closes they are gone, and you will be asked for them again next time.'
+  'Nothing here is kept between visits: not your key, and not the identity it gives. When this tab ' +
+  'closes they are gone, and the console asks again next time.'
 
-/** The file input's label and the description under it. */
-export const KEY_FILE_LABEL = 'Your key file'
-
-export const KEY_FILE_HINT =
-  'The file saved from the Recovery code screen, on the Sync panel. It holds two locked boxes and ' +
-  'no secret: neither your passphrase nor your code is in it or derivable from it.'
+/* ── Where the key is (#258) ──────────────────────────────────────────────────────────────── */
 
 /**
- * For the owner who has no file.
- *
- * Plain text under the input rather than an empty state or a callout: not having made one yet is
- * not a fault and must not be drawn as one. It says the consequence of making a new one, because
- * that consequence is the entire defect this screen was rebuilt to remove — a new key is a new
- * identity, and a clinician holding the old fingerprint will not match it.
+ * Where the key comes from, said before the token is asked for. The server keeps the master locked
+ * under each secret and can open neither (docs/SYNC_PROTOCOL.md §1.2), which is the fact that makes
+ * handing the locks to this page with a token acceptable.
  */
-export const NO_KEY_FILE_YET =
-  'If you have not made one, the Recovery code screen makes one. A key made there is a new key with ' +
-  'a new identity, so anything a clinician has already written down will not match it.'
+export const KEY_IS_ON_THE_SERVER =
+  'This console reads your key from your server, where it is kept locked twice: once under your ' +
+  'passphrase and once under your recovery code. The server can open neither lock. The key is opened ' +
+  'here, in this tab, and only for this session.'
+
+/** The verb for reading what the server holds. The console's own connection panel uses the same. */
+export const CONNECT_ACTION = 'Connect'
+export const CONNECT_BUSY = 'Reading what the server holds'
+
+/**
+ * What a server holding a locked key holds, once read. A fact about the server, no verdict. The
+ * other two answers lead to the set-up form, whose words are components/recovery/copy.ts's.
+ */
+export const HOLDS_A_LOCKED_KEY = 'This server holds your key, locked. Open it with your passphrase or your recovery code.'
+
+/** Refusals at the connect step. The token is never repeated in any of them. */
+export const CONNECT_NO_TOKEN = 'Enter your owner access token. Nothing was sent.'
+export const CONNECT_REFUSED = 'The server did not accept that access token, so nothing was read.'
+export const CONNECT_FAILED = 'This console could not read what the server holds, so nothing has been unlocked.'
+
+/** Above the new code, once the server has taken the key. */
+export const KEY_STORED_WITH_THIS_CODE =
+  'Your key is on the server now, locked under your passphrase and under the recovery code below.'
 
 /** Offering the recovery code at the door. */
 export const USE_CODE_INSTEAD = 'Use my recovery code instead'
@@ -69,11 +82,12 @@ export const UNLOCK_BUSY = 'Opening your key — this takes a few seconds'
  * The fingerprint line, after unlocking.
  *
  * The old screen showed a fingerprint that was true for one tab. Saying it is now stable is the
- * whole user-visible content of this fix, and it is what makes reading it aloud worth doing.
+ * whole user-visible content of this fix, and it is what makes reading it aloud worth doing. Both
+ * secrets open the same master, so both give this fingerprint (owner/identity.test.ts, three doors).
  */
 export const FINGERPRINT_IS_STABLE =
-  'With this key file it is the same every time. A clinician who wrote it down can check it against ' +
-  'what they see.'
+  'It is the same every time, whether your passphrase or your recovery code opened the key. A ' +
+  'clinician who wrote it down can check it against what they see.'
 
 /* ── Adding a clinician, and the token that comes with it ─────────────────────────────────── */
 

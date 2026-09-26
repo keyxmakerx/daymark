@@ -55,6 +55,7 @@
  * congratulates anybody for finishing a step, because finishing a step is not an achievement, and
  * a screen that celebrates is a screen that is not listening.
  */
+import type { SetUpFault } from '../../recovery/serverKey'
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
    1. What the surface is.
@@ -419,3 +420,80 @@ export function groupDoesNotMatch(group: number): string {
 export function groupLengthIsWrong(group: number, typed: number): string {
   return `Group ${group} has ${typed} ${typed === 1 ? 'character' : 'characters'}. Each group has five.`
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   8. Setting the key up on the server (#258).
+
+   The set-up form (KeySetup.svelte) is the same wherever a server holds no locked key yet — the
+   owner console's door, and "Get a code" on this screen — so its words are here, once. What each
+   step does is recovery/serverKey.ts's; these say it to a person.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+/** What the server holds, once read: one sentence per answer that needs a set-up. No verdicts. */
+export const HOLDS_KEY_PARAMETERS =
+  'This server holds the key parameters your snapshots were written with, and no recovery code yet. ' +
+  'Adding a recovery code locks the key your passphrase already opens, once under the passphrase and ' +
+  'once under a new code, and stores the two locks here. Nothing already stored is encrypted again.'
+
+export const HOLDS_NOTHING =
+  'This server holds no key yet. Choosing a passphrase here makes your key in this tab, locks it under ' +
+  'the passphrase and under a new recovery code, and stores only the two locks on the server.'
+
+/**
+ * How an enrolment proves the passphrase before it stores anything (serverKey.ts, the anchor). One
+ * of the two, whichever this server allows, said before the passphrase is typed.
+ */
+export const ENROL_TRIES_NEWEST_SNAPSHOT =
+  'Your passphrase is tried first on the newest snapshot this server stores. If it does not open it, ' +
+  'nothing is stored.'
+
+export const ENROL_ASKS_TWICE =
+  'This server stores no snapshot to try your passphrase on, so it is asked for twice instead.'
+
+/** The field labels of a set-up. */
+export const NEW_PASSPHRASE_LABEL = 'Passphrase for this key'
+export const SYNC_PASSPHRASE_LABEL = 'The passphrase you sync with'
+export const SAME_AGAIN_LABEL = 'The same passphrase again'
+
+/** The verbs of a set-up, and what each says while Argon2id runs several times over. */
+export const FIRST_RUN_ACTION = 'Make my key'
+export const FIRST_RUN_BUSY = 'Making and locking your key — this takes several seconds'
+export const ENROL_ACTION = 'Add a recovery code'
+export const ENROL_BUSY = 'Checking and locking your key — this takes several seconds'
+
+/**
+ * Why a set-up stored nothing. Every one is decided before anything is sent (serverKey.ts
+ * SetUpFault), so each can say that nothing was stored and be true. None names a cause the screen
+ * cannot know: a passphrase that does not open the newest snapshot is said to not open it, not to
+ * be wrong.
+ */
+export const SETUP_FAULT_TEXT: Readonly<Record<SetUpFault, string>> = {
+  noPassphrase: 'Enter a passphrase. Nothing has been stored.',
+  typeItTwice: 'Enter the passphrase a second time. Nothing has been stored.',
+  passphrasesDiffer: 'The two passphrases are different. Nothing has been stored.',
+  doesNotOpenNewest: 'That passphrase does not open the newest snapshot on this server, so nothing has been stored.',
+  snapshotsWithoutKey:
+    'This server stores snapshots and no key parameters for them. A new key would not open them, so none was made, and nothing has been stored.',
+  selfCheckFailed: 'The locked key made in this tab did not open again to the same key, so nothing has been stored.',
+  alreadyLocked: 'This server already holds a locked key, so nothing has been stored.',
+}
+
+/** After a 412: the state moved between the read and the create. What changed, not who changed it. */
+export const KEY_CHANGED_ON_SERVER =
+  'What the server holds changed after it was read here, so nothing from here was stored. What it ' +
+  'holds now is below.'
+
+/**
+ * After a create the server took, when what it handed back did not open to the same key. The key
+ * was sent, so this does not say nothing was stored; the code for it is not shown, because it may
+ * open nothing the server hands out.
+ */
+export const READ_BACK_DID_NOT_MATCH =
+  'The server took the new key, and what it handed back did not open to the same key, so no recovery ' +
+  'code is shown. Read what the server holds again to see where things stand.'
+
+/**
+ * A set-up that failed in a way none of the above covers. It does not say nothing was stored: the
+ * failure may have come after the server took the key, and the next read says which.
+ */
+export const SETUP_FAILED = 'The key could not be set up. Read what the server holds again to see where things stand.'

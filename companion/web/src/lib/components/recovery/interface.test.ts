@@ -139,6 +139,7 @@ function scriptCopyOf(file: string): string[] {
 const SENTENCES = [
   ...Object.values(copy).filter((v): v is string => typeof v === 'string' && v.length > 30),
   ...copy.PLACEHOLDERS.map((p) => `${p.title} ${p.body} ${p.specifiedAt}`),
+  ...Object.values(copy.SETUP_FAULT_TEXT),
 ]
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
@@ -150,6 +151,7 @@ describe('the suite has a subject', () => {
     expect(componentFiles).toEqual([
       'CodeSheet.svelte',
       'GroupEntry.svelte',
+      'KeySetup.svelte',
       'NewCodeFlow.svelte',
       'Placeholder.svelte',
       'RecoveryPanel.svelte',
