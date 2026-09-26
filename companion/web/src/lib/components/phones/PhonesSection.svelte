@@ -302,6 +302,8 @@
   /* Day ink on a day-paper tile whatever the theme, with a thin edge so it reads as an object on a
      dark page. The quiet zone a reader needs is inside the drawing. */
   .qr-tile {
+    align-self: flex-start;
+    max-width: 100%;
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
     background: var(--scan-paper);
