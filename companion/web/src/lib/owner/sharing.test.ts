@@ -267,11 +267,13 @@ describe('(d) the ended state', () => {
     // that answered "they left" on a timeout would stop somebody sharing with a therapist who is
     // still there. The strip falls back to the live state; the seal falls through to the server.
     expect(stripSource).toContain('endedAt = null')
+    // The seal's half is sealShare's, held by behaviour in sealShare.test.ts: a check that throws
+    // lets the share go on. The builder goes through it and says the refusal it returns.
     const builder = readFileSync(
       fileURLToPath(new URL('../components/owner/ShareBuilder.svelte', import.meta.url)),
       'utf8',
     )
-    expect(builder).toContain('.catch(() => null)')
+    expect(builder).toContain('await sealShare({')
     expect(builder).toContain('shareRefusedBecauseEnded')
   })
 })
@@ -279,7 +281,9 @@ describe('(d) the ended state', () => {
 describe('the builder signs a share with the version it publishes it as', () => {
   // The portal refuses a share whose signed version differs from the one it is served under, so a
   // builder that signed one number and published another would fail closed on every share after
-  // the first, and no test that calls buildShare directly would notice.
+  // the first, and no test that calls buildShare directly would notice. sealShare looks the number
+  // up before anything is sealed and hands the same one to every step (sealShare.test.ts); what is
+  // checked here is that the builder's steps use the number they are handed.
   const builder = readFileSync(
     fileURLToPath(new URL('../components/owner/ShareBuilder.svelte', import.meta.url)),
     'utf8',
@@ -287,18 +291,14 @@ describe('the builder signs a share with the version it publishes it as', () => 
   const codeOnly = (src: string) =>
     src.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(?<!:)\/\/[^\n]*/g, '')
 
-  /** One `version`, looked up before anything is sealed, is both signed and published. */
+  /** The builder sets no `version` of its own: the one it is handed is bundled, signed and published. */
   function signsWhatItPublishes(src: string): boolean {
     const code = codeOnly(src)
     const assignments = code.match(/\bversion\s*=(?!=)/g) ?? []
-    const lookedUp = code.indexOf('version = existing.reduce')
-    const sealed = code.indexOf('buildShare(')
     return (
-      assignments.length === 2 && // `let version = 0`, then the lookup; nothing else moves it
-      lookedUp !== -1 &&
-      sealed !== -1 &&
-      lookedUp < sealed &&
-      /const shareMeta: ShareMeta = \{[^}]*\bversion,/.test(code) &&
+      assignments.length === 0 &&
+      /build: \(version\) => \{\s*const meta: ShareBundleMeta = \{[^}]*\bversion,/.test(code) &&
+      /seal: \(bundle, version, pins\) => \{\s*const shareMeta: ShareMeta = \{[^}]*\bversion,/.test(code) &&
       code.includes("putBlob(therapist.inboxToken, 'shares', lineage, version,")
     )
   }
@@ -307,13 +307,16 @@ describe('the builder signs a share with the version it publishes it as', () => 
     expect(signsWhatItPublishes(builder)).toBe(true)
   })
 
-  it('fails when the builder publishes a different number, or moves it after signing (positive control)', () => {
+  it('fails when the builder publishes, signs or bundles a number of its own (positive control)', () => {
     const published = builder.replace("'shares', lineage, version,", "'shares', lineage, version + 1,")
     expect(published).not.toBe(builder)
     expect(signsWhatItPublishes(published)).toBe(false)
-    const moved = builder.replace('const shareMeta: ShareMeta = {', 'version = 0\n      const shareMeta: ShareMeta = {')
+    const moved = builder.replace('const shareMeta: ShareMeta = {', 'version = 0\n          const shareMeta: ShareMeta = {')
     expect(moved).not.toBe(builder)
     expect(signsWhatItPublishes(moved)).toBe(false)
+    const bundled = builder.replace('const meta: ShareBundleMeta = { shareId, version,', 'const meta: ShareBundleMeta = { shareId, version: 0,')
+    expect(bundled).not.toBe(builder)
+    expect(signsWhatItPublishes(bundled)).toBe(false)
   })
 })
 
