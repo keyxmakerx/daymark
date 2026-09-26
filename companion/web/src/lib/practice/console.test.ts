@@ -157,7 +157,7 @@ describe('(a) the console never implies that membership is access', () => {
 
   it('renders the removal sentence at the removal, not in a manual', () => {
     expect(codeOf('RosterPanel.svelte')).toContain('REMOVAL_ENDS_A_MEMBERSHIP')
-    expect(codeOf('RosterPanel.svelte')).toContain('Confirm removal')
+    expect(codeOf('RosterPanel.svelte')).toContain('Remove from practice')
   })
 
   it('corrects the fired-clinician assumption at the same click (issue #91)', () => {

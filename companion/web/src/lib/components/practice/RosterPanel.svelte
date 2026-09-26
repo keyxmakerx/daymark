@@ -322,10 +322,14 @@
                 Change role
               </button>
               {#if confirming === id}
+                <!--
+                  Each button says what it does (COMPANION_UX.md §10.3), and the way out comes first,
+                  where "Remove" was, so a second press on the same spot keeps the seat.
+                -->
+                <button type="button" onclick={() => (confirming = null)}>Keep their seat</button>
                 <button type="button" onclick={() => void remove(id)} disabled={working}>
-                  Confirm removal
+                  Remove from practice
                 </button>
-                <button type="button" onclick={() => (confirming = null)}>Cancel</button>
               {:else}
                 <button type="button" onclick={() => (confirming = id)} disabled={working}>
                   Remove
@@ -377,7 +381,9 @@
         />
       </label>
 
+      <!-- The way out first and named for what it keeps, as in the removal confirm above. -->
       <div class="controls">
+        <button type="button" onclick={() => (editing = null)}>Keep their role</button>
         <button
           class="primary"
           type="button"
@@ -386,7 +392,6 @@
         >
           Change role
         </button>
-        <button type="button" onclick={() => (editing = null)}>Cancel</button>
       </div>
     </div>
   {/if}
