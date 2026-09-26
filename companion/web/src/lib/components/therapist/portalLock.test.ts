@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { isLive, touch, DEFAULT_IDLE_MS, type SessionInfo } from '../../therapist/session'
+import { isLive, touch, DEFAULT_IDLE_MS, MAX_ABSOLUTE_MS, type SessionInfo } from '../../therapist/session'
 import { SCREEN_COPY, SIGN_IN_CONTRACT } from '../../therapist/signIn'
 
 /*
@@ -119,9 +119,10 @@ describe('the automatic lock says what happened, and only the automatic lock (#2
 describe('the numbers the sign-in contract states are the numbers the code uses (#262)', () => {
   /*
    * "15 minutes without activity, or 8 hours in all" is copy, and these are the two limits it
-   * names: the page's own idle deadline, and the absolute expiry the server returns at sign-in,
-   * which the guard above enforces. Eight hours is the server's default
-   * (DAYMARK_SESSION_ABSOLUTE_SECONDS); an operator who changes it changes when the page locks.
+   * names: the page's own idle deadline, and the absolute expiry, which the page takes from the
+   * server's answer at sign-in and caps at MAX_ABSOLUTE_MS, so the sentence holds on every
+   * deployment. Eight hours is also the server's default (DAYMARK_SESSION_ABSOLUTE_SECONDS), so on
+   * a default deployment the page and the server end the session together.
    */
   const SERVER_CONFIG = readFileSync(
     fileURLToPath(new URL('../../../../../server/src/main/kotlin/com/daymark/companion/Config.kt', import.meta.url)),
@@ -139,11 +140,12 @@ describe('the numbers the sign-in contract states are the numbers the code uses 
     expect(serverDefault('DAYMARK_NO_SUCH_SETTING')).toBeNaN()
   })
 
-  it('15 minutes is the page’s idle deadline, and 8 hours the server’s absolute default', () => {
+  it('15 minutes is the page’s idle deadline, and 8 hours the page’s cap and the server’s default', () => {
     const minutes = DEFAULT_IDLE_MS / 60_000
-    const hours = serverDefault('DAYMARK_SESSION_ABSOLUTE_SECONDS') / 3_600
+    const hours = MAX_ABSOLUTE_MS / 3_600_000
     expect(minutes).toBe(15)
     expect(hours).toBe(8)
+    expect(serverDefault('DAYMARK_SESSION_ABSOLUTE_SECONDS') / 3_600).toBe(hours)
     const memory = SIGN_IN_CONTRACT.find((c) => c.id === 'session.memory')!.text
     for (const text of [memory, SCREEN_COPY.lockedNotice]) {
       expect(text).toContain(`${minutes} minutes without activity`)
@@ -151,9 +153,9 @@ describe('the numbers the sign-in contract states are the numbers the code uses 
     }
   })
 
-  it('the page takes the absolute expiry from the server’s answer, and the guard reads it', () => {
+  it('the page takes the absolute expiry from the server’s answer, capped, and the guard reads it', () => {
     const SESSION = readFileSync(fileURLToPath(new URL('../../therapist/session.ts', import.meta.url)), 'utf8')
-    expect(SESSION).toContain('absoluteExpiresAt: body.absoluteExpiry,')
+    expect(SESSION).toContain('absoluteExpiresAt: Math.min(body.absoluteExpiry, now + MAX_ABSOLUTE_MS),')
     expect(SESSION).toMatch(/return now < session\.absoluteExpiresAt && now < session\.idleExpiresAt/)
   })
 })
