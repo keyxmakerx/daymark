@@ -59,6 +59,13 @@ internal class DeviceServer(
     lateinit var account: OwnerAccountStore
     lateinit var ownerAudit: AuditStore
 
+    /**
+     * Stands between the owner's stores and [now], on the thread that reads the clock: handed the reading
+     * to take, it returns what it took, so a test can act just before or just after one reading, as a
+     * second request or the console could act between two steps of one request. Null: [now], as it is.
+     */
+    @Volatile var aroundClock: ((reading: () -> Long) -> Long)? = null
+
     fun config() = Config(
         bindAddr = "127.0.0.1", port = 8080, dataDir = dataDir.path, basePath = "/",
         webDir = "build/test-web", logLevel = "info", authToken = authToken,
@@ -73,7 +80,7 @@ internal class DeviceServer(
     val seconds: Long get() = now / 1000
 
     private fun open() {
-        account = OwnerAccountStore(dataDir.path, authToken, clock = { now })
+        account = OwnerAccountStore(dataDir.path, authToken, clock = { aroundClock?.invoke { now } ?: now })
         ownerAudit = AuditStore(dataDir.path, dbName = OWNER_AUDIT_DB, clock = { now / 1000 })
     }
 

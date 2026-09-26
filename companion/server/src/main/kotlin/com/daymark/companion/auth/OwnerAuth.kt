@@ -56,9 +56,10 @@ data class OwnerPrincipal(val ownerId: String, val kind: CredentialKind, val cre
  *   request with no live key behind it holds one chunk of memory however large its body. A key that
  *   becomes live while its body is on the way is refused.
  * - A NONCE IS TAKEN ONLY BY A REQUEST ITS KEY SIGNED, after the signature is checked: a forged request
- *   leaves nothing behind. The time is judged after the body with the same reading of the clock that
- *   decides which nonces have lapsed, so a captured request sent again meets its nonce while it is
- *   inside its window, and is refused for its time once it is past it, however its body is held.
+ *   leaves nothing behind. Taking it judges the end of the window once more, on the one reading of the
+ *   clock, under the store's lock, that also decides which nonces have lapsed, so a captured request
+ *   sent again meets its nonce while it is inside its window, and is refused for its time once it is
+ *   past it, however its body is held and whatever another request forgets meanwhile.
  * - EVERY REFUSAL IS THE SAME 401, whichever check said no. A failed signature counts toward the
  *   source's lockout exactly as a bad token does, in the same [AuthGuard], so one source has one
  *   budget whichever credential it tries. The lockout's audit row is written on arming, never per
@@ -225,10 +226,8 @@ class OwnerAuth(
         val keep = liveKey(keyId, allowPending) != null
         val body = call.readSignedBody(maxBodyBytes, keep) ?: return Signed.TooLarge
 
-        // One reading of the clock judges the request's time and decides which nonces have lapsed: a body
-        // finished after the window is refused, and inside it a nonce already used is still kept.
-        val now = devices.now()
-        if (!withinWindow(now, sentAt)) return Signed.Refused
+        // The time, judged again once the body is in: a body finished outside the window is refused.
+        if (!withinWindow(devices.now(), sentAt)) return Signed.Refused
         // The key and its revocation, read now: no verdict is kept between requests.
         val live = liveKey(keyId, allowPending)
         val message = DeviceSignature.requestMessage(
@@ -244,8 +243,10 @@ class OwnerAuth(
         // A key that became live while its body was on the way had that body dropped: refused, never
         // handed to a handler that would find nothing to read.
         if (!body.kept) return Signed.Refused
-        // Only a request its key signed takes a nonce, so a forged one leaves no row behind.
-        if (!devices.rememberNonce(keyId, nonce, keepUntil = sentAt + DeviceSignature.WINDOW_MS, now = now)) return Signed.Refused
+        // Only a request its key signed takes a nonce, so a forged one leaves no row behind. Taking it
+        // judges the end of the window once more, on the one reading, under the store's lock, that also
+        // decides which nonces have lapsed: inside its window, a nonce already used is still kept.
+        if (!devices.rememberNonce(keyId, nonce, keepUntil = sentAt + DeviceSignature.WINDOW_MS)) return Signed.Refused
         // Read again, last, with nothing kept from the first reading: a phone revoked in between is
         // refused, and the handler never runs for it.
         return liveKey(keyId, allowPending)?.second ?: Signed.Refused

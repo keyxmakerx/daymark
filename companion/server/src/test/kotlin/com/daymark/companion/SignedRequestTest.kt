@@ -1,6 +1,7 @@
 package com.daymark.companion
 
 import com.daymark.companion.auth.BODY_CHUNK_BYTES
+import com.daymark.companion.auth.DeviceKeyStore
 import com.daymark.companion.auth.DeviceSignature
 import com.daymark.companion.auth.PairingCode
 import com.daymark.companion.auth.SIGNED_BODY
@@ -26,7 +27,12 @@ import io.ktor.server.application.call
 import io.ktor.server.response.ApplicationSendPipeline
 import io.ktor.server.testing.testApplication
 import java.io.File
+import java.lang.management.ManagementFactory
 import java.sql.DriverManager
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -351,6 +357,93 @@ class SignedRequestTest {
             server.now = ahead * 1000 + DeviceSignature.WINDOW_MS
             assertEquals(unauthorized, client.send(HttpMethod.Get, "/v1/snapshots", sent).answer(), "at the end of its own window")
             assertEquals(HttpStatusCode.OK, server.signedGet(client, phone, "/v1/snapshots").status, "control: a request made then is taken")
+        }
+    }
+
+    /** Whether this thread is taking a nonce: inside the nonce store's rememberNonce. */
+    private fun takingANonce(): Boolean = StackWalker.getInstance().walk { frames ->
+        frames.anyMatch { it.className == DeviceKeyStore::class.java.name && it.methodName == "rememberNonce" }
+    }
+
+    /**
+     * Arms [server]'s clock so that [act] runs once, on the thread that takes the first reading taken as
+     * a nonce is being taken, just [before] that reading or just after it; no other reading is touched.
+     * True, once asked, when [act] ran.
+     */
+    private fun atNonce(server: DeviceServer, before: Boolean, act: () -> Unit): AtomicBoolean {
+        val ran = AtomicBoolean()
+        server.aroundClock = { reading ->
+            when {
+                !takingANonce() || !ran.compareAndSet(false, true) -> reading()
+                before -> { act(); reading() }
+                else -> reading().also { act() }
+            }
+        }
+        return ran
+    }
+
+    /**
+     * [work] on a thread of its own, as a second request runs, waited for until it has finished or is
+     * waiting for a lock this thread holds, as a second request must wait while this one holds it.
+     */
+    private fun alongside(work: () -> Unit) {
+        val here = Thread.currentThread().threadId()
+        val second = thread(name = "a second request") { work() }
+        val threads = ManagementFactory.getThreadMXBean()
+        val deadline = System.nanoTime() + 10_000_000_000L
+        while (second.isAlive) {
+            val waiting = threads.getThreadInfo(second.threadId())
+            if (waiting != null && waiting.threadState == Thread.State.BLOCKED && waiting.lockOwnerId == here) return
+            check(System.nanoTime() < deadline) { "the second request neither finished nor waited for this one's lock" }
+            Thread.sleep(1)
+        }
+    }
+
+    @Test
+    fun `a replay judged at the last millisecond of its window is refused, whatever another request forgets meanwhile`() {
+        // Another request, a millisecond later, forgets every nonce whose time has passed: the replay's
+        // first row among them. It lands just before the replay reads the clock to take its nonce; just
+        // after that reading, from a thread of its own, as a second request runs; and, the control, nowhere.
+        val landings: Map<String, (DeviceServer, () -> Unit) -> AtomicBoolean?> = mapOf(
+            "just before the replay reads the clock to take its nonce" to { server, forget -> atNonce(server, before = true, act = forget) },
+            "just after that reading" to { server, forget -> atNonce(server, before = false) { alongside(forget) } },
+            "nowhere" to { _, _ -> null },
+        )
+        for ((where, land) in landings) testApplication {
+            val server = DeviceServer()
+            server.start(this)
+            val phone = TestPhone()
+            server.pair(client, phone)
+            val target = "/v1/snapshots/devA/1"
+            val body = byteArrayOf(4, 5, 6)
+            val sentAt = server.now
+            val captured = phone.headers("PUT", target, body, server.seconds)
+            assertEquals(HttpStatusCode.Created, client.send(HttpMethod.Put, target, captured, body).status, "$where: the phone's own request is taken")
+
+            server.now = sentAt + DeviceSignature.WINDOW_MS
+            val forgot = CompletableFuture<Boolean>()
+            val landed = land(server) {
+                server.now = sentAt + DeviceSignature.WINDOW_MS + 1
+                forgot.complete(server.account.devices.rememberNonce(phone.keyId, TestPhone.freshNonce(), keepUntil = server.now + DeviceSignature.WINDOW_MS))
+            }
+            val replay = client.send(HttpMethod.Put, target, captured, body).answer()
+            server.aroundClock = null
+            if (landed != null) assertTrue(landed.get(), "$where: a reading is taken as the replay's nonce is")
+            assertEquals(unauthorized, replay, where)
+            if (landed != null) {
+                assertEquals(true, forgot.get(10, TimeUnit.SECONDS), "$where: the other request took its own nonce")
+                assertEquals(emptyList(), keptUntil(server, captured.getValue(DeviceSignature.NONCE_HEADER)), "$where: it forgot the replay's first row")
+            }
+            val versions = server.signedGet(client, phone, "/v1/snapshots/devA").bodyAsText()
+            assertEquals(1, Regex("\"version\":").findAll(versions).count(), "$where: nothing more was stored: $versions")
+            if (landed == null) {
+                // Control: at that same millisecond a request of the same time, never sent before, is taken,
+                // so the replay was refused for its nonce and not for its time.
+                val unsent = phone.headers("GET", "/v1/snapshots", timeSeconds = sentAt / 1000)
+                assertEquals(HttpStatusCode.OK, client.send(HttpMethod.Get, "/v1/snapshots", unsent).status, where)
+            }
+            // Control: a request the phone makes then is taken.
+            assertEquals(HttpStatusCode.OK, server.signedGet(client, phone, "/v1/snapshots").status, where)
         }
     }
 

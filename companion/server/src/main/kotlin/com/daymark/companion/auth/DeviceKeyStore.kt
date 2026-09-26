@@ -86,14 +86,20 @@ class DeviceKeyStore internal constructor(
     }
 
     /**
-     * Record that [keyId] has used [nonce], to be remembered until [keepUntil]; false when it already
-     * had, which makes the request a replay. Nonces whose time had passed at [now] are forgotten first,
-     * in the same transaction: a request carrying one is refused by its time alone.
+     * Record that [keyId] has used [nonce], to be remembered until [keepUntil], the end of its request's
+     * window; false when it already had, which makes the request a replay, and false when [keepUntil]
+     * has passed, which makes it too old. Nonces whose time has passed are forgotten first, in the same
+     * transaction: a request carrying one is refused by its time alone.
      *
-     * [now] is the reading the caller judged the request's time by, never a later one. A later reading
-     * could forget the very nonce a replay carries, after the replay's time had been found good.
+     * ONE READING OF THE CLOCK, TAKEN UNDER THE LOCK, judges [keepUntil] and decides which nonces have
+     * lapsed, and the nonce is taken in the same hold of the lock. So no other request's forgetting can
+     * come between this request's time being found good and its nonce being taken: whatever another
+     * request forgot had lapsed at a reading no later than this one, and a request carrying it is refused
+     * here by its time (#186).
      */
-    fun rememberNonce(keyId: String, nonce: String, keepUntil: Long, now: Long): Boolean = synchronized(lock) {
+    fun rememberNonce(keyId: String, nonce: String, keepUntil: Long): Boolean = synchronized(lock) {
+        val now = clock()
+        if (keepUntil < now) return false
         conn.inTransaction {
             conn.prepareStatement("DELETE FROM seen_nonces WHERE keep_until < ?").use { ps ->
                 ps.setLong(1, now)
