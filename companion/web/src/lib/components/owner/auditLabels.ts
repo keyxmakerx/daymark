@@ -57,6 +57,13 @@ const ACTION_LABELS: Record<string, string> = {
   'owner_key.registered': 'Sent your key to this server',
   'owner_key.refused': 'Sent your key again; the first one was kept',
   'owner_key.fetched': 'Read your published key',
+  /*
+   * Phones (#186, #189), written to the owner's own log rather than a relationship's. A receipt for
+   * the console's Confirm and Revoke, in the words the re-issue's warning uses ("This disconnects
+   * every paired phone"): the server holds the key it was handed and vouches for nothing about it.
+   */
+  'device.registered': 'Paired a phone',
+  'device.revoked': 'Disconnected a phone',
 }
 
 export function auditActionLabel(action: string): string {
