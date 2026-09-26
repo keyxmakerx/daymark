@@ -263,7 +263,7 @@ confirmation in the browser, not a step-up. A fresh passkey as step-up: not buil
 
 | Control | As built |
 |---|---|
-| Token | An opaque 256-bit session id in the cookie `daymark_session`, `HttpOnly; Secure; SameSite=Strict; Path=/`. The server stores only its digest. `DAYMARK_COOKIE_INSECURE` drops `Secure`, for plain-HTTP testing only (a startup refusal alongside an https address: #181). |
+| Token | An opaque 256-bit session id in the cookie `daymark_session`, `HttpOnly; Secure; SameSite=Strict; Path=/`. The server stores only its digest. `DAYMARK_COOKIE_INSECURE` drops `Secure`, for plain-HTTP testing only (refused at start alongside an `https` public address, #181). |
 | Lifetime | 15 minutes idle, 8 hours absolute. |
 | Binding | Each session belongs to one credential and one relationship; every request re-checks both, and a session presented for another relationship is refused. |
 | CSRF | `SameSite=Strict` plus a per-session token, required as `X-CSRF-Token` on every state-changing request. |
@@ -274,9 +274,9 @@ confirmation in the browser, not a step-up. A fresh passkey as step-up: not buil
 - The passkey relying-party id and origins come only from configuration. The app never reads
   `X-Forwarded-Host`, `X-Forwarded-Proto`, `X-Forwarded-Prefix` or `Forwarded`.
 - Links in email are built from `DAYMARK_PUBLIC_BASE_URL`, falling back to the first
-  `DAYMARK_WEBAUTHN_ORIGINS` entry. The unauthenticated recovery route goes no further. Routes that
-  need an owner token or a clinician session fall back to the request's `Host` as a last resort, which
-  compose makes unreachable by always setting the base URL; refusing to start without it is #180.
+  `DAYMARK_WEBAUTHN_ORIGINS` entry. The unauthenticated recovery route goes no further. The server
+  refuses to start the clinician portal or email without a usable address (COMPANION_DEPLOYMENT.md
+  §5.3, #180), so no link it hands out takes its host from a request.
 - Serving under a sub-path (`DAYMARK_BASE_PATH` other than `/`) is not supported: pages move under the
   prefix, but the API stays at `/v1` on the root and the consoles call it there (#176).
 

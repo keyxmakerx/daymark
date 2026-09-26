@@ -90,9 +90,9 @@ is right.
    header right to left, skipping trusted hops, so an appended chain is safe and a replaced one is
    safe. A header copied from the client unchanged is not.
 4. **Tell the app who you are:** `DAYMARK_TRUSTED_PROXIES` (§4.0).
-5. **Refuse unknown `Host` and SNI** with a catch-all that answers an error. The app builds emailed
-   links from `DAYMARK_PUBLIC_BASE_URL`, which compose always sets; the catch-all means a poisoned
-   invitation link needs two mistakes, not one (#180).
+5. **Refuse unknown `Host` and SNI** with a catch-all that answers an error. The app builds every
+   link it hands out from `DAYMARK_PUBLIC_BASE_URL` and will not start the clinician portal or email
+   without it (§5.3); the catch-all means a poisoned invitation link needs two mistakes, not one.
 6. **Serve the Companion at the root of its own hostname.** `DAYMARK_BASE_PATH` exists, but a sub-path
    deployment does not work consistently: the API stays at `/v1` on the root while pages move under
    the prefix (#176).
@@ -186,10 +186,10 @@ read from a file named by `NAME_FILE`, which wins.
 | `DAYMARK_DATA_DIR` | `/data` | The volume (§6) |
 | `DAYMARK_WEB_DIR` | `web` (the image sets `/app/web`) | The built consoles |
 | `DAYMARK_BASE_PATH` | `/` | Sub-path prefix; not supported yet (§3.1, requirement 6) |
-| `DAYMARK_LOG_LEVEL` | `info` (the image, compose and `.env.example` set `warn`) | Level of the app's own loggers (COMPANION_OBSERVABILITY.md §2.4) |
+| `DAYMARK_LOG_LEVEL` | `info`, in the code, the image, compose and `.env.example` | Level of the app's own loggers. `warn` hides the startup settings line, the SMTP-enabled line and `readiness restored` (COMPANION_OBSERVABILITY.md §2.4) |
 | `DAYMARK_AUTH_TOKEN` (`_FILE`) | unset | The owner's bearer token. Unset: the sync API, owner routes, recovery and the clinician portal all answer 503 |
 | `DAYMARK_THERAPIST_AUTH` | off | `1` or `true` turns on the clinician portal, relationships, pairing, practices and the audit log |
-| `DAYMARK_PUBLIC_BASE_URL` | first `DAYMARK_WEBAUTHN_ORIGINS` entry | The external origin in emailed links |
+| `DAYMARK_PUBLIC_BASE_URL` | first `DAYMARK_WEBAUTHN_ORIGINS` entry | The external origin every link the server hands out is built on: an absolute `http` or `https` address with a host and no user name, query or fragment. Required while the clinician portal or SMTP is on (§5.3) |
 | `DAYMARK_WEBAUTHN_RP_ID` | unset | The passkey relying-party id. Passkeys sign people in on an `https` address with a hostname, and never unlock keys (#205); not built: #326 (COMPANION_SECURITY.md §5.1) |
 | `DAYMARK_WEBAUTHN_ORIGINS` | unset | Comma-separated; also the fallback for `DAYMARK_PUBLIC_BASE_URL` |
 | `DAYMARK_TRUSTED_PROXIES` | empty: trust nothing | §4.0 |
@@ -204,7 +204,7 @@ read from a file named by `NAME_FILE`, which wins.
 | `DAYMARK_TOTP_LOCKOUT_FAILS`, `_SECONDS` | `5`, `300` | Bad sign-in codes before a credential is locked, and for how long; also the backoff for wrong invitation secrets |
 | `DAYMARK_INVITE_TTL_SECONDS` | `259200` (72 h) | Invitation lifetime |
 | `DAYMARK_SESSION_IDLE_SECONDS`, `_ABSOLUTE_SECONDS` | `900`, `28800` | Clinician session lifetimes |
-| `DAYMARK_COOKIE_INSECURE` | off | Plain-HTTP testing only: drops `Secure` from the session cookie (#181) |
+| `DAYMARK_COOKIE_INSECURE` | off | Plain-HTTP testing only: drops `Secure` from the session cookie. Refused at start with an `https` public address (§5.3) |
 | `DAYMARK_ACCESS_LOG_RETENTION_DAYS` | `90` | Audit-log retention (COMPANION_SECURITY.md §9) |
 | `DAYMARK_ACCESS_LOG_SOURCE_IP` | off | Records the client address in audit entries |
 | `DAYMARK_REISSUE_MAX_PER_HOUR` | `3` | Recovery requests per address per hour |
@@ -253,6 +253,26 @@ also sets `TZ=UTC` and the `JAVA_TOOL_OPTIONS` in §2.
 - By decision, a new server is claimed with a one-time setup code it writes to its own log, and each
   person signs in with an account of their own, so no token is created (#208). Not built: #322,
   #324.
+
+### 5.3 Settings the server refuses
+
+The server checks these before it opens the volume or a port. A refusal is one log line beginning
+`Refusing to start:` that names the setting to change, never its value, and the process exits with
+status 78. Under `restart: unless-stopped` Docker starts it again and the same line repeats until
+the setting is changed: `docker compose logs companion | grep 'Refusing to start'`.
+
+| Refused | Why | Change |
+| --- | --- | --- |
+| `DAYMARK_THERAPIST_AUTH` on or `DAYMARK_SMTP_HOST` set, with no public address | Invitations and notifications carry links to this server; a link never takes its host from a request, which a visitor controls, and an invitation link carries its secret (#180) | Set `DAYMARK_PUBLIC_BASE_URL` to the address people type, e.g. `https://daymark.example.com`; compose derives it from `DAYMARK_DOMAIN`. A server that only syncs needs none |
+| The same, with a public address that is not an absolute `http` or `https` address with a host, or that carries a user name, query or fragment | No link can be built on it | Write it as people type it. A host with an underscore is refused; write an internationalised name in its `xn--` form |
+| `DAYMARK_COOKIE_INSECURE` on with an `https` public address | The switch lets the clinician session cookie travel over plain `http`, and is for local testing only (#181) | Remove `DAYMARK_COOKIE_INSECURE` |
+
+The public address is `DAYMARK_PUBLIC_BASE_URL`, or the first `DAYMARK_WEBAUTHN_ORIGINS` entry when
+that is unset; a refusal names whichever it read.
+
+These also stop the start, with a Java stack trace rather than one line: an SMTP TLS mode of `none`
+or one the server does not recognise, a missing `DAYMARK_SMTP_FROM`, an SMTP port out of range
+(COMPANION_OBSERVABILITY.md §3.2), and a `_FILE` secret the process cannot read (§2).
 
 ## 6. Backup and restore
 
@@ -326,7 +346,8 @@ newer audit-chain head will see the chain fall behind it (COMPANION_SECURITY.md 
    and `docker compose up -d`. Pin a digest, never `:latest`, in production: a moving tag lets a
    registry swap the code that holds people's keys.
 3. Watch it come up: `docker compose ps` should reach `healthy`; then run the checks in
-   COMPANION_OBSERVABILITY.md §6.4.
+   COMPANION_OBSERVABILITY.md §6.4. If it restarts instead, `docker compose logs companion | grep
+   'Refusing to start'` names the setting to change (§5.3).
 
 **Schema changes** are additive: each store creates missing tables and adds missing columns at start.
 There is no schema version and no automatic copy before a change, so the backup from step 1 is the way

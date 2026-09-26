@@ -18,7 +18,7 @@ cd companion/server && ./gradlew shadowJar
 cd companion/web && pnpm build
 DAYMARK_BIND_ADDR=127.0.0.1 DAYMARK_PORT=8101 DAYMARK_DATA_DIR=<an EMPTY dir> \
   DAYMARK_WEB_DIR=companion/web/dist DAYMARK_AUTH_TOKEN=owner-token-e2e \
-  DAYMARK_THERAPIST_AUTH=1 DAYMARK_COOKIE_SECURE=false \
+  DAYMARK_THERAPIST_AUTH=1 DAYMARK_PUBLIC_BASE_URL=http://127.0.0.1:8101 DAYMARK_COOKIE_INSECURE=1 \
   java -jar companion/server/build/libs/daymark-companion.jar
 ```
 
@@ -32,6 +32,11 @@ two browser contexts; read its header before writing anything new.
   `playwright install`.
 - The variable is `DAYMARK_THERAPIST_AUTH`, not `DAYMARK_THERAPIST_AUTH_ENABLED`. Get it wrong and
   every portal route answers 503 while looking like a product bug.
+- **With the portal on, the server will not start without `DAYMARK_PUBLIC_BASE_URL`** (#180). It
+  exits with status 78 after one line beginning `Refusing to start:`, so a harness that only waits
+  for the port reads it as a timeout; print the server's output when it exits early. For plain
+  http the cookie switch is `DAYMARK_COOKIE_INSECURE=1` (the server has never read
+  `DAYMARK_COOKIE_SECURE`), and it is refused alongside an `https` address (#181).
 - **The data directory must be empty.** A live invitation restored from an earlier run changes
   which phase a screen opens in, and you will debug the wrong thing.
 - The first-run setup screen blocks everything. Pre-seed `daymark.setup.shape.v1` = `1:paired` and

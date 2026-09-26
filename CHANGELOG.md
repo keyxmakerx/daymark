@@ -202,6 +202,11 @@ All notable changes to this project are documented here. The format is based on
   both jobs.
 
 ### Changed
+- **Companion — the server logs at `info` as shipped.** The image, the compose file and `.env.example`
+  set `DAYMARK_LOG_LEVEL` to `warn`, which hid the three lines that say how the server is set up and
+  whether it recovered: the startup settings line, the email-enabled line and "readiness restored",
+  without which a cleared storage outage looks permanent in the log. All three now say `info`, the
+  code's own default. There is no per-request logging, so this is a handful of lines per start. (#367)
 - **A share lasts 14 days unless you choose otherwise, and never more than 90.** The share builder
   used to start at 30 days and allow a year. Beside the number you now read the date the share ends:
   *Ends on {date}. The server then deletes its copy. Anything read before then has already been
@@ -714,6 +719,19 @@ All notable changes to this project are documented here. The format is based on
   browser, which is now part of how this repository verifies itself.
 
 ### Security
+- **Companion — the server will not start the clinician portal or email without its public
+  address.** Invitation and notification links fell back to whatever address the visitor's request
+  named when `DAYMARK_PUBLIC_BASE_URL` was unset, and an invitation link carries its secret. With the
+  clinician portal (`DAYMARK_THERAPIST_AUTH`) or outbound email (`DAYMARK_SMTP_HOST`) on, the server
+  now refuses to start without the address, or with one that is not an absolute `http` or `https`
+  address, and says so in one log line that names the setting and gives an example; it exits with
+  status 78. The shipped compose file always sets the address from `DAYMARK_DOMAIN`, so a standard
+  install is unaffected, and a server that only syncs needs none. (#180)
+- **Companion — the plain-http testing switch is refused on a server reached over https.**
+  `DAYMARK_COOKIE_INSECURE` lets the clinician session cookie travel over plain `http`, for local
+  testing. Left on where the public address is `https`, it was one step from session cookies crossing
+  the network in the clear, and nothing said so. The server now refuses to start with it there,
+  naming both settings. (#181)
 - **A share's signature now covers everything in it, so nobody holding a share can change what it
   says.** The key that opens a share is sealed to the clinician with a sealed box, which anyone who
   knows the clinician's public key can make, and the owner's signature covered only the share's

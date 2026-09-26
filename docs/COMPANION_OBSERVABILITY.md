@@ -191,6 +191,7 @@ the code has changed.
 
 | Level | Logger | Message | What it can carry |
 |---|---|---|---|
+| ERROR | `com.daymark.companion` | `Refusing to start: …` (`main`, then exit 78) | Setting names and a fixed example address; never a configured value |
 | INFO | `com.daymark.companion` | `Daymark Companion starting on {}:{} basePath={} sync={} smtp={} dataDir={}` (`main`) | Configuration only |
 | WARN | `com.daymark.companion` | `DAYMARK_AUTH_TOKEN is not set — the /v1 sync API is DISABLED…` (`main`) | Nothing |
 | INFO | `com.daymark.companion` | `Outbound SMTP is ENABLED … host={} port={} tls={}` (`main`) | Configuration only; never the password — `MailerConfig.toString` and `Config.toString` redact |
@@ -230,18 +231,18 @@ warning; and **a raw `relRef` and lineage id** in the two lines marked #160. Tre
 sensitive and redact them before sharing. An address is personal data, and the audit log records one
 only when you turn on `DAYMARK_ACCESS_LOG_SOURCE_IP` — which also changes the retention story (§4).
 
-### 2.4 The shipped log level hides more than you expect
+### 2.4 The log level: `info`, and what `warn` hides
 
-`DAYMARK_LOG_LEVEL` is `warn` in the image, the compose file and `.env.example`. `applyLogLevel` applies
-it to the `com.daymark.companion` loggers at start. At `warn` you never see: the startup banner — the
-only place the live address, base path and flags are reported; the SMTP-enabled line; and `readiness
-restored`, so a readiness outage looks permanent in the log after it clears. The mailer's success
-lines are DEBUG, so neither `warn` nor `info` shows them.
+`DAYMARK_LOG_LEVEL` is `info` in the code, the image, the compose file and `.env.example` (#171,
+#367). `applyLogLevel` applies it to the `com.daymark.companion` loggers at start. At `warn` you
+would never see: the startup banner — the only place the live address, base path and flags are
+reported; the SMTP-enabled line; and `readiness restored`, so a readiness outage would look
+permanent in the log after it clears. The mailer's success lines are DEBUG, so neither `warn` nor
+`info` shows them. A startup refusal (COMPANION_DEPLOYMENT.md §5.3) is logged before the level is
+applied, so no level hides it.
 
 `logback.xml` pins `io.ktor` at INFO and `io.netty` at WARN, and `DAYMARK_LOG_LEVEL` changes neither
-(#169). **Run at `info`** unless volume is a real problem: there is no per-request logging, so `info`
-costs a handful of lines per start. `info` is the default by decision, as it already is in the code
-(#171). Not built: #367, which sets it in the image, the compose file and `.env.example`.
+(#169). There is no per-request logging, so `info` costs a handful of lines per start.
 
 ## 3. SMTP — the one deliberate outbound connection
 
@@ -419,6 +420,7 @@ docker system df -v | grep daymark-companion_blobs
 
 | Log pattern | Means | Do |
 |---|---|---|
+| `Refusing to start: …` (then the container restarts) | A setting the server will not run with; the line names it and never its value | Change the named setting (COMPANION_DEPLOYMENT.md §5.3) and start again |
 | `NOT READY: …` | `/readyz` is failing: `/data` would not take a 4 KiB write and fsync | Check free space, the volume's ownership (UID 65532) and whether it is mounted read-only. Readiness does not probe SQLite lock contention, so a stuck writer still answers 200 |
 | `Received X-Forwarded-For from … DAYMARK_TRUSTED_PROXIES is EMPTY` | Something is proxying and the app is ignoring it; all clients share one lockout bucket | Set `DAYMARK_TRUSTED_PROXIES` to the address in the line, as a `/32`; restart; run §1.7 |
 | `DAYMARK_TRUSTED_PROXIES is unset` (at start) | A hint, not evidence: unset is right for a server reached directly | Behind a proxy, fix it; otherwise ignore it |
@@ -441,7 +443,7 @@ no audit entry, so on a server without SMTP it is completely silent (#163).
 Run all of this after changing the proxy, the compose file, the image or `.env`.
 
 ```sh
-# 1. It started, with the configuration you think it has. Needs DAYMARK_LOG_LEVEL=info (§2.4).
+# 1. It started, with the configuration you think it has (§2.4).
 docker compose logs companion | grep 'Daymark Companion starting on'
 
 # 2. Both probes and the capability route answer through the proxy, not just on loopback.
