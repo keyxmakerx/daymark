@@ -35,6 +35,8 @@ import {
   unwrapWithRecoveryCode,
   zeroizeDataKey,
   DataKeyError,
+  KDF_ABOVE_CEILING,
+  KDF_BELOW_FLOOR,
   type RecoverableDataKey,
 } from '../recovery/dataKey'
 import { RecoveryCodeError, RECOVERY_FAULT_TEXT, type RecoveryCodeFault } from '../recovery/recoveryCode'
@@ -45,7 +47,13 @@ import type { Identity } from '../share/pairing'
 export type SecretKind = 'passphrase' | 'recovery'
 
 /** Everything an unlock can be other than an identity. */
-export type UnlockFault = 'noSecret' | 'noRecoveryLock' | 'noPassphraseLock' | 'didNotOpen' | RecoveryCodeFault
+export type UnlockFault =
+  | 'noSecret'
+  | 'noRecoveryLock'
+  | 'noPassphraseLock'
+  | 'settingsNotAccepted'
+  | 'didNotOpen'
+  | RecoveryCodeFault
 
 export type UnlockResult = { ok: true; identity: Identity } | { ok: false; fault: UnlockFault; at?: number }
 
@@ -60,6 +68,12 @@ export type UnlockResult = { ok: true; identity: Identity } | { ok: false; fault
  * are one outcome, not two. Saying "wrong passphrase" would assert a cause this code cannot
  * distinguish, and would send someone to re-type a passphrase that was right all along. So it names
  * the consequence and points at the one input.
+ *
+ * `settingsNotAccepted` is the refusal whose cause IS known, and it is never `didNotOpen` (#418).
+ * The settings stored with the key are held to the accepted range (sync/crypto.ts kdfRange) before
+ * anything is derived, so when they fall outside it, what was typed was never tried: pointing at
+ * the typing would send someone to re-type a secret, over and over, that nothing had tested. It
+ * names the settings, and says nothing was opened and nothing changed.
  */
 export const UNLOCK_FAULT_TEXT: Record<UnlockFault, string> = {
   ...RECOVERY_FAULT_TEXT,
@@ -68,6 +82,8 @@ export const UNLOCK_FAULT_TEXT: Record<UnlockFault, string> = {
     'This server holds no recovery code lock for your key, so a recovery code cannot open it. Use your passphrase.',
   noPassphraseLock:
     'This server holds no passphrase lock for your key, so a passphrase cannot open it. Use your recovery code.',
+  settingsNotAccepted:
+    'The key this server holds asks for settings this console does not accept, so it was not opened. Nothing has changed.',
   didNotOpen: 'That did not open the key this server holds. Nothing has changed. Check what you typed and try again.',
 }
 
@@ -98,6 +114,13 @@ export async function unlockFromBlob(
      * "did not open" would spend three seconds of Argon2id to say something less useful.
      */
     if (err instanceof RecoveryCodeError) return { ok: false, fault: err.fault, at: err.at }
+    /*
+     * Told apart by dataKey.ts's two fixed refusals, as sync/client.ts tells them apart. Any slot
+     * outside the range refuses the whole key, before a byte is derived, whichever secret was offered.
+     */
+    if (err instanceof DataKeyError && (err.message === KDF_BELOW_FLOOR || err.message === KDF_ABOVE_CEILING)) {
+      return { ok: false, fault: 'settingsNotAccepted' }
+    }
     if (err instanceof DataKeyError && /no (passphrase|recovery) slot/.test(err.message)) {
       // By the kind that was offered: that is the lock the key does not have.
       return { ok: false, fault: kind === 'recovery' ? 'noRecoveryLock' : 'noPassphraseLock' }

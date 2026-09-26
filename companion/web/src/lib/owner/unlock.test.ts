@@ -156,6 +156,39 @@ describe('(c) what it says when it does not open', () => {
     expect(UNLOCK_FAULT_TEXT.didNotOpen).not.toMatch(/wrong|incorrect/i)
   }, 30_000)
 
+  it('refuses a key whose settings are outside the accepted range in its own words, never as a typing problem (#418)', async () => {
+    const SETTINGS_NOT_ACCEPTED =
+      'The key this server holds asks for settings this console does not accept, so it was not opened. Nothing has changed.'
+    expect(UNLOCK_FAULT_TEXT.settingsNotAccepted).toBe(SETTINGS_NOT_ACCEPTED)
+    // The sentence must not point at the typing. The detector is shown seeing didNotOpen do exactly that.
+    const POINTS_AT_TYPING = /what you typed|try again/i
+    expect(POINTS_AT_TYPING.test(UNLOCK_FAULT_TEXT.didNotOpen)).toBe(true)
+    expect(POINTS_AT_TYPING.test(SETTINGS_NOT_ACCEPTED)).toBe(false)
+
+    // One lock moved outside the range, on each side of it, in memory and in passes. The secrets
+    // offered are the RIGHT ones — the key as made opens with both, section (a) — so the settings
+    // are the only thing refused here, and a sentence about the typing would be false.
+    const outside: [what: string, kind: 'passphrase' | 'recovery', kdf: Partial<typeof FAST>][] = [
+      ['the passphrase lock at 513 MiB', 'passphrase', { memMiB: 513 }],
+      ['the passphrase lock at 128 MiB', 'passphrase', { memMiB: 128 }],
+      ['the recovery code lock at 9 passes', 'recovery', { ops: 9 }],
+      ['the recovery code lock at 2 passes', 'recovery', { ops: 2 }],
+    ]
+    for (const [what, kind, kdf] of outside) {
+      const moved: RecoverableDataKey = {
+        v: 1,
+        slots: blob.slots.map((s) => (s.kind === kind ? { ...s, kdf: { ...s.kdf, ...kdf } } : s)),
+      }
+      // The move is real: that lock's settings are no longer the ones it was made with.
+      expect(moved.slots.find((s) => s.kind === kind)!.kdf, what).not.toEqual(blob.slots.find((s) => s.kind === kind)!.kdf)
+      for (const [secret, offered] of [[PASSPHRASE, 'passphrase'], [code.canonical, 'recovery']] as const) {
+        const out = await unlockFromBlob(moved, secret, offered)
+        expect(out, `${what}, offered the ${offered}`).toEqual({ ok: false, fault: 'settingsNotAccepted' })
+        if (!out.ok) expect(UNLOCK_FAULT_TEXT[out.fault], what).not.toBe(UNLOCK_FAULT_TEXT.didNotOpen)
+      }
+    }
+  })
+
   it('says which lock the server’s key does not have, by the secret that was offered, and names the other', async () => {
     const passphraseOnly: RecoverableDataKey = { v: 1, slots: blob.slots.filter((s) => s.kind === 'passphrase') }
     const recoveryOnly: RecoverableDataKey = { v: 1, slots: blob.slots.filter((s) => s.kind === 'recovery') }
