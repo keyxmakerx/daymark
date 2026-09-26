@@ -15,8 +15,8 @@ import kotlin.test.assertTrue
  * implementation reproduces. Every expected value below was made outside this code base, with
  * OpenSSL's Ed25519 and Python's BLAKE2b, and libsodium (`crypto_sign_seed_keypair`,
  * `crypto_sign_detached`, `crypto_generichash`) makes the same bytes; they are written here as
- * literals. This test holds the server's implementation to them, and a Kotlin test in `sync-crypto`
- * holds the phone's.
+ * literals. This test holds the server's implementation to them, and a phone's implementation must
+ * make the same bytes from the same inputs.
  *
  * Inputs: the Ed25519 seed 0x40..0x5f; `PUT /v1/snapshots/devA/7` with the body `{"hello":"daymark"}`,
  * at 1790000000 (seconds), with the nonce 0x60..0x6f; and the pairing code `K7M4RD96QA`.

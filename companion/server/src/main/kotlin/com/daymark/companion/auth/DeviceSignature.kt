@@ -6,8 +6,8 @@ import java.util.Base64
 
 /**
  * A phone's signed request (#186) and its pairing code (#189), byte for byte: what the phone builds and
- * what the server checks. SYNC_PROTOCOL.md §2 says the same in prose, and DeviceSignatureVectorTest
- * holds the fixed vector the phone's own implementation reproduces.
+ * what the server checks. DeviceSignatureVectorTest holds the fixed vector a phone's own implementation
+ * must reproduce.
  *
  * THE KEY is a fresh Ed25519 pair the phone makes for this server. It is not derived from the master:
  * a stolen master must not also be server access, and revoking a device must never touch the owner's

@@ -114,7 +114,8 @@ internal fun auditDevice(ownerAudit: AuditStore, ownerId: String, action: AuditA
  * ONLY OVER HTTPS. A code is minted only while the server's public address is https (the same check
  * the cookies and #181 make), and on an http server every route here answers as if no code exists. On
  * plain http, anyone on the same network is on the path of both screens and could make their words
- * match; the phone refuses an http QR itself, and this is the depth behind it.
+ * match. The phone must refuse an http QR itself, since it is the one party the network cannot
+ * rewrite (#189); this is the depth behind that.
  *
  * THE CONSOLE'S, NOT THE PHONE'S. Minting, reading a code, confirming, the list and Revoke take the
  * owner console's credential only ([ownerConsole]): the console is the side already trusted, and a
