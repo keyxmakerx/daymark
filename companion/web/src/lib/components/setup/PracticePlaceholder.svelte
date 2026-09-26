@@ -28,8 +28,8 @@
   import {
     LABELS,
     PRACTICE_CONSOLE_ELSEWHERE,
+    PRACTICE_FORGOTTEN_PASSPHRASE,
     PRACTICE_MISSING,
-    PRACTICE_OPEN_QUESTION,
     PRACTICE_ROLE_NOTE,
     PRACTICE_SERVER_HAS,
     PRACTICE_SERVER_INTRO,
@@ -82,8 +82,8 @@
   </section>
 
   <section class="block">
-    <h3>{LABELS.practiceOpenQuestion}</h3>
-    <p class="para">{PRACTICE_OPEN_QUESTION}</p>
+    <h3>{LABELS.practiceForgottenPassphrase}</h3>
+    <p class="para">{PRACTICE_FORGOTTEN_PASSPHRASE}</p>
   </section>
 
   {#snippet footer()}

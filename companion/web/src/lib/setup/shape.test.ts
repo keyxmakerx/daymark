@@ -14,8 +14,8 @@ import {
   CONFIG_SETTING,
   LABELS,
   PRACTICE_CONSOLE_ELSEWHERE,
+  PRACTICE_FORGOTTEN_PASSPHRASE,
   PRACTICE_MISSING,
-  PRACTICE_OPEN_QUESTION,
   PRACTICE_ROLE_NOTE,
   PRACTICE_SERVER_HAS,
   SETUP_CHOICE_VERSION,
@@ -553,9 +553,35 @@ describe('the practice panel, which is not the practice console', () => {
     // read a single note" true rather than marketing.
     expect(PRACTICE_ROLE_NOTE).toMatch(/never carries a key/i)
     expect(PRACTICE_ROLE_NOTE).toContain('COMPANION_ACCESS_CONTROL.md')
-    // And the passphrase-reset question that gates the whole shape (COMPANION_PAIRING.md §12).
-    expect(PRACTICE_OPEN_QUESTION).toMatch(/forgotten passphrase/i)
-    expect(PRACTICE_OPEN_QUESTION).toMatch(/read the\s+journals/is)
+    // And the passphrase-reset answer that gates the whole shape (COMPANION_PAIRING.md §12).
+    expect(PRACTICE_FORGOTTEN_PASSPHRASE).toMatch(/forgotten passphrase/i)
+    expect(PRACTICE_FORGOTTEN_PASSPHRASE).toMatch(/read the\s+journals/is)
+  })
+
+  it('states the passphrase answer #100 settled, rather than calling it open (#313)', () => {
+    expect(PRACTICE_FORGOTTEN_PASSPHRASE).toBe(
+      'Nobody can reset a forgotten passphrase: not the person who invited a clinician, not a ' +
+        'practice administrator, and not whoever runs this server. It never reaches the server, ' +
+        'which is what keeps the server unable to read anything. Any way of resetting it would mean ' +
+        'the practice can read the journals. A clinician who loses theirs keeps their seat and loses ' +
+        'what was shared with them; each patient invites them again.',
+    )
+    expect(LABELS.practiceForgottenPassphrase).toBe('A forgotten passphrase')
+    // Nothing on the panel calls it a question any more: not the text, not its heading.
+    const RETIRED = /still open|has not answered|decided in the open|who can reset/i
+    expect(PRACTICE_FORGOTTEN_PASSPHRASE).not.toMatch(RETIRED)
+    expect(Object.values(LABELS).join(' ')).not.toMatch(RETIRED)
+    expect(Object.keys(setup)).not.toContain('PRACTICE_OPEN_QUESTION')
+    // Control: the retired text and heading are seen by the same pattern.
+    expect('One question is still open … who can reset a forgotten passphrase?').toMatch(RETIRED)
+    expect('The question this shape has not answered').toMatch(RETIRED)
+    // And the panel renders the answer under its heading, with no trace of the old names.
+    const panel = readFileSync(
+      fileURLToPath(new URL('../components/setup/PracticePlaceholder.svelte', import.meta.url)),
+      'utf8',
+    )
+    expect(panel).toContain('<h3>{LABELS.practiceForgottenPassphrase}</h3>\n    <p class="para">{PRACTICE_FORGOTTEN_PASSPHRASE}</p>')
+    expect(panel).not.toMatch(/PRACTICE_OPEN_QUESTION|practiceOpenQuestion/)
   })
 })
 
@@ -696,7 +722,27 @@ describe('the copy', () => {
     expect(PATIENT.test('a diagnosis of anything')).toBe(true)
     expect(PATIENT.test('one clinician you invite')).toBe(false)
 
-    const offenders = CORPUS.filter((c) => PATIENT.test(c.text)).map((c) => `${c.path}: ${c.text}`)
+    /*
+     * THE SENTENCES ABOUT A CLINIC'S PATIENTS. The Practice choice and its panel describe a clinic,
+     * and a clinic has patients: the forgotten-passphrase answer says each of them invites a
+     * clinician again (#313). Those sentences may say "patient" in the third person, and only that
+     * way. Everything else on this screen is read by someone about their own journal, and may not
+     * say it at all. Each exception has to still need itself, so it cannot outlive its sentence.
+     */
+    const ABOUT_A_CLINICS_PATIENTS = new Set(['shape.ts@PRACTICE_FORGOTTEN_PASSPHRASE'])
+    const ADDRESSES_THE_READER = /(?<![\w-])(your|you are a|you're a|you as a|as a) patients?(?![\w-])/i
+    expect(ADDRESSES_THE_READER.test('as a patient, you can')).toBe(true) // the detector detects
+    expect(ADDRESSES_THE_READER.test('each patient invites them again')).toBe(false)
+    for (const path of ABOUT_A_CLINICS_PATIENTS) {
+      const entry = CORPUS.find((c) => c.path === path)
+      expect(entry, `${path} is not in the corpus`).toBeDefined()
+      expect(PATIENT.test(entry!.text), `${path} no longer needs its exception`).toBe(true)
+      expect(ADDRESSES_THE_READER.test(entry!.text), `${path} addresses the reader as a patient`).toBe(false)
+    }
+
+    const offenders = CORPUS.filter((c) => !ABOUT_A_CLINICS_PATIENTS.has(c.path) && PATIENT.test(c.text)).map(
+      (c) => `${c.path}: ${c.text}`,
+    )
     expect(offenders).toEqual([])
   })
 

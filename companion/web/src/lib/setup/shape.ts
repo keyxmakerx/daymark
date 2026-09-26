@@ -450,16 +450,19 @@ export const PRACTICE_ROLE_NOTE =
   'authoritative here.'
 
 /**
- * Who can reset a forgotten passphrase — the question COMPANION_PAIRING.md §12 answers (nobody) —
- * on the screen rather than in a document. It is the gate on Practice being responsible to build
- * at all, and someone standing one up should meet it before they have staff depending on the
- * answer. The text below still calls the question open: #313.
+ * Who can reset a forgotten passphrase, and the answer COMPANION_PAIRING.md §12 records (#100):
+ * nobody. On the screen rather than in a document, because it is the gate on Practice being
+ * responsible to build at all, and someone standing one up should meet it — and the cost of a lost
+ * passphrase, which they should plan for — before they have staff depending on the answer. Stated
+ * as settled (#313), in the same facts as the clinician's own passphrase screen
+ * (therapist/inviteAccept.ts) and the practice console (practice/copy.ts).
  */
-export const PRACTICE_OPEN_QUESTION =
-  'One question is still open, and it is the one that decides whether a practice server can be ' +
-  'run honestly: who can reset a forgotten passphrase? Today nobody can, which is what keeps the ' +
-  'server unable to read anything. Every convenient answer to it means the practice can read the ' +
-  'journals, and that has to be decided in the open rather than discovered later.'
+export const PRACTICE_FORGOTTEN_PASSPHRASE =
+  'Nobody can reset a forgotten passphrase: not the person who invited a clinician, not a practice ' +
+  'administrator, and not whoever runs this server. It never reaches the server, which is what ' +
+  'keeps the server unable to read anything. Any way of resetting it would mean the practice can ' +
+  'read the journals. A clinician who loses theirs keeps their seat and loses what was shared with ' +
+  'them; each patient invites them again.'
 
 /** Every heading, button and label the screen renders. Here so the copy tests reach all of it. */
 export const LABELS = {
@@ -491,7 +494,7 @@ export const LABELS = {
   practiceWhatExists: 'What exists on the server',
   practiceWhatIsMissing: 'What this panel is',
   practiceWhereItHappens: 'Where a practice is administered',
-  practiceOpenQuestion: 'The question this shape has not answered',
+  practiceForgottenPassphrase: 'A forgotten passphrase',
   /** The anchor out to the fourth page. Sibling-scoped, so it resolves under any base path. */
   practiceConsoleHref: './practice.html',
   openPractice: 'Open the practice console',
