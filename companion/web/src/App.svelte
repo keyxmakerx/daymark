@@ -5,6 +5,7 @@
   import Dashboard from './lib/components/Dashboard.svelte'
   import TrustBar from './lib/components/TrustBar.svelte'
   import SyncPanel from './lib/components/SyncPanel.svelte'
+  import PhonesSection from './lib/components/phones/PhonesSection.svelte'
   import Assessments from './lib/components/Assessments.svelte'
   import OwnerConsole from './lib/components/owner/OwnerConsole.svelte'
   import Orientation from './lib/components/onboarding/Orientation.svelte'
@@ -111,10 +112,11 @@
    * THE ACCESS TOKEN A SYNC FETCH PROVED, FOR THIS VISIT ONLY.
    *
    * The sync card kept its server address and token in its own state, gone the moment another
-   * card opened. It now hands them up here when a fetch succeeds, and the "Recover access" card
-   * reuses them to register the recovery email on a solo server (#330) instead of asking for the
-   * token a second time. Held in memory for the life of this page, as the records that fetch
-   * opened are; never written to storage, and gone on reload.
+   * card opened. It now hands them up here once the server has accepted them (a fetch succeeded, or
+   * the server answered the phone list with them), and the "Recover access" card reuses them to
+   * register the recovery email on a solo server (#330) instead of asking for the token a second
+   * time, as the Phones section does to pair a phone (#431). Held in memory for the life of this
+   * page, as the records that fetch opened are; never written to storage, and gone on reload.
    */
   let syncConnection = $state<OwnerConnection | null>(null)
 
@@ -385,11 +387,20 @@
                   <strong>{fileName}</strong> · backup v{data.version} · exported {formatDate(data.exportedAt)}
                 </p>
                 <Dashboard {data} />
+                <!--
+                  A fetch that opened a snapshot replaces the sync card with the dashboard, and the
+                  Phones section at the card's foot with it (#431). It follows the dashboard here
+                  instead, with the connection that fetch proved, so a phone can still be paired or
+                  disconnected after the snapshot is open.
+                -->
+                {#if source === 'sync' && syncConnection}
+                  <div class="card phones-card"><PhonesSection connection={syncConnection} /></div>
+                {/if}
               </section>
             {:else if source === 'file'}
               <Dropzone onload={load} onerror={(m) => (error = m)} />
             {:else if source === 'sync'}
-              <SyncPanel onload={loadData} onconnected={(c) => (syncConnection = c)} />
+              <SyncPanel onload={loadData} onconnected={(c) => (syncConnection = c)} connection={syncConnection} />
             {:else if source === 'assess'}
               <Assessments />
             {:else if source === 'build'}
@@ -456,6 +467,7 @@
      awful day" — interface state wearing a person's data. */
   .error { color: var(--clay); background: var(--clay-wash); border: 1px solid var(--clay); border-radius: var(--radius-sm); padding: var(--space-3) var(--space-4); margin: 0; }
   .filemeta { margin: 0; }
+  .phones-card { max-width: 34rem; margin-top: var(--space-5); }
   /* The `.tabs` rules that lived here went with the six flat buttons Orientation replaced. The
      reasoning they carried — that a selected surface is STRUCTURE, so it takes the structural
      accent rather than content ink, and that aria-pressed carries the selection so a fill is

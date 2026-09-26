@@ -324,13 +324,20 @@ describe('RecoverAccess.svelte renders the view, and App.svelte hands it what it
   })
 
   it('the sync card hands the token up only after the server accepted it, and before the card closes', () => {
-    const pull = SYNC.indexOf('await client.pullLatest(lineage, passphrase)')
-    const handUp = SYNC.indexOf('onconnected?.({ serverUrl, token })')
+    const pull = SYNC.indexOf('pulled = await client.pullLatest(lineage, passphrase)')
+    const handUp = SYNC.indexOf('onconnected?.(tried)', pull)
     const load = SYNC.indexOf('onload(data,')
     expect(pull, 'no pull').toBeGreaterThan(-1)
     expect(handUp, 'no hand-up').toBeGreaterThan(pull)
     expect(load).toBeGreaterThan(handUp)
-    expect(SYNC.match(/onconnected\?\.\(/g)).toHaveLength(1)
+    // The one other hand-up (#431): after the phone list answered with the same address and token,
+    // which only a token the server accepts gets. A server nothing has been synced to has no snapshot
+    // to prove a token with.
+    const prove = SYNC.slice(SYNC.indexOf('async function proveToken'), SYNC.indexOf('async function fetchAndDecrypt'))
+    expect(prove).toMatch(/await devicesApi\(tried\.serverUrl, tried\.token\)\.listDevices\(\)\s*\n\s*onconnected\?\.\(tried\)/)
+    expect(SYNC.match(/onconnected\?\.\(/g)).toHaveLength(2)
+    // And a token the server refused is not asked about a second time.
+    expect(SYNC).toMatch(/if \(!refused\) await proveToken\(tried\)/)
   })
 
   it('keeps the token in memory only: nothing on these three writes it to browser storage', () => {
