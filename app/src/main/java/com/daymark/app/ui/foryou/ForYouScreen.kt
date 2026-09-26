@@ -88,7 +88,7 @@ fun ForYouScreen(
                         Text(
                             "Gentle suggestions — never nags",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.tertiary,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 },
@@ -155,7 +155,7 @@ fun ForYouScreen(
                 Text(
                     text = "You're always in control — dismiss any card and it steps back.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.tertiary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(top = 6.dp).animateItem(),
                 )
@@ -193,7 +193,7 @@ private fun OnThisDayCard(
                 Text(
                     "ON THIS DAY",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.tertiary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     letterSpacing = 1.2.sp,
                     modifier = Modifier
                         .weight(1f)
@@ -218,7 +218,7 @@ private fun OnThisDayCard(
                         Text(
                             if (yearsAgo == 1) "1 year ago" else "$yearsAgo years ago",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.tertiary,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         if (m.entry.note.isNotBlank()) {
                             Text(

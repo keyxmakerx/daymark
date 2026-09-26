@@ -102,7 +102,7 @@ fun SuggestionsScreen(
                 text = "Suggestions are opt-out, granular, and remembered. " +
                     "Crisis resources stay available no matter what you set here.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.tertiary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -163,7 +163,7 @@ private fun SuggestionSectionHeader(text: String) {
         text = text.uppercase(),
         style = MaterialTheme.typography.labelSmall,
         letterSpacing = 1.sp,
-        color = MaterialTheme.colorScheme.tertiary,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 18.dp, top = 18.dp, bottom = 6.dp),
     )
 }

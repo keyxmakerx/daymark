@@ -139,7 +139,7 @@ private fun DayCell(cell: Cell.Day) {
                 text = cell.date.dayOfMonth.toString(),
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
-                color = if (hasMood) Color.White else MaterialTheme.colorScheme.tertiary,
+                color = if (hasMood) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

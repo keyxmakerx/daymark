@@ -215,7 +215,7 @@ private fun WhoTheyAreBlock(person: Person, onWrite: () -> Unit) {
         Text(
             personGroupLabelForKey(person.groupKey),
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.tertiary,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp),
         )
         if (person.whoTheyAre.isNotBlank()) {
@@ -298,7 +298,7 @@ private fun NoteRow(note: PersonNote) {
         Text(
             DateUtils.formatDate(note.dateTime),
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.tertiary,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(note.body, style = MaterialTheme.typography.bodyLarge)
     }
@@ -337,7 +337,7 @@ private fun EntriesBlock(entries: List<PersonEntryLine>, onOpenEntry: (Long) -> 
                                 DateUtils.formatDate(line.dateTime) + " · " +
                                     DateUtils.formatTime(line.dateTime),
                                 style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.tertiary,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             if (line.note.isNotBlank()) {
                                 Text(

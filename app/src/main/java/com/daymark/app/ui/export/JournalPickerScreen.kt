@@ -122,7 +122,7 @@ fun JournalPickerScreen(
                         text = rangeLabel,
                         style = MaterialTheme.typography.labelSmall,
                         letterSpacing = 1.sp,
-                        color = MaterialTheme.colorScheme.tertiary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
                         text = "The report can carry your journal writing. It starts with none of " +
@@ -267,7 +267,7 @@ private fun EntryRow(
                     text = DateUtils.formatDate(row.dateTimeMillis) + " · " +
                         DateUtils.formatTime(row.dateTimeMillis),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.tertiary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
                     text = row.preview,

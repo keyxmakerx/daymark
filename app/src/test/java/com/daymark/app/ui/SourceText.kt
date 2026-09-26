@@ -38,6 +38,98 @@ internal fun withoutComments(source: String): String =
         .replace(Regex("//[^\n]*"), " ")
 
 /**
+ * [source] with every comment removed and every string and character literal emptied: each removed
+ * character becomes a space and every newline stays, so what is left is code alone, and an index into
+ * it is an index into [source] on the same line. The quotes stay; what was between them does not.
+ *
+ * A scanner and not a regex, for the two ways [withoutComments] fails once a check reads the whole
+ * tree rather than one chosen file: a comment opener inside a string (a wildcard MIME type) swallows
+ * the code after it, and a bracket inside a string ("Step 1)") unbalances the call that holds it.
+ * Block comments nest, as Kotlin's do. A string template's `${…}` is followed to its own closing
+ * brace, strings inside it included, so a quote in a template cannot end the outer string early.
+ * `FaintInkSourceTest` shows it a planted example of each.
+ */
+internal fun codeOnly(source: String): String {
+    val out = StringBuilder(source)
+    fun blank(from: Int, until: Int) {
+        for (k in from until minOf(until, source.length)) if (source[k] != '\n') out.setCharAt(k, ' ')
+    }
+    // What is open at this point, innermost last: the file's own code at the bottom, which never
+    // closes; a literal (STRING or RAW); or code inside a template, held as its own open-brace count.
+    val open = ArrayDeque<Int>().apply { addLast(FILE_CODE) }
+    var i = 0
+    while (i < source.length) {
+        val top = open.last()
+        val c = source[i]
+        if (top == STRING || top == RAW) {
+            when {
+                top == STRING && c == '\\' -> { blank(i, i + 2); i += 2 }
+                top == STRING && c == '"' -> { open.removeLast(); i++ }
+                top == RAW && source.startsWith("\"\"\"", i) -> {
+                    // A run of more than three quotes closes on its last three; the rest is content.
+                    var end = i + 3
+                    while (end < source.length && source[end] == '"') end++
+                    blank(i, end - 3)
+                    open.removeLast()
+                    i = end
+                }
+                c == '$' && source.startsWith("{", i + 1) -> { blank(i, i + 2); open.addLast(0); i += 2 }
+                else -> { blank(i, i + 1); i++ }
+            }
+            continue
+        }
+        // Code: the file's own, or a template's, which belongs to a string and is emptied with it.
+        val inTemplate = top != FILE_CODE
+        when {
+            source.startsWith("//", i) -> {
+                val end = source.indexOf('\n', i).let { if (it < 0) source.length else it }
+                blank(i, end)
+                i = end
+            }
+            source.startsWith("/*", i) -> {
+                var depth = 0
+                var j = i
+                while (j < source.length) {
+                    when {
+                        source.startsWith("/*", j) -> { depth++; j += 2 }
+                        source.startsWith("*/", j) -> { depth--; j += 2; if (depth == 0) break }
+                        else -> j++
+                    }
+                }
+                blank(i, j)
+                i = j
+            }
+            source.startsWith("\"\"\"", i) -> { if (inTemplate) blank(i, i + 3); open.addLast(RAW); i += 3 }
+            c == '"' -> { if (inTemplate) blank(i, i + 1); open.addLast(STRING); i++ }
+            c == '\'' -> {
+                var j = i + 1
+                if (j < source.length && source[j] == '\\') j += 2 else j++
+                while (j < source.length && source[j] != '\'' && source[j] != '\n') j++
+                if (inTemplate) blank(i, j + 1) else blank(i + 1, j)
+                i = j + 1
+            }
+            c == '`' -> {
+                val end = source.indexOf('`', i + 1).let { if (it < 0) source.length else it }
+                if (inTemplate) blank(i, end + 1)
+                i = end + 1
+            }
+            inTemplate && c == '{' -> { blank(i, i + 1); open[open.lastIndex] = top + 1; i++ }
+            inTemplate && c == '}' -> {
+                blank(i, i + 1)
+                if (top == 0) open.removeLast() else open[open.lastIndex] = top - 1
+                i++
+            }
+            else -> { if (inTemplate) blank(i, i + 1); i++ }
+        }
+    }
+    return out.toString()
+}
+
+private const val FILE_CODE = Int.MAX_VALUE
+private const val STRING = -1
+private const val RAW = -2
+
+/**
  * Every double-quoted string literal in [text], with `"a" + "b"` joined first so a sentence broken
  * across lines is matched as the one sentence it renders as. Lifted from
  * `ui/settings/LockDisclosureSourceTest`, which needed exactly this.

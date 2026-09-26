@@ -125,7 +125,7 @@ fun DebugTimingScreen(
                 text = "Read at " + clockLabel(state.hour) + " on " + weekdayName(state.weekday) +
                     " · " + state.zoneId,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.tertiary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = ScreenPadding),
             )
 
@@ -148,7 +148,7 @@ fun DebugTimingScreen(
                     "with you — the ledger and the grid are never shared with a clinician, and " +
                     "nothing here goes into a backup, an export or a report.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.tertiary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = ScreenPadding, vertical = Spacing.xl),
             )
         }
@@ -193,7 +193,7 @@ private fun FeatureCard(row: DebugFeature) {
                 text = "There is no setting for this one, so “your setting” above is the " +
                     "starting point the app uses until you choose.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.tertiary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
@@ -339,7 +339,7 @@ private fun GridLegend() {
                 "and never records a reason, because it has none: asleep, busy and a hard week " +
                 "look the same from here.",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.tertiary,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -472,7 +472,7 @@ private fun HourRuler() {
                         text = twoDigits(hour),
                         style = MaterialTheme.typography.labelSmall,
                         fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.tertiary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }

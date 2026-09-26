@@ -194,7 +194,7 @@ private fun MoodLine(moodLevel: Int, dateTime: Long) {
             Text(
                 DateUtils.formatTime(dateTime),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.tertiary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

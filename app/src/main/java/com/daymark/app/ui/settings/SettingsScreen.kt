@@ -501,7 +501,7 @@ private fun SectionHeader(text: String) {
         text = text.uppercase(),
         style = MaterialTheme.typography.labelSmall,
         letterSpacing = 1.sp,
-        color = MaterialTheme.colorScheme.tertiary,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 18.dp, top = 18.dp, bottom = 6.dp),
     )
 }

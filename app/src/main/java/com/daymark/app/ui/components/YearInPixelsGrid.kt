@@ -44,7 +44,7 @@ fun YearInPixelsGrid(
                 Text(
                     text = label,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.tertiary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.width(30.dp),
                 )
                 Row(

@@ -205,7 +205,11 @@ private fun SectionHeader(text: String) {
 private fun Stat(label: String, value: String) {
     Column {
         Text(value, style = MaterialTheme.typography.headlineSmall)
-        Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+        Text(
+            label.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

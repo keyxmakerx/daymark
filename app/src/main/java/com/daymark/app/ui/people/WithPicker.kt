@@ -77,7 +77,7 @@ fun WithPicker(
             Text(
                 personGroupLabel(section.first),
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.tertiary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 section.second.forEach { person ->

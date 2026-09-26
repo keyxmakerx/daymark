@@ -103,7 +103,7 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
                 label.uppercase(),
                 style = MaterialTheme.typography.labelSmall,
                 letterSpacing = 0.8.sp,
-                color = MaterialTheme.colorScheme.tertiary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -117,7 +117,7 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
                 title.uppercase(),
                 style = MaterialTheme.typography.labelSmall,
                 letterSpacing = 0.8.sp,
-                color = MaterialTheme.colorScheme.tertiary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Box(Modifier.padding(top = 14.dp)) { content() }
         }

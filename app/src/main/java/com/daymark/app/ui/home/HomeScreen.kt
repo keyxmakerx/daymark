@@ -107,7 +107,7 @@ fun HomeScreen(
                 Text(
                     text = DateUtils.formatWeekdayAndDay(today),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.tertiary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -190,7 +190,7 @@ private fun CheckInCard(
             Text(
                 text = "HOW ARE YOU, RIGHT NOW?",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.tertiary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 letterSpacing = 1.2.sp,
                 modifier = Modifier.padding(start = 18.dp, end = 18.dp, bottom = 10.dp),
             )
@@ -325,7 +325,7 @@ private fun TodaySheet(
             Text(
                 text = "TODAY",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.tertiary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 letterSpacing = 1.2.sp,
                 modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 4.dp),
             )

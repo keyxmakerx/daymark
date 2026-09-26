@@ -57,7 +57,7 @@ fun EntryRow(
                 Text(
                     text = DateUtils.formatTime(entry.entry.dateTime),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.tertiary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -142,7 +142,7 @@ fun CompactEntryRow(
         Text(
             text = DateUtils.formatTime(entry.entry.dateTime),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.tertiary,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
