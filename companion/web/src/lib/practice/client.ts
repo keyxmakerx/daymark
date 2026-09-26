@@ -259,6 +259,40 @@ export function failureSentence(failure: PracticeFailure): string {
   return base
 }
 
+/** An act on the roster screen that can fail, which decides the heading its failure is shown under. */
+export type RosterAct = 'read' | 'role' | 'removal' | 'seat'
+
+/** The heading over a failed read. A read changes nothing, so it has one heading and not two. */
+export const ROSTER_NOT_READ = 'The roster was not read'
+
+/** The heading over a write whose answer shows nothing was written: what did not happen. */
+export const ACT_NOT_DONE: Record<Exclude<RosterAct, 'read'>, string> = {
+  role: 'The role was not changed',
+  removal: 'The member was not removed',
+  seat: 'Your own seat was not accepted',
+}
+
+/** The heading over a write whose answer shows nothing either way: that it is not known. */
+export const ACT_NOT_KNOWN: Record<Exclude<RosterAct, 'read'>, string> = {
+  role: 'Whether the role was changed is not known from here',
+  removal: 'Whether the member was removed is not known from here',
+  seat: 'Whether your own seat was accepted is not known from here',
+}
+
+/**
+ * The heading a failure is shown under: the outcome, never a cause (COMPANION_UX.md §10.3, #401).
+ *
+ * It says what did not happen only where the answer is evidence that nothing was written
+ * ([nothingChanged]); otherwise it says that whether it happened is not known here, because "not
+ * removed" over a lost answer would be this page guessing about a row that may well have changed.
+ * The sentence under it ([failureSentence]) says what the server answered. The add form keeps the
+ * same pair for adding, in components/practice/AddMemberPanel.svelte.
+ */
+export function refusalHeading(act: RosterAct, failure: PracticeFailure): string {
+  if (act === 'read') return ROSTER_NOT_READ
+  return nothingChanged(failure) ? ACT_NOT_DONE[act] : ACT_NOT_KNOWN[act]
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
    3. Identifiers, as the server defines them.
    ═══════════════════════════════════════════════════════════════════════════════════════════ */

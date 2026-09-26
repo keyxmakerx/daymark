@@ -29,7 +29,16 @@ import {
   orgAuditSubjectLabel,
 } from './audit'
 import { roleById } from './roles'
-import type { OrgAuditEvent } from './client'
+import {
+  ACT_NOT_DONE,
+  ACT_NOT_KNOWN,
+  ROSTER_NOT_READ,
+  nothingChanged,
+  refusalHeading,
+  type OrgAuditEvent,
+  type PracticeFailure,
+  type RosterAct,
+} from './client'
 import { SHAPES, shapeById } from '../setup/shape'
 
 /*
@@ -608,5 +617,103 @@ describe('both practice surfaces say no real patient’s data belongs on a pract
     // Control: a Callout left open before the line is counted as one.
     const wrapped = `<Callout tone="warn">${consoleMarkup.slice(0, own)}`
     expect((wrapped.match(/<Callout\b/g) ?? []).length).toBeGreaterThan((wrapped.match(/<\/Callout>/g) ?? []).length)
+  })
+})
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   (f) The roster's removal confirm, and what a failed act is headed with (#401).
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+describe('(f) the roster spends clay on removal, and heads each failure with its outcome (#401)', () => {
+  /** The tone of the Callout that holds a given rendered expression, or null where none holds it. */
+  function toneAround(src: string, expression: string): string | null {
+    const code = src.replace(/<!--[\s\S]*?-->/g, '')
+    const at = code.indexOf(expression)
+    if (at < 0) return null
+    const open = code.lastIndexOf('<Callout', at)
+    if (open < 0 || code.lastIndexOf('</Callout>', at) > open) return null
+    return /^<Callout\b[^>]*?\btone="(\w+)"/.exec(code.slice(open))?.[1] ?? null
+  }
+
+  const ROSTER = componentSource.get('RosterPanel.svelte')!
+
+  it('draws the removal confirm in clay, the alarm hue for a destructive act, and not in amber', () => {
+    expect(toneAround(ROSTER, '{REMOVAL_ENDS_A_MEMBERSHIP}')).toBe('critical')
+    // Control: the same reading sees amber when amber is put back, and sees no Callout at all
+    // around a sentence that is outside one.
+    const amber = ROSTER.replace('<Callout tone="critical" title="Removing', '<Callout tone="warn" title="Removing')
+    expect(amber).not.toBe(ROSTER)
+    expect(toneAround(amber, '{REMOVAL_ENDS_A_MEMBERSHIP}')).toBe('warn')
+    expect(toneAround(ROSTER, '{MEMBERSHIP_IS_NOT_READ_ACCESS}')).toBeNull()
+  })
+
+  it('heads a failure with the outcome of the act that failed, never with one line for all', () => {
+    const code = codeOf('RosterPanel.svelte')
+    expect(code).toContain('title={refusalHeading(failedAct, failure)}')
+    // The one heading every failure used to share, which named two causes and no outcome.
+    const OLD = 'The server refused, or could not be reached'
+    expect(`<Callout tone="critical" title="${OLD}">`).toContain(OLD)
+    expect(code).not.toContain(OLD)
+  })
+
+  it('each write names its own act when it fails', () => {
+    const code = codeOf('RosterPanel.svelte')
+    const body = (fn: string) => {
+      const at = code.indexOf(`async function ${fn}(`)
+      const next = code.indexOf('async function ', at + 1)
+      return code.slice(at, next < 0 ? undefined : next)
+    }
+    expect(body('applyRole')).toContain("writeFailed('role', result.failure)")
+    expect(body('remove')).toContain("writeFailed('removal', result.failure)")
+    expect(body('acceptOwnSeat')).toContain("writeFailed('seat', result.failure)")
+    // Control: the slicing finds a function's own body and not its neighbour's.
+    expect(body('remove')).not.toContain("writeFailed('role'")
+  })
+
+  it('keeps a write’s failure on screen while the roster is read again beneath it', () => {
+    // A re-read that cleared the failure would leave a row that may have changed with nothing on
+    // screen saying why — which is what reading through read() did, since read() starts clean.
+    const code = codeOf('RosterPanel.svelte')
+    const at = code.indexOf('async function writeFailed(')
+    const writeFailed = code.slice(at, code.indexOf('\n  }\n', at))
+    expect(writeFailed).toContain('client.roster(orgId)')
+    expect(writeFailed).not.toMatch(/failure = null|await read\(\)/)
+    // Control: the detector sees the clearing re-read when it is put back.
+    expect(`${writeFailed}\n    await read()`).toMatch(/failure = null|await read\(\)/)
+    // And the sentence saying the roster was read again is shown only when it was.
+    expect(code).toContain('{#if rereadAfterFailure}')
+  })
+
+  it('says what did not happen, or that it is not known, for every act and every failure', () => {
+    const known: PracticeFailure = { kind: 'conflict', serverSaid: '' }
+    const lost: PracticeFailure = { kind: 'no-answer', detail: '' }
+    expect(nothingChanged(known)).toBe(true)
+    expect(nothingChanged(lost)).toBe(false)
+    const acts: RosterAct[] = ['role', 'removal', 'seat']
+    expect(acts.map((a) => refusalHeading(a, known))).toEqual([
+      'The role was not changed',
+      'The member was not removed',
+      'Your own seat was not accepted',
+    ])
+    expect(acts.map((a) => refusalHeading(a, lost))).toEqual([
+      'Whether the role was changed is not known from here',
+      'Whether the member was removed is not known from here',
+      'Whether your own seat was accepted is not known from here',
+    ])
+    // A read changes nothing, so it has one heading whatever the answer.
+    expect(refusalHeading('read', known)).toBe('The roster was not read')
+    expect(refusalHeading('read', lost)).toBe('The roster was not read')
+    // One heading per outcome: no two acts or outcomes share one.
+    const all = [ROSTER_NOT_READ, ...Object.values(ACT_NOT_DONE), ...Object.values(ACT_NOT_KNOWN)]
+    expect(new Set(all).size).toBe(all.length)
+  })
+
+  it('names no cause in any heading', () => {
+    // A heading says what happened to the act. Why the server answered as it did is not known
+    // here, and a guessed cause sends somebody after the wrong problem (COMPANION_UX.md §10.3).
+    const CAUSE = /\bbecause\b|\brefused\b|\bcould not be reached\b|\bdown\b|\boffline\b|\bwrong\b|\battack/i
+    expect(CAUSE.test('The server refused, or could not be reached')).toBe(true)
+    const all = [ROSTER_NOT_READ, ...Object.values(ACT_NOT_DONE), ...Object.values(ACT_NOT_KNOWN)]
+    expect(all.filter((h) => CAUSE.test(h))).toEqual([])
   })
 })

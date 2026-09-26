@@ -45,8 +45,10 @@
     failureSentence,
     formatInstant,
     nothingChanged,
+    refusalHeading,
     type Member,
     type PracticeFailure,
+    type RosterAct,
   } from '../../practice/client'
   import { SEATABLE_ROLE_WIRES, roleLabel, type OrgRoleWire } from '../../practice/orgRoles'
   import {
@@ -75,6 +77,13 @@
 
   let members = $state<Member[] | null>(null)
   let failure = $state<PracticeFailure | null>(null)
+  /** The act the failure on screen belongs to, which its heading names (#401). */
+  let failedAct = $state<RosterAct>('read')
+  /**
+   * Whether the roster was read again after the failure on screen, so that the table shows what the
+   * server holds. Only after a write whose outcome is not known, and only when that read worked.
+   */
+  let rereadAfterFailure = $state(false)
   /** A plain statement of what the last write did. Never a congratulation; see the house rules. */
   let outcome = $state('')
   /**
@@ -120,6 +129,7 @@
   async function read() {
     working = true
     failure = null
+    rereadAfterFailure = false
     const result = await client.roster(orgId)
     working = false
     if (result.ok) {
@@ -129,6 +139,28 @@
       // no evidence for.
     } else {
       failure = result.failure
+      failedAct = 'read'
+    }
+  }
+
+  /**
+   * A write failed. The failure stays on screen under its own act's heading, and where its answer
+   * is not evidence that nothing changed, the roster is read again beneath it WITHOUT clearing it:
+   * the failure is the news, and a re-read that wiped it would leave a row that may have changed
+   * with nothing on screen saying why. A re-read that fails leaves the table as it was, and the
+   * sentence under the heading already says to read the roster again.
+   */
+  async function writeFailed(act: RosterAct, writeFailure: PracticeFailure) {
+    failure = writeFailure
+    failedAct = act
+    rereadAfterFailure = false
+    if (nothingChanged(writeFailure)) return
+    working = true
+    const result = await client.roster(orgId)
+    working = false
+    if (result.ok) {
+      members = result.value
+      rereadAfterFailure = true
     }
   }
 
@@ -174,8 +206,7 @@
       onchanged?.()
       await read()
     } else {
-      failure = result.failure
-      if (!nothingChanged(result.failure)) await read()
+      await writeFailed('role', result.failure)
     }
   }
 
@@ -196,8 +227,7 @@
       onchanged?.()
       await read()
     } else {
-      failure = result.failure
-      if (!nothingChanged(result.failure)) await read()
+      await writeFailed('removal', result.failure)
     }
   }
 
@@ -214,8 +244,7 @@
       onchanged?.()
       await read()
     } else {
-      failure = result.failure
-      if (!nothingChanged(result.failure)) await read()
+      await writeFailed('seat', result.failure)
     }
   }
 
@@ -251,12 +280,17 @@
   </div>
 
   {#if failure}
-    <Callout tone="critical" title="The server refused, or could not be reached">
+    <!--
+      The heading is the outcome, as on the add form, so it changes with the act and with what is
+      known: what did not happen, or that whether it happened is not known from here. It never
+      names a cause; the sentence under it says what the server answered.
+    -->
+    <Callout tone="critical" title={refusalHeading(failedAct, failure)}>
       <p class="para">{failureSentence(failure)}</p>
-      {#if !nothingChanged(failure)}
+      {#if rereadAfterFailure}
         <p class="para">
-          Whether anything changed is not known from here. The roster below was read again after the
-          failure, so it shows what the server holds rather than what this page expected.
+          The roster below was read again after the failure, so it shows what the server holds rather
+          than what this page expected.
         </p>
       {/if}
     </Callout>
@@ -345,7 +379,11 @@
   {/if}
 
   {#if confirming}
-    <Callout tone="warn" title="Removing {confirming} from this practice">
+    <!--
+      Clay, the one alarm hue the design system gives a destructive act (COMPANION_DESIGN_SYSTEM.md
+      §2.3.5), and not amber, which is warn severity only (#401).
+    -->
+    <Callout tone="critical" title="Removing {confirming} from this practice">
       <p class="para">{REMOVAL_ENDS_A_MEMBERSHIP}</p>
       <!--
         The case this button is most often pressed for, and the one it does least about: somebody
