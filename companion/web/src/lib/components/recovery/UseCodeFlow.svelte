@@ -208,6 +208,10 @@
         held = out.now
         fault = REPLACE_MOVED
         step = 'entry'
+      } else if (out.kind === 'unread') {
+        // Taken, and not read back: nothing was handed back, so nothing is said about what was.
+        fault = REPLACE_FAILED
+        step = 'entry'
       } else {
         fault = REPLACE_UNCHECKED
         step = 'entry'

@@ -32,15 +32,33 @@ describe('what the form does', () => {
   })
 
   it('forgets a typed passphrase on every way out but a refusal', () => {
-    // stored, moved, not read back as sent, and a failure. A refusal keeps what was typed, so a
-    // person told the two passphrases differ can correct one rather than type both again.
+    // stored, stored and not read back, moved, not read back as sent, failed, and a throw. A
+    // refusal keeps what was typed, so a person told the two passphrases differ can correct one
+    // rather than type both again.
     const body = code.slice(code.indexOf('async function setUpKey()'))
-    expect(body.match(/forgetTypedPassphrases\(\)/g)).toHaveLength(4)
-    const refused = body.slice(body.indexOf("out.kind === 'refused'"), body.indexOf('} else {'))
+    expect(body.match(/forgetTypedPassphrases\(\)/g)).toHaveLength(6)
+    const refusedAt = body.indexOf("out.kind === 'refused'")
+    const refused = body.slice(refusedAt, body.indexOf('} else', refusedAt))
+    expect(refused).toContain('SETUP_FAULT_TEXT[out.fault]')
     expect(refused).not.toContain('forgetTypedPassphrases()')
     const forget = code.slice(code.indexOf('function forgetTypedPassphrases()'), code.indexOf('function setBusy('))
     expect(forget).toContain("passphrase = ''")
     expect(forget).toContain("repeated = ''")
+  })
+
+  it('hands on a code whose lock the server took even when it could not be read back (#258)', () => {
+    // The lock is on the server either way; a code that is not handed on is a lock nobody holds.
+    const branch = (kind: string) => {
+      const at = code.indexOf(`out.kind === '${kind}'`)
+      expect(at, kind).toBeGreaterThan(-1)
+      return code.slice(at, code.indexOf('} else', at))
+    }
+    expect(branch('storedUnread')).toContain('onunread({ recoveryCode: out.recoveryCode, sent: out.sent })')
+    // The mismatch sentence is for a read-back that was read and did not open, and for nothing else.
+    expect(branch('unchecked')).toContain('onlost(READ_BACK_DID_NOT_MATCH)')
+    expect(code.match(/READ_BACK_DID_NOT_MATCH\)/g)).toHaveLength(1)
+    // And a set-up whose outcome is not known says so, whichever way it ended.
+    expect(code.match(/onlost\(SETUP_FAILED\)/g)).toHaveLength(2)
   })
 
   it('asks for the passphrase twice on a first run, and wherever the set-up says it must', () => {

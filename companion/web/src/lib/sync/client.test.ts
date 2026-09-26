@@ -48,6 +48,9 @@ function fakeServer() {
         ? new Response(null, { status: 404 })
         : new Response(state.keyparams, { status: 200, headers: { 'X-Key-Document': 'keyparams', ETag: '"kp"' } })
     }
+    if (path === '/v1/snapshots' && method === 'GET') {
+      return new Response(JSON.stringify({ lineages: [] }), { status: 200 })
+    }
     if (path === '/v1/keyparams' && method === 'PUT') {
       state.keyparams = String(body)
       return new Response(null, { status: 204 })
@@ -97,10 +100,12 @@ describe('the writer refuses such a snapshot plainly, and never sends it unpadde
     const meta = await client.pushSnapshot('devA', 0, new Uint8Array(25_690_108), 'passphrase')
     expect(server.calls.map((c) => `${c.method} ${c.path}`)).toEqual([
       'GET /v1/keydoc',
+      'GET /v1/snapshots',
       'PUT /v1/keyparams',
+      'GET /v1/keydoc',
       'PUT /v1/snapshots/devA/0',
     ])
-    const put = server.calls[2]!
+    const put = server.calls[4]!
     expect(put.head).toEqual([0x44, 0x4d, 0x53, 0x31, 0x02]) // "DMS1", format 2
     expect(put.bodyLength).toBe(25_690_157)
     expect(meta.size).toBe(25_690_157)

@@ -24,6 +24,12 @@
  * request left on that path is the writer's create-only PUT when the server holds no key document
  * at all; a 409 or 410 to it means another writer got there first, and the writer reads the key
  * document again and uses what is there.
+ *
+ * TWO THINGS THE WRITER WILL NOT DO. It publishes no key parameters on a server that stores
+ * snapshots and no key document, because a fresh salt would open none of them. And it uploads no
+ * snapshot whose key the server no longer serves: the key document is read again right before the
+ * upload, and what it holds must open, with the same passphrase, to the key the snapshot was
+ * encrypted under (assertKeyUnchanged). Both refuse in fixed words, having stored nothing.
  */
 import {
   initCrypto,
@@ -90,6 +96,24 @@ export class SyncError extends Error {
 
 /** The refusal when the passphrase does not open the passphrase slot of the server's wrapped key. */
 export const PASSPHRASE_DOES_NOT_OPEN_KEY = 'That passphrase does not open the key this server holds.'
+
+/**
+ * The writer's refusal to make a key on a server that stores snapshots and no key document (#258):
+ * a new salt derives a new master, which would open none of them. Said before anything is written.
+ */
+export const SNAPSHOTS_WITHOUT_KEY =
+  'Nothing was stored. This server stores snapshots but not what is needed to open them. A new key ' +
+  'would not open those snapshots, so none was made.'
+
+/**
+ * The writer's refusal when the key document changed between the read that gave it its key and the
+ * upload (#258): an enrolment or a first run landed in between, and this passphrase does not open
+ * what the server holds now to the key the snapshot was encrypted under. Sent, the snapshot would
+ * open with nothing the server serves, so it is not sent.
+ */
+export const KEY_CHANGED_BEFORE_UPLOAD =
+  'The snapshot was not sent. The key this server holds changed while the snapshot was being ' +
+  'encrypted, and this passphrase does not open it to the key the snapshot was encrypted under.'
 
 /** A server that asks which state a create was made against is answering a fault in this client. */
 const CREATE_NAMED_NO_STATE =
@@ -379,6 +403,9 @@ export class SyncClient {
     await initCrypto()
     const doc = await this.getKeyDocument()
     if (doc.kind !== 'none') return this.keysFrom(doc, passphrase)
+    // No key document, and snapshots already stored: whatever key wrote them, a fresh salt is not
+    // it, and publishing one would leave every stored snapshot opening with nothing served.
+    if ((await this.listLineages()).length > 0) throw new SyncError(SNAPSHOTS_WITHOUT_KEY)
     const saltB64 = toBase64(newSalt())
     if (await this.publishKeyParams({ v: 1, alg: 'xchacha20poly1305', kdf: DEFAULT_KDF, saltB64 })) {
       return this.derive(passphrase, saltB64, DEFAULT_KDF)
@@ -397,6 +424,7 @@ export class SyncClient {
     this.assertSnapshotFits(plaintext.length)
     const keys = await this.ensureKeys(passphrase)
     const blob = encryptSnapshot(plaintext, keys.syncKey, lineage, version)
+    await this.assertKeyUnchanged(keys, passphrase)
     try {
       return await this.putBlob(lineage, version, blob)
     } catch (e) {
@@ -406,6 +434,23 @@ export class SyncClient {
       }
       throw e
     }
+  }
+
+  /**
+   * The key document again, right before an upload (#258). The key a snapshot is encrypted under
+   * came from one read; an enrolment or a first run can land between that read and the upload, and
+   * once one has, the server serves the new locked key and answers the key parameters 410. So the
+   * upload goes ahead only if what the server holds now opens, with this passphrase, to the same
+   * sync key — the same master — the snapshot was encrypted under. Otherwise nothing is sent.
+   *
+   * The common case costs one request: an unchanged document hits the key cache.
+   */
+  private async assertKeyUnchanged(keys: OwnerKeys, passphrase: string): Promise<void> {
+    const now = await this.getKeyDocument()
+    let current: OwnerKeys | null = null
+    if (now.kind !== 'none') current = await this.keysFrom(now, passphrase).catch(() => null)
+    const same = current !== null && current.syncKey.length === keys.syncKey.length && current.syncKey.every((b, i) => b === keys.syncKey[i])
+    if (!same) throw new SyncError(KEY_CHANGED_BEFORE_UPLOAD)
   }
 
   /**

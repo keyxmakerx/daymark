@@ -44,6 +44,7 @@ vi.mock('./migration', async (importOriginal) => {
 })
 
 import {
+  confirmStored,
   enrolmentCheck,
   replacePassphraseOnServer,
   serverKeyPorts,
@@ -51,7 +52,7 @@ import {
   type ServerKeyPorts,
   type SnapshotRef,
 } from './serverKey'
-import { SyncClient, type CreateAgainst, type KeyDocument, type KeyParams } from '../sync/client'
+import { SyncClient, SyncError, type CreateAgainst, type KeyDocument, type KeyParams } from '../sync/client'
 import { DEFAULT_KDF, decryptSnapshot, deriveKeys, encryptSnapshot, initCrypto, newSalt, toBase64 } from '../sync/crypto'
 import { createRecoverableDataKey, unwrapWithPassphrase, unwrapWithRecoveryCode, type RecoverableDataKey } from './dataKey'
 import { masterFromPassphrase, subkeysFromMaster } from './migration'
@@ -76,9 +77,17 @@ function fakeServer(init: { keyparams?: KeyParams; wrapped?: RecoverableDataKey[
     wrapped: [...(init.wrapped ?? [])],
     snapshots: [...(init.snapshots ?? [])],
     beforeCreate: null as (() => void) | null,
-    /** When set, a read after a create hands back this instead of what was stored. */
+    /** When set, a read after a write hands back this instead of what was stored. */
     readBackAs: null as KeyDocument | null,
     created: [] as { wrapped: RecoverableDataKey; against: CreateAgainst }[],
+    writes: 0,
+    /**
+     * A create whose answer never arrives: 'landed' stores it first (a proxy's 502 or 504 after the
+     * server took it), 'lost' does not (the request never reached the server). Either way it throws.
+     */
+    createFails: null as 'landed' | 'lost' | null,
+    /** How many of the reads after a write fail, as a read that got no answer does. */
+    readsFailingAfterWrite: 0,
   }
   const keyparamsEtag = '"etag of these key parameters: 7f"'
   const current = (): KeyDocument => {
@@ -90,7 +99,11 @@ function fakeServer(init: { keyparams?: KeyParams; wrapped?: RecoverableDataKey[
   const ports: ServerKeyPorts = {
     async read() {
       spy.log.push('read')
-      return state.readBackAs && state.created.length > 0 ? state.readBackAs : current()
+      if (state.writes > 0 && state.readsFailingAfterWrite > 0) {
+        state.readsFailingAfterWrite -= 1
+        throw new TypeError('Failed to fetch')
+      }
+      return state.readBackAs && state.writes > 0 ? state.readBackAs : current()
     },
     async create(wrapped, against) {
       spy.log.push(against.kind === 'firstRun' ? 'create firstRun' : `create enrolment ${against.etag}`)
@@ -99,15 +112,19 @@ function fakeServer(init: { keyparams?: KeyParams; wrapped?: RecoverableDataKey[
         against.kind === 'firstRun'
           ? state.keyparams === null && state.wrapped.length === 0
           : state.wrapped.length === 0 && state.keyparams !== null && against.etag === keyparamsEtag
+      if (state.createFails === 'lost') throw new TypeError('Failed to fetch')
       if (!holds) return 'moved'
       state.created.push({ wrapped, against })
       state.wrapped.push(wrapped)
+      state.writes += 1
+      if (state.createFails === 'landed') throw new SyncError('key document store failed', 502)
       return 'created'
     },
     async replace(version, wrapped) {
       spy.log.push(`replace ${version}`)
       if (state.wrapped.length === 0 || version !== state.wrapped.length + 1) return 'moved'
       state.wrapped.push(wrapped)
+      state.writes += 1
       return 'written'
     },
     async newestSnapshot() {
@@ -383,6 +400,121 @@ describe('(d) a new passphrase, stored as the next version', () => {
 })
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
+   (f) What the server hands back, and what it does not hand back at all (#258).
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+describe('(f) a read-back is believed only when it opens to the same master', () => {
+  let samePassphraseOtherMaster: RecoverableDataKey
+
+  beforeAll(async () => {
+    // Locked under PASS, over a master of its own: it OPENS with PASS, and to the wrong key. The
+    // case a check that stopped at "it opened" would wave through.
+    samePassphraseOtherMaster = (await createRecoverableDataKey(PASS)).blob
+  }, 60_000)
+
+  it('a set-up whose read-back opens with the same passphrase to another master is refused, and no identity is derived', async () => {
+    const s = fakeServer()
+    s.state.readBackAs = { kind: 'wrapped', wrapped: samePassphraseOtherMaster, version: 1, etag: '"v1"' }
+    // The positive control for "opens": the planted read-back does open with this passphrase.
+    const opens = await unwrapWithPassphrase(samePassphraseOtherMaster, PASS)
+    expect(opens).toHaveLength(32)
+    spy.log.length = 0
+    expect(await setUp(s.ports, { kind: 'none' }, PASS, PASS)).toEqual({ kind: 'unchecked' })
+    expect(spy.log).toEqual(['newestSnapshot', 'create firstRun', 'read'])
+  }, 120_000)
+
+  it('a new passphrase whose read-back opens with it to another master is refused', async () => {
+    const NEW = 'a passphrase chosen after a recovery'
+    const made = await createRecoverableDataKey(PASS)
+    const other = (await createRecoverableDataKey(NEW)).blob
+    expect(await unwrapWithPassphrase(other, NEW)).toHaveLength(32)
+    const s = fakeServer({ wrapped: [made.blob] })
+    s.state.readBackAs = { kind: 'wrapped', wrapped: other, version: 2, etag: '"v2"' }
+    const held = { kind: 'wrapped' as const, wrapped: made.blob, version: 1, etag: '"v1"' }
+    expect(await replacePassphraseOnServer(s.ports, held, made.dataKey, NEW, NEW)).toEqual({ kind: 'unchecked' })
+  }, 120_000)
+})
+
+describe('(g) a create with no trustworthy answer, and a read-back that cannot be read', () => {
+  it('a create whose answer was lost after the server took it is read again, and stored with its code', async () => {
+    const s = fakeServer()
+    s.state.createFails = 'landed'
+    spy.log.length = 0
+    const out = await setUp(s.ports, { kind: 'none' }, PASS, PASS)
+    expect(out.kind).toBe('stored')
+    // Read again, opened, and only then an identity: the same order as a create that answered.
+    expect(spy.log).toEqual(['newestSnapshot', 'create firstRun', 'read', 'identity'])
+    if (out.kind !== 'stored') return
+    const stored = s.state.wrapped[0]!
+    expect(b64(await unwrapWithRecoveryCode(stored, out.recoveryCode.canonical))).toBe(b64(await unwrapWithPassphrase(stored, PASS)))
+  }, 120_000)
+
+  it('a create that never reached the server is "failed", with no code, after reading again', async () => {
+    const s = fakeServer()
+    s.state.createFails = 'lost'
+    spy.log.length = 0
+    expect(await setUp(s.ports, { kind: 'none' }, PASS, PASS)).toEqual({ kind: 'failed' })
+    expect(spy.log).toEqual(['newestSnapshot', 'create firstRun', 'read'])
+    expect(s.state.wrapped).toEqual([])
+  }, 120_000)
+
+  it('a lost create while another device stored its own key is "failed" too: that key is not the one sent', async () => {
+    const theirs = (await createRecoverableDataKey('another device chose this one')).blob
+    const s = fakeServer()
+    s.state.createFails = 'lost'
+    s.state.beforeCreate = () => {
+      if (s.state.wrapped.length === 0) s.state.wrapped.push(theirs)
+    }
+    spy.log.length = 0
+    expect(await setUp(s.ports, { kind: 'none' }, PASS, PASS)).toEqual({ kind: 'failed' })
+    expect(spy.log).not.toContain('identity')
+  }, 120_000)
+
+  it('a create the server took whose read-back cannot be read keeps its code: "storedUnread", with what was sent', async () => {
+    const s = fakeServer()
+    s.state.readsFailingAfterWrite = 1
+    spy.log.length = 0
+    const out = await setUp(s.ports, { kind: 'none' }, PASS, PASS)
+    expect(out.kind).toBe('storedUnread')
+    // No identity: nothing was read back to open.
+    expect(spy.log).toEqual(['newestSnapshot', 'create firstRun', 'read'])
+    if (out.kind !== 'storedUnread') return
+    // The code opens the lock the server took, and `sent` is that lock.
+    expect(out.sent).toEqual(s.state.wrapped[0])
+    expect(b64(await unwrapWithRecoveryCode(out.sent, out.recoveryCode.canonical))).toBe(b64(await unwrapWithPassphrase(out.sent, PASS)))
+  }, 120_000)
+
+  it('a new passphrase the server took whose read-back cannot be read is "unread", not "unchecked"', async () => {
+    const NEW = 'a passphrase chosen after a recovery'
+    const made = await createRecoverableDataKey(PASS)
+    const s = fakeServer({ wrapped: [made.blob] })
+    s.state.readsFailingAfterWrite = 1
+    const held = { kind: 'wrapped' as const, wrapped: made.blob, version: 1, etag: '"v1"' }
+    expect(await replacePassphraseOnServer(s.ports, held, made.dataKey, NEW, NEW)).toEqual({ kind: 'unread' })
+    expect(s.state.wrapped).toHaveLength(2)
+  }, 120_000)
+
+  it('confirmStored: the server holding exactly what was sent, something else, or still nothing readable', async () => {
+    const mine = (await createRecoverableDataKey(PASS)).blob
+    const theirs = (await createRecoverableDataKey(PASS)).blob
+    expect(JSON.stringify(theirs)).not.toBe(JSON.stringify(mine))
+
+    const holding = fakeServer({ wrapped: [mine] })
+    expect(await confirmStored(holding.ports, mine)).toEqual({ kind: 'held', wrapped: mine })
+    // Byte for byte, as the server stored it: a document parsed back from its own JSON is the same.
+    expect(await confirmStored(holding.ports, JSON.parse(JSON.stringify(mine)))).toMatchObject({ kind: 'held' })
+
+    expect(await confirmStored(fakeServer({ wrapped: [theirs] }).ports, mine)).toEqual({ kind: 'other' })
+    expect(await confirmStored(fakeServer().ports, mine)).toEqual({ kind: 'other' })
+
+    const unreadable = fakeServer({ wrapped: [mine] })
+    unreadable.state.writes = 1
+    unreadable.state.readsFailingAfterWrite = 1
+    expect(await confirmStored(unreadable.ports, mine)).toEqual({ kind: 'unread' })
+  }, 120_000)
+})
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
    (e) The ports, over the sync client.
    ═══════════════════════════════════════════════════════════════════════════════════════════ */
 
@@ -428,6 +560,34 @@ describe('(e) the ports over the sync client', () => {
     const ports = serverKeyPorts(new SyncClient('http://sync.test', 'token', doFetch), async () => {})
     await expect(ports.newestSnapshot()).rejects.toThrow()
     expect(n).toBe(5)
+  })
+
+  it('reads the key document again after a 429, a 5xx and a request with no answer, and not after a 401', async () => {
+    // The read-back after a create goes through here, so a server that stumbles once does not cost
+    // the person a check of their own. A 401 is an answer, and asking again would repeat it.
+    const doc = JSON.stringify({ v: 1, alg: 'xchacha20poly1305', kdf: DEFAULT_KDF, saltB64: 'AAAAAAAAAAAAAAAAAAAAAA' })
+    const answers: (number | 'no answer')[] = [429, 503, 'no answer', 200]
+    let asked = 0
+    const doFetch = (async () => {
+      const next = answers[asked++]
+      if (next === 'no answer') throw new TypeError('Failed to fetch')
+      if (next === 200) return new Response(doc, { status: 200, headers: { 'X-Key-Document': 'keyparams', ETag: '"e"' } })
+      return new Response('{}', { status: next })
+    }) as unknown as typeof fetch
+    const waits: number[] = []
+    const ports = serverKeyPorts(new SyncClient('http://sync.test', 'token', doFetch), async (ms) => void waits.push(ms))
+    expect((await ports.read()).kind).toBe('keyparams')
+    expect(asked).toBe(4)
+    expect(waits).toHaveLength(3)
+
+    let refused = 0
+    const unauthorised = (async () => {
+      refused += 1
+      return new Response('{}', { status: 401 })
+    }) as unknown as typeof fetch
+    const once = serverKeyPorts(new SyncClient('http://sync.test', 'token', unauthorised), async () => {})
+    await expect(once.read()).rejects.toMatchObject({ status: 401 })
+    expect(refused).toBe(1)
   })
 })
 

@@ -14,7 +14,9 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { createHash } from 'node:crypto'
 import {
+  KEY_CHANGED_BEFORE_UPLOAD,
   PASSPHRASE_DOES_NOT_OPEN_KEY,
+  SNAPSHOTS_WITHOUT_KEY,
   SyncClient,
   SyncError,
   parseKeyDocument,
@@ -238,11 +240,19 @@ describe('(b) the pull and the writer take their key from the key document', () 
   it('the writer publishes key parameters only when the server holds no key document', async () => {
     const server = fakeServer()
     await server.client.pushSnapshot('laptop', 0, enc.encode('{"v":0}'), PASS)
-    expect(requests(server.calls)).toEqual(['GET /v1/keydoc', 'PUT /v1/keyparams', 'PUT /v1/snapshots/laptop/0'])
+    // The stored lineages are listed before any key is made, and the key document is read again
+    // right before the upload.
+    expect(requests(server.calls)).toEqual([
+      'GET /v1/keydoc',
+      'GET /v1/snapshots',
+      'PUT /v1/keyparams',
+      'GET /v1/keydoc',
+      'PUT /v1/snapshots/laptop/0',
+    ])
     // And a second push reads what the first published rather than publishing again.
     server.calls.length = 0
     await server.client.pushSnapshot('laptop', 1, enc.encode('{"v":1}'), PASS)
-    expect(requests(server.calls)).toEqual(['GET /v1/keydoc', 'PUT /v1/snapshots/laptop/1'])
+    expect(requests(server.calls)).toEqual(['GET /v1/keydoc', 'GET /v1/keydoc', 'PUT /v1/snapshots/laptop/1'])
   }, 60_000)
 
   it('a writer that loses the race to publish (409) reads again and uses the key parameters that won', async () => {
@@ -255,7 +265,7 @@ describe('(b) the pull and the writer take their key from the key document', () 
       }
     }
     const keys = await server.client.ensureKeys(PASS)
-    expect(requests(server.calls)).toEqual(['GET /v1/keydoc', 'PUT /v1/keyparams', 'GET /v1/keydoc'])
+    expect(requests(server.calls)).toEqual(['GET /v1/keydoc', 'GET /v1/snapshots', 'PUT /v1/keyparams', 'GET /v1/keydoc'])
     expect(Buffer.from(keys.syncKey)).toEqual(Buffer.from(deriveKeys(PASS, fromBase64(theirs), DEFAULT_KDF).syncKey))
   }, 60_000)
 
@@ -267,7 +277,7 @@ describe('(b) the pull and the writer take their key from the key document', () 
       }
     }
     const keys = await server.client.ensureKeys(PASS)
-    expect(requests(server.calls)).toEqual(['GET /v1/keydoc', 'PUT /v1/keyparams', 'GET /v1/keydoc'])
+    expect(requests(server.calls)).toEqual(['GET /v1/keydoc', 'GET /v1/snapshots', 'PUT /v1/keyparams', 'GET /v1/keydoc'])
     expect(Buffer.from(keys.syncKey)).toEqual(Buffer.from(subkeysFromMaster(enrolled.master).syncKey))
   }, 60_000)
 })
@@ -356,4 +366,80 @@ describe('(d) a create names the state it was read against, and only that one', 
     expect(requests(server.calls).slice(-2)).toEqual(['PUT /v1/keydoc/2', 'PUT /v1/keydoc/2'])
     await expect(server.client.putKeyDocumentVersion(1, doc)).rejects.toThrow(RangeError)
   })
+})
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   (e) The writer makes no key beside snapshots it cannot open, and uploads under no key the
+       server has stopped serving (#258).
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+describe('(e) no key parameters beside stored snapshots', () => {
+  it('a server that stores snapshots and no key document gets no key parameters, and no snapshot', async () => {
+    const server = fakeServer()
+    server.state.snapshots.set('laptop/0', { bytes: legacySnapshot, createdAt: 1 })
+    const refused = await server.client.pushSnapshot('laptop', 1, enc.encode('{"v":1}'), PASS).catch((e: unknown) => e)
+    expect(refused).toBeInstanceOf(SyncError)
+    expect((refused as Error).message).toBe(SNAPSHOTS_WITHOUT_KEY)
+    // Read, and nothing written: the listing is what told it no.
+    expect(requests(server.calls)).toEqual(['GET /v1/keydoc', 'GET /v1/snapshots'])
+    expect(server.state.keyparams).toBeNull()
+  })
+
+  it('positive control: the same server with no snapshot gets its key parameters and the snapshot', async () => {
+    const server = fakeServer()
+    await server.client.pushSnapshot('laptop', 0, enc.encode('{"v":0}'), PASS)
+    expect(server.state.keyparams).not.toBeNull()
+    expect(requests(server.calls)).toContain('PUT /v1/snapshots/laptop/0')
+  }, 60_000)
+})
+
+describe('(f) the key document is read again right before a snapshot is uploaded', () => {
+  let otherPassphrasesMaster: RecoverableDataKey
+  let samePassphraseOtherMaster: RecoverableDataKey
+
+  beforeAll(async () => {
+    // Two ways the key can move between the writer's read and its upload. An enrolment typed with
+    // another passphrase on a server with no snapshot to check it against: the key parameters'
+    // salt, a different master. And a lock that opens with the writer's own passphrase, over a
+    // master of its own.
+    otherPassphrasesMaster = (await enrolExistingOwner('a passphrase the writer does not have', salt, DEFAULT_KDF)).blob
+    samePassphraseOtherMaster = (await createRecoverableDataKey(PASS)).blob
+  }, 180_000)
+
+  /** A server with the key parameters, whose key document becomes `next` just before the second read. */
+  function switchingServer(next: RecoverableDataKey) {
+    const server = fakeServer()
+    server.state.keyparams = keyparamsJson(saltB64)
+    let reads = 0
+    server.state.before = (call) => {
+      if (call.method === 'GET' && call.path === '/v1/keydoc' && ++reads === 2) server.state.wrapped.push(JSON.stringify(next))
+    }
+    return server
+  }
+
+  it('an enrolment under another passphrase between the two reads: refused, and the snapshot is not sent', async () => {
+    const server = switchingServer(otherPassphrasesMaster)
+    const refused = await server.client.pushSnapshot('laptop', 0, enc.encode('{"v":0}'), PASS).catch((e: unknown) => e)
+    expect(refused).toBeInstanceOf(SyncError)
+    expect((refused as Error).message).toBe(KEY_CHANGED_BEFORE_UPLOAD)
+    expect(requests(server.calls)).toEqual(['GET /v1/keydoc', 'GET /v1/keydoc'])
+    expect(server.state.snapshots.size).toBe(0)
+  }, 60_000)
+
+  it('a lock that opens with the same passphrase to another master: refused as well', async () => {
+    // Opening is not enough; it has to open to the key the snapshot was encrypted under.
+    const server = switchingServer(samePassphraseOtherMaster)
+    const refused = await server.client.pushSnapshot('laptop', 0, enc.encode('{"v":0}'), PASS).catch((e: unknown) => e)
+    expect((refused as Error).message).toBe(KEY_CHANGED_BEFORE_UPLOAD)
+    expect(server.state.snapshots.size).toBe(0)
+  }, 60_000)
+
+  it('positive control: an enrolment of the same passphrase between the two reads is the same key, and the snapshot goes', async () => {
+    const server = switchingServer(enrolled.blob)
+    await server.client.pushSnapshot('laptop', 0, enc.encode('{"v":0}'), PASS)
+    expect(requests(server.calls)).toEqual(['GET /v1/keydoc', 'GET /v1/keydoc', 'PUT /v1/snapshots/laptop/0'])
+    // And it opens through what the server now serves.
+    const pulled = await new SyncClient('http://sync.test', 'token', server.doFetch).pullLatest('laptop', PASS)
+    expect(dec.decode(pulled.plaintext)).toBe('{"v":0}')
+  }, 60_000)
 })

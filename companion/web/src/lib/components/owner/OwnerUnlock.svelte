@@ -38,7 +38,15 @@
   import WriteDownCheck from '../recovery/WriteDownCheck.svelte'
   import KeySetup from '../recovery/KeySetup.svelte'
   import { emptyGroups, firstGroupProblem, groupsToTyped, type GroupProblem } from '../recovery/groups'
-  import { HOW_ENTRY_WORKS, KEY_CHANGED_ON_SERVER, WRITE_IT_ON_PAPER } from '../recovery/copy'
+  import {
+    HOW_ENTRY_WORKS,
+    KEY_CHANGED_ON_SERVER,
+    READ_ACTION,
+    READ_BACK_DID_NOT_MATCH,
+    READ_BACK_FAILED,
+    READ_BUSY,
+    WRITE_IT_ON_PAPER,
+  } from '../recovery/copy'
   import {
     UNLOCK_LEDE,
     NOTHING_IS_KEPT,
@@ -66,6 +74,7 @@
   import type { OwnerSession, PinnedTherapist } from './session'
   import type { KeyDocument } from '../../sync/client'
   import type { EnrolmentCheck, ServerKeyPorts } from '../../recovery/serverKey'
+  import type { RecoverableDataKey } from '../../recovery/dataKey'
   import type { RecoveryCode } from '../../recovery/recoveryCode'
   import type { OwnerConnection } from '../../owner/recoveryEmail'
 
@@ -73,6 +82,14 @@
 
   let busy = $state(false)
   let error = $state('')
+  /** How the message above is drawn: a refusal, or a warning about something not yet checked. */
+  let errorTone = $state<'critical' | 'warn'>('critical')
+  /**
+   * Whether the message tells the person to read what the server holds again. When it does, the
+   * button that does it sits directly under the message, so the words never name a button that is
+   * somewhere else on the page.
+   */
+  let readAgain = $state(false)
   /** A statement about what happened that is not a refusal: the server's key changed under a set-up. */
   let notice = $state('')
 
@@ -103,6 +120,13 @@
    * it came from was wiped inside serverKey.ts and never reaches this component.
    */
   let setUpIdentity: Identity | null = null
+  /**
+   * A create the server took (201) whose read-back could not be read: what was sent, kept until a
+   * later read finds the server holding exactly it. While it is set, no identity exists, and the
+   * code is on screen with READ_BACK_FAILED rather than the statement that the key is stored.
+   */
+  let unreadSent = $state.raw<RecoverableDataKey | null>(null)
+  let checking = $state(false)
 
   /* ── An unlock: a locked key held ───────────────────────────────────────────────────────── */
 
@@ -162,11 +186,15 @@
     readWith = null
     notice = ''
     error = ''
+    errorTone = 'critical'
+    readAgain = false
   }
 
   /** Read what the server holds. Nothing is written here. */
   async function connect() {
     error = ''
+    errorTone = 'critical'
+    readAgain = false
     notice = ''
     if (!token) {
       error = CONNECT_NO_TOKEN
@@ -209,6 +237,52 @@
     codeStep = 'showing'
   }
 
+  /**
+   * The server took the key and it could not be read back. The code is shown all the same — the
+   * lock it opens is on the server — with READ_BACK_FAILED in place of the statement that the key
+   * is stored, and no identity until a read finds the server holding exactly what was sent.
+   */
+  function keyUnread(stored: { recoveryCode: RecoveryCode; sent: RecoverableDataKey }) {
+    error = ''
+    notice = ''
+    setUpIdentity = null
+    unreadSent = stored.sent
+    newCode = stored.recoveryCode
+    codeStep = 'showing'
+  }
+
+  /**
+   * READ_BACK_FAILED's button: read the key document again and compare it with what was sent. It
+   * never takes the code off the screen by itself — only a server that answers with something else
+   * does, because then the code opens nothing it serves. When the server holds exactly what was
+   * sent, the identity is derived by opening that read-back with the code on screen, so it still
+   * comes from what the server handed back.
+   */
+  async function checkReadBack() {
+    if (!ports || !unreadSent || !newCode) return
+    checking = true
+    try {
+      const { confirmStored } = await import('../../recovery/serverKey')
+      const out = await confirmStored(ports, unreadSent)
+      if (out.kind === 'unread') return
+      if (out.kind === 'held') {
+        await initAssignmentCrypto()
+        const { unlockFromBlob } = await import('../../owner/unlock')
+        const back = await unlockFromBlob(out.wrapped, newCode.canonical, 'recovery')
+        if (back.ok) {
+          setUpIdentity = back.identity
+          unreadSent = null
+          return
+        }
+      }
+      newCode = null
+      unreadSent = null
+      keyLost(READ_BACK_DID_NOT_MATCH)
+    } finally {
+      checking = false
+    }
+  }
+
   /** The server's key changed between the read and the create: show what it holds now. */
   function keyMoved(now: KeyDocument, nowCheck: EnrolmentCheck | null) {
     error = ''
@@ -223,12 +297,23 @@
     error = message
   }
 
-  /** The new code is on paper: drop it, and open the console with the identity the set-up derived. */
+  /**
+   * The new code is on paper: drop it, and open the console with the identity the set-up derived.
+   * With the read-back still unread there is no identity, so nothing opens: the person is asked to
+   * read what the server holds, with the button under the words, and unlocks from there.
+   */
   async function codeWrittenDown() {
     newCode = null
+    if (!setUpIdentity) {
+      unreadSent = null
+      keyLost(READ_BACK_FAILED)
+      errorTone = 'warn'
+      readAgain = true
+      return
+    }
     // The fingerprint needs the assignment crypto ready, which an unlock readies too.
     await initAssignmentCrypto()
-    if (setUpIdentity) opened(setUpIdentity)
+    opened(setUpIdentity)
     setUpIdentity = null
   }
 
@@ -406,9 +491,15 @@
           <fieldset class="add">
             <legend>Your recovery code</legend>
             {#if codeStep === 'showing'}
-              <p class="hint">{KEY_STORED_WITH_THIS_CODE}</p>
+              {#if !unreadSent}<p class="hint">{KEY_STORED_WITH_THIS_CODE}</p>{/if}
               <p class="hint">{WRITE_IT_ON_PAPER}</p>
               <CodeSheet display={newCode.display} />
+              {#if unreadSent}
+                <!-- The server took the key and could not be read back: the code stays, and so does
+                     the one way to check it, directly under the words that name it. -->
+                <Callout tone="warn"><p class="para">{READ_BACK_FAILED}</p></Callout>
+                <button type="button" onclick={checkReadBack} disabled={checking}>{checking ? READ_BUSY : READ_ACTION}</button>
+              {/if}
               <button class="primary" type="button" onclick={() => (codeStep = 'confirm')}>I have written it down</button>
             {:else}
               <WriteDownCheck
@@ -477,6 +568,7 @@
               {held}
               {check}
               onstored={keyStored}
+              onunread={keyUnread}
               onmoved={keyMoved}
               onlost={keyLost}
               onbusy={(b) => (busy = b)}
@@ -535,7 +627,12 @@
         <button class="primary" onclick={enter}>Enter console</button>
       {/if}
 
-      {#if error}<Callout tone="critical">{error}</Callout>{/if}
+      {#if error}
+        <Callout tone={errorTone}><p class="para">{error}</p></Callout>
+        {#if readAgain && !held}
+          <button type="button" class="again" onclick={connect} disabled={busy}>{busy ? READ_BUSY : READ_ACTION}</button>
+        {/if}
+      {/if}
     </div>
   </Card>
 </div>
@@ -544,7 +641,9 @@
   .unlock { max-width: 40rem; }
   .stack { display: flex; flex-direction: column; gap: var(--space-3); }
   .hint { margin: 0; color: var(--ink-soft); font-size: 0.9rem; }
+  .para { margin: 0; font-size: 0.9rem; line-height: 1.55; }
   .notice { color: var(--ink-text); }
+  .again { align-self: flex-start; }
   .fp code, .pub code { font-family: var(--font-mono); font-size: 0.75rem; word-break: break-all; }
   .pub { margin: 0; font-size: 0.8rem; }
   .add { display: flex; flex-direction: column; gap: var(--space-2); border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: var(--space-3); }

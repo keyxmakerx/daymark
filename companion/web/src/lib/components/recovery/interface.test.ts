@@ -272,10 +272,26 @@ describe('(b) the write-down check is a check', () => {
     // The server already holds the lock the code opens; a code that never reached the screen would
     // be a recovery slot nobody holds. So nothing is awaited before it is shown.
     const flow = codeOf('NewCodeFlow.svelte')
-    const body = flow.slice(flow.indexOf('async function keyStored('), flow.indexOf('function keyMoved('))
+    const body = flow.slice(flow.indexOf('async function keyStored('), flow.indexOf('function keyUnread('))
     const shown = body.indexOf('code = stored.recoveryCode')
     expect(shown).toBeGreaterThan(-1)
     expect(body.indexOf('await')).toBeGreaterThan(shown)
+  })
+
+  it('shows a code whose lock the server took even when it could not be read back, with the check under the words (#258)', () => {
+    const flow = codeOf('NewCodeFlow.svelte')
+    const unread = flow.slice(flow.indexOf('function keyUnread('), flow.indexOf('async function checkReadBack('))
+    expect(unread).toContain('code = stored.recoveryCode')
+    expect(unread).toContain("step = 'showing'")
+    // READ_BACK_FAILED, and directly under it the button that checks: on the code's step and on the
+    // last one, where the key would otherwise be said to be stored.
+    const UNDER = /<Callout tone="warn"><p class="para">\{READ_BACK_FAILED\}<\/p><\/Callout>\s*<div class="actions">\s*<button type="button" onclick=\{checkReadBack\}/g
+    expect(flow.match(UNDER)).toHaveLength(2)
+    const held = flow.slice(flow.indexOf("{#if step === 'held'}"))
+    expect(held).toMatch(/\{#if unread\}[\s\S]*READ_BACK_FAILED[\s\S]*\{:else\}\s*<p class="para">\{KEY_STORED_HERE\}<\/p>/)
+    // The check takes the code away only when the server answered with something else.
+    const check = flow.slice(flow.indexOf('async function checkReadBack('))
+    expect(check.slice(0, check.indexOf('</script>'))).toMatch(/out\.kind === 'other'\)\s*\{\s*code = null/)
   })
 
   it('drops the code at the end, and offers no way back to it', () => {

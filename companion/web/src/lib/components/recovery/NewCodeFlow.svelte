@@ -49,6 +49,7 @@
   import Placeholder from './Placeholder.svelte'
   import type { KeyDocument } from '../../sync/client'
   import type { EnrolmentCheck, ServerKeyPorts } from '../../recovery/serverKey'
+  import type { RecoverableDataKey } from '../../recovery/dataKey'
   import type { RecoveryCode } from '../../recovery/recoveryCode'
   import type { Identity } from '../../share/pairing'
   import {
@@ -61,6 +62,8 @@
     PLACEHOLDERS,
     PRINTING,
     READ_ACTION,
+    READ_BACK_DID_NOT_MATCH,
+    READ_BACK_FAILED,
     READ_BUSY,
     READ_FAILED,
     READ_NEEDS_TOKEN,
@@ -96,6 +99,14 @@
 
   /* Held only between the set-up and the end of the confirmation. See the header note. */
   let code = $state<RecoveryCode | null>(null)
+
+  /**
+   * A create the server took (201) whose read-back could not be read: what was sent, kept until a
+   * read finds the server holding exactly it. While it is set, the screen says READ_BACK_FAILED
+   * rather than that the key is stored, with the button that checks directly under it.
+   */
+  let unread = $state.raw<RecoverableDataKey | null>(null)
+  let checking = $state(false)
 
   const rotation = PLACEHOLDERS.find((p) => p.id === 'rotation')!
 
@@ -143,6 +154,39 @@
     step = 'showing'
     const { zeroizeOwnerIdentity } = await import('../../owner/identity')
     zeroizeOwnerIdentity(stored.identity)
+  }
+
+  /**
+   * The server took the key and it could not be read back. The code is shown all the same — the
+   * lock it opens is on the server — with READ_BACK_FAILED under it.
+   */
+  function keyUnread(stored: { recoveryCode: RecoveryCode; sent: RecoverableDataKey }) {
+    code = stored.recoveryCode
+    unread = stored.sent
+    step = 'showing'
+  }
+
+  /**
+   * READ_BACK_FAILED's button: read the key document again and compare it with what was sent. It
+   * takes the code off the screen only when the server answers with something else, because then
+   * the code opens nothing it serves; a server that still cannot be read leaves everything as it is.
+   */
+  async function checkReadBack() {
+    if (!ports || !unread) return
+    checking = true
+    try {
+      const { confirmStored } = await import('../../recovery/serverKey')
+      const out = await confirmStored(ports, unread)
+      if (out.kind === 'held') {
+        unread = null
+      } else if (out.kind === 'other') {
+        code = null
+        unread = null
+        keyLost(READ_BACK_DID_NOT_MATCH)
+      }
+    } finally {
+      checking = false
+    }
   }
 
   /** The server's key changed between the read and the create: go on from what it holds now. */
@@ -221,7 +265,7 @@
     <Card title="Make a recovery code">
       <div class="stack">
         {#if notice}<p class="para" role="status">{notice}</p>{/if}
-        <KeySetup {ports} {held} {check} onstored={keyStored} onmoved={keyMoved} onlost={keyLost} />
+        <KeySetup {ports} {held} {check} onstored={keyStored} onunread={keyUnread} onmoved={keyMoved} onlost={keyLost} />
       </div>
     </Card>
   {/if}
@@ -244,6 +288,15 @@
         <p class="para">{WRITE_IT_ON_PAPER}</p>
 
         <CodeSheet display={code.display} />
+
+        {#if unread}
+          <!-- The server took the key and could not be read back: the code stays, and so does the
+               one way to check it, directly under the words that name it. -->
+          <Callout tone="warn"><p class="para">{READ_BACK_FAILED}</p></Callout>
+          <div class="actions">
+            <button type="button" onclick={checkReadBack} disabled={checking}>{checking ? READ_BUSY : READ_ACTION}</button>
+          </div>
+        {/if}
 
         <div class="actions">
           <button type="button" class="primary" onclick={() => (step = 'confirm')}>
@@ -277,7 +330,14 @@
           The server holds two locks on one key; that is the whole of what happened, and it is what
           this step says. Reassurance on this surface is the absence of a callout.
         -->
-        <p class="para">{KEY_STORED_HERE}</p>
+        {#if unread}
+          <Callout tone="warn"><p class="para">{READ_BACK_FAILED}</p></Callout>
+          <div class="actions">
+            <button type="button" onclick={checkReadBack} disabled={checking}>{checking ? READ_BUSY : READ_ACTION}</button>
+          </div>
+        {:else}
+          <p class="para">{KEY_STORED_HERE}</p>
+        {/if}
         <p class="para">
           The code is no longer in this page. Nothing here can show it again, and nothing can
           reconstruct it from the locked key — which is exactly why a locked key can sit on a

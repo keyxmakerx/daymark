@@ -101,12 +101,24 @@ export type SetUpFault =
 export type SetUpResult =
   /** Created, read back and opened. The recovery code is here once, for the screen to show. */
   | { kind: 'stored'; recoveryCode: RecoveryCode; identity: Identity }
+  /**
+   * The server took the create (201), and it could not be read back afterwards, however many times
+   * it was asked. The lock the code opens is on the server, so the code is here to be shown: it is
+   * the only copy anyone will ever have. No identity is derived, because nothing was read back to
+   * open; `sent` is what was created, for confirmStored() to compare a later read against.
+   */
+  | { kind: 'storedUnread'; recoveryCode: RecoveryCode; sent: RecoverableDataKey }
   /** The server's 412: what it holds now, read again. Nothing from this set-up was stored. */
   | { kind: 'moved'; now: KeyDocument }
   /** Nothing was written. */
   | { kind: 'refused'; fault: SetUpFault }
   /** The create was taken, and what the server handed back did not open to the same master. */
   | { kind: 'unchecked' }
+  /**
+   * The create got no answer this module could trust, and reading again did not find the key it
+   * sent. Whether anything was stored is not known here; the next read says.
+   */
+  | { kind: 'failed' }
 
 /** How an enrolment will know the passphrase is the right one, before it is typed. */
 export type EnrolmentCheck = 'newestSnapshot' | 'typedTwice'
@@ -227,6 +239,22 @@ async function opensToMaster(
 /**
  * Create, then read back and open, then — only then — derive the identity. A 412 reads the key
  * document again and hands it back for the screen to act on.
+ *
+ * THE CODE IS NEVER DROPPED WHILE THE SERVER MAY HOLD ITS LOCK (#258). Once a create may have
+ * landed, a recovery code that is not shown is a lock nobody holds, so two uncertain endings are
+ * handled rather than reported as failures:
+ *
+ *   - the create itself got no answer this module can trust (the request failed, or a proxy
+ *     answered 502 or 504 after passing it on): the key document is read again, and if it now holds
+ *     a locked key that opens with the passphrase to the master that was sent, the create landed and
+ *     this is 'stored'; anything else is 'failed', and whether something was stored is left to the
+ *     next read;
+ *   - the create was taken (201) and the read-back could not be read (the adapter asks again after a
+ *     429, a 5xx or a failed request): 'storedUnread', with the code, and no identity, because nothing
+ *     was read back to open.
+ *
+ * 'unchecked' is kept for the one case it names: a read-back that was read and does not open, with
+ * the passphrase, to the same master.
  */
 async function store(
   ports: ServerKeyPorts,
@@ -236,17 +264,56 @@ async function store(
   master: Uint8Array,
   recoveryCode: RecoveryCode,
 ): Promise<SetUpResult> {
-  if ((await ports.create(wrapped, against)) === 'moved') return { kind: 'moved', now: await ports.read() }
-  const back = await ports.read().catch(() => null)
-  if (!back || back.kind !== 'wrapped') return { kind: 'unchecked' }
+  let created: 'created' | 'moved' | 'uncertain'
+  try {
+    created = await ports.create(wrapped, against)
+  } catch {
+    created = 'uncertain'
+  }
+  if (created === 'moved') return { kind: 'moved', now: await ports.read() }
+  let back: KeyDocument | null
+  try {
+    back = await ports.read()
+  } catch {
+    back = null
+  }
+  if (!back) return created === 'created' ? { kind: 'storedUnread', recoveryCode, sent: wrapped } : { kind: 'failed' }
   let opened: Uint8Array | null = null
   try {
-    opened = await unwrapWithPassphrase(back.wrapped, passphrase).catch(() => null)
-    if (!opened || !same(opened, master)) return { kind: 'unchecked' }
+    if (back.kind === 'wrapped') opened = await unwrapWithPassphrase(back.wrapped, passphrase).catch(() => null)
+    if (!opened || !same(opened, master)) return created === 'created' ? { kind: 'unchecked' } : { kind: 'failed' }
     return { kind: 'stored', recoveryCode, identity: ownerIdentityFromMaster(opened) }
   } finally {
     zeroizeDataKey(opened)
   }
+}
+
+/** What a later read of the key document says about a create that could not be read back. */
+export type StoredCheck =
+  /** The server holds exactly the document that was created. `wrapped` is it, as read back. */
+  | { kind: 'held'; wrapped: RecoverableDataKey }
+  /** The server answered with something else: the lock the code opens is not what it serves. */
+  | { kind: 'other' }
+  /** The server could not be read this time either. */
+  | { kind: 'unread' }
+
+/**
+ * Read the key document again after a 'storedUnread', and compare it with what was created. It
+ * needs no secret: a document that is byte for byte the one this tab made, and checked before it
+ * was sent (opensToMaster), opens to the same master. The owner console's door then opens it with
+ * the recovery code still on screen to derive the identity, so the identity still comes from what
+ * was read back.
+ */
+export async function confirmStored(ports: ServerKeyPorts, sent: RecoverableDataKey): Promise<StoredCheck> {
+  let back: KeyDocument
+  try {
+    back = await ports.read()
+  } catch {
+    return { kind: 'unread' }
+  }
+  return back.kind === 'wrapped' && JSON.stringify(back.wrapped) === JSON.stringify(sent)
+    ? { kind: 'held', wrapped: back.wrapped }
+    : { kind: 'other' }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
@@ -264,6 +331,8 @@ export type ReplaceResult =
   | { kind: 'refused'; fault: ReplaceFault }
   /** The version was taken, and what the server handed back did not open to the same master. */
   | { kind: 'unchecked' }
+  /** The version was taken, and it could not be read back: which passphrase opens it is not known. */
+  | { kind: 'unread' }
 
 /**
  * Lock the open master under a new passphrase and store it as the next version (dataKey.ts
@@ -281,8 +350,14 @@ export async function replacePassphraseOnServer(
   if (repeated !== passphrase) return { kind: 'refused', fault: 'passphrasesDiffer' }
   const next = await replacePassphrase(held.wrapped, master, passphrase)
   if ((await ports.replace(held.version + 1, next)) === 'moved') return { kind: 'moved', now: await ports.read() }
-  const back = await ports.read().catch(() => null)
-  if (!back || back.kind !== 'wrapped') return { kind: 'unchecked' }
+  let back: KeyDocument
+  try {
+    back = await ports.read()
+  } catch {
+    return { kind: 'unread' }
+  }
+  if (back.kind !== 'wrapped') return { kind: 'unchecked' }
+  // Opening is not enough: a lock made under this same passphrase over another master opens too.
   const opened = await unwrapWithPassphrase(back.wrapped, passphrase).catch(() => null)
   try {
     return opened && same(opened, master) ? { kind: 'written' } : { kind: 'unchecked' }
@@ -298,17 +373,29 @@ export async function replacePassphraseOnServer(
 const pause = (ms: number) => new Promise<void>((done) => setTimeout(done, ms))
 
 /**
- * A read the server answered 429 to is asked again, a little later, a few times. Finding the
- * newest snapshot is one request per lineage, and the server's default allowance is five a second
- * from one address, so an owner with several devices' lineages would otherwise be refused an
- * enrolment by the pace of this console's own reads.
+ * Whether a failed read is worth asking again: the server's 429, a 5xx (from the server or a proxy
+ * in front of it), or a request that got no answer at all. A 401, a 404 or an answer this client
+ * could not read is the answer, and asking again would only repeat it.
+ */
+function transient(e: unknown): boolean {
+  if (e instanceof SyncError) return e.status === 429 || (e.status !== undefined && e.status >= 500)
+  return e instanceof TypeError
+}
+
+/**
+ * A read that failed for a transient reason is asked again, a little later, a few times. Finding
+ * the newest snapshot is one request per lineage, and the server's default allowance is five a
+ * second from one address, so an owner with several devices' lineages would otherwise be refused an
+ * enrolment by the pace of this console's own reads. The read-back after a create is asked again
+ * the same way, because a code whose lock was taken is shown whatever the read-back does, and a read
+ * that succeeds on the second try saves the person a check of their own (#258).
  */
 async function paced<T>(read: () => Promise<T>, wait: (ms: number) => Promise<void>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {
       return await read()
     } catch (e) {
-      if (!(e instanceof SyncError && e.status === 429) || attempt >= 5) throw e
+      if (!transient(e) || attempt >= 5) throw e
       await wait(300 * attempt)
     }
   }
@@ -317,7 +404,7 @@ async function paced<T>(read: () => Promise<T>, wait: (ms: number) => Promise<vo
 /** The ports as the real server answers them, through a SyncClient holding the owner's token. */
 export function serverKeyPorts(client: SyncClient, wait: (ms: number) => Promise<void> = pause): ServerKeyPorts {
   return {
-    read: () => client.getKeyDocument(),
+    read: () => paced(() => client.getKeyDocument(), wait),
     create: (wrapped, against) => client.createKeyDocument(wrapped, against),
     replace: (version, wrapped) => client.putKeyDocumentVersion(version, wrapped),
     async newestSnapshot() {

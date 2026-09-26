@@ -61,7 +61,41 @@ describe('(a) nothing here can invent an identity', () => {
     const assignments = (code.match(/ownerIdentity\s*=\s*[^\n]+/g) ?? []).filter((a) => !a.includes('$state'))
     expect(assignments).toEqual(['ownerIdentity = identity'])
     expect(code.match(/\bopened\([^)]*\)/g)).toEqual(['opened(setUpIdentity)', 'opened(identity: Identity)', 'opened(out.identity)'])
-    expect(code.match(/setUpIdentity = [^\n]+/g)).toEqual(['setUpIdentity = stored.identity', 'setUpIdentity = null'])
+    // A set-up's identity comes from its read-back, or — when that could not be read — from opening,
+    // with the code on screen, the document a later read found the server holding.
+    expect(code.match(/setUpIdentity = [^\n]+/g)).toEqual([
+      'setUpIdentity = stored.identity',
+      'setUpIdentity = null',
+      'setUpIdentity = back.identity',
+      'setUpIdentity = null',
+    ])
+    expect(code).toContain("unlockFromBlob(out.wrapped, newCode.canonical, 'recovery')")
+  })
+
+  it('keeps a code whose lock the server took on screen when the read-back could not be read (#258)', () => {
+    // READ_BACK_FAILED under the code, and the one way to check it directly under the words.
+    expect(code).toMatch(
+      /\{#if unreadSent\}\s*<Callout tone="warn"><p class="para">\{READ_BACK_FAILED\}<\/p><\/Callout>\s*<button type="button" onclick=\{checkReadBack\}/,
+    )
+    // Not the statement that the key is stored, while that is not known.
+    expect(code).toMatch(/\{#if !unreadSent\}<p class="hint">\{KEY_STORED_WITH_THIS_CODE\}<\/p>\{\/if\}/)
+    // The check never takes the code away unless the server answered with something else.
+    const check = code.slice(code.indexOf('async function checkReadBack()'), code.indexOf('function keyMoved('))
+    expect(check).toContain("if (out.kind === 'unread') return")
+    expect(check.indexOf('newCode = null')).toBeGreaterThan(check.indexOf("out.kind === 'held'"))
+  })
+
+  it('opens nothing after the write-down when the read-back is still unread, and asks for a read', () => {
+    const body = code.slice(code.indexOf('async function codeWrittenDown()'), code.indexOf('function opened('))
+    const unreadBranch = body.slice(0, body.indexOf('return'))
+    expect(unreadBranch).toContain('if (!setUpIdentity)')
+    expect(unreadBranch).toContain('keyLost(READ_BACK_FAILED)')
+    expect(unreadBranch).toContain('readAgain = true')
+    expect(unreadBranch).not.toContain('opened(')
+    // And the read button sits directly under the message whenever it asks for one.
+    expect(code).toMatch(
+      /<Callout tone=\{errorTone\}><p class="para">\{error\}<\/p><\/Callout>\s*\{#if readAgain && !held\}\s*<button type="button" class="again" onclick=\{connect\}/,
+    )
   })
 
   it('has no file input, and nothing that reads a file: the key file is retired, with no fallback (#258)', () => {
@@ -95,7 +129,7 @@ describe('(a) nothing here can invent an identity', () => {
   it('puts the new code on screen before anything that could fail', () => {
     // The server already holds the lock the code opens; a code that never reached the screen would
     // be a recovery slot nobody holds. So the handler awaits nothing before showing it.
-    const body = code.slice(code.indexOf('function keyStored('), code.indexOf('function keyMoved('))
+    const body = code.slice(code.indexOf('function keyStored('), code.indexOf('function keyUnread('))
     expect(body).toContain('newCode = stored.recoveryCode')
     expect(body).not.toMatch(/\bawait\b/)
     expect(/\bawait\b/.test('await initAssignmentCrypto()\n    newCode = stored.recoveryCode')).toBe(true)
@@ -152,8 +186,11 @@ describe('(b) the passphrase and the code do not leave the tab', () => {
 
 describe('(c) a mistyped code is refused before any derivation', () => {
   it('runs firstGroupProblem before it imports the unlock module', () => {
-    const check = code.indexOf('firstGroupProblem(groups)')
-    const derive = code.indexOf("await import('../../owner/unlock')")
+    // Inside the unlock itself: the read-back check imports the same module for a code that came
+    // from this screen, not from a person's typing.
+    const unlock = code.slice(code.indexOf('async function unlock()'))
+    const check = unlock.indexOf('firstGroupProblem(groups)')
+    const derive = unlock.indexOf("await import('../../owner/unlock')")
     expect(check).toBeGreaterThan(-1)
     expect(derive).toBeGreaterThan(-1)
     expect(check).toBeLessThan(derive)

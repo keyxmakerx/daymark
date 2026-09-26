@@ -460,6 +460,15 @@ export const READ_BACK_DID_NOT_MATCH =
   'code is shown. Read what the server holds again to see where things stand.'
 
 /**
+ * After a create the server took (201), when the read-back could not be read however many times it
+ * was asked. The code IS shown with this, because the lock it opens is on the server; the sentence
+ * says what is not known and what to do, in that order, and names the button that sits under it.
+ */
+export const READ_BACK_FAILED =
+  'The server accepted your key, but it could not be read back to check just now. Write your ' +
+  'recovery code down, then use Read what this server holds to check it.'
+
+/**
  * A set-up that failed in a way none of the above covers. It does not say nothing was stored: the
  * failure may have come after the server took the key, and the next read says which.
  */

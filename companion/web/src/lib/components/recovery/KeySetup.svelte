@@ -15,10 +15,17 @@
    * read, the read-back opened before an identity exists — is recovery/serverKey.ts's, where it is a
    * node test. This component asks, shows what came back, and forgets what was typed on every way
    * out. It shows no code: the caller does, once, because only the caller knows what follows it.
+   *
+   * A CODE WHOSE LOCK THE SERVER TOOK IS ALWAYS HANDED ON. When the create was taken and the
+   * read-back could not be read, the code still goes to the caller (onunread), with what was sent,
+   * because the lock it opens is on the server; the caller shows it with READ_BACK_FAILED. Only a
+   * read-back that was read and does not open is READ_BACK_DID_NOT_MATCH, and only a set-up whose
+   * outcome is not known is SETUP_FAILED.
    */
   import { Callout } from '../ui'
   import type { KeyDocument } from '../../sync/client'
   import type { EnrolmentCheck, ServerKeyPorts } from '../../recovery/serverKey'
+  import type { RecoverableDataKey } from '../../recovery/dataKey'
   import type { RecoveryCode } from '../../recovery/recoveryCode'
   import type { Identity } from '../../share/pairing'
   import {
@@ -44,6 +51,7 @@
     held,
     check,
     onstored,
+    onunread,
     onmoved,
     onlost,
     onbusy,
@@ -55,6 +63,11 @@
     check: EnrolmentCheck | null
     /** The server took the key, read it back and opened it. The code is for the caller to show once. */
     onstored: (stored: { recoveryCode: RecoveryCode; identity: Identity }) => void
+    /**
+     * The server took the key and it could not be read back. The code is for the caller to show once
+     * all the same, with READ_BACK_FAILED; `sent` is what to compare a later read against.
+     */
+    onunread: (stored: { recoveryCode: RecoveryCode; sent: RecoverableDataKey }) => void
     /** The server's state moved after it was read (412): what it holds now. Nothing was stored. */
     onmoved: (now: KeyDocument, check: EnrolmentCheck | null) => void
     /** Where things stand is not known here any more; the caller reads the server again. */
@@ -91,15 +104,21 @@
       if (out.kind === 'stored') {
         forgetTypedPassphrases()
         onstored({ recoveryCode: out.recoveryCode, identity: out.identity })
+      } else if (out.kind === 'storedUnread') {
+        forgetTypedPassphrases()
+        onunread({ recoveryCode: out.recoveryCode, sent: out.sent })
       } else if (out.kind === 'moved') {
         forgetTypedPassphrases()
         onmoved(out.now, out.now.kind === 'keyparams' ? await enrolmentCheck(ports) : null)
       } else if (out.kind === 'refused') {
         if (out.fault === 'typeItTwice') twiceAfterAll = true
         error = SETUP_FAULT_TEXT[out.fault]
-      } else {
+      } else if (out.kind === 'unchecked') {
         forgetTypedPassphrases()
         onlost(READ_BACK_DID_NOT_MATCH)
+      } else {
+        forgetTypedPassphrases()
+        onlost(SETUP_FAILED)
       }
     } catch {
       forgetTypedPassphrases()

@@ -264,6 +264,7 @@ describe.skipIf(!HAVE_JAR)('a first run on a server holding no key document (rea
     expect(dec.decode(pulled.plaintext)).toBe('{"first":"run"}')
     expect(seen).toEqual([
       'GET /v1/keydoc',
+      'GET /v1/keydoc',
       'PUT /v1/snapshots/first/0',
       'GET /v1/keydoc',
       'GET /v1/snapshots/first',
