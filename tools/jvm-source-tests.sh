@@ -38,7 +38,10 @@
 set -eu
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
-OUT="${TMPDIR:-/tmp}/daymark-jvm-source-tests"
+# A folder of its own for every run, removed on exit: two runs at once must never compile into, or
+# delete, each other's classes.
+OUT=$(mktemp -d "${TMPDIR:-/tmp}/daymark-jvm-source-tests.XXXXXX")
+trap 'rm -rf "$OUT"' EXIT
 GL=/opt/gradle-8.14.3/lib
 GC="$HOME/.gradle/caches/modules-2/files-2.1"
 
@@ -94,7 +97,6 @@ $f"
   fi
 done
 
-rm -rf "$OUT"; mkdir -p "$OUT"
 
 # shellcheck disable=SC2086
 java -cp "$KC:$STDLIB:$GL/kotlin-reflect-$KOTLIN.jar:$GL/kotlin-script-runtime-$KOTLIN.jar:$GL/kotlin-daemon-embeddable-$KOTLIN.jar:$GL/kotlinx-coroutines-core-jvm-1.6.4.jar:$GL/annotations-24.0.1.jar:$GL/trove4j-1.0.20200330.jar" \
