@@ -124,3 +124,59 @@ describe('trust strip — honesty gate', () => {
     expect(app, 'App.svelte fetches directly again').not.toMatch(/(?<![\w.])fetch\s*\(/)
   })
 })
+
+/**
+ * One posture's sentence as it reads: the markup between its `{#if}`/`{:else if}` and the next
+ * branch, tags removed without a space (so `<strong>…</strong> This` reads as it renders) and
+ * whitespace collapsed. Takes the source as an argument so a planted copy runs through it too.
+ */
+function branchProse(code: string, open: string, close: string): string {
+  const from = code.indexOf(open)
+  const to = code.indexOf(close, from + open.length)
+  if (from < 0 || to < 0) return ''
+  return code
+    .slice(from + open.length, to)
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+describe('the local posture asks for nothing a person cannot do (#252)', () => {
+  const OPEN = "{#if surface === 'local'}"
+  const CLOSE = "{:else if surface === 'setup'}"
+  const NOW =
+    'Meant to run offline. This tab works on what is already in this browser and sends nothing — ' +
+    'but a page cannot prove that about itself, and nothing yet lets you check this build against a ' +
+    'published value.'
+  /*
+   * Retired: a check against a value no release publishes, before unlocking a backup no local tab
+   * can open. The drop zone reads plain JSON, and "your backup" was wrong on the other three local
+   * surfaces (self-checks, the tool builder, the practice panel).
+   */
+  const RETIRED = [
+    'This tab reads your backup in the browser',
+    "Verify this build's integrity before you unlock an encrypted backup.",
+  ]
+
+  it('says the one thing that is true today, whole', () => {
+    expect(branchProse(trustBarCode, OPEN, CLOSE)).toBe(NOW)
+  })
+
+  it('no longer asks for a check, or names an encrypted backup', () => {
+    const local = branchProse(trustBarCode, OPEN, CLOSE)
+    expect(local.length).toBeGreaterThan(100) // the branch was really found
+    for (const sentence of RETIRED) expect(local).not.toContain(sentence)
+    expect(local).not.toMatch(/\bverify\b|\bunlock\b|encrypted backup/i)
+    // Control: the retired sentences, planted back into the real branch, are seen by the same
+    // extraction and the same patterns.
+    const planted = trustBarCode.replace(
+      'and nothing yet lets you',
+      "and nothing yet lets you. This tab reads your backup in the browser. Verify this build's integrity before you unlock an encrypted backup.",
+    )
+    expect(planted).not.toBe(trustBarCode)
+    const seen = branchProse(planted, OPEN, CLOSE)
+    for (const sentence of RETIRED) expect(seen).toContain(sentence)
+    expect(seen).toMatch(/\bverify\b|\bunlock\b|encrypted backup/i)
+  })
+})

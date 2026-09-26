@@ -178,7 +178,7 @@ the posture of the surface you are on (`trust/posture.ts` decides which):
 
 | Posture | Where | Says |
 |---|---|---|
-| `local` | every other tab: opening a backup file, self-checks, the tool builder | *"Meant to run offline. This tab reads your backup in the browser and sends nothing — but a page cannot prove that about itself. Verify this build's integrity before you unlock an encrypted backup."* |
+| `local` | every other tab: opening a backup file, self-checks, the tool builder, the practice panel | *"Meant to run offline. This tab works on what is already in this browser and sends nothing — but a page cannot prove that about itself, and nothing yet lets you check this build against a published value."* |
 | `setup` | the first-run screen while it reads the server's configuration | *"This screen reads your server's configuration. It asks one thing — whether this deployment already names what this machine is for — and sends nothing about you or your journal. Once that question has an answer here, this page stops asking on load."* |
 | `sync` | connecting to sync | *"This tab talks to your server. Your passphrase and the decrypted entries stay in this browser; what crosses the network is ciphertext your server cannot read. It can still see that you synced, and when."* |
 | `account` | the owner console, account recovery | *"This tab sends data to your server. Account actions here transmit identifiers, and account recovery transmits the email address you type. Your passphrase and your entries are not involved and never leave this browser."* |
@@ -190,8 +190,8 @@ the posture of the surface you are on (`trust/posture.ts` decides which):
   nothing about whether a page would call out.
 - It never claims the page "makes no network requests" or that data "never leaves this device".
 - Enforced by `components/trustbar.test.ts`.
-- Not built: anything to verify the build against. The `local` sentence asks for a check nothing yet
-  lets a person make, and the drop zone opens only plaintext JSON: #252.
+- Not built: a published value to check this build against, which the `local` sentence would then
+  point at: #144.
 
 **The sharing strip** (`owner/SharingStrip.svelte`) is the owner's standing notice that someone can
 read what they share. It is rendered per relationship above the tab content, so changing tab does not

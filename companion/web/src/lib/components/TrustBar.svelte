@@ -20,8 +20,15 @@
    * and never reached the code.
    *
    * So: no green, and no self-asserted "makes no network requests" — a tampered page could
-   * not be trusted to police itself, which is why the copy points at integrity verification
-   * instead. The strip now states the posture of the surface you are actually on.
+   * not be trusted to police itself, which is why the copy says a page cannot prove that about
+   * itself. The strip now states the posture of the surface you are actually on.
+   *
+   * THE LOCAL SENTENCE ASKS FOR NO CHECK (#252). It used to end "Verify this build's integrity
+   * before you unlock an encrypted backup": no release publishes a value to verify against, and
+   * no local tab opens an encrypted backup. It now says what is true today — there is nothing
+   * to check against yet — and when a release publishes a value (#144), that clause becomes the
+   * pointer to it. The local tabs are the file tab, self-checks, the tool builder and the
+   * practice panel, and none of them reads anything but what is already in this browser.
    *
    * TOKENS. The strip used to be washed in --mood-3-wash with a --mood-3 dot: the middle of
    * the DATA ramp, borrowed to mean "caution". The ramp encodes a person's reported experience
@@ -64,9 +71,9 @@
 <aside class="trust" aria-label="Privacy and trust">
   <p>
     {#if surface === 'local'}
-      <strong>Meant to run offline.</strong> This tab reads your backup in the browser and
-      sends nothing — but a page cannot prove that about itself. Verify this build's integrity
-      before you unlock an encrypted backup.
+      <strong>Meant to run offline.</strong> This tab works on what is already in this browser
+      and sends nothing — but a page cannot prove that about itself, and nothing yet lets you
+      check this build against a published value.
     {:else if surface === 'setup'}
       <!--
         THE FIRST-RUN SCREEN, WHICH IS THE ONE LOCAL-LOOKING SURFACE THAT DOES REACH THE SERVER.
