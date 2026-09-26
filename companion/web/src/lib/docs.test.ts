@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, dirname, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -68,6 +69,14 @@ function candidatePaths(text: string): string[] {
 }
 
 /**
+ * Directories inside the checkout that are not this repository. `.claude/worktrees/` holds the full
+ * checkouts the harness makes for parallel agents (gitignored). Indexed, they let a path that exists
+ * only in an agent's copy resolve here while CI, which has no such copies, fails it, and they
+ * reported each copy's own citations as this tree's.
+ */
+const NOT_THIS_REPOSITORY = new Set(['.claude/worktrees'])
+
+/**
  * Every tracked file in the repo, as repo-relative paths, for suffix matching.
  *
  * Documentation legitimately writes shorthand — `stats/SupportOffer.kt`, `instruments/predicate.ts`,
@@ -76,12 +85,14 @@ function candidatePaths(text: string): string[] {
  * demanded the prefix would flag correct prose, and a guard that cries wolf is one that gets
  * switched off, which is worse than not having it.
  */
-function indexFiles(dir: string, acc: string[] = []): string[] {
+function indexFiles(dir: string, root: string = REPO, acc: string[] = []): string[] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     if (/^(node_modules|\.git|build|dist|\.gradle|\.idea)$/.test(e.name)) continue
     const p = join(dir, e.name)
-    if (e.isDirectory()) indexFiles(p, acc)
-    else acc.push(p.slice(REPO.length + 1).split(sep).join('/'))
+    const rel = p.slice(root.length + 1).split(sep).join('/')
+    if (e.isDirectory()) {
+      if (!NOT_THIS_REPOSITORY.has(rel)) indexFiles(p, root, acc)
+    } else acc.push(rel)
   }
   return acc
 }
@@ -145,6 +156,22 @@ describe('the corpus is actually being read', () => {
   it('the resolver is not simply saying yes to everything', () => {
     expect(resolves('docs/THIS_FILE_DOES_NOT_EXIST.md')).toBe(false)
     expect(resolves('companion/web/src/app.css')).toBe(true)
+  })
+
+  it("indexes this repository, not the agents' checkouts inside it", () => {
+    const root = mkdtempSync(join(tmpdir(), 'docs-index-'))
+    try {
+      mkdirSync(join(root, '.claude', 'worktrees', 'agent-x', 'docs'), { recursive: true })
+      writeFileSync(join(root, '.claude', 'worktrees', 'agent-x', 'docs', 'ONLY_IN_A_COPY.md'), '')
+      mkdirSync(join(root, '.claude', 'agents'), { recursive: true })
+      writeFileSync(join(root, '.claude', 'agents', 'pilot.md'), '')
+      const index = indexFiles(root, root)
+      // Positive control: the rest of .claude is read, so an empty index cannot pass this.
+      expect(index).toContain('.claude/agents/pilot.md')
+      expect(index.filter((f) => f.startsWith('.claude/worktrees/'))).toEqual([])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 
   it('the ellipsis segment matches a real path and still rejects a false one', () => {
