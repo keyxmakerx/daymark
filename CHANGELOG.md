@@ -37,6 +37,10 @@ All notable changes to this project are documented here. The format is based on
   still contains unlock times restores normally; the badges in it are just not brought back.
 
 ### Added
+- **The phone can now unlock your key the way the web does, from either kind of key document the
+  server keeps.** It opens it with your passphrase or with your recovery code, typed with or without
+  dashes and spaces, and refuses anything weaker than the agreed strength before it starts. Nothing
+  on the phone fetches the document yet; that comes with phone sync. (#403)
 - **Companion — the server can now keep the locked copy of your key that a recovery code opens.**
   A recovery code only helps on another device if that device can reach the locked copy of your
   key. Until now there was nowhere to put it, so the Recovery code screen saved a key file instead.

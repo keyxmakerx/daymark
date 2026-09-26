@@ -200,8 +200,9 @@ from the environment. The phone's is not built: #168.
 decrypt (the AEAD verifies integrity). A wrong passphrase makes decryption fail, with no oracle
 beyond that.
 
-Both flows read `/v1/keyparams`, so once a wrapped key exists they stop at its `410`. A reader that
-opens the wrapped key instead is not built: #258.
+Both flows read `/v1/keyparams`, so once a wrapped key exists they stop at its `410`. The phone's
+crypto opens either document (#403); nothing fetches `/v1/keydoc` yet: #168 for the phone, #258 for
+the consoles.
 
 Sync is single-writer and last-snapshot-wins: the newest full snapshot is authoritative, and rows are
 never merged, because the app's schema has no per-row ids or timestamps. That is settled (#200): the
@@ -223,4 +224,11 @@ elsewhere must decrypt there, and the other way round. The Kotlin port is held t
 passes; nonce 0x01..0x18; lineage `devA`, version 7; plaintext `{"hello":"daymark"}`; 4,141 bytes):
 the Kotlin writer makes exactly those bytes under that nonce, and the Kotlin reader opens them, and
 the format-1 envelope of the same inputs. `PaddingTest` holds the padding vector and length table of
-`padding.test.ts`.
+`padding.test.ts`. The key documents are held the same way (#403).
+`companion/web/src/lib/recovery/dataKeyVector.test.ts` makes a wrapped key with `wrapDataKey`, with
+only its random draws fixed: the passphrase `wrapped-key vector: café, 日記, 🌿`, salts 0x20..0x2f and
+0x50..0x5f, nonces 0x30..0x47 and 0x60..0x77, and the recovery code
+`K7M2Q-XR9CT-4HWAZ-P3NE8-GUV6D-YJF59`. It wraps the master the key params give (salt 0x10..0x1f,
+256 MiB, 3 passes), and the result is 463 bytes. `KeyDocumentVectorTest` opens both documents to that
+master and its four subkeys, the Kotlin writer makes the same 463 bytes, and both sides refuse the
+same twelve mutations before deriving anything.

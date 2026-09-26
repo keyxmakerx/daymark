@@ -33,7 +33,10 @@ libsodium and no emulator; the `sync` flavour wires it to the Android binding
 
 | Must match | Web reference | Kotlin | Built |
 | --- | --- | --- | --- |
-| Argon2id floor (256 MiB, 3 passes), 16-byte salt, 32-byte master | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
+| Argon2id floor (256 MiB, 3 passes), refused below the floor before anything is derived; 16-byte salt, 32-byte master | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
+| The key document at `GET /v1/keydoc`, either kind, read strictly: `v` 1, the floor on every slot, URL-safe unpadded base64, exact lengths; a slot of a kind it does not know is skipped, as on the web (#403) | `sync/client.ts`, `recovery/dataKey.ts`, with the vector in `recovery/dataKeyVector.test.ts` | `KeyDocument.kt` | Yes |
+| Wrapped-key slots: Argon2id per slot, XChaCha20-Poly1305 under the AAD `daymark.datakey.v1\|kind`; a passphrase opens the first passphrase slot, a code each recovery slot in turn | `recovery/dataKey.ts` | `SyncCrypto.kt` | Opening: yes. Writing: only in the tests |
+| Reading a typed recovery code: JavaScript's `\s`, `-` and U+2010–U+2015 dropped, full Unicode upper case, the mod-31 check symbol checked before any derivation | `recovery/recoveryCode.ts` | `RecoveryCode.kt` | Reading: yes. Generating: no |
 | Subkeys, context `dmsync01`: 1 sync key, 2 manifest seed | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
 | Subkeys 3 and 4: the owner's X25519 and Ed25519 seeds | `owner/identity.ts` | — | No: #174 |
 | Snapshot envelope `DMS1 \| 0x01 \| nonce \| ciphertext`, AAD `daymark.snapshot.v1\|lineage\|version`: read, never written | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
@@ -58,15 +61,22 @@ Kotlin writer makes byte for byte under the vector's nonce, and a format-1 envel
 opens. `PaddingTest` checks the bucket rule, the boundaries, the strict refusals and the vectors of
 `padding.test.ts`. `CpaceCryptoTest` checks the CFRG test vectors (generator string, generator
 point, both messages, the key), a live exchange, and that a wrong code diverges silently.
-`LazySodiumParityTest` checks that the Java and Android bindings expose the same surface, since the
-tests run on one and the app on the other. The same checks on a real device are not built: #192.
+`KeyDocumentVectorTest` holds the vector of `recovery/dataKeyVector.test.ts` (#403): the phone opens
+the web-made key parameters and wrapped key, with the passphrase and with the recovery code as typed,
+to the same master and four subkeys; its writer makes the same 463 bytes; and both sides refuse the
+same twelve mutations before any Argon2id. `KeyDocumentTest` pins the other refusals, including where
+the phone is stricter than the web, and that a slot of an unknown kind is skipped and still held to
+the floor. `RecoveryCodeTest` pins normalisation, faults and the check symbol, and `StrictJsonTest`
+holds the JSON reader to `JSON.parse`. `LazySodiumParityTest` checks that the Java and Android
+bindings expose the same surface, since the tests run on one and the app on the other. The same checks on a real device are not built: #192.
 
 ## 2. Sync of the owner's own data
 
 Settings → Sync: a server address and the sync passphrase, and no bearer token: the phone signs in
 with its own per-device key (#189, #186), because the shared token stops being anyone's sign-in
 (#208; not built: #324). Push the existing backup snapshot (`BackupManager`) as the plaintext,
-append-only, at `max(existing) + 1`; pull fetches the newest and decrypts it. Not built: #168.
+append-only, at `max(existing) + 1`; pull fetches the newest and decrypts it. The phone reads the
+owner's key document of either kind (#403); fetching it is part of #168. Not built: #168.
 
 Sync is single-writer, last-snapshot-wins, for good (#200): the phone is the only device that writes
 the journal's encrypted copy, the schema has no per-row ids or timestamps, and rows are never
