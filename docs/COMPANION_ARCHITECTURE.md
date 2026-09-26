@@ -50,9 +50,12 @@ is a side effect.
 | **Practice** | a clinic | many people's, as tenants (not built: #318, #331) |
 
 - **One product in three shapes** (#288). Solo and Paired have the same trust model and the same
-  threat model. Today one flag, `DAYMARK_THERAPIST_AUTH=1`, switches the clinician and practice
-  surfaces on together; with it off, every relationship route answers 503. Not built: the shape as a
-  server setting, `DAYMARK_SETUP_MODE`, that switches on only what that shape needs: #330.
+  threat model. The shape is a server setting, `DAYMARK_SETUP_MODE`, and each shape switches on only
+  its own routes, pages and stores (#330): Solo serves sync and the owner's page; Paired adds
+  invitations, pairing, clinician sign-in, relationships and the clinician's page; Practice adds the
+  practice routes and page. What a shape leaves off answers exactly as the whole clinical surface
+  did when it was off, and the shape is visible to anyone who can reach the server
+  (COMPANION_DEPLOYMENT.md §0).
 - **Practice inverts the arrangement.** In Solo and Paired the journal sits on its owner's hardware.
   In Practice the clinic owns the machine and the person is a tenant on it. That is a different
   posture, not a bigger deployment. What exists for it: the practice model on the server (three
@@ -65,8 +68,10 @@ is a side effect.
   person's relationships kept to that person (#331).
 - The question that gates Practice — who may reset a forgotten passphrase — is answered: nobody
   (COMPANION_PAIRING.md §12).
-- The first-run screen of the owner console asks which shape the machine is for and remembers the
-  answer in that browser only. It changes nothing on the server.
+- When the operator chose a shape, `/v1/config` publishes it as `setupMode`. On a server with none,
+  the first-run screen of the owner console asks which shape the machine is for and keeps the answer
+  in that browser only, which changes nothing on the server; reading the published shape instead of
+  asking is the web half of #330.
 - **Who runs it** (#288). A person runs their own server, or an office runs its own; Daymark runs
   none (§8). The old one-clinician scope is retired. An office grows in steps: one clinician, then a
   receptionist, then several clinicians, receptionists and doctors who assess and refer, and every

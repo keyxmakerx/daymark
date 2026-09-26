@@ -191,8 +191,9 @@ the code has changed.
 
 | Level | Logger | Message | What it can carry |
 |---|---|---|---|
-| ERROR | `com.daymark.companion` | `Refusing to start: …` (`main`, then exit 78) | Setting names and a fixed example address; never a configured value |
+| ERROR | `com.daymark.companion` | `Refusing to start: …` (`main`, then exit 78) | Setting names, a fixed example address, and which of a setting's fixed choices it read; never a value as the operator wrote it |
 | INFO | `com.daymark.companion` | `Daymark Companion starting on {}:{} basePath={} sync={} smtp={} dataDir={}` (`main`) | Configuration only |
+| INFO | `com.daymark.companion` | `Serving the {} shape, as DAYMARK_SETUP_MODE says: …`, or `… assumed because DAYMARK_SETUP_MODE is not set and DAYMARK_THERAPIST_AUTH is on` (or `off`) `… Set DAYMARK_SETUP_MODE …` (`Application.module`, once per start) | The shape and setting names; never a value as the operator wrote it |
 | WARN | `com.daymark.companion` | `DAYMARK_AUTH_TOKEN is not set — the /v1 sync API is DISABLED…` (`main`) | Nothing |
 | INFO | `com.daymark.companion` | `Outbound SMTP is ENABLED … host={} port={} tls={}` (`main`) | Configuration only; never the password — `MailerConfig.toString` and `Config.toString` redact |
 | WARN | `com.daymark.companion` | `DAYMARK_TRUSTED_PROXIES is unset…` (`Application.module`) | Nothing |

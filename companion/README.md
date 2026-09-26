@@ -22,10 +22,10 @@ topology, the proxy contract, every setting, backup and restore:
   The writer today is the command-line tool below. **The phone does not sync yet.**
 - **Self-checks and a focus task** (Steady Attention) in the browser — non-diagnostic, licence-clean,
   and never uploaded. Results stay on that device.
-- **With `DAYMARK_THERAPIST_AUTH=1`:** the owner console (invite a clinician and pair with a spoken
-  code, grant capabilities, share chosen slices, review what they assign, read the access log); the
-  clinician's portal (sign-in with a six-digit authenticator code, the shared-data dashboard,
-  assignments, game plans, leaving); and the practice console.
+- **With `DAYMARK_SETUP_MODE=paired`:** the owner console (invite a clinician and pair with a spoken
+  code, grant capabilities, share chosen slices, review what they assign, read the access log) and
+  the clinician's portal (sign-in with a six-digit authenticator code, the shared-data dashboard,
+  assignments, game plans, leaving). **With `practice`**, the practice console as well.
 - **Optional email (SMTP)**, off unless configured: invitation links, owner notifications, and
   recovery of the owner's access token, which the decided design replaces with proving the owner's
   own key (#208; not built: #325). Emails carry links and event names, never record content.
@@ -47,11 +47,14 @@ docker compose up -d --build
 # then open http://localhost:8080
 ```
 
-For one person and their own backup (Solo), leave `DAYMARK_THERAPIST_AUTH=0`. Set it to `1` only if a
-clinician or a practice will use this machine; with it at 0 every relationship route answers 503.
-Solo, Paired and Practice are shapes of one product, and the shape is a server setting,
-`DAYMARK_SETUP_MODE`, that switches on only what each shape needs (#288). Not built: #330. A
-Practice server holds no real patient's data until the compliance gate is passed (#284).
+Set `DAYMARK_SETUP_MODE` in `.env` to what this machine is for: `solo` for one person and their own
+backup (the example's value), `paired` if clinicians you invite will use it, `practice` if a clinic
+runs it. Each switches on only what it needs: in `solo` every clinician, pairing and practice route
+answers 503 and the clinician and practice pages are not served
+([COMPANION_DEPLOYMENT.md](../docs/COMPANION_DEPLOYMENT.md) §0). **On a Practice server the server
+token is the owner's credential for every relationship on it: never hand it to the people who share
+with the office** (#331). A Practice server holds no real patient's data until the compliance gate
+is passed (#284).
 
 ## The access token, which switches sync on
 
@@ -127,7 +130,7 @@ None of this is observable from a web page, so it is a list to check by hand:
 - `DAYMARK_DOMAIN` is the real external hostname: invitation and recovery links are built from it.
 - The proxy terminates TLS, sets HSTS, forwards the root paths, and is named exactly in
   `DAYMARK_TRUSTED_PROXIES`.
-- `DAYMARK_THERAPIST_AUTH` is 1 only if a clinician or practice uses this machine.
+- `DAYMARK_SETUP_MODE` is what this machine is for, and the log's `Serving the … shape` line agrees.
 - `/data` is backed up, and you have tried a restore.
 - The image is pinned by digest unless you want it to update itself (below).
 - SMTP stays off unless you need email; enabling it opens the one deliberate outbound path.

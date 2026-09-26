@@ -750,6 +750,23 @@ All notable changes to this project are documented here. The format is based on
   browser, which is now part of how this repository verifies itself.
 
 ### Security
+- **Companion — each server serves only what its shape needs.** A new setting, `DAYMARK_SETUP_MODE`,
+  says what a server is for: `solo`, `paired` or `practice`. A solo server serves sync and the
+  owner's page and nothing clinical: every clinician, pairing and practice route answers 503, as
+  they all did with `DAYMARK_THERAPIST_AUTH` off, and the clinician and practice pages answer 403
+  however their address is written. A paired server adds invitations, pairing, clinician sign-in,
+  relationships and the clinician's page; a practice server adds the practice routes and page. The
+  health probes and the server console are served in every shape, and each shape opens only its own
+  files on the volume. `/v1/config` publishes a chosen shape as `setupMode`. A server with no mode
+  set keeps doing what its `DAYMARK_THERAPIST_AUTH` switch did — with it on, everything — except
+  that one with the switch off no longer serves the clinician and practice pages, which could do
+  nothing there; either way it says in its log which shape it assumed and how to choose. A value
+  other than the three, or a mode the switch contradicts, stops the server at start with one line
+  naming the settings. Two clinician routes that answered differently with the switch off now answer
+  503 like the rest. The example environment chooses `solo`, and compose passes
+  `DAYMARK_THERAPIST_AUTH` only when `.env` sets it. On a practice server the one server token is
+  still the owner's credential for every relationship on it: never hand it to the people who share
+  with the office (#331). (#330)
 - **Companion — the server will not start the clinician portal or email without its public
   address.** Invitation and notification links fell back to whatever address the visitor's request
   named when `DAYMARK_PUBLIC_BASE_URL` was unset, and an invitation link carries its secret. With the

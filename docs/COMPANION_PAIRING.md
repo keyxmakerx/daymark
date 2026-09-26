@@ -360,7 +360,8 @@ the code, can seal one that opens. No signature inside would add to that.
 ### 13.5 Endpoints
 
 Owner routes carry the bearer token; clinician routes carry the invitation secret in the body. Every
-route here answers 503 unless the operator set `DAYMARK_THERAPIST_AUTH=1`.
+route here answers 503 unless the server's shape is `paired` or `practice` (COMPANION_DEPLOYMENT.md
+§0).
 
 | Request | Body | Answers |
 | --- | --- | --- |

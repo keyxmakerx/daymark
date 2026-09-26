@@ -292,9 +292,9 @@ server's shape is a setting that switches on only what that shape needs. An offi
 clinician, or several clinicians with receptionists, an administrator, and doctors who assess and
 refer. Every referral is a person's decision, never software's. No role, the administrator's
 included, reaches anyone's credentials, keys or content. The old one-clinician scope lock is
-retired, and the gate above still stands. Not built: the shape setting (#330), each person's own
-credential on an office server (#331), one sign-in per clinician (#314), and the admin console on
-an address of its own (#323).
+retired, and the gate above still stands. Not built: each person's own credential on an office
+server (#331), one sign-in per clinician (#314), and the admin console on an address of its own
+(#323).
 
 Source: [the July product direction](https://github.com/keyxmakerx/daymark/blob/968638594f10f6a4424415f8a5c14fd8eb4aaa00/docs/PRODUCT_DIRECTION.md).
 

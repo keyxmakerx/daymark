@@ -15,11 +15,33 @@ logs, the runbook — is [COMPANION_OBSERVABILITY.md](COMPANION_OBSERVABILITY.md
   metadata, and some sign-in secrets (COMPANION_SECURITY.md §5.2). A stolen disk or backup leaks
   metadata and those secrets — never journal content.
 - **No reverse proxy is bundled.** The app speaks plain HTTP; your proxy terminates TLS (§3).
-- **Three shapes of one product**, chosen with `DAYMARK_THERAPIST_AUTH`: *Solo*, just you and your
-  backup (`0`); *Paired*, plus the clinicians you invite (`1`); *Practice*, a clinic runs the
-  machine (`1`). With `0`, every clinician, pairing and practice route answers 503. The shape is a
-  server setting, `DAYMARK_SETUP_MODE`, that switches on only what each shape needs (#288). Not
-  built: #330.
+- **Three shapes of one product** (#288), chosen with `DAYMARK_SETUP_MODE`, and each switches on
+  only what it needs (#330):
+
+  | `DAYMARK_SETUP_MODE` | Routes on | Pages served |
+  | --- | --- | --- |
+  | `solo` | sync; the owner's notifications and access recovery | the owner's page |
+  | `paired` | solo's, and invitations, pairing, clinician sign-in, relationships, keys, endings and the access log | solo's, and the clinician's page at `/therapist`, where the invitation link's `/portal/invite` leads |
+  | `practice` | paired's, and the practice routes (`/v1/orgs`) | paired's, and the practice page |
+
+  `/healthz`, `/readyz`, `/v1/config` and the server console are served in every shape. A route the
+  shape leaves off answers 503 `{"error":"therapist portal not configured"}`, as every clinician,
+  pairing and practice route did with `DAYMARK_THERAPIST_AUTH` off; a page it leaves off answers 403
+  with no body, however its path is spelled. The shape is not a secret: anyone who can reach the
+  server can tell it from those answers, and `/v1/config` publishes a chosen one as `setupMode`, so
+  the owner's first-run screen does not ask. A solo server's image still holds the clinical code,
+  switched off rather than absent.
+- **With no `DAYMARK_SETUP_MODE`, the server assumes a shape and says which.** With
+  `DAYMARK_THERAPIST_AUTH` on it serves `practice`, which is everything that switch has always
+  turned on; with it off, `solo`. It logs one line at start, `Serving the … shape, assumed because
+  DAYMARK_SETUP_MODE is not set …`, and `/v1/config` publishes no `setupMode`. The mode replaces the
+  switch: beside a mode, leave `DAYMARK_THERAPIST_AUTH` out, or set it to agree (§5.3).
+- **A Practice server has one owner.** Whoever holds its token (§5.2) acts as the owner of every
+  relationship on it, so never hand that token to the people who share with the office: each person
+  having their own credential is not built (#331). Its sync API follows #219: each stored journal
+  belongs to one owner, so until several people's journals can each be reached only by their own
+  owner (#324), a Practice server holds no patient's journal. No real patient's data belongs on it
+  before the outside assessment (#284).
 - **The server is a replica.** The journal lives on the owner's phone; losing the server loses
   convenience, not the journal.
 
@@ -188,8 +210,9 @@ read from a file named by `NAME_FILE`, which wins.
 | `DAYMARK_BASE_PATH` | `/` | Sub-path prefix; not supported yet (§3.1, requirement 6) |
 | `DAYMARK_LOG_LEVEL` | `info`, in the code, the image, compose and `.env.example` | Level of the app's own loggers. `warn` hides the startup settings line, the SMTP-enabled line and `readiness restored` (COMPANION_OBSERVABILITY.md §2.4) |
 | `DAYMARK_AUTH_TOKEN` (`_FILE`) | unset | The owner's bearer token. Unset: the sync API, owner routes, recovery and the clinician portal all answer 503 |
-| `DAYMARK_THERAPIST_AUTH` | off | `1` or `true` turns on the clinician portal, relationships, pairing, practices and the audit log |
-| `DAYMARK_PUBLIC_BASE_URL` | first `DAYMARK_WEBAUTHN_ORIGINS` entry | The external origin every link the server hands out is built on: an absolute `http` or `https` address with a host and no user name, query or fragment. Required while the clinician portal or SMTP is on (§5.3) |
+| `DAYMARK_SETUP_MODE` | unset | `solo`, `paired` or `practice`, in any case: the shape, and so which routes, pages and stores the server serves (§0). Unset or blank, the server assumes one from `DAYMARK_THERAPIST_AUTH` and logs which. Any other value stops the server at start (§5.3) |
+| `DAYMARK_THERAPIST_AUTH` | off | The switch `DAYMARK_SETUP_MODE` replaces; `1` or `true` is on, anything else off. With no mode it decides the shape: on is `practice`, off is `solo`. Beside a mode, leave it out or set it to agree (§5.3) |
+| `DAYMARK_PUBLIC_BASE_URL` | first `DAYMARK_WEBAUTHN_ORIGINS` entry | The external origin every link the server hands out is built on: an absolute `http` or `https` address with a host and no user name, query or fragment. Required in the `paired` and `practice` shapes and while SMTP is on (§5.3) |
 | `DAYMARK_WEBAUTHN_RP_ID` | unset | The passkey relying-party id. Passkeys sign people in on an `https` address with a hostname, and never unlock keys (#205); not built: #326 (COMPANION_SECURITY.md §5.1) |
 | `DAYMARK_WEBAUTHN_ORIGINS` | unset | Comma-separated; also the fallback for `DAYMARK_PUBLIC_BASE_URL` |
 | `DAYMARK_TRUSTED_PROXIES` | empty: trust nothing | §4.0 |
@@ -257,15 +280,19 @@ also sets `TZ=UTC` and the `JAVA_TOOL_OPTIONS` in §2.
 ### 5.3 Settings the server refuses
 
 The server checks these before it opens the volume or a port. A refusal is one log line beginning
-`Refusing to start:` that names the setting to change, never its value, and the process exits with
-status 78. Under `restart: unless-stopped` Docker starts it again and the same line repeats until
-the setting is changed: `docker compose logs companion | grep 'Refusing to start'`.
+`Refusing to start:` that names the setting to change and never repeats a value as it was written,
+and the process exits with status 78. Under `restart: unless-stopped` Docker starts it again and the
+same line repeats until the setting is changed: `docker compose logs companion | grep 'Refusing to
+start'`.
 
 | Refused | Why | Change |
 | --- | --- | --- |
-| `DAYMARK_THERAPIST_AUTH` on or `DAYMARK_SMTP_HOST` set, with no public address | Invitations and notifications carry links to this server; a link never takes its host from a request, which a visitor controls, and an invitation link carries its secret (#180) | Set `DAYMARK_PUBLIC_BASE_URL` to the address people type, e.g. `https://daymark.example.com`; compose derives it from `DAYMARK_DOMAIN`. A server that only syncs needs none |
+| The `paired` or `practice` shape (chosen, or assumed from `DAYMARK_THERAPIST_AUTH` on), or `DAYMARK_SMTP_HOST` set, with no public address | Invitations and notifications carry links to this server; a link never takes its host from a request, which a visitor controls, and an invitation link carries its secret (#180) | Set `DAYMARK_PUBLIC_BASE_URL` to the address people type, e.g. `https://daymark.example.com`; compose derives it from `DAYMARK_DOMAIN`. A server that only syncs needs none |
 | The same, with a public address that is not an absolute `http` or `https` address with a host, or that carries a user name, query or fragment | No link can be built on it | Write it as people type it. A host with an underscore is refused; write an internationalised name in its `xn--` form |
 | `DAYMARK_COOKIE_INSECURE` on with an `https` public address | The switch lets the clinician session cookie travel over plain `http`, and is for local testing only (#181) | Remove `DAYMARK_COOKIE_INSECURE` |
+| `DAYMARK_SETUP_MODE` set to anything but `solo`, `paired` or `practice` | The server will not guess a shape, and never switches everything on for a value it cannot read (#330) | Set it to one of the three; case and space around it do not matter. Leave it unset for the server to assume one |
+| `DAYMARK_SETUP_MODE=solo` with `DAYMARK_THERAPIST_AUTH` on | The two contradict each other: a solo server has no clinician portal (#330) | Remove `DAYMARK_THERAPIST_AUTH`, or choose `paired` or `practice` |
+| `DAYMARK_SETUP_MODE` `paired` or `practice` with `DAYMARK_THERAPIST_AUTH` set to anything but `1` or `true` | The two contradict each other: the mode turns the clinician portal on and the switch turns it off (#330) | Remove `DAYMARK_THERAPIST_AUTH`, which the mode replaces, or choose `solo` |
 
 The public address is `DAYMARK_PUBLIC_BASE_URL`, or the first `DAYMARK_WEBAUTHN_ORIGINS` entry when
 that is unset; a refusal names whichever it read.
@@ -285,16 +312,18 @@ The volume is `daymark-companion_blobs`, mounted at `/data`.
 | `index.db` and `blobs/<lineage>/<version>.blob` | Snapshot ciphertext and its index | a bearer token is set |
 | `keyparams.json` | The owner's key-derivation parameters (salt and cost; public) | an owner has published them |
 | `owner-account.db` | The bearer-token digest, the notification email (plaintext), recovery-link digests | a bearer token is set |
-| `auth.db` | Invitations (Argon2id), sign-in code seeds (**in the clear**), session digests, attempt counters, public keys, relationship endings | `DAYMARK_THERAPIST_AUTH=1` |
-| `rel-index.db` and `rel/<relRef>/<channel>/<lineage>/<version>.blob` | Relationship ciphertext and its index | `DAYMARK_THERAPIST_AUTH=1` |
-| `audit.db`, `org-audit.db` | Audit chains, per relationship and per practice | `DAYMARK_THERAPIST_AUTH=1` |
-| `org.db` | Practices, members, roles | `DAYMARK_THERAPIST_AUTH=1` |
-| `pairing.db` | Pairing messages in transit | `DAYMARK_THERAPIST_AUTH=1` |
+| `auth.db` | Invitations (Argon2id), sign-in code seeds (**in the clear**), session digests, attempt counters, public keys, relationship endings | the `paired` or `practice` shape (§0) |
+| `rel-index.db` and `rel/<relRef>/<channel>/<lineage>/<version>.blob` | Relationship ciphertext and its index | the `paired` or `practice` shape (§0) |
+| `audit.db` | The audit chain per relationship | the `paired` or `practice` shape |
+| `org-audit.db` | The audit chain per practice | the `practice` shape |
+| `org.db` | Practices, members, roles | the `practice` shape |
+| `pairing.db` | Pairing messages in transit | the `paired` or `practice` shape (§0) |
 | `tmp/` | Staging for atomic writes | with either blob store |
 
-That is eight SQLite databases, all in WAL mode: each may have `-wal` and `-shm` files beside it, and
-those belong to it. Also present and not worth keeping: `.readyz` (the readiness probe's file) and the
-SQLite native library the server unpacks at every start.
+That is eight SQLite databases, all in WAL mode: each may have `-wal` and `-shm` files beside it,
+and those belong to it. Also present and not worth keeping: `.readyz` (the readiness probe's file)
+and the SQLite native library the server unpacks at every start. A server that changes shape keeps
+the files it no longer opens: nothing is migrated or deleted.
 
 The volume holds **sign-in secrets**: anyone with a copy of `auth.db` can mint sign-in codes for every
 enrolled clinician (COMPANION_SECURITY.md §5.2). Protect backups like a password file — encrypted at
@@ -419,8 +448,8 @@ check that a real email arrives (#207).
 
 ## 9. First run
 
-1. `cp .env.example .env` in `companion/`; set `DAYMARK_DOMAIN`, and `DAYMARK_THERAPIST_AUTH=1` if a
-   clinician or a practice will use this server.
+1. `cp .env.example .env` in `companion/`; set `DAYMARK_DOMAIN`, and set `DAYMARK_SETUP_MODE` to
+   what this machine is for (§0). The example says `solo`.
 2. Create the bearer token (§5.2). By decision, a one-time setup code from the server's own log
    replaces this step (#208); not built: #322.
 3. Pick the topology (§1) and start: `docker compose up -d --build`, adding the override if your proxy
