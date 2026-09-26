@@ -30,6 +30,7 @@
   } from './lib/setup/shape'
   import { startConfigurationRead } from './lib/setup/configProbe'
   import { offersRoute } from './lib/onboarding/audience'
+  import type { OwnerConnection } from './lib/owner/recoveryEmail'
   import { trustPostureFor } from './lib/trust/posture'
   import type { InstrumentDefinition } from './lib/instruments/types'
 
@@ -105,6 +106,17 @@
    * is withheld, and the recovery code screen's paragraph about the key file sends nobody to it.
    */
   const ownerConsoleOffered = $derived(offersRoute('owner', published))
+
+  /*
+   * THE ACCESS TOKEN A SYNC FETCH PROVED, FOR THIS VISIT ONLY.
+   *
+   * The sync card kept its server address and token in its own state, gone the moment another
+   * card opened. It now hands them up here when a fetch succeeds, and the "Recover access" card
+   * reuses them to register the recovery email on a solo server (#330) instead of asking for the
+   * token a second time. Held in memory for the life of this page, as the records that fetch
+   * opened are; never written to storage, and gone on reload.
+   */
+  let syncConnection = $state<OwnerConnection | null>(null)
 
   /*
    * ═══════════════════════════════════════════════════════════════════════════════════════════
@@ -377,13 +389,13 @@
             {:else if source === 'file'}
               <Dropzone onload={load} onerror={(m) => (error = m)} />
             {:else if source === 'sync'}
-              <SyncPanel onload={loadData} {ownerConsoleOffered} />
+              <SyncPanel onload={loadData} {ownerConsoleOffered} onconnected={(c) => (syncConnection = c)} />
             {:else if source === 'assess'}
               <Assessments />
             {:else if source === 'build'}
               <ToolBuilder onPublish={publishTool} />
             {:else if source === 'recover'}
-              <RecoverAccess />
+              <RecoverAccess {ownerConsoleOffered} connection={syncConnection} onopen={(id) => (source = id)} />
             {:else if source === 'practice'}
               <!--
                 The marked placeholder standing where the practice console will be. It is reached

@@ -16,6 +16,17 @@ import {
   FILE_IS_A_STAND_IN_WITHOUT_OWNER_CONSOLE,
   fileIsAStandIn,
 } from '../components/recovery/copy'
+import {
+  BEFORE_YOU_NEED_IT,
+  EMAIL_LABEL,
+  EMAIL_MISSING,
+  LOAD_FAILED,
+  REGISTER,
+  REMOVE,
+  SAVE_FAILED,
+  recoverCardView,
+  registeredStatement,
+} from '../owner/recoveryEmail'
 
 /*
  * WHAT THIS SUITE IS FOR (#330)
@@ -213,6 +224,26 @@ describe('the entry points the owner’s page offers, shape by shape', () => {
 
 describe('nothing on a published solo page points at the owner console it withholds', () => {
   const OWNER_CONSOLE = /\bowner console\b/i
+  /** The console, or the tab inside it that holds the recovery email. */
+  const CONSOLE_OR_ITS_TAB = /\bowner console\b|\bnotifications?\b/i
+
+  /** Every sentence and label the "Recover access" card shows in one state. */
+  function recoverCardWords(published: ShapeId, connected: boolean, registered: string | null): string[] {
+    const view = recoverCardView({ ownerConsoleOffered: offersRoute('owner', published), connected, registered })
+    const setup = view.setup
+    return [
+      ...(view.summary ? [view.summary] : []),
+      BEFORE_YOU_NEED_IT,
+      ...(setup.kind === 'register'
+        ? [setup.lede, EMAIL_LABEL, REGISTER, REMOVE, ...(setup.registered ? [registeredStatement(setup.registered)] : [])]
+        : [setup.text, setup.link.label]),
+      view.lostHeading,
+      ...view.lostLede,
+      EMAIL_MISSING,
+      LOAD_FAILED,
+      SAVE_FAILED,
+    ]
+  }
 
   /** The words the owner's page renders from these modules for one published shape. */
   function wordsFor(published: ShapeId) {
@@ -232,6 +263,9 @@ describe('nothing on a published solo page points at the owner console it withho
       shape.buildNote,
       opensOnStatement(published),
       fileIsAStandIn(offersRoute('owner', published)),
+      ...recoverCardWords(published, false, null),
+      ...recoverCardWords(published, true, null),
+      ...recoverCardWords(published, true, 'someone@example.org'),
     ]
   }
 
@@ -240,6 +274,15 @@ describe('nothing on a published solo page points at the owner console it withho
     // file — so the detector and the word list both see it before it is asserted absent.
     expect(wordsFor('paired').filter((w) => OWNER_CONSOLE.test(w)).length).toBeGreaterThanOrEqual(2)
     expect(wordsFor('solo').filter((w) => OWNER_CONSOLE.test(w))).toEqual([])
+  })
+
+  it('nor, on the "Recover access" card, about the console’s Notifications tab', () => {
+    // Control: the paired card points at the tab by name, and the retired line did too.
+    expect(recoverCardWords('paired', false, null).filter((w) => CONSOLE_OR_ITS_TAB.test(w)).length).toBeGreaterThanOrEqual(2)
+    expect('Enter the email you registered for notifications.').toMatch(CONSOLE_OR_ITS_TAB)
+    for (const [connected, registered] of [[false, null], [true, null], [true, 'someone@example.org']] as const) {
+      expect(recoverCardWords('solo', connected, registered).filter((w) => CONSOLE_OR_ITS_TAB.test(w))).toEqual([])
+    }
   })
 
   it('drops only the sentence about the console from the key file paragraph', () => {
@@ -259,7 +302,11 @@ describe('nothing on a published solo page points at the owner console it withho
         .replace(/\/\*[\s\S]*?\*\//g, ' ')
     const app = read('../../App.svelte')
     expect(app).toContain("const ownerConsoleOffered = $derived(offersRoute('owner', published))")
-    expect(app).toContain('<SyncPanel onload={loadData} {ownerConsoleOffered} />')
+    // The sync card's tag carries the rule; the tag matcher is mustache-aware, because the
+    // `onconnected={(c) => …}` handler beside it carries a `>` of its own.
+    const syncTag = app.match(/<SyncPanel\b(?:[^>{]|\{[^{}]*\})*>/)?.[0] ?? ''
+    expect(syncTag).toContain('onload={loadData}') // the whole tag was read
+    expect(syncTag).toContain('{ownerConsoleOffered}')
     expect(read('../components/SyncPanel.svelte')).toContain('<RecoveryPanel {ownerConsoleOffered} />')
     expect(read('../components/recovery/RecoveryPanel.svelte')).toContain('<UseCodeFlow {ownerConsoleOffered} />')
     const flow = read('../components/recovery/UseCodeFlow.svelte')

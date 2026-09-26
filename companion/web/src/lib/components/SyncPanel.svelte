@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Component } from 'svelte'
   import { parseBackup, type BackupData } from '../backup'
+  import type { OwnerConnection } from '../owner/recoveryEmail'
 
   let {
     onload,
@@ -9,9 +10,17 @@
      * names that console in one paragraph, and says it only where the console is offered.
      */
     ownerConsoleOffered = true,
+    /**
+     * Handed the server address and access token once a pull with them has succeeded — the
+     * server accepted the token and returned this person's snapshot — so the "Recover access"
+     * card can register the recovery email without asking for the token again (#330). Never
+     * called with a token the server has not accepted.
+     */
+    onconnected = undefined,
   }: {
     onload: (data: BackupData, source: string) => void
     ownerConsoleOffered?: boolean
+    onconnected?: (connection: OwnerConnection) => void
   } = $props()
 
   // Default to the same origin (this portal is served by the companion). Users behind a
@@ -33,6 +42,9 @@
       const { SyncClient } = await import('../sync/client')
       const client = new SyncClient(serverUrl, token)
       const { version, plaintext } = await client.pullLatest(lineage, passphrase)
+      // The server accepted the token and returned this person's snapshot, so the token is proved.
+      // Handed up before `onload`, which replaces this card with the dashboard.
+      onconnected?.({ serverUrl, token })
       const text = new TextDecoder().decode(plaintext)
       const data = parseBackup(text)
       onload(data, `sync · ${lineage} v${version}`)

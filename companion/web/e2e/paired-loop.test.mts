@@ -437,6 +437,14 @@ it('the paired loop: pair, grant, seal a share, read it, and send an assignment 
     expect(await clinicianLink.count(), 'the clinician console is not linked').toBe(1)
     const href = await clinicianLink.getAttribute('href')
     expect((await fetch(new URL(href ?? '', `${BASE}/`))).status, `${href} was refused`).toBe(200)
+    // On a paired server the recovery email is set in the owner console, and the "Recover access"
+    // card points there rather than holding the setting itself (#330); its link opens the console.
+    await routeCard('Recover access to your server').click()
+    const recover = owner.locator('.recover')
+    await recover.getByText('Register or change the email in the owner console, under Notifications.').waitFor()
+    expect(await recover.getByLabel('Recovery email').count(), 'the solo registration field shows on paired').toBe(0)
+    await recover.getByRole('button', { name: 'Owner console — clinicians and shares', exact: true }).click()
+    await owner.locator('.unlock').waitFor()
   })
 
   await step('the Recovery code screen makes the owner key file', async () => {
