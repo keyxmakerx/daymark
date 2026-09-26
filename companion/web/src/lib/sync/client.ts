@@ -152,7 +152,18 @@ function isKeyParams(x: unknown): x is KeyParams {
   return isRecord(x) && x.v === 1 && isRecord(x.kdf) && typeof x.saltB64 === 'string'
 }
 
-/** The shape of a wrapped key, and nothing more: dataKey.ts checks every slot again on every use. */
+/** The kinds of slot this client opens (recovery/dataKey.ts SlotKind). */
+const KNOWN_SLOT_KINDS: ReadonlySet<unknown> = new Set(['passphrase', 'recovery'])
+
+/**
+ * The shape of a wrapped key, read as recovery/dataKey.ts and the phone read one (#403, #419):
+ * every slot is an object, and a slot of a kind this client opens carries all of its fields. A slot
+ * of any other kind — a passkey's, a Shamir share, one with no kind — is not read here at all, so a
+ * kind added later does not make the whole key unreadable. Its KDF parameters are still held to the
+ * floor and the ceiling, with every other slot's, before anything is derived: dataKey.ts
+ * validateBlob checks every slot of every kind against crypto.ts kdfRange on every use, and
+ * keysFrom turns its two refusals into WEAK_KDF and COSTLY_KDF.
+ */
 function isWrappedKey(x: unknown): x is RecoverableDataKey {
   return (
     isRecord(x) &&
@@ -161,11 +172,11 @@ function isWrappedKey(x: unknown): x is RecoverableDataKey {
     x.slots.every(
       (s) =>
         isRecord(s) &&
-        typeof s.kind === 'string' &&
-        isRecord(s.kdf) &&
-        typeof s.saltB64 === 'string' &&
-        typeof s.nonceB64 === 'string' &&
-        typeof s.ctB64 === 'string',
+        (!KNOWN_SLOT_KINDS.has(s.kind) ||
+          (isRecord(s.kdf) &&
+            typeof s.saltB64 === 'string' &&
+            typeof s.nonceB64 === 'string' &&
+            typeof s.ctB64 === 'string')),
     )
   )
 }

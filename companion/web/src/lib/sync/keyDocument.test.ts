@@ -518,3 +518,136 @@ describe('(g) KDF parameters under the floor or over the ceiling are refused bef
     })
   }
 })
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   (h) A slot of a kind this client does not open is skipped, and still held to the range (#419).
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+describe('(h) a slot of a kind this client does not open is skipped, and still held to the range (#419)', () => {
+  /*
+   * The owner console (recovery/dataKey.ts) and the phone (#403) skip a slot of a kind they do not
+   * open, so a kind added later, a passkey's or a Shamir share, does not lock them out of a key they
+   * can otherwise open. The sync card and `pnpm push` read the key document through this client and
+   * must do the same: read nothing of such a slot but its KDF parameters, and hold those to the
+   * floor and the ceiling like every other slot's. The strangers are the ones
+   * recovery/dataKeyVector.test.ts and the phone's KeyDocumentVectorTest share: a passkey's slot
+   * before the two this client opens, a slot with no kind between them, and a slot whose kind is
+   * not a string after them. None has a salt, a nonce or a lock.
+   */
+  type Loose = Record<string, unknown> & { kdf?: Record<string, unknown> }
+  interface Doc {
+    v: number
+    slots: Loose[]
+  }
+  const floor = (): Record<string, unknown> => ({ ...DEFAULT_KDF })
+  const withStrangers = (): Doc => {
+    const slots: Loose[] = enrolled.blob.slots.map((s) => ({ ...s, kdf: { ...s.kdf } }))
+    slots.splice(0, 0, { kind: 'webauthn-prf', kdf: floor(), credentialId: 'not base64 !!' })
+    slots.splice(2, 0, { kdf: floor() })
+    slots.push({ kind: 1, kdf: floor() })
+    return { v: 1, slots }
+  }
+  const passkeySlot = (d: Doc) => d.slots[0]!
+  const kindlessSlot = (d: Doc) => d.slots[2]!
+  let text: string
+  let so: Awaited<ReturnType<typeof initCrypto>>
+  beforeAll(async () => {
+    so = await initCrypto()
+    text = JSON.stringify(withStrangers())
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  /** What the sync client asked of every slot, whatever its kind, before #419. */
+  const everySlotStrictly = (d: Doc): boolean =>
+    d.slots.every(
+      (s) =>
+        typeof s.kind === 'string' &&
+        typeof s.kdf === 'object' &&
+        s.kdf !== null &&
+        typeof s.saltB64 === 'string' &&
+        typeof s.nonceB64 === 'string' &&
+        typeof s.ctB64 === 'string',
+    )
+
+  it('the document is one that reading every slot strictly refuses (the counter-example)', () => {
+    // The strict reading takes the enrolled key's own two slots, so it is not blind...
+    expect(everySlotStrictly(enrolled.blob as unknown as Doc)).toBe(true)
+    // ...and refuses this document, so the reads below prove the strangers are skipped.
+    expect(everySlotStrictly(JSON.parse(text) as Doc)).toBe(false)
+    expect((JSON.parse(text) as Doc).slots).toHaveLength(5)
+  })
+
+  it('the pull opens the passphrase slot beside them, and reads the snapshot', async () => {
+    const server = fakeServer()
+    server.state.wrapped.push(text)
+    server.state.snapshots.set('laptop/0', { bytes: legacySnapshot, createdAt: 1 })
+    const pulled = await server.client.pullLatest('laptop', PASS)
+    expect(dec.decode(pulled.plaintext)).toBe('{"from":"before the wrapped key"}')
+    // The strangers are kept as the server sent them, for anything that writes the key back.
+    const read = await server.client.getKeyDocument()
+    expect(read.kind === 'wrapped' && JSON.stringify(read.wrapped)).toBe(text)
+  }, 60_000)
+
+  it('pnpm push writes under it, and the snapshot opens through it', async () => {
+    const server = fakeServer()
+    server.state.wrapped.push(text)
+    await server.client.pushSnapshot('desk', 0, enc.encode('{"beside":"a passkey slot"}'), PASS)
+    expect(requests(server.calls)).toEqual(['GET /v1/keydoc', 'GET /v1/keydoc', 'PUT /v1/snapshots/desk/0'])
+    const pulled = await new SyncClient('http://sync.test', 'token', server.doFetch).pullLatest('desk', PASS)
+    expect(dec.decode(pulled.plaintext)).toBe('{"beside":"a passkey slot"}')
+  }, 60_000)
+
+  const REACHED_THE_DERIVATION = 'reached the derivation'
+  const stubDerivation = () =>
+    vi.spyOn(so, 'crypto_pwhash').mockImplementation(() => {
+      throw new Error(REACHED_THE_DERIVATION)
+    })
+
+  const ROWS: Array<[string, (d: Doc) => void, string]> = [
+    ['the passkey slot at 255 MiB', (d) => { passkeySlot(d).kdf!.memMiB = 255 }, WEAK_KDF],
+    ['the passkey slot on argon2i', (d) => { passkeySlot(d).kdf!.alg = 'argon2i' }, WEAK_KDF],
+    ['the passkey slot with no KDF parameters', (d) => { delete passkeySlot(d).kdf }, WEAK_KDF],
+    ['the kindless slot at 2 passes', (d) => { kindlessSlot(d).kdf!.ops = 2 }, WEAK_KDF],
+    ['the passkey slot at 513 MiB', (d) => { passkeySlot(d).kdf!.memMiB = 513 }, COSTLY_KDF],
+    ['the kindless slot at 9 passes', (d) => { kindlessSlot(d).kdf!.ops = 9 }, COSTLY_KDF],
+  ]
+  for (const [name, mutate, words] of ROWS) {
+    it(`${name}: refused in these words, with nothing derived and no snapshot asked for`, async () => {
+      const d = withStrangers()
+      mutate(d)
+      const served = JSON.stringify(d)
+      expect(served).not.toBe(text)
+      const server = fakeServer()
+      server.state.wrapped.push(served)
+      const pwhash = stubDerivation()
+      const refused = await server.client.pullLatest('laptop', PASS).catch((e: unknown) => e)
+      expect(refused).toBeInstanceOf(SyncError)
+      expect((refused as Error).message).toBe(words)
+      expect(pwhash).not.toHaveBeenCalled()
+      expect(requests(server.calls)).toEqual(['GET /v1/keydoc'])
+    })
+  }
+
+  it('the passkey slot at 512 MiB and 8 passes is not refused: the passphrase slot is derived as it always is', async () => {
+    const d = withStrangers()
+    Object.assign(passkeySlot(d).kdf!, { memMiB: 512, ops: 8 })
+    const server = fakeServer()
+    server.state.wrapped.push(JSON.stringify(d))
+    const pwhash = stubDerivation()
+    const outcome = await server.client.pullLatest('laptop', PASS).catch((e: unknown) => e)
+    expect((outcome as Error).message).toBe(PASSPHRASE_DOES_NOT_OPEN_KEY)
+    expect(pwhash.mock.calls.map((c) => [c[3], c[4]])).toEqual([[DEFAULT_KDF.ops, DEFAULT_KDF.memMiB * 1024 * 1024]])
+  })
+
+  it('a slot of a kind this client opens is still read strictly: one with no lock is refused', () => {
+    const d = withStrangers()
+    const passphraseSlot = d.slots.find((s) => s.kind === 'passphrase')!
+    delete passphraseSlot.ctB64
+    const headers = new Headers({ 'X-Key-Document': 'wrapped', 'X-Key-Document-Version': '1', ETag: '"e"' })
+    expect(() => parseKeyDocument(headers, JSON.stringify(d))).toThrow('the server sent a wrapped key this client cannot read')
+    // Positive control: the same document with its lock reads.
+    expect(parseKeyDocument(headers, text).kind).toBe('wrapped')
+  })
+})
