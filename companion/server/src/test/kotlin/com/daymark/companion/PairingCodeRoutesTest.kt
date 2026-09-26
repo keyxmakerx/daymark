@@ -16,9 +16,14 @@ import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import java.io.File
+import java.math.BigInteger
+import java.security.MessageDigest
 import java.sql.DriverManager
+import java.util.Base64
+import java.util.HexFormat
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -281,5 +286,141 @@ class PairingCodeRoutesTest {
         val unknown = revoke(TestPhone().keyId)
         assertEquals(HttpStatusCode.NotFound to """{"error":"no such device"}""", unknown.status to unknown.bodyAsText())
     }
+
+    /**
+     * A key of mixed order and a redemption proof for [code] that verifies under it: a scalar times the
+     * base point, plus a point of order 8, signed with the scalar and a nonce drawn again until the
+     * challenge is a multiple of 8, so the point of order 8 drops out of the check.
+     */
+    private fun mixedOrderRedemption(code: String): Pair<String, String> {
+        val a = BigInteger("1234567890123456789012345678901234567890").mod(Edwards.L)
+        val orderEight = Edwards.decode(HexFormat.of().parseHex(SMALL_ORDER[4]))
+        val key = Edwards.encode(Edwards.add(Edwards.times(a, Edwards.base), orderEight))
+        val keyB64 = DeviceSignature.b64url(key)
+        val message = DeviceSignature.redeemMessage(DeviceSignature.codeIdOf(code), keyB64)
+        for (n in 1..1_000) {
+            val r = BigInteger.valueOf(1_000L + n)
+            val encodedR = Edwards.encode(Edwards.times(r, Edwards.base))
+            val k = Edwards.fromLittleEndian(MessageDigest.getInstance("SHA-512").digest(encodedR + key + message)).mod(Edwards.L)
+            if (k.mod(BigInteger.valueOf(8)) != BigInteger.ZERO) continue
+            val s = (r + k * a).mod(Edwards.L)
+            return keyB64 to DeviceSignature.b64url(encodedR + Edwards.littleEndian(s, 32))
+        }
+        error("no nonce made the challenge a multiple of 8")
+    }
+
+    @Test
+    fun `a public key of small or mixed order is refused at redeem, and nothing is written`() = testApplication {
+        val server = DeviceServer()
+        server.start(this)
+        val phone = TestPhone()
+        assertTrue(DeviceSignature.isUsablePublicKey(phone.publicKey), "control: a phone's key is usable")
+        for (hex in SMALL_ORDER + NOT_CANONICAL) {
+            assertFalse(DeviceSignature.isUsablePublicKey(HexFormat.of().parseHex(hex)), hex)
+        }
+
+        val minted = server.mint(client)
+        suspend fun redeem(keyB64: String, proofB64: String) = client.post("/v1/devices/redeem") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"code":"${minted.code}","publicKey":"$keyB64","signature":"$proofB64"}""")
+        }
+        // A key of small order verifies a signature over any message: R the identity, S zero.
+        val overAnything = DeviceSignature.b64url(Edwards.encode(Edwards.identity) + ByteArray(32))
+        for (hex in SMALL_ORDER + NOT_CANONICAL) {
+            val res = redeem(DeviceSignature.b64url(HexFormat.of().parseHex(hex)), overAnything)
+            assertEquals(refusal, res.status to res.bodyAsText(), hex)
+        }
+        // A key of mixed order, with a proof the signature check takes: only the check of the key refuses it.
+        val (mixed, proof) = mixedOrderRedemption(minted.code)
+        val decoder = Base64.getUrlDecoder()
+        val proved = DeviceSignature.redeemMessage(DeviceSignature.codeIdOf(minted.code), mixed)
+        assertTrue(DeviceSignature.verify(decoder.decode(mixed), proved, decoder.decode(proof)), "control: the proof verifies under the key")
+        val res = redeem(mixed, proof)
+        assertEquals(refusal, res.status to res.bodyAsText(), "a key of mixed order")
+
+        // Nothing was written: no redemption, and the code still waits for a phone, which redeems it.
+        assertEquals(0, rows(server.dataDir, "pairing_redemptions"))
+        assertEquals(HttpStatusCode.Accepted, server.redeem(client, phone, minted.code).status)
+        assertEquals(1, rows(server.dataDir, "pairing_redemptions"), "control: the table the refusals left empty is the one a redemption writes")
+    }
+
+    private companion object {
+        /** The eight points of small order on Ed25519, by their canonical encodings: order 1, 2, 4, 4 and four of order 8. */
+        val SMALL_ORDER = listOf(
+            "0100000000000000000000000000000000000000000000000000000000000000",
+            "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            "0000000000000000000000000000000000000000000000000000000000000080",
+            "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a",
+            "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa",
+            "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05",
+            "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85",
+        )
+
+        /** Spellings of them no encoder makes: y = p and y = p + 1, and x = 0 with its sign bit set, for each sign. */
+        val NOT_CANONICAL = listOf(
+            "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+            "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+            "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "0100000000000000000000000000000000000000000000000000000000000080",
+            "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        )
+    }
 }
 
+
+/**
+ * Ed25519's curve by the book, in BigInteger: enough to make keys no phone would, and a signature for one.
+ * Slow, and for tests only.
+ */
+private object Edwards {
+    val P: BigInteger = BigInteger.TWO.pow(255) - BigInteger.valueOf(19)
+    val L: BigInteger = BigInteger.TWO.pow(252) + BigInteger("27742317777372353535851937790883648493")
+    private val D: BigInteger = BigInteger.valueOf(-121665).multiply(BigInteger.valueOf(121666).modInverse(P)).mod(P)
+    private val SQRT_MINUS_ONE: BigInteger = BigInteger.TWO.modPow((P - BigInteger.ONE) / BigInteger.valueOf(4), P)
+
+    data class Point(val x: BigInteger, val y: BigInteger)
+
+    val identity = Point(BigInteger.ZERO, BigInteger.ONE)
+    val base: Point = (BigInteger.valueOf(4) * BigInteger.valueOf(5).modInverse(P)).mod(P).let { y -> Point(xFor(y, odd = false), y) }
+
+    fun add(a: Point, b: Point): Point {
+        val dxy = (D * a.x * b.x * a.y * b.y).mod(P)
+        val x = ((a.x * b.y + a.y * b.x) * (BigInteger.ONE + dxy).modInverse(P)).mod(P)
+        val y = ((a.y * b.y + a.x * b.x) * (BigInteger.ONE - dxy).mod(P).modInverse(P)).mod(P)
+        return Point(x, y)
+    }
+
+    fun times(k: BigInteger, p: Point): Point {
+        var r = identity
+        for (i in k.bitLength() - 1 downTo 0) {
+            r = add(r, r)
+            if (k.testBit(i)) r = add(r, p)
+        }
+        return r
+    }
+
+    private fun xFor(y: BigInteger, odd: Boolean): BigInteger {
+        val x2 = ((y * y - BigInteger.ONE) * (D * y * y + BigInteger.ONE).mod(P).modInverse(P)).mod(P)
+        var x = x2.modPow((P + BigInteger.valueOf(3)) / BigInteger.valueOf(8), P)
+        if ((x * x - x2).mod(P) != BigInteger.ZERO) x = (x * SQRT_MINUS_ONE).mod(P)
+        if (x.testBit(0) != odd) x = (P - x).mod(P)
+        return x
+    }
+
+    fun encode(p: Point): ByteArray = littleEndian(p.y, 32).also { if (p.x.testBit(0)) it[31] = (it[31].toInt() or 0x80).toByte() }
+
+    fun decode(bytes: ByteArray): Point {
+        val odd = bytes[31].toInt() and 0x80 != 0
+        val y = fromLittleEndian(bytes.copyOf().also { it[31] = (it[31].toInt() and 0x7f).toByte() })
+        return Point(xFor(y, odd), y)
+    }
+
+    fun littleEndian(v: BigInteger, size: Int): ByteArray {
+        val bigEndian = v.toByteArray()
+        return ByteArray(size) { i -> if (i < bigEndian.size) bigEndian[bigEndian.size - 1 - i] else 0 }
+    }
+
+    fun fromLittleEndian(bytes: ByteArray): BigInteger = BigInteger(1, bytes.reversedArray())
+}
