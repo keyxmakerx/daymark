@@ -58,9 +58,10 @@ const ACTION_LABELS: Record<string, string> = {
   'owner_key.refused': 'Sent your key again; the first one was kept',
   'owner_key.fetched': 'Read your published key',
   /*
-   * Phones (#186, #189), written to the owner's own log rather than a relationship's. A receipt for
-   * the console's Confirm and Revoke, in the words the re-issue's warning uses ("This disconnects
-   * every paired phone"): the server holds the key it was handed and vouches for nothing about it.
+   * Phones (#186, #189, #431), written to the owner's own log rather than a relationship's. A receipt
+   * for the Phones section's "Pair this phone" and "Disconnect", in the person's word, which the
+   * re-issue line uses too ("disconnects every paired phone"): the server holds the key it was handed
+   * and vouches for nothing about it. A re-issue's disconnections read otherwise (ownerLogActionLabel).
    */
   'device.registered': 'Paired a phone',
   'device.revoked': 'Disconnected a phone',
