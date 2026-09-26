@@ -226,7 +226,7 @@ read from a file named by `NAME_FILE`, which wins.
 | `DAYMARK_AUTH_LOCKOUT_FAILS`, `_SECONDS` | `8`, `900` | Bad bearer tokens before an address is locked out, and for how long |
 | `DAYMARK_TOTP_LOCKOUT_FAILS`, `_SECONDS` | `5`, `300` | Bad sign-in codes before a credential is locked, and for how long; also the backoff for wrong invitation secrets |
 | `DAYMARK_INVITE_TTL_SECONDS` | `259200` (72 h) | Invitation lifetime |
-| `DAYMARK_SESSION_IDLE_SECONDS`, `_ABSOLUTE_SECONDS` | `900`, `28800` | Clinician session lifetimes |
+| `DAYMARK_SESSION_IDLE_SECONDS`, `_ABSOLUTE_SECONDS` | `900`, `28800` | Clinician session lifetimes on the server. The clinician console also drops its keys after 15 minutes without activity, and at the server's absolute expiry or 8 hours after sign-in, whichever is sooner, as its sign-in contract says: a shorter value here applies, a longer one does not extend what the page holds |
 | `DAYMARK_COOKIE_INSECURE` | off | Plain-HTTP testing only: drops `Secure` from the session cookie. Refused at start with an `https` public address (§5.3) |
 | `DAYMARK_ACCESS_LOG_RETENTION_DAYS` | `90` | Audit-log retention (COMPANION_SECURITY.md §9) |
 | `DAYMARK_ACCESS_LOG_SOURCE_IP` | off | Records the client address in audit entries |

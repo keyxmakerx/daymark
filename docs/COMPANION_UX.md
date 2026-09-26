@@ -158,8 +158,7 @@ then, with **Cancel** and **Share this** equally weighted:
 
 - *"You're sending real entries to another person. Once they open it, you can't un-see it for
   them."*
-- *"You can revoke anytime. That blocks future access on an honest server. For the strongest
-  protection against a tampered server, re-pair with a new key."*
+- *"You can revoke anytime. That stops future access through an honest server."*
 - *"Your server can see that a share exists, roughly how big it is and when it was sent — not what is in
   it. It cannot hide that you share with someone."*
 

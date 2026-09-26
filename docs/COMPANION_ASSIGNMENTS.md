@@ -46,9 +46,10 @@ append-only version on the grants channel; the clinician verifies it against the
 and checks that it names their own key, before trusting it. The owner signs every clinician's grant
 with the same key, so the name inside is what says who a grant is for. A clinician who re-pairs with
 new keys keeps what was granted, re-bound to the new key. Revoking sets `granted: false` in a new
-version. That stops future delivery through an honest server; a true cutoff for material already
-delivered is re-pairing with new keys (COMPANION_SECURITY.md R3). "Revoking does not un-send what
-was already read."
+version. That stops future delivery through an honest server. Nothing reaches what was already
+delivered: re-pairing with new keys changes what is sealed from then on, and what was sealed to the
+old keys stays readable by whoever holds them (COMPANION_SECURITY.md R3). "Revoking does not un-send
+what was already read."
 
 ## 2. The assignment channel (clinician to owner)
 
@@ -134,8 +135,8 @@ Year-in-pixels, brushing, journal search, sleep trends and export are not built:
   is not currently granted, and applies nothing in `propose` mode without an explicit yes.
 - **Mutual pinning.** Each side verifies the other's signatures against keys pinned in the pairing
   ([COMPANION_PAIRING.md](COMPANION_PAIRING.md)), never against a key the server supplied.
-- **Revocation** is a capability turned off, for future delivery through an honest server, plus
-  re-pairing for a true cutoff.
+- **Revocation** is a capability turned off, for future delivery through an honest server;
+  re-pairing with new keys changes what is sealed from then on, never what was already sealed.
 - **Transparency both ways.** The owner's access log records what the clinician opened and sent; the
   clinician sees their current grant.
 - **Non-diagnostic and licence-clean throughout.** Only catalogue items that pass the honesty gate

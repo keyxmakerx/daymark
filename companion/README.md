@@ -24,7 +24,7 @@ topology, the proxy contract, every setting, backup and restore:
   and never uploaded. Results stay on that device.
 - **With `DAYMARK_SETUP_MODE=paired`:** the owner console (invite a clinician and pair with a spoken
   code, grant capabilities, share chosen slices, review what they assign, read the access log) and
-  the clinician's portal (sign-in with a six-digit authenticator code, the shared-data dashboard,
+  the clinician console (sign-in with a six-digit authenticator code, the shared-data dashboard,
   assignments, game plans, leaving). **With `practice`**, the practice console as well.
 - **Optional email (SMTP)**, off unless configured: invitation links, owner notifications, and
   recovery of the owner's access token, which the decided design replaces with proving the owner's

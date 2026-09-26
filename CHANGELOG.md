@@ -210,6 +210,17 @@ All notable changes to this project are documented here. The format is based on
   both jobs.
 
 ### Changed
+- **Companion — the words match what the software does.** The consoles say "clinician", and each
+  page is a console named for who uses it (#158). The owner page says a sealed share leaves the
+  browser, and makes one claim about entries: they leave only when you sync or share them (#273,
+  #252). The share builder says a share is access, and your own words go only when you include them
+  (#337). The clinician's sign-in says what the lock drops and what extensions and screenshots can
+  still keep, the page drops its keys within 8 hours on every server, and it says when it locked
+  (#262). The card after accepting an invitation describes the real sign-in (#312). Nothing promises
+  a cutoff for past data or asks anyone to verify a digest nobody publishes (#320). The practice
+  screens state that nobody can reset a passphrase (#313), promise no complete log and say what
+  removing a member does (#317), and say no real patient's data belongs there before the outside
+  reviews (#333).
 - **The PDF report says what it is, and leaves your check-in notes out unless you switch them on.**
   Settings → *Export a PDF report* (it used to say "for therapist") opens with *A report is a copy.
   Once handed over, it cannot be taken back.*, and *Include check-in notes* starts off; a report

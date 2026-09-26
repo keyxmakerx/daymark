@@ -77,7 +77,8 @@ is a side effect.
   receptionist, then several clinicians, receptionists and doctors who assess and refer, and every
   referral is a person's decision. Not built: a sign-in for each member of staff, #314; the front
   desk's calendar, #299; referrals, #291. No real patient's data belongs on a Practice deployment
-  before an outside assessment: #284.
+  before an outside assessment: #284. The first-run Practice choice and the practice console say so
+  in one fixed sentence (#333).
 
 ## 3. Parties and trust
 
@@ -131,8 +132,9 @@ keys, endings and the access log (`/v1/relations/{relRef}/…`); owner notificat
 
 Svelte and TypeScript, built by Vite into one static bundle the server serves. Every page loads only
 from its own origin; all cryptography runs in the browser (libsodium). Each page is named for who
-uses it, and all four are Daymark Companion, with no separate brand (#310). Not built: page titles
-to match, which today read "Report viewer", "Therapist portal" and "Server admin": #158.
+uses it, and all four are Daymark Companion, with no separate brand (#310): the pages are titled
+"Daymark Companion — owner console", "— clinician console", "— admin console" and "— practice
+console" (#158).
 
 - **Owner console** (`index.html`): open an exported backup file; read the encrypted copy from the
   server; the self-check engine and a focus task (COMPANION_FEATURES.md); the tool builder; access
@@ -211,7 +213,7 @@ rather than left to be discovered.
 | **No forward secrecy for sealed items** | Anyone who later obtains a clinician's long-term key can open every share ever sealed to it that is still stored | Nothing the owner and a clinician send each other is served past 90 days, a newer share ends the one before it, and within the hour after an item ends the server deletes its bytes (#228, #332, #338). Grants, which are signed and not sealed, have no end. What a colluding server chose to keep is beyond any software's reach (R3) |
 | **Revocation binds an honest server** | Expiry and withdrawal stop future fetches on an honest server. They do not un-send what was read, and a colluding server can keep serving what it holds | A permanent, stated limit (#222); re-pairing with new keys protects what is sent afterwards |
 | **The bearer token travels on every request** | On plain HTTP anyone on the wire can replay it (never the content: that is encrypted) | Signed requests replace it: #186 |
-| **The clinician's browser holds plaintext** | Keys are wrapped at rest and wiped when idle; extensions and screenshots are beyond any control | Telling clinicians plainly: #262. Not built: a clinician client the server cannot change, which a Practice deployment needs before it holds a real patient's data (#222): #319 |
+| **The clinician's browser holds plaintext** | Keys are wrapped at rest and wiped when idle; extensions and screenshots are beyond any control | The sign-in contract says so beside the lock, which drops the keys after 15 minutes without activity or 8 hours in all, whatever the server allows (#262). Not built: a clinician client the server cannot change, which a Practice deployment needs before it holds a real patient's data (#222): #319 |
 
 ## 7. Rules that hold everywhere
 
