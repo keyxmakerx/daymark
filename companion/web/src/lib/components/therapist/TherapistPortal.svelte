@@ -64,6 +64,8 @@
     ctx = c
     grant = null
     grantError = ''
+    // A lock notice describes the session that just ended; this is a new one.
+    locked = false
     // Whatever the last leave said is stale the moment somebody signs in again — on this machine
     // that is a different relationship, since the one that was left cannot be signed into at all.
     leftNotice = ''
@@ -98,6 +100,23 @@
     // The decrypted bundle goes with the session. Leaving it behind would keep a person's records
     // in memory on a machine whose therapist has just said they were finished with it.
     shared = null
+    // The person's own Log out says nothing afterwards: they know what they did.
+    locked = false
+  }
+
+  /*
+   * THE AUTOMATIC LOCK SAYS WHAT HAPPENED (#262).
+   *
+   * Everything logout() does, and then one flag for the sign-in screen, which states the rule and
+   * that nothing else changed (SCREEN_COPY.lockedNotice). Without it the page simply returned to
+   * sign-in, which reads as something having gone wrong, or as someone else having done it. The
+   * flag is component state and nothing more: no storage call, so it cannot outlive this tab or
+   * tell anyone else that a session was here.
+   */
+  let locked = $state(false)
+  function lock() {
+    logout()
+    locked = true
   }
 
   /*
@@ -122,6 +141,7 @@
     tab = 'allowed'
     shared = null
     leftNotice = notice
+    locked = false
   }
 
   const canAssign = $derived(
@@ -158,7 +178,7 @@
   const live = $derived(ctx ? isLive(ctx.session, clock) : false)
 
   $effect(() => {
-    if (ctx && !live) logout()
+    if (ctx && !live) lock()
   })
 
   /*
@@ -209,7 +229,7 @@
     -->
     <p class="left-notice" role="status">{leftNotice}</p>
   {/if}
-  <SignInScreen>
+  <SignInScreen {locked}>
     {#snippet credentials()}
       <LoginGate onunlock={onUnlock} standalone={false} />
     {/snippet}

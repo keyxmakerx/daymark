@@ -566,3 +566,71 @@ describe('the module reads no clock', () => {
     expect(detector.test(codeOnly(MODULE_SRC))).toBe(false)
   })
 })
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   What the lock reaches, and what it does not (#262)
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+describe('the contract says what the lock does and what it cannot reach (#262)', () => {
+  const clause = (id: string) => SIGN_IN_CONTRACT.find((c) => c.id === id)?.text ?? ''
+  const MEMORY =
+    'Keys are held in memory only. Logging out, closing the tab, 15 minutes without activity, or 8 ' +
+    'hours in all drops them, and signing in starts again from this screen.'
+  const SCREEN =
+    'What you open is on screen like any other page. A browser extension can read it, a screenshot ' +
+    'can keep it, and on a computer other people use both matter more. The lock drops the keys from ' +
+    'memory; it does not reach a copy an extension or a screenshot already took.'
+  const RETIRED =
+    'Keys are held in memory only. Logging out, going idle, or closing the tab drops them, and the ' +
+    'next visit starts from this screen again.'
+
+  it('names every trigger the page acts on', () => {
+    expect(clause('session.memory')).toBe(MEMORY)
+  })
+
+  it('says what an extension and a screenshot can do, beside the lock that does not reach them', () => {
+    expect(clause('session.screen')).toBe(SCREEN)
+    const session = SIGN_IN_CONTRACT.filter((c) => c.section === 'session').map((c) => c.id)
+    expect(session.indexOf('session.screen')).toBe(session.indexOf('session.memory') + 1)
+  })
+
+  it('no longer says "going idle" or "the next visit"', () => {
+    const texts = SIGN_IN_CONTRACT.map((c) => c.text)
+    expect(texts).not.toContain(RETIRED)
+    expect(texts.join(' ')).not.toMatch(/going idle|next visit/i)
+    // Control: the retired clause planted back into the real contract is seen by both checks.
+    const planted = SIGN_IN_CONTRACT.map((c) => (c.id === 'session.memory' ? RETIRED : c.text))
+    expect(planted).toContain(RETIRED)
+    expect(planted.join(' ')).toMatch(/going idle|next visit/i)
+  })
+
+  it('the after-lock line states the rule, past tense, and that nothing else changed', () => {
+    expect(SCREEN_COPY.lockedNotice).toBe(
+      'This session ended. Sessions end after 15 minutes without activity, or 8 hours in all, and ' +
+        "the keys are dropped from this browser's memory. Nothing else changed.",
+    )
+  })
+
+  it('the screen shows it only when told the lock fired, above the fields, and in no warning', () => {
+    const needle = '{SCREEN_COPY.lockedNotice}'
+    const at = SCREEN_MARKUP.indexOf(needle)
+    expect(at).toBeGreaterThan(-1)
+    // Inside exactly one block, and that block is `{#if locked}`.
+    expect(blockDepthAt(SCREEN_MARKUP, needle)).toBe(1)
+    const opened = SCREEN_MARKUP.lastIndexOf('{#if', at)
+    expect(SCREEN_MARKUP.slice(opened, opened + '{#if locked}'.length)).toBe('{#if locked}')
+    // Above the credential entry, inside the same card.
+    const cardTag = '<Card title={SCREEN_COPY.credentialTitle}>'
+    const card = SCREEN_MARKUP.lastIndexOf(cardTag, at)
+    expect(card).toBeGreaterThan(-1)
+    expect(SCREEN_MARKUP.indexOf('{@render credentials()}', at)).toBeGreaterThan(at)
+    // Plain text: no Callout between the card and the line, so no warn, critical or info tone.
+    expect(SCREEN_MARKUP.slice(card, at)).not.toMatch(/<Callout\b/)
+    // Control: the same slice check does see a Callout when one wraps the line.
+    const wrapped = SCREEN_MARKUP.replace(needle, `<Callout tone="warn">${needle}</Callout>`)
+    const wrappedAt = wrapped.indexOf(needle)
+    expect(wrapped.slice(wrapped.lastIndexOf(cardTag, wrappedAt), wrappedAt)).toMatch(/<Callout\b/)
+    // The prop that carries the flag defaults to off.
+    expect(SCREEN_CODE).toMatch(/locked = false,/)
+  })
+})

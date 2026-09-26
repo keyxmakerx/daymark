@@ -257,6 +257,15 @@ sections — *What you are being trusted with*, *What the server can see*, *What
 section loses its only clause, if a clause makes an assurance claim, or if one paraphrases the
 lower-assurance banner, which renders unconditionally and is retyped nowhere.
 
+*While you are signed in* says what the automatic lock drops and what it cannot reach (#262): the
+keys go after 15 minutes without activity or 8 hours in all, but a browser extension can read what
+is on screen and a screenshot can keep it, which matters more on a computer other people use. After
+the automatic lock, and never after **Log out**, the sign-in screen says *"This session ended.
+Sessions end after 15 minutes without activity, or 8 hours in all, and the keys are dropped from this
+browser's memory. Nothing else changed."* above the fields, in plain ink, from a flag held in memory
+only. The 8 hours is the server's absolute session limit, `DAYMARK_SESSION_ABSOLUTE_SECONDS` at its
+default; the page locks when the expiry the server returned at sign-in passes.
+
 The digest of the image serving the page sits above the credential fields, whole (a truncated hash
 cannot be compared), in mono, copyable in one click. It is the page's own report: information for
 whoever runs the server, never a control or a source of trust, because a changed page can print the

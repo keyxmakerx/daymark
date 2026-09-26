@@ -43,7 +43,8 @@ const SCREEN_MARKUP = markupOf(SCREEN)
 
 describe('the portal composes the sign-in contract around the one auth path', () => {
   it('renders LoginGate inside SignInScreen rather than beside or instead of it', () => {
-    expect(PORTAL).toContain('<SignInScreen>')
+    // `{locked}` tells the screen the automatic lock fired, so it can say so (#262).
+    expect(PORTAL).toContain('<SignInScreen {locked}>')
     expect(PORTAL).toContain('{#snippet credentials()}')
     const snippet = PORTAL.slice(PORTAL.indexOf('{#snippet credentials()}'))
     expect(snippet.slice(0, snippet.indexOf('{/snippet}'))).toContain('<LoginGate')

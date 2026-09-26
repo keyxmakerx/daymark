@@ -334,9 +334,23 @@ export const SIGN_IN_CONTRACT: readonly ContractClause[] = [
   {
     id: 'session.memory',
     section: 'session',
+    // Each trigger is one the page itself acts on: logout() zeroizes, a closed tab takes its
+    // memory with it, and TherapistPortal's guard locks on the idle deadline (DEFAULT_IDLE_MS) and
+    // on the absolute expiry the server returns at sign-in, 8 hours by default
+    // (DAYMARK_SESSION_ABSOLUTE_SECONDS). portalLock.test.ts holds the numbers to the code.
     text:
-      'Keys are held in memory only. Logging out, going idle, or closing the tab drops them, and ' +
-      'the next visit starts from this screen again.',
+      'Keys are held in memory only. Logging out, closing the tab, 15 minutes without activity, or ' +
+      '8 hours in all drops them, and signing in starts again from this screen.',
+  },
+  {
+    id: 'session.screen',
+    section: 'session',
+    // Beside the lock, because the lock is what a clinician will assume covers these, and it does
+    // not (#262). Information, not an alarm: a clause like the others, in no warning container.
+    text:
+      'What you open is on screen like any other page. A browser extension can read it, a ' +
+      'screenshot can keep it, and on a computer other people use both matter more. The lock drops ' +
+      'the keys from memory; it does not reach a copy an extension or a screenshot already took.',
   },
   {
     id: 'session.noVerdicts',
@@ -379,6 +393,15 @@ export const SCREEN_COPY = {
     'The contract above is incomplete, so the sign-in form is not being offered. Reading someone ' +
     "else's record starts with a complete statement of what that means; without one there is " +
     'nothing here to agree to.',
+  /*
+   * Shown above the credentials after the automatic lock, and only then (#262). A page that
+   * silently returns to sign-in reads as "something went wrong" or "someone else did this", so it
+   * says what happened in the past tense and states the rule rather than guessing which limit
+   * fired. Never after the person's own "Log out": they know what they did.
+   */
+  lockedNotice:
+    'This session ended. Sessions end after 15 minutes without activity, or 8 hours in all, and ' +
+    "the keys are dropped from this browser's memory. Nothing else changed.",
 } as const
 
 /* ── Checking the contract ───────────────────────────────────────────────────────────────── */

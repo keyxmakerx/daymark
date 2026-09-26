@@ -74,6 +74,7 @@
 
   let {
     imageDigest = null,
+    locked = false,
     credentials,
   }: {
     /**
@@ -82,6 +83,11 @@
      * than hides. It is a claim by this page about itself and is never treated as more.
      */
     imageDigest?: string | null
+    /**
+     * True only after the automatic lock ended a session in this tab (#262), never after the
+     * person's own Log out. Held by the caller in component state, so it never outlives the tab.
+     */
+    locked?: boolean
     /**
      * The credential entry. Supplied by the caller — in this product that is LoginGate, which
      * owns the only authentication path there is. Required: a sign-in screen with no way to
@@ -243,6 +249,11 @@
       {/if}
 
       <Card title={SCREEN_COPY.credentialTitle}>
+        {#if locked}
+          <!-- What the lock did, once, directly above the fields. Plain text in the ink voice: it
+               is not a warning, not an error and not a confirmation, so no Callout carries it. -->
+          <p class="locked-notice" role="status">{SCREEN_COPY.lockedNotice}</p>
+        {/if}
         {@render credentials()}
       </Card>
     </div>
@@ -269,6 +280,9 @@
   .mark { width: 1.5rem; height: 1.5rem; border-radius: 0.375rem; background: linear-gradient(135deg, var(--indigo), var(--indigo-deep)); box-shadow: var(--elevation); flex: none; }
   .wordmark { margin: 0; font-family: var(--font-display); font-weight: 560; font-size: 1.1rem; line-height: 1.2; color: var(--ink-text); }
   .tagline { margin: 0; font-size: 0.9rem; }
+
+  /* The after-lock line: ordinary ink, one step down in size, and nothing that reads as a state. */
+  .locked-notice { margin: 0 0 var(--space-4); color: var(--ink-text); font-size: 0.9rem; line-height: 1.55; }
 
   /* The build marker beside the title: chrome talking about itself, subordinate to everything
      else in the header. The whole digest lives in the control below. */

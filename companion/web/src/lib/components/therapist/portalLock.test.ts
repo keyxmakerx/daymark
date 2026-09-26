@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { isLive, touch, DEFAULT_IDLE_MS, type SessionInfo } from '../../therapist/session'
+import { SCREEN_COPY, SIGN_IN_CONTRACT } from '../../therapist/signIn'
 
 /*
  * THE PORTAL LOCK, WHICH DID NOT LOCK.
@@ -79,8 +80,81 @@ describe('time is a value the reactive system can see', () => {
   })
 
   it('still logs out — and zeroizes — when the session stops being live', () => {
-    expect(CODE).toMatch(/if \(ctx && !live\) logout\(\)/)
+    // The guard locks, and locking is logging out plus one flag for the sign-in screen (#262).
+    expect(CODE).toMatch(/if \(ctx && !live\) lock\(\)/)
+    expect(CODE).toMatch(/function lock\(\) \{\s*logout\(\)\s*locked = true\s*\}/)
     expect(CODE).toContain('zeroize(ctx.keys)')
+  })
+})
+
+describe('the automatic lock says what happened, and only the automatic lock (#262)', () => {
+  const fn = (name: string) => {
+    const at = CODE.indexOf(`function ${name}(`)
+    return at < 0 ? '' : CODE.slice(at, CODE.indexOf('\n  }\n', at) + 4)
+  }
+
+  it('the lock sets the flag, and the person’s own Log out and a new sign-in clear it', () => {
+    expect(fn('lock')).toMatch(/locked = true/)
+    expect(fn('logout')).toMatch(/locked = false/)
+    expect(fn('onUnlock')).toMatch(/locked = false/)
+    expect(fn('onLeft')).toMatch(/locked = false/)
+    // The Log out button is logout, not lock: pressing it must not print "This session ended".
+    expect(CODE).toMatch(/<button class="lock" onclick=\{logout\}>Log out<\/button>/)
+    // Control: the function reader finds a body, and the patterns fire on one that sets the flag.
+    expect(fn('logout').length).toBeGreaterThan(100)
+    expect(fn('logout').replace('locked = false', 'locked = true')).toMatch(/locked = true/)
+  })
+
+  it('hands the flag to the sign-in screen, and keeps it in memory only', () => {
+    expect(CODE).toContain('let locked = $state(false)')
+    expect(CODE).toMatch(/<SignInScreen \{locked\}>/)
+    // No storage call anywhere in the portal: the flag cannot outlive the tab, or tell the next
+    // person at this computer that a session was here.
+    const STORAGE = /\b(?:localStorage|sessionStorage|indexedDB)\b/
+    expect(CODE).not.toMatch(STORAGE)
+    expect('window.sessionStorage.setItem("locked", "1")').toMatch(STORAGE) // control
+  })
+})
+
+describe('the numbers the sign-in contract states are the numbers the code uses (#262)', () => {
+  /*
+   * "15 minutes without activity, or 8 hours in all" is copy, and these are the two limits it
+   * names: the page's own idle deadline, and the absolute expiry the server returns at sign-in,
+   * which the guard above enforces. Eight hours is the server's default
+   * (DAYMARK_SESSION_ABSOLUTE_SECONDS); an operator who changes it changes when the page locks.
+   */
+  const SERVER_CONFIG = readFileSync(
+    fileURLToPath(new URL('../../../../../server/src/main/kotlin/com/daymark/companion/Config.kt', import.meta.url)),
+    'utf8',
+  )
+  const serverDefault = (name: string): number => {
+    const m = new RegExp(`env\\["${name}"\\][^\\n]*\\?: ([\\d_]+)L`).exec(SERVER_CONFIG)
+    return m ? Number(m[1]!.replace(/_/g, '')) : NaN
+  }
+
+  it('reads the server defaults it compares against', () => {
+    expect(serverDefault('DAYMARK_SESSION_ABSOLUTE_SECONDS')).toBe(28_800)
+    expect(serverDefault('DAYMARK_SESSION_IDLE_SECONDS')).toBe(900)
+    // Control: a name that is not there reads as nothing, not as a number.
+    expect(serverDefault('DAYMARK_NO_SUCH_SETTING')).toBeNaN()
+  })
+
+  it('15 minutes is the page’s idle deadline, and 8 hours the server’s absolute default', () => {
+    const minutes = DEFAULT_IDLE_MS / 60_000
+    const hours = serverDefault('DAYMARK_SESSION_ABSOLUTE_SECONDS') / 3_600
+    expect(minutes).toBe(15)
+    expect(hours).toBe(8)
+    const memory = SIGN_IN_CONTRACT.find((c) => c.id === 'session.memory')!.text
+    for (const text of [memory, SCREEN_COPY.lockedNotice]) {
+      expect(text).toContain(`${minutes} minutes without activity`)
+      expect(text).toContain(`${hours} hours in all`)
+    }
+  })
+
+  it('the page takes the absolute expiry from the server’s answer, and the guard reads it', () => {
+    const SESSION = readFileSync(fileURLToPath(new URL('../../therapist/session.ts', import.meta.url)), 'utf8')
+    expect(SESSION).toContain('absoluteExpiresAt: body.absoluteExpiry,')
+    expect(SESSION).toMatch(/return now < session\.absoluteExpiresAt && now < session\.idleExpiresAt/)
   })
 })
 
