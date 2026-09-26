@@ -44,12 +44,14 @@ class SecurityEventTest {
         correlator: Correlator = keyed(1),
         maxLineBytes: Int = SecurityLog.MAX_LINE_BYTES,
         clock: () -> Instant = { at },
+        nanoTime: () -> Long = System::nanoTime,
     ) = SecurityLog(
         sink = { out += it },
         sourceIpMode = mode,
         correlator = correlator,
         clock = clock,
         maxLineBytes = maxLineBytes,
+        nanoTime = nanoTime,
     )
 
     private fun parse(line: String) = Json.parseToJsonElement(line).jsonObject
@@ -898,19 +900,25 @@ class SecurityEventTest {
          * quota by failing to log in quickly. The per-source auth limiter does not bound this — it
          * is per source, and a distributed flood has many.
          */
+        // The limiter's clock is the test's, so the flood spans exactly the time the test gives it,
+        // whatever the speed of the machine: here none, the fastest a flood can arrive.
+        var nanos = 0L
         val out = mutableListOf<String>()
-        val log = logTo(out)
+        val log = logTo(out, nanoTime = { nanos })
         repeat(20_000) { log.emit(SecurityEventType.AUTH_FAILURE, Outcome.FAILURE) }
 
         assertTrue(out.size < 20_000, "the flood was not bounded at all")
         assertTrue(out.size >= 100, "the bucket cannot be so tight that ordinary traffic is lost")
+        assertEquals(SecurityLog.BURST.toInt(), out.size, "within one instant, the burst and no more")
 
         // The loss is VISIBLE. A gap an operator cannot see is worse than one they can, so the
-        // next admitted record says how many were discarded.
+        // next admitted record, once the bucket has refilled, says how many were discarded.
+        nanos += 1_000_000_000L
+        log.emit(SecurityEventType.AUTH_FAILURE, Outcome.FAILURE)
         val dropped = out.mapNotNull { line ->
             parse(line)["detail"]!!.jsonObject["dropped"]?.jsonPrimitive?.longOrNull
         }
-        assertTrue(dropped.isNotEmpty(), "records were discarded without ever saying so")
+        assertEquals(listOf(20_000L - SecurityLog.BURST), dropped, "records were discarded without ever saying so")
     }
 
     @Test

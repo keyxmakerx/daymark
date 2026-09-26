@@ -90,6 +90,11 @@ class SecurityLog(
     private val correlator: Correlator = Correlator.perProcess(),
     private val clock: () -> Instant = Instant::now,
     private val maxLineBytes: Int = MAX_LINE_BYTES,
+    /**
+     * The flood limiter's clock, in nanoseconds: [System.nanoTime] in a running server. Injectable so
+     * a test decides how much time a flood spans, whatever the speed of the machine running it.
+     */
+    private val nanoTime: () -> Long = System::nanoTime,
 ) {
 
     /**
@@ -200,11 +205,11 @@ class SecurityLog(
      * many addresses the traffic arrives from.
      */
     private val tokens = AtomicLong(BURST)
-    private val lastRefillNanos = AtomicLong(System.nanoTime())
+    private val lastRefillNanos = AtomicLong(nanoTime())
     private val droppedSinceLastEmit = AtomicLong(0)
 
     private fun admits(): Boolean {
-        val now = System.nanoTime()
+        val now = nanoTime()
         val previous = lastRefillNanos.getAndSet(now)
         val refill = (now - previous) / 1_000_000_000.0 * MAX_LINES_PER_SECOND
         if (refill >= 1) {
