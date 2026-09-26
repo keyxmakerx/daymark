@@ -216,7 +216,7 @@
         <details class="why">
           <summary>{LABELS.configurationSays}</summary>
           <!--
-            WHY THIS PAGE ASKED: no setup mode reached it, so the answer is this browser's, and the
+            WHY THIS PAGE ASKS: no setup mode reached it, so the answer is this browser's, and the
             setting that makes it the server's is named. Folded away because a person answering
             for their own browser does not need it, and named in full because an operator who set
             it, and is still being asked, needs to know where to look.

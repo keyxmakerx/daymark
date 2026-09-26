@@ -155,36 +155,48 @@ describe('the three deployment shapes', () => {
     // Paired is ranked by CASE rather than by popularity — it is the right answer for exactly one
     // situation, and saying "some people want this" would rank nothing. The case is showing some
     // of your own journal to the clinicians you invite, however many that is (#288).
-    expect(shapeById('paired').ranking).toMatch(/some of your own journal to the clinicians you invite/i)
+    expect(shapeById('paired').ranking).toMatch(/a clinician will read some of your journal/i)
   })
 
-  it('the Paired choice counts no clinicians: its label, summary and ranking say "the clinicians you invite" or "each" (#288)', () => {
+  it('the Paired choice counts no clinicians: its label, summary and ranking as the copy pass settled them (#288)', () => {
     const paired = shapeById('paired')
-    expect(paired.label).toBe('Paired — you, and the clinicians you invite')
+    expect(paired.label).toBe('Paired — you and the clinicians you invite')
     expect(paired.summary).toBe(
-      'Everything Solo does, plus an invitation you mint for each clinician, whose key you check ' +
-        'and pin before anything is shared.',
+      'Everything Solo does, plus sharing chosen parts of your journal with a clinician, once you ' +
+        'have checked their key together.',
     )
-    expect(paired.ranking).toBe(
-      'Choose this if you are showing some of your own journal to the clinicians you invite.',
-    )
+    expect(paired.ranking).toBe('Choose this if a clinician will read some of your journal.')
     // The label says what the masthead's Paired tagline says (App.svelte), in the choice's form.
     const app = readFileSync(fileURLToPath(new URL('../../App.svelte', import.meta.url)), 'utf8')
     expect(app).toContain("paired: 'Your journal, and the clinicians you invite'")
-    expect(paired.label.endsWith(', and the clinicians you invite')).toBe(true)
+    expect(paired.label.endsWith(' and the clinicians you invite')).toBe(true)
 
+    const every = [paired.label, paired.arrangement, paired.summary, paired.ranking, paired.buildNote]
+    expect(every.every((line) => line.length > 20)).toBe(true) // five real lines, none empty
+
+    // The first retired set counted one clinician. Control: each is seen by the detector.
     const ONE_CLINICIAN = /\bone clinician\b/i
-    const RETIRED = [
+    const COUNTED_ONE = [
       'Paired — you, and one clinician',
       'Everything Solo does, plus an invitation you mint for one clinician, whose key you check ' +
         'and pin before anything is shared.',
       'Choose this if you are showing some of your own journal to one clinician.',
     ]
-    // Control: every retired line is seen by the detector, so the absence below is not blindness.
-    for (const line of RETIRED) expect(line).toMatch(ONE_CLINICIAN)
-    const every = [paired.label, paired.arrangement, paired.summary, paired.ranking, paired.buildNote]
+    for (const line of COUNTED_ONE) expect(line).toMatch(ONE_CLINICIAN)
     expect(every.filter((line) => ONE_CLINICIAN.test(line))).toEqual([])
-    for (const line of RETIRED) expect(every).not.toContain(line)
+
+    // The second retired set, replaced by the copy pass. Control: each is seen by the detector.
+    const FIRST_REWRITE = /^Paired — you, and |an invitation you mint for each clinician|showing some of your own journal to/
+    const REWRITTEN = [
+      'Paired — you, and the clinicians you invite',
+      'Everything Solo does, plus an invitation you mint for each clinician, whose key you check ' +
+        'and pin before anything is shared.',
+      'Choose this if you are showing some of your own journal to the clinicians you invite.',
+    ]
+    for (const line of REWRITTEN) expect(line).toMatch(FIRST_REWRITE)
+    expect(every.filter((line) => FIRST_REWRITE.test(line))).toEqual([])
+
+    for (const line of [...COUNTED_ONE, ...REWRITTEN]) expect(every).not.toContain(line)
   })
 
   it('Paired shows the journal to the clinicians the owner invites, not to one (#288)', () => {
@@ -518,20 +530,21 @@ describe('a configuration-provided mode', () => {
     expect(CONFIG_PATH).toBe('/v1/config')
   })
 
-  it('says why it asked where the server published no shape, and names the setting that would answer instead (#330)', () => {
+  it('says why it asks where the server published no shape, and names the setting that would answer instead (#330)', () => {
     // The server publishes the field now, so the page no longer calls its absence a placeholder.
-    // What is true instead: nothing reached this page, so it asked; the answer stays in this
-    // browser and changes nothing on the server; the setting is what makes it the server's.
+    // What is true instead: the server was not told its shape, so the page asks; the operator can
+    // tell it once, with the setting; a browser that has not answered then is not asked.
     expect(NO_SHAPE_PUBLISHED).toBe(
-      'This page asked because /v1/config gave it no setupMode. The answer given here stays in ' +
-        'this browser and changes nothing on the server. Whoever runs the server can set ' +
-        'DAYMARK_SETUP_MODE instead: the server then publishes the shape, and a browser that ' +
-        'finds it there does not ask.',
+      'This page asks because the server has not been told its shape. Whoever runs the server can ' +
+        'tell it once, by starting it with DAYMARK_SETUP_MODE set to the shape it should have — ' +
+        'solo, paired or practice. After that the server publishes the shape and a browser that has ' +
+        'not already answered will not ask.',
     )
-    // Built from the same names the rest of the configured copy uses, so they cannot drift.
-    expect(NO_SHAPE_PUBLISHED).toContain(CONFIG_PATH)
-    expect(NO_SHAPE_PUBLISHED).toContain(CONFIG_FIELD)
+    // Built from the same setting name the configured copy uses, so the two cannot drift, and it
+    // names every shape the setting takes.
     expect(NO_SHAPE_PUBLISHED).toContain(CONFIG_SETTING)
+    expect(configuredHowToChange()).toContain(CONFIG_SETTING)
+    for (const id of SHAPE_IDS) expect(NO_SHAPE_PUBLISHED, id).toMatch(new RegExp(`\\b${id}\\b`))
     // No "every browser": a browser already holding an answer reads nothing until its question is
     // reopened (CONFIGURATION_IS_NOT_RE_READ), so the sentence claims only the browser that looks.
     expect(NO_SHAPE_PUBLISHED).not.toMatch(/\bevery browser\b/i)
@@ -547,6 +560,16 @@ describe('a configuration-provided mode', () => {
     expect(NO_SHAPE_PUBLISHED).not.toMatch(RETIRED)
     expect(Object.keys(setup)).toContain('NO_SHAPE_PUBLISHED')
     expect(Object.keys(setup)).not.toContain('CONFIG_NOT_PUBLISHED_YET')
+
+    // And the first rewrite, which the copy pass replaced. Control: the detector sees it.
+    const FIRST_REWRITE = /gave it no setupMode|The answer given here stays|a browser that finds it there/
+    const firstRewrite =
+      'This page asked because /v1/config gave it no setupMode. The answer given here stays in ' +
+      'this browser and changes nothing on the server. Whoever runs the server can set ' +
+      'DAYMARK_SETUP_MODE instead: the server then publishes the shape, and a browser that finds ' +
+      'it there does not ask.'
+    expect(firstRewrite).toMatch(FIRST_REWRITE)
+    expect(NO_SHAPE_PUBLISHED).not.toMatch(FIRST_REWRITE)
   })
 
   it('removing the setting still means being asked: the how-to-change line is unchanged (#330)', () => {

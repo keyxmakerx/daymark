@@ -160,19 +160,18 @@ export const SHAPES: readonly DeploymentShape[] = [
     primary: 'file',
   },
   {
-    /* A person may invite more than one clinician (#288), so no line here counts them: the label
-       follows the masthead's Paired tagline, and the rest say "each" or "the clinicians you
-       invite". */
+    /* A person may invite more than one clinician (#288), so no line here says "one clinician":
+       the label follows the masthead's Paired tagline, and the summary and ranking say "a
+       clinician", which counts nobody. */
     id: 'paired',
-    label: 'Paired — you, and the clinicians you invite',
+    label: 'Paired — you and the clinicians you invite',
     arrangement:
       'You still run the machine and the journal is still yours. The clinicians you invite are ' +
       'shown the slices you pick, and you can withdraw that at any time.',
     summary:
-      'Everything Solo does, plus an invitation you mint for each clinician, whose key you check ' +
-      'and pin before anything is shared.',
-    ranking:
-      'Choose this if you are showing some of your own journal to the clinicians you invite.',
+      'Everything Solo does, plus sharing chosen parts of your journal with a clinician, once you ' +
+      'have checked their key together.',
+    ranking: 'Choose this if a clinician will read some of your journal.',
     buildState: 'built',
     buildNote:
       'The pairing path is wired: you mint the invitation, they accept it on the clinician ' +
@@ -320,25 +319,23 @@ export function configuredHowToChange(): string {
 }
 
 /**
- * WHY THIS PAGE ASKED, for whoever opens the fold to find out whether configuration answers this.
+ * WHY THIS PAGE ASKS, for whoever opens the fold to find out whether configuration answers this.
  *
  * The server publishes [CONFIG_FIELD] only when its operator chose a shape with [CONFIG_SETTING]
  * (#330). With none chosen it still assumes a shape, from its older switch, and publishes nothing:
- * an assumed shape is not the operator's answer, so the page asks. Shown for `absent` and for
- * `unreachable` alike, so the first sentence says what reached the page rather than claiming the
- * server answered.
+ * an assumed shape is not the operator's answer, so the page asks. The fold is shown for `absent`
+ * and for `unreachable` alike, and its first sentence gives the reason `absent` means.
  *
- * The rest says where the answer goes and where the lasting one is set. The answer given here
- * stays in this browser and routes this page only. The setting is what makes the answer the
- * server's — and it says "a browser that finds it there", not "every browser", because a browser
- * already holding an answer does not read [CONFIG_PATH] until its question is reopened
+ * The rest says how the answer becomes the server's: set once, where the server starts. It says
+ * "a browser that has not already answered", not "every browser", because a browser already
+ * holding an answer does not read [CONFIG_PATH] until its question is reopened
  * ([CONFIGURATION_IS_NOT_RE_READ]).
  */
 export const NO_SHAPE_PUBLISHED =
-  `This page asked because ${CONFIG_PATH} gave it no ${CONFIG_FIELD}. The answer given here ` +
-  'stays in this browser and changes nothing on the server. Whoever runs the server can set ' +
-  `${CONFIG_SETTING} instead: the server then publishes the shape, and a browser that finds it ` +
-  'there does not ask.'
+  'This page asks because the server has not been told its shape. Whoever runs the server can ' +
+  `tell it once, by starting it with ${CONFIG_SETTING} set to the shape it should have — solo, ` +
+  'paired or practice. After that the server publishes the shape and a browser that has not ' +
+  'already answered will not ask.'
 
 /**
  * THE LIMIT ON THE PRECEDENCE ABOVE, SAID ON THE PAGE RATHER THAN ONLY IN A COMMENT.
