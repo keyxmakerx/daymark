@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 import { ALL_CAPABILITIES } from '../assignments/types'
 import { describeCapability } from '../assignments/describe'
@@ -18,6 +20,7 @@ import {
   type Plane,
 } from './capabilities'
 import { ROLES, ROLE_IDS, roleById, rolesWith, type RoleId } from './roles'
+import { REMOVAL_ENDS_A_MEMBERSHIP } from './copy'
 
 /**
  * MODEL INTEGRITY — the boring half, without which the invariant suite next door is guessing.
@@ -187,5 +190,124 @@ describe('the role catalog is well-formed', () => {
     // No role holds a read scope, so the lookup that matters most comes back empty — and the
     // practice UI can say so honestly instead of implying a title exists that would grant it.
     for (const cap of READ_CLINICAL_CAPABILITIES) expect(rolesWith(cap), cap).toEqual([])
+  })
+})
+
+/*
+ * NO DESCRIPTION CLAIMS COMPLETENESS (#317).
+ *
+ * The server writes the access log about itself, so a dishonest one can leave an open out without
+ * breaking the chain (COMPANION_SECURITY.md §9, R12), and #217 decided to say so rather than build
+ * signed attestations. The screens that show the log carry that caveat; a one-line description that
+ * promised "every open" was the one place still contradicting it. No absolute claims
+ * (COMPANION_UX.md §10.3): not "every", not "cannot be hidden". Titles are read too.
+ */
+describe('no capability description claims completeness (#317)', () => {
+  const COMPLETENESS: { name: string; pattern: RegExp; planted: string }[] = [
+    { name: 'every', pattern: /\bevery\b/i, planted: 'Every open of your own record: who, what, and when.' },
+    {
+      name: 'cannot be hidden',
+      pattern: /\b(?:cannot|can't|can not)\s+be\s+(?:hidden|missed|left out|omitted)\b/i,
+      planted: 'An open of your record cannot be hidden from you.',
+    },
+    {
+      name: 'nothing missing',
+      pattern: /\bnothing\s+(?:is\s+)?(?:missing|left out|omitted|unrecorded)\b/i,
+      planted: 'Nothing is left out of your access log.',
+    },
+    {
+      name: 'complete or exhaustive',
+      pattern: /\b(?:complete|full|exhaustive|entire)\s+(?:log|list|history|trail|record of)\b|\b(?:is|are)\s+(?:complete|exhaustive)\b/i,
+      planted: 'A complete log of who opened your record.',
+    },
+    {
+      name: 'all of them',
+      pattern: /\ball\s+(?:the\s+)?(?:opens?|reads?|accesses|access to|events|activity)\b/i,
+      planted: 'All access to your record, with who and when.',
+    },
+  ]
+  type Described = { cap: string; title: string; desc: string }
+  const catalog: Described[] = ALL_PRACTICE_CAPABILITIES.map((cap) => ({ cap, ...describePracticeCapability(cap) }))
+  const claimsIn = (entries: Described[]) =>
+    entries.flatMap((e) =>
+      COMPLETENESS.filter(({ pattern }) => pattern.test(`${e.title}. ${e.desc}`)).map(({ name }) => `${e.cap}: ${name}`),
+    )
+
+  it('each pattern fires on the claim it is named for', () => {
+    for (const { name, pattern, planted } of COMPLETENESS) expect(pattern.test(planted), name).toBe(true)
+  })
+
+  it('the check catches a planted "every open" in the real catalog', () => {
+    const planted = catalog.map((e) =>
+      e.cap === 'audit.viewOwn' ? { ...e, desc: 'Every open of your own record: who, what, and when. Metadata only.' } : e,
+    )
+    expect(claimsIn(planted)).toEqual(['audit.viewOwn: every'])
+  })
+
+  it('and finds none in the catalog as shipped, the shipped eight included', () => {
+    expect(catalog.length).toBe(ALL_PRACTICE_CAPABILITIES.length)
+    expect(catalog.length).toBeGreaterThan(20)
+    expect(claimsIn(catalog)).toEqual([])
+  })
+
+  it('the access log says where its list comes from, not that it is all there is', () => {
+    expect(describePracticeCapability('audit.viewOwn').desc).toBe(
+      'What the log records about your own record: who opened it, and when. Metadata only.',
+    )
+    expect(describePracticeCapability('tool.publishValidated').desc).toBe(
+      'Publish a tool under a Validated or Adapted provenance claim, which anyone reading it will see.',
+    )
+  })
+})
+
+/*
+ * REMOVING A MEMBER, AS THE SERVER DOES IT.
+ *
+ * The description used to say removal "triggers revocation and a re-key, and adding one to a care
+ * team tells the affected clients". The server deletes the membership row and cuts that credential's
+ * sessions (OrgStore.removeMember, OrgRoutes DELETE /members/{memberId}); it withdraws no grant,
+ * does not disable the credential, rotates nothing, and adding a member notifies nobody, because
+ * org-consent to a care team is not built. practice/copy.ts already said so on the console.
+ */
+describe('member.manage promises only what removal does', () => {
+  const SERVER = '../../../../server/src/main/kotlin/com/daymark/companion/'
+  const read = (rel: string) => readFileSync(fileURLToPath(new URL(SERVER + rel, import.meta.url)), 'utf8')
+  /** Kotlin with comments removed, so the reasoning around the code cannot stand in for it. */
+  const kotlinCode = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(?<!:)\/\/[^\n]*/g, '')
+  const block = (src: string, start: string, end: string) => {
+    const from = src.indexOf(start)
+    return from < 0 ? '' : src.slice(from, src.indexOf(end, from + start.length))
+  }
+
+  it('says it whole', () => {
+    expect(describePracticeCapability('member.manage').desc).toBe(
+      'Add a member to the practice or remove one. Removing ends their membership: it withdraws no ' +
+        'grant, and they can sign in again. Only a patient can end what they granted.',
+    )
+  })
+
+  it('promises no revocation, re-key or notification', () => {
+    const OVERCLAIM = /revocation|re-?key|rotat|tells the affected|notif/i
+    expect(describePracticeCapability('member.manage').desc).not.toMatch(OVERCLAIM)
+    // Control: the retired sentence is seen by the same pattern.
+    expect('Removing triggers revocation and a re-key, and adding one to a care team tells the affected clients.').toMatch(
+      OVERCLAIM,
+    )
+    // And it agrees with the console's own sentence about removal.
+    expect(REMOVAL_ENDS_A_MEMBERSHIP).toMatch(/not disabled and no grant is withdrawn/)
+  })
+
+  it('matches the server: the row goes, the sessions are cut, and nothing else is touched', () => {
+    const store = block(kotlinCode(read('org/OrgStore.kt')), 'fun removeMember(', '\n    }\n')
+    expect(store).toContain('DELETE FROM org_members')
+    const route = block(kotlinCode(read('routes/OrgRoutes.kt')), 'delete("/members/{memberId}")', 'auditSafely')
+    expect(route).toContain('orgStore.removeMember(')
+    expect(route).toContain('authStore.revokeSessionsForCredential(memberId)')
+    // Nothing on the path deletes a credential, touches a grant or a key, or sends anything.
+    const MORE = /grant|totp|credential_id|DELETE FROM (?!org_members)|rotate|notif|mail/i
+    expect(store).not.toMatch(MORE)
+    expect(route.replace('revokeSessionsForCredential', '')).not.toMatch(MORE)
+    // Control: the pattern sees a path that did more.
+    expect(`${store}\nconn.prepareStatement("DELETE FROM totp WHERE credential_id=?")`).toMatch(MORE)
   })
 })

@@ -780,9 +780,13 @@ export const PRACTICE_CAPABILITY_COPY: Record<PracticeOnlyCapability, { title: s
   },
   'member.manage': {
     title: 'Add and remove practice members',
+    // What removal does on the server (OrgStore.removeMember, OrgRoutes DELETE /members/{id}): the
+    // membership row goes and that credential's sessions are cut. No grant is withdrawn and the
+    // credential is not disabled, as REMOVAL_ENDS_A_MEMBERSHIP in practice/copy.ts says. Adding a
+    // member notifies nobody: org-consent to a care team is not built.
     desc:
-      'Add a member to the practice or remove one. Removing triggers revocation and a re-key, and ' +
-      'adding one to a care team tells the affected clients.',
+      'Add a member to the practice or remove one. Removing ends their membership: it withdraws no ' +
+      'grant, and they can sign in again. Only a patient can end what they granted.',
   },
   'role.assign': {
     title: 'Set a member’s role',
@@ -820,7 +824,7 @@ export const PRACTICE_CAPABILITY_COPY: Record<PracticeOnlyCapability, { title: s
   },
   'tool.publishValidated': {
     title: 'Publish a Validated or Adapted tool',
-    desc: 'Publish a tool under a Validated or Adapted provenance claim, which every reader of it will see.',
+    desc: 'Publish a tool under a Validated or Adapted provenance claim, which anyone reading it will see.',
   },
   'server.operate': {
     title: 'Operate the server',
@@ -830,7 +834,10 @@ export const PRACTICE_CAPABILITY_COPY: Record<PracticeOnlyCapability, { title: s
   },
   'audit.viewOwn': {
     title: 'Read your own access log',
-    desc: 'Every open of your own record: who, what, and when. Metadata only.',
+    // Where the list comes from, not a promise that it is all there is: the server writes the log
+    // about itself and could leave an open out (#217, #317). The caveat stays where it lives
+    // (owner/AuditCaveat.svelte); a one-line description does not retype it.
+    desc: 'What the log records about your own record: who opened it, and when. Metadata only.',
   },
   'audit.review': {
     title: 'Review the practice access log',
