@@ -38,6 +38,8 @@
 # `ui/components/TickAndGreenSourceTest` reads ui/components and the PDF renderer and holds both off a
 # tick, and the components off green (#278). `ui/HairlineFillSourceTest` reads every production file
 # and holds every word drawn on the hairline fill off the soft and faint inks (#408).
+# `export/ReportInkSourceTest` reads the PDF renderer and holds every word it draws to 4.5:1 on the
+# white page, with its faint grey for marks only (#409).
 #
 # WHAT IT WILL NOT CATCH. Everything tools/jvm-tests.sh cannot: anything outside these files, Room's
 # annotation processing, Hilt, resources, R8. And it runs a HAND-LISTED set of test files. A new
@@ -79,7 +81,8 @@ ANNOT=$(find_jar org.jetbrains/annotations "annotations-13.0.jar")
 # and `WeekDaysSourceTest`, which imports the same and `java.util.Locale`.
 # `DynamicColorSourceTest` and `TickAndGreenSourceTest` import `repoFile`, `codeOnly`, `java.io.File`
 # and JUnit only; `HairlineFillSourceTest` imports `repoFile`, `java.io.File` and JUnit and uses
-# `codeOnly` and `withoutComments` from its own package.
+# `codeOnly` and `withoutComments` from its own package; `ReportInkSourceTest` imports `repoFile`,
+# `codeOnly` and JUnit only.
 TESTS="com.daymark.app.data.PeopleSchemaTest com.daymark.app.data.TimedOfferSchemaTest
 com.daymark.app.data.CompanionSchemaTest com.daymark.app.data.MigrationSchemaExportTest
 com.daymark.app.export.ReportCopySourceTest com.daymark.app.ui.settings.ReportExportSourceTest
@@ -87,7 +90,8 @@ com.daymark.app.ui.theme.ColorSchemeSourceTest com.daymark.app.ui.FaintInkSource
 com.daymark.app.ui.insights.MonthGridSourceTest com.daymark.app.ui.WeekDaysSourceTest
 com.daymark.app.ui.theme.DynamicColorSourceTest
 com.daymark.app.ui.components.TickAndGreenSourceTest
-com.daymark.app.ui.HairlineFillSourceTest"
+com.daymark.app.ui.HairlineFillSourceTest
+com.daymark.app.export.ReportInkSourceTest"
 SOURCES="$REPO/app/src/test/java/com/daymark/app/data/PeopleSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/TimedOfferSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/CompanionSchemaTest.kt
@@ -101,6 +105,7 @@ $REPO/app/src/test/java/com/daymark/app/ui/WeekDaysSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/theme/DynamicColorSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/components/TickAndGreenSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/HairlineFillSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/export/ReportInkSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/backup/RepoFile.kt
 $REPO/app/src/test/java/com/daymark/app/ui/SourceText.kt"
 

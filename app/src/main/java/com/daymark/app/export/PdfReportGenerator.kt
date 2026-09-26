@@ -117,6 +117,9 @@ class PdfReportGenerator @Inject constructor() {
 // Palette. Paper ink, deliberately monochrome apart from the mood ramp.
 // ---------------------------------------------------------------------------------------------
 
+// Every word is INK or SOFT: on the white page INK measures 14.88:1 and SOFT 5.77:1, over the 4.5:1
+// small text needs. FAINT, 2.72:1, is for marks only, never a word, as on screen (docs/DESIGN.md,
+// "The faint ink never carries words", #409). `ReportInkSourceTest` holds the report to both.
 private const val INK = 0xFF2A2722.toInt()
 private const val SOFT = 0xFF6B655B.toInt()
 private const val FAINT = 0xFFA49C8E.toInt()
@@ -574,7 +577,7 @@ private class PageCtx(
         canvas.drawText(
             "SIDE ${s.index} OF ${s.of} · ${s.job.uppercase()} · ${Copy.CONTINUED}",
             margin, y + ReportLayout.CONTINUATION_BASELINE,
-            paint(7.5f, FAINT, bold = true).apply { letterSpacing = 0.1f },
+            paint(7.5f, SOFT, bold = true).apply { letterSpacing = 0.1f },
         )
         y += ReportLayout.CONTINUATION_RULE_LEAD
         canvas.drawLine(margin, y, pageW - margin, y, hairline)
@@ -597,7 +600,7 @@ private class PageCtx(
     }
 
     private fun drawFooter() {
-        val p = paint(7.5f, FAINT)
+        val p = paint(7.5f, SOFT)
         val ruleY = ReportLayout.footerRuleY(pageH)
         canvas.drawLine(margin, ruleY, pageW - margin, ruleY, hairline)
         val baseline = pageH - ReportLayout.FOOTER_TEXT_RISE
@@ -613,7 +616,7 @@ private class PageCtx(
 
     private fun sectionLabel(text: String) {
         ensure(ReportLayout.SECTION_LABEL_RESERVE)
-        canvas.drawText(text.uppercase(), margin, y + 8f, paint(8f, FAINT, bold = true).apply { letterSpacing = 0.08f })
+        canvas.drawText(text.uppercase(), margin, y + 8f, paint(8f, SOFT, bold = true).apply { letterSpacing = 0.08f })
         y += ReportLayout.SECTION_LABEL_H
     }
 
@@ -671,11 +674,11 @@ private class PageCtx(
         canvas.drawText(
             "SIDE $index OF $of · ${job.uppercase()}",
             margin, y + ReportLayout.HEADER_EYEBROW_BASELINE,
-            paint(7.5f, FAINT, bold = true).apply { letterSpacing = 0.1f },
+            paint(7.5f, SOFT, bold = true).apply { letterSpacing = 0.1f },
         )
         y += ReportLayout.HEADER_EYEBROW_ADVANCE
         canvas.drawText(title, margin, y + ReportLayout.HEADER_TITLE_BASELINE, paint(17f, INK, bold = true))
-        val mp = paint(8f, FAINT)
+        val mp = paint(8f, SOFT)
         meta.forEachIndexed { i, line ->
             canvas.drawText(
                 line,
@@ -703,7 +706,7 @@ private class PageCtx(
      * be left stranded over nothing at the foot of a page.
      */
     private fun tableHead(vararg cols: Pair<Float, String>) {
-        val hp = paint(7f, FAINT, bold = true).apply { letterSpacing = 0.06f }
+        val hp = paint(7f, SOFT, bold = true).apply { letterSpacing = 0.06f }
         cols.forEach { (x, label) -> canvas.drawText(label, x, y + 7f, hp) }
         y += 11f
         canvas.drawLine(margin, y, pageW - margin, y, hairline)
@@ -781,13 +784,13 @@ private class PageCtx(
             val dir = if (flag.below) "below" else "above"
             noteBox(
                 listOf(
-                    paint(8f, FAINT, bold = true) to Copy.FLAG_LABEL.uppercase(),
+                    paint(8f, SOFT, bold = true) to Copy.FLAG_LABEL.uppercase(),
                     paint(10f, INK, bold = true) to
                         "${flag.instrument} has moved $dir this person's own usual range.",
                     paint(8.5f, SOFT) to
                         "${flag.outside} of the last ${flag.window} results sit $dir the usual " +
                         "range for this period — the band drawn on the plot below.",
-                    paint(8f, FAINT) to Copy.FLAG_CAVEAT,
+                    paint(8f, SOFT) to Copy.FLAG_CAVEAT,
                 ),
             )
             return
@@ -795,9 +798,9 @@ private class PageCtx(
         val thin = instruments.all { it.band == null }
         noteBox(
             listOf(
-                paint(8f, FAINT, bold = true) to Copy.NO_FLAG_LABEL.uppercase(),
+                paint(8f, SOFT, bold = true) to Copy.NO_FLAG_LABEL.uppercase(),
                 paint(9.5f, INK) to (if (thin) Copy.NO_FLAG_THIN else Copy.NO_FLAG_BODY),
-                paint(8f, FAINT) to Copy.NO_FLAG_CAVEAT,
+                paint(8f, SOFT) to Copy.NO_FLAG_CAVEAT,
             ),
         )
     }
@@ -824,7 +827,7 @@ private class PageCtx(
 
         val np = paint(10f, INK, bold = true)
         canvas.drawText(inst.title, margin, y + 8f, np)
-        val tp = paint(7.5f, FAINT)
+        val tp = paint(7.5f, SOFT)
         canvas.drawText(inst.tier.label, margin + np.measureText(inst.title) + 8f, y + 8f, tp)
         val meta = "${inst.points.size} entries · ${inst.scaleLabel}"
         canvas.drawText(meta, pageW - margin - tp.measureText(meta), y + 8f, tp)
@@ -850,12 +853,12 @@ private class PageCtx(
             val half = maxOf((yFor(lo) - yFor(hi)) / 2f, 1f)
             val bandPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = BAND }
             canvas.drawRect(left, mid - half, right, mid + half, bandPaint)
-            val bl = paint(6.5f, FAINT)
+            val bl = paint(6.5f, SOFT)
             canvas.drawText(Copy.USUAL_RANGE, right - bl.measureText(Copy.USUAL_RANGE) - 2f, mid - half - 2.5f, bl)
         }
 
         // Gridlines, labelled with whatever the instrument calls those points on its scale.
-        val al = paint(6.5f, FAINT)
+        val al = paint(6.5f, SOFT)
         inst.axisLabels.forEach { (value, label) ->
             val gy = yFor(value)
             canvas.drawLine(left, gy, right, gy, hairline)
@@ -863,7 +866,7 @@ private class PageCtx(
         }
 
         if (inst.points.isEmpty()) {
-            canvas.drawText(Copy.NO_RESULTS, left + 6f, top + plotH / 2f, paint(8f, FAINT))
+            canvas.drawText(Copy.NO_RESULTS, left + 6f, top + plotH / 2f, paint(8f, SOFT))
         } else {
             val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = INK }
             val lastDay = (rangeDays - 1).coerceAtLeast(1)
@@ -877,7 +880,7 @@ private class PageCtx(
         }
 
         y = top + plotH + ReportLayout.PLOT_AXIS_GAP
-        val ax = paint(6.5f, FAINT)
+        val ax = paint(6.5f, SOFT)
         canvas.drawText(rangeStart.format(DAY_MONTH).uppercase(), left, y + 6f, ax)
         val endLabel = rangeEnd.format(DAY_MONTH).uppercase()
         canvas.drawText(endLabel, right - ax.measureText(endLabel), y + 6f, ax)
@@ -894,7 +897,7 @@ private class PageCtx(
                 canvas.drawRect(left + i * cw + 0.6f, y, left + (i + 1) * cw - 0.6f, y + densityH, cell)
             }
             y += densityH + ReportLayout.DENSITY_GAP
-            val dl = paint(6.5f, FAINT)
+            val dl = paint(6.5f, SOFT)
             canvas.drawText(Copy.DENSITY_LEFT, left, y + 5f, dl)
             canvas.drawText(Copy.DENSITY_RIGHT, right - dl.measureText(Copy.DENSITY_RIGHT), y + 5f, dl)
             y += ReportLayout.DENSITY_LABEL_H
@@ -930,7 +933,7 @@ private class PageCtx(
         cells.forEachIndexed { i, (label, value) ->
             val x = margin + i * cw
             canvas.drawText(value, x, y + 16f, paint(18f, INK, bold = true))
-            canvas.drawText(label.uppercase(), x, y + 30f, paint(6.5f, FAINT))
+            canvas.drawText(label.uppercase(), x, y + 30f, paint(6.5f, SOFT))
         }
         y += 42f
         distribution(data)
@@ -984,7 +987,7 @@ private class PageCtx(
         suggestions(data)
         projects(data)
         if (data.assignmentOutcomes.isEmpty() && data.projects.isEmpty()) {
-            noteBox(listOf(paint(8f, FAINT) to Copy.NOT_RECORDED_YET))
+            noteBox(listOf(paint(8f, SOFT) to Copy.NOT_RECORDED_YET))
         }
 
         if (data.activityStats.isNotEmpty()) activityTable(data)
@@ -1064,7 +1067,7 @@ private class PageCtx(
         head()
 
         if (data.entries.isEmpty()) {
-            canvas.drawText(Copy.NO_ENTRIES, margin, y + 8f, paint(8.5f, FAINT))
+            canvas.drawText(Copy.NO_ENTRIES, margin, y + 8f, paint(8.5f, SOFT))
             y += 18f
             return
         }
@@ -1278,7 +1281,7 @@ private class PageCtx(
         noteBox(listOf(paint(8.5f, SOFT) to optIn))
 
         val titleP = paint(10f, INK, bold = true)
-        val metaP = paint(7.5f, FAINT)
+        val metaP = paint(7.5f, SOFT)
         val bodyP = paint(9f, INK)
         data.journal.sortedByDescending { it.dateTime }.forEach { j ->
             ensure(ReportLayout.JOURNAL_ENTRY_RESERVE)
@@ -1310,7 +1313,7 @@ private class PageCtx(
             } else {
                 "The other $withheld entries are not here and are not summarised."
             }
-            noteBox(listOf(paint(8f, FAINT) to "$lead ${Copy.JOURNAL_ABSENT_TAIL}"))
+            noteBox(listOf(paint(8f, SOFT) to "$lead ${Copy.JOURNAL_ABSENT_TAIL}"))
         }
     }
 
@@ -1332,7 +1335,7 @@ private class PageCtx(
 
         discussionPrompts(data, options)
         provenance(data, options)
-        noteBox(listOf(paint(8f, FAINT) to Copy.NOT_IN_REPORT))
+        noteBox(listOf(paint(8f, SOFT) to Copy.NOT_IN_REPORT))
         verification(data)
     }
 
@@ -1361,7 +1364,7 @@ private class PageCtx(
                 y += 5f
             }
         }
-        noteBox(listOf(paint(8f, FAINT) to Copy.PROMPTS_CAVEAT))
+        noteBox(listOf(paint(8f, SOFT) to Copy.PROMPTS_CAVEAT))
     }
 
     /** What every tool in this report is, tool by tool, before anyone acts on a number from it. */
@@ -1452,7 +1455,7 @@ private class PageCtx(
         noteBox(
             listOf(
                 paint(8f, SOFT) to (if (allCustom) Copy.PROVENANCE_ALL_CUSTOM else Copy.PROVENANCE_MIXED),
-                paint(8f, FAINT) to Copy.CUSTOM_DISCLAIMER,
+                paint(8f, SOFT) to Copy.CUSTOM_DISCLAIMER,
             ),
         )
     }
@@ -1464,7 +1467,7 @@ private class PageCtx(
      */
     private fun verification(data: ReportData) {
         val qrSize = 90f
-        val textP = paint(8f, FAINT)
+        val textP = paint(8f, SOFT)
         val hashP = paint(7.5f, SOFT)
         val textLeft = margin + qrSize + 14f
         val textW = pageW - margin - textLeft
