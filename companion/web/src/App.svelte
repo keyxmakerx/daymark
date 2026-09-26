@@ -103,7 +103,7 @@
   /*
    * Whether the owner console is offered: by the same rule as its route card, so no other surface
    * on this page names a console the page has withheld. Where the published shape is solo the card
-   * is withheld, and the recovery code screen's paragraph about the key file sends nobody to it.
+   * is withheld, and the "Recover access" card sends nobody to it.
    */
   const ownerConsoleOffered = $derived(offersRoute('owner', published))
 
@@ -389,7 +389,7 @@
             {:else if source === 'file'}
               <Dropzone onload={load} onerror={(m) => (error = m)} />
             {:else if source === 'sync'}
-              <SyncPanel onload={loadData} {ownerConsoleOffered} onconnected={(c) => (syncConnection = c)} />
+              <SyncPanel onload={loadData} onconnected={(c) => (syncConnection = c)} />
             {:else if source === 'assess'}
               <Assessments />
             {:else if source === 'build'}

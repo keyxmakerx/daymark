@@ -11,11 +11,7 @@ import {
   shownAudiences,
   shownRoutes,
 } from '../onboarding/audience'
-import {
-  FILE_IS_A_STAND_IN,
-  FILE_IS_A_STAND_IN_WITHOUT_OWNER_CONSOLE,
-  fileIsAStandIn,
-} from '../components/recovery/copy'
+import * as recoveryCopy from '../components/recovery/copy'
 import {
   BEFORE_YOU_NEED_IT,
   EMAIL_LABEL,
@@ -245,6 +241,13 @@ describe('nothing on a published solo page points at the owner console it withho
     ]
   }
 
+  /** Every fixed sentence the Recovery code screen can show (#258), on any shape's page. */
+  const recoveryWords = [
+    ...Object.values(recoveryCopy).filter((v): v is string => typeof v === 'string'),
+    ...Object.values(recoveryCopy.SETUP_FAULT_TEXT),
+    ...recoveryCopy.PLACEHOLDERS.flatMap((p) => [p.title, p.body]),
+  ]
+
   /** The words the owner's page renders from these modules for one published shape. */
   function wordsFor(published: ShapeId) {
     const shape = shapeById(published)
@@ -262,7 +265,8 @@ describe('nothing on a published solo page points at the owner console it withho
       shape.summary,
       shape.buildNote,
       opensOnStatement(published),
-      fileIsAStandIn(offersRoute('owner', published)),
+      // The Recovery code screen is on every shape's page, so its words are the same on each.
+      ...recoveryWords,
       ...recoverCardWords(published, false, null),
       ...recoverCardWords(published, true, null),
       ...recoverCardWords(published, true, 'someone@example.org'),
@@ -270,10 +274,13 @@ describe('nothing on a published solo page points at the owner console it withho
   }
 
   it('says nothing about the owner console on solo', () => {
-    // Control: on paired the same words do name it — its card, and the paragraph about the key
-    // file — so the detector and the word list both see it before it is asserted absent.
+    // Control: on paired the same words do name it — its card, and the "Recover access" card's
+    // pointer to it — so the detector and the word list both see it before it is asserted absent.
     expect(wordsFor('paired').filter((w) => OWNER_CONSOLE.test(w)).length).toBeGreaterThanOrEqual(2)
     expect(wordsFor('solo').filter((w) => OWNER_CONSOLE.test(w))).toEqual([])
+    // Non-vacuity: the Recovery code screen's words are in the list being checked.
+    expect(recoveryWords.length).toBeGreaterThan(40)
+    expect(wordsFor('solo')).toContain(recoveryCopy.WHERE_THE_KEY_IS)
   })
 
   it('nor, on the "Recover access" card, about the console’s Notifications tab', () => {
@@ -285,35 +292,27 @@ describe('nothing on a published solo page points at the owner console it withho
     }
   })
 
-  it('drops only the sentence about the console from the key file paragraph', () => {
-    const sentence =
-      'It is also what the owner console opens with: that screen asks for this file and one of ' +
-      'these two secrets every visit, because it keeps nothing between them. '
-    expect(FILE_IS_A_STAND_IN).toContain(sentence)
-    expect(FILE_IS_A_STAND_IN.replace(sentence, '')).toBe(FILE_IS_A_STAND_IN_WITHOUT_OWNER_CONSOLE)
-    expect(fileIsAStandIn(true)).toBe(FILE_IS_A_STAND_IN)
-    expect(fileIsAStandIn(false)).toBe(FILE_IS_A_STAND_IN_WITHOUT_OWNER_CONSOLE)
-  })
-
-  it('hands the owner-console rule down to the paragraph, from App.svelte to the flow that renders it', () => {
+  it('the Recovery code screen names no owner console, so it is handed no rule about one', () => {
+    // The one paragraph on it that named the console was about the key file, retired with it
+    // (#258). What the screen is handed now is the sync card's address and token, and nothing that
+    // depends on the shape.
     const read = (rel: string) =>
       readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8')
         .replace(/<!--[\s\S]*?-->/g, ' ')
         .replace(/\/\*[\s\S]*?\*\//g, ' ')
     const app = read('../../App.svelte')
-    expect(app).toContain("const ownerConsoleOffered = $derived(offersRoute('owner', published))")
-    // The sync card's tag carries the rule; the tag matcher is mustache-aware, because the
-    // `onconnected={(c) => …}` handler beside it carries a `>` of its own.
+    // The sync card's tag; the matcher is mustache-aware, because the `onconnected={(c) => …}`
+    // handler carries a `>` of its own.
     const syncTag = app.match(/<SyncPanel\b(?:[^>{]|\{[^{}]*\})*>/)?.[0] ?? ''
     expect(syncTag).toContain('onload={loadData}') // the whole tag was read
-    expect(syncTag).toContain('{ownerConsoleOffered}')
-    expect(read('../components/SyncPanel.svelte')).toContain('<RecoveryPanel {ownerConsoleOffered} />')
-    expect(read('../components/recovery/RecoveryPanel.svelte')).toContain('<UseCodeFlow {ownerConsoleOffered} />')
-    const flow = read('../components/recovery/UseCodeFlow.svelte')
-    expect(flow).toContain('{fileIsAStandIn(ownerConsoleOffered)}')
-    // The paragraph as it was, rendered whole whatever the shape, is seen and is gone.
-    const WHOLE = /\{FILE_IS_A_STAND_IN\}/
-    expect('<p class="para small">{FILE_IS_A_STAND_IN}</p>').toMatch(WHOLE)
-    expect(flow).not.toMatch(WHOLE)
+    expect(syncTag).not.toContain('ownerConsoleOffered')
+    expect(read('../components/SyncPanel.svelte')).toContain('<RecoveryPanel {serverUrl} {token} />')
+    for (const file of ['RecoveryPanel', 'NewCodeFlow', 'UseCodeFlow', 'KeySetup', 'CodeSheet', 'WriteDownCheck']) {
+      const code = read(`../components/recovery/${file}.svelte`)
+      expect(code, file).not.toContain('ownerConsoleOffered')
+      expect(OWNER_CONSOLE.test(code.replace(/<script[\s\S]*?<\/script>/, '')), file).toBe(false)
+    }
+    // The detector sees the sentence that was retired.
+    expect(OWNER_CONSOLE.test('It is also what the owner console opens with')).toBe(true)
   })
 })

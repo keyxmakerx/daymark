@@ -1,25 +1,33 @@
 <script lang="ts">
   /*
-   * FLOW ONE — GET A CODE: generate it, show it once, and find out whether it was written down.
+   * FLOW ONE — GET A CODE: set the key up on the server with a new code, show the code once, and find
+   * out whether it was written down.
    *
-   * ─── THE FOUR STEPS, AND WHY THE THIRD ONE IS THE FEATURE ─────────────────────────────────────
+   * ─── THE STEPS, AND WHY THE CONFIRMATION IS THE FEATURE ───────────────────────────────────────
    *
-   *   start    a passphrase, and the sentence about what losing both costs, BEFORE anything is
-   *            generated. docs/COMPANION_ARCHITECTURE.md §1 is explicit that the cost has
-   *            to be stated where the passphrase is chosen and not in a footnote.
-   *   showing  the code, large, in six numbered groups, with print and download beside it.
+   *   start    the sentence about what losing both costs, BEFORE anything else. docs/COMPANION_
+   *            ARCHITECTURE.md §1 is explicit that the cost has to be stated where the passphrase is
+   *            chosen and not in a footnote. Then a read of what the server holds (#258), with the
+   *            address and token of the sync card above.
+   *   setup    the server holds no locked key: the set-up form the owner console's door uses too
+   *            (KeySetup.svelte). With nothing on the server it makes the key; with key parameters it
+   *            locks the key the passphrase already opens, after proving the passphrase.
+   *   locked   the server already holds a locked key, so there is no new code to make here.
+   *            Replacing a code is not built, and says so as a placeholder.
+   *   showing  the code, large, in six numbered groups, with print and download beside it. The server
+   *            has taken the key, read it back and opened it before this step is reached, so the code
+   *            on screen is the one attached to the key the server holds.
    *   confirm  the code is hidden and two of its groups are asked for. This step is the reason the
-   *            other three exist: everything before it is machinery, and without it the machinery
-   *            produces a code that a person may or may not have recorded, which is the same as no
-   *            code at all except that it looks finished.
-   *   held     what now exists, what does not, and where the wrapped key went.
+   *            others exist: without it they produce a code that a person may or may not have
+   *            recorded, which is the same as no code at all except that it looks finished.
+   *   held     where the key is now.
    *
    * ─── WHAT "SHOWN ONCE" MEANS HERE, EXACTLY ────────────────────────────────────────────────────
    *
    * The code is dropped from this component's state at the end of the confirmation, and there is no
    * path back to it — no re-show button on the last step, and nothing that could re-derive it,
-   * because it was never stored and cannot be recomputed from the wrapped key (that is the point of
-   * the wrapped key). Before the confirmation it can be shown again as often as somebody needs.
+   * because it was never stored and cannot be recomputed from the locked key (that is the point of
+   * the locked key). Before the confirmation it can be shown again as often as somebody needs.
    *
    * The honest limit of dropping it: a JavaScript string cannot be overwritten, so setting the
    * variable to null removes this component's reference and leaves the engine to collect the
@@ -28,94 +36,130 @@
    * narrower and is worth being precise about: nothing writes it anywhere, and no code path reads
    * it back.
    *
-   * ─── WHY THE PASSPHRASE IS ASKED FOR AT ALL ───────────────────────────────────────────────────
+   * ─── WHAT THIS FLOW DOES NOT KEEP ─────────────────────────────────────────────────────────────
    *
-   * A recovery code is the SECOND way into a key. There is no first way until a passphrase wraps
-   * one, and a blob with only a recovery slot would be a key whose sole opener is a piece of paper —
-   * a worse position than the one this feature exists to fix. So both slots are made together, in
-   * one act, which is also what createRecoverableDataKey() does and why it takes a passphrase.
-   *
-   * ─── THE COST, IN SECONDS, AND WHY IT IS NOT A PROGRESS BAR ───────────────────────────────────
-   *
-   * Generating wraps the key twice, and each wrap is a full Argon2id derivation at the 256 MiB /
-   * 3-pass floor: a few seconds of a locked-up tab. The button says what is happening in words. A
-   * percentage would be invented — nothing here can measure how far through a derivation it is —
-   * and a spinner that implied progress it could not observe is the small version of the same lie
-   * this whole surface is careful about.
+   * A set-up hands back the owner's identity along with the code, because the owner console's door
+   * opens with it. This screen opens nothing, so the identity's private halves are wiped the moment
+   * it arrives.
    */
   import { Callout, Card } from '../ui'
   import CodeSheet from './CodeSheet.svelte'
   import WriteDownCheck from './WriteDownCheck.svelte'
+  import KeySetup from './KeySetup.svelte'
   import Placeholder from './Placeholder.svelte'
-  import { holdWrappedKey, releaseWrappedKey, encodeWrappedKeyFile } from './session'
-  import type { RecoverableDataKey } from '../../recovery/dataKey'
+  import type { KeyDocument } from '../../sync/client'
+  import type { EnrolmentCheck, ServerKeyPorts } from '../../recovery/serverKey'
   import type { RecoveryCode } from '../../recovery/recoveryCode'
+  import type { Identity } from '../../share/pairing'
   import {
+    ALREADY_LOCKED_HERE,
+    CODE_CAN_ACT_AS_YOU,
     DOWNLOAD_IS_A_PLAINTEXT_COPY,
-    HANDOFF_IS_A_STAND_IN,
     IF_BOTH_ARE_LOST,
-    NEW_KEY_NOT_YOUR_ARCHIVE,
+    KEY_CHANGED_ON_SERVER,
+    KEY_STORED_HERE,
     PLACEHOLDERS,
     PRINTING,
-    PRINT_SHEET_CAVEAT,
+    READ_ACTION,
+    READ_BUSY,
+    READ_FAILED,
+    READ_NEEDS_TOKEN,
     SHOWN_ONCE,
+    TOKEN_NOT_ACCEPTED,
     WHAT_THIS_OPENS,
     WHY_NOBODY_CAN_HELP,
     WRITE_IT_ON_PAPER,
   } from './copy'
 
-  let { onhandoff }: { onhandoff?: () => void } = $props()
+  let {
+    /** The sync card's server address; blank means this page's own server. */
+    serverUrl = '',
+    /** The sync card's access token. */
+    token = '',
+  }: {
+    serverUrl?: string
+    token?: string
+  } = $props()
 
-  type Step = 'start' | 'showing' | 'confirm' | 'held'
+  type Step = 'start' | 'setup' | 'locked' | 'showing' | 'confirm' | 'held'
 
   let step = $state<Step>('start')
-  let passphrase = $state('')
-  let repeated = $state('')
   let busy = $state(false)
   let error = $state('')
+  /** A statement about what happened that is not a refusal: the server's key changed under a set-up. */
+  let notice = $state('')
 
-  /* Held only between the generate and the end of the confirmation. See the header note. */
+  /** What the server held when it was read, and the reads and writes bound to that server. */
+  let held = $state.raw<KeyDocument | null>(null)
+  let check = $state<EnrolmentCheck | null>(null)
+  let ports = $state.raw<ServerKeyPorts | null>(null)
+
+  /* Held only between the set-up and the end of the confirmation. See the header note. */
   let code = $state<RecoveryCode | null>(null)
-  let blob = $state<RecoverableDataKey | null>(null)
 
-  /** Placeholders pulled from the catalogue rather than written out again here. */
-  const enrolment = PLACEHOLDERS.find((p) => p.id === 'enrolment')!
-  const storage = PLACEHOLDERS.find((p) => p.id === 'storage')!
+  const rotation = PLACEHOLDERS.find((p) => p.id === 'rotation')!
 
-  async function generate() {
+  /** Read what the server holds, with the sync card's address and token. Nothing is written here. */
+  async function read() {
     error = ''
-    if (!passphrase) {
-      error = 'Enter a passphrase. It is the first of the two ways into this key.'
-      return
-    }
-    if (passphrase !== repeated) {
-      error = 'The two passphrases are different. Nothing has been generated.'
+    notice = ''
+    if (!token) {
+      error = READ_NEEDS_TOKEN
       return
     }
     busy = true
     try {
       /*
        * Loaded here rather than imported at the top, the same way SyncPanel loads the sync client:
-       * dataKey.ts pulls in libsodium, and a person who opened this panel to read what a recovery
-       * code is should not pay for a WASM crypto library to do it.
+       * the key's module pulls in libsodium, and a person who opened this panel to read what a
+       * recovery code is should not pay for a WASM crypto library to do it.
        */
-      const { createRecoverableDataKey, zeroizeDataKey } = await import('../../recovery/dataKey')
-      const made = await createRecoverableDataKey(passphrase)
-      /*
-       * The data key is wiped immediately. This flow has no use for it — both slots are already
-       * wrapped — and a 32-byte key sitting in a component's state for the length of a confirmation
-       * step is a key that outlives its purpose by several minutes.
-       */
-      zeroizeDataKey(made.dataKey)
-      blob = made.blob
-      code = made.recoveryCode
-      holdWrappedKey(made.blob)
-      step = 'showing'
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'The key could not be generated on this device.'
+      const { SyncClient, SyncError } = await import('../../sync/client')
+      const { serverKeyPorts, enrolmentCheck } = await import('../../recovery/serverKey')
+      const reading = serverKeyPorts(new SyncClient(serverUrl, token))
+      try {
+        const doc = await reading.read()
+        check = doc.kind === 'keyparams' ? await enrolmentCheck(reading) : null
+        held = doc
+        ports = reading
+        step = doc.kind === 'wrapped' ? 'locked' : 'setup'
+      } catch (e) {
+        error = e instanceof SyncError && e.status === 401 ? TOKEN_NOT_ACCEPTED : READ_FAILED
+      }
+    } catch {
+      error = READ_FAILED
     } finally {
       busy = false
     }
+  }
+
+  /**
+   * The server took the key, read it back and opened it: show the code, and keep nothing else. The
+   * code first, before anything else can fail — the server holds the lock it opens, and a code that
+   * never reached the screen would be a recovery slot nobody holds.
+   */
+  async function keyStored(stored: { recoveryCode: RecoveryCode; identity: Identity }) {
+    code = stored.recoveryCode
+    step = 'showing'
+    const { zeroizeOwnerIdentity } = await import('../../owner/identity')
+    zeroizeOwnerIdentity(stored.identity)
+  }
+
+  /** The server's key changed between the read and the create: go on from what it holds now. */
+  function keyMoved(now: KeyDocument, nowCheck: EnrolmentCheck | null) {
+    held = now
+    check = nowCheck
+    notice = KEY_CHANGED_ON_SERVER
+    step = now.kind === 'wrapped' ? 'locked' : 'setup'
+  }
+
+  /** Where things stand is not known here any more: start again from a read. */
+  function keyLost(message: string) {
+    held = null
+    ports = null
+    notice = ''
+    error = message
+    step = 'start'
   }
 
   /**
@@ -139,24 +183,8 @@
     if (!code) return
     /* Everything the sheet says, in the order it says it. A file found in five years needs the
        context as much as a printed page does. */
-    const text = [
-      WHAT_THIS_OPENS,
-      '',
-      code.display,
-      '',
-      IF_BOTH_ARE_LOST,
-      '',
-      SHOWN_ONCE,
-      '',
-      PRINT_SHEET_CAVEAT,
-      '',
-    ].join('\n')
+    const text = [WHAT_THIS_OPENS, '', code.display, '', IF_BOTH_ARE_LOST, '', CODE_CAN_ACT_AS_YOU, '', SHOWN_ONCE, ''].join('\n')
     download(text, 'daymark-recovery-code.txt')
-  }
-
-  function downloadWrappedKey() {
-    if (!blob) return
-    download(encodeWrappedKeyFile(blob), 'daymark-wrapped-key-stand-in.json')
   }
 
   function confirmed() {
@@ -164,16 +192,6 @@
        back. See the header note for the honest limit of what dropping a string achieves. */
     code = null
     step = 'held'
-  }
-
-  function startAgain() {
-    code = null
-    blob = null
-    releaseWrappedKey()
-    passphrase = ''
-    repeated = ''
-    error = ''
-    step = 'start'
   }
 </script>
 
@@ -184,30 +202,37 @@
         <p class="para">{IF_BOTH_ARE_LOST}</p>
         <p class="para muted-para">{WHY_NOBODY_CAN_HELP}</p>
 
-        <label class="field">
-          <span class="label">Passphrase for this key</span>
-          <input type="password" bind:value={passphrase} autocomplete="new-password" />
-        </label>
-        <label class="field">
-          <span class="label">The same passphrase again</span>
-          <input type="password" bind:value={repeated} autocomplete="new-password" />
-        </label>
-
         <div class="actions">
-          <button type="button" class="primary" onclick={generate} disabled={busy}>
-            {busy ? 'Deriving the key — this takes a few seconds' : 'Generate a recovery code'}
+          <button type="button" class="primary" onclick={read} disabled={busy}>
+            {busy ? READ_BUSY : READ_ACTION}
           </button>
         </div>
 
         {#if error}
-          <Callout tone="critical" title="Nothing was generated">
+          <Callout tone="critical">
             <p class="para">{error}</p>
           </Callout>
         {/if}
+      </div>
+    </Card>
+  {/if}
 
-        <Placeholder title={enrolment.title} specifiedAt={enrolment.specifiedAt}>
-          <p class="para">{NEW_KEY_NOT_YOUR_ARCHIVE}</p>
-          <p class="para">{enrolment.body}</p>
+  {#if step === 'setup' && held && held.kind !== 'wrapped' && ports}
+    <Card title="Make a recovery code">
+      <div class="stack">
+        {#if notice}<p class="para" role="status">{notice}</p>{/if}
+        <KeySetup {ports} {held} {check} onstored={keyStored} onmoved={keyMoved} onlost={keyLost} />
+      </div>
+    </Card>
+  {/if}
+
+  {#if step === 'locked'}
+    <Card title="This server already holds your key">
+      <div class="stack">
+        {#if notice}<p class="para" role="status">{notice}</p>{/if}
+        <p class="para">{ALREADY_LOCKED_HERE}</p>
+        <Placeholder title={rotation.title} specifiedAt={rotation.specifiedAt}>
+          <p class="para">{rotation.body}</p>
         </Placeholder>
       </div>
     </Card>
@@ -245,41 +270,19 @@
   {/if}
 
   {#if step === 'held'}
-    <Card title="Where the wrapped key is">
+    <Card title="Where your key is">
       <div class="stack">
         <!--
           Deliberately not a congratulation, a tick or a statement that anything is now protected.
-          Two locked boxes exist in a browser tab; that is the whole of what happened, and it is
-          what this step says. Reassurance on this surface is the absence of a callout.
+          The server holds two locks on one key; that is the whole of what happened, and it is what
+          this step says. Reassurance on this surface is the absence of a callout.
         -->
-        <p class="para">{HANDOFF_IS_A_STAND_IN}</p>
+        <p class="para">{KEY_STORED_HERE}</p>
         <p class="para">
           The code is no longer in this page. Nothing here can show it again, and nothing can
-          reconstruct it from the wrapped key — which is exactly why a wrapped key can sit on a
+          reconstruct it from the locked key — which is exactly why a locked key can sit on a
           server that never learns anything from holding it.
         </p>
-
-        <div class="actions">
-          {#if onhandoff}
-            <button type="button" class="primary" onclick={onhandoff}>Try opening it with the code</button>
-          {/if}
-          <button type="button" onclick={downloadWrappedKey}>Save the wrapped key to a file</button>
-          <button type="button" onclick={startAgain}>Make a different code</button>
-        </div>
-
-        <p class="para small">
-          Making a different code replaces the wrapped key held in this page. The one you wrote down
-          would open nothing afterwards.
-        </p>
-
-        <!--
-          Repeated here, at the step where somebody would put the paper in a drawer and consider the
-          job done. The panel says it above both flows; this is the moment it is most likely to be
-          acted on, and a placeholder is cheap next to what believing otherwise would cost.
-        -->
-        <Placeholder title={storage.title} specifiedAt={storage.specifiedAt}>
-          <p class="para">{storage.body}</p>
-        </Placeholder>
       </div>
     </Card>
   {/if}
@@ -315,27 +318,6 @@
     font-size: 0.85rem;
   }
 
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    max-width: 26rem;
-  }
-
-  .label {
-    font-size: 0.9rem;
-    color: var(--ink-soft);
-  }
-
-  .field input {
-    font: inherit;
-    padding: var(--space-2) var(--space-3);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
-    background: var(--paper-bg);
-    color: var(--ink-text);
-  }
-
   .actions {
     display: flex;
     flex-wrap: wrap;
@@ -343,11 +325,9 @@
   }
 
   /* Printing this page is one of the two ways the code gets onto paper, so the controls around the
-     sheet — buttons, passphrase fields, the actions row — are left off the printed copy. The sheet
-     itself, and the sentences it carries, print. */
+     sheet are left off the printed copy. The sheet itself, and the sentences it carries, print. */
   @media print {
-    .actions,
-    .field {
+    .actions {
       display: none;
     }
   }

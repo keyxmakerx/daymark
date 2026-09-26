@@ -64,6 +64,25 @@ describe('(a) nothing here can invent an identity', () => {
     expect(code.match(/setUpIdentity = [^\n]+/g)).toEqual(['setUpIdentity = stored.identity', 'setUpIdentity = null'])
   })
 
+  it('has no file input, and nothing that reads a file: the key file is retired, with no fallback (#258)', () => {
+    // The door opens the server's copy of the key and nothing else. The detector is shown catching
+    // the input this screen used to have, planted back into a copy of this source, before the
+    // absence is asserted over what ships.
+    const FILE_INPUT = /<input[^>]*type=["']?file\b|\.files\??\.\[0\]|\bFileReader\b|\bfile\.text\(\)|\bkeyFileText\b/
+    const planted = code.replace(
+      '<legend>Your server</legend>',
+      '<legend>Your server</legend><input type="file" accept="application/json,.json" onchange={chooseFile} />',
+    )
+    expect(planted).not.toBe(code)
+    expect(FILE_INPUT.test(planted)).toBe(true)
+    expect(FILE_INPUT.test(code)).toBe(false)
+    // Nor a word about one.
+    expect(/key file/i.test(code)).toBe(false)
+    for (const [key, value] of Object.entries(unlockCopy)) {
+      if (typeof value === 'string') expect(/key file|\bfile\b/i.test(value), key).toBe(false)
+    }
+  })
+
   it('opens the console from a set-up only once the new code is confirmed written down', () => {
     // The identity a set-up derived waits behind the write-down check, as the code does on the
     // Recovery code screen: the one caller that hands it on is the check's confirmation.

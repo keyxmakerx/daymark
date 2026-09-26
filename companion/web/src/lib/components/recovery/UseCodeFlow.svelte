@@ -1,6 +1,6 @@
 <script lang="ts">
   /*
-   * FLOW TWO — USE A CODE: enter it, open the key, set a passphrase again.
+   * FLOW TWO — USE A CODE: read the key from the server, open it with the code, set a passphrase again.
    *
    * ─── THE ONE THING THIS SCREEN MUST GET RIGHT ─────────────────────────────────────────────────
    *
@@ -20,41 +20,35 @@
    * proves a mistake exists and cannot locate it — see CHECKSUM_CANNOT_POINT — so that branch names
    * no group. Pointing at one would send somebody to rewrite a character that was right.
    *
-   * ─── WHY THERE IS A "WHERE FROM" STEP AT ALL ──────────────────────────────────────────────────
+   * ─── WHERE THE KEY COMES FROM ─────────────────────────────────────────────────────────────────
    *
-   * In a finished build there would not be one: a new device would fetch the wrapped key from the
-   * server by itself, because a recovery that requires you to already have a file is not much of a
-   * recovery. Nothing fetches anything here, because there is no route to fetch from — so this flow
-   * has to be handed a wrapped key, and it says so in those words rather than showing an empty
-   * screen that looks like a failure. session.ts sets out why the stand-in exists and what it is
-   * careful not to be.
+   * The owner's server keeps it, locked under the passphrase and under the code (#258), and this
+   * flow reads it there when the code is offered, with the address and token of the sync card above.
+   * So a person on a new device needs the paper and their access token, and nothing else. A server
+   * that holds no locked key has no code that opens anything, and the screen says so rather than
+   * showing an empty form that looks like a failure.
    *
    * ─── WHAT HAPPENS AFTER THE KEY OPENS ─────────────────────────────────────────────────────────
    *
    * A new passphrase, immediately, because a person who has just recovered has exactly one way in
-   * again and it is a piece of paper. replacePassphrase() re-wraps only the passphrase slot: the
-   * data key does not move, so nothing that was encrypted under it needs re-encrypting, and the
-   * recovery slot is deliberately left alone so that changing a passphrase does not silently
+   * again and it is a piece of paper. recovery/serverKey.ts replacePassphraseOnServer() locks the
+   * same key under it and stores that as the next version of the key on the server, then reads it
+   * back and opens it. The key does not move, so nothing encrypted under it needs encrypting again,
+   * and the recovery slot is deliberately left alone so that changing a passphrase does not silently
    * invalidate the paper in somebody's filing cabinet.
    *
    * Two things are said at that point that a screen like this normally leaves out, and both are
    * corrections to what the button appears to have done: the old code still works (OLD_CODE_STILL_
-   * WORKS), and for an archive enrolled from an older setup a passphrase change is not a revocation
-   * until the previously published key parameters are gone (PASSPHRASE_CHANGE_IS_NOT_A_REVOCATION,
-   * which migration.ts describes as the hazard that must not be papered over).
+   * WORKS), and the old passphrase is retired against the live server only, not against copies of it
+   * made before (PASSPHRASE_CHANGE_IS_NOT_A_REVOCATION). "Your old passphrase no longer works" is the
+   * reassuring sentence that is not true, and it is not said.
    */
   import { Callout, Card, EmptyState } from '../ui'
   import GroupEntry from './GroupEntry.svelte'
-  import Placeholder from './Placeholder.svelte'
-  import {
-    decodeWrappedKeyFile,
-    heldWrappedKey,
-    holdWrappedKey,
-    slotSummary,
-    WRAPPED_KEY_FILE_FAULT_TEXT,
-  } from './session'
+  import { slotSummary } from './session'
   import { emptyGroups, firstGroupProblem, groupsToTyped, type GroupProblem } from './groups'
-  import type { RecoverableDataKey } from '../../recovery/dataKey'
+  import type { KeyDocument } from '../../sync/client'
+  import type { ServerKeyPorts } from '../../recovery/serverKey'
   import {
     CODE_DOES_NOT_OPEN_THIS,
     HOW_ENTRY_WORKS,
@@ -64,20 +58,23 @@
     OLD_CODE_STILL_WORKS,
     PASSPHRASE_ADVICE,
     PASSPHRASE_CHANGE_IS_NOT_A_REVOCATION,
-    PLACEHOLDERS,
-    HANDOFF_IS_A_STAND_IN,
-    fileIsAStandIn,
+    PASSPHRASE_REPLACED,
+    READ_FAILED,
+    READ_NEEDS_TOKEN,
+    REPLACE_FAILED,
+    REPLACE_MOVED,
+    REPLACE_UNCHECKED,
+    TOKEN_NOT_ACCEPTED,
   } from './copy'
 
   let {
-    /**
-     * Whether the owner's page offers the owner console (`offersRoute`, in
-     * lib/onboarding/audience.ts). Where it does not — a server whose published shape switches
-     * the clinician routes off (#330) — the paragraph about the key file sends nobody to it.
-     */
-    ownerConsoleOffered = true,
+    /** The sync card's server address; blank means this page's own server. */
+    serverUrl = '',
+    /** The sync card's access token. */
+    token = '',
   }: {
-    ownerConsoleOffered?: boolean
+    serverUrl?: string
+    token?: string
   } = $props()
 
   type Step = 'entry' | 'opened' | 'rewrapped'
@@ -88,17 +85,20 @@
 
   /** A positioned diagnosis from the grouped entry, or null. */
   let problem = $state<GroupProblem | null>(null)
-  /** A fault that is not about the shape of what was typed: the key did not open, the file was wrong. */
+  /** The code was well-formed and did not open the key the server holds. */
+  let codeFault = $state('')
+  /** Any other refusal: the server could not be read, or a new passphrase was not stored. */
   let fault = $state('')
 
-  /*
-   * Read once, when this flow renders. The stand-in is written by the other flow, and the panel
-   * remounts this component when it is switched to, so a key made next door is picked up.
+  /**
+   * What the server held when the code was last offered, and the reads and writes bound to it. Raw,
+   * because it is replaced whole and never edited.
    */
-  let blob = $state<RecoverableDataKey | null>(heldWrappedKey())
+  let held = $state.raw<KeyDocument | null>(null)
+  let ports = $state.raw<ServerKeyPorts | null>(null)
 
   /*
-   * The open data key, alive only between the code opening it and the new passphrase wrapping it.
+   * The open data key, alive only between the code opening it and the new passphrase locking it.
    * It is the one genuinely secret thing this component ever holds; it is wiped in place the
    * moment it has been used, which is the whole of what zeroizeDataKey() promises and no more.
    */
@@ -108,39 +108,26 @@
   let repeated = $state('')
 
   const messageId = $props.id()
-  const storage = PLACEHOLDERS.find((p) => p.id === 'storage')!
 
-  const slots = $derived(blob ? slotSummary(blob) : null)
+  const slots = $derived(held?.kind === 'wrapped' ? slotSummary(held.wrapped) : null)
 
   function updateGroups(next: string[]) {
     groups = next
-    /* Both complaints are about what was typed a moment ago; editing makes them stale. */
+    /* The complaints are about what was typed a moment ago; editing makes them stale. */
     problem = null
+    codeFault = ''
     fault = ''
-  }
-
-  async function loadFile(event: Event) {
-    fault = ''
-    const input = event.target as HTMLInputElement
-    const file = input.files?.[0]
-    if (!file) return
-    const read = decodeWrappedKeyFile(await file.text())
-    if (!read.ok) {
-      fault = WRAPPED_KEY_FILE_FAULT_TEXT[read.fault]
-      return
-    }
-    blob = read.blob
-    holdWrappedKey(read.blob)
   }
 
   async function open() {
+    codeFault = ''
     fault = ''
-    if (!blob) return
     /*
-     * The shape of what was typed is checked here, before any import and any derivation. That
-     * ordering is the difference between "there is a mistake in group 3" arriving instantly and a
-     * three-second wait ending in a generic refusal — the same distinction dataKey.ts builds into
-     * unwrapWithRecoveryCode() by taking a typed string rather than a parsed code.
+     * The shape of what was typed is checked here, before any import, any request and any
+     * derivation. That ordering is the difference between "there is a mistake in group 3" arriving
+     * instantly and a three-second wait ending in a generic refusal — the same distinction
+     * dataKey.ts builds into unwrapWithRecoveryCode() by taking a typed string rather than a parsed
+     * code.
      */
     const found = firstGroupProblem(groups)
     if (found) {
@@ -148,51 +135,87 @@
       return
     }
     problem = null
+    if (!token) {
+      fault = READ_NEEDS_TOKEN
+      return
+    }
     busy = true
     try {
+      const { SyncClient, SyncError } = await import('../../sync/client')
+      const { serverKeyPorts } = await import('../../recovery/serverKey')
+      const reading = serverKeyPorts(new SyncClient(serverUrl, token))
+      let doc: KeyDocument
+      try {
+        doc = await reading.read()
+      } catch (e) {
+        fault = e instanceof SyncError && e.status === 401 ? TOKEN_NOT_ACCEPTED : READ_FAILED
+        return
+      }
+      held = doc
+      ports = reading
+      if (doc.kind !== 'wrapped') return
       const { unwrapWithRecoveryCode } = await import('../../recovery/dataKey')
-      dataKey = await unwrapWithRecoveryCode(blob, groupsToTyped(groups))
+      try {
+        dataKey = await unwrapWithRecoveryCode(doc.wrapped, groupsToTyped(groups))
+      } catch {
+        /*
+         * Deliberately not the thrown message. dataKey.ts says "that secret does not open this slot"
+         * for every reason a slot fails to open, which is correct for a crypto module and unhelpful
+         * to a person; CODE_DOES_NOT_OPEN_THIS says the same thing and then says what it could mean.
+         */
+        codeFault = CODE_DOES_NOT_OPEN_THIS
+        return
+      }
       /* The typed code is dropped from the form as soon as it has been used. It is on paper in the
          person's hand; leaving thirty characters sitting in six visible boxes for the rest of the
          session serves nobody. */
       groups = emptyGroups()
       step = 'opened'
     } catch {
-      /*
-       * Deliberately not the thrown message. dataKey.ts says "that secret does not open this slot"
-       * for every reason a slot fails to open, which is correct for a crypto module and unhelpful
-       * to a person; CODE_DOES_NOT_OPEN_THIS says the same thing and then says what it could mean.
-       */
-      fault = CODE_DOES_NOT_OPEN_THIS
+      fault = READ_FAILED
     } finally {
       busy = false
     }
   }
 
+  /** The open key is done with, whichever way the new passphrase went. */
+  async function dropOpenKey() {
+    const { zeroizeDataKey } = await import('../../recovery/dataKey')
+    zeroizeDataKey(dataKey)
+    dataKey = null
+    passphrase = ''
+    repeated = ''
+  }
+
   async function setPassphrase() {
     fault = ''
-    if (!blob || !dataKey) return
-    if (!passphrase) {
-      fault = 'Enter a passphrase. The key is open, and nothing has been re-wrapped.'
-      return
-    }
-    if (passphrase !== repeated) {
-      fault = 'The two passphrases are different. Nothing has been re-wrapped.'
-      return
-    }
+    if (!held || held.kind !== 'wrapped' || !ports || !dataKey) return
     busy = true
     try {
-      const { replacePassphrase, zeroizeDataKey } = await import('../../recovery/dataKey')
-      const next = await replacePassphrase(blob, dataKey, passphrase)
-      blob = next
-      holdWrappedKey(next)
-      zeroizeDataKey(dataKey)
-      dataKey = null
-      passphrase = ''
-      repeated = ''
-      step = 'rewrapped'
-    } catch (e) {
-      fault = e instanceof Error ? e.message : 'The key could not be re-wrapped on this device.'
+      const { replacePassphraseOnServer } = await import('../../recovery/serverKey')
+      const out = await replacePassphraseOnServer(ports, held, dataKey, passphrase, repeated)
+      if (out.kind === 'refused') {
+        fault =
+          out.fault === 'noPassphrase'
+            ? 'Enter a passphrase. The key is open, and nothing has been stored.'
+            : 'The two passphrases are different. Nothing has been stored.'
+        return
+      }
+      await dropOpenKey()
+      if (out.kind === 'written') {
+        step = 'rewrapped'
+      } else if (out.kind === 'moved') {
+        held = out.now
+        fault = REPLACE_MOVED
+        step = 'entry'
+      } else {
+        fault = REPLACE_UNCHECKED
+        step = 'entry'
+      }
+    } catch {
+      await dropOpenKey()
+      fault = REPLACE_FAILED
+      step = 'entry'
     } finally {
       busy = false
     }
@@ -200,31 +223,7 @@
 </script>
 
 <div class="flow">
-  {#if !blob}
-    <Card title="There is nothing here to open">
-      <div class="stack">
-        <EmptyState title="No wrapped key in this page">
-          <p class="para">{NOTHING_TO_OPEN}</p>
-        </EmptyState>
-
-        <label class="file">
-          <span class="label">Load a wrapped key saved by the other flow</span>
-          <input type="file" accept="application/json,.json" onchange={loadFile} />
-        </label>
-        <p class="para small">{fileIsAStandIn(ownerConsoleOffered)}</p>
-
-        {#if fault}
-          <Callout tone="warn" title="That file was not loaded">
-            <p class="para">{fault}</p>
-          </Callout>
-        {/if}
-
-        <Placeholder title={storage.title} specifiedAt={storage.specifiedAt}>
-          <p class="para">{storage.body}</p>
-        </Placeholder>
-      </div>
-    </Card>
-  {:else if step === 'entry'}
+  {#if step === 'entry'}
     <Card title="Enter your recovery code">
       <div class="stack">
         <p class="para">{NOT_A_PASSWORD_RESET}</p>
@@ -250,28 +249,38 @@
             <Callout tone="warn" title={problem.message}>
               {#if problem.detail}<p class="para">{problem.detail}</p>{/if}
             </Callout>
-          {:else if fault}
+          {:else if codeFault}
             <Callout tone="warn" title="That code did not open this key">
+              <p class="para">{codeFault}</p>
+            </Callout>
+          {:else if fault}
+            <Callout tone="warn">
               <p class="para">{fault}</p>
             </Callout>
           {/if}
         </div>
 
+        {#if held && held.kind !== 'wrapped'}
+          <!-- A server holding no locked key is an absence, drawn as one, not as a failure. -->
+          <EmptyState title="No locked key on this server">
+            <p class="para">{NOTHING_TO_OPEN}</p>
+          </EmptyState>
+        {/if}
+
         <div class="actions">
           <button type="button" class="primary" onclick={open} disabled={busy}>
-            {busy ? 'Deriving the key — this takes a few seconds' : 'Open the wrapped key'}
+            {busy ? 'Deriving the key — this takes a few seconds' : 'Open the key'}
           </button>
         </div>
 
         {#if slots}
           <p class="para small">
-            This wrapped key holds {slots.passphrase} passphrase
+            The key this server holds is locked in {slots.passphrase} passphrase
             {slots.passphrase === 1 ? 'copy' : 'copies'} and {slots.recovery} recovery
-            {slots.recovery === 1 ? 'copy' : 'copies'} of the same key. Opening any one of them
-            opens the same bytes.
+            {slots.recovery === 1 ? 'copy' : 'copies'}. Opening any one of them opens the same
+            key.
           </p>
         {/if}
-        <p class="para small">{HANDOFF_IS_A_STAND_IN}</p>
       </div>
     </Card>
   {:else if step === 'opened'}
@@ -282,21 +291,21 @@
 
         <label class="field">
           <span class="label">New passphrase</span>
-          <input type="password" bind:value={passphrase} autocomplete="new-password" />
+          <input type="password" bind:value={passphrase} autocomplete="new-password" disabled={busy} />
         </label>
         <label class="field">
           <span class="label">The same passphrase again</span>
-          <input type="password" bind:value={repeated} autocomplete="new-password" />
+          <input type="password" bind:value={repeated} autocomplete="new-password" disabled={busy} />
         </label>
 
         <div class="actions">
           <button type="button" class="primary" onclick={setPassphrase} disabled={busy}>
-            {busy ? 'Deriving the key — this takes a few seconds' : 'Wrap the key under this passphrase'}
+            {busy ? 'Locking and storing the key — this takes a few seconds' : 'Lock the key under this passphrase'}
           </button>
         </div>
 
         {#if fault}
-          <Callout tone="critical" title="Nothing was re-wrapped">
+          <Callout tone="critical" title="Nothing was stored">
             <p class="para">{fault}</p>
           </Callout>
         {/if}
@@ -305,20 +314,12 @@
   {:else}
     <Card title="What changed, and what did not">
       <div class="stack">
-        <p class="para">
-          The passphrase copy of this key was replaced. The key itself did not change, so nothing
-          encrypted under it needs re-encrypting.
-        </p>
+        <p class="para">{PASSPHRASE_REPLACED}</p>
         <p class="para">{OLD_CODE_STILL_WORKS}</p>
 
-        <Callout tone="warn" title="A passphrase change is not always a revocation">
+        <Callout tone="warn" title="What the old passphrase still opens">
           <p class="para">{PASSPHRASE_CHANGE_IS_NOT_A_REVOCATION}</p>
         </Callout>
-
-        <Placeholder title={storage.title} specifiedAt={storage.specifiedAt}>
-          <p class="para">{storage.body}</p>
-          <p class="para">{HANDOFF_IS_A_STAND_IN}</p>
-        </Placeholder>
       </div>
     </Card>
   {/if}
@@ -350,8 +351,7 @@
     color: var(--ink-soft);
   }
 
-  .field,
-  .file {
+  .field {
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
@@ -370,12 +370,6 @@
     border-radius: var(--radius-sm);
     background: var(--paper-bg);
     color: var(--ink-text);
-  }
-
-  .file input {
-    font: inherit;
-    font-size: 0.85rem;
-    color: var(--ink-soft);
   }
 
   .message:empty {

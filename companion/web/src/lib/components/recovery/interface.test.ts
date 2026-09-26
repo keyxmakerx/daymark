@@ -2,16 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import * as copy from './copy'
-import {
-  FILE_NOTE,
-  STAND_IN_MARKER,
-  decodeWrappedKeyFile,
-  encodeWrappedKeyFile,
-  heldWrappedKey,
-  holdWrappedKey,
-  releaseWrappedKey,
-  slotSummary,
-} from './session'
+import { slotSummary } from './session'
 import type { RecoverableDataKey } from '../../recovery/dataKey'
 
 /*
@@ -21,13 +12,13 @@ import type { RecoverableDataKey } from '../../recovery/dataKey'
  *
  * Two things this surface can get wrong that no unit test of a pure function would notice.
  *
- * FIRST: IT COULD LIE BY OMISSION. There is no storage for a wrapped key — no wire format, no
- * endpoint, no client call — so a code minted here opens nothing outside the page it was made in.
- * A screen that let somebody write thirty characters onto paper and file them without saying that
- * would be the single most damaging thing in this directory, and it would be damaging in a way that
- * surfaces years later, to one person, at the worst moment of their use of this product. So the
- * assertions below check that the sentence exists, that it is said above both flows rather than
- * under one of them, and that every unbuilt thing calls itself a placeholder.
+ * FIRST: IT COULD LIE BY OMISSION. A piece of paper is worth exactly what it is attached to, and a
+ * screen that let somebody write thirty characters down without saying where the key they open is
+ * kept — or that implied a part that is not built — would be damaging in a way that surfaces years
+ * later, to one person, at the worst moment of their use of this product. So the assertions below
+ * check that where the key is kept is said above both flows rather than under one of them, that the
+ * stand-in that came before the server kept the key is gone rather than still describing itself
+ * (#258), and that every unbuilt thing calls itself a placeholder.
  *
  * SECOND: IT COULD LEAK. A recovery code opens years of somebody's journal, and the places a secret
  * escapes to are not exotic — a console call left in during debugging, a localStorage line added to
@@ -204,8 +195,8 @@ describe('(a) the cost of losing both secrets is stated where it is incurred', (
     // The plan is explicit that this belongs where the passphrase is chosen and not in a footnote,
     // and the sheet and the confirmation are the two other moments a person is deciding how
     // seriously to take a piece of paper. A module holding a good sentence is worth nothing if the
-    // screens do not render it.
-    for (const file of ['NewCodeFlow.svelte', 'CodeSheet.svelte', 'WriteDownCheck.svelte']) {
+    // screens do not render it. KeySetup is where the passphrase is chosen, on both screens.
+    for (const file of ['NewCodeFlow.svelte', 'KeySetup.svelte', 'CodeSheet.svelte', 'WriteDownCheck.svelte']) {
       expect(codeOf(file), file).toContain('IF_BOTH_ARE_LOST')
     }
   })
@@ -219,13 +210,30 @@ describe('(a) the cost of losing both secrets is stated where it is incurred', (
   it('carries its own context onto paper, where the screen is gone', () => {
     // A printed sheet outlives the page it came from and is read by somebody who did not print it.
     expect(copy.WHAT_THIS_OPENS).toContain('Daymark recovery code')
-    expect(copy.PRINT_SHEET_CAVEAT).toContain('no storage for the wrapped key')
     const sheet = codeOf('CodeSheet.svelte')
     expect(sheet).toContain('WHAT_THIS_OPENS')
-    expect(sheet).toContain('PRINT_SHEET_CAVEAT')
     expect(sheet).toContain('@media print')
     // And the downloaded file says the same things, for the same reason.
-    expect(codeOf('NewCodeFlow.svelte')).toContain('PRINT_SHEET_CAVEAT')
+    expect(codeOf('NewCodeFlow.svelte')).toContain('WHAT_THIS_OPENS')
+  })
+
+  it('says, wherever the code is shown and on paper, that it can act as the person', () => {
+    // The code opens the master, and the owner's signing identity is derived from it
+    // (owner/identity.ts), so the paper is not read-only. Said without naming a console or a
+    // clinician, because the sheet is shown on servers that offer neither.
+    expect(copy.CODE_CAN_ACT_AS_YOU).toContain('act as you')
+    expect(copy.CODE_CAN_ACT_AS_YOU).not.toMatch(/owner console|clinician/i)
+    expect(codeOf('CodeSheet.svelte')).toContain('{CODE_CAN_ACT_AS_YOU}')
+    expect(codeOf('NewCodeFlow.svelte')).toContain('CODE_CAN_ACT_AS_YOU')
+  })
+
+  it('no longer says, on screen or on paper, that a code opens nothing outside the page', () => {
+    // The caveat printed on every sheet while no server kept the key would now be false (#258).
+    expect('PRINT_SHEET_CAVEAT' in copy).toBe(false)
+    for (const file of componentFiles) expect(codeOf(file), file).not.toContain('PRINT_SHEET_CAVEAT')
+    const REHEARSAL = /opens nothing outside|rehearsal rather than/i
+    expect(REHEARSAL.test('this code opens nothing outside the page it was made in')).toBe(true)
+    expect(SENTENCES.filter((s) => REHEARSAL.test(s))).toEqual([])
   })
 })
 
@@ -258,6 +266,16 @@ describe('(b) the write-down check is a check', () => {
     const check = codeOf('WriteDownCheck.svelte')
     expect(check).toContain('canonical')
     expect(check).not.toMatch(/\{canonical\}|\{code\.display\}|\{display\}/)
+  })
+
+  it('puts the new code on screen before anything that could fail', () => {
+    // The server already holds the lock the code opens; a code that never reached the screen would
+    // be a recovery slot nobody holds. So nothing is awaited before it is shown.
+    const flow = codeOf('NewCodeFlow.svelte')
+    const body = flow.slice(flow.indexOf('async function keyStored('), flow.indexOf('function keyMoved('))
+    const shown = body.indexOf('code = stored.recoveryCode')
+    expect(shown).toBeGreaterThan(-1)
+    expect(body.indexOf('await')).toBeGreaterThan(shown)
   })
 
   it('drops the code at the end, and offers no way back to it', () => {
@@ -313,11 +331,15 @@ describe('(c) a positioned error is positioned, and an unpositioned one says so'
     expect(codeOf('GroupEntry.svelte')).toContain("aria-invalid={problemGroup === i + 1}")
   })
 
-  it('checks the shape before it derives anything', () => {
+  it('checks the shape before it asks the server or derives anything', () => {
     // A mistyped character is refused in milliseconds rather than after three seconds of Argon2id
-    // ending in a shrug — the same distinction dataKey.ts builds into unwrapWithRecoveryCode().
+    // ending in a shrug — the same distinction dataKey.ts builds into unwrapWithRecoveryCode(). And
+    // before the read of the server's key, so a typo costs no request either.
     const flow = codeOf('UseCodeFlow.svelte')
-    expect(flow.indexOf('firstGroupProblem')).toBeLessThan(flow.indexOf('unwrapWithRecoveryCode'))
+    const check = flow.indexOf('firstGroupProblem(groups)')
+    expect(check).toBeGreaterThan(-1)
+    expect(check).toBeLessThan(flow.indexOf('reading.read()'))
+    expect(check).toBeLessThan(flow.indexOf('unwrapWithRecoveryCode'))
   })
 })
 
@@ -325,34 +347,56 @@ describe('(c) a positioned error is positioned, and an unpositioned one says so'
    (d) Nothing unbuilt is drawn as though it were built.
    ═══════════════════════════════════════════════════════════════════════════════════════════ */
 
-describe('(d) the missing storage is stated before either flow', () => {
-  it('says what is missing, in the three specific terms', () => {
-    expect(copy.STORAGE_IS_NOT_BUILT).toContain('no wire format')
-    expect(copy.STORAGE_IS_NOT_BUILT).toContain('no endpoint that accepts one')
-    expect(copy.STORAGE_IS_NOT_BUILT).toContain('no client call')
-    expect(copy.STORAGE_IS_NOT_BUILT).toContain('not yet a working recovery')
+describe('(d) where the key is, said before either flow, and nothing unbuilt drawn as built', () => {
+  it('says where the key is kept, and what the server can and cannot do with it', () => {
+    expect(copy.WHERE_THE_KEY_IS).toContain('kept on your server')
+    expect(copy.WHERE_THE_KEY_IS).toContain('The server can open neither lock')
+    expect(copy.WHERE_THE_KEY_IS).toContain('the card above')
   })
 
   it('renders it on the panel, above the choice of flow', () => {
     const panel = codeOf('RecoveryPanel.svelte')
-    expect(panel).toContain('STORAGE_IS_NOT_BUILT')
-    // Above, not under: a correction that arrives after somebody has written thirty characters down
-    // has to fight a belief they have already formed.
-    expect(panel.indexOf('STORAGE_IS_NOT_BUILT')).toBeLessThan(panel.indexOf('<NewCodeFlow'))
-    expect(panel.indexOf('STORAGE_IS_NOT_BUILT')).toBeLessThan(panel.indexOf('role="tablist"'))
+    expect(panel).toContain('{WHERE_THE_KEY_IS}')
+    // Above, not under: a person deciding how seriously to take a piece of paper needs to know what
+    // it is attached to before the code exists.
+    expect(panel.indexOf('WHERE_THE_KEY_IS}')).toBeLessThan(panel.indexOf('<NewCodeFlow'))
+    expect(panel.indexOf('WHERE_THE_KEY_IS}')).toBeLessThan(panel.indexOf('role="tablist"'))
   })
 
-  it('describes the hand-off as a stand-in wherever the hand-off is used', () => {
-    expect(copy.HANDOFF_IS_A_STAND_IN).toContain('Reload the tab and it is gone')
-    expect(copy.HANDOFF_IS_A_STAND_IN).toContain('it is not storage')
-    for (const file of ['NewCodeFlow.svelte', 'UseCodeFlow.svelte']) {
-      expect(codeOf(file), file).toContain('HANDOFF_IS_A_STAND_IN')
+  it('the stand-in that came before the server kept the key is gone, words and all (#258)', () => {
+    // Each of these said that nothing stores the key, or that the page's memory or a file stood in
+    // for storage. With the server keeping the key every one of them would be false, and a false
+    // "this opens nothing" is as damaging as a false "this is kept".
+    for (const name of [
+      'STORAGE_IS_NOT_BUILT',
+      'HANDOFF_IS_A_STAND_IN',
+      'FILE_IS_A_STAND_IN',
+      'FILE_IS_A_STAND_IN_WITHOUT_OWNER_CONSOLE',
+      'PANEL_BUILD_STATE',
+      'NEW_KEY_NOT_YOUR_ARCHIVE',
+    ]) {
+      expect(name in copy, name).toBe(false)
+      for (const file of componentFiles) expect(codeOf(file), `${file}: ${name}`).not.toContain(name)
     }
-    expect(copy.FILE_IS_A_STAND_IN).toContain('no server would accept it')
+    const STAND_IN = /stands? in for storage|nothing stores the wrapped key|no endpoint (that accepts|serves)|in this page’s memory/i
+    expect(STAND_IN.test('This stands in for storage; it is not storage.')).toBe(true)
+    expect(SENTENCES.filter((s) => STAND_IN.test(s))).toEqual([])
+    for (const file of componentFiles) expect(STAND_IN.test(proseOf(file)), file).toBe(false)
+  })
+
+  it('the placeholders that are now true went in the same change that made them true', () => {
+    const ids = copy.PLACEHOLDERS.map((p) => p.id)
+    expect(ids).not.toContain('storage')
+    expect(ids).not.toContain('enrolment')
+    // Replacing a code is still not built: the server takes a new version, and nothing here makes
+    // one. Its note says so rather than saying there is nowhere to publish it.
+    const rotation = copy.PLACEHOLDERS.find((p) => p.id === 'rotation')!
+    expect(rotation.body).toContain('nothing on this screen makes one yet')
+    expect(rotation.body).not.toMatch(/somewhere to publish/)
   })
 
   it('every placeholder names itself, its subject and where the real thing is specified', () => {
-    expect(copy.PLACEHOLDERS.length).toBeGreaterThanOrEqual(5)
+    expect(copy.PLACEHOLDERS.length).toBeGreaterThanOrEqual(3)
     const ids = copy.PLACEHOLDERS.map((p) => p.id)
     expect(new Set(ids).size).toBe(ids.length)
     for (const note of copy.PLACEHOLDERS) {
@@ -368,10 +412,10 @@ describe('(d) the missing storage is stated before either flow', () => {
     expect(codeOf('Placeholder.svelte')).toContain('{PLACEHOLDER_WORD}')
     expect(proseOf('Placeholder.svelte')).toContain('{PLACEHOLDER_WORD}')
     // Rendered through the shared component, so a placeholder cannot be added without the marker.
-    for (const file of ['RecoveryPanel.svelte', 'NewCodeFlow.svelte', 'UseCodeFlow.svelte']) {
+    for (const file of ['RecoveryPanel.svelte', 'NewCodeFlow.svelte']) {
       expect(codeOf(file), file).toContain('<Placeholder')
     }
-    expect(codeOf('RecoveryPanel.svelte')).toContain('{#each rest as note')
+    expect(codeOf('RecoveryPanel.svelte')).toContain('{#each notBuilt as note')
   })
 
   it('promises no dates and no versions', () => {
@@ -384,9 +428,9 @@ describe('(d) the missing storage is stated before either flow', () => {
   })
 
   it('contains nothing that could pass for real data', () => {
-    // The worst failure this surface has after the storage lie: a plausible name, date, count or
-    // status rendered as though something produced it. Every detector is calibrated on a planted
-    // example first.
+    // The worst failure this surface has after a false statement about storage: a plausible name,
+    // date, count or status rendered as though something produced it. Every detector is calibrated
+    // on a planted example first.
     const SAMPLE = /\b(jane|john|dr\.|doe|acme|lorem ipsum|example\.com|@example)\b/i
     const FABRICATED = /\b20\d\d-\d\d-\d\d\b|\b\d+ (days?|weeks?|months?|years?) ago\b|last used|last rotated/i
     expect(SAMPLE.test('Dr. Jane Doe')).toBe(true)
@@ -400,11 +444,11 @@ describe('(d) the missing storage is stated before either flow', () => {
     expect(SENTENCES.filter((s) => SAMPLE.test(s) || FABRICATED.test(s))).toEqual([])
   })
 
-  it('shows an absent wrapped key as absent rather than as a specimen', () => {
+  it('shows a server with no locked key as an absence rather than as a failure', () => {
     const flow = codeOf('UseCodeFlow.svelte')
     expect(flow).toContain('<EmptyState')
-    expect(flow).toContain('{#if !blob}')
-    expect(copy.NOTHING_TO_OPEN).toContain('no endpoint serves')
+    expect(flow).toContain("{#if held && held.kind !== 'wrapped'}")
+    expect(copy.NOTHING_TO_OPEN).toContain('holds no locked key')
   })
 
   it('states no status the software does not know', () => {
@@ -416,6 +460,17 @@ describe('(d) the missing storage is stated before either flow', () => {
     expect(CLAIMED_STATE.test('Your code is stored')).toBe(true)
     expect(SENTENCES.filter((s) => CLAIMED_STATE.test(s))).toEqual([])
     for (const file of componentFiles) expect(CLAIMED_STATE.test(proseOf(file)), file).toBe(false)
+  })
+
+  it('never says the old passphrase stops working, and says what it still opens', () => {
+    // The decision on #258: the master does not move, so a changed passphrase is retired against the
+    // live server and not against copies someone kept. The reassuring sentence is the false one.
+    const FALSE_COMFORT = /old passphrase (no longer|doesn’t|does not|won’t|will not) (work|open)/i
+    expect(FALSE_COMFORT.test('Your old passphrase no longer works.')).toBe(true)
+    expect(SENTENCES.filter((s) => FALSE_COMFORT.test(s))).toEqual([])
+    for (const file of componentFiles) expect(FALSE_COMFORT.test(proseOf(file)), file).toBe(false)
+    expect(copy.PASSPHRASE_CHANGE_IS_NOT_A_REVOCATION).toContain('still opens with the old one')
+    expect(codeOf('UseCodeFlow.svelte')).toContain('{PASSPHRASE_CHANGE_IS_NOT_A_REVOCATION}')
   })
 })
 
@@ -478,8 +533,10 @@ describe('(e) the register is flat, adult and non-diagnostic', () => {
     // set, which is the failure mode every grep-shaped guard has.
     expect(headings.length).toBeGreaterThan(8)
     expect(headings).toContain('Set a passphrase')
-    expect(headings).toContain('Nothing stores a wrapped key yet')
-    expect(faults.length).toBeGreaterThan(3)
+    expect(headings).toContain('Where your key is')
+    // Most refusals on this surface now come from copy.ts by name; the two a flow still spells out
+    // itself are the new-passphrase ones.
+    expect(faults.length).toBeGreaterThanOrEqual(2)
     expect(faults.some((s) => s.startsWith('The two passphrases are different'))).toBe(true)
 
     for (const line of [...headings, ...faults]) {
@@ -490,10 +547,11 @@ describe('(e) the register is flat, adult and non-diagnostic', () => {
     }
   })
 
-  it('says what the build is rather than letting a first pass look finished', () => {
-    expect(copy.PANEL_BUILD_STATE).toContain('First interface')
-    expect(copy.PANEL_BUILD_STATE).toContain('hand a wrapped key to each other inside this page')
-    expect(codeOf('RecoveryPanel.svelte')).toContain('PANEL_BUILD_STATE')
+  it('says what is not built as placeholders at the foot, rather than letting the panel look finished', () => {
+    // Replacing a code, the phone, and a split: each still unbuilt, each said where a reader of the
+    // panel will find it.
+    expect(codeOf('RecoveryPanel.svelte')).toContain('const notBuilt = PLACEHOLDERS')
+    expect(copy.PLACEHOLDERS.map((p) => p.id)).toEqual(['rotation', 'devices', 'split'])
   })
 })
 
@@ -562,33 +620,55 @@ describe('(f) no recovery code and no unwrapped key leaves this page', () => {
     expect(flow).toContain('DOWNLOAD_IS_A_PLAINTEXT_COPY')
   })
 
-  it('wipes the open data key the moment it has been used', () => {
-    // The one genuinely secret buffer either flow holds. zeroizeDataKey() promises only that the
-    // buffer it was handed is overwritten, which is why it is called at the earliest point rather
-    // than at the end of the session.
-    expect(codeOf('NewCodeFlow.svelte')).toContain('zeroizeDataKey(made.dataKey)')
+  it('wipes the open data key, and the identity it does not use, the moment each has been used', () => {
+    // The open key is the one genuinely secret buffer a flow holds. zeroizeDataKey() promises only
+    // that the buffer it was handed is overwritten, which is why it is called at the earliest point
+    // rather than at the end of the session. "Get a code" never holds a key at all; the identity a
+    // set-up hands back is wiped as it arrives, because this screen opens nothing with it.
+    expect(codeOf('NewCodeFlow.svelte')).toContain('zeroizeOwnerIdentity(stored.identity)')
     const use = codeOf('UseCodeFlow.svelte')
     expect(use).toContain('zeroizeDataKey(dataKey)')
     expect(use).toContain('dataKey = null')
   })
 
-  it('loads the crypto on demand rather than into the offline viewer’s chunk', () => {
+  it('loads the crypto and the sync client on demand rather than into the offline viewer’s chunk', () => {
     // SyncPanel lazily loads the sync client so that a person opening a backup file never pays for
     // libsodium; this surface reaches the same library and must not undo that.
-    for (const file of ['NewCodeFlow.svelte', 'UseCodeFlow.svelte']) {
+    const LAZY: Record<string, string[]> = {
+      'NewCodeFlow.svelte': ["await import('../../recovery/serverKey')", "await import('../../sync/client')"],
+      'UseCodeFlow.svelte': ["await import('../../recovery/dataKey')", "await import('../../recovery/serverKey')", "await import('../../sync/client')"],
+      'KeySetup.svelte': ["await import('../../recovery/serverKey')"],
+    }
+    // A value import of any of these would put it in the chunk regardless. `import type` is erased
+    // at build time and is what these files use.
+    const EAGER = /^\s*import \{[^}]*\} from '\.\.\/\.\.\/(recovery\/dataKey|recovery\/serverKey|sync\/client|owner\/identity)'/m
+    expect(EAGER.test("  import { setUp } from '../../recovery/serverKey'")).toBe(true)
+    for (const [file, imports] of Object.entries(LAZY)) {
       const code_ = codeOf(file)
-      expect(code_, file).toContain("await import('../../recovery/dataKey')")
-      // A value import of the same module would put it in the chunk regardless. `import type` is
-      // erased at build time and is what these files use.
-      expect(code_, file).not.toMatch(/^\s*import \{[^}]*\} from '\.\.\/\.\.\/recovery\/dataKey'/m)
+      for (const lazy of imports) expect(code_, `${file}: ${lazy}`).toContain(lazy)
+      expect(code_, file).not.toMatch(EAGER)
     }
     expect(syncPanel).toContain("await import('./recovery/RecoveryPanel.svelte')")
     expect(syncPanel).not.toMatch(/^\s*import RecoveryPanel from/m)
   })
+
+  it('has no file input anywhere, and saves no key: the key file is retired (#258)', () => {
+    // The stand-in key file is gone outright, with no fallback and no import. The one thing these
+    // screens still hand out as a file is the code itself, as text, which is a download and not an
+    // input. The detector is shown catching the input it replaced.
+    const FILE_INPUT = /<input[^>]*type=["']?file\b|\.files\??\.\[0\]|\bFileReader\b|\bfile\.text\(\)/
+    expect(FILE_INPUT.test('<input type="file" accept="application/json,.json" onchange={loadFile} />')).toBe(true)
+    expect(FILE_INPUT.test('const file = input.files?.[0]')).toBe(true)
+    const offenders = componentFiles.filter((f) => FILE_INPUT.test(codeOf(f)))
+    expect(offenders).toEqual([])
+    const KEY_FILE = /wrapped-key-stand-in|encodeWrappedKeyFile|decodeWrappedKeyFile|Save the wrapped key|key file/i
+    expect(KEY_FILE.test("download(encodeWrappedKeyFile(blob), 'daymark-wrapped-key-stand-in.json')")).toBe(true)
+    for (const file of source.keys()) expect(KEY_FILE.test(codeOf(file)), file).toBe(false)
+  })
 })
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
-   (g) The stand-in holds a wrapped key and nothing else.
+   (g) What a locked key can say about itself without being opened.
    ═══════════════════════════════════════════════════════════════════════════════════════════ */
 
 /** A blob-shaped value. Not a real one — nothing here derives anything. */
@@ -600,16 +680,7 @@ const fakeBlob: RecoverableDataKey = {
   ],
 }
 
-describe('(g) the page-memory stand-in', () => {
-  it('holds a wrapped key, hands it back, and forgets it', () => {
-    releaseWrappedKey()
-    expect(heldWrappedKey()).toBeNull()
-    holdWrappedKey(fakeBlob)
-    expect(heldWrappedKey()).toBe(fakeBlob)
-    releaseWrappedKey()
-    expect(heldWrappedKey()).toBeNull()
-  })
-
+describe('(g) the locked key, counted rather than described', () => {
   it('counts the copies of the key rather than asserting what the design says', () => {
     // A blob with two recovery slots is a thing the format allows — the slot list is a list
     // precisely so a person can hold more than one code. A screen that said "one" would be
@@ -621,41 +692,13 @@ describe('(g) the page-memory stand-in', () => {
     })
   })
 
-  it('writes a file that says what it is and carries no secret', () => {
-    const text = encodeWrappedKeyFile(fakeBlob)
-    const parsed = JSON.parse(text)
-    expect(Object.keys(parsed).sort()).toEqual(['note', 'standIn', 'wrapped'])
-    expect(parsed.standIn).toBe(STAND_IN_MARKER)
-    expect(parsed.note).toBe(FILE_NOTE)
-    expect(parsed.wrapped).toEqual(fakeBlob)
-    // The file is two locked boxes and public salts. Nothing else may find its way into it — a
-    // recovery code or a passphrase in this JSON would be the escrow this product does not have.
-    expect(FILE_NOTE).toContain('no secret')
-    expect(text).not.toMatch(/passphrase["']?\s*:\s*["'][^"']/)
-    expect(text).not.toMatch(/recoveryCode|dataKey|canonical|display/)
-  })
-
-  it('reads its own file back, and says what any other file is', () => {
-    const read = decodeWrappedKeyFile(encodeWrappedKeyFile(fakeBlob))
-    expect(read.ok).toBe(true)
-    expect(read.ok && read.blob).toEqual(fakeBlob)
-
-    expect(decodeWrappedKeyFile('not json at all')).toEqual({ ok: false, fault: 'notJson' })
-    expect(decodeWrappedKeyFile('{"some":"json"}')).toEqual({ ok: false, fault: 'notThisFile' })
-    expect(decodeWrappedKeyFile('null')).toEqual({ ok: false, fault: 'notThisFile' })
-    expect(
-      decodeWrappedKeyFile(JSON.stringify({ standIn: STAND_IN_MARKER, note: '', wrapped: { v: 1, slots: [] } })),
-    ).toEqual({ ok: false, fault: 'noSlots' })
-  })
-
   it('leaves every question about the key’s strength to the module that owns it', () => {
     // Deliberately NOT a second KDF floor check. dataKey.ts validates every slot of every blob on
     // every use, because a blob is untrusted input; a second floor here would be a second thing to
     // keep in step, and the failure mode of two floors drifting is that one of them becomes the
     // lower one.
     const weak = { v: 1 as const, slots: [{ ...fakeBlob.slots[0], kdf: { alg: 'argon2id' as const, memMiB: 8, ops: 1 } }] }
-    const read = decodeWrappedKeyFile(encodeWrappedKeyFile(weak))
-    expect(read.ok).toBe(true)
+    expect(slotSummary(weak)).toEqual({ passphrase: 1, recovery: 0 })
     expect(codeOf('session.ts')).not.toContain('memMiB')
   })
 })

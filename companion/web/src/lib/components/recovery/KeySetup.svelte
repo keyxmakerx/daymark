@@ -30,6 +30,7 @@
     FIRST_RUN_BUSY,
     HOLDS_KEY_PARAMETERS,
     HOLDS_NOTHING,
+    IF_BOTH_ARE_LOST,
     NEW_PASSPHRASE_LABEL,
     READ_BACK_DID_NOT_MATCH,
     SAME_AGAIN_LABEL,
@@ -112,6 +113,11 @@
 <div class="setup">
   <fieldset class="fields">
     <legend>Your key</legend>
+    <!--
+      Where the passphrase is chosen, or the code about to be made, and not in a footnote
+      (docs/COMPANION_ARCHITECTURE.md §1): the cost of losing both, before either is committed to.
+    -->
+    <p class="cost">{IF_BOTH_ARE_LOST}</p>
     {#if firstRun}
       <p class="hint">{HOLDS_NOTHING}</p>
     {:else}
@@ -169,11 +175,16 @@
   }
 
   .hint,
-  .para {
+  .para,
+  .cost {
     margin: 0;
     max-width: 44rem;
     font-size: 0.9rem;
     line-height: 1.55;
+  }
+
+  .cost {
+    color: var(--ink-text);
   }
 
   .hint {

@@ -44,50 +44,45 @@
  * the master twice, publish the blob. That is enrolExistingOwner() below, and it is a handful of
  * lines because the design decision above did the work.
  *
- * ─── THE HAZARD THIS INTRODUCES, WHICH IS THE REASON TO WRITE ANY OF THIS DOWN ──────────────────
+ * ─── THE HAZARD THIS INTRODUCES, AND WHERE IT IS CLOSED ─────────────────────────────────────────
  *
  * After migration, a migrated owner has TWO routes to the same master: the new passphrase slot, and
  * the old keyparams record, which still says "Argon2id(passphrase, this salt, these params)". The
  * old route cannot be revoked by anything in this module.
  *
  * That is harmless while both routes need the same passphrase. It stops being harmless the moment
- * the owner changes it. replacePassphrase() re-wraps the passphrase slot, and a reader of this code
- * would reasonably assume the old passphrase is now useless — but for a MIGRATED owner it is not:
- * the old passphrase plus the still-published keyparams still reproduces the master, and the master
- * still opens everything. A passphrase change is therefore only real for a migrated owner once the
- * legacy keyparams record is gone.
+ * the owner changes it: replacePassphrase() re-wraps the passphrase slot, and the old passphrase
+ * plus a still-published keyparams record would still reproduce the master. So the server closes
+ * the old route by presence (#258; docs/SYNC_PROTOCOL.md §1.2): from the moment any wrapped key
+ * exists it stops serving the key parameters and takes no new ones, and it keeps the file. No client
+ * deletes anything, and every reader goes through the key document (sync/client.ts), so none stops
+ * at the retired route.
  *
- * Two ways out, and the choice belongs with whoever owns the server and client surfaces:
+ * What that does not reach is copies: a backup of the server made before a passphrase change still
+ * holds the key parameters and the older wrapped versions, and the old passphrase still opens them.
+ * A changed secret is retired against the live server, not against copies someone kept, and the
+ * screen where the passphrase is changed says so (components/recovery/copy.ts,
+ * PASSPHRASE_CHANGE_IS_NOT_A_REVOCATION). The dishonest option is to change the passphrase, show the
+ * person a reassuring sentence, and say nothing about the copies. Retiring the master itself is key
+ * rotation, which is not built: #297.
  *
- *   (a) DELETE THE KEYPARAMS RECORD as the last step of migration, once the owner's other devices
- *       have upgraded. Cheap and complete, but it is a flag day per owner: a device still running
- *       the old code has no way to derive anything afterwards, so the ORDER MATTERS — every reader
- *       must understand the blob before any writer removes the keyparams.
- *   (b) ACCEPT THE LEGACY ROUTE and say so in the passphrase-change copy, until (a) is safe.
+ * ─── WHERE THE REST OF THE MIGRATION LIVES ──────────────────────────────────────────────────────
  *
- * The dishonest third option is to change the passphrase, show the person a reassuring sentence,
- * and leave the old one working. This comment exists so nobody picks it by accident.
- *
- * A related, smaller note: for a NEW owner the master is random and no keyparams record is ever
- * published, so a client that only knows the old format cannot read them at all. Ship the reader
- * before the writer.
- *
- * ─── WHAT IS AND IS NOT IMPLEMENTED HERE ────────────────────────────────────────────────────────
- *
- * IMPLEMENTED: the whole cryptographic half — deriving the existing master, reproducing the two
+ * This file is the whole cryptographic half — deriving the existing master, reproducing the two
  * subkeys from it (pinned against sync/crypto.ts by a conformance test, see below), and wrapping it
  * into a recoverable blob. It is pure and takes no transport, so it can be called from a browser,
  * from the phone, or from a script.
  *
- * NOT IMPLEMENTED, deliberately: where the blob is stored and when the migration runs. That means a
- * keyparams v2 document (or a new endpoint) on the server, the SyncClient calls to read and write
- * it, and the enrolment UI that shows the code once and makes the person confirm they have written
- * it down. Those live in companion/server and in sync/client.ts, which this change does not own, so
- * shipping half of them here would have produced an untested surface in somebody else's file.
+ * The rest is elsewhere, and built (#258): the server keeps the wrapped key (the key document,
+ * docs/SYNC_PROTOCOL.md §2); sync/client.ts reads and writes it; recovery/serverKey.ts runs the
+ * enrolment in order — the passphrase proved on the newest stored snapshot before anything is
+ * written, the create named against the key parameters it wraps, the read-back opened before any
+ * identity exists; and the set-up form (components/recovery/KeySetup.svelte) shows the code once
+ * and asks the person to confirm they wrote it down.
  *
- * ALSO NOT IMPLEMENTED: the "optional social / Shamir recovery" that COMPANION_ACCESS_CONTROL.md
- * lists alongside recovery codes. The slot list in dataKey.ts is shaped to accept it; nothing here
- * splits a secret.
+ * NOT IMPLEMENTED: the "optional social / Shamir recovery" that COMPANION_ACCESS_CONTROL.md lists
+ * alongside recovery codes. The slot list in dataKey.ts is shaped to accept it; nothing here splits
+ * a secret.
  *
  * ─── WHY THESE THREE CONSTANTS ARE COPIED ───────────────────────────────────────────────────────
  *

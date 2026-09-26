@@ -6,11 +6,6 @@
   let {
     onload,
     /**
-     * Whether the owner's page offers the owner console (#330). The recovery code screen below
-     * names that console in one paragraph, and says it only where the console is offered.
-     */
-    ownerConsoleOffered = true,
-    /**
      * Handed the server address and access token once a pull with them has succeeded — the
      * server accepted the token and returned this person's snapshot — so the "Recover access"
      * card can register the recovery email without asking for the token again (#330). Never
@@ -19,7 +14,6 @@
     onconnected = undefined,
   }: {
     onload: (data: BackupData, source: string) => void
-    ownerConsoleOffered?: boolean
     onconnected?: (connection: OwnerConnection) => void
   } = $props()
 
@@ -79,8 +73,12 @@
    *
    * Held as a component value rather than behind an `{#await}` so that opening it is one decision
    * with one loading state, and so it stays mounted once it is there.
+   *
+   * IT IS HANDED THIS CARD'S ADDRESS AND TOKEN (#258). The key the recovery code opens is kept on the
+   * server, locked, and both of the screen's flows read and write it there. The fields for reaching
+   * that server are this card's, so the screen uses them rather than asking for them a second time.
    */
-  let RecoveryPanel = $state<Component<{ ownerConsoleOffered?: boolean }> | null>(null)
+  let RecoveryPanel = $state<Component<{ serverUrl?: string; token?: string }> | null>(null)
   let loadingRecovery = $state(false)
   let recoveryError = $state('')
 
@@ -141,7 +139,7 @@
 -->
 <section class="recovery">
   {#if RecoveryPanel}
-    <RecoveryPanel {ownerConsoleOffered} />
+    <RecoveryPanel {serverUrl} {token} />
   {:else}
     <h2 class="recovery-title">Recovery code</h2>
     <p class="recovery-lede">

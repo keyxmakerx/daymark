@@ -1,63 +1,54 @@
 <script lang="ts">
   /*
-   * THE RECOVERY CODE SURFACE — both flows, and the truth about what sits between them.
+   * THE RECOVERY CODE SURFACE — both flows, and where the key they work on is.
    *
-   * ─── WHY THE MISSING PIECE IS STATED FIRST, ABOVE BOTH FLOWS ──────────────────────────────────
+   * ─── WHY WHERE THE KEY IS IS SAID FIRST, ABOVE BOTH FLOWS ─────────────────────────────────────
    *
    * The order of this panel is an argument. A person arrives to do one of two things — get a code,
-   * or use one — and either task, done in good faith on this build, ends with a piece of paper that
-   * opens nothing, because there is no storage for a wrapped key: no wire format, no endpoint, no
-   * client call (migration.ts names all three as deliberately unimplemented).
-   *
-   * That fact cannot be a caveat under the flow that produced the code. By then the person has
-   * already written thirty characters down and formed a belief about what they are for, and a
-   * correction arriving after the belief has to fight it. So STORAGE_IS_NOT_BUILT is said at the
-   * top, before the choice, where it changes what the reader thinks they are about to do rather
-   * than what they think they have just done.
+   * or use one — and either task ends with a piece of paper whose worth depends entirely on what it
+   * is attached to. The key is kept on their server, locked under the passphrase and again under
+   * the code (#258; docs/SYNC_PROTOCOL.md §1.2), and both flows read and write it there with the
+   * address and token of the sync card above. That is said at the top, before the choice, where it
+   * changes what the reader thinks they are about to do rather than what they think they have just
+   * done.
    *
    * ─── WHY BOTH FLOWS ARE HERE AND NOT ON SEPARATE SCREENS ──────────────────────────────────────
    *
-   * Because the stand-in that joins them is a variable in this page (session.ts), and the point of
-   * that stand-in is that the maintainer can click the whole thing end to end: mint a code, hide
-   * it, type it back, then walk next door and open the same wrapped key with it. Split across two
-   * routes, the hand-off would need storage — which is the thing that does not exist.
-   *
-   * In a finished build these are two different moments in a person's life, years apart, reached
-   * from completely different places, and this panel would not exist in this shape.
+   * They are two moments in a person's life, years apart, and both begin at the same place: the
+   * server that keeps the key, reached from the card that connects to it. Getting a code is a set-up
+   * the owner console's door can also do (KeySetup.svelte is shared); using one is here only, and it
+   * ends by storing a new passphrase.
    *
    * ─── WHAT IS DELIBERATELY NOT ON THIS PANEL ───────────────────────────────────────────────────
    *
-   * No status line saying whether this person has a recovery code, because nothing knows. No date
-   * of last rotation, no count of codes issued, no server state of any kind. Every one of those
-   * would have to be invented, and an invented status on a security surface is indistinguishable
-   * from a bug — worse, it is indistinguishable from a bug that says everything is fine.
+   * No status line saying whether this person has a recovery code until the server has been read,
+   * and then only what the server said. No date of last rotation, no count of codes issued. Every
+   * one of those would have to be invented, and an invented status on a security surface is
+   * indistinguishable from a bug — worse, it is indistinguishable from a bug that says everything is
+   * fine.
    */
   import { Callout } from '../ui'
   import NewCodeFlow from './NewCodeFlow.svelte'
   import UseCodeFlow from './UseCodeFlow.svelte'
   import Placeholder from './Placeholder.svelte'
-  import {
-    PANEL_BUILD_STATE,
-    PANEL_LEDE,
-    PANEL_TITLE,
-    PLACEHOLDERS,
-    STORAGE_IS_NOT_BUILT,
-  } from './copy'
+  import { PANEL_LEDE, PANEL_TITLE, PLACEHOLDERS, WHERE_THE_KEY_IS } from './copy'
 
   type Flow = 'new' | 'use'
 
   let flow = $state<Flow>('new')
 
-  const storage = PLACEHOLDERS.find((p) => p.id === 'storage')!
-  /* The rest of the catalogue, listed once at the foot. The storage note is above, on its own,
-     because it is the one that changes how everything else on the panel should be read. */
-  const rest = PLACEHOLDERS.filter((p) => p.id !== 'storage' && p.id !== 'enrolment')
+  /* What is still not built, listed once at the foot. Replacing a code is also shown where a
+     person would reach for it, on "Get a code" when the server already holds a key. */
+  const notBuilt = PLACEHOLDERS
 
   let {
-    /** Whether the owner's page offers the owner console; handed to the flow that names it. */
-    ownerConsoleOffered = true,
+    /** The sync card's server address, as typed; blank means this page's own server. */
+    serverUrl = '',
+    /** The sync card's access token, as typed. */
+    token = '',
   }: {
-    ownerConsoleOffered?: boolean
+    serverUrl?: string
+    token?: string
   } = $props()
 
   const panelId = $props.id()
@@ -70,22 +61,12 @@
   </header>
 
   <!--
-    Two banners, in this order and with these tones. The build state is structural — the interface
-    explaining how it is arranged — so it is info. The missing storage is a genuine warning about
-    what this screen cannot do, so it is warn. Neither is an alarm: nothing has gone wrong, and
-    spending the clay here would blunt it for the failures that need it.
+    Info, not warn: this is the interface saying how it is arranged, and nothing about it is a
+    warning. Spending the amber here would blunt it for the refusals that need it.
   -->
-  <Callout tone="info" title="What is built">
-    <p class="para">{PANEL_BUILD_STATE}</p>
+  <Callout tone="info" title="Where your key is">
+    <p class="para">{WHERE_THE_KEY_IS}</p>
   </Callout>
-
-  <Callout tone="warn" title="Nothing stores a wrapped key yet">
-    <p class="para">{STORAGE_IS_NOT_BUILT}</p>
-  </Callout>
-
-  <Placeholder title={storage.title} specifiedAt={storage.specifiedAt}>
-    <p class="para">{storage.body}</p>
-  </Placeholder>
 
   <div class="tabs" role="tablist" aria-label="Recovery code">
     <button
@@ -119,20 +100,14 @@
     aria-labelledby={flow === 'new' ? `${panelId}-tab-new` : `${panelId}-tab-use`}
   >
     {#if flow === 'new'}
-      <!--
-        `onhandoff` walks the person from the end of the first flow into the second one. It is the
-        one piece of navigation on this panel, and it exists because the two flows only connect at
-        all through this page's memory — following that hand-off is the only way to see the whole
-        thing work on this build.
-      -->
-      <NewCodeFlow onhandoff={() => (flow = 'use')} />
+      <NewCodeFlow {serverUrl} {token} />
     {:else}
-      <UseCodeFlow {ownerConsoleOffered} />
+      <UseCodeFlow {serverUrl} {token} />
     {/if}
   </div>
 
   <div class="rest">
-    {#each rest as note (note.id)}
+    {#each notBuilt as note (note.id)}
       <Placeholder title={note.title} specifiedAt={note.specifiedAt}>
         <p class="para">{note.body}</p>
       </Placeholder>
@@ -197,11 +172,11 @@
   }
 
   /* The tabs and the catalogue of unbuilt things are navigation; the printed page is the code
-     sheet plus the sentences that must travel with it. The storage banners above deliberately do
-     print — see Placeholder's own note on why a sheet from this build has to carry that. */
+     sheet plus the sentences that must travel with it. */
   @media print {
     .tabs,
-    .head {
+    .head,
+    .rest {
       display: none;
     }
   }

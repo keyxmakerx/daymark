@@ -119,9 +119,9 @@ describe('enrolling an owner who already has snapshots on the server', () => {
   }, 180000)
 
   it('also leaves the passphrase working, so enrolment is not a cutover', async () => {
-    // Enrolment must not be a moment where something can break. Both routes work from the instant
-    // the blob is written, which is what lets the legacy keyparams record be removed later and
-    // separately — the ordering hazard migration.ts spells out.
+    // Enrolment must not be a moment where something can break. Both routes open the same master at
+    // the instant the blob is written, which is what lets the server stop serving the key
+    // parameters from that instant (#258) without stranding anyone who types the same passphrase.
     const viaPassphrase = await unwrapWithPassphrase(enrolled.blob, PASSPHRASE)
     expect(Buffer.from(viaPassphrase)).toEqual(Buffer.from(enrolled.master))
   }, 180000)

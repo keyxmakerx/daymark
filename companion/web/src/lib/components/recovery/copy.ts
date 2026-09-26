@@ -25,18 +25,14 @@
  * unforgiving"), and docs/COMPANION_ARCHITECTURE.md §1 says explicitly that the sentence belongs
  * "where the passphrase is chosen, not in a footnote".
  *
- * ─── THE OTHER THING THIS SURFACE MUST NOT DO ────────────────────────────────────────────────────
+ * ─── WHAT THE PAPER IS ATTACHED TO ───────────────────────────────────────────────────────────────
  *
- * There is no transport and no storage for a wrapped key: no wire format, no endpoint, no client
- * call. src/lib/recovery/migration.ts says so in its own words and names them as deliberately
- * unimplemented. So this interface can generate a real code and can really open a real wrapped key,
- * and it cannot yet recover anything, because nothing keeps the wrapped key between one visit and
- * the next.
- *
- * A screen that implied otherwise would be the worst thing on this surface by a distance. Somebody
- * would write a code onto paper, file it, and find out at the moment they needed it that there had
- * never been anything for it to open. [STORAGE_IS_NOT_BUILT] is therefore said at the top of the
- * panel, before either flow, rather than as a caveat under one of them.
+ * The key is kept on the owner's server, locked under the passphrase and again under the code
+ * (docs/SYNC_PROTOCOL.md §1.2), and both flows read and write it there with the owner's access
+ * token (recovery/serverKey.ts). A person deciding how seriously to take a piece of paper needs to
+ * know what it is attached to, so [WHERE_THE_KEY_IS] is said at the top of the panel, before either
+ * flow. What is still not built — replacing a code, the phone, a split — is said as a placeholder,
+ * never implied.
  *
  * ─── ON PLACEHOLDERS ─────────────────────────────────────────────────────────────────────────────
  *
@@ -69,16 +65,14 @@ export const PANEL_LEDE =
   'opens, so either one is enough on its own, and neither can be reconstructed from the other.'
 
 /**
- * The build state, said first, because everything below reads differently once you know it.
- *
- * The crypto is finished and tested; the interface is a first pass; the storage between them does
- * not exist. Saying which half you are looking at is not modesty — unmarked scaffolding is the most
- * expensive kind of confusion to unpick later.
+ * Where the key is, said first, because everything below reads differently once you know it: a
+ * code made here is attached to the key the server keeps, and the flows reach it with the address
+ * and token the sync card above holds.
  */
-export const PANEL_BUILD_STATE =
-  'First interface over a finished crypto module. The code generation, the check character and the ' +
-  'wrapped key are real and tested. What is missing is everything between them and a server, so ' +
-  'the two flows below hand a wrapped key to each other inside this page rather than storing one.'
+export const WHERE_THE_KEY_IS =
+  'Your key is kept on your server, locked twice: once under your passphrase and once under your ' +
+  'recovery code. The server can open neither lock. The two tabs below read the locks from it, and ' +
+  'write them, with the address and access token in the card above.'
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
    2. The sentence the paper depends on, and the three around it.
@@ -131,15 +125,14 @@ export const WHAT_THIS_OPENS =
   'Besides that person’s passphrase, nothing else can.'
 
 /**
- * The sentence that stops a sheet printed today from being trusted in five years.
- *
- * Printed only, because it is about the build the paper came out of rather than about the feature.
- * A screen is re-read; a sheet of paper is filed once and believed later, so the paper is the one
- * that has to carry its own date-stamp of honesty.
+ * What the code can do besides open the data, said wherever the code is shown and on the printed
+ * sheet. The code opens the master, and the master is what the owner's signing identity is derived
+ * from (owner/identity.ts), so the paper is not read-only. Written without naming a console or a
+ * clinician, because the sheet is shown on servers that offer neither.
  */
-export const PRINT_SHEET_CAVEAT =
-  'This sheet was printed from a build with no storage for the wrapped key, so this code opens ' +
-  'nothing outside the page it was made in. Keep it as a rehearsal rather than as a recovery.'
+export const CODE_CAN_ACT_AS_YOU =
+  'Whoever holds this code can open your data and act as you, exactly as your passphrase can. Keep ' +
+  'the paper where only you can reach it.'
 
 export const WRITE_IT_ON_PAPER =
   'Copy it onto paper, in the six groups shown. Paper does not sync to anyone else’s machine, does ' +
@@ -178,19 +171,6 @@ export const DOWNLOAD_IS_A_PLAINTEXT_COPY =
   'swept up by whatever backs this device up. Paper is the intended home. Download it if the ' +
   'alternative is not recording it at all.'
 
-/**
- * The key wrapped in this flow is new, and is not the key an existing archive is encrypted under.
- *
- * This is the difference between "generate a recovery code" and "enrol the archive I already have",
- * and it is invisible from the screen unless it is said. migration.ts implements the second one
- * cryptographically and cannot run it, because reproducing an existing master needs the published
- * key parameters, and reading those needs the transport that does not exist.
- */
-export const NEW_KEY_NOT_YOUR_ARCHIVE =
-  'The key wrapped here is generated on this device, now. It is not the key your existing snapshots ' +
-  'are encrypted under. Enrolling an archive you already have means wrapping the key your passphrase ' +
-  'already derives, which needs the stored key document this build does not have.'
-
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
    4. Using a code.
    ═══════════════════════════════════════════════════════════════════════════════════════════ */
@@ -219,15 +199,16 @@ export const CHECKSUM_CANNOT_POINT =
   'and it cannot tell us which: every position has some value that would explain the mismatch, so ' +
   'naming one would be a guess dressed up as an answer. Read the whole code back against your paper.'
 
-/** Shown when the code is well-formed but does not open this wrapped key. */
+/** Shown when the code is well-formed but does not open the key the server holds. */
 export const CODE_DOES_NOT_OPEN_THIS =
-  'That code is well-formed and does not open this wrapped key. Either it belongs to a different ' +
-  'one, or a character is wrong in a way the check character could not catch.'
+  'That code is well-formed and does not open the key this server holds. Either it belongs to a ' +
+  'different key, or a character is wrong in a way the check character could not catch.'
 
 /** Setting the new passphrase, once the code has opened the key. */
 export const NEW_PASSPHRASE_LEDE =
-  'The data key is open. Setting a passphrase wraps that same key a second way; it does not change ' +
-  'the key, so nothing that was encrypted under it needs re-encrypting.'
+  'The key is open. Setting a passphrase locks this same key again, under the new passphrase, and ' +
+  'stores that lock on the server in place of the old one. The key does not change, so nothing ' +
+  'encrypted under it needs encrypting again.'
 
 export const PASSPHRASE_ADVICE =
   'A long passphrase of ordinary words is easier to remember and harder to guess than a short one ' +
@@ -243,63 +224,69 @@ export const OLD_CODE_STILL_WORKS =
   'take knowingly.'
 
 /**
- * The migration hazard, said where a passphrase is changed rather than left in a source comment.
+ * What a passphrase change does not do, said where it is done (#258).
  *
- * migration.ts spells it out: after enrolment a migrated owner has two routes to the same master —
- * the new wrapped slot, and the key parameters still published from before — and re-wrapping the
- * slot does not revoke the second one. Somebody who changes their passphrase reasonably believes
- * the old one stopped working. For a migrated owner it did not. The dishonest option is to show a
- * reassuring sentence and say nothing; this is the sentence instead.
+ * The master does not move, so a changed passphrase is retired against the live server and not
+ * against copies someone kept: the server hands out only the newest version and no longer serves the
+ * key parameters, but older versions stay on its disk and in its backups, and they still open with
+ * the old passphrase (docs/SYNC_PROTOCOL.md §1.2). Saying "your old passphrase no longer works"
+ * would be the reassuring sentence that is not true. Retiring the key itself is key rotation, which
+ * is not built: #297.
  */
 export const PASSPHRASE_CHANGE_IS_NOT_A_REVOCATION =
-  'For an archive that was enrolled from an older setup, the previous passphrase can still derive ' +
-  'the key through the key parameters published at that time, and changing it here would not remove ' +
-  'those. A passphrase change becomes complete only once that older record is gone.'
+  'The key itself did not change, so everything encrypted under it still opens with it. This server ' +
+  'now hands out only the copy locked under the new passphrase, but a copy of the server made before ' +
+  'now, such as a backup, still opens with the old one. Replacing the key itself is not built yet.'
+
+/** After the new passphrase's lock was stored, read back and opened to the same key. */
+export const PASSPHRASE_REPLACED =
+  'The passphrase copy of your key on the server was replaced. The key itself did not change, so ' +
+  'nothing encrypted under it needs encrypting again.'
+
+/** A new version another device stored first (409): nothing from here was stored. */
+export const REPLACE_MOVED =
+  'The key on the server changed while it was open here, so the new passphrase was not stored. ' +
+  'Open it again with your code.'
+
+/**
+ * The server took the new version, and what it handed back did not open to the same key. It was
+ * sent, so this does not say it was not stored.
+ */
+export const REPLACE_UNCHECKED =
+  'The server took the new passphrase copy, and what it handed back did not open to the same key. ' +
+  'Read what the server holds again before relying on the new passphrase.'
+
+/** A failure none of the above covers, which may have come after the server took the new version. */
+export const REPLACE_FAILED =
+  'This screen could not finish storing the new passphrase. Read what the server holds again to ' +
+  'see which passphrase opens it.'
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
-   5. What stands in for storage, and is not storage.
+   5. Reading the key from the server (#258).
    ═══════════════════════════════════════════════════════════════════════════════════════════ */
 
-/**
- * The top-of-panel statement. Everything on the surface reads differently once this is known, so it
- * is said before either flow rather than under one of them.
- */
-export const STORAGE_IS_NOT_BUILT =
-  'Nothing stores the wrapped key yet. There is no wire format for it, no endpoint that accepts one, ' +
-  'and no client call that would send one. Everything on this screen runs on this device and reaches ' +
-  'no server at all, so a code made here opens nothing outside this page. This is not yet a working ' +
-  'recovery, and a code from this build is not yet worth filing.'
+/** The verb for reading what the server holds, and what it says while it does. */
+export const READ_ACTION = 'Read what this server holds'
+export const READ_BUSY = 'Reading what the server holds'
 
-export const HANDOFF_IS_A_STAND_IN =
-  'The wrapped key is held in this page’s memory so the second flow has something real to open. ' +
-  'Reload the tab and it is gone. This stands in for storage; it is not storage.'
+/** Refusals of a read. None repeats the token, and none guesses why a read failed. */
+export const READ_NEEDS_TOKEN = 'Enter your access token in the card above. Nothing was sent.'
+export const TOKEN_NOT_ACCEPTED = 'The server did not accept that access token, so nothing was read.'
+export const READ_FAILED = 'What the server holds could not be read, so nothing has changed.'
 
-export const FILE_IS_A_STAND_IN =
-  'Saving the wrapped key to a file is the same stand-in written to disk, so both flows can be tried ' +
-  'across a reload. It is also what the owner console opens with: that screen asks for this file and ' +
-  'one of these two secrets every visit, because it keeps nothing between them. It is not a wire ' +
-  'format, and no server would accept it. The file holds two locked boxes and no secret: neither ' +
-  'your passphrase nor your code is in it or derivable from it.'
+/** "Get a code" on a server that already holds a locked key: there is no new code to make there. */
+export const ALREADY_LOCKED_HERE =
+  'This server already holds your key, locked under a passphrase and a recovery code, so there is no ' +
+  'new code to make here. Using the code you have is the other tab.'
 
-/**
- * The same paragraph on a page that does not offer the owner console — a server whose published
- * shape switches the clinician routes off (#330), where the console is withheld and a sentence
- * sending someone to it would point at nothing. That sentence goes; the rest is the paragraph
- * above, word for word.
- */
-export const FILE_IS_A_STAND_IN_WITHOUT_OWNER_CONSOLE =
-  'Saving the wrapped key to a file is the same stand-in written to disk, so both flows can be tried ' +
-  'across a reload. It is not a wire format, and no server would accept it. The file holds two ' +
-  'locked boxes and no secret: neither your passphrase nor your code is in it or derivable from it.'
+/** After the code is confirmed written down: where the key now is. Not a verdict, not a tick. */
+export const KEY_STORED_HERE =
+  'Your key is on your server now, locked under your passphrase and under the code you wrote down.'
 
-/** Which of the two to show, by whether the page offers the owner console (`offersRoute`). */
-export function fileIsAStandIn(ownerConsoleOffered: boolean): string {
-  return ownerConsoleOffered ? FILE_IS_A_STAND_IN : FILE_IS_A_STAND_IN_WITHOUT_OWNER_CONSOLE
-}
-
+/** "Use a code" on a server that holds no locked key: there is no code that opens anything there. */
 export const NOTHING_TO_OPEN =
-  'There is no wrapped key in this page to open. Nothing fetches one, because no endpoint serves ' +
-  'one. Make one in the other flow, or load a file you saved there.'
+  'This server holds no locked key, so there is no recovery code to use with it. Getting a code, in ' +
+  'the other tab, makes one.'
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
    6. The placeholder catalogue.
@@ -326,33 +313,13 @@ export interface PlaceholderNote {
  */
 export const PLACEHOLDERS: PlaceholderNote[] = [
   {
-    id: 'storage',
-    title: 'Storing the wrapped key',
-    body:
-      'The two locked boxes have to live somewhere a new device can fetch them, next to the key ' +
-      'parameters the server already publishes. That means a document format, a route that reads ' +
-      'and writes it, and the client calls either side. None of the three exists, which is why this ' +
-      'panel hands the wrapped key between its own two flows instead.',
-    specifiedAt: 'src/lib/recovery/migration.ts, “WHAT IS AND IS NOT IMPLEMENTED HERE”',
-  },
-  {
-    id: 'enrolment',
-    title: 'Enrolling an archive that already exists',
-    body:
-      'Somebody with snapshots on a server keeps their existing key and wraps it, so not one ' +
-      'snapshot is re-encrypted and the manifest signing identity does not change. The cryptographic ' +
-      'half of that is written and tested; running it needs the published key parameters, which ' +
-      'needs the transport above.',
-    specifiedAt: 'src/lib/recovery/migration.ts enrolExistingOwner(), and its test',
-  },
-  {
     id: 'rotation',
     title: 'Replacing a code you no longer trust',
     body:
       'A code that has been photographed, emailed to yourself or left in a moving box is a live key ' +
-      'to everything, and the answer is a new one that drops the old. The function exists and takes ' +
-      'a wrapped key and an open data key; publishing the result needs somewhere to publish it to.',
-    specifiedAt: 'src/lib/recovery/dataKey.ts rotateRecoveryCode()',
+      'to everything, and the answer is a new one that drops the old. The server takes a new version ' +
+      'of the locked key, and the function that makes one exists; nothing on this screen makes one yet.',
+    specifiedAt: 'src/lib/recovery/dataKey.ts rotateRecoveryCode(); docs/SYNC_PROTOCOL.md §2, PUT /v1/keydoc/{version}',
   },
   {
     id: 'devices',

@@ -88,9 +88,9 @@ describe('neither secret reveals the other', () => {
     const underNewPassphrase = await unwrapWithPassphrase(rewrapped, 'a completely different passphrase')
     expect(Buffer.from(underNewPassphrase)).toEqual(Buffer.from(created.dataKey))
 
-    // And the old passphrase is genuinely out of this blob. (migration.ts documents the one case
-    // where that is NOT the end of the story: a migrated owner whose legacy keyparams record still
-    // stands can still reach the master the old way until it is deleted.)
+    // And the old passphrase is genuinely out of this blob. (migration.ts documents where that is
+    // NOT the end of the story: a copy of the server made before the change still holds the key
+    // parameters and the older versions, and the old passphrase still opens those.)
     await expect(unwrapWithPassphrase(rewrapped, PASSPHRASE)).rejects.toThrow(DataKeyError)
   }, 120000)
 

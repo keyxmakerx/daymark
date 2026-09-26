@@ -2,9 +2,10 @@
  * OPENING THE OWNER CONSOLE — the sequence, apart from the screen that runs it.
  *
  * The console used to open by pressing a button that minted a throwaway identity (issue #121). It
- * now opens by the owner producing the key they already have: a wrapped-key file, and either the
- * passphrase or the recovery code that opens it. From that key the pairing identity is derived
- * (owner/identity.ts), and the key itself is wiped.
+ * now opens by the owner producing the key they already have: the locked key their server keeps
+ * (recovery/serverKey.ts reads it; docs/SYNC_PROTOCOL.md §1.2), and either the passphrase or the
+ * recovery code that opens it. From that key the pairing identity is derived (owner/identity.ts),
+ * and the key itself is wiped.
  *
  * ─── WHY THIS IS A MODULE AND NOT A FUNCTION INSIDE THE COMPONENT ───────────────────────────────
  *
@@ -22,13 +23,12 @@
  *
  * ─── ON THE COST OF GETTING IN ──────────────────────────────────────────────────────────────────
  *
- * The owner picks a file and types a secret EVERY session, and this module is where that is most
- * visible, so it is worth stating plainly rather than leaving as an accident of the code. There is
- * nowhere to keep the file: components/recovery/session.ts argues at length against browser storage
- * for key material on a page the server serves, and there is no server route for the blob. So the
- * friction is not an oversight; it is the shape of a console that holds nothing between visits.
- * It is also in keeping with what this console already asks — the bearer token is typed by hand
- * every visit too.
+ * The owner types their access token and a secret EVERY session, and this module is where that is
+ * most visible, so it is worth stating plainly rather than leaving as an accident of the code. The
+ * server keeps the locked key, and nothing on this side keeps anything: components/recovery/
+ * session.ts argues at length against browser storage for key material on a page the server serves.
+ * So the friction is not an oversight; it is the shape of a console that holds nothing between
+ * visits.
  */
 import {
   unwrapWithPassphrase,
@@ -38,30 +38,14 @@ import {
   type RecoverableDataKey,
 } from '../recovery/dataKey'
 import { RecoveryCodeError, RECOVERY_FAULT_TEXT, type RecoveryCodeFault } from '../recovery/recoveryCode'
-import {
-  decodeWrappedKeyFile,
-  WRAPPED_KEY_FILE_FAULT_TEXT,
-  type WrappedKeyFileFault,
-} from '../components/recovery/session'
 import { ownerIdentityFromMaster } from './identity'
 import type { Identity } from '../share/pairing'
 
 /** Which of the two secrets the owner is offering. */
 export type SecretKind = 'passphrase' | 'recovery'
 
-/**
- * Everything an unlock can be other than an identity.
- *
- * The file faults are the ones `decodeWrappedKeyFile` already names, carried through rather than
- * re-worded, so the owner console and the recovery screens say the same thing about the same file.
- */
-export type UnlockFault =
-  | WrappedKeyFileFault
-  | 'noFile'
-  | 'noSecret'
-  | 'noSlotOfThatKind'
-  | 'didNotOpen'
-  | RecoveryCodeFault
+/** Everything an unlock can be other than an identity. */
+export type UnlockFault = 'noSecret' | 'noSlotOfThatKind' | 'didNotOpen' | RecoveryCodeFault
 
 export type UnlockResult = { ok: true; identity: Identity } | { ok: false; fault: UnlockFault; at?: number }
 
@@ -69,47 +53,25 @@ export type UnlockResult = { ok: true; identity: Identity } | { ok: false; fault
  * What to show for each fault.
  *
  * `didNotOpen` is the one worth reading twice. Argon2id ran and the ciphertext did not authenticate,
- * and from here that is ALL that is known: the wrong file, the wrong passphrase, and a file edited
- * by someone else are one outcome, not three. Saying "wrong passphrase" would assert a cause this
- * code cannot distinguish, and would send someone to re-type a passphrase that was right all along.
- * So it names the consequence and points at both inputs.
+ * and from here that is ALL that is known: the wrong passphrase and a key edited by whoever keeps it
+ * are one outcome, not two. Saying "wrong passphrase" would assert a cause this code cannot
+ * distinguish, and would send someone to re-type a passphrase that was right all along. So it names
+ * the consequence and points at the one input.
  */
 export const UNLOCK_FAULT_TEXT: Record<UnlockFault, string> = {
-  ...WRAPPED_KEY_FILE_FAULT_TEXT,
   ...RECOVERY_FAULT_TEXT,
-  noFile: 'No key file has been chosen.',
   noSecret: 'Nothing was entered.',
   noSlotOfThatKind: 'The key this server holds has no copy locked that way.',
   didNotOpen: 'That did not open the key this server holds. It is worth checking what you typed.',
 }
 
 /**
- * file text + one secret -> the owner's pairing identity, or one diagnosis.
+ * The server's locked key + one secret -> the owner's pairing identity, or one diagnosis.
  *
- * Nothing throws. A person picking the wrong file out of a folder, or mistyping a code, is ordinary
- * rather than exceptional, and a screen that has to distinguish exceptions from results in a catch
- * block ends up with a branch nobody tests.
- */
-export async function unlockOwnerIdentity(
-  fileText: string,
-  secret: string,
-  kind: SecretKind,
-): Promise<UnlockResult> {
-  if (!fileText.trim()) return { ok: false, fault: 'noFile' }
-  if (!secret.trim()) return { ok: false, fault: 'noSecret' }
-
-  const read = decodeWrappedKeyFile(fileText)
-  if (!read.ok) return { ok: false, fault: read.fault }
-
-  return unlockFromBlob(read.blob, secret, kind)
-}
-
-/**
- * The same, for a blob the caller already holds.
- *
- * Split out because the file is one way a blob arrives and will not be the only one — a WebAuthn-PRF
- * slot or a phone-side handoff would deliver a blob with no file anywhere near it — and because it
- * keeps the wipe in one place rather than one per entry point.
+ * Nothing throws. Mistyping a code is ordinary rather than exceptional, and a screen that has to
+ * distinguish exceptions from results in a catch block ends up with a branch nobody tests. The key
+ * arrives as the caller holds it — the server's copy today, a phone-side handoff or a WebAuthn-PRF
+ * slot one day — and the wipe is in one place whichever way it came.
  */
 export async function unlockFromBlob(
   blob: RecoverableDataKey,
