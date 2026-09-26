@@ -210,6 +210,12 @@ All notable changes to this project are documented here. The format is based on
   both jobs.
 
 ### Changed
+- **Companion — the owner's page follows the server's shape.** Where the server publishes its shape
+  (`DAYMARK_SETUP_MODE`), the owner's page links only the consoles that shape serves: on a solo
+  server it shows no card or link for the clinician console, and the practice console is linked only
+  on a practice server. Where it publishes none, the page cannot tell and keeps every link. The
+  first-run screen says the server has not been told its shape, and how whoever runs it can set one.
+  The Paired choice no longer says "one clinician": a person may invite more than one (#288). (#330)
 - **Companion — the words match what the software does.** The consoles say "clinician", and each
   page is a console named for who uses it (#158). The owner page says a sealed share leaves the
   browser, and makes one claim about entries: they leave only when you sync or share them (#273,

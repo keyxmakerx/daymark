@@ -68,10 +68,12 @@ is a side effect.
   person's relationships kept to that person (#331).
 - The question that gates Practice — who may reset a forgotten passphrase — is answered: nobody
   (COMPANION_PAIRING.md §12).
-- When the operator chose a shape, `/v1/config` publishes it as `setupMode`. On a server with none,
-  the first-run screen of the owner console asks which shape the machine is for and keeps the answer
-  in that browser only, which changes nothing on the server; reading the published shape instead of
-  asking is the web half of #330.
+- When the operator chose a shape, `/v1/config` publishes it as `setupMode`: the owner console's
+  first-run screen takes it instead of asking, and the owner's page links the clinician and practice
+  consoles only where that shape serves them. On a server with none, the screen asks which shape the
+  machine is for, keeps the answer in that browser only, which changes nothing on the server, and
+  names `DAYMARK_SETUP_MODE` as the setting that would answer instead; with no published shape the
+  owner's page cannot tell which pages are served, so it keeps both links.
 - **Who runs it** (#288). A person runs their own server, or an office runs its own; Daymark runs
   none (§8). The old one-clinician scope is retired. An office grows in steps: one clinician, then a
   receptionist, then several clinicians, receptionists and doctors who assess and refer, and every

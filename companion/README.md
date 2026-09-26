@@ -51,10 +51,12 @@ Set `DAYMARK_SETUP_MODE` in `.env` to what this machine is for: `solo` for one p
 backup (the example's value), `paired` if clinicians you invite will use it, `practice` if a clinic
 runs it. Each switches on only what it needs: in `solo` every clinician, pairing and practice route
 answers 503 and the clinician and practice pages are not served
-([COMPANION_DEPLOYMENT.md](../docs/COMPANION_DEPLOYMENT.md) §0). **On a Practice server the server
-token is the owner's credential for every relationship on it: never hand it to the people who share
-with the office** (#331). A Practice server holds no real patient's data until the compliance gate
-is passed (#284).
+([COMPANION_DEPLOYMENT.md](../docs/COMPANION_DEPLOYMENT.md) §0). The owner's page reads the mode
+from `/v1/config`: it does not ask what the machine is for, and it links only the consoles the mode
+serves. Left unset, each browser is asked, and the page keeps its links. **On a Practice server the
+server token is the owner's credential for every relationship on it: never hand it to the people who
+share with the office** (#331). A Practice server holds no real patient's data until the compliance
+gate is passed (#284).
 
 ## The access token, which switches sync on
 

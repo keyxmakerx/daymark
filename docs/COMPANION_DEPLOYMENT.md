@@ -29,13 +29,16 @@ logs, the runbook — is [COMPANION_OBSERVABILITY.md](COMPANION_OBSERVABILITY.md
   pairing and practice route did with `DAYMARK_THERAPIST_AUTH` off; a page it leaves off answers 403
   with no body, however its path is spelled. The shape is not a secret: anyone who can reach the
   server can tell it from those answers, and `/v1/config` publishes a chosen one as `setupMode`, so
-  the owner's first-run screen does not ask. A solo server's image still holds the clinical code,
-  switched off rather than absent.
+  the owner's first-run screen does not ask, and the owner's page links only the consoles that shape
+  serves. A solo server's image still holds the clinical code, switched off rather than absent.
 - **With no `DAYMARK_SETUP_MODE`, the server assumes a shape and says which.** With
   `DAYMARK_THERAPIST_AUTH` on it serves `practice`, which is everything that switch has always
   turned on; with it off, `solo`. It logs one line at start, `Serving the … shape, assumed because
   DAYMARK_SETUP_MODE is not set …`, and `/v1/config` publishes no `setupMode`. The mode replaces the
-  switch: beside a mode, leave `DAYMARK_THERAPIST_AUTH` out, or set it to agree (§5.3).
+  switch: beside a mode, leave `DAYMARK_THERAPIST_AUTH` out, or set it to agree (§5.3). The owner's
+  first-run screen then asks in each browser, and the owner's page, unable to tell which pages are
+  served, keeps its links to the clinician and practice consoles, which a server that assumed `solo`
+  answers 403.
 - **A Practice server has one owner.** Whoever holds its token (§5.2) acts as the owner of every
   relationship on it, so never hand that token to the people who share with the office: each person
   having their own credential is not built (#331). Its sync API follows #219: each stored journal
