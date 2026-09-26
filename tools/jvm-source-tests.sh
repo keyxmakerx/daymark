@@ -21,10 +21,14 @@
 # the statement and watching the wrong tests fail, which is a thing you only do when the answer
 # takes a second.
 #
+# The same holds for the report's copy. `export/ReportCopySourceTest` reads the PDF renderer, which
+# draws on an Android Canvas and so cannot be compiled here, as text; it imports `repoFile` and the
+# two string helpers in `ui/SourceText.kt`, and neither of those reaches Android or Room.
+#
 # WHAT IT WILL NOT CATCH. Everything tools/jvm-tests.sh cannot: anything outside these files, Room's
 # annotation processing, Hilt, resources, R8. And it runs a HAND-LISTED set of test files. A new
-# source test in `data/` is not picked up until somebody adds it below, and CI remains the oracle
-# for all of it.
+# source test is not picked up until somebody adds it below, and CI remains the oracle for all of
+# it.
 set -eu
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
@@ -48,12 +52,15 @@ JUNIT=$(find_jar junit/junit "junit-4.13.2.jar")
 HAMCREST="$GL/hamcrest-core-1.3.jar"
 ANNOT=$(find_jar org.jetbrains/annotations "annotations-13.0.jar")
 
-# The test files this runs, and the one class outside `data/` they need. Adding a file here is a
-# deliberate act: read its imports first and confirm none of them is a Room or Android type.
-TESTS="com.daymark.app.data.PeopleSchemaTest com.daymark.app.data.TimedOfferSchemaTest"
+# The test files this runs, and the helpers they need. Adding a file here is a deliberate act: read
+# its imports first and confirm none of them is a Room or Android type.
+TESTS="com.daymark.app.data.PeopleSchemaTest com.daymark.app.data.TimedOfferSchemaTest
+com.daymark.app.export.ReportCopySourceTest"
 SOURCES="$REPO/app/src/test/java/com/daymark/app/data/PeopleSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/TimedOfferSchemaTest.kt
-$REPO/app/src/test/java/com/daymark/app/backup/RepoFile.kt"
+$REPO/app/src/test/java/com/daymark/app/export/ReportCopySourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/backup/RepoFile.kt
+$REPO/app/src/test/java/com/daymark/app/ui/SourceText.kt"
 
 # `TimedOfferSchemaTest` calls TimingGrid to prove the sentinel is really refused, so `stats/` is
 # compiled in — minus the files that import outside it, the same rule tools/jvm-tests.sh applies.

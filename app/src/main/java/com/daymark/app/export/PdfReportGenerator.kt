@@ -266,12 +266,17 @@ private object Copy {
             "cut-off — their bands are splits chosen for this app, and mean only what this person's " +
             "own history makes them mean."
 
+    /**
+     * What the document does not hold, printed on side 4. Every item on it is true whatever the
+     * person switched on or off.
+     *
+     * Streaks are not on the list: the app keeps none, so there is nothing to leave out, and a line
+     * saying the report carries none would itself be the mention the report never makes (#304).
+     */
     const val NOT_IN_REPORT =
         "Not in this report, and not obtainable from it. Location — the app collects none. Anything " +
             "written inside an exercise — those fields are excluded from sharing by construction, " +
-            "not by preference. Any journal entry not on side 3. Streak counts — this report " +
-            "carries none, since a streak reports adherence to the app rather than anything about " +
-            "the person. The app still shows them on the person's own screens."
+            "not by preference. Any journal entry not on side 3."
 
     /** The authenticity wording. Unchanged from the previous report; only its position moved. */
     const val AUTHENTICITY =
