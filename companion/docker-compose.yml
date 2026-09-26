@@ -111,10 +111,11 @@ services:
       DAYMARK_TRUSTED_PROXIES: "${DAYMARK_TRUSTED_PROXIES:-}"
 
       # The real external origin, as clients type it. Not a LAN alias: this is the
-      # WebAuthn RP-ID and the base URL for invite links in outbound email. Without it,
-      # RouteUrls.resolveBaseUrl() falls back to the client-supplied Host header and
-      # emails an attacker-controlled invite link. See docs/COMPANION_DEPLOYMENT.md §3.1,
-      # requirement 5; refusing to start without it is #180.
+      # WebAuthn RP-ID and the base of every link the server hands out — invitations,
+      # notifications, recovery. With DAYMARK_THERAPIST_AUTH on or SMTP set, the server
+      # refuses to start without a usable absolute http(s) address here, rather than take
+      # a link's host from a visitor's Host header (#180). See docs/COMPANION_DEPLOYMENT.md
+      # §3.1, requirement 5.
       DAYMARK_PUBLIC_BASE_URL:  "${DAYMARK_PUBLIC_SCHEME:-https}://${DAYMARK_DOMAIN:?set in .env, e.g. daymark.example.com}"
       DAYMARK_WEBAUTHN_RP_ID:   "${DAYMARK_DOMAIN:?set in .env, e.g. daymark.example.com}"
       DAYMARK_WEBAUTHN_ORIGINS: "${DAYMARK_PUBLIC_SCHEME:-https}://${DAYMARK_DOMAIN:?set in .env, e.g. daymark.example.com}"

@@ -130,8 +130,9 @@ internal const val REPORT_WINDOW_MS = 60_000L
  * documented WebAuthn scaffold stubs. Owner-facing routes (mint invite) are gated on the owner
  * bearer token; therapist-facing routes use capped-backoff rate limiting.
  *
- * @param publicBaseUrl absolute base for building the invite link (e.g. https://host/base). If
- *   null, the link is built from the request's own scheme/host as a best effort.
+ * @param publicBaseUrl absolute base for building the invite link (e.g. https://host/base). Never
+ *   null in a running server, which refuses to start the portal without it (#180); see
+ *   [resolveBaseUrl] for what a hand-built test configuration gets instead.
  */
 fun Route.therapistAuthRoutes(
     authStore: AuthStore,

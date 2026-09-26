@@ -2,6 +2,21 @@ package com.daymark.companion
 
 import com.daymark.companion.mail.MailerConfig
 import java.io.File
+import java.net.URI
+
+/**
+ * A configuration the server will not start with. `main` logs [message] as one line and exits
+ * with [EXIT_CONFIG], so an operator reads the setting to change rather than a stack trace, and
+ * reads it again on every restart until it is changed (#180).
+ *
+ * The message names settings and says what to set. It never repeats a configured value: logs carry
+ * no content or identifiers, and a value can be a hostname, a path or a secret.
+ */
+class StartupRefusal(override val message: String) : Exception(message) {
+    init {
+        require('\n' !in message && '\r' !in message) { "a startup refusal is one line" }
+    }
+}
 
 /**
  * Runtime configuration, read from DAYMARK_* environment variables. Names match
@@ -35,13 +50,15 @@ data class Config(
     val webauthnRpId: String? = null,
     val webauthnOrigins: List<String> = emptyList(),
     /**
-     * Explicit public origin for building absolute links in outbound email (invites,
-     * review notifications, access-token recovery). Falls back to the first configured
-     * WebAuthn origin if unset (many deployments already point that at the real external
-     * origin). Never derived from a client-controllable `Host` header — see
-     * COMPANION_SECURITY.md's trusted-proxy contract; the unauthenticated recovery route in
-     * particular refuses to guess a base URL when this is unset rather than trusting the
-     * request.
+     * The server's public address: the base of every link it hands out — invitations, review
+     * notifications, access-token recovery. `DAYMARK_PUBLIC_BASE_URL`, else the first
+     * `DAYMARK_WEBAUTHN_ORIGINS` entry; never a request's `Host` header, which a visitor controls
+     * (COMPANION_SECURITY.md §5.5).
+     *
+     * [fromEnv] refuses to start without one, or with one that is not a usable absolute http(s)
+     * address, whenever [buildsLinks] (#180), so a server that `main` started always has it there.
+     * A sync-only server needs none. It is null alongside [buildsLinks] only in a [Config] built by
+     * hand, as the tests build theirs.
      */
     val publicBaseUrl: String? = null,
     /** Single-use invite TTL (default 72h). */
@@ -96,6 +113,13 @@ data class Config(
     val smtpEnabled: Boolean get() = mailer.enabled
 
     /**
+     * True when links to this server leave it: the clinician portal hands the owner invitation
+     * links, and outbound email carries notification and recovery links. Either one makes
+     * [publicBaseUrl] required at start (#180).
+     */
+    val buildsLinks: Boolean get() = therapistAuthEnabled || smtpEnabled
+
+    /**
      * A data class's generated `toString()` prints every property — including [authToken], the
      * bearer token that gates the entire sync API.
      *
@@ -111,9 +135,22 @@ data class Config(
             "authToken=${if (authToken.isNullOrBlank()) "unset" else "REDACTED"})"
 
     companion object {
+        /** The address every refusal about the public address offers as its example. */
+        internal const val EXAMPLE_PUBLIC_BASE_URL = "https://daymark.example.com"
+
+        /**
+         * The configuration `main` runs with, or a [StartupRefusal] naming the setting to change.
+         *
+         * The refusals live here, where `main` reads the environment, and not in
+         * `Application.module`: a test that builds its own [Config] without a public address still
+         * starts, and a deployment never does.
+         */
         fun fromEnv(env: Map<String, String> = System.getenv()): Config {
             val basePathRaw = env["DAYMARK_BASE_PATH"]?.trim().orEmpty().ifEmpty { "/" }
-            return Config(
+            val webauthnOrigins = env["DAYMARK_WEBAUTHN_ORIGINS"]?.split(',')
+                ?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
+            val explicitBaseUrl = env["DAYMARK_PUBLIC_BASE_URL"]?.trim()?.ifBlank { null }
+            val config = Config(
                 bindAddr = env["DAYMARK_BIND_ADDR"]?.trim().orEmpty().ifEmpty { "0.0.0.0" },
                 port = env["DAYMARK_PORT"]?.trim()?.toIntOrNull() ?: 8080,
                 dataDir = env["DAYMARK_DATA_DIR"]?.trim().orEmpty().ifEmpty { "/data" },
@@ -131,10 +168,8 @@ data class Config(
                 mailer = MailerConfig.fromEnv(env),
                 therapistAuthEnabled = env["DAYMARK_THERAPIST_AUTH"]?.trim().let { it == "1" || it.equals("true", true) },
                 webauthnRpId = env["DAYMARK_WEBAUTHN_RP_ID"]?.trim()?.ifBlank { null },
-                webauthnOrigins = env["DAYMARK_WEBAUTHN_ORIGINS"]?.split(',')
-                    ?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList(),
-                publicBaseUrl = env["DAYMARK_PUBLIC_BASE_URL"]?.trim()?.ifBlank { null }
-                    ?: env["DAYMARK_WEBAUTHN_ORIGINS"]?.split(',')?.map { it.trim() }?.firstOrNull { it.isNotEmpty() },
+                webauthnOrigins = webauthnOrigins,
+                publicBaseUrl = explicitBaseUrl ?: webauthnOrigins.firstOrNull(),
                 inviteTtlSeconds = env["DAYMARK_INVITE_TTL_SECONDS"]?.trim()?.toLongOrNull() ?: 259_200L,
                 sessionIdleSeconds = env["DAYMARK_SESSION_IDLE_SECONDS"]?.trim()?.toLongOrNull() ?: 900L,
                 sessionAbsoluteSeconds = env["DAYMARK_SESSION_ABSOLUTE_SECONDS"]?.trim()?.toLongOrNull() ?: 28_800L,
@@ -150,6 +185,68 @@ data class Config(
                 reissueConfirmTtlSeconds = env["DAYMARK_REISSUE_CONFIRM_TTL_SECONDS"]?.trim()?.toLongOrNull() ?: 3600L,
                 trustedProxies = ClientAddress.parseTrusted(env["DAYMARK_TRUSTED_PROXIES"]),
             )
+            refuseUnsafe(
+                config,
+                addressSetting = if (explicitBaseUrl != null) {
+                    "DAYMARK_PUBLIC_BASE_URL"
+                } else {
+                    "the first entry of DAYMARK_WEBAUTHN_ORIGINS, standing in for the unset DAYMARK_PUBLIC_BASE_URL,"
+                },
+            )
+            return config
+        }
+
+        /**
+         * Throws a [StartupRefusal] for a configuration the server must not run with.
+         *
+         * While [buildsLinks], the public address must be present and usable (#180). A link that
+         * cannot take the configured address would have to take its host from the request, which a
+         * visitor controls — and an invitation link carries the invitation's secret, so a link on a
+         * host an attacker names hands the secret to them.
+         *
+         * [addressSetting] names where [publicBaseUrl] was read from, so a refusal points at the
+         * setting the operator actually wrote.
+         */
+        private fun refuseUnsafe(config: Config, addressSetting: String) {
+            if (!config.buildsLinks) return
+            val address = config.publicBaseUrl
+            val use = "Set DAYMARK_PUBLIC_BASE_URL to the address people type, for example $EXAMPLE_PUBLIC_BASE_URL"
+            if (address == null) {
+                val on = listOfNotNull(
+                    "DAYMARK_THERAPIST_AUTH is on".takeIf { config.therapistAuthEnabled },
+                    "DAYMARK_SMTP_HOST is set".takeIf { config.smtpEnabled },
+                ).joinToString(" and ")
+                throw StartupRefusal(
+                    "Refusing to start: DAYMARK_PUBLIC_BASE_URL is not set. $on, so this server sends " +
+                        "links to itself, and it will not take its own address from a request. $use",
+                )
+            }
+            if (!isUsableBaseUrl(address)) {
+                throw StartupRefusal(
+                    "Refusing to start: $addressSetting is not a usable address: it must begin with " +
+                        "http:// or https://, name a host, and carry no user name, query or fragment. $use",
+                )
+            }
+        }
+
+        /**
+         * Whether [raw] can be the base of a link: an absolute `http` or `https` address with a host
+         * name, and nothing a path cannot be appended to — no user name, query or fragment, and no
+         * empty path segment (`https://https://host` is a host named `https` with an empty
+         * segment). The host is an IP literal or ASCII letters, digits, dots and hyphens, as
+         * `java.net.URI` reads one: an underscore is refused, and an internationalised name is
+         * written in its `xn--` form.
+         */
+        internal fun isUsableBaseUrl(raw: String): Boolean {
+            val uri = runCatching { URI(raw) }.getOrNull() ?: return false
+            val scheme = uri.scheme?.lowercase()
+            return (scheme == "http" || scheme == "https") &&
+                !uri.host.isNullOrEmpty() &&
+                (uri.port == -1 || uri.port in 1..65_535) &&
+                uri.rawUserInfo == null &&
+                uri.rawQuery == null &&
+                uri.rawFragment == null &&
+                "//" !in uri.rawPath.orEmpty()
         }
 
         /** Returns "/" or "/prefix" (leading slash, no trailing slash). */

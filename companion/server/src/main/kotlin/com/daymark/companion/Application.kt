@@ -47,6 +47,7 @@ import io.ktor.server.routing.routing
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import java.io.File
+import kotlin.system.exitProcess
 
 private val log = LoggerFactory.getLogger("com.daymark.companion")
 
@@ -54,8 +55,18 @@ private val log = LoggerFactory.getLogger("com.daymark.companion")
 @kotlinx.serialization.Serializable
 data class ServerConfigDto(val smtpEnabled: Boolean)
 
+/** The exit status of a [StartupRefusal]: `EX_CONFIG` in sysexits.h, a configuration error. */
+internal const val EXIT_CONFIG = 78
+
 fun main() {
-    val config = Config.fromEnv()
+    val config = try {
+        Config.fromEnv()
+    } catch (refusal: StartupRefusal) {
+        // One line naming the setting, and out. It is logged before DAYMARK_LOG_LEVEL is applied,
+        // so no level can hide it, and without the exception, so no stack trace buries it (#180).
+        log.error(refusal.message)
+        exitProcess(EXIT_CONFIG)
+    }
     applyLogLevel(config.logLevel)
     log.info(
         "Daymark Companion starting on {}:{} basePath={} sync={} smtp={} dataDir={}",
