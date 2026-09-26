@@ -135,21 +135,24 @@ None of this is observable from a web page, so it is a list to check by hand:
 ## Push a backup from your laptop
 
 Until the phone can sync, the command-line writer encrypts an exported Daymark backup with your sync
-passphrase and uploads it as the next append-only version. The passphrase is read from the
-environment, never from the command line. The wire format is
-[`../docs/SYNC_PROTOCOL.md`](../docs/SYNC_PROTOCOL.md).
+passphrase and uploads it as the next append-only version. The passphrase and the server's access
+token are both read from the environment, never from the command line, where other users of the
+machine could read them. The wire format is [`../docs/SYNC_PROTOCOL.md`](../docs/SYNC_PROTOCOL.md).
 
 ```bash
 cd companion/web && pnpm install
-DAYMARK_SYNC_PASSPHRASE='your sync passphrase' \
-  pnpm push -- --server http://localhost:8080 --token "$DAYMARK_AUTH_TOKEN" \
-              --lineage laptop --backup ~/Downloads/daymark-backup.json
+DAYMARK_SYNC_PASSPHRASE='your sync passphrase' DAYMARK_AUTH_TOKEN='your server access token' \
+  pnpm --silent push -- --server http://localhost:8080 --lineage laptop \
+                       --backup ~/Downloads/daymark-backup.json
 ```
+
+`pnpm --silent push -- --help` lists the options and sends nothing. A token given as `--token` is
+refused before anything is sent.
 
 The snapshot is padded before it is encrypted, so the server learns only roughly how big it is. If
 your server accepts larger blobs than the default (`DAYMARK_MAX_BLOB_BYTES`), add `--max-blob-bytes`
-with the same number, or the writer refuses a snapshot that is only too large once padded. The
-command does not start at the moment: #373.
+with the same number, or the writer refuses a snapshot that is only too large once padded. A refusal
+sends nothing.
 
 Read it back in the browser: open the portal → **Connect to your sync server** → the token, the
 lineage and the passphrase. The snapshot is fetched and decrypted in your browser.
@@ -212,7 +215,14 @@ pnpm dev        # Vite dev server with HMR
 pnpm test       # unit tests
 pnpm check      # type-check
 pnpm build      # type-check + production bundle → dist/
+pnpm e2e:paired # the Paired loop in two real browsers against a real server; not part of pnpm test
 ```
+
+`pnpm e2e:paired` builds the server jar and the bundle, starts its own server on 127.0.0.1 with an
+empty data directory, and stops it afterwards. It needs Java and an installed Chromium (under
+`PLAYWRIGHT_BROWSERS_PATH`, default `/opt/pw-browsers`, or at `CHROMIUM_PATH`); it downloads
+nothing. A run takes about a minute and a half, most of it the clinician's page waiting up to 45
+seconds for the approval.
 
 **Server:**
 ```bash

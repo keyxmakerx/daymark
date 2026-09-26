@@ -285,6 +285,24 @@ All notable changes to this project are documented here. The format is based on
   quiet notice that names nobody and counts nothing.
 
 ### Fixed
+- **Companion — a share can be sealed from the owner console.** Since its first version the owner
+  console was handed nothing of the backup the person had opened, and once a backup was open the
+  page replaced the navigation with the dashboard, so the console could not even be reached. "Seal &
+  publish share" stayed disabled in every state a person could get to. The navigation now stays on
+  screen whatever is open, and the console receives the same records the dashboard shows.
+- **Companion — a clinician can be granted access from the browser.** "Sign & publish grant" failed
+  in every browser before anything reached the server: it copied the grant with a function that
+  cannot copy the page's live state, and the tests, which draw no page, never saw it. It now
+  publishes, and a test checks that no component copies state that way.
+- **Companion — the command-line writer starts, and keeps the token off the command line.** `pnpm
+  push` stopped before doing anything, so no snapshot could be uploaded from a laptop (#373). It now
+  runs, and a test runs the command itself. It reads the server's access token from
+  `DAYMARK_AUTH_TOKEN`, as it already read the passphrase from the environment, and refuses a
+  `--token` argument, which other users of the same machine could read (#384).
+- **Companion — a browser test walks the whole Paired loop.** Two browsers and a real server: first
+  run, the recovery code, pairing by spoken code, the grant, a share, the clinician reading it, an
+  assignment and the owner's inbox. It found both fixes above. `pnpm e2e:paired`; not part of `pnpm
+  test`.
 - **Restoring a backup no longer empties the journal when it fails part-way.** "Replace all
   current data" deleted thirteen tables and then wrote the backup back, and the two halves were not
   tied together. If anything threw between them — an older file whose activity links name something

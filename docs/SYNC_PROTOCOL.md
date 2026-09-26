@@ -148,12 +148,12 @@ the writer refuses a snapshot whose padded envelope is larger than the server ac
 it never falls back to an unpadded write. The limit it assumes is the server's default, 26,214,400
 bytes; for a server whose operator raised `DAYMARK_MAX_BLOB_BYTES`, pass the same number with
 `--max-blob-bytes`. A 413 from the server is reported as the server's answer. Today's writer is the
-command-line tool (`pnpm push` in `companion/web`), which does not start at the moment: #373. The
-phone's is not built: #168.
+command-line tool (`pnpm push` in `companion/web`), which reads the passphrase and the access token
+from the environment. The phone's is not built: #168.
 
-**Pull (reader — the browser, or the CLI).** GET keyparams → derive keys → list versions → fetch the
-head → decrypt (the AEAD verifies integrity). A wrong passphrase makes decryption fail, with no
-oracle beyond that.
+**Pull (reader — the browser).** GET keyparams → derive keys → list versions → fetch the head →
+decrypt (the AEAD verifies integrity). A wrong passphrase makes decryption fail, with no oracle
+beyond that.
 
 Sync is single-writer and last-snapshot-wins: the newest full snapshot is authoritative, and rows are
 never merged, because the app's schema has no per-row ids or timestamps. That is settled (#200): the
