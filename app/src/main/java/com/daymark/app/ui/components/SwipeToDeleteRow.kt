@@ -102,10 +102,13 @@ fun SwipeToDeleteRow(
         },
         label = "swipeDeleteBackground",
     )
+    // The words and the bin take the full ink in both states: on the hairline fill the soft ink
+    // measures 4.36:1 in the light theme, under the 4.5:1 small words need. The muted fill and the
+    // words themselves are what say "not yet" (#408).
     val foregroundColor = if (armed) {
         MaterialTheme.colorScheme.onErrorContainer
     } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
+        MaterialTheme.colorScheme.onSurface
     }
 
     SwipeToDismissBox(

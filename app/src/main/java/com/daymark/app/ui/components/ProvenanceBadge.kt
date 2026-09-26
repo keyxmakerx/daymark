@@ -39,7 +39,13 @@ enum class ProvenanceTier(val symbol: String?, val label: String) {
     ORIGINAL("✎", "Original"),
 }
 
-/** The small pill naming a tool's tier, shown on its start screen. */
+/**
+ * The small pill naming a tool's tier, shown on its start screen.
+ *
+ * Its words, and the note's below, take the full ink: on the hairline fill the soft ink measures
+ * 4.36:1 in the light theme, under the 4.5:1 small text needs (#408). `HairlineFillSourceTest` holds
+ * every word on that fill to it.
+ */
 @Composable
 fun ProvenanceBadge(tier: ProvenanceTier, modifier: Modifier = Modifier) {
     Surface(
@@ -51,7 +57,7 @@ fun ProvenanceBadge(tier: ProvenanceTier, modifier: Modifier = Modifier) {
         Text(
             text = tier.symbol?.let { "$it ${tier.label}" } ?: tier.label,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
         )
     }
@@ -83,7 +89,7 @@ fun ProvenanceNote(
             Text(
                 text = disclaimer,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
     }
