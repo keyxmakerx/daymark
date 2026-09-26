@@ -1,7 +1,6 @@
 package com.daymark.companion.routes
 
-import com.daymark.companion.clientAddress
-import com.daymark.companion.auth.AuthGuard
+import com.daymark.companion.auth.OwnerAuth
 import com.daymark.companion.storage.BlobStore
 import com.daymark.companion.storage.BlobStoreException
 import com.daymark.companion.storage.KeyDocumentException
@@ -43,11 +42,11 @@ const val KEY_DOCUMENT_KEYPARAMS = "keyparams"
 
 /**
  * The /v1 sync API. The server is zero-knowledge: every blob is opaque ciphertext it
- * cannot read. All routes require a valid bearer token; identity for rate-limit/lockout
- * is [clientAddress]: the socket peer, unless a proxy on the operator's trusted-proxy list
- * vouches for another address (docs/COMPANION_DEPLOYMENT.md §4.0).
+ * cannot read. All routes require the owner: the bearer token, or a registered phone's signature
+ * (#186); identity for rate-limit/lockout is `clientAddress()`: the socket peer, unless a proxy on
+ * the operator's trusted-proxy list vouches for another address (docs/COMPANION_DEPLOYMENT.md §4.0).
  */
-fun Route.syncRoutes(store: BlobStore, keys: KeyDocumentStore, guard: AuthGuard, maxRequestBytes: Long) {
+fun Route.syncRoutes(store: BlobStore, keys: KeyDocumentStore, guard: OwnerAuth, maxRequestBytes: Long) {
     route("/v1") {
         // Non-secret KDF parameters (salt etc.) shared by all of an owner's clients (#258). Written
         // once: a second PUT answers 409, since a new salt would strand everything written under the
@@ -198,36 +197,11 @@ fun Route.syncRoutes(store: BlobStore, keys: KeyDocumentStore, guard: AuthGuard,
     }
 }
 
-/** Verify the bearer token; respond + return false on any failure. Generic, non-enumerating errors. */
-private suspend fun ApplicationCall.authorized(guard: AuthGuard): Boolean {
-    val sourceId = clientAddress()
-    val presented = request.headers[HttpHeaders.Authorization]?.removePrefix("Bearer ")?.trim()
-    return when (guard.authorize(sourceId, presented)) {
-        AuthGuard.Result.OK -> true
-        AuthGuard.Result.RATE_LIMITED -> { respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited")); false }
-        AuthGuard.Result.LOCKED -> { respond(HttpStatusCode.TooManyRequests, ErrorDto("temporarily locked")); false }
-        AuthGuard.Result.BAD_TOKEN -> { respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized")); false }
-    }
-}
+/** The owner gate every sync route shares ([ownerAuthorized]): respond and return false on any failure. */
+private suspend fun ApplicationCall.authorized(guard: OwnerAuth): Boolean = ownerAuthorized(guard)
 
 /** Read the request body with a hard cap; respond 413 and return null if exceeded. */
-private suspend fun ApplicationCall.readCapped(max: Long): ByteArray? {
-    val stream = receiveStream()
-    val buf = ByteArray(64 * 1024)
-    val out = java.io.ByteArrayOutputStream()
-    var total = 0L
-    while (true) {
-        val n = stream.read(buf)
-        if (n < 0) break
-        total += n
-        if (total > max) {
-            respond(HttpStatusCode.PayloadTooLarge, ErrorDto("request body too large"))
-            return null
-        }
-        out.write(buf, 0, n)
-    }
-    return out.toByteArray()
-}
+private suspend fun ApplicationCall.readCapped(max: Long): ByteArray? = readBodyCapped(max)
 
 private val routeLog = org.slf4j.LoggerFactory.getLogger("com.daymark.companion.routes")
 

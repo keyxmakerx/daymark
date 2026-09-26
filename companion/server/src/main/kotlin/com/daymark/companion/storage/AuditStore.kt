@@ -215,6 +215,25 @@ enum class AuditAction(val wire: String) {
     OWNER_KEY_FETCHED("owner_key.fetched"),
 
     /**
+     * The owner console confirmed a phone's key, and it can now sign requests as the owner (#189).
+     *
+     * Written to the owner's own log (`owner-audit.db`), once, when the confirmation writes the key's
+     * row; a second press of Confirm writes nothing. Like every key line here it is a receipt: the
+     * server holds the key it was handed and vouches for nothing about it. What decided that it was
+     * the right phone's is the person comparing the words on the two screens. Its objectRef is the
+     * key's id, the fingerprint the device list shows.
+     */
+    DEVICE_REGISTERED("device.registered"),
+
+    /**
+     * A phone's key was revoked, and every request it signs is refused from the next one on (#186).
+     *
+     * Written once per key, when its revocation row is written, with `by` saying how: `owner` for the
+     * console's Revoke, `reissue` for a re-issued token, which revokes every device of the owner.
+     */
+    DEVICE_REVOKED("device.revoked"),
+
+    /**
      * A practice was created and its first admin was seated.
      *
      * The genesis entry of a practice's chain, and the only one the operator's provisioning

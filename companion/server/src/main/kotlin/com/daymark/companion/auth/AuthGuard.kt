@@ -54,20 +54,36 @@ class AuthGuard(
     private class Bucket(var tokens: Double, var last: Long)
 
     fun authorize(sourceId: String, presented: String?): Result {
-        evictIfLarge()
-        if (!allowRate(sourceId)) return Result.RATE_LIMITED
-
-        val fs = failures[sourceId]
-        if (fs != null && fs.lockedUntil > clock()) return Result.LOCKED
-
-        if (presented != null &&
-            constantTimeEquals(acceptedHashBytes, Secrets.tokenHash(presented).toByteArray(Charsets.UTF_8))
-        ) {
-            failures.remove(sourceId) // reset on success
+        admit(sourceId)?.let { return it }
+        if (tokenMatches(presented)) {
+            recordSuccess(sourceId)
             return Result.OK
         }
         recordFailure(sourceId)
         return Result.BAD_TOKEN
+    }
+
+    /**
+     * The rate limit and the lockout, before any credential is looked at: null to go on, or
+     * [Result.RATE_LIMITED] or [Result.LOCKED]. Every owner credential passes here first — the token,
+     * a device's signature and a pairing code alike (#186) — so one source has one budget whichever
+     * it presents.
+     */
+    fun admit(sourceId: String): Result? {
+        evictIfLarge()
+        if (!allowRate(sourceId)) return Result.RATE_LIMITED
+        val fs = failures[sourceId]
+        if (fs != null && fs.lockedUntil > clock()) return Result.LOCKED
+        return null
+    }
+
+    /** Whether [presented] is the accepted token: digest to digest, in constant time. */
+    fun tokenMatches(presented: String?): Boolean =
+        presented != null && constantTimeEquals(acceptedHashBytes, Secrets.tokenHash(presented).toByteArray(Charsets.UTF_8))
+
+    /** A credential from [sourceId] was good: its failures are forgotten. */
+    fun recordSuccess(sourceId: String) {
+        failures.remove(sourceId)
     }
 
     /**
@@ -84,7 +100,8 @@ class AuthGuard(
     }
 
     /**
-     * Record a failed attempt, and arm a lockout once the threshold is reached.
+     * Record a failed attempt, and arm a lockout once the threshold is reached. True when this failure
+     * armed one, which is when a lockout's one audit row is owed — on arming, never per probe.
      *
      * ## The count decays, and it has to
      *
@@ -102,14 +119,19 @@ class AuthGuard(
      * lockout and comes back an hour later gets a clean slate, which is the behaviour a person
      * would expect and the previous code did not give them.
      */
-    private fun recordFailure(sourceId: String) {
+    fun recordFailure(sourceId: String): Boolean {
         val now = clock()
+        var armed = false
         failures.compute(sourceId) { _, prev ->
             val forgiven = prev == null || now - prev.lastFailureAt >= forgetMillis
             val count = if (forgiven) 1 else prev.count + 1
             val locked = if (count >= lockoutThreshold) now + lockoutMillis else (prev?.lockedUntil ?: 0L)
+            // Armed by this failure only when no lockout was already running: one episode, one arming,
+            // however many requests were in flight when it began.
+            armed = count >= lockoutThreshold && (prev == null || prev.lockedUntil <= now)
             FailState(count, locked, now)
         }
+        return armed
     }
 
     /** How long a quiet source keeps its failure count before it is forgiven and reset. */

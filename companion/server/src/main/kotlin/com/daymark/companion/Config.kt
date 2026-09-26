@@ -127,6 +127,14 @@ data class Config(
     val smtpEnabled: Boolean get() = mailer.enabled
 
     /**
+     * Whether the server's public address, [publicBaseUrl], is an `https` one: the one question the
+     * session cookie's switch (#181) and pairing a phone (#189) both ask of it. Without it, a pairing
+     * code is never minted, since the ceremony's two screens would both be on a path anyone on the
+     * network can rewrite.
+     */
+    val publicAddressIsHttps: Boolean get() = publicBaseUrl?.startsWith("https://", ignoreCase = true) == true
+
+    /**
      * The shape this server serves (#330): the one the operator chose or, with none chosen, the one
      * `DAYMARK_THERAPIST_AUTH` already meant. On, it switches the clinician and practice routes on
      * together and every page is served, which is [SetupMode.PRACTICE] exactly. Off, every clinician,
@@ -317,8 +325,7 @@ data class Config(
          * plain-http request away from crossing the network in the clear.
          */
         private fun refuseInsecureCookie(config: Config, addressSetting: String) {
-            val address = config.publicBaseUrl ?: return
-            if (!config.cookieSecure && address.startsWith("https://", ignoreCase = true)) {
+            if (!config.cookieSecure && config.publicAddressIsHttps) {
                 throw StartupRefusal(
                     "Refusing to start: DAYMARK_COOKIE_INSECURE is on while $addressSetting is an https " +
                         "address. The switch lets the clinician session cookie travel over plain http and " +

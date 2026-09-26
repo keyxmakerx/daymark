@@ -2,8 +2,8 @@ package com.daymark.companion.routes
 
 import com.daymark.companion.clientAddress
 import com.daymark.companion.auth.AttemptLimiter
-import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.auth.AuthStore
+import com.daymark.companion.auth.OwnerAuth
 import com.daymark.companion.auth.Secrets
 import com.daymark.companion.mail.MailMessage
 import com.daymark.companion.mail.OwnerNotifier
@@ -95,7 +95,7 @@ enum class Role { OWNER, THERAPIST }
  */
 fun Route.relationRoutes(
     store: RelationStore,
-    ownerGuard: AuthGuard,
+    ownerGuard: OwnerAuth,
     authStore: AuthStore,
     sessionIdleSeconds: Long,
     maxRequestBytes: Long,
@@ -402,7 +402,7 @@ private data class RelContext(val relRef: String, val channel: Channel, val role
  */
 private suspend fun io.ktor.server.routing.RoutingContext.resolve(
     store: RelationStore,
-    ownerGuard: AuthGuard,
+    ownerGuard: OwnerAuth,
     authStore: AuthStore,
     sessionIdleSeconds: Long,
     auditStore: AuditStore,
@@ -447,18 +447,24 @@ private suspend fun io.ktor.server.routing.RoutingContext.resolve(
         call.respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited")); return null
     }
 
-    // Determine role. Prefer an owner bearer token; else a therapist session cookie bound here.
-    // For state-changing therapist calls (requireCsrf), a missing/mismatched X-CSRF-Token is a
-    // rejection, not a bypass — the cookie alone must not authorize a write.
-    val role = resolveRole(call, ownerGuard, authStore, sessionIdleSeconds, pathRelRef, requireCsrf, auditStore, auditSourceIp) ?: run {
-        call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized")); return null
+    // Determine role. Prefer an owner credential — the bearer token or a registered phone's signature
+    // (#186); else a therapist session cookie bound here. For state-changing therapist calls
+    // (requireCsrf), a missing/mismatched X-CSRF-Token is a rejection, not a bypass — the cookie alone
+    // must not authorize a write.
+    val owner = if (ownerGuard.presentsCredential(call)) ownerGuard.check(call) else null
+    if (owner == OwnerAuth.Outcome.TooLarge) {
+        call.refuse(owner); return null
     }
+    val role = (if (owner is OwnerAuth.Outcome.Ok) Role.OWNER else null)
+        ?: resolveTherapist(call, authStore, sessionIdleSeconds, pathRelRef, requireCsrf, auditStore, auditSourceIp)
+        ?: run {
+            call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized")); return null
+        }
     return RelContext(pathRelRef, channel, role)
 }
 
-private fun resolveRole(
+private fun resolveTherapist(
     call: ApplicationCall,
-    ownerGuard: AuthGuard,
     authStore: AuthStore,
     sessionIdleSeconds: Long,
     relRef: String,
@@ -466,11 +472,6 @@ private fun resolveRole(
     auditStore: AuditStore,
     auditSourceIp: Boolean,
 ): Role? {
-    val sourceId = call.clientAddress()
-    val bearer = call.request.headers[HttpHeaders.Authorization]?.removePrefix("Bearer ")?.trim()
-    if (bearer != null && ownerGuard.authorize(sourceId, bearer) == AuthGuard.Result.OK) {
-        return Role.OWNER
-    }
     val sessionId = call.request.cookies["daymark_session"]
     if (sessionId != null) {
         // On a CSRF-required (write) path, the header MUST be present; a null header must never
@@ -492,21 +493,7 @@ private fun resolveRole(
 }
 
 private suspend fun ApplicationCall.readCappedRel(max: Long): ByteArray? {
-    val stream = receiveStream()
-    val buf = ByteArray(64 * 1024)
-    val out = java.io.ByteArrayOutputStream()
-    var total = 0L
-    while (true) {
-        val n = stream.read(buf)
-        if (n < 0) break
-        total += n
-        if (total > max) {
-            respond(HttpStatusCode.PayloadTooLarge, ErrorDto("request body too large"))
-            return null
-        }
-        out.write(buf, 0, n)
-    }
-    return out.toByteArray()
+    return readBodyCapped(max)
 }
 
 /**

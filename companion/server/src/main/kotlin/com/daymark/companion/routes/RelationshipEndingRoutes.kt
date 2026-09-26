@@ -1,7 +1,7 @@
 package com.daymark.companion.routes
 
 import com.daymark.companion.auth.AttemptLimiter
-import com.daymark.companion.auth.AuthGuard
+import com.daymark.companion.auth.OwnerAuth
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.auth.Secrets
 import com.daymark.companion.clientAddress
@@ -100,7 +100,7 @@ private fun auditSafely(block: () -> Unit) {
  */
 fun Route.relationshipEndingRoutes(
     authStore: AuthStore,
-    ownerGuard: AuthGuard,
+    ownerGuard: OwnerAuth,
     sessionIdleSeconds: Long,
     auditStore: AuditStore,
     auditSourceIp: Boolean = false,

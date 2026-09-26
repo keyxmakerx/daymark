@@ -133,9 +133,12 @@ class ShapeRoutingTest {
     @Test
     fun `with no owner token, every sync route answers that sync is not configured`() {
         val sync = everyRoute.filter { it.group == Group.SYNC }
-        // The positive control: the walk found the sync routes, the key document's among them (#258),
-        // so "each answered 503" is not a statement about an empty list.
-        val named = listOf("GET /v1/keyparams", "GET /v1/keydoc", "POST /v1/keydoc", "PUT /v1/keydoc/{version}")
+        // The positive control: the walk found the sync routes, the key document's and the devices'
+        // among them (#258, #189), so "each answered 503" is not a statement about an empty list.
+        val named = listOf(
+            "GET /v1/keyparams", "GET /v1/keydoc", "POST /v1/keydoc", "PUT /v1/keydoc/{version}",
+            "POST /v1/devices/pairing", "POST /v1/devices/redeem", "GET /v1/devices/registration",
+        )
         assertTrue(sync.map { it.toString() }.containsAll(named), "the walk must find $named: $sync")
         val dataDir = Files.createTempDirectory("shape-no-token").toFile()
         val webDir = webRoot()
@@ -379,8 +382,12 @@ class ShapeRoutingTest {
             serve(case) { served ->
                 assertEquals(HttpStatusCode.OK, client.get("/healthz").status)
                 val files = served.dataDir.list()!!.filter { it.endsWith(".db") }.toSet()
-                // The positive control: the listing sees the stores every shape opens, the wrapped key's among them (#258).
-                assertTrue("owner-account.db" in files && "index.db" in files && "wrapped-key.db" in files, "${case.name}: $files")
+                // The positive control: the listing sees the stores every shape opens, the wrapped key's
+                // among them (#258), and the owner's own log, which a phone's pairing writes to (#189).
+                assertTrue(
+                    "owner-account.db" in files && "index.db" in files && "wrapped-key.db" in files && "owner-audit.db" in files,
+                    "${case.name}: $files",
+                )
                 val clinician = case.serves in GROUP_ON_IN.getValue(Group.CLINICIAN)
                 for (name in listOf("auth.db", "rel-index.db", "audit.db", "pairing.db")) {
                     assertEquals(clinician, name in files, "${case.name}: $name in $files")
@@ -480,12 +487,19 @@ class ShapeRoutingTest {
             "GET /v1/snapshots/{lineage}/{version}", "PUT /v1/snapshots/{lineage}/{version}",
             "GET /v1/owner/notifications", "PUT /v1/owner/notifications",
             "POST /v1/recovery/request", "POST /v1/recovery/confirm",
+            // Pairing a phone, and the phones paired (#186, #189): a phone pairs to sync, in every shape.
+            "GET /v1/devices", "POST /v1/devices/pairing", "GET /v1/devices/pairing/{codeId}",
+            "POST /v1/devices/pairing/{codeId}/confirm", "POST /v1/devices/{keyId}/revoke",
+            "POST /v1/devices/redeem", "GET /v1/devices/registration",
+            // The owner's own log: phones paired and revoked, and lockouts (#189).
+            "GET /v1/owner/audit",
         )
 
         /** Each route's group, by the first two segments of its path. */
         val GROUPS = mapOf(
             "healthz" to Group.PROBE, "readyz" to Group.PROBE, "v1/config" to Group.PROBE,
             "v1/keyparams" to Group.SYNC, "v1/keydoc" to Group.SYNC, "v1/snapshots" to Group.SYNC,
+            "v1/devices" to Group.SYNC,
             "v1/owner" to Group.OWNER, "v1/recovery" to Group.OWNER,
             "v1/rel" to Group.CLINICIAN, "v1/invite" to Group.CLINICIAN, "v1/totp" to Group.CLINICIAN,
             "v1/session" to Group.CLINICIAN, "v1/webauthn" to Group.CLINICIAN, "v1/relations" to Group.CLINICIAN,

@@ -14,26 +14,33 @@ import kotlin.test.assertEquals
 /**
  * A start checks and changes only the databases its shape opens (#193, #330).
  *
- * All nine files are planted, each an unversioned database holding one table of its own, and a server
+ * All ten files are planted, each an unversioned database holding one table of its own, and a server
  * of each shape is started on them. The ones its shape opens are adopted: they gain their structure,
- * are copied first, and are marked. The rest are left byte for byte as they were, unversioned, so a
- * server that changes shape keeps the files it no longer opens without reading them. The adopted ones
- * are the positive control: they show the planted files are the ones the stores open.
+ * are copied first, and are marked with the version this release brings them to. The rest are left
+ * byte for byte as they were, unversioned, so a server that changes shape keeps the files it no longer
+ * opens without reading them. The adopted ones are the positive control: they show the planted files
+ * are the ones the stores open.
  */
 class ShapeSchemaTest {
 
     private val every = listOf(
-        "index.db", "wrapped-key.db", "owner-account.db",
+        "index.db", "wrapped-key.db", "owner-account.db", "owner-audit.db",
         "auth.db", "rel-index.db", "audit.db", "pairing.db",
         "org.db", "org-audit.db",
     )
 
-    /** What each shape opens, restated from the issue's table (#330) rather than read from the code. */
+    /**
+     * What each shape opens, restated from the issue's table (#330) rather than read from the code. The
+     * owner's log is the sync API's (#189): a phone pairs in every shape.
+     */
     private val opens = mapOf(
-        SetupMode.SOLO to every.take(3),
-        SetupMode.PAIRED to every.take(7),
+        SetupMode.SOLO to every.take(4),
+        SetupMode.PAIRED to every.take(8),
         SetupMode.PRACTICE to every,
     )
+
+    /** The version each database is brought to: owner-account.db's second holds the phones (#186, #189). */
+    private val versionOf = every.associateWith { if (it == "owner-account.db") 2 else 1 }
 
     private fun sha256(file: File): String =
         MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
@@ -75,7 +82,7 @@ class ShapeSchemaTest {
                 for (name in every) {
                     val file = File(dataDir, name)
                     if (name in opened) {
-                        assertEquals(1, userVersion(file), "${mode.wire}: $name is opened, so it is adopted and marked")
+                        assertEquals(versionOf.getValue(name), userVersion(file), "${mode.wire}: $name is opened, so it is adopted and marked")
                         assertEquals(1, copies.count { it.startsWith(name.removeSuffix(".db") + ".v0.") }, "${mode.wire}: $name was copied first: $copies")
                     } else {
                         assertEquals(before.getValue(name), sha256(file), "${mode.wire}: $name is not opened, so not a byte of it changes")

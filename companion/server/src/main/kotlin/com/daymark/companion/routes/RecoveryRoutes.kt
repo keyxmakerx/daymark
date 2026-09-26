@@ -1,12 +1,14 @@
 package com.daymark.companion.routes
 
 import com.daymark.companion.clientAddress
-import com.daymark.companion.auth.AuthGuard
+import com.daymark.companion.auth.OwnerAuth
 import com.daymark.companion.auth.Secrets
 import com.daymark.companion.mail.MailMessage
 import com.daymark.companion.mail.Mailer
 import com.daymark.companion.mail.OwnerAccountStore
 import com.daymark.companion.mail.ReissueConfirmOutcome
+import com.daymark.companion.storage.AuditAction
+import com.daymark.companion.storage.AuditStore
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -48,11 +50,13 @@ private val log = LoggerFactory.getLogger("com.daymark.companion.routes.Recovery
  */
 fun Route.recoveryRoutes(
     accountStore: OwnerAccountStore,
-    ownerGuard: AuthGuard,
+    ownerGuard: OwnerAuth,
     mailer: Mailer,
     confirmTtlSeconds: Long,
     reissueMaxPerHour: Int,
     publicBaseUrl: String?,
+    /** The owner's own log (`owner-audit.db`): the re-issue writes one row per device it revoked (#186). */
+    ownerAudit: AuditStore? = null,
 ) {
     route("/v1") {
         get("/owner/notifications") {
@@ -130,8 +134,15 @@ fun Route.recoveryRoutes(
             // The guard is handed the new token's DIGEST, matching what OwnerAccountStore now
             // persists — newToken itself stays plaintext all the way to the HTTP response below,
             // the one place it is delivered to the owner.
-            when (val result = accountStore.confirmReissue(req.confirmToken) { newToken -> ownerGuard.rotate(Secrets.tokenHash(newToken)) }) {
+            // The re-issue also revoked every paired phone, in the transaction that wrote the new token
+            // (#186): a phone pairs again by QR. One owner-log row for each.
+            when (val result = accountStore.confirmReissue(req.confirmToken) { newToken -> ownerGuard.guard.rotate(Secrets.tokenHash(newToken)) }) {
                 is ReissueConfirmOutcome.Rotated -> {
+                    if (ownerAudit != null) {
+                        for (keyId in result.revokedDevices) {
+                            auditDevice(ownerAudit, ownerGuard.ownerId, AuditAction.DEVICE_REVOKED, keyId, DEVICE_REVOKED_BY_REISSUE)
+                        }
+                    }
                     // Best-effort receipt; dispatched in the background so a slow SMTP server
                     // never delays handing the owner their new token.
                     accountStore.registeredEmail()?.let { addr ->
@@ -149,17 +160,8 @@ fun Route.recoveryRoutes(
     }
 }
 
-/** Owner-token gate, matching the convention in TherapistAuthRoutes.kt / SyncRoutes.kt. */
-private suspend fun ApplicationCall.ownerAuthorizedForRecovery(guard: AuthGuard): Boolean {
-    val sourceId = clientAddress()
-    val presented = request.headers[HttpHeaders.Authorization]?.removePrefix("Bearer ")?.trim()
-    return when (guard.authorize(sourceId, presented)) {
-        AuthGuard.Result.OK -> true
-        AuthGuard.Result.RATE_LIMITED -> { respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited")); false }
-        AuthGuard.Result.LOCKED -> { respond(HttpStatusCode.TooManyRequests, ErrorDto("temporarily locked")); false }
-        AuthGuard.Result.BAD_TOKEN -> { respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized")); false }
-    }
-}
+/** The owner gate every owner route shares ([ownerAuthorized]). */
+private suspend fun ApplicationCall.ownerAuthorizedForRecovery(guard: OwnerAuth): Boolean = ownerAuthorized(guard)
 
 /**
  * Structural-only plausibility check (one `@`, something on both sides, no whitespace or control

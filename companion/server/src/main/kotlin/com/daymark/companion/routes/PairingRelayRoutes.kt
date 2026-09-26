@@ -1,7 +1,7 @@
 package com.daymark.companion.routes
 
 import com.daymark.companion.auth.AttemptBudget
-import com.daymark.companion.auth.AuthGuard
+import com.daymark.companion.auth.OwnerAuth
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.auth.PairingStore
 import com.daymark.companion.auth.PersistentAttemptLimiter
@@ -240,7 +240,7 @@ const val PAIRING_STATUS_POLL_SECONDS = 45L
 fun Route.pairingRelayRoutes(
     authStore: AuthStore,
     pairingStore: PairingStore,
-    ownerGuard: AuthGuard,
+    ownerGuard: OwnerAuth,
     auditStore: AuditStore,
     /** The same two values redeem passes to the store, so the SHARED per-invite counter arms
      *  identically whichever surface a guess lands on. */

@@ -1,6 +1,6 @@
 package com.daymark.companion.routes
 
-import com.daymark.companion.auth.AuthGuard
+import com.daymark.companion.auth.OwnerAuth
 import com.daymark.companion.storage.AuditStore
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
@@ -85,7 +85,7 @@ private val CHAIN_REL_REF = Regex("^[A-Za-z0-9_-]{1,64}$")
  * NOTHING HERE LOGS. Not the relRef, not the head, not the outcome. The server is a zero-knowledge
  * relay and a chain check is not an incident.
  */
-fun Route.auditChainRoutes(store: AuditStore, ownerGuard: AuthGuard) {
+fun Route.auditChainRoutes(store: AuditStore, ownerGuard: OwnerAuth) {
     route("/v1/relations/{relRef}/audit-chain") {
         get {
             // The guard first, and it is the whole gate: rate limiting, lockout and the token

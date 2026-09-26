@@ -3,8 +3,8 @@ package com.daymark.companion.routes
 import com.daymark.companion.auth.AttemptBudget
 import com.daymark.companion.auth.AttemptLimiter
 import com.daymark.companion.clientAddress
-import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.auth.AuthStore
+import com.daymark.companion.auth.OwnerAuth
 import com.daymark.companion.auth.PersistentAttemptLimiter
 import com.daymark.companion.auth.Secrets
 import com.daymark.companion.auth.Totp
@@ -136,7 +136,7 @@ internal const val REPORT_WINDOW_MS = 60_000L
  */
 fun Route.therapistAuthRoutes(
     authStore: AuthStore,
-    ownerGuard: AuthGuard,
+    ownerGuard: OwnerAuth,
     mailer: Mailer,
     inviteTtlSeconds: Long,
     sessionIdleSeconds: Long,
@@ -271,8 +271,9 @@ fun Route.therapistAuthRoutes(
             // Which caller this is has to be decided before anything is spent: the owner path is
             // already metered by AuthGuard's own bucket, and making the owner share the anonymous
             // guard would let an attacker on the same address spend the owner's ability to kill an
-            // invite — handing the attacker the outcome this route exists to prevent.
-            val presentingOwnerToken = call.request.headers[HttpHeaders.Authorization] != null
+            // invite — handing the attacker the outcome this route exists to prevent. The owner's
+            // credential is the token or a device's signature (#186).
+            val presentingOwnerToken = ownerGuard.presentsCredential(call)
             if (!presentingOwnerToken && !reportFloodGuard.allow(call.clientAddress())) {
                 call.respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited"))
                 return@post
@@ -526,25 +527,6 @@ fun Route.therapistAuthRoutes(
         post("/webauthn/assert/finish", webauthnStub)
         // Also answer GET for the scaffold so a probe sees the documented 501 either way.
         get("/webauthn/register/begin", webauthnStub)
-    }
-}
-
-/**
- * Owner-token gate for the mint route. Non-enumerating errors, source-keyed lockout.
- *
- * `internal` rather than private because the therapist public-key read (TherapistKeyRoutes.kt) is
- * specified as being gated "exactly as POST /v1/invite is", and the only way to keep that promise
- * literally true is to call the same function rather than write a third copy of it that can drift.
- * Nothing about the gate changed in making it visible.
- */
-internal suspend fun ApplicationCall.ownerAuthorized(guard: AuthGuard): Boolean {
-    val sourceId = clientAddress()
-    val presented = request.headers[HttpHeaders.Authorization]?.removePrefix("Bearer ")?.trim()
-    return when (guard.authorize(sourceId, presented)) {
-        AuthGuard.Result.OK -> true
-        AuthGuard.Result.RATE_LIMITED -> { respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited")); false }
-        AuthGuard.Result.LOCKED -> { respond(HttpStatusCode.TooManyRequests, ErrorDto("temporarily locked")); false }
-        AuthGuard.Result.BAD_TOKEN -> { respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized")); false }
     }
 }
 

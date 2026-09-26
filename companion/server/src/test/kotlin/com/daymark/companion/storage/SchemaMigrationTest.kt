@@ -3,6 +3,7 @@ package com.daymark.companion.storage
 import com.daymark.companion.StartupRefusal
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.auth.PairingStore
+import com.daymark.companion.auth.Secrets
 import com.daymark.companion.mail.OwnerAccountStore
 import com.daymark.companion.org.OrgStore
 import java.nio.file.Files
@@ -33,8 +34,9 @@ import kotlin.test.assertTrue
  * adopted, never taken for empty; one newer than the release is refused; a second start changes
  * nothing; and no change touches an audit row.
  *
- * Every release so far is version 1, so the step from one version to the next is exercised by adding
- * a version to a real schema here ([plus]) — made of the same three kinds of change a real version is.
+ * The step from one version to the next is exercised by adding a version to a real schema here
+ * ([plus]) — made of the same three kinds of change a real version is — and by the first real one:
+ * version 2 of owner-account.db, which holds the phones (#186, #189).
  */
 class SchemaMigrationTest {
 
@@ -218,6 +220,66 @@ class SchemaMigrationTest {
         assertEquals(listOf("auth.v1.20260926T144512Z.db"), copies(dir))
     }
 
+    // ---- The first real version: owner-account.db gains the phones (#186, #189) ----------------------
+
+    /** The tables version 2 of owner-account.db adds. */
+    private val phoneTables = listOf("owner", "device_keys", "device_key_revocations", "pairing_codes", "pairing_redemptions", "seen_nonces")
+
+    /**
+     * owner-account.db as the release before this one left it: version 1, holding the token's digest,
+     * a recovery email and a pending recovery link. Made by version 1's own statements.
+     */
+    private fun ownerAccountBeforePhones(dir: Path, version: Int): Path {
+        Schema("owner-account.db", OwnerAccountStore.SCHEMA.versions.take(1)).open(dir, clock).close()
+        val db = dir.resolve("owner-account.db")
+        val digest = Secrets.tokenHash("owner-token")
+        exec(
+            db,
+            "INSERT INTO owner_token(id, token, bootstrap_token, updated_at) VALUES (1, '$digest', '$digest', 11)",
+            "INSERT INTO owner_notify(id, email, events, updated_at) VALUES (1, 'owner@example.org', 'SHARE_OPENED', 12)",
+            "INSERT INTO reissue_confirm(token_hash, expiry, status, created_at) VALUES ('link-digest', 99, 'PENDING', 13)",
+        )
+        stamp(db, version)
+        assertEquals(version, userVersion(db), "the fixture is at version $version")
+        return db
+    }
+
+    @Test
+    fun `owner-account db from before the phones is copied, gains their tables, and keeps every row`() {
+        for (from in listOf(1, 0)) { // written by the release before this one, and by one before versions were kept
+            val dir = tmpDir()
+            val db = ownerAccountBeforePhones(dir, from)
+            val layout = layout(db)
+            val before = contents(db, layout)
+            assertTrue(before.values.all { it.size == 1 }, "from $from: the fixture holds a row in each of its tables")
+            assertTrue(phoneTables.none { it in layout }, "from $from: and lacks what version 2 adds")
+
+            OwnerAccountStore(dir.toString(), envToken = "owner-token").use { store ->
+                assertEquals(Secrets.tokenHash("owner-token"), store.currentTokenHash(), "from $from: the token set before works after")
+                assertEquals("owner@example.org", store.registeredEmail())
+                assertEquals(emptyList(), store.revokedAtStart, "the token did not change, so nothing was revoked")
+                assertTrue(store.devices.ownerId.isNotEmpty(), "the owner has an id")
+            }
+
+            assertEquals(2, userVersion(db), "from $from")
+            assertTrue(phoneTables.all { it in layout(db) }, "from $from: version 2's tables are there: ${layout(db).keys}")
+            assertEquals(before, contents(db, layout), "from $from: every row of the database before is as it was")
+
+            val copyName = copies(dir).single()
+            assertTrue(Regex("""^owner-account\.v$from\.\d{8}T\d{6}Z\.db$""").matches(copyName), "from $from: copied first: $copyName")
+            val copy = lookInto(dir.resolve(Schema.PRE_MIGRATE_DIR).resolve(copyName))
+            assertEquals(from, userVersion(copy), "the copy is the database as it was")
+            assertTrue(phoneTables.none { it in layout(copy) })
+            assertEquals(before, contents(copy, layout), "and holds every row")
+
+            // A second start changes nothing, and copies nothing.
+            val afterFirst = sha256(db)
+            OwnerAccountStore(dir.toString(), envToken = "owner-token").close()
+            assertEquals(afterFirst, sha256(db), "from $from: the second start wrote nothing")
+            assertEquals(listOf(copyName), copies(dir))
+        }
+    }
+
     // ---- Databases from before versions were kept ----------------------------------------------
 
     @Test
@@ -362,9 +424,9 @@ class SchemaMigrationTest {
         val refusal = assertFailsWith<StartupRefusal> { OwnerAccountStore(dir.toString(), envToken = "owner-token") }
 
         assertEquals(
-            "Refusing to start: owner-account.db could not be changed from structure version 0 to 1 (it would still " +
-                "lack owner_token.bootstrap_token); the change was rolled back and the file is as it was " +
-                "(COMPANION_DEPLOYMENT.md §7).",
+            "Refusing to start: owner-account.db could not be changed from structure version 0 to " +
+                "${OwnerAccountStore.SCHEMA.current} (it would still lack owner_token.bootstrap_token); the change " +
+                "was rolled back and the file is as it was (COMPANION_DEPLOYMENT.md §7).",
             refusal.message,
         )
         assertEquals(before, sha256(db), "the tables made before the check went with the rollback")
@@ -380,7 +442,7 @@ class SchemaMigrationTest {
             "INSERT INTO owner_token VALUES (1, 'digest', 'digest', 0)",
         )
         OwnerAccountStore(controlDir.toString(), envToken = "owner-token").close()
-        assertEquals(1, userVersion(controlDir.resolve("owner-account.db")))
+        assertEquals(OwnerAccountStore.SCHEMA.current, userVersion(controlDir.resolve("owner-account.db")))
     }
 
     // ---- The ordinary start ---------------------------------------------------------------------
@@ -551,7 +613,7 @@ class SchemaMigrationTest {
 
     private class Database(val file: String, val current: Int, val open: (String) -> AutoCloseable)
 
-    /** The nine databases a server can open, each through the store that opens it. */
+    /** The ten databases a server can open, each through the store that opens it. */
     private val databases = listOf(
         Database("auth.db", AuthStore.SCHEMA.current) { AuthStore(it) },
         Database("pairing.db", PairingStore.SCHEMA.current) { PairingStore(it) },
@@ -559,6 +621,7 @@ class SchemaMigrationTest {
         Database("org.db", OrgStore.SCHEMA.current) { OrgStore(it) },
         Database("audit.db", AuditStore.VERSIONS.size) { AuditStore(it) },
         Database("org-audit.db", AuditStore.VERSIONS.size) { AuditStore(it, dbName = "org-audit.db") },
+        Database("owner-audit.db", AuditStore.VERSIONS.size) { AuditStore(it, dbName = "owner-audit.db") },
         Database("index.db", BlobStore.SCHEMA.current) { BlobStore(it, 1_000_000, 10, 10_000_000) },
         Database("rel-index.db", RelationStore.SCHEMA.current) { RelationStore(it, 1_000_000, 10, 10_000_000) },
         Database("wrapped-key.db", KeyDocumentStore.SCHEMA.current) { KeyDocumentStore(it) },
@@ -566,7 +629,7 @@ class SchemaMigrationTest {
 
     @Test
     fun `every database the server opens records its version, and refuses one newer than it knows`() {
-        assertEquals(9, databases.map { it.file }.toSet().size)
+        assertEquals(10, databases.map { it.file }.toSet().size)
         for (d in databases) {
             // A new one: created at the current version, with nothing to copy.
             val fresh = tmpDir()

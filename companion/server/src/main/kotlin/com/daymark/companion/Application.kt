@@ -2,14 +2,19 @@ package com.daymark.companion
 
 import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.auth.AuthStore
+import com.daymark.companion.auth.OwnerAuth
 import com.daymark.companion.auth.PairingStore
 import com.daymark.companion.mail.Mailer
 import com.daymark.companion.mail.OwnerAccountStore
 import com.daymark.companion.mail.OwnerNotifier
 import com.daymark.companion.org.OrgStore
+import com.daymark.companion.routes.DEVICE_REVOKED_BY_REISSUE
 import com.daymark.companion.routes.ErrorDto
 import com.daymark.companion.routes.auditChainRoutes
+import com.daymark.companion.routes.auditDevice
+import com.daymark.companion.routes.auditLockout
 import com.daymark.companion.routes.auditRoutes
+import com.daymark.companion.routes.deviceRoutes
 import com.daymark.companion.routes.orgRoutes
 import com.daymark.companion.routes.pairingRelayRoutes
 import com.daymark.companion.routes.recoveryRoutes
@@ -19,6 +24,7 @@ import com.daymark.companion.routes.syncRoutes
 import com.daymark.companion.routes.therapistAuthRoutes
 import com.daymark.companion.routes.ownerKeyRoutes
 import com.daymark.companion.routes.therapistKeyRoutes
+import com.daymark.companion.storage.AuditAction
 import com.daymark.companion.storage.AuditStore
 import com.daymark.companion.storage.BlobStore
 import com.daymark.companion.storage.KeyDocumentStore
@@ -70,6 +76,9 @@ data class ServerConfigDto(
 
 /** The exit status of a [StartupRefusal]: `EX_CONFIG` in sysexits.h, a configuration error. */
 internal const val EXIT_CONFIG = 78
+
+/** The owner's own audit chain (#189), beside the relationship log and the practice log. */
+internal const val OWNER_AUDIT_DB = "owner-audit.db"
 
 fun main() {
     val config = try {
@@ -167,6 +176,8 @@ fun Application.module(
      * ticker; this module registers the jobs on it, starts it, and stops it as the application stops.
      */
     housekeeping: Housekeeping? = null,
+    /** The owner's own log, `owner-audit.db` (#189). Injectable so a test can read what was written. */
+    ownerAuditStore: AuditStore? = null,
 ) {
     // Publish the trusted-proxy allowlist before any route runs: every per-client lockout and rate
     // limit reads it via ApplicationCall.clientAddress(). Empty (the default) means forwarded
@@ -221,6 +232,30 @@ fun Application.module(
         AuthGuard(it.currentTokenHash(), config.authLockoutFails, config.authLockoutSeconds * 1000, config.rateLimitRps)
     }
 
+    // The owner's own log (#189): phones paired and revoked, and the lockouts owner credentials arm.
+    // A third chain in a file of its own, like the practice's, keyed on the owner's id, and opened in
+    // every shape that syncs, because phones pair in every one of them.
+    val ownerAudit = account?.let {
+        ownerAuditStore ?: AuditStore(config.dataDir, config.auditRetentionDays * 86_400L, dbName = OWNER_AUDIT_DB)
+    }
+
+    // Who a request is from (#186): the bearer token, or a registered phone's signature, on one owner
+    // id. Every owner route below takes this, never the token's digest.
+    val ownerAuth = if (account != null && guard != null && ownerAudit != null) {
+        // One row when a lockout is armed, never per probe; OwnerAuth spaces them out server-wide.
+        OwnerAuth(guard, account.devices, config.maxRequestBytes) { source, credential ->
+            auditLockout(ownerAudit, account.devices.ownerId, credential, source.takeIf { config.auditSourceIpEnabled })
+        }
+    } else {
+        null
+    }
+    // The phones this start disconnected because DAYMARK_AUTH_TOKEN changed: one row each.
+    if (account != null && ownerAudit != null) {
+        for (keyId in account.revokedAtStart) {
+            auditDevice(ownerAudit, account.devices.ownerId, AuditAction.DEVICE_REVOKED, keyId, DEVICE_REVOKED_BY_REISSUE)
+        }
+    }
+
     // Built once and DI'd to the invite/notification services. When SMTP is disabled this never
     // opens a socket. Tests can inject an InMemory-backed mailer.
     val mail = mailer ?: Mailer.forConfig(config.mailer)
@@ -228,8 +263,9 @@ fun Application.module(
 
     // The shape (#330): which route groups and pages this server serves, and so which stores it
     // opens. A group's stores are opened only in a shape that serves the group, so a solo server
-    // writes no relationship, sign-in, audit or pairing file to the volume, and a paired one no
-    // practice file. One line per start says which shape, and whether it was chosen or assumed.
+    // writes no relationship, clinician sign-in, relationship audit or clinician pairing file to the
+    // volume, and a paired one no practice file. One line per start says which shape, and whether it
+    // was chosen or assumed.
     val shape = config.shape
     log.info(shapeLogLine(config))
 
@@ -313,8 +349,17 @@ fun Application.module(
             call.respond(ServerConfigDto(smtpEnabled = config.smtpEnabled, setupMode = config.setupMode?.wire))
         }
 
-        if (store != null && keyDocuments != null && guard != null) {
-            syncRoutes(store, keyDocuments, guard, config.maxRequestBytes)
+        if (store != null && keyDocuments != null && ownerAuth != null && ownerAudit != null) {
+            syncRoutes(store, keyDocuments, ownerAuth, config.maxRequestBytes)
+            // Pairing a phone and the phones paired (#186, #189): part of the sync API, since a phone
+            // pairs to sync, so on in every shape with it.
+            deviceRoutes(
+                auth = ownerAuth,
+                pairingOpen = config.publicAddressIsHttps,
+                publicBaseUrl = config.publicBaseUrl,
+                ownerAudit = ownerAudit,
+                auditSourceIp = config.auditSourceIpEnabled,
+            )
         } else {
             // Fail-closed: sync not configured. Cover the methods the API uses. Scope to the
             // exact sync paths so the therapist portal's /v1/rel + /v1/invite etc. can still be
@@ -326,24 +371,28 @@ fun Application.module(
             get("/v1/keydoc") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
             post("/v1/keydoc") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
             put("/v1/keydoc/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
+            get("/v1/devices") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
+            get("/v1/devices/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
+            post("/v1/devices/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
+            get("/v1/owner/audit") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
         }
 
         // The clinician group (#330): on in paired and practice. Fail-closed: when it is off, every
         // path it answers answers 503 instead (clinicianGroupOff), so a probe cannot tell
         // configured-but-empty from not-configured. The group is all or nothing: a store missing
         // here would leave its routes answered by nothing at all rather than by the 503.
-        if (relStore != null && auth != null && guard != null && audit != null && notifier != null &&
+        if (relStore != null && auth != null && ownerAuth != null && audit != null && notifier != null &&
             pairing != null
         ) {
             relationRoutes(
-                relStore, guard, auth, config.sessionIdleSeconds, config.maxRequestBytes,
+                relStore, ownerAuth, auth, config.sessionIdleSeconds, config.maxRequestBytes,
                 auditStore = audit, auditSourceIp = config.auditSourceIpEnabled,
                 notifier = notifier, publicBaseUrl = config.publicBaseUrl,
                 clock = relationClock,
             )
             therapistAuthRoutes(
                 authStore = auth,
-                ownerGuard = guard,
+                ownerGuard = ownerAuth,
                 mailer = mail,
                 inviteTtlSeconds = config.inviteTtlSeconds,
                 sessionIdleSeconds = config.sessionIdleSeconds,
@@ -361,7 +410,7 @@ fun Application.module(
             // keys belong to a relationship, and relationships only exist when the portal is on.
             therapistKeyRoutes(
                 authStore = auth,
-                ownerGuard = guard,
+                ownerGuard = ownerAuth,
                 sessionIdleSeconds = config.sessionIdleSeconds,
                 auditStore = audit,
                 auditSourceIp = config.auditSourceIpEnabled,
@@ -369,7 +418,7 @@ fun Application.module(
 
             ownerKeyRoutes(
                 authStore = auth,
-                ownerGuard = guard,
+                ownerGuard = ownerAuth,
                 sessionIdleSeconds = config.sessionIdleSeconds,
                 auditStore = audit,
                 auditSourceIp = config.auditSourceIpEnabled,
@@ -380,7 +429,7 @@ fun Application.module(
             // relationships only exist when the portal is on. See routes/RelationshipEndingRoutes.kt.
             relationshipEndingRoutes(
                 authStore = auth,
-                ownerGuard = guard,
+                ownerGuard = ownerAuth,
                 sessionIdleSeconds = config.sessionIdleSeconds,
                 auditStore = audit,
                 auditSourceIp = config.auditSourceIpEnabled,
@@ -390,18 +439,18 @@ fun Application.module(
             pairingRelayRoutes(
                 authStore = auth,
                 pairingStore = pairing,
-                ownerGuard = guard,
+                ownerGuard = ownerAuth,
                 auditStore = audit,
                 totpLockoutFails = config.totpLockoutFails,
                 totpLockoutSeconds = config.totpLockoutSeconds,
                 auditSourceIp = config.auditSourceIpEnabled,
             )
-            auditRoutes(audit, guard)
+            auditRoutes(audit, ownerAuth)
             // The chain's own check: recompute the stored audit chain for one relationship and
             // report its head. Owner bearer token, same gate as the therapist-keys read — a head
             // plus a count per relRef is exactly the relationship metadata this server does not
             // hand to anonymous callers. See routes/AuditChainRoutes.kt for the whole argument.
-            auditChainRoutes(audit, guard)
+            auditChainRoutes(audit, ownerAuth)
         } else {
             clinicianGroupOff()
         }
@@ -409,11 +458,11 @@ fun Application.module(
         // The practice group (#330): on in practice only, and fail-closed the same way. The org /
         // practice control plane: membership and roles only — it holds no key, serves no
         // ciphertext, and cannot mint a grant. See routes/OrgRoutes.kt for the whole argument.
-        if (orgs != null && orgAudit != null && auth != null && guard != null) {
+        if (orgs != null && orgAudit != null && auth != null && ownerAuth != null) {
             orgRoutes(
                 orgStore = orgs,
                 authStore = auth,
-                ownerGuard = guard,
+                ownerGuard = ownerAuth,
                 sessionIdleSeconds = config.sessionIdleSeconds,
                 orgAudit = orgAudit,
                 auditSourceIp = config.auditSourceIpEnabled,
@@ -427,14 +476,15 @@ fun Application.module(
         // flow. Gated on the sync/owner bearer token being configured at all (independent of the
         // therapist portal — recovery covers plain /v1 sync access too), fail-closed to 503
         // otherwise so a probe cannot tell configured-but-empty from absent.
-        if (account != null && guard != null && notifier != null) {
+        if (account != null && ownerAuth != null && notifier != null) {
             recoveryRoutes(
                 accountStore = account,
-                ownerGuard = guard,
+                ownerGuard = ownerAuth,
                 mailer = mail,
                 confirmTtlSeconds = config.reissueConfirmTtlSeconds,
                 reissueMaxPerHour = config.reissueMaxPerHour,
                 publicBaseUrl = config.publicBaseUrl,
+                ownerAudit = ownerAudit,
             )
         } else {
             get("/v1/owner/notifications") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("recovery not configured")) }
