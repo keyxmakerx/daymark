@@ -153,7 +153,7 @@
               <span class="an">{a.name}</span>
               <svg class="delta" viewBox="0 0 200 16" role="img" aria-label={`${a.name}: ${a.delta >= 0 ? '+' : ''}${a.delta} vs average over ${a.count} entries`}>
                 <line x1="100" y1="0" x2="100" y2="16" class="axis" />
-                <rect x={a.delta >= 0 ? 100 : 100 + (a.delta / maxAbsDelta) * 100} y="4" width={Math.max(2, (Math.abs(a.delta) / maxAbsDelta) * 100)} height="8" rx="4" class={a.delta >= 0 ? 'pos' : 'neg'} />
+                <rect x={a.delta >= 0 ? 100 : 100 + (a.delta / maxAbsDelta) * 100} y="4" width={Math.max(2, (Math.abs(a.delta) / maxAbsDelta) * 100)} height="8" rx="4" class="bar" />
               </svg>
               <span class="ad mono">{a.delta >= 0 ? '+' : ''}{a.delta}</span>
               <span class="ac faint">{a.count}×</span>
@@ -237,16 +237,15 @@
   .delta { width: 100%; height: 16px; }
   .delta .axis { stroke: var(--hairline); }
 
-  /* DATA — do not "fix" these to clay/amber. The bar is the person's own average mood on days
-     carrying this activity, measured against their own overall average, so the hue is reading
-     off the mood ramp exactly as the ramp intends: above-average days are drawn in the colour
-     of an above-average mood. It is not a judgement of the activity — the copy above says
-     association, not causation — and the signed number and the bar's side of the axis both
-     state the direction without colour. These two keep the shipped ramp where a person has
-     recoloured their moods: a direction bar sits beside no mood word, and a person's own colour
-     fills a mood mark and nothing else (#280). */
-  .delta .pos { fill: var(--mood-5); }
-  .delta .neg { fill: var(--mood-2); }
+  /* INK, one fill for both sides (#404). The bar is how far the average mood on days with this
+     activity sits from the overall average: a difference between two averages, not a mood
+     anybody logged, so no mood colour draws it. Filling "above" in the Rad colour, which is
+     green, and "below" in the Bad colour would be a verdict on the activity painted in mood
+     colours, and a mood colour is the value a person logged, never a status (docs/DESIGN.md).
+     Which side of the centre line the bar sits on, and the signed number beside it, say the
+     direction; nothing here says whether it is good. dashboardActivities.test.ts holds it, on
+     the person's own view and the clinician's alike, since both draw this card. */
+  .delta .bar { fill: var(--ink-accent); }
   .ad { text-align: right; color: var(--ink-soft); }
   .ac { text-align: right; }
   .assess { display: grid; gap: var(--space-1); }
