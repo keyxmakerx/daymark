@@ -21,6 +21,7 @@ import com.daymark.companion.routes.ownerKeyRoutes
 import com.daymark.companion.routes.therapistKeyRoutes
 import com.daymark.companion.storage.AuditStore
 import com.daymark.companion.storage.BlobStore
+import com.daymark.companion.storage.KeyDocumentStore
 import com.daymark.companion.storage.RelationStore
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -193,6 +194,9 @@ fun Application.module(
     val store = if (config.syncEnabled) {
         blobStore ?: BlobStore(config.dataDir, config.maxBlobBytes, config.maxVersions, config.perTokenQuotaBytes)
     } else null
+    // The owner's key documents (#258): the key parameters and the wrapped key that supersedes them.
+    // Part of the sync API, so opened with it and on the same volume.
+    val keyDocuments = if (config.syncEnabled) KeyDocumentStore(config.dataDir) else null
 
     // The owner's email, for notifications and access-token recovery (COMPANION_SECURITY.md §6,
     // "Owner notifications and server-access recovery"): the owner/bearer token now lives here, not
@@ -298,8 +302,8 @@ fun Application.module(
             call.respond(ServerConfigDto(smtpEnabled = config.smtpEnabled, setupMode = config.setupMode?.wire))
         }
 
-        if (store != null && guard != null) {
-            syncRoutes(store, guard, config.maxRequestBytes)
+        if (store != null && keyDocuments != null && guard != null) {
+            syncRoutes(store, keyDocuments, guard, config.maxRequestBytes)
         } else {
             // Fail-closed: sync not configured. Cover the methods the API uses. Scope to the
             // exact sync paths so the therapist portal's /v1/rel + /v1/invite etc. can still be
@@ -308,6 +312,9 @@ fun Application.module(
             put("/v1/snapshots/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
             get("/v1/keyparams") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
             put("/v1/keyparams") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
+            get("/v1/keydoc") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
+            post("/v1/keydoc") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
+            put("/v1/keydoc/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
         }
 
         // The clinician group (#330): on in paired and practice. Fail-closed: when it is off, every

@@ -131,6 +131,30 @@ class ShapeRoutingTest {
     }
 
     @Test
+    fun `with no owner token, every sync route answers that sync is not configured`() {
+        val sync = everyRoute.filter { it.group == Group.SYNC }
+        // The positive control: the walk found the sync routes, the key document's among them (#258),
+        // so "each answered 503" is not a statement about an empty list.
+        val named = listOf("GET /v1/keyparams", "GET /v1/keydoc", "POST /v1/keydoc", "PUT /v1/keydoc/{version}")
+        assertTrue(sync.map { it.toString() }.containsAll(named), "the walk must find $named: $sync")
+        val dataDir = Files.createTempDirectory("shape-no-token").toFile()
+        val webDir = webRoot()
+        try {
+            testApplication {
+                application { module(config(soloSet, dataDir.path, webDir.path).copy(authToken = null)) }
+                for (route in sync) {
+                    val res = client.request(route.path) { method = route.method }
+                    assertEquals(HttpStatusCode.ServiceUnavailable, res.status, "$route on a server with no owner token")
+                    assertEquals(SYNC_OFF_BODY, res.bodyAsText(), "$route on a server with no owner token")
+                }
+            }
+        } finally {
+            dataDir.deleteRecursively()
+            webDir.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `every page of the web build is one this file classifies`() {
         val web = File(System.getProperty("user.dir"), "../web").canonicalFile
         val pages = web.listFiles { f -> f.isFile && f.name.endsWith(".html") }!!.map { it.name }.toSet()
@@ -355,8 +379,8 @@ class ShapeRoutingTest {
             serve(case) { served ->
                 assertEquals(HttpStatusCode.OK, client.get("/healthz").status)
                 val files = served.dataDir.list()!!.filter { it.endsWith(".db") }.toSet()
-                // The positive control: the listing sees the stores every shape opens.
-                assertTrue("owner-account.db" in files && "index.db" in files, "${case.name}: $files")
+                // The positive control: the listing sees the stores every shape opens, the wrapped key's among them (#258).
+                assertTrue("owner-account.db" in files && "index.db" in files && "wrapped-key.db" in files, "${case.name}: $files")
                 val clinician = case.serves in GROUP_ON_IN.getValue(Group.CLINICIAN)
                 for (name in listOf("auth.db", "rel-index.db", "audit.db", "pairing.db")) {
                     assertEquals(clinician, name in files, "${case.name}: $name in $files")
@@ -405,6 +429,9 @@ class ShapeRoutingTest {
         /** What every clinician, pairing and practice route answered with DAYMARK_THERAPIST_AUTH off. */
         const val OFF_BODY = """{"error":"therapist portal not configured"}"""
 
+        /** What every sync route answers on a server with no owner token. */
+        const val SYNC_OFF_BODY = """{"error":"sync API not configured"}"""
+
         /** Text unique to each page, so "served something" cannot pass for "served this page". */
         val MARKERS = mapOf(
             Pages.OWNER to "<div id=\"owner-app\"></div>",
@@ -448,6 +475,7 @@ class ShapeRoutingTest {
         val SERVED_IN_EVERY_SHAPE = setOf(
             "GET /healthz", "GET /readyz", "GET /v1/config",
             "GET /v1/keyparams", "PUT /v1/keyparams",
+            "GET /v1/keydoc", "POST /v1/keydoc", "PUT /v1/keydoc/{version}",
             "GET /v1/snapshots", "GET /v1/snapshots/{lineage}",
             "GET /v1/snapshots/{lineage}/{version}", "PUT /v1/snapshots/{lineage}/{version}",
             "GET /v1/owner/notifications", "PUT /v1/owner/notifications",
@@ -457,7 +485,7 @@ class ShapeRoutingTest {
         /** Each route's group, by the first two segments of its path. */
         val GROUPS = mapOf(
             "healthz" to Group.PROBE, "readyz" to Group.PROBE, "v1/config" to Group.PROBE,
-            "v1/keyparams" to Group.SYNC, "v1/snapshots" to Group.SYNC,
+            "v1/keyparams" to Group.SYNC, "v1/keydoc" to Group.SYNC, "v1/snapshots" to Group.SYNC,
             "v1/owner" to Group.OWNER, "v1/recovery" to Group.OWNER,
             "v1/rel" to Group.CLINICIAN, "v1/invite" to Group.CLINICIAN, "v1/totp" to Group.CLINICIAN,
             "v1/session" to Group.CLINICIAN, "v1/webauthn" to Group.CLINICIAN, "v1/relations" to Group.CLINICIAN,

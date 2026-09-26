@@ -199,35 +199,6 @@ class BlobStore(
         out
     }
 
-    /**
-     * Non-secret per-owner key parameters (KDF salt + params) so any reader with the
-     * passphrase can derive the same key. Small, overwrite-allowed, opaque to the server.
-     */
-    fun putKeyparams(bytes: ByteArray) = synchronized(lock) {
-        if (bytes.size > 4096) throw BlobStoreException("keyparams too large", BlobStoreException.Kind.TOO_LARGE)
-        var tmp: Path? = null
-        try {
-            tmp = Files.createTempFile(tmpDir, "kp", ".tmp")
-            FileOutputStream(tmp.toFile()).use { out ->
-                out.write(bytes)
-                out.flush()
-                out.fd.sync()
-            }
-            Files.move(tmp, root.resolve("keyparams.json"), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
-        } catch (e: IOException) {
-            // Was uncaught, so a full disk here surfaced as a bare 500 while the identical failure
-            // one method up mapped to 507. Same cause, same volume, two different answers.
-            throw BlobStoreException("disk write failed: ${e.message}", BlobStoreException.Kind.DISK_FULL)
-        } finally {
-            tmp?.let { runCatching { Files.deleteIfExists(it) } }
-        }
-    }
-
-    fun getKeyparams(): ByteArray? = synchronized(lock) {
-        val f = root.resolve("keyparams.json")
-        if (f.exists()) Files.readAllBytes(f) else null
-    }
-
     fun usedBytes(): Long = synchronized(lock) { usedBytesLocked() }
 
     private fun usedBytesLocked(): Long {
