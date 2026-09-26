@@ -7,17 +7,20 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.request
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsBytes
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
+import io.ktor.server.routing.RoutingRoot
 import io.ktor.server.routing.getAllRoutes
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import java.io.File
 import java.nio.file.Files
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -28,12 +31,18 @@ import kotlin.test.assertTrue
  * Each shape switches on only what it needs (#330): every route group, every page and every store,
  * checked against the issue's own table, which this file restates, rather than against the code's.
  *
- * The routes are not listed by hand. [everyRoute] walks the route tree of a server with everything
- * switched on, so a route added to a group later is asked here without anyone remembering to, and a
- * route in no known group fails the first test until someone decides which shape serves it.
+ * The gated routes are not listed by hand. [everyRoute] walks the route tree of a server with
+ * everything switched on, so a route added to a group later is asked here without anyone remembering
+ * to, and a route in no known group fails the first test until someone decides which shape serves it.
+ * The routes every shape serves ARE listed by hand, in [SERVED_IN_EVERY_SHAPE]: a route is grouped by
+ * its path, so a clinician route under an owner's prefix would otherwise be classified as served in
+ * solo, and pass.
  *
  * Each shape has a positive control — something that IS served there — so a server with everything
- * switched off cannot pass the tests of the shapes that switch things on.
+ * switched off cannot pass the tests of the shapes that switch things on. A route that is on must
+ * answer from its own handler, and the router is asked which route took each call, because a route
+ * that went missing is rarely a 404 here: the static handler answers any GET it has no file for with
+ * the owner's page, and a neighbouring route with a path parameter can take the call.
  */
 class ShapeRoutingTest {
 
@@ -45,6 +54,7 @@ class ShapeRoutingTest {
     private val practiceSet = Case("practice", PRACTICE, therapistAuth = false, serves = PRACTICE)
     private val switchOnNoMode = Case("no mode, DAYMARK_THERAPIST_AUTH on", null, therapistAuth = true, serves = PRACTICE)
     private val switchOffNoMode = Case("no mode, DAYMARK_THERAPIST_AUTH off", null, therapistAuth = false, serves = SOLO)
+    private val everyCase = listOf(soloSet, pairedSet, practiceSet, switchOnNoMode, switchOffNoMode)
 
     private fun config(case: Case, dataDir: String, webDir: String, basePath: String = "/") = Config(
         bindAddr = "127.0.0.1", port = 8080, dataDir = dataDir, basePath = basePath,
@@ -56,16 +66,34 @@ class ShapeRoutingTest {
         therapistAuthEnabled = case.therapistAuth, setupMode = case.mode, cookieSecure = false,
     )
 
-    private fun serve(case: Case, basePath: String = "/", block: suspend ApplicationTestBuilder.(dataDir: File) -> Unit) {
-        val dataDir = Files.createTempDirectory("shape-data").toFile()
-        val cfg = config(case, dataDir.path, webRoot().path, basePath)
+    /**
+     * A server [serve] started: its directories, its route tree, and the route the router handed its
+     * latest call to, as the tree prints it — null when the router found none and answered itself.
+     */
+    private class Served(val dataDir: File, val webDir: File) {
+        lateinit var app: Application
+        val answeredBy = AtomicReference<String?>()
+
+        /** Every route this server mounts, read from its route tree while it runs. */
+        fun routes(): List<Mounted> = app.routing { }.getAllRoutes().map { mounted(it.toString()) }
+    }
+
+    private fun serve(case: Case, basePath: String = "/", block: suspend ApplicationTestBuilder.(Served) -> Unit) {
+        val served = Served(Files.createTempDirectory("shape-data").toFile(), webRoot())
+        val cfg = config(case, served.dataDir.path, served.webDir.path, basePath)
         try {
             testApplication {
-                application { module(cfg) }
-                block(dataDir)
+                application {
+                    module(cfg)
+                    served.app = this
+                    monitor.subscribe(RoutingRoot.RoutingCallStarted) { call -> served.answeredBy.set(call.route.toString()) }
+                }
+                startApplication()
+                block(served)
             }
         } finally {
-            dataDir.deleteRecursively()
+            served.dataDir.deleteRecursively()
+            served.webDir.deleteRecursively()
         }
     }
 
@@ -78,6 +106,27 @@ class ShapeRoutingTest {
         // The positive control: the walk sees every group, so "nothing unclassified" is not an empty walk.
         for (group in Group.entries) {
             assertTrue(everyRoute.any { it.group == group }, "the walk found no route in $group: ${everyRoute.map { it.template }}")
+        }
+    }
+
+    @Test
+    fun `the routes under the prefixes every shape serves are exactly the ones this file names`() {
+        for (case in everyCase) {
+            serve(case) { served ->
+                val mounted = served.routes().filter { it.group in ALWAYS_ON }
+                val unnamed = mounted.filter { it.toString() !in SERVED_IN_EVERY_SHAPE }.map { "$it (${it.group})" }
+                assertEquals(
+                    emptyList(), unnamed,
+                    "${case.name} mounts a route under a prefix every shape serves, which classifies it as served in " +
+                        "every shape, solo included. Classify it on purpose: a clinician or practice route goes under " +
+                        "one of its own group's prefixes (GROUPS), inside the group's gate, where the off-answer covers " +
+                        "it in a shape without the group; a route every shape serves goes in SERVED_IN_EVERY_SHAPE",
+                )
+                // The other half of "exactly", and the positive control for the half above: every route the
+                // list names is mounted, in every shape, so the filter saw the groups it filtered for.
+                val gone = SERVED_IN_EVERY_SHAPE - mounted.map { it.toString() }.toSet()
+                assertEquals(emptySet(), gone, "${case.name} mounts none of these, and every shape serves them")
+            }
         }
     }
 
@@ -115,14 +164,28 @@ class ShapeRoutingTest {
         for (group in GROUP_ON_IN.keys) {
             assertTrue(routes.count { it.group == group } >= 2, "${case.name}: the walk found too few $group routes: $routes")
         }
-        serve(case) {
+        serve(case) { served ->
+            // A redirect would hand the call to a second route, and the route asked is the one that must answer.
+            val noRedirects = client.config { followRedirects = false }
             for (route in routes.filter { it.group in ASKED }) {
-                val res = client.request(route.path) { method = route.method }
+                served.answeredBy.set(null)
+                val res = noRedirects.request(route.path) { method = route.method }
                 val body = res.bodyAsText()
                 val offAnswer = res.status == HttpStatusCode.ServiceUnavailable && body == OFF_BODY
                 val on = GROUP_ON_IN[route.group]?.contains(case.serves) ?: true
                 if (on) {
                     assertFalse(offAnswer, "${case.name}: ${route.method.value} ${route.template} (${route.group}) must be on")
+                    // From its own handler, for the method it was registered with, which only the router can
+                    // say: a route that went missing is answered by the static handler (the owner's page, for a
+                    // GET), by a neighbouring route with a path parameter, or by the router's own 404 or 405,
+                    // and a real handler may answer 404 itself.
+                    val answeredBy = served.answeredBy.get()?.let(::mounted)
+                    assertEquals(
+                        route, answeredBy,
+                        "${case.name}: $route (${route.group}) must answer from its own handler, but " +
+                            "${answeredBy?.let { "$it (${it.group})" } ?: "no route"} took the call and answered " +
+                            "${res.status.value} ${body.take(80)}",
+                    )
                 } else {
                     assertEquals(
                         HttpStatusCode.ServiceUnavailable, res.status,
@@ -168,6 +231,40 @@ class ShapeRoutingTest {
     fun `under a base path, solo and paired serve and refuse the same pages`() {
         assertPages(soloSet, basePath = "/daymark")
         assertPages(pairedSet, basePath = "/daymark")
+    }
+
+    @Test
+    fun `where the clinician's page is off, nothing under its clean paths answers with its bytes`() {
+        for (basePath in listOf("/", "/daymark")) {
+            val base = basePath.trimEnd('/')
+            // The positive control: the comparison sees the page where the page is served, so the
+            // refusals below are not a comparison that could never match.
+            serve(pairedSet, basePath) { served ->
+                assertTrue(isClinicianPage(client.get("$base/therapist"), served), "paired: $base/therapist must be the page")
+            }
+            for (case in listOf(soloSet, switchOffNoMode)) {
+                serve(case, basePath) { served ->
+                    // Every route this server mounts under the page's clean paths, one added later included,
+                    // and paths under them that no route names, which reach the static handler.
+                    val mounted = served.routes().filter { relativeTo(it, base).group == Group.CLINICIAN_PAGE }
+                    assertTrue(
+                        mounted.any { it.template == "$base/therapist" },
+                        "${case.name}: the walk must find $base/therapist, or it asks nothing that is mounted: $mounted",
+                    )
+                    val asked = mounted.map { it.method to it.path } +
+                        CLINICIAN_PAGE_PREFIXES.flatMap { listOf("$base/$it/x", "$base/$it/") }.map { HttpMethod.Get to it }
+                    for ((verb, path) in asked.distinct()) {
+                        // Redirects are followed: a page reached through one is served all the same.
+                        val res = client.request(path) { method = verb }
+                        assertFalse(
+                            isClinicianPage(res, served),
+                            "${case.name}: ${verb.value} $path answers with ${Pages.CLINICIAN}'s bytes, " +
+                                "a page this shape does not serve",
+                        )
+                    }
+                }
+            }
+        }
     }
 
     private fun assertPages(case: Case, basePath: String = "/") {
@@ -227,6 +324,10 @@ class ShapeRoutingTest {
         assertEquals("", body, what)
     }
 
+    /** Whether [res] is the clinician's page: byte for byte the file in the web root [served] was given. */
+    private suspend fun isClinicianPage(res: HttpResponse, served: Served): Boolean =
+        res.bodyAsBytes().contentEquals(File(served.webDir, Pages.CLINICIAN).readBytes())
+
     /**
      * Other spellings of `/[page]` that the static handler resolves to the same file. Each is derived
      * from the page's name, never written as a literal that might happen to equal it, and checked to
@@ -250,10 +351,10 @@ class ShapeRoutingTest {
 
     @Test
     fun `each shape opens only the stores of the groups it serves`() {
-        for (case in listOf(soloSet, pairedSet, practiceSet, switchOnNoMode, switchOffNoMode)) {
-            serve(case) { dataDir ->
+        for (case in everyCase) {
+            serve(case) { served ->
                 assertEquals(HttpStatusCode.OK, client.get("/healthz").status)
-                val files = dataDir.list()!!.filter { it.endsWith(".db") }.toSet()
+                val files = served.dataDir.list()!!.filter { it.endsWith(".db") }.toSet()
                 // The positive control: the listing sees the stores every shape opens.
                 assertTrue("owner-account.db" in files && "index.db" in files, "${case.name}: $files")
                 val clinician = case.serves in GROUP_ON_IN.getValue(Group.CLINICIAN)
@@ -331,6 +432,28 @@ class ShapeRoutingTest {
         /** The groups asked route by route; the page mounts are asked by [assertPages]. */
         val ASKED = setOf(Group.PROBE, Group.SYNC, Group.OWNER, Group.CLINICIAN, Group.PRACTICE)
 
+        /**
+         * The groups no shape switches off. Their prefixes do not say a route is served in every shape:
+         * [SERVED_IN_EVERY_SHAPE] does.
+         */
+        val ALWAYS_ON: Set<Group> = ASKED - GROUP_ON_IN.keys
+
+        /**
+         * Every route under an [ALWAYS_ON] group's prefix, by method and path: the routes every shape
+         * serves, solo included. Named one by one because a route is grouped by its path, and a clinician
+         * route under an owner's prefix — outside the clinician group's gate, or inside it where no
+         * off-answer covers it — would otherwise be classified as served in every shape, and pass. A route
+         * added under one of these prefixes fails until someone decides, here, that every shape serves it.
+         */
+        val SERVED_IN_EVERY_SHAPE = setOf(
+            "GET /healthz", "GET /readyz", "GET /v1/config",
+            "GET /v1/keyparams", "PUT /v1/keyparams",
+            "GET /v1/snapshots", "GET /v1/snapshots/{lineage}",
+            "GET /v1/snapshots/{lineage}/{version}", "PUT /v1/snapshots/{lineage}/{version}",
+            "GET /v1/owner/notifications", "PUT /v1/owner/notifications",
+            "POST /v1/recovery/request", "POST /v1/recovery/confirm",
+        )
+
         /** Each route's group, by the first two segments of its path. */
         val GROUPS = mapOf(
             "healthz" to Group.PROBE, "readyz" to Group.PROBE, "v1/config" to Group.PROBE,
@@ -343,24 +466,47 @@ class ShapeRoutingTest {
             "{...}" to Group.STATIC,
         )
 
+        /** The clinician's page's clean paths, `/therapist` and the invitation link's: its group's prefixes. */
+        val CLINICIAN_PAGE_PREFIXES = GROUPS.filterValues { it == Group.CLINICIAN_PAGE }.keys
+
         /** A mounted route: its method, its path template, and a concrete path that reaches it. */
         data class Mounted(val method: HttpMethod, val template: String) {
             val path: String = template.split('/').filter { it.isNotEmpty() }
                 .joinToString("/", prefix = "/") { if (it.startsWith("{")) "p" else it }
             val group: Group? = GROUPS[template.split('/').filter { it.isNotEmpty() }.take(2).joinToString("/")]
                 ?: GROUPS[template.split('/').filter { it.isNotEmpty() }.take(1).joinToString("/")]
+
+            override fun toString() = "${method.value} $template"
         }
 
         /**
-         * Every route a server with every group on mounts, read from its route tree: a route prints
-         * as its path with a `(method:X)` segment last and `(…)` segments for selectors that match no
-         * path, such as the static handler's.
+         * A route as its route tree prints it: its path with a `(method:X)` segment last, and `(…)`
+         * segments for selectors that match no path, such as the static handler's.
          */
+        fun mounted(text: String): Mounted {
+            val method = Regex("""/\(method:([A-Z]+)\)$""").find(text)
+                ?: error("a route with no method selector last: $text")
+            val template = text.removeSuffix(method.value).split('/')
+                .filterNot { it.startsWith("(") }
+                .joinToString("/").ifEmpty { "/" }
+            return Mounted(HttpMethod.parse(method.groupValues[1]), template)
+        }
+
+        /** [route] with the base path [base] taken off, where it is under it, as the page routes are. */
+        fun relativeTo(route: Mounted, base: String): Mounted =
+            if (base.isNotEmpty() && route.template.startsWith("$base/")) {
+                Mounted(route.method, route.template.removePrefix(base))
+            } else {
+                route
+            }
+
+        /** Every route a server with every group on mounts, read from its route tree. */
         val everyRoute: List<Mounted> by lazy {
             val dataDir = Files.createTempDirectory("shape-routes").toFile()
+            val webDir = webRoot()
             val cfg = Config(
                 bindAddr = "127.0.0.1", port = 8080, dataDir = dataDir.path, basePath = "/",
-                webDir = webRoot().path, logLevel = "info", authToken = OWNER_TOKEN,
+                webDir = webDir.path, logLevel = "info", authToken = OWNER_TOKEN,
                 maxBlobBytes = 26_214_400L, maxRequestBytes = 27_262_976L,
                 maxVersions = 200, perTokenQuotaBytes = 5_368_709_120L,
                 authLockoutFails = 8, authLockoutSeconds = 900L, rateLimitRps = 100,
@@ -376,14 +522,8 @@ class ShapeRoutingTest {
                 printed = app!!.routing { }.getAllRoutes().map { it.toString() }
             }
             dataDir.deleteRecursively()
-            printed.map { text ->
-                val method = Regex("""/\(method:([A-Z]+)\)$""").find(text)
-                    ?: error("a route with no method selector last: $text")
-                val template = text.removeSuffix(method.value).split('/')
-                    .filterNot { it.startsWith("(") }
-                    .joinToString("/").ifEmpty { "/" }
-                Mounted(HttpMethod.parse(method.groupValues[1]), template)
-            }
+            webDir.deleteRecursively()
+            printed.map(::mounted)
         }
 
         /** A web root holding every page of the build, each distinguishable, and one script. */
