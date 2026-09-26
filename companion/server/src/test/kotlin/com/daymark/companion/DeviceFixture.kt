@@ -48,6 +48,8 @@ internal class DeviceServer(
     val maxRequestBytes: Long = 2_097_152L,
     /** The server's mail, for a test that reads what was sent; null for the configuration's own. */
     val mailer: Mailer? = null,
+    /** `DAYMARK_TRUSTED_PROXIES`: a test on Netty trusts 127.0.0.1 to send requests from addresses of its choosing. */
+    val trustedProxies: String? = null,
 ) {
     lateinit var account: OwnerAccountStore
     lateinit var ownerAudit: AuditStore
@@ -66,6 +68,7 @@ internal class DeviceServer(
         maxVersions = 200, perTokenQuotaBytes = 5_368_709_120L,
         authLockoutFails = lockoutFails, authLockoutSeconds = 900L, rateLimitRps = rateLimitRps,
         setupMode = mode, publicBaseUrl = publicBaseUrl,
+        trustedProxies = ClientAddress.parseTrusted(trustedProxies),
     )
 
     /** The server's time in whole seconds, as a phone on the same clock signs it. */
