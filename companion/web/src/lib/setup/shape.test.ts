@@ -34,6 +34,7 @@ import {
   isShapeId,
   opensOnStatement,
   primaryLabel,
+  publishedShape,
   readSetupMode,
   readStoredChoice,
   rememberShape,
@@ -558,6 +559,17 @@ describe('a configuration-provided mode', () => {
     expect(readSetupMode('{"smtpEnabled":false}')).toEqual({ kind: 'absent' })
     expect(resolveSetup({ config: config.absent, session: null, stored: null }).state).toBe('ask')
   })
+
+  it('counts only a published shape as published', () => {
+    // Positive control first: a set configuration yields its shape, for every shape.
+    for (const id of SHAPE_IDS) expect(publishedShape(config.set(id)), id).toBe(id)
+    // Everything else is "this page does not know" — including `reading`, which is also the state
+    // of every load that asked nothing because this browser already had an answer, and an
+    // unrecognised word, which says nothing about which pages the server serves.
+    for (const c of [config.reading, config.unreachable, config.absent, config.unrecognised('SOLO')]) {
+      expect(publishedShape(c), c.kind).toBeNull()
+    }
+  })
 })
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
@@ -1035,10 +1047,27 @@ describe('the practice placeholder panel', () => {
     expect(panel).not.toMatch(/\$state|\$derived/)
   })
 
+  it('links the practice console only where the published shape serves it, or none was published (#330)', () => {
+    // The anchor is the whole body of one guard, and the guard is the shared rule over the
+    // published shape (lib/setup/pages.ts, where each shape's answer is a node test).
+    const code = panel.replace(/<!--[\s\S]*?-->/g, ' ')
+    const GUARDED =
+      /\{#if linksTo\('practice', published\)\}\s*<p class="para">\s*<a class="go" href=\{LABELS\.practiceConsoleHref\}>\{LABELS\.openPractice\}<\/a>\s*<\/p>\s*\{\/if\}/
+    expect(code).toMatch(GUARDED)
+    // Exactly one anchor on the panel, so there is no unguarded second way out.
+    expect(code.match(/<a\b/g)).toHaveLength(1)
+    // The prop the guard reads is the panel's own, defaulting to "nothing was published".
+    expect(code).toMatch(/published = null,/)
+    // Control: the panel as it was, with the anchor unguarded, fails the same pattern.
+    const asItWas =
+      '<p class="para">\n      <a class="go" href={LABELS.practiceConsoleHref}>{LABELS.openPractice}</a>\n    </p>'
+    expect(asItWas).not.toMatch(GUARDED)
+  })
+
   it('is the only place App.svelte routes the practice surface', () => {
     // So the swap, when the practice console lands, is one import and one element.
     const app = readFileSync(fileURLToPath(new URL('../../App.svelte', import.meta.url)), 'utf8')
-    expect(app).toContain('<PracticePlaceholder />')
+    expect(app).toContain('<PracticePlaceholder {published} />')
     expect(app).toContain("{:else if source === 'practice'}")
     // And the practice surface is deliberately NOT one of the owner's six routes.
     expect(OWNER_ROUTES.map((r) => r.id)).not.toContain('practice')
@@ -1084,5 +1113,22 @@ describe('App.svelte gates on the decision rather than on a flag of its own', ()
     expect(app, 'App.svelte fetches directly again').not.toMatch(/(?<![\w.])fetch\s*\(/)
     // The cost of that scope is stated on the page rather than only in a comment.
     expect(strip).toContain('CONFIGURATION_IS_NOT_RE_READ')
+  })
+
+  it('gates links on what the server published, never on the browser’s own answer (#330)', () => {
+    // The person's answer routes this page and changes nothing on the server, so it says nothing
+    // about which pages the server serves. Only configuration's answer does.
+    const code = app.replace(/<!--[\s\S]*?-->/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+    expect(code).toContain('const published = $derived(publishedShape(config))')
+    // Both places that link a page a shape can refuse are handed it. The tag matcher is
+    // mustache-aware, because `onchoose={(id) => …}` carries a `>` of its own.
+    const orientationTag = code.match(/<Orientation\b(?:[^>{]|\{[^{}]*\})*>/)?.[0] ?? ''
+    expect(orientationTag).toContain('onchoose=') // the whole tag was read, past the arrow
+    expect(orientationTag).toContain('{published}')
+    expect(code).toContain('<PracticePlaceholder {published} />')
+    // Control: a derivation from the decision, which folds in the local answer, is caught.
+    const FROM_THE_ANSWER = /published = \$derived\([^)]*(decision|sessionShape|stored)/
+    expect('const published = $derived(decidedShape(decision))').toMatch(FROM_THE_ANSWER)
+    expect(code).not.toMatch(FROM_THE_ANSWER)
   })
 })

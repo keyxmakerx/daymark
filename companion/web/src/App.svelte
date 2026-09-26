@@ -18,6 +18,7 @@
     decidedShape,
     defaultSetupStorage,
     forgetShape,
+    publishedShape,
     readStoredChoice,
     rememberShape,
     resolveSetup,
@@ -86,6 +87,16 @@
   let forgetRefused = $state(false)
 
   const decision = $derived(resolveSetup({ config, session: sessionShape, stored }))
+
+  /*
+   * WHAT THE SERVER SERVES, AS FAR AS THIS PAGE CAN TELL (#330). A shape the server published
+   * decides which pages it serves, so the orientation and the practice panel link only those
+   * (lib/setup/pages.ts). Null whenever nothing was published or nothing was read — including every
+   * load where this browser's own answer meant no request was made — and null keeps every link.
+   * The person's own answer is never used here: it routes this page and changes nothing on the
+   * server.
+   */
+  const published = $derived(publishedShape(config))
 
   /*
    * ═══════════════════════════════════════════════════════════════════════════════════════════
@@ -345,6 +356,7 @@
         <Orientation
           selected={source === 'practice' ? undefined : source}
           onchoose={(id) => (source = id)}
+          {published}
         >
           {#snippet surface()}
             {#if (source === 'file' || source === 'sync') && data}
@@ -371,7 +383,7 @@
                 see the header note in PracticePlaceholder.svelte for why an empty roster was the
                 wrong answer.
               -->
-              <PracticePlaceholder />
+              <PracticePlaceholder {published} />
             {:else}
               <!-- The records the person opened on the file or sync tab, so the share builder has
                    something to seal. Handed null, it could never seal anything. -->

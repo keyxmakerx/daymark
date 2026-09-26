@@ -56,6 +56,8 @@
  * in; every function here is (input) → view model.
  */
 import { ENDPOINTS, type Endpoint, type ProbeId, type ProbeReading } from '../admin/health'
+import { linksTo, type ShapePage } from '../setup/pages'
+import type { ShapeId } from '../setup/shape'
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
    1. The three audiences.
@@ -80,6 +82,11 @@ export interface Audience {
    * index.html is served from. Null means "the page you are on".
    */
   href: string | null
+  /**
+   * The page `href` opens, when it is one a shape can refuse (lib/setup/pages.ts); null when it
+   * opens a page every shape serves, or there is no link. [shownAudiences] reads it.
+   */
+  page: ShapePage | null
   /** What the link calls the destination. Null for the owner, who has nowhere to be sent. */
   linkLabel: string | null
   /**
@@ -103,6 +110,7 @@ export const AUDIENCES: readonly Audience[] = [
       'You exported a backup from the Daymark app, or you run a sync server of your own. This ' +
       'page is yours, and everything below is on it.',
     href: null,
+    page: null,
     linkLabel: null,
     entryCondition:
       'Nothing here asks who you are until you pick something that talks to your server. Opening ' +
@@ -115,6 +123,7 @@ export const AUDIENCES: readonly Audience[] = [
       'You were invited by the person whose data it is, and you hold the key they pinned for you. ' +
       'Your portal is a different page from this one.',
     href: './therapist.html',
+    page: 'clinician',
     linkLabel: 'the clinician console',
     entryCondition:
       'You need an invitation from the person whose data it is. There is no sign-up on that page ' +
@@ -129,6 +138,7 @@ export const AUDIENCES: readonly Audience[] = [
       'You operate the box. You are not the owner of the data and not a clinician, and the ' +
       'console shows you neither — no entries, no names, no record of who shared what with whom.',
     href: './admin.html',
+    page: null,
     linkLabel: 'the server console',
     entryCondition:
       'Operational health only. On this build that console asks for no credential of its own, ' +
@@ -136,6 +146,34 @@ export const AUDIENCES: readonly Audience[] = [
       'reach it can open it. Serve it where you would serve a shell, not where you serve this page.',
   },
 ]
+
+/**
+ * The audiences the screen shows, in catalogue order. Both of its views, the full cards and the
+ * compact line's links, render this list and nothing else.
+ *
+ * AN ENTRY IS WITHHELD WHOLE, NOT JUST ITS LINK, for two different reasons.
+ *
+ *   The operator's, unless `adminLink` is set. admin.html asks for no credential on this build, and
+ *   the card's own condition says so: anyone who can reach it can open it. Withholding the anchor
+ *   while printing that sentence withholds nothing — the filename is a vite entry in the public
+ *   source, one request away — so a deployment has to choose to advertise an unguarded ops console
+ *   from a public page, and the default is closed.
+ *
+ *   The clinician's, when the server published a shape that does not serve the clinician's page
+ *   (#330). That page answers 403 there, and the card would be telling a clinician their portal is
+ *   a different page when this server has none. With no published shape the card stays: this page
+ *   cannot tell what the server serves (lib/setup/pages.ts). `published` is read from
+ *   GET /v1/config by the first-run screen, never by this one, so the rule above about what this
+ *   screen may probe is untouched, and the shape is used to withhold, never to say anything.
+ */
+export function shownAudiences({
+  adminLink = false,
+  published = null,
+}: { adminLink?: boolean; published?: ShapeId | null } = {}): Audience[] {
+  return AUDIENCES.filter(
+    (a) => (a.id !== 'operator' || adminLink) && (a.page === null || linksTo(a.page, published)),
+  )
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
    2. The owner's six entry points, grouped and ranked.
@@ -294,11 +332,14 @@ export function rankOwnerRoutes(routes: readonly OwnerRoute[] = OWNER_ROUTES): R
  *
  * DECLINED, and why:
  *
- *   capability (GET /v1/config). Public, and still not shown. It publishes one boolean about
- *   outbound mail, and the whole subject of mail configuration is off this screen: an
- *   unauthenticated page is not where a stranger learns which delivery paths this deployment has.
- *   It is legitimately useful — it decides whether the emailed half of "Recover access" can work
- *   — and it belongs on the admin console once that console has a credential. Today it does not.
+ *   capability (GET /v1/config). Public, and not probed here. It publishes one boolean about
+ *   outbound mail and, when the operator chose one, the server's shape as `setupMode` (#330). The
+ *   whole subject of mail configuration is off this screen: an unauthenticated page is not where a
+ *   stranger learns which delivery paths this deployment has. It is legitimately useful — it
+ *   decides whether the emailed half of "Recover access" can work — and it belongs on the admin
+ *   console once that console has a credential. Today it does not. The shape is read by the
+ *   first-run screen, only while its question is open (lib/setup/configProbe.ts), and reaches this
+ *   one as [shownAudiences]'s `published`, which withholds links and says nothing.
  *
  *   Whether the sync API is configured. This is genuinely already public: with sync unconfigured
  *   every sync path answers 503 "sync API not configured" (Application.kt), so restating it would
@@ -731,6 +772,19 @@ export const WHY_SO_FEW_CHECKS =
 export const COMPACT_SUMMARY =
   'Your own data is on this page. A clinician you invited has a separate portal; whoever runs ' +
   'the server has a separate console.'
+
+/**
+ * The same line where the server published a shape without the clinician's page (#330). The
+ * portal clause goes with the card and the link: that server refuses the page, so it has no portal
+ * for anyone to be sent to. The rest is the line above, word for word.
+ */
+export const COMPACT_SUMMARY_WITHOUT_CLINICIAN_PAGE =
+  'Your own data is on this page. Whoever runs the server has a separate console.'
+
+/** Which compact line to show, by the same rule as the clinician's card ([shownAudiences]). */
+export function compactSummary(published: ShapeId | null = null): string {
+  return linksTo('clinician', published) ? COMPACT_SUMMARY : COMPACT_SUMMARY_WITHOUT_CLINICIAN_PAGE
+}
 
 /**
  * The footer under the reading. It is the disclosure rule stated as a fact about the two

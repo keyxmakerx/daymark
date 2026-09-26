@@ -47,9 +47,8 @@
   import { untrack, type Snippet } from 'svelte'
   import { Callout, Card, Chip } from '../ui'
   import { describeLastChecked, readProbe, type ProbeReading } from '../../admin/health'
+  import type { ShapeId } from '../../setup/shape'
   import {
-    AUDIENCES,
-    COMPACT_SUMMARY,
     LABELS,
     NEEDS_LABEL,
     ORIENTATION_LEDE,
@@ -60,6 +59,7 @@
     SERVED_BY_THE_SERVER,
     WHAT_THIS_PAGE_IS,
     WHY_SO_FEW_CHECKS,
+    compactSummary,
     defaultOrientationStorage,
     forgetDismissal,
     orientationEndpoints,
@@ -70,6 +70,7 @@
     rememberDismissal,
     routeNoteFor,
     showsReachWhenCompact,
+    shownAudiences,
     type OrientationStorage,
     type OrientationView,
     type OwnerRouteId,
@@ -99,6 +100,13 @@
      */
     adminLink = false,
     /**
+     * The shape the server published, or null when this page has read none. A published shape
+     * withholds the clinician's card, its link and its clause in the compact line wherever that
+     * shape does not serve the clinician's page (#330); null withholds nothing, because this page
+     * cannot tell. See shownAudiences in audience.ts.
+     */
+    published = null,
+    /**
      * The surface the chosen route opens — the drop zone, the owner console, whichever the host
      * has selected. Rendered directly under the route cards, between them and the reach panel,
      * so the thing a person just chose appears where they chose it. See the markup note.
@@ -112,6 +120,7 @@
     selected?: OwnerRouteId
     onchoose?: (id: OwnerRouteId) => void
     adminLink?: boolean
+    published?: ShapeId | null
     surface?: Snippet
   } = $props()
 
@@ -185,6 +194,10 @@
   }
 
   const groups = rankOwnerRoutes()
+
+  /* Both views render this list and nothing else, so a card withheld from one is withheld from
+     the other. */
+  const audiences = $derived(shownAudiences({ adminLink, published }))
 
   const clock = $derived(now ?? ticked)
   const staleness = $derived(describeLastChecked(lastCheckedAt, clock))
@@ -260,43 +273,34 @@
     <section class="block">
       <h3 class="section-title">{LABELS.audiences}</h3>
       <ul class="audiences">
-        {#each AUDIENCES as audience (audience.id)}
-          <!--
-            THE OPERATOR ENTRY IS WITHHELD WHOLE, NOT JUST ITS LINK.
-
-            `adminLink={false}` used to suppress the anchor and still print the condition beneath
-            it — which reads, to any anonymous visitor of an unauthenticated page: "that console
-            asks for no credential of its own … so anyone who can reach it can open it". Withholding
-            the href while printing the sentence that makes it worth finding is not withholding
-            anything; the filename is a vite entry in the public source, one request away.
-
-            So the flag now governs the entry. It is minor as disclosures go — admin.html is
-            already served by staticFiles and says the same thing about itself — but a deployment
-            should have to choose to advertise an unguarded ops console, which is why the default
-            is closed rather than open.
-          -->
-          {#if audience.id !== 'operator' || adminLink}
-            <li class="audience" class:here={audience.href === null}>
-              <p class="question">{audience.question}</p>
-              <!--
-                `who` and `entryCondition` are the honest detail and they are not what someone
-                needs in order to choose. Folded, so the three questions read as three questions
-                rather than as three paragraphs.
-              -->
-              <details class="more">
-                <summary>{LABELS.whatThisMeans}</summary>
-                <p class="who">{audience.who}</p>
-                <p class="condition">{audience.entryCondition}</p>
-              </details>
-              <p class="destination">
-                {#if audience.href === null}
-                  <Chip tone="accent">{LABELS.youAreHere}</Chip>
-                {:else}
-                  <a class="go" href={audience.href}>{LABELS.open} {audience.linkLabel}</a>
-                {/if}
-              </p>
-            </li>
-          {/if}
+        <!--
+          AN ENTRY IS WITHHELD WHOLE, NOT JUST ITS LINK: the operator's unless `adminLink` is set,
+          and the clinician's where the published shape refuses the clinician's page (#330). A
+          card whose sentence makes a page worth finding, printed without its link, withholds
+          nothing; one pointing at a page this server refuses sends someone to a 403. The rule and
+          its reasons are shownAudiences in audience.ts, which is what `audiences` is.
+        -->
+        {#each audiences as audience (audience.id)}
+          <li class="audience" class:here={audience.href === null}>
+            <p class="question">{audience.question}</p>
+            <!--
+              `who` and `entryCondition` are the honest detail and they are not what someone
+              needs in order to choose. Folded, so the three questions read as three questions
+              rather than as three paragraphs.
+            -->
+            <details class="more">
+              <summary>{LABELS.whatThisMeans}</summary>
+              <p class="who">{audience.who}</p>
+              <p class="condition">{audience.entryCondition}</p>
+            </details>
+            <p class="destination">
+              {#if audience.href === null}
+                <Chip tone="accent">{LABELS.youAreHere}</Chip>
+              {:else}
+                <a class="go" href={audience.href}>{LABELS.open} {audience.linkLabel}</a>
+              {/if}
+            </p>
+          </li>
         {/each}
       </ul>
     </section>
@@ -308,11 +312,9 @@
       returning person still has to choose one.
     -->
     <p class="compact">
-      {COMPACT_SUMMARY}
-      {#each AUDIENCES.filter((a) => a.href !== null) as audience (audience.id)}
-        {#if audience.id !== 'operator' || adminLink}
-          <a class="go" href={audience.href}>{LABELS.open} {audience.linkLabel}</a>
-        {/if}
+      {compactSummary(published)}
+      {#each audiences.filter((a) => a.href !== null) as audience (audience.id)}
+        <a class="go" href={audience.href}>{LABELS.open} {audience.linkLabel}</a>
       {/each}
     </p>
   {/if}

@@ -23,6 +23,12 @@
    * AND IT MAKES NO CLAIM ABOUT THE CONSOLE'S COMPLETENESS. Where that page is, is a fact about
    * this build. What it can do is a claim about somebody else's screen, which that screen states
    * for itself — and a second-hand version of it here would go stale without anyone noticing.
+   *
+   * THE LINK OUT IS THERE ONLY WHEN THE SERVER CAN SERVE ITS PAGE (#330). A shape without the
+   * practice page answers it 403, so the anchor renders when the published shape serves it, or
+   * when none was published and this page cannot tell (lib/setup/pages.ts). Configuration
+   * outranks every local answer, so today this panel only ever meets `practice` or nothing; the
+   * rule holds here anyway, so a new way onto this panel cannot bring back a link to a refusal.
    */
   import { Callout, Card, Chip } from '../ui'
   import {
@@ -33,7 +39,16 @@
     PRACTICE_ROLE_NOTE,
     PRACTICE_SERVER_HAS,
     PRACTICE_SERVER_INTRO,
+    type ShapeId,
   } from '../../setup/shape'
+  import { linksTo } from '../../setup/pages'
+
+  let {
+    /** The shape the server published, or null when this page has read none (`publishedShape`). */
+    published = null,
+  }: {
+    published?: ShapeId | null
+  } = $props()
 </script>
 
 <Card title={LABELS.practiceTitle}>
@@ -59,12 +74,15 @@
   <section class="block">
     <h3>{LABELS.practiceWhereItHappens}</h3>
     <p class="para">{PRACTICE_CONSOLE_ELSEWHERE}</p>
-    <p class="para">
-      <!-- Relative and sibling-scoped, the same convention lib/onboarding/audience.ts uses for
-           the therapist portal and the server console: all four pages ship from one bundle and
-           may be served under a base path, so `./practice.html` resolves wherever this page is. -->
-      <a class="go" href={LABELS.practiceConsoleHref}>{LABELS.openPractice}</a>
-    </p>
+    {#if linksTo('practice', published)}
+      <p class="para">
+        <!-- Relative and sibling-scoped, the same convention lib/onboarding/audience.ts uses for
+             the clinician console and the server console: all four pages ship from one bundle
+             and may be served under a base path, so `./practice.html` resolves wherever this
+             page is. -->
+        <a class="go" href={LABELS.practiceConsoleHref}>{LABELS.openPractice}</a>
+      </p>
+    {/if}
   </section>
 
   <section class="block">

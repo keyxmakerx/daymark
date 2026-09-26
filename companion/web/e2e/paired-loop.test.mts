@@ -431,6 +431,12 @@ it('the paired loop: pair, grant, seal a share, read it, and send an assignment 
     // answer instead of asking: Paired opens on the owner console.
     await owner.locator('.unlock').waitFor()
     expect(await owner.getByRole('button', { name: /^Paired/ }).count(), 'the first-run question was asked').toBe(0)
+    // The paired shape serves the clinician console, so the page links it (#330: a published shape
+    // withholds only the pages it refuses), and the link opens the page rather than a refusal.
+    const clinicianLink = owner.getByRole('link', { name: 'Open the clinician console' })
+    expect(await clinicianLink.count(), 'the clinician console is not linked').toBe(1)
+    const href = await clinicianLink.getAttribute('href')
+    expect((await fetch(new URL(href ?? '', `${BASE}/`))).status, `${href} was refused`).toBe(200)
   })
 
   await step('the Recovery code screen makes the owner key file', async () => {

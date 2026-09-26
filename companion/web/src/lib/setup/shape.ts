@@ -514,7 +514,10 @@ export const LABELS = {
   practiceWhatIsMissing: 'What this panel is',
   practiceWhereItHappens: 'Where a practice is administered',
   practiceForgottenPassphrase: 'A forgotten passphrase',
-  /** The anchor out to the fourth page. Sibling-scoped, so it resolves under any base path. */
+  /**
+   * The anchor out to the fourth page. Sibling-scoped, so it resolves under any base path. Linked
+   * only when a published shape serves that page, or none was published (lib/setup/pages.ts).
+   */
   practiceConsoleHref: './practice.html',
   openPractice: 'Open the practice console',
   /** Brings the panel back after a returning person has navigated away from it. */
@@ -691,6 +694,18 @@ export function readSetupMode(body: string | null): ConfigState {
   if (typeof value !== 'string') return { kind: 'unrecognised', value: String(value) }
   if (!isShapeId(value)) return { kind: 'unrecognised', value }
   return { kind: 'set', shape: value }
+}
+
+/**
+ * The shape the server published, or null when this page has read none.
+ *
+ * Only `set` counts. `absent` and `unreachable` carried no shape; `unrecognised` carried a word
+ * this build does not know, which says nothing about which pages the server serves; and `reading`
+ * is also the state of every load that made no request because this browser already held an
+ * answer. What a published shape lets the owner's page link is lib/setup/pages.ts.
+ */
+export function publishedShape(config: ConfigState): ShapeId | null {
+  return config.kind === 'set' ? config.shape : null
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
