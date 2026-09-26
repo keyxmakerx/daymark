@@ -1,6 +1,8 @@
 package com.daymark.companion
 
 import com.daymark.companion.auth.DeviceSignature
+import java.io.File
+import java.sql.DriverManager
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
@@ -62,6 +64,41 @@ class HeldRequestTest {
                 val replay = heldUntil(live, captured, chunked, then = sentAt + DeviceSignature.WINDOW_MS + 1)
                 assertEquals(unauthorized, replay.status to replay.body, if (chunked) "chunked, the last chunk held" else "the body held")
             }
+        }
+    }
+
+    /** Whether the server has taken [nonce]: it has checked the request's key and is reading its body. */
+    private fun nonceTaken(server: DeviceServer, nonce: String): Boolean =
+        DriverManager.getConnection("jdbc:sqlite:${File(server.dataDir, "owner-account.db").path}").use { c ->
+            c.prepareStatement("SELECT 1 FROM seen_nonces WHERE nonce=?").use { ps ->
+                ps.setString(1, nonce)
+                ps.executeQuery().use { it.next() }
+            }
+        }
+
+    @Test
+    fun `a phone revoked while its request's body is on the way is refused, and nothing is stored`() {
+        val server = DeviceServer()
+        server.startNetty().use { live ->
+            val phone = TestPhone()
+            live.pair(phone)
+            val headers = phone.headers("PUT", target, body, server.seconds)
+            live.open().use { c ->
+                c.write(LiveServer.head("PUT", target, headers, chunked = false, length = body.size.toLong()))
+                c.write(body.copyOfRange(0, 4))
+                // The server has found the key good and taken the nonce, and waits for the rest of the body.
+                val deadline = System.currentTimeMillis() + 10_000
+                while (!nonceTaken(server, headers.getValue("X-Device-Nonce"))) {
+                    assertTrue(System.currentTimeMillis() < deadline, "the server took the request's nonce")
+                    Thread.sleep(5)
+                }
+                assertEquals(204, live.owner("POST", "/v1/devices/${phone.keyId}/revoke").status, "the console's Revoke")
+                c.write(body.copyOfRange(4, body.size))
+                val answer = c.readResponse()
+                assertEquals(unauthorized, answer.status to answer.body)
+            }
+            val stored = live.owner("GET", "/v1/snapshots/devA")
+            assertEquals(200 to """{"lineage":"devA","versions":[]}""", stored.status to stored.body, "nothing was stored")
         }
     }
 

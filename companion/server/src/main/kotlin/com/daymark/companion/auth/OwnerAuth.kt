@@ -34,7 +34,8 @@ data class OwnerPrincipal(val ownerId: String, val kind: CredentialKind, val cre
  * - A SIGNATURE IS TAKEN when every header is there in its one spelling; its time is within
  *   [DeviceSignature.WINDOW_SECONDS] of the server's clock, either way, when the request arrives and
  *   again once its body has been read; the key it names is registered to this owner and has no
- *   revocation, both read from the database on this request; the key has not used the nonce before;
+ *   revocation, both read from the database when the request arrives and again once the signature has
+ *   been checked, the last thing before the handler; the key has not used the nonce before;
  *   and the signature is that key's over the method, the target, the body, the time and the nonce.
  *   The nonce is taken before the body is read, so a captured request sent again is refused however
  *   its body is held, and the time judged with the same reading of the clock that decides which
@@ -184,7 +185,7 @@ class OwnerAuth(
         if (!withinWindow(now, sentAt)) return Signed.Refused
 
         // The key and its revocation, read now: no verdict is kept between requests.
-        val (publicKey, verdict) = liveKey(keyId, allowPending) ?: return Signed.Refused
+        val (publicKey, _) = liveKey(keyId, allowPending) ?: return Signed.Refused
 
         // The nonce is taken before the body is read, so a captured request sent again is refused
         // however slowly its body comes, and before any of it is read.
@@ -203,7 +204,9 @@ class OwnerAuth(
             nonce,
         )
         if (!DeviceSignature.verify(publicKey, message, signature)) return Signed.Refused
-        return verdict
+        // Read again, last, with nothing kept from the first reading: a phone revoked while its body was
+        // on the way is refused, and the handler never runs for it.
+        return liveKey(keyId, allowPending)?.second ?: Signed.Refused
     }
 
     private fun withinWindow(now: Long, sentAt: Long): Boolean = abs(now - sentAt) <= DeviceSignature.WINDOW_MS
