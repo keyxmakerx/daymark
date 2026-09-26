@@ -365,6 +365,12 @@ screen can."* — and no banner on any console asks a person to verify a digest 
 | Key changed before upload | `pnpm push` | *"The snapshot was not sent. The key this server holds changed while the snapshot was being encrypted, and this passphrase does not open it to the key the snapshot was encrypted under."* |
 | A day with nothing on it | Owner, month calendar | The same plain square with no marks; heard as *"{date}: nothing recorded"*; the panel says *"Nothing recorded."* |
 | Roster act failed | Practice console, roster | Headed with what did not happen: *"The role was not changed"*, *"The member was not removed"*, *"Your own seat was not accepted"*, *"The roster was not read"*; where the answer was lost, *"Whether the role was changed is not known from here"* (and the same for a removal or a seat), which stays on screen when the roster is read again |
+| An inbox decision not saved: the key changed | Owner, assignment inbox | *"Nothing was saved. The key this server holds has changed since this console was opened. Lock the console, open it again, and try again."* The item stays undecided |
+| An inbox decision not saved | Owner, assignment inbox | *"Nothing was saved. Try again."*; with no server connected, *"Nothing was saved. This console is not connected to a server."* |
+| This browser's earlier decisions cannot be opened | Owner, assignment inbox | *"Nothing was saved. What this browser saved on this server before could not be opened, so nothing was added after it."* |
+| A save with no answer | Owner, assignment inbox | *"This may not have been saved. Refresh shows whether it was."* Refresh reads the lane and shows it either way |
+| Saved decisions not read | Owner, assignment inbox | *"The decisions saved on this server could not be read, so none are shown. Refresh to try again."*; when only some cannot be opened, *"Some decisions saved on this server could not be opened, so they are not shown."* |
+| A lane named as a snapshot | `pnpm push`, the sync card | *"A lineage whose name begins "lane_" holds what the web console adds, never a snapshot. Nothing was read or sent."* |
 
 ## 12. Accessibility, language, motion
 

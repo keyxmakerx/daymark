@@ -102,9 +102,12 @@ verifies and validates each item → the owner accepts, declines or snoozes (or 
 the owner clicks. Items are append-only and versioned per lineage; superseding one issues a new
 version.
 
+The owner's accept or decline is kept, encrypted, in the owner console's lane on their own server,
+and is still there after Refresh (SYNC_PROTOCOL.md §1.4; #234, #345). It is never sent back, so the
+clinician does not learn it.
+
 What is not built:
 
-- The owner's decision is not saved yet, so the clinician never learns it: #234.
 - The phone receives nothing yet, so nothing an owner accepts reaches the app: #177.
 - Results of a self-check taken in the Companion stay on that device; they reach a clinician only
   once they are saved into the encrypted snapshot and shared: #237.

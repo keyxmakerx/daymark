@@ -242,6 +242,14 @@ nothing that decrypts a record or authors content.
   server that stores snapshots but no key document, and reads the key document again right before an
   upload; if the passphrase no longer opens what the server holds to the key the snapshot was
   encrypted under, the snapshot is not sent.
+- **The web console's lane says only "the owner's console added this" (#345).** What the console
+  adds is sealed under the owner's sync key with the lane's own associated data, padded, in a lineage
+  named `lane_…`. The server sees the name, when each version arrives and its padded size, never a
+  record. Because the console is served by the server (§3 T3), a record carries no authority of its
+  own: the phone checks every decision's signature, recipient and grant before taking it in (#346).
+  The console reads the key document again right before every upload and sends nothing unless the
+  server still serves the wrapped key it opened. While it is unlocked, the owner console holds the
+  sync key it opened, beside its identity, and zeroes it when it locks.
 - **Key files are retired.** Nothing reads or writes the stand-in key files. A relationship paired
   while the console was opened with one is bound to an identity the real master cannot reproduce, and
   must be ended and paired again. A relationship is held only by the session that made it, so no later

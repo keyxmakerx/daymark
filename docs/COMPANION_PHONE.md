@@ -42,6 +42,7 @@ libsodium and no emulator; the `sync` flavour wires it to the Android binding
 | Snapshot envelope `DMS1 \| 0x01 \| nonce \| ciphertext`, AAD `daymark.snapshot.v1\|lineage\|version`: read, never written | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
 | Padding before encryption: a `u32` big-endian length, the plaintext, then zeros up to the standard size (#214) | `lib/padding.ts`, with the vector in `lib/padding.test.ts` | `Padding.kt` | Yes |
 | Padded snapshot envelope, format 2, the only format written: `pad(plaintext)` under the AAD `daymark.snapshot.v2\|lineage\|version`; format 1 still read (#214) | `sync/crypto.ts`, with the vector in `sync/crypto.test.ts` | `SyncCrypto.kt` | Yes |
+| The web console's lanes: lineages `lane_…`, a format-2 envelope under the AAD `daymark.lane.v1\|lineage\|version`, holding the records of SYNC_PROTOCOL.md §1.4; read, never written, by the phone | `sync/crypto.ts` (`decryptLaneVersion`), `lane/record.ts`, with the vector in `lane/laneVector.test.ts` | — | No: #346 |
 | Manifest signing bytes | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
 | Base64: RFC 4648 §5, URL-safe, no padding | everywhere | `SyncCrypto.kt` (plain `java.util.Base64`, because lazysodium's own helper is standard base64) | Yes |
 | CPace (CPACE-RISTRETTO255-SHA512) | `pairing/cpace.ts` | `CpaceCrypto.kt` | Yes |
@@ -81,8 +82,15 @@ owner's key document of either kind (#403); fetching it is part of #168. Not bui
 Sync is single-writer, last-snapshot-wins, for good (#200): the phone is the only device that writes
 the journal's encrypted copy, the schema has no per-row ids or timestamps, and rows are never
 merged. What the web console creates arrives as new records in a separate, add-only encrypted lane,
-which the phone takes in once each, by its id, and sync never replaces a journal without asking. Not
-built: the lane, #345; taking its records in, #346; asking before replacing, #344. Refusing an older
+which the phone takes in once each, by its id, and sync never replaces a journal without asking.
+The records and their lanes are SYNC_PROTOCOL.md §1.4. Taking them in means: list `GET /v1/snapshots`;
+open the newest version of every `lane_` lineage with the sync key and the lane's associated data; skip
+unknown kinds; take in each record whose id it has not taken in before, exactly once, keyed by the id,
+refusing anything that would change or remove a row; check each decision's signed item as the inbox
+does (#177), trusting the record no further than "the owner's console added this"; keep the later of
+two decisions about one item (by `createdAt`, then `id`) and both in its history; and list every id it
+has taken in as `laneRecordsTakenIn` in the snapshot it uploads. The phone never writes a lane, nor a
+snapshot under a `lane_` name. Not built: taking records in, #346; asking before replacing, #344. Refusing an older
 snapshot presented as the newest needs a signed manifest and a watermark kept on the device: #179.
 
 Neither the server nor anyone else can reset the app PIN or the sync passphrase. The owner's email
@@ -115,7 +123,8 @@ accept or decline.
 - **Settings** apply only for the allowlisted keys (`visibleSelfChecks`, `reminderTime`,
   `reminderCadence`, `theme`), never PIN, lock, encryption or network settings.
 - Not built: opening and verifying items, the inbox, and anything that writes these tables: #177.
-  The owner's console on the web has an assignment inbox, but it does not yet save a decision: #234.
+  The owner's console on the web keeps an accept or a decline in its lane (SYNC_PROTOCOL.md §1.4);
+  the phone taking it in is #346.
 
 ## 4. Pairing: the phone as the owner's device
 

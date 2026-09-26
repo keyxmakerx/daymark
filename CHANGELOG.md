@@ -37,6 +37,12 @@ All notable changes to this project are documented here. The format is based on
   still contains unlock times restores normally; the badges in it are just not brought back.
 
 ### Added
+- **Companion — your accept or decline of a clinician's assignment is kept.** In the owner console's
+  Inbox, your answer is now saved, encrypted, on your own Companion server, and it is still there
+  after you press Refresh. It is kept in a separate place that only adds and never changes or replaces
+  your journal. Your phone will add it to your journal once phone sync exists. A snooze is not saved,
+  nor is declining an item that could not be checked. If an answer cannot be saved, the item stays
+  undecided and says so. (#234, #345)
 - **Companion — a month calendar of your own entries.** When you open a backup in the browser, on the
   backup page or in the owner console's Review tab, the dashboard now has a **Calendar** card showing
   one month at a time. Every day is the same plain square with its date. Each check-in is a small
@@ -428,6 +434,10 @@ All notable changes to this project are documented here. The format is based on
   quiet notice that names nobody and counts nothing.
 
 ### Fixed
+- **Companion — the sync card and `pnpm push` keep working if your server's key gains a new kind of
+  lock.** They refused the whole key when it held a lock of a kind they did not know, such as a future
+  passkey lock, while the owner console and the phone skipped it. They now skip it too, and still
+  refuse a key whose settings, on any lock, are outside what they accept. (#419)
 - **Companion — opening your key no longer tells you to check your typing when the problem is the
   key's settings.** If the key on your server asks for settings the console does not accept, it now
   says: "The key this server holds asks for settings this console does not accept, so it was not

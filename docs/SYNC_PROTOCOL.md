@@ -98,7 +98,8 @@ is `RecoverableDataKey` in `companion/web/src/lib/recovery/dataKey.ts`:
 The server stores this document byte for byte. It cannot open it and vouches for nothing in it. It
 checks only that the body is one JSON object in UTF-8, at most 16 KiB and at most 32 levels deep. A
 two-slot document is about 460 bytes. Readers check the KDF floor and ceiling on every slot, whatever its
-kind, as they do for the key params.
+kind, as they do for the key params. A slot of a kind a reader does not open is otherwise not read, by
+the consoles, the sync card, `pnpm push` and the phone alike (#403, #419).
 
 The first version is created against the state its writer read (§2), so two devices never both mint
 a master. A first run mints a random master only while no key document of either kind exists. An
@@ -132,6 +133,58 @@ readers check each blob with the AEAD tag only, the server stores no manifest, a
 watermark. So a tampered or substituted blob fails to decrypt, but a malicious server can still
 present an older version as the newest. Not built: #179.
 
+### 1.4 The web console's lane
+
+What the owner's web console adds to the person's record travels as records in lanes: lineages of the
+owner's sync API (§2), beside the snapshots. The console never uploads a journal copy; the phone is
+the journal's only writer (#200) and takes each record in once, by its id (not built: #346).
+Reference: `companion/web/src/lib/lane/`.
+
+*Names.* A lane is a lineage whose name begins `lane_`; a console names its lane `lane_` and the
+URL-safe unpadded base64 of 16 random bytes (27 characters in all). Every such lineage is read as a
+lane and never as a snapshot, and no snapshot is written under such a name (`pnpm push` refuses one,
+and so must the phone's writer). Each browser writes one lane of its own and keeps its name in its own
+storage (`daymark.lane.v1`); without storage it makes a new one, and the old one is still read.
+Readers list `GET /v1/snapshots` and keep the names with the prefix.
+
+*Envelope.* A format-2 snapshot envelope (§1.1) in every byte, under the same `SYNC_KEY`, with
+`AAD = utf8("daymark.lane.v1|" + lineage + "|" + version)`. A lane version never opens as a snapshot,
+nor a snapshot as a lane version. Lanes exist only padded.
+
+*Plaintext.* UTF-8 JSON with no spaces: `{"v":1,"records":[{"id","kind","createdAt","payload"},…]}`.
+`id` is the canonical unpadded URL-safe base64 of 16 random bytes (22 characters, the last one of A,
+Q, g or w); `createdAt` is epoch milliseconds, a whole number of at least 0. A payload has exactly
+these members:
+- `assignmentDecision` and `gamePlanDecision`: `decision` (`accepted` or `declined`), `payloadJson`
+  and `sigB64`, the clinician's signed item verbatim, exactly as the signature covers it;
+- `instrumentResult`: `instrumentId`, `instrumentVersion`, `takenAt`, and `scales`, a list of
+  `{scaleId, score, bandLabel}`;
+- `taskResult`: `taskId`, `taskVersion`, `takenAt`, `timing` (`{flag, frameJitterMs, droppedFrames,
+  refreshMs}`) and `metrics` (`{name: number}`).
+
+A result carries scores and bands only: no member can hold an answer. A reader refuses a whole version
+for another `v`, a malformed record or a repeated id, and skips other kinds and unknown members.
+
+*Add only.* No record changes or removes anything. Of two decisions about one signed item, the later
+`createdAt` stands, then the higher `id`.
+
+*Carry-forward.* The server keeps only the newest `MAX_VERSIONS`. A record is added by writing the
+browser's lane at head + 1 (0 for a new lane) holding every record of the head the phone has not taken
+in, then the new one. Only heads are read, so pruning loses nothing.
+
+*Taken in.* The phone lists every lane record id it has taken in as `laneRecordsTakenIn`, an array of
+strings at the top of its snapshot's backup JSON; absent means none (not built: #346).
+
+*The writer.* It holds the `SYNC_KEY` of the master its unlock opened (§1.2), and the `ETag` of that
+key document. Right before every upload it reads `GET /v1/keydoc` again and sends nothing unless the
+`ETag` is unchanged. A `409` reads again and writes after it. With no answer, or a `500`, `502` or
+`504`, the next read says whether it landed; a record already there, by id, is not written again.
+
+*Trust.* A version that opens says only that one of the owner's consoles wrote it, and the console is
+served by the server ([COMPANION_SECURITY.md](COMPANION_SECURITY.md) §3 T3). The phone checks every
+decision's signed item itself, against the pinned clinician key, its context, its recipient and the
+grant, before taking it in.
+
 ## 2. HTTP API (`/v1`)
 
 Every route requires `Authorization: Bearer <token>`, where the token is the owner's. At first boot
@@ -161,7 +214,8 @@ bucket; see [COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md).
 | `PUT /v1/snapshots/{lineage}/{version}` | raw bytes (the envelope) | `201 {lineage,version,size,contentHash}` + `X-Content-Hash` | **Append-only**: `409` if the version exists |
 | `GET /v1/snapshots/{lineage}/{version}` | — | `200` octet-stream + `X-Content-Hash` | |
 
-`lineage` ⊂ `[A-Za-z0-9_-]{1,64}` (server-validated; the blob path is server-derived).
+`lineage` ⊂ `[A-Za-z0-9_-]{1,64}` (server-validated; the blob path is server-derived). A lineage
+beginning `lane_` is a web console's lane (§1.4).
 `version` is a non-negative integer (monotonic per device; pick `max(existing)+1`).
 `X-Content-Hash` is the server's own SHA-256 over the stored bytes; a client-supplied hash is never
 trusted. `ETag` is the SHA-256 of a key document's bytes, as 64 hex digits in quotes; a create sends
@@ -219,7 +273,8 @@ document with the owner's access token (`companion/web/src/lib/recovery/serverKe
 first run — a random master is locked under the passphrase (typed twice) and a new recovery code,
 both locks are opened locally to that master, and the document is created with `If-None-Match: *`;
 refused where the server stores snapshots. Key params only: an enrolment — subkey 1 of the
-passphrase's master must open the newest stored snapshot (by `createdAt`, across lineages), or with
+passphrase's master must open the newest stored snapshot (by `createdAt`, across lineages, lanes
+aside), or with
 none stored the passphrase is typed twice; both locks must open locally to the directly derived
 master, and the create names the key params' `ETag` in `If-Match`, exactly as received. A wrapped key:
 an unlock, with either secret. After a create the document is read back and must open with the
@@ -240,9 +295,10 @@ Sync is single-writer and last-snapshot-wins: the newest full snapshot is author
 never merged, because the app's schema has no per-row ids or timestamps. That is settled (#200): the
 phone is the journal's one writer (until it syncs, the command-line tool uploads its exported
 backup), and other devices read it. What the web console creates travels as new records, each with a
-random id, in a separate, add-only encrypted lane, and the phone takes each record in exactly once.
-No device silently replaces a copy it has not seen. Not built: the lane and its format (#345), the
-phone taking records in (#346), and the refusal to replace a copy it has not seen (#344).
+random id, in the web console's lanes (§1.4), and the phone takes each record in exactly once. The
+owner console keeps its accept or decline of an assignment there. No device silently replaces a copy
+it has not seen. Not built: the phone taking records in (#346), and the refusal to replace a copy it
+has not seen (#344).
 
 ## 4. Conformance
 
@@ -265,3 +321,7 @@ only its random draws fixed: the passphrase `wrapped-key vector: café, 日記, 
 master and its four subkeys, the Kotlin writer makes the same 463 bytes, and both sides refuse the
 same twenty-six mutations before deriving anything (seventeen of the wrapped key, seven of a slot of a
 kind neither side opens, two of the key params); at 512 MiB and 8 passes each reaches Argon2id.
+The lane has its own vector, `companion/web/src/lib/lane/laneVector.test.ts`: the snapshot vector's
+key, the lane `lane_AAECAwQFBgcICQoLDA0ODw` at version 3, nonce 0x01..0x18, and two records stated in
+full (a 468-byte plaintext); sealed, it is 4,141 bytes, and it is refused as a snapshot. No Kotlin
+reader holds it yet (#346).
