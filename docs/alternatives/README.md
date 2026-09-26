@@ -13,8 +13,8 @@ disagree, the contract is right.
 |---|---|---|
 | `Caddyfile` | A public deployment with Let's Encrypt. The most complete of the four: a catch-all refusing unknown `Host`, HSTS, a redaction filter on the access log, a body cap and timeouts, with the reasoning inline. | Written for a proxy in a container (the no-egress override). For a Caddy on the Docker host, change the upstream to `127.0.0.1:8080`. |
 | `Caddyfile.lan` | A LAN with no public DNS, using Caddy's internal CA. | Every device must trust Caddy's root certificate. |
-| `nginx.conf` | The nginx equivalent. | **No catch-all `default_server`**, and it forwards the client's `Host` — add a catch-all and pin the host, or requirement 5 (refuse unknown `Host`) is unmet (#209). Its upstream name is `companion`, where the shipped container is `daymark-companion`. `add_header` cannot set a header only if absent, so do not emit a second CSP (requirement 7). |
-| `traefik.md` | Label-driven Traefik. | Traefik's Docker provider wants `/var/run/docker.sock`. This deployment mounts no socket anywhere; adding one puts root-equivalent access to the host next to a server whose whole premise is that it is untrusted. |
+| `nginx.conf` | The nginx equivalent: a catch-all `default_server` on ports 80 and 443 that refuses any `Host` or SNI it does not serve, its own configured name forwarded as `Host`, and the forwarded headers set once for every location. | Written for nginx 1.25.1 or later; its header says what to change on an older one. `add_header` cannot set a header only if absent, so do not emit a second CSP (requirement 7). |
+| `traefik.md` | Label-driven Traefik. Its `Host` rule is the catch-all, and its entry point trusts no client's forwarded headers. | Traefik's Docker provider wants `/var/run/docker.sock`. This deployment mounts no socket anywhere; adding one puts root-equivalent access to the host next to a server whose whole premise is that it is untrusted. |
 
 Serve the Companion at the root of its own hostname. The sub-path notes at the foot of `nginx.conf`
 predate the finding that sub-path deployment does not work consistently (#176).

@@ -103,8 +103,10 @@ connection forging the header, and odd address spellings.
 Per proxy:
 
 - **nginx.** `$remote_addr` replaces; `$proxy_add_x_forwarded_for` appends; `$http_x_forwarded_for`
-  passes through — the bug. `docs/alternatives/nginx.conf` replaces, but it has no catch-all
-  `default_server` and forwards the client's `Host` (#209).
+  passes through — the bug. So does a `location` with no `X-Forwarded-For` line in effect: nginx
+  forwards every header the client sent unless `proxy_set_header` replaces it, and a location that
+  sets any `proxy_set_header` of its own inherits none from its server. The example,
+  `docs/alternatives/nginx.conf`, replaces it once, for the whole server.
 - **Caddy.** `reverse_proxy` appends by default; `docs/alternatives/Caddyfile` pins the replace form
   with `header_up X-Forwarded-For {client_ip}`. Do not set Caddy's own `trusted_proxies` when Caddy is
   the edge, and do not let Caddy add a CSP — the app sends one, and two are intersected.

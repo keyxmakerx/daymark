@@ -416,8 +416,9 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
   bucket. The app warns once when a forwarded header arrives while the list is empty; a wrong
   non-empty list produces no warning (#167).
 - The operator's side: [COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md) §3 and §4.0. Symptoms and
-  the test: [COMPANION_OBSERVABILITY.md](COMPANION_OBSERVABILITY.md) §1. The example nginx config still
-  forwards the client's `Host` and has no catch-all server (#209).
+  the test: [COMPANION_OBSERVABILITY.md](COMPANION_OBSERVABILITY.md) §1. The nginx and Traefik
+  examples in [alternatives/](alternatives/README.md) refuse a request for any host name they do not
+  serve, and the nginx one forwards its own configured name as `Host`, never the visitor's.
 - **The admin boundary does not depend on `Host`.** By decision, the admin console and every route
   only an administrator may call can be served on a second port, which the operator's proxy
   publishes only on an admin hostname or over a VPN. The server tells the two apart by listener,
