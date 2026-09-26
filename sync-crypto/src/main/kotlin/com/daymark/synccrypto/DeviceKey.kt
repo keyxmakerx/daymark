@@ -20,9 +20,13 @@ import com.goterl.lazysodium.interfaces.Sign
  *   proves the phone holds the key it asks to have registered, for that code and no other.
  * - ITS WORDS ([words]) are the six the person compares with the console's ([DeviceWords]).
  *
- * The secret key never leaves this object: no property returns it and [toString] shows only the key id,
- * which is not a secret. [sodium] is the shared abstract [LazySodium], as in [SyncCrypto]:
- * lazysodium-java in the tests, lazysodium-android on the phone.
+ * - KEPT ONCE REGISTERED. [seedToKeep] is the one way the secret half leaves this object, as the 32-byte
+ *   seed the phone seals under a key of its own keystore once the poll answers `registered`, and
+ *   [restore] makes the same pair from it again on the next start (#432).
+ *
+ * No property returns the secret key and [toString] shows only the key id, which is not a secret.
+ * [sodium] is the shared abstract [LazySodium], as in [SyncCrypto]: lazysodium-java in the tests,
+ * lazysodium-android on the phone.
  */
 class DeviceKey private constructor(
     private val sodium: LazySodium,
@@ -92,6 +96,13 @@ class DeviceKey private constructor(
     /** The six words this phone shows while the person compares them with the console's. */
     fun words(): List<String> = DeviceWords.of(sodium, publicKeyB64)
 
+    /**
+     * The 32-byte seed this pair is made from, for the phone to keep once the registration poll answers
+     * `registered`, and never before (#432). libsodium's Ed25519 secret key is the seed followed by the
+     * public key, so this is its first half. A copy, which the caller wipes once it is sealed.
+     */
+    fun seedToKeep(): ByteArray = secretKey.copyOfRange(0, Sign.SEEDBYTES)
+
     override fun toString(): String = "DeviceKey($keyId)"
 
     private fun sign(message: ByteArray): ByteArray {
@@ -111,7 +122,13 @@ class DeviceKey private constructor(
             return DeviceKey(sodium, publicKey, secretKey)
         }
 
-        /** The key pair of a 32-byte seed, for the vector. A key the phone uses comes from [generate]. */
+        /**
+         * The key the phone kept ([seedToKeep]), made again: the same pair and the same id. Only for a key
+         * the server has registered; a new key comes from [generate].
+         */
+        fun restore(sodium: LazySodium, seed: ByteArray): DeviceKey = fromSeed(sodium, seed)
+
+        /** The key pair of a 32-byte seed: [restore], and the vector. A new key comes from [generate]. */
         internal fun fromSeed(sodium: LazySodium, seed: ByteArray): DeviceKey {
             require(seed.size == Sign.SEEDBYTES) { "an Ed25519 seed is ${Sign.SEEDBYTES} bytes" }
             val publicKey = ByteArray(Sign.PUBLICKEYBYTES)
