@@ -1,10 +1,14 @@
 package com.daymark.companion
 
+import com.daymark.companion.auth.AuthGuard
+import com.daymark.companion.auth.OwnerAuth
 import com.daymark.companion.mail.InMemoryMailTransport
 import com.daymark.companion.mail.Mailer
 import com.daymark.companion.mail.MailerConfig
 import com.daymark.companion.routes.KEY_DOCUMENT_HEADER
 import com.daymark.companion.routes.KEY_DOCUMENT_VERSION_HEADER
+import com.daymark.companion.routes.PHONE_REFUSED_ROUTES
+import com.daymark.companion.routes.owner
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -19,6 +23,13 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.server.application.ApplicationCallPipeline
+import io.ktor.server.application.call
+import io.ktor.server.request.path
+import io.ktor.server.response.respond
+import io.ktor.server.routing.get
+import io.ktor.server.routing.route
+import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import java.io.File
 import java.sql.DriverManager
@@ -269,5 +280,50 @@ class PhoneRouteRuleTest {
         assertEquals(HttpStatusCode.NoContent, client.post(target) { header(HttpHeaders.Authorization, "Bearer ${server.authToken}") }.status)
         val afterRevoke = server.signedGet(client, b, "/v1/snapshots")
         assertEquals(HttpStatusCode.Unauthorized to """{"error":"unauthorized"}""", afterRevoke.status to afterRevoke.bodyAsText())
+    }
+
+    @Test
+    fun `a route whose name the gate cannot read is refused to a phone`() = testApplication {
+        val server = DeviceServer()
+        server.start(this)
+        application {
+            // The gate with the one list, over the server's owner, keys and nonces, with a budget of its own.
+            val guard = AuthGuard(server.account.currentTokenHash(), 100_000, 900_000L, 100_000)
+            val gate = OwnerAuth(guard, server.account.devices, 2_097_152L, PHONE_REFUSED_ROUTES)
+            // Asked before any route is matched: the call is not a routed one, so it has no route name.
+            intercept(ApplicationCallPipeline.Plugins) {
+                if (call.request.path() == "/v1/planted-unrouted") {
+                    if (call.owner(gate) != null) call.respond(HttpStatusCode.OK)
+                    finish()
+                }
+            }
+            routing {
+                // Matched by the router, but with no method in its name, so the gate cannot read one.
+                route("/v1/planted-no-method") {
+                    handle {
+                        call.owner(gate) ?: return@handle
+                        call.respond(HttpStatusCode.OK)
+                    }
+                }
+                // Control: a route the gate can name, and not on the list.
+                get("/v1/planted-named") {
+                    call.owner(gate) ?: return@get
+                    call.respond(HttpStatusCode.OK)
+                }
+            }
+        }
+        val phone = TestPhone()
+        server.pair(client, phone)
+
+        for (target in listOf("/v1/planted-unrouted", "/v1/planted-no-method")) {
+            val byPhone = client.get(target) { signedWith(phone.headers("GET", target, timeSeconds = server.seconds)) }
+            assertEquals(phoneRefused, byPhone.status to byPhone.bodyAsText(), target)
+            // Control: the owner's token passes the same gate there, so the 403 is the phone's.
+            val byToken = client.get(target) { header(HttpHeaders.Authorization, "Bearer ${server.authToken}") }
+            assertEquals(HttpStatusCode.OK, byToken.status, target)
+        }
+        // Control: a route the gate can name, and not on the list, takes the phone through the same gate.
+        val named = client.get("/v1/planted-named") { signedWith(phone.headers("GET", "/v1/planted-named", timeSeconds = server.seconds)) }
+        assertEquals(HttpStatusCode.OK, named.status)
     }
 }
