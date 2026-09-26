@@ -19,6 +19,9 @@ import java.sql.DriverManager
 import java.util.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * The request headers an owner route acts on are covered by the phone's signature (#186), so a person
@@ -31,37 +34,29 @@ class SignedHeaderTest {
     private val unauthorized = HttpStatusCode.Unauthorized to """{"error":"unauthorized"}"""
     private val day = 24L * 60 * 60 * 1000
 
-    /** A wrapped key in the web's shape (companion/web/src/lib/recovery/dataKey.ts), told apart by [marker]. */
-    private fun wrapped(marker: String): ByteArray =
-        (
-            """{"v":1,"slots":[{"kind":"passphrase","kdf":{"alg":"argon2id","memMiB":256,"ops":3},""" +
-                """"saltB64":"$marker","nonceB64":"q6urq6urq6urq6urq6urq6urq6urq6ur","ctB64":"q6urq6urq6ur"}]}"""
-            ).toByteArray()
-
-    /** Key parameters in the shape of docs/SYNC_PROTOCOL.md §1.2, told apart by [salt]. */
-    private fun keyparams(salt: String): ByteArray =
-        """{"v":1,"alg":"xchacha20poly1305","kdf":{"alg":"argon2id","memMiB":256,"ops":3},"saltB64":"$salt"}""".toByteArray()
-
     private suspend fun HttpClient.keyDocumentKind(server: DeviceServer): String? =
         get("/v1/keydoc") { header(HttpHeaders.Authorization, "Bearer ${server.authToken}") }.headers[KEY_DOCUMENT_HEADER]
 
+    /**
+     * A phone may not write the key documents at all (PhoneRouteRuleTest). The signature holds the
+     * precondition headers regardless, so a swapped one is refused before that rule is reached.
+     */
     @Test
     fun `a first run's precondition swapped on the path for an enrolment's is refused, and nothing is written`() = testApplication {
         val server = DeviceServer()
         server.start(this)
         val phone = TestPhone()
         server.pair(client, phone)
-        val document = wrapped("PHONE")
+        val document = wrappedKey("PHONE")
         val firstRun = mapOf(HttpHeaders.IfNoneMatch to "*")
 
         // The phone's first run, signed when it found no key document, held on the path.
         val held = phone.headers("POST", "/v1/keydoc", document, server.seconds, signed = firstRun)
 
-        // Meanwhile another of the owner's devices publishes key parameters. The held request, sent now
-        // as signed, would be refused 412: the state it names is gone.
+        // Meanwhile the owner console publishes key parameters: the state the held request names is gone.
         val published = client.put("/v1/keyparams") {
             header(HttpHeaders.Authorization, "Bearer ${server.authToken}")
-            setBody(keyparams("CONSOLE"))
+            setBody(keyParams("CONSOLE"))
         }
         assertEquals(HttpStatusCode.NoContent, published.status)
         val etag = client.get("/v1/keyparams") { header(HttpHeaders.Authorization, "Bearer ${server.authToken}") }.headers[HttpHeaders.ETag]
@@ -74,15 +69,21 @@ class SignedHeaderTest {
         assertEquals(unauthorized, attack.status to attack.bodyAsText())
         assertEquals(KEY_DOCUMENT_KEYPARAMS, client.keyDocumentKind(server), "no wrapped key was written")
 
-        // Controls, each signed afresh. The first run as the phone signs it is refused for the state it names...
-        val asSigned = client.post("/v1/keydoc") {
-            signedWith(phone.headers("POST", "/v1/keydoc", document, server.seconds, signed = firstRun))
-            setBody(document)
-        }
-        assertEquals(HttpStatusCode.PreconditionFailed, asSigned.status, asSigned.bodyAsText())
-        // ...and an enrolment the phone signs itself is taken: If-Match is refused only when it was not signed.
+        // Controls. The held signature is the phone's over the request as it was signed, and not over the
+        // swapped one, so the 401 is the swap's; and the phone's key is live.
+        fun signedOver(carrying: Map<String, String>) = DeviceSignature.requestMessage(
+            "POST", "/v1/keydoc", DeviceSignature.bodyHash(document),
+            held.getValue(DeviceSignature.TIME_HEADER), held.getValue(DeviceSignature.NONCE_HEADER),
+            assertNotNull(DeviceSignature.signedHeaderValues { name -> carrying.filterKeys { it.equals(name, ignoreCase = true) }.values.toList() }),
+        )
+        val signature = assertNotNull(DeviceSignature.decodeCanonical(held.getValue(DeviceSignature.SIGNATURE_HEADER), DeviceSignature.SIGNATURE_BYTES))
+        assertTrue(DeviceSignature.verify(phone.publicKey, signedOver(firstRun), signature), "the held request, as signed")
+        assertFalse(DeviceSignature.verify(phone.publicKey, signedOver(mapOf(HttpHeaders.IfMatch to etag)), signature), "the swapped one")
+        assertEquals(HttpStatusCode.OK, server.signedGet(client, phone, "/v1/keydoc").status)
+        // And the state the swap names is one a writer reaches: the console's enrolment with that If-Match is taken.
         val enrolment = client.post("/v1/keydoc") {
-            signedWith(phone.headers("POST", "/v1/keydoc", document, server.seconds, signed = mapOf(HttpHeaders.IfMatch to etag)))
+            header(HttpHeaders.Authorization, "Bearer ${server.authToken}")
+            header(HttpHeaders.IfMatch, etag)
             setBody(document)
         }
         assertEquals(HttpStatusCode.Created, enrolment.status, enrolment.bodyAsText())

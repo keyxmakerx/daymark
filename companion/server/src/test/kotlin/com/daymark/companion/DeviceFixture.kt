@@ -140,6 +140,17 @@ internal class DeviceServer(
 
 internal suspend fun HttpResponse.json(): JsonObject = Json.parseToJsonElement(bodyAsText()).jsonObject
 
+/** A wrapped key in the web's shape (companion/web/src/lib/recovery/dataKey.ts), told apart by [marker]. */
+internal fun wrappedKey(marker: String): ByteArray =
+    (
+        """{"v":1,"slots":[{"kind":"passphrase","kdf":{"alg":"argon2id","memMiB":256,"ops":3},""" +
+            """"saltB64":"$marker","nonceB64":"q6urq6urq6urq6urq6urq6urq6urq6ur","ctB64":"q6urq6urq6ur"}]}"""
+        ).toByteArray()
+
+/** Key parameters in the shape of docs/SYNC_PROTOCOL.md §1.2, told apart by [salt]. */
+internal fun keyParams(salt: String): ByteArray =
+    """{"v":1,"alg":"xchacha20poly1305","kdf":{"alg":"argon2id","memMiB":256,"ops":3},"saltB64":"$salt"}""".toByteArray()
+
 internal fun JsonObject.string(key: String): String = getValue(key).jsonPrimitive.content
 
 /** A status and a body, as a socket read them. */

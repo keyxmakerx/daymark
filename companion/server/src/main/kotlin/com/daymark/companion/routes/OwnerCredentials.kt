@@ -19,8 +19,9 @@ const val UNAUTHORIZED_MESSAGE = "unauthorized"
 
 /**
  * The one answer, 403, a registered phone gets on every route in [PHONE_REFUSED_ROUTES]. It names the
- * credential rather than a page, because the pages these routes belong to differ: device management
- * and the notification settings are the owner console's, practice provisioning the practice console's.
+ * credential rather than a page, because the pages these routes belong to differ: device management,
+ * the notification settings and the key are the owner console's, practice provisioning the practice
+ * console's.
  */
 const val PHONE_REFUSED_MESSAGE = "a paired phone cannot do this"
 
@@ -34,10 +35,16 @@ const val PHONE_REFUSED_MESSAGE = "a paired phone cannot do this"
  *    phone can never leave behind another it made.
  *  - PROVISIONING: creating a practice and seating its first admin, which is the operator's act (its
  *    audit actor is `platform`), not the journal owner's.
- *  - HOW THE OWNER RECOVERS: the notification settings, which hold the address the token's re-issue
- *    link is mailed to. The recovery routes take no credential, so a phone that could set the address
- *    could have the console's token re-issued to whoever holds its key, and every other phone revoked
- *    with it; one that could read it would hand them the owner's email address, which no phone needs.
+ *  - HOW THE OWNER RECOVERS:
+ *    - The notification settings, which hold the address the token's re-issue link is mailed to. The
+ *      recovery routes take no credential, so a phone that could set the address could have the
+ *      console's token re-issued to whoever holds its key, and every other phone revoked with it; one
+ *      that could read it would hand them the owner's email address, which no phone needs.
+ *    - Writing the key documents: publishing the key parameters, creating the wrapped key, and writing
+ *      a new version of it. The key documents are how the owner recovers: a phone that could write one
+ *      could leave the owner's passphrase and recovery code opening nothing the server serves, and no
+ *      route undoes that. The console sets and changes the key; a phone only reads it, so both reads
+ *      stay open.
  *
  * Every other owner route takes a registered phone exactly as it takes the token, on the same owner
  * id. A route added here is refused to phones from then on; nothing else needs to change.
@@ -51,6 +58,9 @@ internal val PHONE_REFUSED_ROUTES: Set<String> = setOf(
     "POST /v1/orgs",
     "GET /v1/owner/notifications",
     "PUT /v1/owner/notifications",
+    "PUT /v1/keyparams",
+    "POST /v1/keydoc",
+    "PUT /v1/keydoc/{version}",
 )
 
 /**
