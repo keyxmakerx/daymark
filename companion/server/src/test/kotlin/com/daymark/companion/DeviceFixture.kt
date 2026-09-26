@@ -49,7 +49,11 @@ internal class DeviceServer(
     lateinit var account: OwnerAccountStore
     lateinit var ownerAudit: AuditStore
 
-    /** Called on every reading of the owner store's clock, on the thread that reads it: a test's way to know where a request has got to. */
+    /**
+     * Called after every reading of the owner store's clock, on the thread that read it: a test's way to
+     * know where a request has got to. The reading is taken first, so a test that moves [now] from here
+     * moves it for the next reading and never for the one that called it.
+     */
     @Volatile var onClockRead: (() -> Unit)? = null
 
     fun config() = Config(
@@ -65,7 +69,7 @@ internal class DeviceServer(
     val seconds: Long get() = now / 1000
 
     private fun open() {
-        account = OwnerAccountStore(dataDir.path, authToken, clock = { onClockRead?.invoke(); now })
+        account = OwnerAccountStore(dataDir.path, authToken, clock = { val reading = now; onClockRead?.invoke(); reading })
         ownerAudit = AuditStore(dataDir.path, dbName = OWNER_AUDIT_DB, clock = { now / 1000 })
     }
 
