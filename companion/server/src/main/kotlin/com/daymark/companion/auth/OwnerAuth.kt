@@ -32,11 +32,14 @@ data class OwnerPrincipal(val ownerId: String, val kind: CredentialKind, val cre
  * - A REQUEST CARRYING ANY OF THE SIGNATURE'S HEADERS is judged by its signature alone, and its
  *   `Authorization` header is not read. Otherwise it is judged by its bearer token.
  * - A SIGNATURE IS TAKEN when every header is there in its one spelling; its time is within
- *   [DeviceSignature.WINDOW_SECONDS] of the server's clock, either way; the key it names is registered
- *   to this owner and has no revocation, both read from the database on this request; the signature
- *   is that key's over the method, the target, the body, the time and the nonce; and the key has not
- *   used the nonce before. The nonce is remembered only after the signature is found good, so a
- *   stranger's requests cannot fill the table.
+ *   [DeviceSignature.WINDOW_SECONDS] of the server's clock, either way, when the request arrives and
+ *   again once its body has been read; the key it names is registered to this owner and has no
+ *   revocation, both read from the database on this request; the key has not used the nonce before;
+ *   and the signature is that key's over the method, the target, the body, the time and the nonce.
+ *   The nonce is taken before the body is read, so a captured request sent again is refused however
+ *   its body is held, and the time judged with the same reading of the clock that decides which
+ *   nonces have lapsed. A stranger's nonces cost a failure each, toward the lockout, and lapse with
+ *   the window.
  * - EVERY REFUSAL IS THE SAME 401, whichever check said no. A failed signature counts toward the
  *   source's lockout exactly as a bad token does, in the same [AuthGuard], so one source has one
  *   budget whichever credential it tries. The lockout's audit row is written on arming, never per
@@ -175,23 +178,23 @@ class OwnerAuth(
         if (DeviceSignature.decodeCanonical(nonce, DeviceSignature.NONCE_BYTES) == null) return Signed.Refused
         val signature = DeviceSignature.decodeCanonical(signatureB64, DeviceSignature.SIGNATURE_BYTES) ?: return Signed.Refused
         val sentAt = (DeviceSignature.parseTime(time) ?: return Signed.Refused) * 1000
-        if (abs(devices.now() - sentAt) > DeviceSignature.WINDOW_MS) return Signed.Refused
+        // One reading of the clock judges the request's time and decides which nonces have lapsed, so
+        // no later reading can forget the nonce of a request whose time was found good.
+        val now = devices.now()
+        if (!withinWindow(now, sentAt)) return Signed.Refused
 
         // The key and its revocation, read now: no verdict is kept between requests.
-        val registered = devices.registeredKey(keyId)
-        val (publicKey, verdict) = when {
-            registered != null -> {
-                if (registered.revokedAt != null || registered.ownerId != ownerId) return Signed.Refused
-                registered.publicKey to Signed.Registered(keyId)
-            }
-            allowPending -> {
-                val pending = devices.pendingKey(keyId) ?: return Signed.Refused
-                pending.publicKey to Signed.Pending(keyId, pending.confirmBy)
-            }
-            else -> return Signed.Refused
-        }
+        val (publicKey, verdict) = liveKey(keyId, allowPending) ?: return Signed.Refused
+
+        // The nonce is taken before the body is read, so a captured request sent again is refused
+        // however slowly its body comes, and before any of it is read.
+        if (!devices.rememberNonce(keyId, nonce, keepUntil = sentAt + DeviceSignature.WINDOW_MS, now = now)) return Signed.Refused
 
         val body = call.requestBody(maxBodyBytes) ?: return Signed.TooLarge
+        // A body finished after the request's window has closed is refused: a request that could be
+        // held open past its time could be completed by whoever held it.
+        if (!withinWindow(devices.now(), sentAt)) return Signed.Refused
+
         val message = DeviceSignature.requestMessage(
             call.request.httpMethod.value,
             call.request.local.uri,
@@ -200,8 +203,24 @@ class OwnerAuth(
             nonce,
         )
         if (!DeviceSignature.verify(publicKey, message, signature)) return Signed.Refused
-        if (!devices.rememberNonce(keyId, nonce, keepUntil = sentAt + DeviceSignature.WINDOW_MS)) return Signed.Refused
         return verdict
+    }
+
+    private fun withinWindow(now: Long, sentAt: Long): Boolean = abs(now - sentAt) <= DeviceSignature.WINDOW_MS
+
+    /**
+     * The key [keyId] names and what it may do: registered to this owner with no revocation, or, where
+     * [allowPending], waiting for its console's confirmation. Null for anything else. Read from the
+     * database on every call.
+     */
+    private fun liveKey(keyId: String, allowPending: Boolean): Pair<ByteArray, Signed>? {
+        val registered = devices.registeredKey(keyId)
+        return when {
+            registered != null ->
+                if (registered.revokedAt != null || registered.ownerId != ownerId) null else registered.publicKey to Signed.Registered(keyId)
+            allowPending -> devices.pendingKey(keyId)?.let { it.publicKey to Signed.Pending(keyId, it.confirmBy) }
+            else -> null
+        }
     }
 
     companion object {

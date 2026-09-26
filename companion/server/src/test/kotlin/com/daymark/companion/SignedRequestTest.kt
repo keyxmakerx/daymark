@@ -121,9 +121,11 @@ class SignedRequestTest {
         val alteredQuery = "/v1/owner/audit?limit=2"
         val queryHeaders = phone.headers("GET", signedQuery, timeSeconds = server.seconds)
         assertEquals(unauthorized, client.send(HttpMethod.Get, alteredQuery, queryHeaders).answer(), "the query")
-        // Controls: each, sent as signed, is taken.
+        // Controls: each, signed afresh and sent as signed, is taken. (The headers tried above are spent:
+        // a nonce is taken before the signature is checked, so a request sent wrongly once is not sent again.)
         assertEquals(HttpStatusCode.OK, client.send(HttpMethod.Get, signedPath, phone.headers("GET", signedPath, timeSeconds = server.seconds)).status)
-        assertEquals(HttpStatusCode.OK, client.send(HttpMethod.Get, signedQuery, queryHeaders).status)
+        assertEquals(HttpStatusCode.OK, client.send(HttpMethod.Get, signedQuery, phone.headers("GET", signedQuery, timeSeconds = server.seconds)).status)
+        assertEquals(unauthorized, client.send(HttpMethod.Get, signedQuery, queryHeaders).answer(), "the headers tried against the altered query are spent")
     }
 
     @Test
@@ -188,10 +190,12 @@ class SignedRequestTest {
             assertTrue(status != HttpStatusCode.Unauthorized, "control: ${c.method.value} ${c.target} was taken ($status)")
         }
         // And requests the person on the path held back, so their nonces were never used.
+        // The first use of each of these meets a fresh nonce, so only the signature can refuse it.
         val withheld = listOf(
             Captured(HttpMethod.Get, "/v1/snapshots/devA", null, phone.headers("GET", "/v1/snapshots/devA", timeSeconds = server.seconds)),
             Captured(HttpMethod.Put, "/v1/snapshots/devA/5", blob, phone.headers("PUT", "/v1/snapshots/devA/5", blob, server.seconds)),
         )
+        val untouched = Captured(HttpMethod.Put, "/v1/snapshots/devA/6", blob, phone.headers("PUT", "/v1/snapshots/devA/6", blob, server.seconds))
         val everything = capture + withheld
 
         // Paths the capture never named, each tried with every captured set of headers and body.
@@ -209,9 +213,8 @@ class SignedRequestTest {
         }
         val versions = server.signedGet(client, phone, "/v1/snapshots/devA").bodyAsText()
         assertTrue("\"version\":2" !in versions, "no version 2 was written: $versions")
-        // Control: a held-back request is still good for exactly what it names.
-        val held = withheld.last()
-        assertEquals(HttpStatusCode.Created, client.send(held.method, held.target, held.headers, held.body).status)
+        // Control: a held-back request nobody turned elsewhere is still good for exactly what it names.
+        assertEquals(HttpStatusCode.Created, client.send(untouched.method, untouched.target, untouched.headers, untouched.body).status)
         // Control: the phone itself can make each of them.
         assertEquals(HttpStatusCode.OK, server.signedGet(client, phone, "/v1/snapshots/devA/1").status)
     }
