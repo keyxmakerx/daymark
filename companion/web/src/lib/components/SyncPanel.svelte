@@ -143,9 +143,8 @@
   {:else}
     <h2 class="recovery-title">Recovery code</h2>
     <p class="recovery-lede">
-      The passphrase above is the only way into your snapshots. A recovery code is a second one,
-      held by you and by nobody else — not this server, which holds ciphertext and has never held
-      the key.
+      Your snapshots open with the passphrase above, or with your recovery code once you have made
+      one.
     </p>
     <button type="button" onclick={openRecovery} disabled={loadingRecovery}>
       {loadingRecovery ? 'Loading' : 'Open the recovery code screen'}

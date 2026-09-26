@@ -36,12 +36,12 @@ export const NOTHING_IS_KEPT =
  */
 export const KEY_IS_ON_THE_SERVER =
   'This console reads your key from your server, where it is kept locked twice: once under your ' +
-  'passphrase and once under your recovery code. The server can open neither lock. The key is opened ' +
-  'here, in this tab, and only for this session.'
+  'passphrase and once under your recovery code. Either one opens it. The server can open neither ' +
+  'lock. The key is opened here, in this tab, and only for this session.'
 
 /** The verb for reading what the server holds. The console's own connection panel uses the same. */
 export const CONNECT_ACTION = 'Connect'
-export const CONNECT_BUSY = 'Reading what the server holds'
+export const CONNECT_BUSY = 'Reading what this server holds'
 
 /**
  * What a server holding a locked key holds, once read. A fact about the server, no verdict. The
@@ -51,12 +51,16 @@ export const HOLDS_A_LOCKED_KEY = 'This server holds your key, locked. Open it w
 
 /** Refusals at the connect step. The token is never repeated in any of them. */
 export const CONNECT_NO_TOKEN = 'Enter your owner access token. Nothing was sent.'
-export const CONNECT_REFUSED = 'The server did not accept that access token, so nothing was read.'
-export const CONNECT_FAILED = 'This console could not read what the server holds, so nothing has been unlocked.'
+export const CONNECT_REFUSED = 'This server did not accept that access token, so nothing was read.'
+export const CONNECT_FAILED = 'This console could not read what this server holds, so nothing has been unlocked.'
 
-/** Above the new code, once the server has taken the key. */
+/**
+ * Under the new code, once the server has taken the key and it was read back and opened. Under it,
+ * not above: the one line above a code is CodeSheet's (ONLY_TIME_SHOWN). The same sentence as the
+ * Recovery code screen's KEY_STORED_HERE, pointing at the code on screen instead of the paper.
+ */
 export const KEY_STORED_WITH_THIS_CODE =
-  'Your key is on the server now, locked under your passphrase and under the recovery code below.'
+  'Your key is on your server now, locked under your passphrase and under the recovery code above.'
 
 /** Offering the recovery code at the door. */
 export const USE_CODE_INSTEAD = 'Use my recovery code instead'

@@ -99,11 +99,13 @@ export const PASSPHRASE_DOES_NOT_OPEN_KEY = 'That passphrase does not open the k
 
 /**
  * The writer's refusal to make a key on a server that stores snapshots and no key document (#258):
- * a new salt derives a new master, which would open none of them. Said before anything is written.
+ * a new salt derives a new master, which would open none of them. Said before anything is written,
+ * in the same words the set-up form uses for the same server (components/recovery/copy.ts,
+ * SETUP_FAULT_TEXT.snapshotsWithoutKey); decidedWords.test.ts holds the two equal.
  */
 export const SNAPSHOTS_WITHOUT_KEY =
-  'Nothing was stored. This server stores snapshots but not what is needed to open them. A new key ' +
-  'would not open those snapshots, so none was made.'
+  'This server stores snapshots but not what is needed to open them. A new key would not open those ' +
+  'snapshots, so none was made, and nothing has been stored.'
 
 /**
  * The writer's refusal when the key document changed between the read that gave it its key and the
@@ -114,6 +116,12 @@ export const SNAPSHOTS_WITHOUT_KEY =
 export const KEY_CHANGED_BEFORE_UPLOAD =
   'The snapshot was not sent. The key this server holds changed while the snapshot was being ' +
   'encrypted, and this passphrase does not open it to the key the snapshot was encrypted under.'
+
+/**
+ * The pull's answer when the server holds no key document at all: nothing has been synced to it, and
+ * there is nothing to open. Shown by the sync card as it stands.
+ */
+export const HOLDS_NO_KEY = 'This server holds no key: nothing has been synced to it.'
 
 /** A server that asks which state a create was made against is answering a fault in this client. */
 const CREATE_NAMED_NO_STATE =
@@ -163,7 +171,7 @@ export function parseKeyDocument(headers: Headers, body: string): KeyDocument {
     throw new SyncError('the server sent a key document that is not JSON')
   }
   if (kind === 'keyparams') {
-    if (!isKeyParams(parsed)) throw new SyncError('the server sent key parameters this client cannot read')
+    if (!isKeyParams(parsed)) throw new SyncError('the server sent a key document this client cannot read')
     return { kind: 'keyparams', params: parsed, etag }
   }
   if (kind === 'wrapped') {
@@ -334,7 +342,7 @@ export class SyncClient {
     })
     if (res.ok) return true
     if (res.status === 409 || res.status === 410) return false
-    throw new SyncError('keyparams store failed', res.status)
+    throw new SyncError('key store failed', res.status)
   }
 
   async listLineages(): Promise<string[]> {
@@ -411,7 +419,7 @@ export class SyncClient {
       return this.derive(passphrase, saltB64, DEFAULT_KDF)
     }
     const now = await this.getKeyDocument()
-    if (now.kind === 'none') throw new SyncError('the server refused the key parameters and holds no key document')
+    if (now.kind === 'none') throw new SyncError('the server refused a new key and holds none')
     return this.keysFrom(now, passphrase)
   }
 
@@ -473,7 +481,7 @@ export class SyncClient {
   async pullLatest(lineage: string, passphrase: string): Promise<{ version: number; plaintext: Uint8Array }> {
     await initCrypto()
     const doc = await this.getKeyDocument()
-    if (doc.kind === 'none') throw new SyncError('no key parameters on server — nothing has been synced yet')
+    if (doc.kind === 'none') throw new SyncError(HOLDS_NO_KEY)
     const keys = await this.keysFrom(doc, passphrase)
     const versions = await this.listVersions(lineage)
     if (versions.length === 0) throw new SyncError(`no snapshots for lineage "${lineage}"`)

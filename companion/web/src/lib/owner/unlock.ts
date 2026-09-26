@@ -45,12 +45,15 @@ import type { Identity } from '../share/pairing'
 export type SecretKind = 'passphrase' | 'recovery'
 
 /** Everything an unlock can be other than an identity. */
-export type UnlockFault = 'noSecret' | 'noSlotOfThatKind' | 'didNotOpen' | RecoveryCodeFault
+export type UnlockFault = 'noSecret' | 'noRecoveryLock' | 'noPassphraseLock' | 'didNotOpen' | RecoveryCodeFault
 
 export type UnlockResult = { ok: true; identity: Identity } | { ok: false; fault: UnlockFault; at?: number }
 
 /**
  * What to show for each fault.
+ *
+ * A key with no lock of the kind offered gets a sentence for that kind, and it names the other
+ * secret: a person told only that "a lock is missing" still has to work out which door is left.
  *
  * `didNotOpen` is the one worth reading twice. Argon2id ran and the ciphertext did not authenticate,
  * and from here that is ALL that is known: the wrong passphrase and a key edited by whoever keeps it
@@ -61,8 +64,11 @@ export type UnlockResult = { ok: true; identity: Identity } | { ok: false; fault
 export const UNLOCK_FAULT_TEXT: Record<UnlockFault, string> = {
   ...RECOVERY_FAULT_TEXT,
   noSecret: 'Nothing was entered.',
-  noSlotOfThatKind: 'The key this server holds has no copy locked that way.',
-  didNotOpen: 'That did not open the key this server holds. It is worth checking what you typed.',
+  noRecoveryLock:
+    'This server holds no recovery code lock for your key, so a recovery code cannot open it. Use your passphrase.',
+  noPassphraseLock:
+    'This server holds no passphrase lock for your key, so a passphrase cannot open it. Use your recovery code.',
+  didNotOpen: 'That did not open the key this server holds. Nothing has changed. Check what you typed and try again.',
 }
 
 /**
@@ -93,7 +99,8 @@ export async function unlockFromBlob(
      */
     if (err instanceof RecoveryCodeError) return { ok: false, fault: err.fault, at: err.at }
     if (err instanceof DataKeyError && /no (passphrase|recovery) slot/.test(err.message)) {
-      return { ok: false, fault: 'noSlotOfThatKind' }
+      // By the kind that was offered: that is the lock the key does not have.
+      return { ok: false, fault: kind === 'recovery' ? 'noRecoveryLock' : 'noPassphraseLock' }
     }
     return { ok: false, fault: 'didNotOpen' }
   }

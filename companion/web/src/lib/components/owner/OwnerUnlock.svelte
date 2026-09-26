@@ -45,6 +45,7 @@
     READ_BACK_DID_NOT_MATCH,
     READ_BACK_FAILED,
     READ_BUSY,
+    READS_AGAIN,
     WRITE_IT_ON_PAPER,
   } from '../recovery/copy'
   import {
@@ -82,14 +83,16 @@
 
   let busy = $state(false)
   let error = $state('')
-  /** How the message above is drawn: a refusal, or a warning about something not yet checked. */
-  let errorTone = $state<'critical' | 'warn'>('critical')
   /**
-   * Whether the message tells the person to read what the server holds again. When it does, the
-   * button that does it sits directly under the message, so the words never name a button that is
-   * somewhere else on the page.
+   * How the message is drawn: READ_BACK_FAILED is a warning about something not yet checked, with the
+   * code already handed over; everything else here is a refusal.
    */
-  let readAgain = $state(false)
+  const errorTone = $derived(error === READ_BACK_FAILED ? 'warn' : 'critical')
+  /**
+   * Whether the message tells the person to read what this server holds. Taken from the message
+   * itself (READS_AGAIN), so the button that does it is under every such message and under no other.
+   */
+  const asksForARead = $derived(READS_AGAIN.has(error))
   /** A statement about what happened that is not a refusal: the server's key changed under a set-up. */
   let notice = $state('')
 
@@ -186,15 +189,11 @@
     readWith = null
     notice = ''
     error = ''
-    errorTone = 'critical'
-    readAgain = false
   }
 
   /** Read what the server holds. Nothing is written here. */
   async function connect() {
     error = ''
-    errorTone = 'critical'
-    readAgain = false
     notice = ''
     if (!token) {
       error = CONNECT_NO_TOKEN
@@ -307,8 +306,6 @@
     if (!setUpIdentity) {
       unreadSent = null
       keyLost(READ_BACK_FAILED)
-      errorTone = 'warn'
-      readAgain = true
       return
     }
     // The fingerprint needs the assignment crypto ready, which an unlock readies too.
@@ -491,15 +488,18 @@
           <fieldset class="add">
             <legend>Your recovery code</legend>
             {#if codeStep === 'showing'}
-              {#if !unreadSent}<p class="hint">{KEY_STORED_WITH_THIS_CODE}</p>{/if}
-              <p class="hint">{WRITE_IT_ON_PAPER}</p>
+              <!-- Nothing between the heading and the sheet: its one line is the only one above the
+                   code (CodeSheet.svelte), and what this door says about the code comes after it. -->
               <CodeSheet display={newCode.display} />
               {#if unreadSent}
                 <!-- The server took the key and could not be read back: the code stays, and so does
                      the one way to check it, directly under the words that name it. -->
                 <Callout tone="warn"><p class="para">{READ_BACK_FAILED}</p></Callout>
                 <button type="button" onclick={checkReadBack} disabled={checking}>{checking ? READ_BUSY : READ_ACTION}</button>
+              {:else}
+                <p class="hint">{KEY_STORED_WITH_THIS_CODE}</p>
               {/if}
+              <p class="hint">{WRITE_IT_ON_PAPER}</p>
               <button class="primary" type="button" onclick={() => (codeStep = 'confirm')}>I have written it down</button>
             {:else}
               <WriteDownCheck
@@ -629,7 +629,7 @@
 
       {#if error}
         <Callout tone={errorTone}><p class="para">{error}</p></Callout>
-        {#if readAgain && !held}
+        {#if asksForARead}
           <button type="button" class="again" onclick={connect} disabled={busy}>{busy ? READ_BUSY : READ_ACTION}</button>
         {/if}
       {/if}

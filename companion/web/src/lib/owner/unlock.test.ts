@@ -156,12 +156,15 @@ describe('(c) what it says when it does not open', () => {
     expect(UNLOCK_FAULT_TEXT.didNotOpen).not.toMatch(/wrong|incorrect/i)
   }, 30_000)
 
-  it('says so when the server’s key carries no copy opened that way', async () => {
+  it('says which lock the server’s key does not have, by the secret that was offered, and names the other', async () => {
     const passphraseOnly: RecoverableDataKey = { v: 1, slots: blob.slots.filter((s) => s.kind === 'passphrase') }
-    expect(await unlockFromBlob(passphraseOnly, code.canonical, 'recovery')).toEqual({
-      ok: false,
-      fault: 'noSlotOfThatKind',
-    })
+    const recoveryOnly: RecoverableDataKey = { v: 1, slots: blob.slots.filter((s) => s.kind === 'recovery') }
+    expect(await unlockFromBlob(passphraseOnly, code.canonical, 'recovery')).toEqual({ ok: false, fault: 'noRecoveryLock' })
+    expect(await unlockFromBlob(recoveryOnly, 'any passphrase at all', 'passphrase')).toEqual({ ok: false, fault: 'noPassphraseLock' })
+    // Each sentence sends the person to the secret that is left.
+    expect(UNLOCK_FAULT_TEXT.noRecoveryLock).toMatch(/Use your passphrase\.$/)
+    expect(UNLOCK_FAULT_TEXT.noPassphraseLock).toMatch(/Use your recovery code\.$/)
+    expect('noSlotOfThatKind' in UNLOCK_FAULT_TEXT).toBe(false)
   })
 
   it('has no file to be handed any more, and no words for one', () => {

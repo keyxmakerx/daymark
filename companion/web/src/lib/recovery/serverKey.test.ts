@@ -86,6 +86,8 @@ function fakeServer(init: { keyparams?: KeyParams; wrapped?: RecoverableDataKey[
      * server took it), 'lost' does not (the request never reached the server). Either way it throws.
      */
     createFails: null as 'landed' | 'lost' | null,
+    /** The same for a new version: 'landed' stores it and then throws, 'lost' throws first. */
+    replaceFails: null as 'landed' | 'lost' | null,
     /** How many of the reads after a write fail, as a read that got no answer does. */
     readsFailingAfterWrite: 0,
   }
@@ -122,9 +124,11 @@ function fakeServer(init: { keyparams?: KeyParams; wrapped?: RecoverableDataKey[
     },
     async replace(version, wrapped) {
       spy.log.push(`replace ${version}`)
+      if (state.replaceFails === 'lost') throw new TypeError('Failed to fetch')
       if (state.wrapped.length === 0 || version !== state.wrapped.length + 1) return 'moved'
       state.wrapped.push(wrapped)
       state.writes += 1
+      if (state.replaceFails === 'landed') throw new SyncError('key document store failed', 504)
       return 'written'
     },
     async newestSnapshot() {
@@ -431,7 +435,8 @@ describe('(f) a read-back is believed only when it opens to the same master', ()
     const s = fakeServer({ wrapped: [made.blob] })
     s.state.readBackAs = { kind: 'wrapped', wrapped: other, version: 2, etag: '"v2"' }
     const held = { kind: 'wrapped' as const, wrapped: made.blob, version: 1, etag: '"v1"' }
-    expect(await replacePassphraseOnServer(s.ports, held, made.dataKey, NEW, NEW)).toEqual({ kind: 'unchecked' })
+    // "unchecked", with the version as it was sent for a later read to compare against.
+    expect(await replacePassphraseOnServer(s.ports, held, made.dataKey, NEW, NEW)).toEqual({ kind: 'unchecked', sent: s.state.wrapped[1] })
   }, 120_000)
 })
 
@@ -490,8 +495,35 @@ describe('(g) a create with no trustworthy answer, and a read-back that cannot b
     const s = fakeServer({ wrapped: [made.blob] })
     s.state.readsFailingAfterWrite = 1
     const held = { kind: 'wrapped' as const, wrapped: made.blob, version: 1, etag: '"v1"' }
-    expect(await replacePassphraseOnServer(s.ports, held, made.dataKey, NEW, NEW)).toEqual({ kind: 'unread' })
+    expect(await replacePassphraseOnServer(s.ports, held, made.dataKey, NEW, NEW)).toEqual({ kind: 'unread', sent: s.state.wrapped[1] })
     expect(s.state.wrapped).toHaveLength(2)
+  }, 120_000)
+
+  it('a new passphrase whose answer was lost is "unread" with what was sent, and a later read tells whether it landed', async () => {
+    // What the read button under REPLACE_FAILED works from (UseCodeFlow.svelte): exactly the version
+    // sent means the new passphrase opens what the server holds, and anything else means it does not.
+    const NEW = 'a passphrase chosen after a recovery'
+    const made = await createRecoverableDataKey(PASS)
+    const held = { kind: 'wrapped' as const, wrapped: made.blob, version: 1, etag: '"v1"' }
+
+    const landed = fakeServer({ wrapped: [made.blob] })
+    landed.state.replaceFails = 'landed'
+    spy.log.length = 0
+    const out = await replacePassphraseOnServer(landed.ports, held, made.dataKey, NEW, NEW)
+    expect(out).toEqual({ kind: 'unread', sent: landed.state.wrapped[1] })
+    // Nothing read back after a write with no answer: whether it landed is the later read's to say.
+    expect(spy.log).toEqual(['replace 2'])
+    if (out.kind !== 'unread') return
+    expect(b64(await unwrapWithPassphrase(out.sent, NEW))).toBe(b64(made.dataKey))
+    expect(await confirmStored(landed.ports, out.sent)).toEqual({ kind: 'held', wrapped: out.sent })
+
+    const lost = fakeServer({ wrapped: [made.blob] })
+    lost.state.replaceFails = 'lost'
+    const gone = await replacePassphraseOnServer(lost.ports, held, made.dataKey, NEW, NEW)
+    expect(gone.kind).toBe('unread')
+    if (gone.kind !== 'unread') return
+    expect(lost.state.wrapped).toHaveLength(1)
+    expect(await confirmStored(lost.ports, gone.sent)).toMatchObject({ kind: 'other', now: { kind: 'wrapped', version: 1 } })
   }, 120_000)
 
   it('confirmStored: the server holding exactly what was sent, something else, or still nothing readable', async () => {
@@ -504,8 +536,12 @@ describe('(g) a create with no trustworthy answer, and a read-back that cannot b
     // Byte for byte, as the server stored it: a document parsed back from its own JSON is the same.
     expect(await confirmStored(holding.ports, JSON.parse(JSON.stringify(mine)))).toMatchObject({ kind: 'held' })
 
-    expect(await confirmStored(fakeServer({ wrapped: [theirs] }).ports, mine)).toEqual({ kind: 'other' })
-    expect(await confirmStored(fakeServer().ports, mine)).toEqual({ kind: 'other' })
+    // Something else, handed back as what the server holds now.
+    expect(await confirmStored(fakeServer({ wrapped: [theirs] }).ports, mine)).toEqual({
+      kind: 'other',
+      now: { kind: 'wrapped', wrapped: theirs, version: 1, etag: '"v1"' },
+    })
+    expect(await confirmStored(fakeServer().ports, mine)).toEqual({ kind: 'other', now: { kind: 'none' } })
 
     const unreadable = fakeServer({ wrapped: [mine] })
     unreadable.state.writes = 1

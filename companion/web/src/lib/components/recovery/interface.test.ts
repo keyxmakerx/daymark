@@ -485,7 +485,7 @@ describe('(d) where the key is, said before either flow, and nothing unbuilt dra
     expect(FALSE_COMFORT.test('Your old passphrase no longer works.')).toBe(true)
     expect(SENTENCES.filter((s) => FALSE_COMFORT.test(s))).toEqual([])
     for (const file of componentFiles) expect(FALSE_COMFORT.test(proseOf(file)), file).toBe(false)
-    expect(copy.PASSPHRASE_CHANGE_IS_NOT_A_REVOCATION).toContain('still opens with the old one')
+    expect(copy.PASSPHRASE_CHANGE_IS_NOT_A_REVOCATION).toContain('the old passphrase still opens that')
     expect(codeOf('UseCodeFlow.svelte')).toContain('{PASSPHRASE_CHANGE_IS_NOT_A_REVOCATION}')
   })
 })

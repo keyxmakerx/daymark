@@ -39,9 +39,18 @@
    *
    * Two things are said at that point that a screen like this normally leaves out, and both are
    * corrections to what the button appears to have done: the old code still works (OLD_CODE_STILL_
-   * WORKS), and the old passphrase is retired against the live server only, not against copies of it
-   * made before (PASSPHRASE_CHANGE_IS_NOT_A_REVOCATION). "Your old passphrase no longer works" is the
-   * reassuring sentence that is not true, and it is not said.
+   * WORKS), and the old passphrase is retired against the live server only, not against backups of
+   * it taken before (PASSPHRASE_CHANGE_IS_NOT_A_REVOCATION). "Your old passphrase no longer works" is
+   * the reassuring sentence that is not true, and it is not said.
+   *
+   * ─── WHEN THE NEW PASSPHRASE'S ENDING IS NOT KNOWN ────────────────────────────────────────────
+   *
+   * A new version the server may hold but that could not be read back, or that was read back and did
+   * not open to the same key, ends on REPLACE_FAILED or REPLACE_UNCHECKED, and both ask for a read.
+   * The button that reads sits directly under them (READS_AGAIN). It compares what the server holds
+   * with the version this screen sent (serverKey.ts confirmStored): exactly that, and the new
+   * passphrase is what opens it, so the screen goes on as it does after a read-back that opened;
+   * anything else is counted under the entry, and the message stays.
    */
   import { Callout, Card, EmptyState } from '../ui'
   import GroupEntry from './GroupEntry.svelte'
@@ -49,6 +58,7 @@
   import { emptyGroups, firstGroupProblem, groupsToTyped, type GroupProblem } from './groups'
   import type { KeyDocument } from '../../sync/client'
   import type { ServerKeyPorts } from '../../recovery/serverKey'
+  import type { RecoverableDataKey } from '../../recovery/dataKey'
   import {
     CODE_DOES_NOT_OPEN_THIS,
     HOW_ENTRY_WORKS,
@@ -59,8 +69,11 @@
     PASSPHRASE_ADVICE,
     PASSPHRASE_CHANGE_IS_NOT_A_REVOCATION,
     PASSPHRASE_REPLACED,
+    READ_ACTION,
+    READ_BUSY,
     READ_FAILED,
     READ_NEEDS_TOKEN,
+    READS_AGAIN,
     REPLACE_FAILED,
     REPLACE_MOVED,
     REPLACE_UNCHECKED,
@@ -97,6 +110,14 @@
   let held = $state.raw<KeyDocument | null>(null)
   let ports = $state.raw<ServerKeyPorts | null>(null)
 
+  /**
+   * A new version this screen sent whose ending is not known — not read back, or read back and not
+   * opening to the same key — kept for the read button to compare what the server holds against. It
+   * is a locked key, not a secret.
+   */
+  let sent = $state.raw<RecoverableDataKey | null>(null)
+  let readingAgain = $state(false)
+
   /*
    * The open data key, alive only between the code opening it and the new passphrase locking it.
    * It is the one genuinely secret thing this component ever holds; it is wiped in place the
@@ -122,6 +143,7 @@
   async function open() {
     codeFault = ''
     fault = ''
+    sent = null
     /*
      * The shape of what was typed is checked here, before any import, any request and any
      * derivation. That ordering is the difference between "there is a mistake in group 3" arriving
@@ -209,10 +231,12 @@
         fault = REPLACE_MOVED
         step = 'entry'
       } else if (out.kind === 'unread') {
-        // Taken, and not read back: nothing was handed back, so nothing is said about what was.
+        // Perhaps taken, and not read back: nothing was handed back, so nothing is said about what was.
+        sent = out.sent
         fault = REPLACE_FAILED
         step = 'entry'
       } else {
+        sent = out.sent
         fault = REPLACE_UNCHECKED
         step = 'entry'
       }
@@ -222,6 +246,38 @@
       step = 'entry'
     } finally {
       busy = false
+    }
+  }
+
+  /**
+   * The button under REPLACE_UNCHECKED and REPLACE_FAILED: read what this server holds again. When
+   * it holds exactly the version this screen sent, the new passphrase is what opens it, and the
+   * screen goes on as it does after a read-back that opened. Otherwise what it holds now is what the
+   * entry counts, and the message stays: nothing has shown that the new passphrase opens anything. A
+   * server that still cannot be read leaves everything as it is.
+   */
+  async function readAgain() {
+    if (!ports) return
+    readingAgain = true
+    try {
+      const { confirmStored } = await import('../../recovery/serverKey')
+      if (sent) {
+        const out = await confirmStored(ports, sent)
+        if (out.kind === 'held') {
+          sent = null
+          fault = ''
+          step = 'rewrapped'
+        } else if (out.kind === 'other') {
+          sent = null
+          held = out.now
+        }
+        return
+      }
+      held = await ports.read()
+    } catch {
+      // Not readable this time either: the message and its button stay as they are.
+    } finally {
+      readingAgain = false
     }
   }
 </script>
@@ -254,7 +310,7 @@
               {#if problem.detail}<p class="para">{problem.detail}</p>{/if}
             </Callout>
           {:else if codeFault}
-            <Callout tone="warn" title="That code did not open this key">
+            <Callout tone="warn">
               <p class="para">{codeFault}</p>
             </Callout>
           {:else if fault}
@@ -263,6 +319,12 @@
             </Callout>
           {/if}
         </div>
+        {#if !problem && !codeFault && READS_AGAIN.has(fault)}
+          <!-- Directly under the message that asks for it, and outside the live region above. -->
+          <div class="actions">
+            <button type="button" onclick={readAgain} disabled={busy || readingAgain}>{readingAgain ? READ_BUSY : READ_ACTION}</button>
+          </div>
+        {/if}
 
         {#if held && held.kind !== 'wrapped'}
           <!-- A server holding no locked key is an absence, drawn as one, not as a failure. -->
@@ -279,10 +341,9 @@
 
         {#if slots}
           <p class="para small">
-            The key this server holds is locked in {slots.passphrase} passphrase
-            {slots.passphrase === 1 ? 'copy' : 'copies'} and {slots.recovery} recovery
-            {slots.recovery === 1 ? 'copy' : 'copies'}. Opening any one of them opens the same
-            key.
+            The key this server holds has {slots.passphrase} passphrase
+            {slots.passphrase === 1 ? 'lock' : 'locks'} and {slots.recovery} recovery code
+            {slots.recovery === 1 ? 'lock' : 'locks'}. Any one of them opens the same key.
           </p>
         {/if}
       </div>
@@ -321,7 +382,8 @@
         <p class="para">{PASSPHRASE_REPLACED}</p>
         <p class="para">{OLD_CODE_STILL_WORKS}</p>
 
-        <Callout tone="warn" title="What the old passphrase still opens">
+        <!-- In the body and never as a heading: read alone, a heading about it reads as an alarm. -->
+        <Callout tone="warn">
           <p class="para">{PASSPHRASE_CHANGE_IS_NOT_A_REVOCATION}</p>
         </Callout>
       </div>

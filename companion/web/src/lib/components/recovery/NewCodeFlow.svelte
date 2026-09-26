@@ -246,17 +246,19 @@
         <p class="para">{IF_BOTH_ARE_LOST}</p>
         <p class="para muted-para">{WHY_NOBODY_CAN_HELP}</p>
 
-        <div class="actions">
-          <button type="button" class="primary" onclick={read} disabled={busy}>
-            {busy ? READ_BUSY : READ_ACTION}
-          </button>
-        </div>
-
+        <!-- The message above the button, never below it: SETUP_FAILED and READ_BACK_DID_NOT_MATCH
+             end on this step and ask for a read, and the button that reads is the one under them. -->
         {#if error}
           <Callout tone="critical">
             <p class="para">{error}</p>
           </Callout>
         {/if}
+
+        <div class="actions">
+          <button type="button" class="primary" onclick={read} disabled={busy}>
+            {busy ? READ_BUSY : READ_ACTION}
+          </button>
+        </div>
       </div>
     </Card>
   {/if}
@@ -285,8 +287,8 @@
   {#if step === 'showing' && code}
     <Card title="Your recovery code">
       <div class="stack">
-        <p class="para">{WRITE_IT_ON_PAPER}</p>
-
+        <!-- Nothing between the heading and the sheet: its one line is the only one above the code
+             (CodeSheet.svelte), and what this step says about the code comes after it. -->
         <CodeSheet display={code.display} />
 
         {#if unread}
@@ -297,6 +299,8 @@
             <button type="button" onclick={checkReadBack} disabled={checking}>{checking ? READ_BUSY : READ_ACTION}</button>
           </div>
         {/if}
+
+        <p class="para">{WRITE_IT_ON_PAPER}</p>
 
         <div class="actions">
           <button type="button" class="primary" onclick={() => (step = 'confirm')}>
@@ -339,8 +343,8 @@
           <p class="para">{KEY_STORED_HERE}</p>
         {/if}
         <p class="para">
-          The code is no longer in this page. Nothing here can show it again, and nothing can
-          reconstruct it from the locked key — which is exactly why a locked key can sit on a
+          The recovery code is no longer in this page. Nothing here can show it again, and nothing
+          can reconstruct it from the locked key — which is exactly why a locked key can sit on a
           server that never learns anything from holding it.
         </p>
       </div>

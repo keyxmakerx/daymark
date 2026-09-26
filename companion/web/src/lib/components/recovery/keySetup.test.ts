@@ -99,7 +99,7 @@ describe('what the form says', () => {
     )
     for (const [fault, text] of faults) expect(text, fault).toMatch(/nothing has been stored/i)
     // After a create the server took, it is not true, and the sentence does not say it.
-    expect(copy.READ_BACK_DID_NOT_MATCH).toContain('The server took the new key')
+    expect(copy.READ_BACK_DID_NOT_MATCH).toContain('The server accepted the new key')
     expect(copy.READ_BACK_DID_NOT_MATCH).not.toMatch(/nothing (has been|was) stored/i)
     // Nor after a failure that may have come after the create.
     expect(copy.SETUP_FAILED).not.toMatch(/nothing (has been|was) stored/i)

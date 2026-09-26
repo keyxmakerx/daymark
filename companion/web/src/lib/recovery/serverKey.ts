@@ -288,21 +288,22 @@ async function store(
   }
 }
 
-/** What a later read of the key document says about a create that could not be read back. */
+/** What a later read of the key document says about a document this tab sent and could not read back. */
 export type StoredCheck =
-  /** The server holds exactly the document that was created. `wrapped` is it, as read back. */
+  /** The server holds exactly the document that was sent. `wrapped` is it, as read back. */
   | { kind: 'held'; wrapped: RecoverableDataKey }
-  /** The server answered with something else: the lock the code opens is not what it serves. */
-  | { kind: 'other' }
+  /** The server answered with something else, which is `now`: what was sent is not what it serves. */
+  | { kind: 'other'; now: KeyDocument }
   /** The server could not be read this time either. */
   | { kind: 'unread' }
 
 /**
- * Read the key document again after a 'storedUnread', and compare it with what was created. It
- * needs no secret: a document that is byte for byte the one this tab made, and checked before it
- * was sent (opensToMaster), opens to the same master. The owner console's door then opens it with
- * the recovery code still on screen to derive the identity, so the identity still comes from what
- * was read back.
+ * Read the key document again after a 'storedUnread', or after a new passphrase that was 'unread'
+ * or 'unchecked', and compare it with what was sent. It needs no secret: a document that is byte
+ * for byte the one this tab made opens as it did when it was made — a set-up's was opened to the
+ * master before it was sent (opensToMaster), and a new passphrase's is dataKey.ts replacePassphrase()
+ * of the master that was open. The owner console's door then opens a set-up's with the recovery code
+ * still on screen to derive the identity, so the identity still comes from what was read back.
  */
 export async function confirmStored(ports: ServerKeyPorts, sent: RecoverableDataKey): Promise<StoredCheck> {
   let back: KeyDocument
@@ -313,7 +314,7 @@ export async function confirmStored(ports: ServerKeyPorts, sent: RecoverableData
   }
   return back.kind === 'wrapped' && JSON.stringify(back.wrapped) === JSON.stringify(sent)
     ? { kind: 'held', wrapped: back.wrapped }
-    : { kind: 'other' }
+    : { kind: 'other', now: back }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
@@ -329,10 +330,17 @@ export type ReplaceResult =
   | { kind: 'moved'; now: KeyDocument }
   /** Nothing was written. */
   | { kind: 'refused'; fault: ReplaceFault }
-  /** The version was taken, and what the server handed back did not open to the same master. */
-  | { kind: 'unchecked' }
-  /** The version was taken, and it could not be read back: which passphrase opens it is not known. */
-  | { kind: 'unread' }
+  /**
+   * The version was taken, and what the server handed back did not open to the same master. `sent`
+   * is the version as it was sent, for a later read to compare against (confirmStored).
+   */
+  | { kind: 'unchecked'; sent: RecoverableDataKey }
+  /**
+   * The version may be on the server — it was taken and could not be read back, or the answer to it
+   * was lost — and nothing was read back: which passphrase opens what the server holds is not known
+   * here. `sent` is as above.
+   */
+  | { kind: 'unread'; sent: RecoverableDataKey }
 
 /**
  * Lock the open master under a new passphrase and store it as the next version (dataKey.ts
@@ -349,18 +357,26 @@ export async function replacePassphraseOnServer(
   if (!passphrase) return { kind: 'refused', fault: 'noPassphrase' }
   if (repeated !== passphrase) return { kind: 'refused', fault: 'passphrasesDiffer' }
   const next = await replacePassphrase(held.wrapped, master, passphrase)
-  if ((await ports.replace(held.version + 1, next)) === 'moved') return { kind: 'moved', now: await ports.read() }
+  let taken: 'written' | 'moved'
+  try {
+    taken = await ports.replace(held.version + 1, next)
+  } catch {
+    // No answer this module can trust (the request failed, or a proxy answered after passing it
+    // on): the version may be on the server, and a later read says whether it is what was sent.
+    return { kind: 'unread', sent: next }
+  }
+  if (taken === 'moved') return { kind: 'moved', now: await ports.read() }
   let back: KeyDocument
   try {
     back = await ports.read()
   } catch {
-    return { kind: 'unread' }
+    return { kind: 'unread', sent: next }
   }
-  if (back.kind !== 'wrapped') return { kind: 'unchecked' }
+  if (back.kind !== 'wrapped') return { kind: 'unchecked', sent: next }
   // Opening is not enough: a lock made under this same passphrase over another master opens too.
   const opened = await unwrapWithPassphrase(back.wrapped, passphrase).catch(() => null)
   try {
-    return opened && same(opened, master) ? { kind: 'written' } : { kind: 'unchecked' }
+    return opened && same(opened, master) ? { kind: 'written' } : { kind: 'unchecked', sent: next }
   } finally {
     zeroizeDataKey(opened)
   }

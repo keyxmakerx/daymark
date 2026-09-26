@@ -71,8 +71,8 @@ export const PANEL_LEDE =
  */
 export const WHERE_THE_KEY_IS =
   'Your key is kept on your server, locked twice: once under your passphrase and once under your ' +
-  'recovery code. The server can open neither lock. The two tabs below read the locks from it, and ' +
-  'write them, with the address and access token in the card above.'
+  'recovery code. Either one opens it. The server can open neither lock. The two tabs below read and ' +
+  'write those locks using the server address and access token in the card above.'
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
    2. The sentence the paper depends on, and the three around it.
@@ -107,6 +107,14 @@ export const NOT_A_PASSWORD_RESET =
 export const SHOWN_ONCE =
   'The code is shown once. Nothing here writes it down for you: it is not saved, not sent, and not ' +
   'put on the clipboard. When this page closes, the only copy is the one you made.'
+
+/**
+ * The one line directly above the code, on screen, wherever a code is shown (CodeSheet.svelte). It
+ * is the only thing between the heading and the groups, so the first words read beside the code say
+ * what to do with it; everything else the screen says about the code comes after the code. Not
+ * printed: on paper it would stop being true the moment the page left the printer.
+ */
+export const ONLY_TIME_SHOWN = 'This is the only time it is shown. Write it down before you go on.'
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
    3. Getting a code.
@@ -199,14 +207,19 @@ export const CHECKSUM_CANNOT_POINT =
   'and it cannot tell us which: every position has some value that would explain the mismatch, so ' +
   'naming one would be a guess dressed up as an answer. Read the whole code back against your paper.'
 
-/** Shown when the code is well-formed but does not open the key the server holds. */
+/**
+ * Shown when the code is well-formed but does not open the key the server holds. A code for another
+ * key and a code with a mistake the check character could not catch are one outcome here, so the
+ * sentence names neither as the cause, and says what to do.
+ */
 export const CODE_DOES_NOT_OPEN_THIS =
-  'That code is well-formed and does not open the key this server holds. Either it belongs to a ' +
-  'different key, or a character is wrong in a way the check character could not catch.'
+  'That recovery code does not open the key this server holds. Nothing has changed. Compare it with ' +
+  'what you wrote down, one character at a time. A code for a different key looks no different from ' +
+  'one with a mistake in it.'
 
 /** Setting the new passphrase, once the code has opened the key. */
 export const NEW_PASSPHRASE_LEDE =
-  'The key is open. Setting a passphrase locks this same key again, under the new passphrase, and ' +
+  'The key is open. Setting a new passphrase locks this same key again, under the new passphrase, and ' +
   'stores that lock on the server in place of the old one. The key does not change, so nothing ' +
   'encrypted under it needs encrypting again.'
 
@@ -224,41 +237,47 @@ export const OLD_CODE_STILL_WORKS =
   'take knowingly.'
 
 /**
- * What a passphrase change does not do, said where it is done (#258).
+ * What a passphrase change does not do, said where it is done (#258), in the body of a callout and
+ * never as its heading: read alone, a heading about it would read as an alarm.
  *
  * The master does not move, so a changed passphrase is retired against the live server and not
- * against copies someone kept: the server hands out only the newest version and no longer serves the
- * key parameters, but older versions stay on its disk and in its backups, and they still open with
- * the old passphrase (docs/SYNC_PROTOCOL.md §1.2). Saying "your old passphrase no longer works"
- * would be the reassuring sentence that is not true. Retiring the key itself is key rotation, which
- * is not built: #297.
+ * against backups of it: the server hands out only the newest version and no longer serves the key
+ * parameters, but older versions stay on its disk and in its backups, and they still open with the
+ * old passphrase (docs/SYNC_PROTOCOL.md §1.2). Saying "your old passphrase no longer works" would be
+ * the reassuring sentence that is not true. Retiring the key itself is key rotation, which is not
+ * built: #297.
  */
 export const PASSPHRASE_CHANGE_IS_NOT_A_REVOCATION =
-  'The key itself did not change, so everything encrypted under it still opens with it. This server ' +
-  'now hands out only the copy locked under the new passphrase, but a copy of the server made before ' +
-  'now, such as a backup, still opens with the old one. Replacing the key itself is not built yet.'
+  'The key itself did not change. This server now hands out only the lock made with the new ' +
+  'passphrase. A backup of the server taken before now still holds the old lock, and the old ' +
+  'passphrase still opens that. This console cannot yet replace the key itself.'
 
 /** After the new passphrase's lock was stored, read back and opened to the same key. */
 export const PASSPHRASE_REPLACED =
-  'The passphrase copy of your key on the server was replaced. The key itself did not change, so ' +
+  'The server now holds your key locked under the new passphrase. The key itself did not change, so ' +
   'nothing encrypted under it needs encrypting again.'
 
 /** A new version another device stored first (409): nothing from here was stored. */
 export const REPLACE_MOVED =
-  'The key on the server changed while it was open here, so the new passphrase was not stored. ' +
-  'Open it again with your code.'
+  'What the server holds changed while the key was open here, so the new passphrase was not stored. ' +
+  'Open the key again with your recovery code.'
 
 /**
  * The server took the new version, and what it handed back did not open to the same key. It was
- * sent, so this does not say it was not stored.
+ * sent, so this does not say it was not stored. The read button sits under it (READS_AGAIN).
  */
 export const REPLACE_UNCHECKED =
-  'The server took the new passphrase copy, and what it handed back did not open to the same key. ' +
-  'Read what the server holds again before relying on the new passphrase.'
+  'The server accepted the new lock, but what it handed back did not open this key. Do not rely on ' +
+  'the new passphrase yet. Your snapshots are unchanged. Read what this server holds again to see ' +
+  'which passphrase opens it.'
 
-/** A failure none of the above covers, which may have come after the server took the new version. */
+/**
+ * A failure none of the above covers, which may have come after the server took the new version —
+ * including a version whose answer was lost, or that could not be read back. The read button sits
+ * under it (READS_AGAIN).
+ */
 export const REPLACE_FAILED =
-  'This screen could not finish storing the new passphrase. Read what the server holds again to ' +
+  'This screen could not finish storing the new passphrase. Read what this server holds again to ' +
   'see which passphrase opens it.'
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
@@ -267,26 +286,34 @@ export const REPLACE_FAILED =
 
 /** The verb for reading what the server holds, and what it says while it does. */
 export const READ_ACTION = 'Read what this server holds'
-export const READ_BUSY = 'Reading what the server holds'
+export const READ_BUSY = 'Reading what this server holds'
 
 /** Refusals of a read. None repeats the token, and none guesses why a read failed. */
 export const READ_NEEDS_TOKEN = 'Enter your access token in the card above. Nothing was sent.'
-export const TOKEN_NOT_ACCEPTED = 'The server did not accept that access token, so nothing was read.'
-export const READ_FAILED = 'What the server holds could not be read, so nothing has changed.'
+export const TOKEN_NOT_ACCEPTED = 'This server did not accept that access token, so nothing was read.'
+export const READ_FAILED = 'What this server holds could not be read, so nothing has changed.'
 
-/** "Get a code" on a server that already holds a locked key: there is no new code to make there. */
+/**
+ * "Get a code" on a server that already holds a locked key: there is no new code to make there. The
+ * other tab is named by its label, exactly as RecoveryPanel.svelte draws it.
+ */
 export const ALREADY_LOCKED_HERE =
-  'This server already holds your key, locked under a passphrase and a recovery code, so there is no ' +
-  'new code to make here. Using the code you have is the other tab.'
+  'This server already holds your key, locked under a passphrase and a recovery code, so there is ' +
+  'nothing to make here. To use the recovery code you already have, go to the Use a code tab.'
 
 /** After the code is confirmed written down: where the key now is. Not a verdict, not a tick. */
 export const KEY_STORED_HERE =
-  'Your key is on your server now, locked under your passphrase and under the code you wrote down.'
+  'Your key is on your server now, locked under your passphrase and under the recovery code you wrote ' +
+  'down.'
 
-/** "Use a code" on a server that holds no locked key: there is no code that opens anything there. */
+/**
+ * "Use a code" on a server that holds no locked key: there is no code that opens anything there. The
+ * other tab is named by its label, exactly as RecoveryPanel.svelte draws it. It is the body of an
+ * empty state, so it does not say "yet" (#103, components/ui/emptyState.test.ts).
+ */
 export const NOTHING_TO_OPEN =
-  'This server holds no locked key, so there is no recovery code to use with it. Getting a code, in ' +
-  'the other tab, makes one.'
+  'This server holds no locked key, so there is no recovery code to use here. The Get a code tab ' +
+  'makes the key and its recovery code.'
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
    6. The placeholder catalogue.
@@ -319,7 +346,7 @@ export const PLACEHOLDERS: PlaceholderNote[] = [
       'A code that has been photographed, emailed to yourself or left in a moving box is a live key ' +
       'to everything, and the answer is a new one that drops the old. The server takes a new version ' +
       'of the locked key, and the function that makes one exists; nothing on this screen makes one yet.',
-    specifiedAt: 'src/lib/recovery/dataKey.ts rotateRecoveryCode(); docs/SYNC_PROTOCOL.md §2, PUT /v1/keydoc/{version}',
+    specifiedAt: 'src/lib/recovery/dataKey.ts rotateRecoveryCode(); docs/SYNC_PROTOCOL.md §2, PUT /v1/keydoc/{version}; #407',
   },
   {
     id: 'devices',
@@ -396,37 +423,46 @@ export function groupLengthIsWrong(group: number, typed: number): string {
    step does is recovery/serverKey.ts's; these say it to a person.
    ═══════════════════════════════════════════════════════════════════════════════════════════ */
 
-/** What the server holds, once read: one sentence per answer that needs a set-up. No verdicts. */
+/**
+ * What the server holds, once read: one sentence per answer that needs a set-up. No verdicts. The
+ * first is a server holding key parameters only, said without the term: what a person needs to know
+ * is that their passphrase already opens their snapshots there.
+ */
 export const HOLDS_KEY_PARAMETERS =
-  'This server holds the key parameters your snapshots were written with, and no recovery code yet. ' +
-  'Adding a recovery code locks the key your passphrase already opens, once under the passphrase and ' +
-  'once under a new code, and stores the two locks here. Nothing already stored is encrypted again.'
+  'This server holds what your passphrase needs to open your snapshots, but no recovery code yet. ' +
+  'Adding one locks the key your passphrase already opens, once under that passphrase and once under ' +
+  'a new recovery code, and stores those two locks here. Nothing already stored is encrypted again.'
 
 export const HOLDS_NOTHING =
-  'This server holds no key yet. Choosing a passphrase here makes your key in this tab, locks it under ' +
-  'the passphrase and under a new recovery code, and stores only the two locks on the server.'
+  'This server holds no key yet. Choosing a passphrase here makes a new key in this tab, locks it ' +
+  'under that passphrase and under a new recovery code, and stores only the two locks on the server. ' +
+  'The server can open neither.'
 
 /**
  * How an enrolment proves the passphrase before it stores anything (serverKey.ts, the anchor). One
  * of the two, whichever this server allows, said before the passphrase is typed.
  */
 export const ENROL_TRIES_NEWEST_SNAPSHOT =
-  'Your passphrase is tried first on the newest snapshot this server stores. If it does not open it, ' +
-  'nothing is stored.'
+  'Your passphrase is tried on the newest snapshot this server stores. If the passphrase does not ' +
+  'open that snapshot, nothing is stored.'
 
 export const ENROL_ASKS_TWICE =
-  'This server stores no snapshot to try your passphrase on, so it is asked for twice instead.'
+  'This server stores no snapshot to check your passphrase against, so you are asked to type it twice ' +
+  'instead.'
 
 /** The field labels of a set-up. */
 export const NEW_PASSPHRASE_LABEL = 'Passphrase for this key'
 export const SYNC_PASSPHRASE_LABEL = 'The passphrase you sync with'
 export const SAME_AGAIN_LABEL = 'The same passphrase again'
 
-/** The verbs of a set-up, and what each says while Argon2id runs several times over. */
+/**
+ * The verbs of a set-up, and what each says while Argon2id runs several times over. Every busy line
+ * on these screens that waits on Argon2id ends in the same words: "— this takes a few seconds".
+ */
 export const FIRST_RUN_ACTION = 'Make my key'
-export const FIRST_RUN_BUSY = 'Making and locking your key — this takes several seconds'
+export const FIRST_RUN_BUSY = 'Making and locking your key — this takes a few seconds'
 export const ENROL_ACTION = 'Add a recovery code'
-export const ENROL_BUSY = 'Checking and locking your key — this takes several seconds'
+export const ENROL_BUSY = 'Checking and locking your key — this takes a few seconds'
 
 /**
  * Why a set-up stored nothing. Every one is decided before anything is sent (serverKey.ts
@@ -438,10 +474,11 @@ export const SETUP_FAULT_TEXT: Readonly<Record<SetUpFault, string>> = {
   noPassphrase: 'Enter a passphrase. Nothing has been stored.',
   typeItTwice: 'Enter the passphrase a second time. Nothing has been stored.',
   passphrasesDiffer: 'The two passphrases are different. Nothing has been stored.',
-  doesNotOpenNewest: 'That passphrase does not open the newest snapshot on this server, so nothing has been stored.',
+  doesNotOpenNewest:
+    'That passphrase does not open the newest snapshot on this server, so nothing has been stored. Your snapshots are unchanged.',
   snapshotsWithoutKey:
-    'This server stores snapshots and no key parameters for them. A new key would not open them, so none was made, and nothing has been stored.',
-  selfCheckFailed: 'The locked key made in this tab did not open again to the same key, so nothing has been stored.',
+    'This server stores snapshots but not what is needed to open them. A new key would not open those snapshots, so none was made, and nothing has been stored.',
+  selfCheckFailed: 'The locks made in this tab did not open back to the same key, so nothing has been stored. You can try again.',
   alreadyLocked: 'This server already holds a locked key, so nothing has been stored.',
 }
 
@@ -453,11 +490,12 @@ export const KEY_CHANGED_ON_SERVER =
 /**
  * After a create the server took, when what it handed back did not open to the same key. The key
  * was sent, so this does not say nothing was stored; the code for it is not shown, because it may
- * open nothing the server hands out.
+ * open nothing the server hands out. The read button sits under it (READS_AGAIN).
  */
 export const READ_BACK_DID_NOT_MATCH =
-  'The server took the new key, and what it handed back did not open to the same key, so no recovery ' +
-  'code is shown. Read what the server holds again to see where things stand.'
+  'The server accepted the new key, but what it handed back did not open to the same key, so the ' +
+  'recovery code is not shown. Your snapshots are unchanged. Read what this server holds again to see ' +
+  'where things stand.'
 
 /**
  * After a create the server took (201), when the read-back could not be read however many times it
@@ -470,6 +508,21 @@ export const READ_BACK_FAILED =
 
 /**
  * A set-up that failed in a way none of the above covers. It does not say nothing was stored: the
- * failure may have come after the server took the key, and the next read says which.
+ * failure may have come after the server took the key, and the next read says which. The read button
+ * sits under it (READS_AGAIN).
  */
-export const SETUP_FAILED = 'The key could not be set up. Read what the server holds again to see where things stand.'
+export const SETUP_FAILED = 'The key could not be set up. Read what this server holds again to see where things stand.'
+
+/**
+ * Every message that tells the person to read what this server holds. Wherever one is shown, the
+ * button that does it sits directly under it — READ_ACTION, or READ_BACK_FAILED's own check — so the
+ * words never name a button that is somewhere else on the page. decidedWords.test.ts holds this set
+ * to the sentences, and each screen to the rule.
+ */
+export const READS_AGAIN: ReadonlySet<string> = new Set([
+  REPLACE_UNCHECKED,
+  REPLACE_FAILED,
+  READ_BACK_DID_NOT_MATCH,
+  READ_BACK_FAILED,
+  SETUP_FAILED,
+])

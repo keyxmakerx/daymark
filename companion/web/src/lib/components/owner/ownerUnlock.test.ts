@@ -73,12 +73,11 @@ describe('(a) nothing here can invent an identity', () => {
   })
 
   it('keeps a code whose lock the server took on screen when the read-back could not be read (#258)', () => {
-    // READ_BACK_FAILED under the code, and the one way to check it directly under the words.
+    // READ_BACK_FAILED under the code, and the one way to check it directly under the words; the
+    // statement that the key is stored only when it is known, in its place.
     expect(code).toMatch(
-      /\{#if unreadSent\}\s*<Callout tone="warn"><p class="para">\{READ_BACK_FAILED\}<\/p><\/Callout>\s*<button type="button" onclick=\{checkReadBack\}/,
+      /<CodeSheet display=\{newCode\.display\} \/>\s*\{#if unreadSent\}\s*<Callout tone="warn"><p class="para">\{READ_BACK_FAILED\}<\/p><\/Callout>\s*<button type="button" onclick=\{checkReadBack\}[^\n]*\s*\{:else\}\s*<p class="hint">\{KEY_STORED_WITH_THIS_CODE\}<\/p>\s*\{\/if\}/,
     )
-    // Not the statement that the key is stored, while that is not known.
-    expect(code).toMatch(/\{#if !unreadSent\}<p class="hint">\{KEY_STORED_WITH_THIS_CODE\}<\/p>\{\/if\}/)
     // The check never takes the code away unless the server answered with something else.
     const check = code.slice(code.indexOf('async function checkReadBack()'), code.indexOf('function keyMoved('))
     expect(check).toContain("if (out.kind === 'unread') return")
@@ -90,11 +89,12 @@ describe('(a) nothing here can invent an identity', () => {
     const unreadBranch = body.slice(0, body.indexOf('return'))
     expect(unreadBranch).toContain('if (!setUpIdentity)')
     expect(unreadBranch).toContain('keyLost(READ_BACK_FAILED)')
-    expect(unreadBranch).toContain('readAgain = true')
     expect(unreadBranch).not.toContain('opened(')
-    // And the read button sits directly under the message whenever it asks for one.
+    // And the read button sits directly under the message whenever the message asks for one, which
+    // is taken from the message itself (decidedWords.test.ts holds the rule on every screen).
+    expect(code).toContain('const asksForARead = $derived(READS_AGAIN.has(error))')
     expect(code).toMatch(
-      /<Callout tone=\{errorTone\}><p class="para">\{error\}<\/p><\/Callout>\s*\{#if readAgain && !held\}\s*<button type="button" class="again" onclick=\{connect\}/,
+      /<Callout tone=\{errorTone\}><p class="para">\{error\}<\/p><\/Callout>\s*\{#if asksForARead\}\s*<button type="button" class="again" onclick=\{connect\}/,
     )
   })
 
