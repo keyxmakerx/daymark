@@ -75,7 +75,7 @@
 
   {#if data}
     <p class="prov faint">Verified against the pinned owner key <code>{ctx.pinnedOwnerSigningFp}</code>. Self-checks: scores and bands only.</p>
-    <Dashboard {data} />
+    <Dashboard {data} showAverage />
   {:else if error}
     <p class="error" role="alert">{error}</p>
   {:else if !loaded}

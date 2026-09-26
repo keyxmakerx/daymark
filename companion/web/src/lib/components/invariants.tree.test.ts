@@ -181,8 +181,6 @@ const MOOD_DATA_FILES: Record<string, string> = {
     'the 5-level mood scale itself (Awful..Rad), mapping a reported level to its token',
   'src/lib/charts/Sparkline.svelte':
     "the plotted line IS the person's daily mood average, on the ramp's own 1..5 scale",
-  'src/lib/components/Overview.svelte':
-    'mood-distribution bars: one bar per level, counting that person’s own entries',
   'src/lib/components/Dashboard.svelte':
     'mood distribution, activity-association deltas and the self-check trend line — all charts of a person’s own series',
   'src/lib/components/QuestionnaireRunner.svelte':
@@ -265,7 +263,7 @@ describe('(a) the mood ramp is a person’s data, and only the data surfaces may
     expect(band).not.toBeNull()
     for (const n of [1, 2, 3, 4, 5]) expect(band!).toContain(`var(--mood-${n})`)
 
-    for (const chart of ['src/lib/components/Overview.svelte', 'src/lib/components/Dashboard.svelte']) {
+    for (const chart of ['src/lib/components/Dashboard.svelte']) {
       const style = styleOf(chart)
       expect(style, `${chart} has no style block`).not.toBeNull()
       for (const n of [1, 2, 3, 4, 5]) expect(style!, chart).toContain(`var(--mood-${n})`)

@@ -5,7 +5,13 @@
   import Sparkline from '../charts/Sparkline.svelte'
   import JournalReader from './JournalReader.svelte'
 
-  let { data }: { data: BackupData } = $props()
+  /*
+   * showAverage: only the clinician's view of a share passes it (#361). A person's own views
+   * describe what was logged and never mark it (#203), and an average of somebody's moods is a
+   * mark: one figure for how they have been. Off unless asked for, so a new mount over a person's
+   * own data shows none. dashboardAverage.test.ts holds every mount to that.
+   */
+  let { data, showAverage = false }: { data: BackupData; showAverage?: boolean } = $props()
 
   const s = $derived(summarize(data))
   let range = $state<RangeDays>(90)
@@ -47,13 +53,14 @@
     <summary>
       <span class="h">Mood over time</span>
       <!--
-        Was "· {n}-day streak". The fragment disappears entirely at zero rather than reading
-        "0 of the last 30 days" — a summary line is the wrong place to hand someone a figure for
-        the time they were away.
+        What was logged, and no mark on it. The average is here only on the clinician's view of a
+        share, named as the PDF report names it, to one decimal as the report prints it. Each
+        fragment disappears entirely at zero rather than reading "0 of the last 30 days": a summary
+        line is the wrong place to hand someone a figure for the time they were away.
       -->
-      <span class="sum faint">avg {s.averageMood?.toFixed(2) ?? '—'}{s.daysWithEntryLast30 > 0
-          ? ` · ${s.daysWithEntryLast30} of the last ${WINDOW_DAYS} days`
-          : ''}</span>
+      <span class="sum faint">{showAverage && s.averageMood !== null
+          ? `average of what was logged: ${s.averageMood.toFixed(1)}${s.daysWithEntryLast30 > 0 ? ' · ' : ''}`
+          : ''}{s.daysWithEntryLast30 > 0 ? `${s.daysWithEntryLast30} of the last ${WINDOW_DAYS} days` : ''}</span>
     </summary>
     <div class="body">
       <div class="controls" role="group" aria-label="Time range">
