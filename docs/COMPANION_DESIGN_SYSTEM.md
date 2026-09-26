@@ -132,10 +132,10 @@ trend, a person's own answer shown back to them — keeps the ramp. **STATE** �
 error, selected tab, link, focus ring, callout border or confirmation — moves to chrome, indigo, clay
 or amber. If you cannot tell which, read what renders it.
 
-Enforced tree-wide. `components/invariants.tree.test.ts` group (a) allows seven files to name a mood
-token — `app.css` and `lib/mood.ts`, which define the ramp, and five surfaces that draw a person's own
-data: `charts/Sparkline.svelte`, `Overview.svelte`, `Dashboard.svelte`, `QuestionnaireRunner.svelte`
-and `ui/BandTag.svelte`. It fails on any other file, and inside those files it fails on a mood token
+Enforced tree-wide. `components/invariants.tree.test.ts` group (a) allows six files to name a mood
+token — `app.css` and `lib/mood.ts`, which define the ramp, and four surfaces that draw a person's own
+data: `charts/Sparkline.svelte`, `Dashboard.svelte`, `QuestionnaireRunner.svelte` and
+`ui/BandTag.svelte`. It fails on any other file, and inside those files it fails on a mood token
 used under a state selector (`:hover`, `.active`, `[aria-selected]` and the like).
 `ui/invariants.test.ts` group (c) adds that inside `ui/` only `BandTag` names the ramp, that it uses
 all five steps, and that no other primitive names `--mood-4` or `--mood-5` even in a comment.

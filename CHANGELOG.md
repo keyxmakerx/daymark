@@ -224,6 +224,10 @@ All notable changes to this project are documented here. The format is based on
   both jobs.
 
 ### Changed
+- **Your own data in the web console no longer shows an average mood.** The owner console and an
+  opened backup still show how many of the last 30 days have an entry. A clinician reading what you
+  share still sees the average, labelled "average of what was logged", as in the PDF report.
+  (#203, #361)
 - **Companion — a solo server's owner page has no owner console, and its "Recover access" card sets
   the recovery email.** The console's clinician and sharing routes are off on a solo server, so its
   card is hidden there. Its Notifications tab was the only place to register the email a recovery
@@ -336,6 +340,12 @@ All notable changes to this project are documented here. The format is based on
   quiet notice that names nobody and counts nothing.
 
 ### Fixed
+- **If the person you share with has ended their access, the owner console notices before it does
+  anything.** It now asks before it records their keys or seals the share, so "Nothing was sealed or
+  sent" is exactly true. (#275)
+- **The owner console's access log describes every event in words.** Revoking a share shows as
+  "Revoked sharing" instead of a code, and approving or taking back a pairing, and sending or reading
+  keys, have plain lines too. (#277)
 - **The example nginx and Traefik proxy setups now meet the rules they sit beside.** nginx refuses
   host names it does not serve and forwards its own configured name, not the visitor's; Traefik
   trusts no visitor's forwarded headers, and its steps now actually apply its labels and join the
