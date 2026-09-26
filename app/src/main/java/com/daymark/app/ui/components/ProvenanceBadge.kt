@@ -21,10 +21,16 @@ import com.daymark.app.ui.theme.HairlineWidth
  *
  * The label is immutable per version: a tool cannot quietly promote itself, and editing a
  * Validated tool's wording downgrades it to [ADAPTED].
+ *
+ * [symbol] says how a tool departs from a published instrument: a half circle for part of one, a
+ * pencil for none. A Validated tool departs from nothing, so it carries no mark and its word says the
+ * rest. Never a tick and never green: beside a questionnaire either reads as "you passed", and a
+ * filled circle beside Adapted's half would read as full marks against half (`CLAUDE.md` §4, #278).
+ * `TickAndGreenSourceTest` holds `ui/components/` to that.
  */
-enum class ProvenanceTier(val symbol: String, val label: String) {
+enum class ProvenanceTier(val symbol: String?, val label: String) {
     /** A published instrument used faithfully — exact wording, scoring, and banding. */
-    VALIDATED("✅", "Validated"),
+    VALIDATED(null, "Validated"),
 
     /** Built on an evidence-based method but modified. Names the method it draws from. */
     ADAPTED("◐", "Adapted"),
@@ -43,7 +49,7 @@ fun ProvenanceBadge(tier: ProvenanceTier, modifier: Modifier = Modifier) {
         border = BorderStroke(HairlineWidth, MaterialTheme.colorScheme.outline),
     ) {
         Text(
-            text = "${tier.symbol} ${tier.label}",
+            text = tier.symbol?.let { "$it ${tier.label}" } ?: tier.label,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),

@@ -191,6 +191,13 @@ internal object Copy {
     const val NO_ENTRIES = "No entries in this range."
     const val NO_RESULTS = "No results in this range."
 
+    /**
+     * Beside a project step that is done, where a step not done has a plain point. A word and never a
+     * tick: a tick marks success, and the report lists what was done without grading it (`CLAUDE.md`
+     * §4, #278).
+     */
+    const val STEP_DONE = "done"
+
     /** Printed under side 2's tables when check-in notes are on, to say what a note is. */
     const val NOTE_FIELD =
         "“Their note” is the one-line note attached to a check-in — a field that has always existed, " +
@@ -1159,6 +1166,8 @@ private class PageCtx(
         val title = paint(9.5f, INK, bold = true)
         val soft = paint(8f, SOFT)
         val step = paint(8.5f, INK)
+        // Every step's title starts clear of the word a done step carries, so the titles line up.
+        val stepTitleX = margin + 8f + soft.measureText(Copy.STEP_DONE) + 6f
         data.projects.forEach { p ->
             ensure(ReportLayout.PROJECT_HEAD_RESERVE)
             canvas.drawText(p.title, margin, y + 8f, title)
@@ -1172,8 +1181,8 @@ private class PageCtx(
             }
             p.steps.forEach { s ->
                 ensure(ReportLayout.PROJECT_STEP_H)
-                canvas.drawText(if (s.done) "✓" else "·", margin + 8f, y + 8f, soft)
-                canvas.drawText(s.title, margin + 22f, y + 8f, step)
+                canvas.drawText(if (s.done) Copy.STEP_DONE else "·", margin + 8f, y + 8f, soft)
+                canvas.drawText(s.title, stepTitleX, y + 8f, step)
                 y += ReportLayout.PROJECT_STEP_H
             }
             // Guarded: the last step can finish flush against the content limit, and an
