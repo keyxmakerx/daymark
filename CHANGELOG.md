@@ -37,6 +37,19 @@ All notable changes to this project are documented here. The format is based on
   still contains unlock times restores normally; the badges in it are just not brought back.
 
 ### Added
+- **Companion — a month calendar of your own entries.** When you open a backup in the browser, on the
+  backup page or in the owner console's Review tab, the dashboard now has a **Calendar** card showing
+  one month at a time. Every day is the same plain square with its date. Each check-in is a small
+  square in its mood's colour with the mood's word beside it, in the order you made them (up to six on
+  a day; the day's list has them all). A journal entry is a small ring, a sleep log a short bar and a
+  self-check a diagonal slash. A day with nothing on it is left plain — nothing greyed out, crossed or
+  counted — and a screen reader hears "nothing recorded". Choose a day to see its records in words
+  beside the calendar: what kind, what time, the mood's word for a check-in, and a self-check's name
+  and band (never its total). **Previous month**, **Today** and **Next month** move between months.
+  **Print this month** prints just the month, dark ink on white even if your screen is in dark mode,
+  every square keeping its word. There is no average, no best or worst day and no count anywhere on
+  it. It only reads your backup and changes nothing, and it is not shown to a clinician, who has a
+  calendar of their own. (#335)
 - **Companion — an upgrade can no longer leave the server's databases half-changed.** Each of the
   server's databases now records which version of its layout it holds. When a new release needs to
   change one, the server first saves a complete copy of it in a `_pre-migrate` folder on the data
@@ -382,6 +395,13 @@ All notable changes to this project are documented here. The format is based on
   quiet notice that names nobody and counts nothing.
 
 ### Fixed
+- **Companion — your own mood names and colours now show in the browser.** If you renamed or
+  recoloured your moods on the phone, the web still showed the app's original ones. On your own data,
+  the mood chart and the new calendar now use your names and colours; any mood you left as it was
+  keeps its usual name and colour. A clinician reading what you share still sees the usual ones,
+  because a share does not carry yours. Your colours are only ever used for the small mark that stands
+  for a mood, always with its word beside it — never for buttons, warnings or anything else on the
+  page. (#280)
 - **Warnings and Delete buttons have a colour of their own.** The phone drew Delete, the lock
   screen's "Incorrect PIN" and the safety plan's crisis button in the same red as an Awful mood, so
   the colour of someone's worst day doubled as a warning. They now use a separate clay red, the same

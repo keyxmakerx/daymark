@@ -38,9 +38,10 @@ been built differently. The old text is
    share less, for less time (§9).
 5. **Every surface says what it is for.** The owner console shares, pairs, opens a backup and runs
    self-checks. It is a desk-side complement to the phone (#247): printing first, then bigger
-   read-only views, and no view grades a day. Writing and the Sky stay on the phone. Not built:
-   printing or saving the report from the browser, #334; a month calendar of the person's own
-   entries, #335; journal search, sleep trends and the dashboard's other views, #245.
+   read-only views, and no view grades a day. Writing and the Sky stay on the phone. A backup open
+   in the viewer or the owner console shows its own month calendar (§7.11). Not built: printing or
+   saving the report from the browser, #334; journal search, sleep trends and the dashboard's other
+   views, #245.
 6. **Nothing from anywhere else.** No CDNs, remote fonts, analytics or third-party origins; the page
    may talk only to the server that served it ([COMPANION_SECURITY.md](COMPANION_SECURITY.md) §6).
 
@@ -143,6 +144,29 @@ The words: key; lock, locked under (never copy, slot or key parameters); passphr
 (bare "code" only in a tab's name); access token; this server. Tabs by their labels (*Get a code*,
 *Use a code*). A wait on the key derivation ends *"— this takes a few seconds"*. Replacing a recovery
 code is not built: #407.
+
+### 7.11 The person's own month (owner)
+
+1. A backup open in the viewer, or in the owner console's Review tab, shows a **Calendar** card in the
+   dashboard: one month, Monday first, read-only (#335). It is drawn only on the person's own data; the
+   clinician has a calendar of their own, which draws no mood's colour.
+2. Every day is the same square with its number in ink. A check-in is a small square in its mood's
+   colour — the person's own where they chose one — with the mood's word beside it, in the order made;
+   at most six a day, keeping one of every mood the day holds, and never a count. A journal entry is a
+   ring, a sleep log a bar, a self-check a diagonal slash, each once however many the day holds. A day
+   with nothing on it is the same square with no marks: nothing dimmer, dotted, struck or counted. No
+   average, best or worst day, count, arrow or tick.
+3. **Previous month**, **Today** and **Next month** change month. Not built: a year view, #379.
+4. Choosing a day lists its records in the panel beside the grid, the calendar in words (#259): each
+   record's kind and time (a sleep log's bed and wake times), a check-in's mood word, a self-check's
+   name and band word. No self-check total: the phone's own view of a day shows none. Before a day is
+   chosen the panel says *"Choose a day to see what was recorded on it."*; a day with nothing says
+   *"Nothing recorded."*
+5. A screen reader hears each day as its date, then each mark in the order drawn — *"Wed 16 Sep 2026:
+   check-in Good, check-in Meh, journal"* — with *", today"* after today's date, and *"nothing
+   recorded"* for a day with nothing on it.
+6. **Print this month** prints the month alone, ink on white whatever the screen's theme, every square
+   beside its word; the day panel, the controls and the rest of the page stay off the paper.
 
 ## 9. Consent and sharing (no dark patterns)
 
@@ -332,6 +356,7 @@ screen can."* — and no banner on any console asks a person to verify a digest 
 | Did not open | Owner, door | *"That did not open the key this server holds. Nothing has changed. Check what you typed and try again."* |
 | Snapshots and no key | `pnpm push`, set-up | *"This server stores snapshots but not what is needed to open them. A new key would not open those snapshots, so none was made, and nothing has been stored."* |
 | Key changed before upload | `pnpm push` | *"The snapshot was not sent. The key this server holds changed while the snapshot was being encrypted, and this passphrase does not open it to the key the snapshot was encrypted under."* |
+| A day with nothing on it | Owner, month calendar | The same plain square with no marks; heard as *"{date}: nothing recorded"*; the panel says *"Nothing recorded."* |
 
 ## 12. Accessibility, language, motion
 

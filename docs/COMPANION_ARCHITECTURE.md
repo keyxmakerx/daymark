@@ -143,7 +143,8 @@ uses it, and all four are Daymark Companion, with no separate brand (#310): the 
 "Daymark Companion — owner console", "— clinician console", "— admin console" and "— practice
 console" (#158).
 
-- **Owner console** (`index.html`): open an exported backup file; read the encrypted copy from the
+- **Owner console** (`index.html`): open an exported backup file and read it as a dashboard and a month
+  calendar, in the person's own mood names and colours; read the encrypted copy from the
   server; the self-check engine and a focus task (COMPANION_FEATURES.md); the tool builder; access
   recovery; and, unlocked from the key the server keeps, with the passphrase or the recovery code,
   invite and pair a

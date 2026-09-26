@@ -132,17 +132,29 @@ trend, a person's own answer shown back to them — keeps the ramp. **STATE** �
 error, selected tab, link, focus ring, callout border or confirmation — moves to chrome, indigo, clay
 or amber. If you cannot tell which, read what renders it.
 
-Enforced tree-wide. `components/invariants.tree.test.ts` group (a) allows six files to name a mood
-token — `app.css` and `lib/mood.ts`, which define the ramp, and four surfaces that draw a person's own
-data: `charts/Sparkline.svelte`, `Dashboard.svelte`, `QuestionnaireRunner.svelte` and
-`ui/BandTag.svelte`. It fails on any other file, and inside those files it fails on a mood token
-used under a state selector (`:hover`, `.active`, `[aria-selected]` and the like).
+Enforced tree-wide. `components/invariants.tree.test.ts` group (a) allows seven files to name a mood
+token — `app.css` and `lib/mood.ts`, which define the ramp, and five surfaces that draw a person's own
+data: `charts/Sparkline.svelte`, `Dashboard.svelte`, `QuestionnaireRunner.svelte`, `ui/BandTag.svelte`
+and `calendar/MoodMark.svelte`. It fails on any other file, and inside those files it fails on a mood
+token used under a state selector (`:hover`, `.active`, `[aria-selected]` and the like).
 `ui/invariants.test.ts` group (c) adds that inside `ui/` only `BandTag` names the ramp, that it uses
 all five steps, and that no other primitive names `--mood-4` or `--mood-5` even in a comment.
 
-The ramp is fixed. The phone lets a person recolour their moods and the backup carries those colours,
-but the web draws the shipped ramp; a person's custom mood labels are used as words in the clinician
-views, and their custom colours are not applied.
+**A person's own names and colours.** The phone lets a person rename and recolour their moods, and the
+backup carries both. On their own data — a backup opened in the viewer or the owner console — the web
+draws their moods in their own words and colours, and a level they left alone keeps the shipped word
+and ramp (#280). A share carries neither, so the clinician's views draw the shipped words and ramp,
+and the clinician's view of a share tells the dashboard `ownData={false}` so it would even if a bundle
+one day carried them. A person's colour can be any colour, the greens included, so it is held to one
+rule more than the ramp: it fills a mood mark and nothing else, and a mood mark always sits beside its
+word. It travels one road. `ownMoodColours` (`lib/mood.ts`) reads the backup's integers into an opaque
+palette, and every colour out is `#rrggbb` built by arithmetic, so a crafted backup writes no CSS. The
+only way out is `ownMoodFill`, whose value is set as one custom property, `--mood-fill`, inline on the
+mood mark itself — a leaf, so nothing inherits it — and read only by rules whose subject is
+`.mood-mark`, as its fill or background. The marks that take it are the mood distribution's bars and
+the month calendar's check-in squares (`calendar/MoodMark.svelte`); the association bars, the mood
+line and the self-check trend keep the shipped ramp, because none is one mood beside its word.
+`components/ownMoodColour.tree.test.ts` holds every step.
 
 #### 2.3.2 Invariant 2 — there is deliberately no success colour
 
@@ -422,7 +434,9 @@ A chart of a person's mood is drawn on the mood ramp, because there **the ramp i
 "awful" bar must be the colour an awful day is everywhere else. A chart of something that is not mood
 (counts, durations) would need its own low-chroma, colour-blind-safe series palette that does not
 overlap the ramp's meaning; none exists yet. Every chart should have a text or table equivalent and
-print cleanly. Not built for every chart: #259.
+print cleanly. The month calendar has both: its day panel lists the chosen day in words, and **Print
+this month** prints the month alone, ink on white (`calendar/print.ts`). Not built for every chart:
+#259.
 
 ## 6. Responsive and accessibility
 
@@ -467,6 +481,18 @@ structural checks, so an explanation of a rule cannot satisfy the rule:
 | (c) | every token a component references is defined in `app.css`, and no component reaches for a `--c-*` primitive (§2.3.3) |
 | (d) | no component hardcodes a colour |
 | (e) | the fixed honesty copy — non-diagnostic banners, lower-assurance banners, the audit caveat, the share builder's scores-only framing, the provenance disclaimers — is verbatim (§2.3.5) |
+
+`components/ownMoodColour.tree.test.ts` — a person's own colours (§2.3.1), over every file under `src/`,
+parsing components with Svelte's own parser: a backup's colours are read only through `ownMoodColours`;
+`ownMoodFill` is called only as the value of a `style:--mood-fill` directive; that directive sits only
+on a non-interactive leaf `span` or `rect` with the class `mood-mark` and a `.mood-word` beside it;
+every rule naming the property has a mood mark as its subject, no interface state or chrome in its
+selector, and spends it on a fill; only the clinician's view says `ownData={false}`.
+
+`components/calendar/monthCalendar.test.ts` — the person's own month: a day is drawn the same whatever
+it holds; no grade, figure or arrow; the day panel and controls are left off the paper and every word
+stays on it; the month is mounted only behind the dashboard's own-data gate; the clinician's calendar
+draws no mood.
 
 Every guard proves its subject exists before it filters, because a grep-shaped test that matches
 nothing goes green. Any change to these suites is mutation-tested before it is trusted (CLAUDE.md §5).
