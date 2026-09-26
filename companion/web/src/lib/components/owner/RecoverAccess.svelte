@@ -30,6 +30,8 @@
     type OwnerConnection,
   } from '../../owner/recoveryEmail'
   import { Card, Callout } from '../ui'
+  import { devicesApi } from '../../phones/devices'
+  import { reissueLine } from '../../phones/copy'
 
   let {
     /** Whether the owner's page offers the owner console (`offersRoute('owner', …)`). */
@@ -78,6 +80,34 @@
         if (!cancelled) registered = settings.email
       } catch {
         if (!cancelled) setupError = LOAD_FAILED
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  })
+
+  /*
+   * RE-ISSUING THE TOKEN DISCONNECTS EVERY PAIRED PHONE (#431), so the line saying so stands directly
+   * above the button that re-issues it, always. With a connection this visit proved, the phones still
+   * connected are counted and the line names how many; with none, or when the count cannot be read,
+   * the count-free line stands, which is true either way. The effect reads only the prop, and what it
+   * writes it never reads.
+   */
+  let connectedPhones = $state<number | null>(null)
+  const reissue = $derived(reissueLine(connectedPhones))
+
+  $effect(() => {
+    const c = connection
+    connectedPhones = null
+    if (!c) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const phones = await devicesApi(c.serverUrl, c.token).listDevices()
+        if (!cancelled) connectedPhones = phones.filter((p) => p.revokedAt === null).length
+      } catch {
+        /* no count: the count-free line stands */
       }
     })()
     return () => {
@@ -224,6 +254,8 @@
             <span>Confirmation token <em>(from the link in your email)</em></span>
             <input type="text" bind:value={confirmToken} autocomplete="off" />
           </label>
+          <!-- Directly above the button that re-issues the token, always: what it does to the phones. -->
+          <p class="para reissue">{reissue}</p>
           <button class="primary" onclick={confirm} disabled={busy}>{busy ? 'Confirming…' : 'Confirm and re-issue'}</button>
           {#if confirmStatus}<p class="status">{confirmStatus}</p>{/if}
           {#if newToken}

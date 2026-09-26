@@ -70,6 +70,33 @@ export function auditActionLabel(action: string): string {
   return ACTION_LABELS[action] ?? action
 }
 
+/**
+ * `by` on a `device.revoked` row when a re-issued access token disconnected every phone, one row per
+ * phone (DeviceRoutes.kt, DEVICE_REVOKED_BY_REISSUE). auditLabels.test.ts reads it from there.
+ */
+export const DEVICE_REVOKED_BY_REISSUE = 'reissue'
+
+/**
+ * A line of the owner's own log (`GET /v1/owner/audit`, #186, #189), which is not a relationship's:
+ * phones paired and disconnected, and the lockouts the owner's own credentials armed. Two rows read
+ * differently there, so this reads the row's `meta` as well as its action:
+ *
+ *   - a phone disconnected because the access token was re-issued is not the owner pressing
+ *     Disconnect, and says so;
+ *   - `lockout` here is a network address paused after wrong tries at the owner's token, a phone's
+ *     key or a pairing code, never a clinician's sign-in, which is what the same action means in a
+ *     relationship's log.
+ *
+ * Every other action reads as it does everywhere ([auditActionLabel]).
+ */
+export function ownerLogActionLabel(action: string, meta?: Record<string, string> | null): string {
+  if (action === 'device.revoked' && meta?.by === DEVICE_REVOKED_BY_REISSUE) {
+    return 'Disconnected a phone when the access token was re-issued'
+  }
+  if (action === 'lockout') return 'Paused one network address after repeated wrong tries'
+  return auditActionLabel(action)
+}
+
 export function auditActorLabel(actor: string): string {
   return actor === 'owner' ? 'You' : 'Your clinician'
 }

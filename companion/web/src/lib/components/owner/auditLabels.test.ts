@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { auditActionLabel, auditActorLabel } from './auditLabels'
+import { DEVICE_REVOKED_BY_REISSUE, auditActionLabel, auditActorLabel, ownerLogActionLabel } from './auditLabels'
 import { orgAuditActionLabel } from '../../practice/audit'
 import { REVOKE_CAVEAT } from '../../pairing/copy'
 
@@ -131,5 +131,43 @@ describe('audit label mapping', () => {
     expect(auditActorLabel('therapist')).not.toMatch(/therapist/i)
     // Control: the word planted back into the real label is seen.
     expect(auditActorLabel('therapist').replace('clinician', 'therapist')).toMatch(/therapist/i)
+  })
+})
+
+describe("the owner's own log reads a row's meta (#431)", () => {
+  const DEVICE_ROUTES = fileURLToPath(
+    new URL('../../../../../server/src/main/kotlin/com/daymark/companion/routes/DeviceRoutes.kt', import.meta.url),
+  )
+
+  /** The value the server writes as `by` when a re-issue disconnects the phones; null when not found. */
+  function reissueBy(kotlin: string): string | null {
+    return /const val DEVICE_REVOKED_BY_REISSUE = "([^"]+)"/.exec(kotlinCode(kotlin))?.[1] ?? null
+  }
+
+  it('names a phone disconnected by a re-issued token, by the value the server writes', () => {
+    const server = readFileSync(DEVICE_ROUTES, 'utf8')
+    expect(reissueBy(server)).toBe(DEVICE_REVOKED_BY_REISSUE)
+    // Positive control: the reading finds nothing when the constant is gone.
+    expect(reissueBy(server.replace('DEVICE_REVOKED_BY_REISSUE =', 'RENAMED ='))).toBeNull()
+
+    expect(ownerLogActionLabel('device.revoked', { by: 'reissue' })).toBe('Disconnected a phone when the access token was re-issued')
+    expect(ownerLogActionLabel('device.revoked', { by: 'owner' })).toBe('Disconnected a phone')
+    expect(ownerLogActionLabel('device.revoked', null)).toBe('Disconnected a phone')
+    expect(ownerLogActionLabel('device.registered', null)).toBe('Paired a phone')
+  })
+
+  it("calls the owner's lockout a paused address, and leaves a clinician's lockout as it was", () => {
+    expect(ownerLogActionLabel('lockout', { credential: 'pairing-code' })).toBe('Paused one network address after repeated wrong tries')
+    expect(ownerLogActionLabel('lockout', { credential: 'token', sourceIp: '192.0.2.1' })).toBe(
+      'Paused one network address after repeated wrong tries',
+    )
+    // The relationship log's line is the clinician's sign-in, and does not change.
+    expect(auditActionLabel('lockout')).toBe('Sign-in temporarily locked (too many attempts)')
+  })
+
+  it('reads every other action as every log does', () => {
+    const others = ACTIONS.filter((a) => a !== 'lockout' && a !== 'device.revoked')
+    expect(others.length).toBeGreaterThan(20)
+    for (const action of others) expect(ownerLogActionLabel(action, null), action).toBe(auditActionLabel(action))
   })
 })

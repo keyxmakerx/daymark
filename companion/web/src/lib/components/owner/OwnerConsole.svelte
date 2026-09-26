@@ -23,6 +23,7 @@
   import type { OwnerConnection } from '../../owner/recoveryEmail'
   import type { Grant } from '../../assignments/types'
   import type { OwnerLane } from '../../lane/lane'
+  import { CONSOLE_POINTER } from '../../phones/copy'
 
   let { data }: { data: BackupData | null } = $props()
 
@@ -190,6 +191,8 @@
         <label><span>Owner access token</span><input type="password" bind:value={token} autocomplete="off" /></label>
         <button onclick={connect}>Connect</button>
         {#if connectStatus}<span class="cstatus">{connectStatus}</span>{/if}
+        <!-- Phones pair on every kind of server, so from the sync card, not from here (#431). -->
+        <p class="cpointer">{CONSOLE_POINTER}</p>
       </div>
     </details>
 
@@ -307,6 +310,7 @@
   .conn-body em { color: var(--text-subtle); font-style: normal; }
   input { font: inherit; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-bg); color: var(--ink-text); }
   .cstatus { font-size: 0.8rem; color: var(--ink-soft); }
+  .cpointer { margin: 0; font-size: 0.85rem; color: var(--ink-soft); }
   .who { padding-bottom: var(--space-2); }
   .empty { margin: 0; }
   .repair { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); border-top: 1px solid var(--hairline); padding-top: var(--space-3); }
