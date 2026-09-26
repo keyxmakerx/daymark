@@ -13,7 +13,7 @@ a key, or plaintext; all cryptography runs on the client. The threat model is
 
 | Step | Primitive | Parameters |
 |---|---|---|
-| KDF | **Argon2id** (`crypto_pwhash`, `ALG_ARGON2ID13`) | `memMiB ≥ 256`, `ops ≥ 3`, 16-byte random salt (non-secret), 32-byte master |
+| KDF | **Argon2id** (`crypto_pwhash`, `ALG_ARGON2ID13`) | `256 ≤ memMiB ≤ 512`, `3 ≤ ops ≤ 8` (writers use 256 and 3), 16-byte random salt (non-secret), 32-byte master |
 | Subkeys | **`crypto_kdf_derive_from_key`** | context `"dmsync01"` (8 bytes), 32 bytes each: id 1 → `SYNC_KEY`, id 2 → `MANIFEST_SEED` (Ed25519 seed), id 3 → the owner's X25519 seed, id 4 → the owner's Ed25519 seed |
 | Content AEAD | **XChaCha20-Poly1305** (`crypto_aead_xchacha20poly1305_ietf`) | 24-byte random nonce per blob, 32-byte `SYNC_KEY` |
 | Manifest signing | **Ed25519** (`crypto_sign_detached`) | keypair from `crypto_sign_seed_keypair(MANIFEST_SEED)` |
@@ -72,8 +72,11 @@ The key params are written once: a second `PUT` answers `409`, because a new sal
 everything already written under the old one.
 
 A reader: fetch keyparams → `Argon2id(passphrase, salt, params)` → subkeys → decrypt.
-Readers **must reject** params below the floor (`memMiB ≥ 256`, `ops ≥ 3`, `alg = argon2id`)
-to defend against a server downgrading them.
+Readers **must reject**, before deriving anything, params below the floor (`memMiB ≥ 256`,
+`ops ≥ 3`, `alg = argon2id`), to defend against a server downgrading them, and params above the
+ceiling (`memMiB ≤ 512`, `ops ≤ 8`), so that no document sets how much memory and time a reader spends
+before anything can refuse it. The floor is checked first. Writers use the floor. The range is
+`kdfRange` in `companion/web/src/lib/sync/crypto.ts`, and `SyncCrypto.KdfParams` on the phone.
 
 > **All base64 in this protocol is RFC 4648 §5 — URL-safe alphabet (`-`/`_`), NO padding**
 > (libsodium `URLSAFE_NO_PADDING`). This applies to `saltB64`, `signatureB64`, and
@@ -82,7 +85,7 @@ to defend against a server downgrading them.
 
 **The wrapped key (#258).** The master, locked once per secret: XChaCha20-Poly1305 under a key that
 Argon2id derives from the passphrase, and again under one derived from the recovery code. Each slot
-has its own salt, the same KDF floor, and `AAD = utf8("daymark.datakey.v1|" + kind)`. The reference
+has its own salt, the same KDF range, and `AAD = utf8("daymark.datakey.v1|" + kind)`. The reference
 is `RecoverableDataKey` in `companion/web/src/lib/recovery/dataKey.ts`:
 
 ```json
@@ -94,8 +97,8 @@ is `RecoverableDataKey` in `companion/web/src/lib/recovery/dataKey.ts`:
 
 The server stores this document byte for byte. It cannot open it and vouches for nothing in it. It
 checks only that the body is one JSON object in UTF-8, at most 16 KiB and at most 32 levels deep. A
-two-slot document is about 460 bytes. Readers check the KDF floor on every slot, as they do for the
-key params.
+two-slot document is about 460 bytes. Readers check the KDF floor and ceiling on every slot, whatever its
+kind, as they do for the key params.
 
 The first version is created against the state its writer read (§2), so two devices never both mint
 a master. A first run mints a random master only while no key document of either kind exists. An
@@ -260,4 +263,5 @@ only its random draws fixed: the passphrase `wrapped-key vector: café, 日記, 
 `K7M2Q-XR9CT-4HWAZ-P3NE8-GUV6D-YJF59`. It wraps the master the key params give (salt 0x10..0x1f,
 256 MiB, 3 passes), and the result is 463 bytes. `KeyDocumentVectorTest` opens both documents to that
 master and its four subkeys, the Kotlin writer makes the same 463 bytes, and both sides refuse the
-same twelve mutations before deriving anything.
+same twenty-six mutations before deriving anything (seventeen of the wrapped key, seven of a slot of a
+kind neither side opens, two of the key params); at 512 MiB and 8 passes each reaches Argon2id.

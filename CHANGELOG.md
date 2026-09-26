@@ -253,6 +253,13 @@ All notable changes to this project are documented here. The format is based on
   both jobs.
 
 ### Changed
+- **Opening your key now has a limit on the work it takes, as well as a minimum.** Before the owner
+  console, the clinician console or the phone turn your passphrase or recovery code into a key, they
+  check the settings stored with it. They already refused settings weaker than the agreed strength;
+  they now also refuse settings that ask for more than 512 MiB of memory or 8 passes, before
+  starting, and say so in one fixed sentence. Every key Daymark makes uses 256 MiB and 3 passes, so
+  nothing you already have changes. On the phone this waits for phone sync, like the rest of its key
+  handling.
 - **Companion — a recovery code now works from any device, and the owner console no longer needs a
   key file.** The owner console opens your key from your own server: you give it the server's address
   and your access token, then your passphrase or, instead, your recovery code. The first time, on a

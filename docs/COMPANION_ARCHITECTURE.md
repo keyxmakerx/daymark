@@ -173,7 +173,7 @@ One primitive set, the same on every client (libsodium in the browser, lazysodiu
 
 | Purpose | Primitive |
 | --- | --- |
-| Passphrase to key (client-side only) | Argon2id, 256 MiB, 3 passes floor; readers refuse weaker parameters |
+| Passphrase to key (client-side only) | Argon2id, 256 MiB, 3 passes floor; readers refuse weaker parameters, and costlier ones than 512 MiB or 8 passes |
 | Subkeys from the master | `crypto_kdf`, context `dmsync01`: 1 sync key, 2 manifest signing seed, 3 and 4 the owner's pairing identity |
 | Symmetric encryption | XChaCha20-Poly1305, random 24-byte nonce |
 | Keys per party | X25519 (encryption) and Ed25519 (signing) |
