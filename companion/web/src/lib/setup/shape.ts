@@ -156,7 +156,7 @@ export const SHAPES: readonly DeploymentShape[] = [
     id: 'paired',
     label: 'Paired — you, and one clinician',
     arrangement:
-      'You still run the machine and the journal is still yours. One clinician you invite is ' +
+      'You still run the machine and the journal is still yours. The clinicians you invite are ' +
       'shown the slices you pick, and you can withdraw that at any time.',
     summary:
       'Everything Solo does, plus an invitation you mint for one clinician, whose key you check ' +

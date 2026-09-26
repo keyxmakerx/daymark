@@ -190,15 +190,15 @@
    * "Offline report viewer" was a constant, and it stayed up over a Paired page whose trust strip,
    * one element below, said "This tab sends data to your server." Both were on screen at once.
    * The tagline is a few words about what this page is FOR on this machine, so it has to change
-   * when the answer does: Solo is the offline viewer; Paired is the journal and the one clinician
-   * it is shown to; Practice reuses the placeholder panel's own title, because that is the same
-   * sentence and one spelling of it is enough. Undecided — the question still open, or a recovery
-   * link that skipped it — keeps the viewer's wording, which is what the page is until told
-   * otherwise.
+   * when the answer does: Solo is your journal on a bigger screen; Paired is the journal and the
+   * clinicians it is shown to, plural because a person may invite more than one; Practice reuses
+   * the placeholder panel's own title, because that is the same sentence and one spelling of it is
+   * enough. Undecided — the question still open, or a recovery link that skipped it — keeps the
+   * Solo wording, which is what the page is until told otherwise.
    */
   const TAGLINE: Record<ShapeId, string> = {
-    solo: 'Offline report viewer',
-    paired: 'Your journal, and one clinician you invited',
+    solo: 'Your journal, on a bigger screen',
+    paired: 'Your journal, and the clinicians you invite',
     practice: SHAPE_LABELS.practiceTitle,
   }
   const tagline = $derived(TAGLINE[decidedShape(decision) ?? 'solo'])
@@ -398,11 +398,13 @@
     {/if}
   </main>
 
+  <!--
+    The footer makes the page's one claim about where data goes, in the same words as the page
+    description and the orientation: scoped to entries, because the page also sends invitations,
+    pairing messages, grants and account identifiers (#273).
+  -->
   <footer class="foot faint">
-    <p>
-      Daymark Companion · Phase-0 viewer · GPL-3.0 · runs entirely on your device.
-      <span class="status">design-stage scaffold</span>
-    </p>
+    <p>Daymark Companion · GPL-3.0 · Your entries leave this browser only when you sync or share them.</p>
   </footer>
 </div>
 
@@ -427,6 +429,5 @@
      accent rather than content ink, and that aria-pressed carries the selection so a fill is
      never the only signal — moved with the markup and is restated in Orientation.svelte. */
   .foot { border-top: 1px solid var(--hairline); padding-top: var(--space-4); font-size: 0.85rem; }
-  .status { font-style: italic; }
   code { font-family: var(--font-mono); background: var(--paper-bg); padding: 0 0.25rem; border-radius: 4px; }
 </style>

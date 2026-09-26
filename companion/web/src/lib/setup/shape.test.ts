@@ -156,6 +156,20 @@ describe('the three deployment shapes', () => {
     expect(shapeById('paired').ranking).toMatch(/one clinician/i)
   })
 
+  it('Paired shows the journal to the clinicians the owner invites, not to one (#288)', () => {
+    const arrangement = shapeById('paired').arrangement
+    expect(arrangement).toBe(
+      'You still run the machine and the journal is still yours. The clinicians you invite are ' +
+        'shown the slices you pick, and you can withdraw that at any time.',
+    )
+    const RETIRED = 'One clinician you invite is shown the slices you pick'
+    expect(arrangement).not.toContain(RETIRED)
+    // Control: the retired sentence planted back into the real arrangement is seen.
+    expect(arrangement.replace('The clinicians you invite are shown', 'One clinician you invite is shown')).toContain(
+      RETIRED,
+    )
+  })
+
   it('states which shapes are built and which is a placeholder, as data rather than as prose', () => {
     // `buildState` is the field the interface reads to mark the gap. If it stopped distinguishing
     // them, the practice choice would look as finished as the other two.

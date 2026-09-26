@@ -37,7 +37,7 @@ import type { SetupSurface } from '../setup/shape'
  *   local     nothing leaves: open-a-file, self-checks, the tool builder, the practice panel.
  *   setup     the first-run screen, which reads the deployment's configuration and nothing else.
  *   sync      ciphertext leaves and returns; the passphrase does not.
- *   account   identifiers, and on recovery an email address, leave.
+ *   account   identifiers, on recovery an email address, and sealed shares leave.
  */
 export type TrustPosture = 'local' | 'setup' | 'sync' | 'account'
 

@@ -199,7 +199,7 @@ export const OWNER_ROUTES: readonly OwnerRoute[] = [
     id: 'file',
     label: 'Open a backup file',
     blurb:
-      'A file you exported from the app. Read here, never uploaded.',
+      'A file you exported from the app, read in this browser.',
     group: 'arrive',
     order: 1,
     needs: 'this-browser',
@@ -665,16 +665,20 @@ export const ORIENTATION_LEDE =
  * recovery email to a stranger, having just been told by the product that it could not happen.
  *
  * The field is not the bug — reaching your own self-hosted server is the entire point, and it can
- * be anywhere. The sentence was the bug. It now says what is actually true: nothing leaves unless
- * you send it, and where it goes is a box you fill in.
+ * be anywhere. The sentence was the bug. It now says what is actually true: your entries leave
+ * only when you sync or share them, and where anything is sent is a box you fill in.
+ *
+ * NOT "NOTHING IS SENT" (#273). The same page syncs and shares, and sends invitations, pairing
+ * messages, grants and account identifiers besides, so an absolute about everything was false.
+ * The claim is scoped to entries, in the same words as the footer and the page description.
  */
 export const WHAT_THIS_PAGE_IS =
   'This page is a viewer. It runs in your browser, holds no account of you, and has nothing of ' +
-  'yours until you give it something. A backup you open is read here, never uploaded, and gone ' +
-  'when you close the tab. Nothing is sent anywhere unless you ask for it — and where it is sent ' +
-  'is an address you type, so check it before you paste a token or an email into a page you did ' +
-  'not open yourself. The single thing it writes to your browser is a note that you have read ' +
-  'this orientation.'
+  'yours until you give it something. A backup you open is read in this browser and gone when ' +
+  'you close the tab. Your entries leave this browser only when you sync or share them — and ' +
+  'where anything is sent is an address you type, so check it before you paste a token or an ' +
+  'email into a page you did not open yourself. The single thing it writes to your browser is a ' +
+  'note that you have read this orientation.'
 
 /**
  * The limitation that matters most for the "even if the server is compromised" promise, and that

@@ -93,9 +93,16 @@
       entries stay in this browser; what crosses the network is ciphertext your server cannot
       read. It can still see that you synced, and when.
     {:else}
-      <strong>This tab sends data to your server.</strong> Account actions here transmit
-      identifiers, and account recovery transmits the email address you type. Your passphrase
-      and your entries are not involved and never leave this browser.
+      <!--
+        Shown on the owner console and on account recovery. The owner console seals shares and
+        uploads them, so this strip may not say entries never leave (#273): it says what crosses,
+        in the sync strip's shape — what stays, what leaves, what the server can still see — and
+        scopes the claim to the one key a share is sealed to rather than promising who can read it.
+      -->
+      <strong>This tab sends data to your server.</strong> Account actions send identifiers, and
+      recovery sends the email address you type. A share you seal leaves this browser too, as
+      ciphertext sealed to one clinician's pinned key: the server can see that it exists and how
+      big it is, not what is in it. Your passphrase stays in this browser.
     {/if}
   </p>
 </aside>

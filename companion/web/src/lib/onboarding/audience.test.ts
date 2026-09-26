@@ -804,7 +804,22 @@ describe('the copy', () => {
     expect(ORIENTATION_LEDE).toContain('three different pages')
     // "State what runs where" — and it must stay true of a build that writes a dismissal note.
     expect(WHAT_THIS_PAGE_IS).toContain('runs in your browser')
-    expect(WHAT_THIS_PAGE_IS).toContain('never uploaded')
+    // Scoped to entries (#273): the page also sends invitations, grants and identifiers, so an
+    // absolute about everything was false. The same words as the footer and the page description.
+    expect(WHAT_THIS_PAGE_IS).toContain('Your entries leave this browser only when you sync or share them')
+    expect(WHAT_THIS_PAGE_IS).toContain('A backup you open is read in this browser and gone when you close the tab.')
+    const RETIRED = /never uploaded|Nothing is sent anywhere unless you ask for it/
+    expect(WHAT_THIS_PAGE_IS).not.toMatch(RETIRED)
+    // Control: the retired wording planted back into the real paragraph is seen.
+    expect(
+      WHAT_THIS_PAGE_IS.replace('read in this browser and gone', 'read here, never uploaded, and gone'),
+    ).toMatch(RETIRED)
+    // The file route's own line: the file is not uploaded, but entries read from it can be shared,
+    // so "never" was an absolute this page cannot keep.
+    const file = OWNER_ROUTES.find((r) => r.id === 'file')!.blurb
+    expect(file).toBe('A file you exported from the app, read in this browser.')
+    expect(file).not.toMatch(RETIRED)
+    expect('A file you exported from the app. Read here, never uploaded.').toMatch(RETIRED) // the retired line
     expect(WHAT_THIS_PAGE_IS).toContain('orientation')
     // The refusal, on the page rather than only in a comment.
     expect(WHY_SO_FEW_CHECKS).toContain('no configuration checklist')

@@ -12,7 +12,7 @@
       still makes zero network requests — everything is vendored and bundled.
     -->
     <title>Daymark Companion — owner console</title>
-    <meta name="description" content="Offline, on-device viewer for a Daymark backup. Your file never leaves this device." />
+    <meta name="description" content="Read, sync and share your Daymark journal on your own server. Your entries leave this browser only when you sync or share them." />
   </head>
   <body>
     <div id="app"></div>
@@ -20,9 +20,8 @@
       <!-- No inline style here: the strict CSP (style-src 'self') blocks inline styles,
            so this fallback is intentionally unstyled, which is fine and accessible. -->
       <p>
-        The Daymark Companion report viewer needs JavaScript to render your backup in
-        the browser. No data is ever sent anywhere — all processing happens locally on
-        this device.
+        The Daymark Companion owner console needs JavaScript to open your backup in the
+        browser. Without it this page does nothing and sends nothing.
       </p>
     </noscript>
     <script type="module" src="/src/main.ts"></script>
