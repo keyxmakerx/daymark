@@ -93,7 +93,11 @@ describe('the Dashboard draws an average only when its mount asks', () => {
   const dashboard = read(DASHBOARD)
 
   it('is off unless asked for', () => {
-    expect(dashboard).toMatch(/let \{ data, showAverage = false \}: \{ data: BackupData; showAverage\?: boolean \} = \$props\(\)/)
+    // The destructuring's own default, whatever other props sit beside it (`ownData`, #280).
+    const OFF_UNLESS_ASKED = /let \{\s*data,\s*showAverage = false,?[^}]*\}: \{ data: BackupData; showAverage\?: boolean;?[^}]*\} = \$props\(\)/
+    expect(dashboard).toMatch(OFF_UNLESS_ASKED)
+    // Control: the same line with the default flipped is not matched.
+    expect(dashboard.replace('showAverage = false', 'showAverage = true')).not.toMatch(OFF_UNLESS_ASKED)
   })
 
   it('draws it only behind the prop, named as an average of what was logged', () => {

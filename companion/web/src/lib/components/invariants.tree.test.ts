@@ -182,7 +182,7 @@ const MOOD_DATA_FILES: Record<string, string> = {
   'src/lib/charts/Sparkline.svelte':
     "the plotted line IS the person's daily mood average, on the ramp's own 1..5 scale",
   'src/lib/components/Dashboard.svelte':
-    'mood distribution, activity-association deltas and the self-check trend line — all charts of a person’s own series',
+    'mood distribution (in the person’s own colours where they chose them), activity-association deltas and the self-check trend line — all charts of a person’s own series',
   'src/lib/components/QuestionnaireRunner.svelte':
     'the result edge is the band this person’s own answers scored into, beside the band label in words',
   'src/lib/components/ui/BandTag.svelte':
@@ -198,6 +198,7 @@ const POLICING_FILES = [
   'src/lib/components/ui/invariants.test.ts',
   'src/lib/components/trustbar.test.ts',
   'src/lib/components/invariants.tree.test.ts',
+  'src/lib/components/ownMoodColour.tree.test.ts',
 ]
 
 const SELF = 'src/lib/components/invariants.tree.test.ts'

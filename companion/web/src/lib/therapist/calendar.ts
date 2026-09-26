@@ -76,7 +76,10 @@
 import type { BackupData } from '../backup'
 import { getInstrument } from '../instruments'
 import type { ProvenanceTier } from '../instruments/types'
-import { moodFor } from '../mood'
+import { moodWord } from '../mood'
+
+/** Mood as a WORD: the bundle's own name for the level first, the app's fixed scale as the fallback. */
+export { moodWord }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Civil-date arithmetic, in integers.
@@ -304,12 +307,6 @@ export interface CalendarEvent {
 const SELF_REPORT_MOOD = 'Self-reported, the app’s own 1–5 mood scale'
 const SELF_REPORT_SLEEP = 'Self-reported sleep log'
 const SELF_CHECK_SOURCE = 'Self-check, scored in the app'
-
-/** Mood as a WORD. The bundle's own labels first, the app's fixed scale as the fallback. */
-export function moodWord(level: number, labels: Record<string, string> | undefined): string {
-  const supplied = labels?.[String(level)]
-  return supplied && supplied.trim() ? supplied.trim() : moodFor(level).label
-}
 
 /** "7h 20m" / "45m" / "0m". Never a percentage: sleep efficiency would be a grade for a night. */
 export function formatDuration(ms: number): string {
