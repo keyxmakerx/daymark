@@ -86,8 +86,9 @@ data class Config(
     /**
      * Whether the therapist session cookie carries the `Secure` attribute. TRUE by default
      * (the portal requires a real TLS origin, per COMPANION_SECURITY.md §5.4; what that means for
-     * a LAN deployment is still open, in #205). Only set false for a plain-HTTP dev/test origin —
-     * the cookie would otherwise not be sent.
+     * a LAN deployment is still open, in #205). Only set false (`DAYMARK_COOKIE_INSECURE`) for a
+     * plain-HTTP dev/test origin — the cookie would otherwise not be sent. [fromEnv] refuses the
+     * switch alongside an `https` public address (#181).
      */
     val cookieSecure: Boolean = true,
     /**
@@ -198,16 +199,21 @@ data class Config(
 
         /**
          * Throws a [StartupRefusal] for a configuration the server must not run with.
-         *
-         * While [buildsLinks], the public address must be present and usable (#180). A link that
-         * cannot take the configured address would have to take its host from the request, which a
-         * visitor controls — and an invitation link carries the invitation's secret, so a link on a
-         * host an attacker names hands the secret to them.
-         *
          * [addressSetting] names where [publicBaseUrl] was read from, so a refusal points at the
          * setting the operator actually wrote.
          */
         private fun refuseUnsafe(config: Config, addressSetting: String) {
+            refuseLinksWithoutAddress(config, addressSetting)
+            refuseInsecureCookie(config, addressSetting)
+        }
+
+        /**
+         * While [buildsLinks], the public address must be present and usable (#180). A link that
+         * cannot take the configured address would have to take its host from the request, which a
+         * visitor controls — and an invitation link carries the invitation's secret, so a link on a
+         * host an attacker names hands the secret to them.
+         */
+        private fun refuseLinksWithoutAddress(config: Config, addressSetting: String) {
             if (!config.buildsLinks) return
             val address = config.publicBaseUrl
             val use = "Set DAYMARK_PUBLIC_BASE_URL to the address people type, for example $EXAMPLE_PUBLIC_BASE_URL"
@@ -225,6 +231,23 @@ data class Config(
                 throw StartupRefusal(
                     "Refusing to start: $addressSetting is not a usable address: it must begin with " +
                         "http:// or https://, name a host, and carry no user name, query or fragment. $use",
+                )
+            }
+        }
+
+        /**
+         * `DAYMARK_COOKIE_INSECURE` is refused alongside an `https` public address (#181). The switch
+         * drops `Secure` from the clinician's session cookie so a plain-http test origin can carry it;
+         * a server people reach over https has no use for that, and with it the cookie is one
+         * plain-http request away from crossing the network in the clear.
+         */
+        private fun refuseInsecureCookie(config: Config, addressSetting: String) {
+            val address = config.publicBaseUrl ?: return
+            if (!config.cookieSecure && address.startsWith("https://", ignoreCase = true)) {
+                throw StartupRefusal(
+                    "Refusing to start: DAYMARK_COOKIE_INSECURE is on while $addressSetting is an https " +
+                        "address. The switch lets the clinician session cookie travel over plain http and " +
+                        "is for local testing only. Remove DAYMARK_COOKIE_INSECURE.",
                 )
             }
         }
