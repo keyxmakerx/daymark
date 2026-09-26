@@ -309,6 +309,10 @@ All notable changes to this project are documented here. The format is based on
   quiet notice that names nobody and counts nothing.
 
 ### Fixed
+- **The example nginx and Traefik proxy setups now meet the rules they sit beside.** nginx refuses
+  host names it does not serve and forwards its own configured name, not the visitor's; Traefik
+  trusts no visitor's forwarded headers, and its steps now actually apply its labels and join the
+  network the compose file creates. (#209)
 - **Companion — a share can be sealed from the owner console.** Since its first version the owner
   console was handed nothing of the backup the person had opened, and once a backup was open the
   page replaced the navigation with the dashboard, so the console could not even be reached. "Seal &
