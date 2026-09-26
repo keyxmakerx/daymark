@@ -5,10 +5,11 @@
  * a component or crosses from one person's browser to the other's, so the loop can be broken for
  * everyone who tries it while every one of them passes. This drives it the way two people would:
  *
- *   owner      first run: Paired. The Recovery code screen makes the key file (the stand-in for
- *              owner-key custody; COMPANION_ARCHITECTURE.md §1). Open the synthetic backup on the
- *              file route, go to the Owner console with it still open, unlock with the key file,
- *              add a clinician (their inbox token is shown once), connect, mint the invitation and
+ *   owner      the server is Paired, so the page opens on the owner console without asking. The
+ *              Recovery code screen makes the key file (the stand-in for owner-key custody;
+ *              COMPANION_ARCHITECTURE.md §1). Open the synthetic backup on the file route, go to
+ *              the Owner console with it still open, unlock with the key file, add a clinician
+ *              (their inbox token is shown once), connect, mint the invitation and
  *              make a code.
  *   clinician  open the link; type the code, a name and a reading passphrase; wait.
  *   owner      check for the reply: the clinician's name and two fingerprints. Approve.
@@ -341,7 +342,12 @@ beforeAll(async () => {
       DAYMARK_DATA_DIR: dataDir,
       DAYMARK_WEB_DIR: distDir,
       DAYMARK_AUTH_TOKEN: OWNER_TOKEN,
-      DAYMARK_THERAPIST_AUTH: '1',
+      // The Paired shape exactly, not the older switch that also turns the practice routes on: so a
+      // route or page this loop needs that the paired shape leaves off fails the run (#330). The
+      // switch is blanked, which the server reads as unset, so a value in the caller's environment
+      // cannot contradict the mode.
+      DAYMARK_SETUP_MODE: 'paired',
+      DAYMARK_THERAPIST_AUTH: '',
       // With the clinician portal on, the server will not start without its public address (it
       // exits with "Refusing to start:"), and the invitation link is built from it: so it is the
       // exact origin both browsers use.
@@ -419,11 +425,12 @@ it('the paired loop: pair, grant, seal a share, read it, and send an assignment 
     return Number(/(\d+)/.exec(text.slice(heading.replace(/\s+/g, '').length))?.[1] ?? NaN)
   }
 
-  await step('the owner answers the first-run question: Paired', async () => {
+  await step('the server says it is Paired, so the page opens on the owner console without asking', async () => {
     await owner.goto(`${BASE}/`, { waitUntil: 'networkidle' })
-    await owner.getByRole('button', { name: /^Paired/ }).click()
-    // Paired opens on the owner console.
+    // /v1/config publishes setupMode: paired (#330), and the first-run screen takes the server's
+    // answer instead of asking: Paired opens on the owner console.
     await owner.locator('.unlock').waitFor()
+    expect(await owner.getByRole('button', { name: /^Paired/ }).count(), 'the first-run question was asked').toBe(0)
   })
 
   await step('the Recovery code screen makes the owner key file', async () => {
