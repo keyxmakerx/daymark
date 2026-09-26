@@ -49,11 +49,13 @@ const val KEY_DOCUMENT_KEYPARAMS = "keyparams"
  */
 fun Route.syncRoutes(store: BlobStore, keys: KeyDocumentStore, guard: AuthGuard, maxRequestBytes: Long) {
     route("/v1") {
-        // Non-secret KDF parameters (salt etc.) shared by all of an owner's clients, until a wrapped
-        // key supersedes them (#258). From then on both methods answer 410 Gone: the parameters were
-        // here and are withdrawn for good. Not 404, which says none were ever published and which a
-        // writer answers by publishing a fresh salt; not 409, which invites a retry that can never
-        // succeed. The file stays on the volume (KeyDocumentStore).
+        // Non-secret KDF parameters (salt etc.) shared by all of an owner's clients (#258). Written
+        // once: a second PUT answers 409, since a new salt would strand everything written under the
+        // old one. The read carries their ETag, which an enrolment names to say which ones it wrapped.
+        // Once a wrapped key supersedes them, both methods answer 410 Gone: the parameters were here
+        // and are withdrawn for good. Not 404, which says none were ever published and which a writer
+        // answers by publishing a fresh salt; not 409, which invites a retry that can never succeed.
+        // The file stays on the volume (KeyDocumentStore).
         put("/keyparams") {
             if (!call.authorized(guard)) return@put
             val body = call.readCapped(maxRequestBytes) ?: return@put
@@ -68,8 +70,12 @@ fun Route.syncRoutes(store: BlobStore, keys: KeyDocumentStore, guard: AuthGuard,
             if (!call.authorized(guard)) return@get
             try {
                 val kp = keys.getKeyparams()
-                if (kp == null) call.respond(HttpStatusCode.NotFound, ErrorDto("no keyparams"))
-                else call.respondBytes(kp, ContentType.Application.Json)
+                if (kp == null) {
+                    call.respond(HttpStatusCode.NotFound, ErrorDto("no keyparams"))
+                } else {
+                    call.response.header(HttpHeaders.ETag, KeyDocumentStore.etagOf(kp))
+                    call.respondBytes(kp, ContentType.Application.Json)
+                }
             } catch (e: KeyDocumentException) {
                 call.failKeyDocument(e)
             }
@@ -78,9 +84,10 @@ fun Route.syncRoutes(store: BlobStore, keys: KeyDocumentStore, guard: AuthGuard,
         // The owner's key document (#258): the newest wrapped key if one exists, the key parameters
         // otherwise, 404 when neither does. X-Key-Document says which of the two the body is, and
         // X-Key-Document-Version the wrapped key's version; the reader still checks the body as that
-        // kind, since the server vouches for neither. Only with the owner's token, because the
-        // passphrase slot can be guessed at offline by whoever holds the document. no-store, because
-        // a changed passphrase retires the old slot only if nothing answers from a kept copy.
+        // kind, since the server vouches for neither. ETag names the bytes, for a create to say what
+        // it read. Only with the owner's token, because the passphrase slot can be guessed at offline
+        // by whoever holds the document. no-store, because a changed passphrase retires the old slot
+        // only if nothing answers from a kept copy.
         get("/keydoc") {
             if (!call.authorized(guard)) return@get
             try {
@@ -88,11 +95,13 @@ fun Route.syncRoutes(store: BlobStore, keys: KeyDocumentStore, guard: AuthGuard,
                     is KeyDocumentStore.Current.Wrapped -> {
                         call.response.header(KEY_DOCUMENT_HEADER, KEY_DOCUMENT_WRAPPED)
                         call.response.header(KEY_DOCUMENT_VERSION_HEADER, current.version.toString())
+                        call.response.header(HttpHeaders.ETag, KeyDocumentStore.etagOf(current.document))
                         call.response.header(HttpHeaders.CacheControl, "no-store")
                         call.respondBytes(current.document, ContentType.Application.Json)
                     }
                     is KeyDocumentStore.Current.Keyparams -> {
                         call.response.header(KEY_DOCUMENT_HEADER, KEY_DOCUMENT_KEYPARAMS)
+                        call.response.header(HttpHeaders.ETag, KeyDocumentStore.etagOf(current.document))
                         call.response.header(HttpHeaders.CacheControl, "no-store")
                         call.respondBytes(current.document, ContentType.Application.Json)
                     }
@@ -103,14 +112,22 @@ fun Route.syncRoutes(store: BlobStore, keys: KeyDocumentStore, guard: AuthGuard,
             }
         }
 
-        // Create-only: version 1 of the wrapped key, whether or not key parameters exist (with them,
-        // this is enrolment). 409 once any version exists, so of two devices creating at once one is
-        // refused, and they never both mint a master.
+        // Create-only: version 1 of the wrapped key, written against the state its writer read, which
+        // it must name. A first run sends If-None-Match: * and is taken only while no key document of
+        // either kind exists; an enrolment sends If-Match with the key parameters' ETag and is taken
+        // only while they are those bytes and no wrapped key exists. So two devices never both mint a
+        // master: not two first runs, not a first run landing on key parameters published after it
+        // read nothing, not an enrolment from a salt that is no longer the one here. A state that
+        // moved is 412, which covers every refusal here, so this route has no 409. Naming no state,
+        // or naming it in any other form, is 428: without it the server cannot tell a first run from
+        // an enrolment.
         post("/keydoc") {
             if (!call.authorized(guard)) return@post
+            val precondition = call.createPrecondition()
+                ?: return@post call.respond(PRECONDITION_REQUIRED, ErrorDto(PRECONDITION_REQUIRED_MESSAGE))
             val body = call.readBodyCapped(KeyDocumentStore.WRAPPED_KEY_MAX_BYTES.toLong()) ?: return@post
             try {
-                call.respond(HttpStatusCode.Created, KeyDocumentWritten(keys.create(body)))
+                call.respond(HttpStatusCode.Created, KeyDocumentWritten(keys.create(precondition, body)))
             } catch (e: KeyDocumentException) {
                 call.failKeyDocument(e)
             }
@@ -230,6 +247,38 @@ private suspend fun ApplicationCall.failBlob(e: BlobStoreException) {
     respond(status, ErrorDto(message))
 }
 
+/** 428 Precondition Required (RFC 6585), which Ktor does not name. */
+private val PRECONDITION_REQUIRED = HttpStatusCode(428, "Precondition Required")
+
+/** The fixed answer to a create that names no state it read (#258): how to resubmit, as RFC 6585 asks. */
+const val PRECONDITION_REQUIRED_MESSAGE =
+    "send If-None-Match: * for a first run, or If-Match with the ETag of the key parameters you read"
+
+/** The fixed answer to a create whose named state is not the current one (#258). */
+const val PRECONDITION_FAILED_MESSAGE = "the key documents are not the ones you read; read them again"
+
+/** One strong entity tag, as RFC 9110 §8.8.3 writes it: no weak prefix, no list, not `*`. */
+private val STRONG_ETAG = Regex("^\"[\\x21\\x23-\\x7E]*\"$")
+
+/**
+ * The state a create names (#258): `If-None-Match: *` for a first run, or `If-Match` with exactly
+ * one strong entity tag for an enrolment. Null for anything else, both headers or neither included:
+ * a `*` in If-Match, a weak tag or a list names no one state, and would let a create land on
+ * whatever is there.
+ */
+private fun ApplicationCall.createPrecondition(): KeyDocumentStore.Precondition? {
+    val ifMatch = request.headers.getAll(HttpHeaders.IfMatch)
+    val ifNoneMatch = request.headers.getAll(HttpHeaders.IfNoneMatch)
+    return when {
+        ifMatch != null && ifNoneMatch != null -> null
+        ifNoneMatch != null ->
+            KeyDocumentStore.Precondition.NoKeyDocument.takeIf { ifNoneMatch.size == 1 && ifNoneMatch.single().trim() == "*" }
+        ifMatch != null ->
+            ifMatch.singleOrNull()?.trim()?.takeIf { STRONG_ETAG.matches(it) }?.let { KeyDocumentStore.Precondition.KeyparamsMatch(it) }
+        else -> null
+    }
+}
+
 /**
  * One fixed answer per refusal of the key-document store (#258). The volume's failure is the one
  * logged, and only by the failure's class: no content, no path, no size, no version.
@@ -240,8 +289,9 @@ private suspend fun ApplicationCall.failKeyDocument(e: KeyDocumentException) {
         KeyDocumentException.Kind.TOO_DEEP -> HttpStatusCode.BadRequest to "the key document is nested too deeply"
         KeyDocumentException.Kind.BAD_VERSION -> HttpStatusCode.BadRequest to "a new version is 2 or more"
         KeyDocumentException.Kind.TOO_LARGE -> HttpStatusCode.PayloadTooLarge to "payload too large"
-        KeyDocumentException.Kind.EXISTS -> HttpStatusCode.Conflict to "a wrapped key already exists"
+        KeyDocumentException.Kind.PRECONDITION_FAILED -> HttpStatusCode.PreconditionFailed to PRECONDITION_FAILED_MESSAGE
         KeyDocumentException.Kind.NOT_NEXT -> HttpStatusCode.Conflict to "not the next version"
+        KeyDocumentException.Kind.KEYPARAMS_EXIST -> HttpStatusCode.Conflict to "the key parameters already exist"
         KeyDocumentException.Kind.SUPERSEDED -> HttpStatusCode.Gone to "superseded by the wrapped key"
         KeyDocumentException.Kind.FULL -> HttpStatusCode.InsufficientStorage to "insufficient storage"
         KeyDocumentException.Kind.IO -> HttpStatusCode.InsufficientStorage to "insufficient storage"

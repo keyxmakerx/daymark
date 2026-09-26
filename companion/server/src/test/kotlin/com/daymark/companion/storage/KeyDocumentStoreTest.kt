@@ -1,6 +1,7 @@
 package com.daymark.companion.storage
 
 import com.daymark.companion.storage.KeyDocumentException.Kind
+import com.daymark.companion.storage.KeyDocumentStore.Precondition
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -42,7 +43,7 @@ class KeyDocumentStoreTest {
     fun `a store closed and opened again reads the newest version and still refuses the key parameters`() {
         val first = open()
         first.putKeyparams(keyparams)
-        assertEquals(1L, first.create(doc("one")))
+        assertEquals(1L, first.create(Precondition.KeyparamsMatch(KeyDocumentStore.etagOf(keyparams)), doc("one")))
         assertEquals(2L, first.append(2, doc("two")))
         first.close()
 
@@ -54,7 +55,8 @@ class KeyDocumentStoreTest {
         assertContentEquals(doc("two"), current.document)
         refusal(Kind.SUPERSEDED) { second.getKeyparams() }
         refusal(Kind.SUPERSEDED) { second.putKeyparams(keyparams) }
-        refusal(Kind.EXISTS) { second.create(doc("again")) }
+        refusal(Kind.PRECONDITION_FAILED) { second.create(Precondition.NoKeyDocument, doc("again")) }
+        refusal(Kind.PRECONDITION_FAILED) { second.create(Precondition.KeyparamsMatch(KeyDocumentStore.etagOf(keyparams)), doc("again")) }
         refusal(Kind.NOT_NEXT) { second.append(2, doc("stale")) }
         assertEquals(3L, second.append(3, doc("three")), "the next version is still taken")
         // Never deleted, never overwritten.
@@ -64,7 +66,7 @@ class KeyDocumentStoreTest {
     @Test
     fun `the version after the last one kept is refused as full, and a version out of turn as not next`() {
         val store = open(maxVersions = 3)
-        store.create(doc("one"))
+        store.create(Precondition.NoKeyDocument, doc("one"))
         store.append(2, doc("two"))
         assertEquals(3L, store.append(3, doc("three")), "the last version kept is taken")
         refusal(Kind.FULL) { store.append(4, doc("four")) }
@@ -76,23 +78,40 @@ class KeyDocumentStoreTest {
     }
 
     @Test
-    fun `a volume that refuses a read or a write is the store's refusal, and leaves no temp file`() {
+    fun `a volume that refuses a read or a write is the store's refusal, not the volume's exception`() {
         val store = open()
-        // The positive control: the same calls succeed while the volume takes them.
-        store.putKeyparams(keyparams)
-        assertContentEquals(keyparams, store.getKeyparams())
-
-        // A non-empty directory where the file goes. Unlike permission bits, root cannot write through it.
+        // Something unreadable where the key parameters go: a directory. Unlike permission bits, root
+        // cannot read through it either.
         val file = File(dir, KeyDocumentStore.KEYPARAMS_FILE)
-        assertTrue(file.delete() && file.mkdir() && File(file, "occupied").createNewFile(), "could not put a directory in the file's place")
-        refusal(Kind.IO) { store.putKeyparams(keyparams) }
-        assertEquals(emptyList(), File(dir, "tmp").list()!!.toList(), "the failed write left its temp file")
+        assertTrue(file.mkdir() && File(file, "occupied").createNewFile(), "could not put a directory in the file's place")
         refusal(Kind.IO) { store.getKeyparams() }
         refusal(Kind.IO) { store.current() }
+        refusal(Kind.IO) { store.create(Precondition.KeyparamsMatch("\"compared\""), doc("one")) }
 
-        // The database's failures too: a closed connection is an SQLException inside the store.
+        // Nothing there, and a staging area that cannot stage: a file where its directory goes.
+        val staging = File(dir, "tmp")
+        assertTrue(file.deleteRecursively() && staging.deleteRecursively() && staging.createNewFile())
+        refusal(Kind.IO) { store.putKeyparams(keyparams) }
+        assertTrue(!file.exists(), "a failed write leaves nothing where the key parameters go")
+
+        // The positive control: the same volume, repaired, takes the same write and reads it back.
+        assertTrue(staging.delete() && staging.mkdir())
+        store.putKeyparams(keyparams)
+        assertContentEquals(keyparams, store.getKeyparams())
+    }
+
+    @Test
+    fun `a database that refuses a read or a write is the store's refusal, not the driver's exception`() {
+        // An empty store, so a first run's precondition holds whichever part of it is weighed first,
+        // and the create reaches the database whatever order the store asks in.
+        val store = open()
         store.close()
-        refusal(Kind.IO) { store.create(doc("one")) }
+        // A closed connection is an SQLException inside the store.
+        refusal(Kind.IO) { store.create(Precondition.NoKeyDocument, doc("one")) }
         refusal(Kind.IO) { store.current() }
+        refusal(Kind.IO) { store.getKeyparams() }
+        refusal(Kind.IO) { store.append(2, doc("two")) }
+        // The positive control: a store over the same files, open, answers.
+        assertIs<KeyDocumentStore.Current.None>(open().current())
     }
 }
