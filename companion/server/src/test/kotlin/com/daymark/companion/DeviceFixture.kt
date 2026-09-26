@@ -1,5 +1,6 @@
 package com.daymark.companion
 
+import com.daymark.companion.mail.Mailer
 import com.daymark.companion.mail.OwnerAccountStore
 import com.daymark.companion.storage.AuditStore
 import io.ktor.client.HttpClient
@@ -45,6 +46,8 @@ internal class DeviceServer(
     val rateLimitRps: Int = 100_000,
     val authToken: String = DEVICE_TEST_TOKEN,
     val maxRequestBytes: Long = 2_097_152L,
+    /** The server's mail, for a test that reads what was sent; null for the configuration's own. */
+    val mailer: Mailer? = null,
 ) {
     lateinit var account: OwnerAccountStore
     lateinit var ownerAudit: AuditStore
@@ -76,7 +79,7 @@ internal class DeviceServer(
     fun start(builder: ApplicationTestBuilder) {
         open()
         val cfg = config()
-        builder.application { module(cfg, accountStore = account, ownerAuditStore = ownerAudit) }
+        builder.application { module(cfg, mailer = mailer, accountStore = account, ownerAuditStore = ownerAudit) }
     }
 
     /** The same server on a real Netty engine on a free local port; close it when done. */
@@ -84,7 +87,7 @@ internal class DeviceServer(
         open()
         val cfg = config()
         val engine = embeddedServer(Netty, configure = { connector { host = "127.0.0.1"; port = 0 } }) {
-            module(cfg, accountStore = account, ownerAuditStore = ownerAudit)
+            module(cfg, mailer = mailer, accountStore = account, ownerAuditStore = ownerAudit)
         }.start(wait = false)
         val port = runBlocking { engine.engine.resolvedConnectors().first().port }
         return LiveServer(this, port) { engine.stop(100, 2_000) }
