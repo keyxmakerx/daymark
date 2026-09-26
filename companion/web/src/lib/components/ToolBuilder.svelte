@@ -182,7 +182,7 @@
     </section>
 
     <section class="gate" class:pass={validation.ok}>
-      <span class="lab">Honesty gate {validation.ok ? '✓ passes' : `— ${validation.errors.length} to fix`}</span>
+      <span class="lab">Honesty gate {validation.ok ? 'passes' : `— ${validation.errors.length} to fix`}</span>
       {#if !validation.ok}
         <ul>
           {#each validation.errors as err (err)}<li>{err}</li>{/each}
@@ -230,8 +230,8 @@
   /* Same undefined-`--accent` fallback as the segment above: links were resolving to --mood-5.
      A link is structural accent. Destructive links and the honesty gate's outstanding-errors
      list are alarm; both were --mood-1. The gate's passing label is a confirmation, so it is
-     solid ink rather than green — and it says "✓ passes" or "— N to fix" in words either way,
-     so the state is never carried by colour alone. */
+     solid ink rather than green, and it says "passes" or "— N to fix" in words either way, with
+     no tick (CLAUDE.md §4, #278), so the state is never carried by colour or a mark. */
   .link { background: none; border: none; color: var(--indigo); font: inherit; font-size: 0.82rem; cursor: pointer; padding: 0; }
   .link.danger { color: var(--clay); }
   .gate ul { margin: 0; padding-left: 1.1rem; color: var(--clay); font-size: 0.82rem; display: flex; flex-direction: column; gap: 2px; }

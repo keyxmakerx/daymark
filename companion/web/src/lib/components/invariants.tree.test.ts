@@ -162,6 +162,10 @@ const GREEN_WORDS =
 const HEX = /#[0-9a-fA-F]{3,8}\b/
 const COLOUR_FN = /(?<![\w-])(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\s*\(/i
 
+/** A tick in any spelling a source file could draw one with: the glyphs, their HTML entities, and
+ * a JavaScript escape. The provenance badge's ◐ and ✎ are not ticks. */
+const TICK = /[✓✔☑✅🗸🗹]|&check;|&#0*10003;|&#0*10004;|&#x0*271[34];|\\u(?:2713|2714|2611|2705)/i
+
 /* ═══════════════════════════════════════════════════════════════════════════
    The two allowlists.
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -372,6 +376,25 @@ describe('(b) there is no success token and no green anywhere in the system', ()
     expect(GREEN_WORDS.test('background: var(--clay);')).toBe(false)
     expect(NAMED_COLOUR.test('color: white;')).toBe(true)
     expect(NAMED_COLOUR.test('white-space: nowrap;')).toBe(false)
+    // The tick detector, on every spelling a file could draw one with, and not on the marks the
+    // provenance badge keeps.
+    for (const tick of ["'✓ passes'", '✔', '☑', '✅', '&check;', '&#10003;', '&#x2714;', "'\\u2713'"]) {
+      expect(TICK.test(tick), tick).toBe(true)
+    }
+    for (const mark of ['◐', '✎', 'passes', '— 2 to fix']) expect(TICK.test(mark), mark).toBe(false)
+  })
+
+  it('no file draws a tick (#278)', () => {
+    // A tick is the product saying "checked, fine, stop reading", which it never says, whatever
+    // colour it is drawn in (CLAUDE.md §4). Run over code, not commentary, so a comment may name
+    // the rule; the planted pair proves the stripper keeps a tick in code and drops one in a comment.
+    expect(TICK.test(codeOnly("const gate = '✓ passes'"))).toBe(true)
+    expect(TICK.test(codeOnly('// a ✓ once stood here'))).toBe(false)
+    const subjects = paths.filter((p) => !p.endsWith('.test.ts'))
+    expect(subjects.length).toBeGreaterThan(60)
+    expect(subjects).toContain('src/lib/instruments/provenance.ts')
+    expect(subjects).toContain('src/lib/components/ToolBuilder.svelte')
+    expect(subjects.filter((p) => TICK.test(code.get(p)!))).toEqual([])
   })
 
   it('no file declares or references a token whose name claims health', () => {
