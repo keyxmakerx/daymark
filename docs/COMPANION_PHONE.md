@@ -43,6 +43,10 @@ libsodium and no emulator; the `sync` flavour wires it to the Android binding
 | Padding before encryption: a `u32` big-endian length, the plaintext, then zeros up to the standard size (#214) | `lib/padding.ts`, with the vector in `lib/padding.test.ts` | `Padding.kt` | Yes |
 | Padded snapshot envelope, format 2, the only format written: `pad(plaintext)` under the AAD `daymark.snapshot.v2\|lineage\|version`; format 1 still read (#214) | `sync/crypto.ts`, with the vector in `sync/crypto.test.ts` | `SyncCrypto.kt` | Yes |
 | The web console's lanes: lineages `lane_…`, a format-2 envelope under the AAD `daymark.lane.v1\|lineage\|version`, holding the records of SYNC_PROTOCOL.md §1.4; read, never written, by the phone | `sync/crypto.ts` (`decryptLaneVersion`), `lane/record.ts`, with the vector in `lane/laneVector.test.ts` | — | No: #346 |
+| A signed request (#186): a fresh Ed25519 key for the server, never derived from the master; its id, base64url of BLAKE2b-128 of the public key; the eleven-line message and the four `X-Device-*` headers; a new 16-byte nonce for every attempt; nothing signed that the server would read differently, a signed header given twice or empty among it | the server's `auth/DeviceSignature.kt`, with the vector in `auth/DeviceSignatureVectorTest.kt` (SYNC_PROTOCOL.md §2.1) | `DeviceSignature.kt`, `DeviceKey.kt` | The crypto: yes. Sending: #432 |
+| The pairing code (#189): ten symbols of the recovery code's alphabet, the last a mod-31 check symbol, read with the recovery code's normalisation and refused before anything is sent; its id and the redemption's proof | the server's `auth/DeviceSignature.kt` (SYNC_PROTOCOL.md §2.2) | `PairingCode.kt`, `DeviceKey.kt` | The crypto: yes. Redeeming: #432 |
+| The QR code's text, `daymark-pair:v1?server=…&code=…`, each value spelled as `encodeURIComponent` spells it, and the https verdict: a scan decides exactly as typing its two values does, and an address that is not `https://` with a host, or that has a user name, query or fragment, is declined before anything is sent (#189) | the console's QR code (#431) | `PairingVerdict.kt`, which imports no libsodium | The verdict: yes. The scanner and the pairing screen: #432 |
+| The six words of a device's key: BLAKE2b-256 over `daymark-device-words-v1`, a line feed and the key, six bytes into the 256-word list | `share/wordlist.ts`; the console's words: #431 | `DeviceWords.kt` | Yes |
 | Manifest signing bytes | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
 | Base64: RFC 4648 §5, URL-safe, no padding | everywhere | `SyncCrypto.kt` (plain `java.util.Base64`, because lazysodium's own helper is standard base64) | Yes |
 | CPace (CPACE-RISTRETTO255-SHA512) | `pairing/cpace.ts` | `CpaceCrypto.kt` | Yes |
@@ -67,15 +71,39 @@ the web-made key parameters and wrapped key, with the passphrase and with the re
 to the same master and four subkeys; its writer makes the same 463 bytes; and both sides refuse the
 same twenty-six mutations before any Argon2id. `KeyDocumentTest` pins the other refusals, including where
 the phone is stricter than the web, and that a slot of an unknown kind is skipped and still held to
-the floor and the ceiling. `RecoveryCodeTest` pins normalisation, faults and the check symbol, and `StrictJsonTest`
+the floor and the ceiling. `DeviceSignatureVectorTest` holds the server's vector (#432): the key from the seed 0x40..0x5f signs
+both of the server's requests and the redemption of `K7M4RD96QA` to the server's bytes. `DeviceKeyTest`
+pins a new nonce for every attempt, a retry included, and every request the signer refuses.
+`PairingCodeTest` holds the check symbol to every single substitution and every swap of neighbours, on
+the vector's code and on 300 drawn ones. `PairingVerdictTest` pins the https verdict, that typing gets
+the same verdict as a scan, the encoding against Node's own, and that the verdict runs with no
+libsodium on the class path. `DeviceWordsTest` holds the six-word vectors the web shares, and
+`DeviceWordsDriftTest` fails when `share/wordlist.ts` and the phone's copy differ.
+`RecoveryCodeTest` pins normalisation, faults and the check symbol, and `StrictJsonTest`
 holds the JSON reader to `JSON.parse`. `LazySodiumParityTest` checks that the Java and Android
 bindings expose the same surface, since the tests run on one and the app on the other. The same checks on a real device are not built: #192.
 
 ## 2. Sync of the owner's own data
 
-Settings → Sync: a server address and the sync passphrase, and no bearer token: the phone signs in
-with its own per-device key (#189, #186), because the shared token stops being anyone's sign-in
-(#208; not built: #324). Push the existing backup snapshot (`BackupManager`) as the plaintext,
+Settings → Sync: the code the owner console shows, and the sync passphrase, and no bearer token. The
+phone signs every request with a key of its own, made for this server, because the shared token stops
+being anyone's sign-in (#208; not built: #324). The server's half is built (SYNC_PROTOCOL.md §2.1 and
+§2.2); the phone's is not: #432.
+
+What the phone must do, against the server as built:
+- Refuse a code whose address is not `https://`, before sending anything: the phone is the one party
+  the network cannot rewrite (#189).
+- Make a new Ed25519 key pair for the server, in memory, and keep it only once the registration poll
+  answers `registered`.
+- Sign each request as SYNC_PROTOCOL.md §2.1, all five header lines included, with nothing after the
+  colon for a header it does not send. Send each of those headers at most once, never empty, with no
+  whitespace around the value. Always send `Content-Length`; never send a body chunked.
+- Use a new nonce for every attempt, a retry included. Keep the clock within 300 seconds of the
+  server's.
+- Never retry a refused request in a loop: every refusal counts toward the lockout of the phone's
+  whole network address, which on a home connection pauses the console too.
+- Expect `403` on managing phones, making a practice, the notification settings and writing the key
+  documents: those belong to the console. Push the existing backup snapshot (`BackupManager`) as the plaintext,
 append-only, at `max(existing) + 1`; pull fetches the newest and decrypts it. The phone reads the
 owner's key document of either kind (#403); fetching it is part of #168. Not built: #168.
 
@@ -94,7 +122,8 @@ snapshot under a `lane_` name. Not built: taking records in, #346; asking before
 snapshot presented as the newest needs a signed manifest and a watermark kept on the device: #179.
 
 Neither the server nor anyone else can reset the app PIN or the sync passphrase. The owner's email
-recovery re-issues the server's bearer token and nothing else.
+recovery re-issues the server's bearer token and nothing else, which disconnects every paired phone;
+each pairs again with a new code.
 
 ## 3. Assignments and game plans, inbound
 
@@ -136,8 +165,9 @@ COMPANION_PAIRING.md §14.
 
 It also gains a screen listing its connections: who, since when, their key fingerprints, what they
 can see in plain words, and Revoke. Not built: #174. The phone as the anchor for the audit chain's
-head: #182. A heartbeat between phone and server: #185. Signed requests instead of the bearer token:
-#186. Pairing the phone with the server by QR code: #189.
+head: #182. A heartbeat between phone and server: #185. Signing requests and pairing by QR code: the
+server's half and the phone's crypto are built (§1); the phone's pairing screen, registration poll and
+signed push and pull are #432.
 
 ## 5. What CI checks
 
@@ -159,6 +189,6 @@ reproducible build (#229); the offline app's listing never carries it (#194). No
    checks. **Built** (v19).
 4. Inbound assignments and game plans, with the acceptance inbox: #177.
 5. The owner's half of pairing, grants and shares from the phone, and the connections screen: #174.
-6. The anti-rollback watermark (#179), the audit anchor (#182), the heartbeat (#185), signed
-   requests (#186), QR pairing (#189).
+6. The anti-rollback watermark (#179), the audit anchor (#182), the heartbeat (#185), and signed
+   requests and QR pairing on the phone (#432; the server's half is built).
 7. The crypto tests on a real device: #192.

@@ -37,6 +37,28 @@ All notable changes to this project are documented here. The format is based on
   still contains unlock times restores normally; the badges in it are just not brought back.
 
 ### Added
+- **Companion — the server can pair a phone, and a paired phone signs what it sends instead of
+  carrying your access token.** This is the server's half; the owner console's pairing screen and the
+  phone's side come next (#431, #432). The console asks the server for a code that lasts two
+  minutes; the phone answers with a key of its own and proof that it holds it; both screens then show
+  the same words, and only your confirmation on the console lets the phone in. From then on, every
+  request the phone sends is signed and can be used only once, within five minutes, so a copy taken off
+  the network is worthless and cannot be pointed at anything else. A paired phone can do what your
+  access token can, except pair or disconnect phones, set up a practice, or change how you recover:
+  your notification address and your locked key. Disconnecting a phone takes effect on its very next
+  request, and re-issuing your access token disconnects every phone. Phones pair only over an https
+  address; [COMPANION_DEPLOYMENT.md](docs/COMPANION_DEPLOYMENT.md) §3.4 says how to give a server that
+  is reachable only at home a certificate the phone will trust. The server also keeps a log of its own
+  for you: each phone paired or disconnected, and each lockout, at most one a minute. The first start of
+  this release copies `owner-account.db` into `_pre-migrate/` and adds the phone tables to it.
+  (#186, #189)
+- **The phone can now prove to your Companion that a request is its own, without a password, and it
+  refuses to pair over anything but https.** It makes a key of its own for your server, never taken
+  from your passphrase, signs what it will send with that key, and shows six words for you to compare
+  with the ones on the owner's page before you confirm it. It reads the pairing code from the QR code
+  or as you type it, with or without dashes, catches a mistyped symbol before sending anything, and
+  will not pair with an address that is not https. Nothing on the phone scans a code or talks to the
+  server yet; that comes next. (#432)
 - **Companion — your accept or decline of a clinician's assignment is kept.** In the owner console's
   Inbox, your answer is now saved, encrypted, on your own Companion server, and it is still there
   after you press Refresh. It is kept in a separate place that only adds and never changes or replaces

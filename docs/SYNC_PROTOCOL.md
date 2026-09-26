@@ -187,14 +187,16 @@ grant, before taking it in.
 
 ## 2. HTTP API (`/v1`)
 
-Every route requires `Authorization: Bearer <token>`, where the token is the owner's. At first boot
-it is `DAYMARK_AUTH_TOKEN`; after an access-recovery reissue (`POST /v1/recovery/confirm`) it is the
-rotated token, and the old one stops working at once. If the operator later changes
-`DAYMARK_AUTH_TOKEN`, the new environment value is accepted from the next start. The server stores
+Every route requires the owner: the owner's bearer token (`Authorization: Bearer <token>`), or the
+signature of a phone the owner paired (§2.1). At first boot the token is `DAYMARK_AUTH_TOKEN`; after an
+access-recovery reissue (`POST /v1/recovery/confirm`) it is the rotated token, and the old one stops
+working at once. If the operator later changes `DAYMARK_AUTH_TOKEN`, the new environment value is
+accepted from the next start. Either re-issue disconnects every paired phone (§2.2). The server stores
 only a digest of the accepted token.
 
-A server serves one owner: the token belongs to that owner, and whoever holds it reaches every
-lineage, the one `keyparams` and the one wrapped key on the server. Each stored journal belongs to exactly one owner,
+A server serves one owner: the token and every paired phone belong to that owner. Whoever holds the
+token reaches every lineage, the one `keyparams` and the one wrapped key on the server; a paired phone
+reaches the same, and may read the key documents but not write them (§2.2). Each stored journal belongs to exactly one owner,
 with its own key parameters, by decision (#219). Not built: #318.
 
 Rate limiting and lockout key on the client address: the socket peer, unless that peer is a proxy
@@ -223,10 +225,13 @@ it back exactly as received.
 
 ### Status codes
 
-`401` bad or missing token · `429` rate-limited or locked out · `400` bad lineage or version, a
+`401` bad or missing credential, a token or a phone's signature (§2.1) · `403` a paired phone on a
+route it may not use (§2.2) · `411` a signed request that does not state its body's length (§2.1) ·
+`429` rate-limited or locked out · `400` bad lineage or version, a
 version below 2 on `PUT /v1/keydoc/{version}`, or a wrapped key that is not one JSON object or nests
 deeper than 32 · `409` the version exists, or is older than the retention window would keep; not the
-next version (`PUT /v1/keydoc/{version}`); the key params already exist (`PUT /v1/keyparams`) ·
+next version (`PUT /v1/keydoc/{version}`); the key params already exist (`PUT /v1/keyparams`); no
+pairing code while the server's address is not https (`POST /v1/devices/pairing`) ·
 `410` the key params, once a wrapped key exists · `412` the key documents are not in the state a
 create named (`POST /v1/keydoc`): read them again · `413` over `MAX_BLOB_BYTES`, the request cap,
 4 KiB of key params or 16 KiB of wrapped key · `428` a create that names no state it read, or names
@@ -239,6 +244,119 @@ it in any other form · `507` quota or disk full, or the wrapped key already has
 hard-deleted), `PER_TOKEN_QUOTA_BYTES` (5 GiB, fail-closed), `RATE_LIMIT_RPS` (5),
 `AUTH_LOCKOUT_FAILS` (8) / `AUTH_LOCKOUT_SECONDS` (900). Fixed, not configurable: key params
 ≤ 4 KiB; a wrapped key ≤ 16 KiB and 32 levels deep, and at most 1,000 versions of it.
+
+### 2.1 Signed requests (a paired phone)
+
+A phone never sends the token. It signs each request with an Ed25519 key it made for this server and
+paired through the owner console (§2.2), and sends four headers:
+
+| Header | Value |
+|---|---|
+| `X-Device-Key` | The key id: BLAKE2b-128 of the public key, base64url, 22 characters |
+| `X-Device-Time` | Unix time in whole seconds: decimal digits, no sign, no leading zero |
+| `X-Device-Nonce` | 16 random bytes, base64url, 22 characters |
+| `X-Device-Signature` | The Ed25519 signature, base64url, 86 characters |
+
+The signature is over eleven lines of UTF-8 joined by LF, with no LF after the last:
+
+```
+daymark-request-v1
+<method>
+<the target as sent: the path from /v1, and ?query if there is one>
+<BLAKE2b-256 of the body, base64url>
+<X-Device-Time>
+<X-Device-Nonce>
+if-match:<value>
+if-none-match:<value>
+x-rel-token:<value>
+x-setting-key:<value>
+x-share-meta:<value>
+```
+
+The last five lines are every request header an owner route acts on. Each line is there whether the
+request carries its header or not, with nothing after the colon when it does not, and a request
+carries each of those headers at most once and never empty. Every base64url value is in its one
+canonical spelling, without padding. A signed request states its body's length; one sent chunked is
+answered `411`.
+
+Before the body is read, a request is answered only on what depends on its own form, the clock or its
+address: `429` for its address's rate or lockout; `401` for a signature header missing or not in its
+one spelling, or a signed header sent twice or empty; `401` for a time more than 300 seconds from the
+server's clock; `411`; and `413`. Every answer that depends on the key comes after the whole body has
+arrived, in this order:
+- the time, judged again, on the one reading of the clock that also decides which nonces have lapsed;
+- the key, registered to this owner and not revoked;
+- the signature, checked against a fixed stand-in key when the key is not live, so a forged request
+  costs the same whatever key it names;
+- the nonce, taken only once the signature has verified, so a forged request writes nothing and a
+  request refused for its signature has not spent its nonce;
+- the key and its revocation, read again just before the handler runs.
+
+Every refusal is the same `401`, whichever check said no, and it counts toward the address's lockout
+exactly as a bad token does. A withheld body gets no answer whatever key it names. The body is hashed
+as it arrives and kept only when the key named was live when the request arrived; for any other key
+it is dropped as it is hashed, so a request naming no live key holds no memory however large its
+body. A request carrying any of the four headers is judged by its signature alone, on every owner
+route, the relationship routes included, and its `Authorization` header is not read. Vectors: `companion/server/src/test/kotlin/com/daymark/companion/auth/DeviceSignatureVectorTest.kt`.
+
+### 2.2 Pairing a phone
+
+The owner console pairs a phone, and the person confirms it there; the phone has two routes of its own.
+
+1. **The console makes a code.** Ten symbols from a 31-symbol alphabet, the last a check symbol, good
+   for two minutes and one redemption. The server keeps the code's id, never the code. The QR code
+   carries the server's address and the code, and nothing that would not be read aloud. A code is made
+   only while the server's public address (`DAYMARK_PUBLIC_BASE_URL`) is `https`; otherwise the answer
+   is `409`, and every route below answers as if no code existed.
+2. **The phone redeems it**, with a new Ed25519 public key and a signature over the code's id and that
+   key, which proves it holds the key. Anything that is not a live code for a key never seen before gets
+   the one refusal, `404 no such pairing code`. A wrong code burns nothing, and counts toward the
+   address's lockout as a wrong token does.
+3. **Both screens show the words of that key.** The console reads them from the code's state.
+4. **The person compares the words and confirms on the console.** Only this writes the key's row; a
+   key nobody confirms lapses at `confirmBy`.
+5. **The phone asks whether it is registered**, signing the question with its key (§2.1): the only
+   route a key waiting for confirmation reaches.
+
+**The QR code's text** is `daymark-pair:v1?server=<address>&code=<code>`: the server's address
+percent-encoded as `encodeURIComponent` encodes it, and the code as its ten symbols without the
+hyphen. The phone refuses any other form, any other version, and an address that is not `https://`
+with a host and no user name, query or fragment. Typing the address and the code by hand does
+exactly what a scan does. Example: `daymark-pair:v1?server=https%3A%2F%2Fdaymark.example.org&code=K7M4RD96QA`.
+
+**The words of a key**, which both screens show, are the first six bytes of BLAKE2b-256 over the UTF-8
+text `daymark-device-words-v1`, a line feed, and the public key in base64url, each byte an index into
+the 256-word list in `companion/web/src/lib/share/wordlist.ts`. A word may repeat, so the words are
+read in order. Vectors: the key `JUO5L_EJVRFHatyDadtt3JM2ZaEZeN2hQE7hBmypVZ0` gives *hotel cedar
+earth coral nacho hotel*, and the all-zero key (`AAAA…A`, 43 characters) gives *inlet arrow cedar
+cobra crisp fault*.
+
+| Method · Path | Credential | Body | Success | Notes |
+|---|---|---|---|---|
+| `POST /v1/devices/pairing` | The token | — | `201 {codeId, code, baseUrl, expiresAt}`, `Cache-Control: no-store` | `409` while the server's address is not https |
+| `POST /v1/devices/redeem` | None | `{code, publicKey, signature}` | `202 {keyId, confirmBy}` | `404` for anything but a live code and a key never seen |
+| `GET /v1/devices/pairing/{codeId}` | The token | — | `200 {state}`: `waiting` with `expiresAt`; `redeemed` with `keyId`, `publicKey`, `confirmBy`; `registered` with `keyId`, `pairedAt` | `404` once the code has lapsed |
+| `POST /v1/devices/pairing/{codeId}/confirm` | The token | `{keyId}`, the key whose words were shown | `201 {keyId, pairedAt}`; `200` if already registered | `404` otherwise |
+| `GET /v1/devices/registration` | The phone's signature | — | `200 {"state":"registered"}` · `202 {"state":"pending","confirmBy"}` | |
+| `GET /v1/devices` | The token | — | `200 {devices:[{keyId, publicKey, pairedAt, revokedAt}]}` | No names: the server stores none |
+| `POST /v1/devices/{keyId}/revoke` | The token | — | `204`, and `204` again with no second row | `404 no such device` |
+| `GET /v1/owner/audit` | The token or a phone | — | `200` a page of the owner's log, newest first (`?before=`, `?limit=`) | |
+
+A revoked phone is refused from its next request on, including one whose body is still arriving.
+Re-issuing the token, by the emailed recovery or by the operator changing `DAYMARK_AUTH_TOKEN`, revokes
+every phone in the same transaction, and each pairs again with a new code. The owner's log
+(`owner-audit.db`) has one row when a phone is paired, one when it is revoked, and one when a lockout
+of an owner credential arms, at most one a minute across the server.
+
+**What a paired phone may not do.** It reaches every owner route the token reaches except these, which
+answer it `403 {"error":"a paired phone cannot do this"}` from one list (`PHONE_REFUSED_ROUTES` in
+`companion/server/src/main/kotlin/com/daymark/companion/routes/OwnerCredentials.kt`):
+- managing phones: `GET /v1/devices`, `POST /v1/devices/pairing`, `GET /v1/devices/pairing/{codeId}`,
+  `POST /v1/devices/pairing/{codeId}/confirm` and `POST /v1/devices/{keyId}/revoke`;
+- making a practice: `POST /v1/orgs`;
+- how the owner recovers: `GET` and `PUT /v1/owner/notifications`, `PUT /v1/keyparams`,
+  `POST /v1/keydoc` and `PUT /v1/keydoc/{version}`. A phone reads the key documents; the console
+  writes them.
 
 ## 3. Client flows
 

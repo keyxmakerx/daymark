@@ -129,7 +129,8 @@ signatures stop forgery. Rollback protection is not built (§8).
 
 ### T5 — Malicious owner or bearer-token holder (against the operator or the clinician)
 
-A bearer-token holder needs no key to fill the disk or push versions. Defences: per-token and
+A bearer-token holder, or whoever holds a paired phone's key until it is revoked, needs no data key
+to fill the disk or push versions. Defences: per-token and
 per-relationship storage quotas; keep-last-N retention per lineage; append-only storage (a version is
 never overwritten, and a version that retention would delete at once is refused); server-derived blob
 paths from `^[A-Za-z0-9_-]{1,64}$` plus an integer version; a server-computed SHA-256 (a
@@ -149,7 +150,9 @@ per-address limits keyed on the trusted client address (§7; the table is
 [COMPANION_OBSERVABILITY.md](COMPANION_OBSERVABILITY.md) §1.1), a per-credential lockout on sign-in
 codes, and capped backoff on invitations — a wrong guess never burns one; only a human report does.
 Comparisons are constant-time, refusals are identical whichever check failed, the anonymous report
-route always answers 204, and every token and invitation id is 256 random bits.
+route always answers 204, and every token and invitation id is 256 random bits. A phone's pairing code
+is shorter, about 44.6 bits, because a person types it: it lives two minutes, is taken once, and every
+wrong one counts toward the address's lockout (§5.8).
 
 ## 4. Cryptography and key hierarchy
 
@@ -356,6 +359,55 @@ relies on:
   office needs one sign-in per clinician, however many relationships they hold (#288). Not built:
   #314.
 
+### 5.8 Paired phones
+
+A phone never holds the bearer token. It signs each request with an Ed25519 key it made for this
+server; the protocol is [SYNC_PROTOCOL.md](SYNC_PROTOCOL.md) §2.1 and §2.2. The key is not derived from
+the master, so a stolen master is not also access to the server, and revoking a phone never touches the
+owner's pairing identity. The properties the rest of this document relies on:
+
+- **The console registers a phone; a phone cannot register itself.** Redeeming a code only makes a key
+  wait. The person compares the key's words on both screens and confirms on the console, and only that
+  writes the key's row. A code lives two minutes and is taken once; a wrong code burns nothing and
+  counts toward the address's lockout.
+- **This code is sent to the server; the clinician's is not.** The code the console shows for a phone
+  is typed or scanned on the phone and sent back in its redemption, and the server keeps only its id.
+  The pairing code of §5.6, between an owner and a clinician, never leaves the device it was typed on.
+- **Only over https.** Over plain http, anyone on the same network is on the path of both screens and
+  could make their words match, so the server makes a code only while its public address is https, and
+  the phone must refuse a code whose address is not (#189). There is no setting that turns this off.
+- **Nothing captured can be used again or aimed elsewhere.** The signature covers the method, the
+  target, the body, a time within 300 seconds, a nonce the key may use once, and every request header
+  an owner route acts on; `SignedHeaderCoverageTest` holds that list to every header the server reads.
+  The time is judged again once the body has arrived, on the same reading of the clock that decides
+  which nonces have lapsed, so holding back a captured request's body buys it nothing. A nonce is
+  spent only by a signature that verified, so a forger writes nothing. Used nonces are kept in
+  `owner-account.db`, so a restart does not reopen the window.
+- **A phone is the owner's journal device, not the operator's console.** It reaches every owner route
+  the token reaches except those SYNC_PROTOCOL.md §2.2 lists, which answer it 403 from one list:
+  - managing phones, so a phone cannot add one, and revoking one leaves nothing behind that it made;
+  - making a practice, which is the operator's act;
+  - how the owner recovers. The recovery routes take no credential, so a phone that could set the
+    notification address could have the console's token re-issued to whoever holds its key, and
+    reading the address would hand them the owner's email. A phone that could write a key document
+    could leave the passphrase and the recovery code opening nothing the server serves, and no route
+    undoes that.
+
+  A route whose name the gate cannot read is refused to a phone, never opened to it.
+- **Revoking holds at once.** Every signed request reads its key and its revocation from the database,
+  when it arrives and again just before the handler, with no verdict cached, so a phone revoked while
+  its body is on the way stores nothing. Re-issuing the token revokes every phone in the same
+  transaction.
+- **No answer tells one key from another.** Every refusal of a signature is the same 401, counted
+  toward the lockout as a bad token is, and nothing that depends on the key is answered before the
+  whole body has arrived, so a withheld body gets no answer whatever key it names.
+- **A stranger cannot make the server hold a body.** A body is kept only for a key live when the
+  request arrived; any other is hashed as it streams in and dropped, so a request naming no live key
+  costs one small buffer however large its body.
+- **The owner's own log**, `owner-audit.db`, has one row when a phone is paired, one when it is
+  revoked, and one when a lockout arms, at most one a minute across the server, so addresses without
+  number cannot fill it.
+
 ## 6. Server hardening defaults
 
 ### Container and runtime
@@ -410,8 +462,8 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
 
 ### Authentication, limits and denial of service
 
-- The owner bearer token is the server's access credential. It is separate from the passphrase and
-  decrypts nothing.
+- The owner bearer token, and a paired phone's signature (§5.8), are the server's access
+  credentials. Neither decrypts anything, and the token is separate from the passphrase.
 - Per-address limits, keyed on the trusted client address (§7), are tabled in
   [COMPANION_OBSERVABILITY.md](COMPANION_OBSERVABILITY.md) §1.1. Comparisons are constant-time.
 - Caps: blobs of at most 25 MiB, upload bodies of at most 26 MiB, JSON bodies of at most 64 KiB, and
@@ -443,8 +495,9 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
   never from the request's `Host`; with neither set, the request is accepted and nothing is sent. The
   link points at `/recover#t=…`, which no route serves yet (#173).
 - `POST /v1/recovery/confirm` replaces the token at once, with no overlap, and returns the new one in
-  the response — once, never by mail. A "your access token was re-issued" notice then goes to the
-  registered address. The confirm writes no audit entry and no log line and has no rate limit
+  the response — once, never by mail. In the same transaction it revokes every paired phone (§5.8),
+  and each gets a `device.revoked` row in the owner's log. A "your access token was re-issued" notice then goes to the
+  registered address. The confirm writes no audit entry of its own and no log line, and has no rate limit
   (#163).
 - An email when a lockout starts: not built (#190).
 
@@ -492,7 +545,9 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
 **Log events, not content.**
 
 - Each relationship has an append-only, metadata-only, hash-chained log in `audit.db`. Each practice
-  has its own in `org-audit.db`, a separate file so the two identifier spaces can never meet.
+  has its own in `org-audit.db`, a separate file so the two identifier spaces can never meet. The
+  owner has a third, in `owner-audit.db`, keyed on the owner's id: phones paired and revoked, and
+  lockouts of an owner credential (§5.8). The owner reads it at `GET /v1/owner/audit`.
 - Entries are written by the server on the real access paths — sign-in, lockout, enrolment, share and
   game-plan reads, assignment and game-plan publishing, share withdrawal, session expiry, pairing
   steps, invitation reports, key registration and fetches, relationship endings, practice membership —

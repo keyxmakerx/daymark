@@ -54,8 +54,10 @@ Every per-source control uses `ApplicationCall.clientAddress()`:
 
 | Control | Budget | Keyed on | Kept in | Where |
 |---|---|---|---|---|
-| Bearer-token requests (sync and owner routes) | `DAYMARK_RATE_LIMIT_RPS`, 5 per second | address | memory | `AuthGuard.authorize` |
-| Bearer-token lockout | `DAYMARK_AUTH_LOCKOUT_FAILS` (8) bad tokens, then `DAYMARK_AUTH_LOCKOUT_SECONDS` (900 s) | address | memory | `AuthGuard` |
+| Owner requests, by token or a phone's signature (sync, owner and device routes), and phones redeeming a pairing code | `DAYMARK_RATE_LIMIT_RPS`, 5 per second | address | memory | `AuthGuard`, through `OwnerAuth` |
+| Owner-credential lockout | `DAYMARK_AUTH_LOCKOUT_FAILS` (8) bad tokens, refused signatures or wrong pairing codes, in one budget, then `DAYMARK_AUTH_LOCKOUT_SECONDS` (900 s) | address | memory | `AuthGuard`, through `OwnerAuth` |
+| A lockout's row in the owner's log | one when a lockout arms, never per probe, and at most one a minute | the whole server | memory | `OwnerAuth` |
+| A phone's nonces | each taken once, and kept until a request carrying it would be too old | device key | `owner-account.db` | `DeviceKeyStore` |
 | Sign-in code attempts, `POST /v1/totp/verify` | 20 per 5 minutes | address | memory | `therapistAuthRoutes` (`totpSourceLimiter`) |
 | Sign-in code lockout | `DAYMARK_TOTP_LOCKOUT_FAILS` (5), then `DAYMARK_TOTP_LOCKOUT_SECONDS` (300 s) | credential | `auth.db` | `AuthStore.recordTotpFailure` |
 | Pairing fetch and respond, by a link holder | 20 per 5 minutes | address | `auth.db` | `pairingRelayRoutes` (`pairSourceLimiter`) |
@@ -214,7 +216,7 @@ the code has changed.
 | WARN | `…mail.OwnerNotifier` | `owner notification failed (event={}): {}` (`OwnerNotifier.notify`) | An event name and an exception class name |
 | WARN | `…routes.RecoveryRoutes` | `recovery email failed to send: {}`, `token-reissued receipt failed to send: {}` (`recoveryRoutes`) | An exception class name |
 | WARN | `…routes.RecoveryRoutes` | `access-token recovery was requested but no public base URL is configured…` (`recoveryRoutes`) | Nothing — but it fires only when the address matched (#160) |
-| WARN | `…companion.audit` | `audit log append failed` **with a stack trace** (`auditSafely` in the relationship, auth, key, ending and pairing routes) | Fixed messages and column names today; a stack trace all the same |
+| WARN | `…companion.audit` | `audit log append failed` **with a stack trace** (`auditSafely` in the relationship, auth, key, ending, pairing and device routes) | Fixed messages and column names today; a stack trace all the same |
 | WARN | `…companion.audit` | `org audit append failed` with a stack trace (`orgRoutes`) | The same |
 | WARN | `…companion.routes` | `blob store I/O error: {}` (`failBlob` in `SyncRoutes.kt`, on a full disk) | **A file path containing the lineage id** (#160) |
 | WARN | `…companion.routes` | `key document store I/O error: {}` (`failKeyDocument` in `SyncRoutes.kt`, when the volume refuses a read or write of the key params or the wrapped key) | An exception class name |

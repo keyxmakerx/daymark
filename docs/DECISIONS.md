@@ -298,6 +298,27 @@ server (#331), one sign-in per clinician (#314), and the admin console on an add
 
 Source: [the July product direction](https://github.com/keyxmakerx/daymark/blob/968638594f10f6a4424415f8a5c14fd8eb4aaa00/docs/PRODUCT_DIRECTION.md).
 
+## D10. A paired phone is the owner's journal device, not the operator's console
+
+A phone never holds the owner's bearer token. It pairs through the owner console and signs each
+request with a key of its own (#186, #189; SYNC_PROTOCOL.md §2.1 and §2.2). What it may do follows
+one rule: **a phone reaches every owner route the token reaches, except the routes that manage phones,
+make a practice, or change how the owner recovers**, the notification address and the key documents
+among them. Those answer it 403 from one list in the code, and a route the gate cannot name is refused
+to a phone, never opened to it. A phone that could add a phone would survive its own revocation; one
+that could set the recovery address could have the console's token re-issued to whoever holds it; one
+that could write the key document could leave the owner's passphrase opening nothing.
+
+Settled with it (2026-09-26, on #186 and #189):
+- **Device keys come before owner accounts**, each tied to the owner's one id from the start, so
+  accounts (#324) take that id and no device row moves.
+- **The key is made on the phone, not derived from the master**, so a stolen master is not also access
+  to the server, and revoking a phone never touches the owner's pairing identity.
+- **Only the phone signs.** The console keeps the token until #324 gives it a session.
+- **Re-issuing the token disconnects every phone**, in the same transaction.
+- **Pairing needs an https address**, and the phone enforces it. There is no setting to turn this off,
+  because the phone cannot see a server setting and a switch set once for setup stays on for good.
+
 ---
 
 ## Decisions recorded in closed issues

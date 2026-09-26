@@ -1,7 +1,9 @@
 // Pure-JVM, Android-free crypto module for the phone "sync" flavor.
 //
-// This module contains ONLY the byte-for-byte port of companion/web/src/lib/sync/crypto.ts.
-// It is compiled against the shared com.goterl.lazysodium.* types so its unit tests run on the
+// This module holds the phone's side of the sync protocol, byte for byte with the web and the
+// server: the snapshot envelope of companion/web/src/lib/sync/crypto.ts, the owner's key document,
+// the recovery code, and the signed request, pairing code and device words the server checks
+// (docs/SYNC_PROTOCOL.md §2.1 and §2.2). It is compiled against the shared com.goterl.lazysodium.* types so its unit tests run on the
 // plain host JVM via lazysodium-java (real native libsodium, no Android SDK or emulator needed),
 // while the real `sync` product flavor in :app wires the same class up with lazysodium-android
 // at runtime. That cross-artifact linkage is verified by LazySodiumParityTest on every test run

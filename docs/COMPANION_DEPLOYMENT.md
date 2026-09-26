@@ -20,7 +20,7 @@ logs, the runbook — is [COMPANION_OBSERVABILITY.md](COMPANION_OBSERVABILITY.md
 
   | `DAYMARK_SETUP_MODE` | Routes on | Pages served |
   | --- | --- | --- |
-  | `solo` | sync; the owner's notifications and access recovery | the owner's page |
+  | `solo` | sync; paired phones and the owner's own log; the owner's notifications and access recovery | the owner's page |
   | `paired` | solo's, and invitations, pairing, clinician sign-in, relationships, keys, endings and the access log | solo's, and the clinician's page at `/therapist`, where the invitation link's `/portal/invite` leads |
   | `practice` | paired's, and the practice routes (`/v1/orgs`) | paired's, and the practice page |
 
@@ -105,8 +105,9 @@ is right.
 
 ### 3.1 What your proxy must do
 
-1. **Terminate TLS.** The app speaks plain HTTP and authenticates with a bearer token; anything that
-   can read the wire can replay the token.
+1. **Terminate TLS.** The app speaks plain HTTP. The owner console authenticates with a bearer token,
+   which anything that can read the wire can replay. A paired phone signs each request instead, and
+   pairs only over an https address (§3.4).
 2. **Add `Strict-Transport-Security`.** The app sends CSP, `X-Frame-Options`, `X-Content-Type-Options`,
    `Referrer-Policy` and the cross-origin headers on every response, but not HSTS, because it cannot
    know it is behind TLS. Suggested: `max-age=31536000; includeSubDomains`; add `preload` only when you
@@ -164,6 +165,27 @@ works only if §4.0 is right. A proxy-level limit is optional: Traefik's `rateLi
 module means building and maintaining your own Caddy. `fail2ban` needs a full per-request access log,
 which is exactly the record §10 asks you not to keep — decide that trade deliberately.
 
+### 3.4 A server reachable only at home
+
+A phone pairs only over an https address: the server makes no pairing code while
+`DAYMARK_PUBLIC_BASE_URL` is `http`, and the phone refuses a code whose address is not `https`
+(COMPANION_SECURITY.md §5.8). On plain http, anyone on the same network is on the path of both the
+phone and the console, and could make the two screens' words match. So a server reachable only on
+your home network still needs a certificate the phone trusts:
+
+- **A hostname you own, with a certificate from a public authority, issued by a DNS challenge.**
+  Let's Encrypt and others can check that you control a domain through a DNS record instead of a
+  connection to your server, so nothing has to be reachable from the internet. Caddy, Traefik and
+  certbot can each do this with a plugin for your DNS provider. Point the hostname at the server's
+  address on your home network, and set `DAYMARK_PUBLIC_BASE_URL` to `https://` and that hostname.
+  Some routers refuse a public DNS answer that points at a home-network address; if the name does not
+  resolve at home, add it to the router's own DNS instead.
+- **Not a certificate authority of your own.** The Android app trusts only the certificate
+  authorities Android ships with, so a certificate from one you made is refused, however it was
+  installed on the phone.
+
+Nothing else changes: what worked over http before still does.
+
 ## 4. Forwarded headers
 
 ### 4.0 Trusted-proxy contract (read first)
@@ -215,7 +237,7 @@ read from a file named by `NAME_FILE`, which wins.
 | `DAYMARK_AUTH_TOKEN` (`_FILE`) | unset | The owner's bearer token. Unset: the sync API, owner routes, recovery and the clinician portal all answer 503 |
 | `DAYMARK_SETUP_MODE` | unset | `solo`, `paired` or `practice`, in any case: the shape, and so which routes, pages and stores the server serves (§0). Unset or blank, the server assumes one from `DAYMARK_THERAPIST_AUTH` and logs which. Any other value stops the server at start (§5.3) |
 | `DAYMARK_THERAPIST_AUTH` | off | The switch `DAYMARK_SETUP_MODE` replaces; `1` or `true` is on, anything else off. With no mode it decides the shape: on is `practice`, off is `solo`. Beside a mode, leave it out or set it to agree (§5.3) |
-| `DAYMARK_PUBLIC_BASE_URL` | first `DAYMARK_WEBAUTHN_ORIGINS` entry | The external origin every link the server hands out is built on: an absolute `http` or `https` address with a host and no user name, query or fragment. Required in the `paired` and `practice` shapes and while SMTP is on (§5.3) |
+| `DAYMARK_PUBLIC_BASE_URL` | first `DAYMARK_WEBAUTHN_ORIGINS` entry | The external origin every link the server hands out is built on: an absolute `http` or `https` address with a host and no user name, query or fragment. Required in the `paired` and `practice` shapes and while SMTP is on (§5.3). A phone pairs only while it is `https` (§3.4) |
 | `DAYMARK_WEBAUTHN_RP_ID` | unset | The passkey relying-party id. Passkeys sign people in on an `https` address with a hostname, and never unlock keys (#205); not built: #326 (COMPANION_SECURITY.md §5.1) |
 | `DAYMARK_WEBAUTHN_ORIGINS` | unset | Comma-separated; also the fallback for `DAYMARK_PUBLIC_BASE_URL` |
 | `DAYMARK_TRUSTED_PROXIES` | empty: trust nothing | §4.0 |
@@ -317,7 +339,8 @@ The volume is `daymark-companion_blobs`, mounted at `/data`.
 | `index.db` and `blobs/<lineage>/<version>.blob` | Snapshot ciphertext and its index | a bearer token is set |
 | `keyparams.json` | The owner's key-derivation parameters (salt and cost; public). Kept, and no longer served, once `wrapped-key.db` holds a version | an owner has published them |
 | `wrapped-key.db` | The owner's wrapped key: the master locked under the passphrase and under the recovery code. Every version is kept; only the newest is served | a bearer token is set |
-| `owner-account.db` | The bearer-token digest, the notification email (plaintext), recovery-link digests | a bearer token is set |
+| `owner-account.db` | The bearer-token digest, the notification email (plaintext), recovery-link digests; the owner's id, each paired phone's public key and revocation, pairing codes' ids and redemptions (never a code), and the nonces phones used in the last five minutes | a bearer token is set |
+| `owner-audit.db` | The owner's own log: phones paired and revoked, and lockouts of an owner credential | a bearer token is set |
 | `auth.db` | Invitations (Argon2id), sign-in code seeds (**in the clear**), session digests, attempt counters, public keys, relationship endings | the `paired` or `practice` shape (§0) |
 | `rel-index.db` and `rel/<relRef>/<channel>/<lineage>/<version>.blob` | Relationship ciphertext and its index | the `paired` or `practice` shape (§0) |
 | `audit.db` | The audit chain per relationship | the `paired` or `practice` shape |
@@ -327,7 +350,7 @@ The volume is `daymark-companion_blobs`, mounted at `/data`.
 | `_pre-migrate/<name>.v<from>.<time>.db` | A copy of one database, taken just before a start changed its structure: `<name>` is the database, `<from>` the version it held (0: written before versions were recorded), `<time>` the moment in UTC, e.g. `auth.v0.20260926T144512Z.db`. One whole file, with no `-wal` beside it | a start has changed a database's structure (§7.2) |
 | `tmp/` | Staging for atomic writes | with either blob store |
 
-That is nine SQLite databases, all in WAL mode: each may have `-wal` and `-shm` files beside it,
+That is ten SQLite databases, all in WAL mode: each may have `-wal` and `-shm` files beside it,
 and those belong to it. Also present and not worth keeping: `.readyz` (the readiness probe's file)
 and the SQLite native library the server unpacks at every start. A server that changes shape keeps
 the files it no longer opens, and neither reads nor changes them: a database it opens again later is
@@ -470,9 +493,11 @@ remains the way back for the whole volume.
 
 ### 7.3 Versions across releases
 
-Every database is at version 1: the structure it had when versions began to be recorded. A later
-release that changes one raises its version, and the copies in `_pre-migrate/` are the way back from
-it (§7.2). Blobs are opaque to the server, which reads no format version in them and serves each as
+Every database is at version 1, the structure it had when versions began to be recorded, except
+`owner-account.db`, which is at version 2: it adds the owner's id, the paired phones, their pairing codes
+and the nonces they used (#186, #189). A start that finds it at version 1 copies it to `_pre-migrate/`
+and adds those tables, and nothing already in it changes. A later release that changes a database
+raises its version, and the copies in `_pre-migrate/` are the way back from it (§7.2). Blobs are opaque to the server, which reads no format version in them and serves each as
 it was written.
 
 Not built: a record, per release, of each database's version and of the oldest Daymark Sync app it

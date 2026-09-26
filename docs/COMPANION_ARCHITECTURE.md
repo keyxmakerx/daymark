@@ -127,12 +127,14 @@ Kotlin and Ktor, in a non-root, read-only, distroless container with no outbound
 | `pairing.db` | Pairing runs: two CPace messages and two sealed envelopes each |
 | `audit.db`, `org-audit.db` | The owner-readable access log and the practice's control-plane log, each a hash chain |
 | `org.db` | Practices and memberships |
-| `owner-account.db` | The owner token's digest, the notification address, recovery-link state |
+| `owner-account.db` | The owner token's digest, the notification address, recovery-link state; the owner's id, the paired phones' keys and revocations, pairing codes and used nonces |
+| `owner-audit.db` | The owner's own log: phones paired and revoked, and lockouts of an owner credential |
 
 Route groups: sync (`/v1/keyparams`, `/v1/keydoc`, `/v1/snapshots`); relationship channels (`/v1/rel/…`);
 invitations, pairing and sign-in (`/v1/invite…`, `/v1/relations/{relRef}/pairing…`, `/v1/totp/…`);
 keys, endings and the access log (`/v1/relations/{relRef}/…`); owner notifications and access recovery
-(`/v1/owner/notifications`, `/v1/recovery/…`); practices (`/v1/orgs…`); and the unauthenticated
+(`/v1/owner/notifications`, `/v1/recovery/…`); paired phones and the owner's log (`/v1/devices…`,
+`/v1/owner/audit`); practices (`/v1/orgs…`); and the unauthenticated
 `/healthz`, `/readyz` and `/v1/config`.
 
 ### 4.2 The web consoles
@@ -221,7 +223,7 @@ rather than left to be discovered.
 | **It writes the audit log about itself** | The hash chain shows internal consistency, never completeness: whoever can rewrite the entries can recompute the chain, and withholding an event is undetectable | The chain head is evidence only when anchored outside the server — a person's note today, the phone later: #182. Signed clinician attestations are not planned (#217): a console the server serves would only report what an honest one did |
 | **No forward secrecy for sealed items** | Anyone who later obtains a clinician's long-term key can open every share ever sealed to it that is still stored | Nothing the owner and a clinician send each other is served past 90 days, a newer share ends the one before it, and within the hour after an item ends the server deletes its bytes (#228, #332, #338). Grants, which are signed and not sealed, have no end. What a colluding server chose to keep is beyond any software's reach (R3) |
 | **Revocation binds an honest server** | Expiry and withdrawal stop future fetches on an honest server. They do not un-send what was read, and a colluding server can keep serving what it holds | A permanent, stated limit (#222); re-pairing with new keys protects what is sent afterwards |
-| **The bearer token travels on every request** | On plain HTTP anyone on the wire can replay it (never the content: that is encrypted) | Signed requests replace it: #186 |
+| **The bearer token travels on every request the console makes** | On plain HTTP anyone on the wire can replay it (never the content: that is encrypted) | A paired phone never sends it: it signs each request, and a captured one cannot be used again (SYNC_PROTOCOL.md §2.1). The console keeps the token until owner accounts give it a session of its own: #324 |
 | **The clinician's browser holds plaintext** | Keys are wrapped at rest and wiped when idle; extensions and screenshots are beyond any control | The sign-in contract says so beside the lock, which drops the keys after 15 minutes without activity or 8 hours in all, whatever the server allows (#262). Not built: a clinician client the server cannot change, which a Practice deployment needs before it holds a real patient's data (#222): #319 |
 
 ## 7. Rules that hold everywhere
