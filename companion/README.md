@@ -185,7 +185,9 @@ manager auto-updates (Cosmos, Watchtower, a Portainer stack that repulls) and yo
 Pin the **digest** when you do not want that. A moving tag plus an auto-updating manager is how a
 server changes behaviour overnight with no diff to look at, and this application carries a
 migrating database: an update can change on-disk state in ways that do not reverse by rolling the
-image back. **Take a backup before an update you did not choose the timing of.** The exact digest
+image back. A release that changes a database first copies it to `_pre-migrate/` on the volume, and an
+earlier release refuses a database a later one changed until the copy is put back
+(COMPANION_DEPLOYMENT.md §7.2). **Take a backup before an update you did not choose the timing of.** The exact digest
 for any build is printed in that run's summary on the Actions tab.
 
 Only builds from `main` move `:latest` and `:main`. A manually dispatched build of a branch

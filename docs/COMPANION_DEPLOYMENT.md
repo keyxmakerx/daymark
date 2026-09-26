@@ -286,7 +286,9 @@ The server checks these before it opens the volume or a port. A refusal is one l
 `Refusing to start:` that names the setting to change and never repeats a value as it was written,
 and the process exits with status 78. Under `restart: unless-stopped` Docker starts it again and the
 same line repeats until the setting is changed: `docker compose logs companion | grep 'Refusing to
-start'`.
+start'`. A database the server cannot open at its release's version stops the start the same way,
+after the volume is opened and before a port is bound, with one line naming the database and its
+versions (§7.2).
 
 | Refused | Why | Change |
 | --- | --- | --- |
@@ -322,18 +324,24 @@ The volume is `daymark-companion_blobs`, mounted at `/data`.
 | `org-audit.db` | The audit chain per practice | the `practice` shape |
 | `org.db` | Practices, members, roles | the `practice` shape |
 | `pairing.db` | Pairing messages in transit | the `paired` or `practice` shape (§0) |
+| `_pre-migrate/<name>.v<from>.<time>.db` | A copy of one database, taken just before a start changed its structure: `<name>` is the database, `<from>` the version it held (0: written before versions were recorded), `<time>` the moment in UTC, e.g. `auth.v0.20260926T144512Z.db`. One whole file, with no `-wal` beside it | a start has changed a database's structure (§7.2) |
 | `tmp/` | Staging for atomic writes | with either blob store |
 
 That is nine SQLite databases, all in WAL mode: each may have `-wal` and `-shm` files beside it,
 and those belong to it. Also present and not worth keeping: `.readyz` (the readiness probe's file)
 and the SQLite native library the server unpacks at every start. A server that changes shape keeps
-the files it no longer opens: nothing is migrated or deleted.
+the files it no longer opens, and neither reads nor changes them: a database it opens again later is
+brought to the release's version then (§7.2).
 
 The volume holds **sign-in secrets**: anyone with a copy of `auth.db` can mint sign-in codes for every
 enrolled clinician (COMPANION_SECURITY.md §5.2). It also holds the owner's wrapped key. That opens
 nothing without the passphrase or the recovery code, but whoever copies `wrapped-key.db` can guess at
 the passphrase offline, and a passphrase or code the owner has since changed still opens the older
-versions in it. Protect backups like a password file — encrypted at rest, readable by few.
+versions in it. A copy in `_pre-migrate/` holds everything its database held when it was taken, and
+nothing prunes it (#405): an `auth.db` copy holds the sign-in seeds, and an `audit.db` copy keeps
+entries past their retention. Protect it as you protect the volume, and delete a copy once the
+release that made it has proved itself. Protect backups like a password file — encrypted at rest,
+readable by few.
 
 ### 6.2 Back up
 
@@ -375,6 +383,8 @@ newer audit-chain head will see the chain fall behind it (COMPANION_SECURITY.md 
 
 ## 7. Upgrades
 
+### 7.1 Steps
+
 1. Back up (§6.2).
 2. Build from source with `git pull` then `docker compose up -d --build`; or run the image CI
    published: set `DAYMARK_IMAGE` to `ghcr.io/…/daymark-companion@sha256:…`, then `docker compose pull`
@@ -382,12 +392,11 @@ newer audit-chain head will see the chain fall behind it (COMPANION_SECURITY.md 
    registry swap the code that holds people's keys.
 3. Watch it come up: `docker compose ps` should reach `healthy`; then run the checks in
    COMPANION_OBSERVABILITY.md §6.4. If it restarts instead, `docker compose logs companion | grep
-   'Refusing to start'` names the setting to change (§5.3).
+   'Refusing to start'` names the setting to change (§5.3), or the database that could not be
+   brought to this release's version (§7.2).
 
-**Schema changes** are additive: each store creates missing tables and adds missing columns at start.
-There is no schema version and no automatic copy before a change, so the backup from step 1 is the way
-back (#193). To roll back, run the previous image — and restore that backup if the new version
-changed a database.
+**Database changes** are made at start, one database at a time, each after a copy of it is taken;
+§7.2 says how, and how to go back.
 
 **Base images** are pinned by digest, and Dependabot proposes the bumps (`.github/dependabot.yml`).
 Nothing updates by itself: a running server keeps its operating system and Java runtime until you
@@ -401,6 +410,73 @@ docker compose down
 docker run --rm -v daymark-companion_blobs:/data alpine:3 chown -R 65532:65532 /data
 docker compose up -d --build
 ```
+
+### 7.2 Database changes
+
+Each database records the version of its structure in its own header (SQLite's `user_version`). At
+start, before anything is served, the server opens only the databases its shape uses (§0) and
+compares each with the version this release knows:
+
+- **The same.** Nothing about its structure changes, and nothing is copied. The server checks that
+  the database has every table, column and index of that version, and refuses to start if one is
+  missing, rather than patch it: the file was changed outside the server, or put back from a
+  mismatched copy.
+- **Older.** The server first writes a consistent copy of the database to
+  `_pre-migrate/<name>.v<from>.<time>.db`, with SQLite's `VACUUM INTO`, flushed to the disk before
+  anything changes. It then makes the changes, checks the result and records the new version, in one
+  transaction, and logs one line: `auth.db: structure changed from version 1 to 2; the copy taken
+  before the change is _pre-migrate/auth.v1.20260926T144512Z.db`.
+- **None recorded**, which is every database written before versions were: the server adopts it as
+  version 1. One already in that structure is only marked, with no copy, because its structure does
+  not change. One of an older shape gains the tables and columns it lacks, after a copy, and keeps
+  every row.
+- **Newer**, because the release was rolled back past the one that changed it: the server refuses to
+  start and leaves the file as it found it.
+
+A change adds a table, a column or an index, and nothing else. No change rewrites, re-orders or
+deletes a row, so the audit chains and the key tables stay exactly as they were written, and none
+reads or rewrites a blob file.
+
+If a change fails, its transaction rolls back and the database is byte for byte as it was; the copy
+just taken is removed, since the untouched file is that copy. The server refuses to start with one
+line and exits with status 78, like a refused setting (§5.3), for example `Refusing to start:
+auth.db could not be changed from structure version 1 to 2 (SQLITE_FULL); the change was rolled back
+and the file is as it was`. The bracket names what failed (an SQLite result code, a Java exception's
+name, or the part of the structure still missing), and the line never carries a row or a path. Under
+`restart: unless-stopped` it repeats until the cause is fixed, most often free space or the volume's
+ownership (UID 65532).
+
+Each database changes in its own transaction; SQLite cannot commit several files as one. A start
+refused on one database has already brought those opened before it to the new version, each with its
+copy, and left the rest as they were. Each database is always wholly at one version or the other.
+
+**To go back** to the release before one that changed a database, stop the server, put back each
+changed database from its copy, and start the earlier image. Remove the database's `-wal` and `-shm`
+first, as for a restore (§6.3):
+
+```sh
+docker compose stop companion
+docker run --rm -v daymark-companion_blobs:/data alpine:3 sh -c \
+  'cd /data && rm -f auth.db-wal auth.db-shm && cp _pre-migrate/auth.v1.<time>.db auth.db && chown 65532:65532 auth.db'
+docker compose up -d
+```
+
+What was written to that database after the copy is lost, as with any restore. Releases from the
+first that records versions refuse a database newer than they know, so an earlier one will not run
+on a database a later one changed until it is put back. A release from before versions were recorded
+reads none and would: never run one on a database a later release has taken past version 1. It runs
+unchanged on a database the first versioned release only marked. The backup from §7.1's first step
+remains the way back for the whole volume.
+
+### 7.3 Versions across releases
+
+Every database is at version 1: the structure it had when versions began to be recorded. A later
+release that changes one raises its version, and the copies in `_pre-migrate/` are the way back from
+it (§7.2). Blobs are opaque to the server, which reads no format version in them and serves each as
+it was written.
+
+Not built: a record, per release, of each database's version and of the oldest Daymark Sync app it
+serves, and a "server too old or too new" message in the app, which has no sync screen yet (#406).
 
 ## 8. Network egress lockdown and the SMTP exception
 

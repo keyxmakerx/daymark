@@ -193,7 +193,10 @@ the code has changed.
 
 | Level | Logger | Message | What it can carry |
 |---|---|---|---|
-| ERROR | `com.daymark.companion` | `Refusing to start: …` (`main`, then exit 78) | Setting names, a fixed example address, and which of a setting's fixed choices it read; never a value as the operator wrote it |
+| ERROR | `com.daymark.companion` | `Refusing to start: …` (`main`, then exit 78) | For a setting: setting names, a fixed example address, and which of a setting's fixed choices it read; never a value as the operator wrote it. For a database (COMPANION_DEPLOYMENT.md §7.2): the database's file name, structure versions, the names of missing tables and columns, an SQLite result code or a Java exception's class name, and a copy's name in `_pre-migrate/`; never a row or a path |
+| INFO | `…companion.schema` | `{}: structure changed from version {} to {}; the copy taken before the change is {}/{}` (`Schema.open`, once for each database a start changes) | A database file name, two versions, and the copy's name (database, version, UTC time) |
+| INFO | `…companion.schema` | `{}: recorded as structure version {}, which it already had` (`Schema.open`, on the first start that opens a database written before versions) | A database file name and a version |
+| DEBUG | `…companion.schema` | `{}: created at structure version {}` (`Schema.open`, for a new database) | A database file name and a version |
 | INFO | `com.daymark.companion` | `Daymark Companion starting on {}:{} basePath={} sync={} smtp={} dataDir={}` (`main`) | Configuration only |
 | INFO | `com.daymark.companion` | `Serving the {} shape, as DAYMARK_SETUP_MODE says: …`, or `… assumed because DAYMARK_SETUP_MODE is not set and DAYMARK_THERAPIST_AUTH is on` (or `off`) `… Set DAYMARK_SETUP_MODE …` (`Application.module`, once per start) | The shape and setting names; never a value as the operator wrote it |
 | WARN | `com.daymark.companion` | `DAYMARK_AUTH_TOKEN is not set — the /v1 sync API is DISABLED…` (`main`) | Nothing |
@@ -242,8 +245,8 @@ only when you turn on `DAYMARK_ACCESS_LOG_SOURCE_IP` — which also changes the 
 would never see: the startup banner — the only place the live address, base path and flags are
 reported; the SMTP-enabled line; and `readiness restored`, so a readiness outage would look
 permanent in the log after it clears. The mailer's success lines are DEBUG, so neither `warn` nor
-`info` shows them. A startup refusal (COMPANION_DEPLOYMENT.md §5.3) is logged before the level is
-applied, so no level hides it.
+`info` shows them. A startup refusal, for a setting (COMPANION_DEPLOYMENT.md §5.3) or a database
+(§7.2), is logged at a level no `DAYMARK_LOG_LEVEL` hides.
 
 `logback.xml` pins `io.ktor` at INFO and `io.netty` at WARN, and `DAYMARK_LOG_LEVEL` changes neither
 (#169). There is no per-request logging, so `info` costs a handful of lines per start.
@@ -382,7 +385,8 @@ verifier must recompute codes and a hash cannot (`Totp.kt` says so). Everything 
 is: invitation secrets with Argon2id, session ids, inbox tokens and the owner's bearer token with
 BLAKE2b. The notification email is plaintext by necessity.
 
-**Act on this.** Anyone who can read `DAYMARK_DATA_DIR`, or any backup or snapshot of it, can mint
+**Act on this.** Anyone who can read `DAYMARK_DATA_DIR`, or any backup or snapshot of it, or any copy
+of `auth.db` in `_pre-migrate/` (COMPANION_DEPLOYMENT.md §7.2), can mint
 valid codes for every enrolled clinician, indefinitely, without anyone noticing. Treat the volume and
 its backups like a password file, not like an encrypted blob store. A seed cannot be replaced: if a
 backup may have leaked, see COMPANION_SECURITY.md §5.2.
@@ -424,7 +428,8 @@ docker system df -v | grep daymark-companion_blobs
 
 | Log pattern | Means | Do |
 |---|---|---|
-| `Refusing to start: …` (then the container restarts) | A setting the server will not run with; the line names it and never its value | Change the named setting (COMPANION_DEPLOYMENT.md §5.3) and start again |
+| `Refusing to start: …` (then the container restarts) | A setting the server will not run with, or a database it cannot bring to this release's version; the line names the setting or the database, never a value | For a setting, change it (COMPANION_DEPLOYMENT.md §5.3). For a database, COMPANION_DEPLOYMENT.md §7.2: free space and the volume's ownership for a change that failed; the copy in `_pre-migrate/`, or the release that wrote it, for one that is newer |
+| `…: structure changed from version … to …` | A start changed a database, after copying it to `_pre-migrate/` | Nothing, while the server is healthy. Delete the copy once the release has proved itself: it keeps everything the database held (COMPANION_DEPLOYMENT.md §7.2) |
 | `NOT READY: …` | `/readyz` is failing: `/data` would not take a 4 KiB write and fsync | Check free space, the volume's ownership (UID 65532) and whether it is mounted read-only. Readiness does not probe SQLite lock contention, so a stuck writer still answers 200 |
 | `Received X-Forwarded-For from … DAYMARK_TRUSTED_PROXIES is EMPTY` | Something is proxying and the app is ignoring it; all clients share one lockout bucket | Set `DAYMARK_TRUSTED_PROXIES` to the address in the line, as a `/32`; restart; run §1.7 |
 | `DAYMARK_TRUSTED_PROXIES is unset` (at start) | A hint, not evidence: unset is right for a server reached directly | Behind a proxy, fix it; otherwise ignore it |

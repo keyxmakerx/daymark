@@ -130,7 +130,7 @@ services:
       # answers 503 "therapist portal not configured"; a page that is off answers 403.
       # Any other value stops the server at start with one line naming this setting.
       # Unset, the server assumes practice with DAYMARK_THERAPIST_AUTH on and solo with it
-      # off, and says which in its log. Changing it needs a restart; nothing is migrated.
+      # off, and says which in its log. Changing it needs a restart; no data moves between shapes.
       DAYMARK_SETUP_MODE: "${DAYMARK_SETUP_MODE:-}"
 
       # The switch DAYMARK_SETUP_MODE replaces. Empty unless .env sets it, so a mode set

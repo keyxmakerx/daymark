@@ -37,6 +37,18 @@ All notable changes to this project are documented here. The format is based on
   still contains unlock times restores normally; the badges in it are just not brought back.
 
 ### Added
+- **Companion — an upgrade can no longer leave the server's databases half-changed.** Each of the
+  server's databases now records which version of its layout it holds. When a new release needs to
+  change one, the server first saves a complete copy of it in a `_pre-migrate` folder on the data
+  volume, then makes the whole change at once. If anything goes wrong, the database is left exactly
+  as it was and the server does not start; it writes one line saying which database and which
+  versions, as it does for a setting it will not run with. A server rolled back to a release older
+  than one that changed a database also refuses to start rather than misread it; putting the saved
+  copy back is the way to go back. The copies keep everything the database held, sign-in secrets
+  included, and nothing deletes them yet (#405), so protect the folder like the rest of the volume
+  and delete a copy once the new release has proved itself. On the first start of this release, a
+  database already in the current layout is only marked with its version, and nothing is copied.
+  (#193)
 - **The phone can now unlock your key the way the web does, from either kind of key document the
   server keeps.** It opens it with your passphrase or with your recovery code, typed with or without
   dashes and spaces, and refuses anything weaker than the agreed strength before it starts. Nothing
