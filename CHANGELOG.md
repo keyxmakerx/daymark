@@ -760,8 +760,9 @@ All notable changes to this project are documented here. The format is based on
   much, never when: the server still sees when each one arrives, and the clinician's sign-in page
   now says so in those words. Everything already stored unpadded still opens. The command-line
   backup writer checks the padded size before it sends anything and says plainly when a backup is
-  too large once padded; a server that accepts larger blobs is matched with `--max-blob-bytes`.
-  (#315)
+  too large once padded; a server that accepts larger blobs is matched with `--max-blob-bytes`. The
+  phone's sync code, not yet switched on (#168), makes and opens the same padded backups byte for
+  byte and still opens unpadded ones. (#315, #316)
 - **A copy of a share sealed before one the clinician has already opened stays closed.** A server
   restored from a backup, or anything able to change what a server stores, could have handed the
   clinician an older share as the current one. The clinician's browser now remembers when the newest

@@ -52,7 +52,8 @@ the AAD. The AAD also names the format, so a server that changes the format byte
 fail to open instead of opening in the wrong form. Unpadding happens only after the AEAD has
 authenticated the body, and it is strict.
 
-Padding (decided in #214; `companion/web/src/lib/padding.ts`): `paddedLength(x)` is 4 KiB up to 4
+Padding (decided in #214; `companion/web/src/lib/padding.ts`; Kotlin port
+`sync-crypto/src/main/kotlin/com/daymark/synccrypto/Padding.kt`): `paddedLength(x)` is 4 KiB up to 4
 KiB, then the next power of two up to 1 MiB, then the Padmé length, which is never more than about
 12% larger. A snapshot of n bytes is stored as 45 + `paddedLength(4 + n)` bytes, so anything up to
 4,092 bytes is stored as 4,141. Padding hides how much was written, never when: the server still
@@ -169,7 +170,9 @@ the exact envelope layout and AAD string, the padding, the keyparams JSON, and t
 The crypto and integration tests in `companion/web/src/lib/sync/` are the oracle: an envelope made
 elsewhere must decrypt there, and the other way round. The Kotlin port is held to it by
 `SyncCryptoTest`, which includes cross-language vectors generated from `crypto.ts`; see
-[COMPANION_PHONE.md](COMPANION_PHONE.md) §1. The format-2 vector in `sync/crypto.test.ts` (key from
-the passphrase `conformance-vector`, salt 0x00..0x0f, 8 MiB and 2 passes; nonce 0x01..0x18; lineage
-`devA`, version 7; plaintext `{"hello":"daymark"}`; 4,141 bytes) is not in `SyncCryptoTest` yet, and
-the Kotlin reader still refuses format 2: #316.
+[COMPANION_PHONE.md](COMPANION_PHONE.md) §1. `SyncCryptoTest` also holds the format-2 vector in
+`sync/crypto.test.ts` (key from the passphrase `conformance-vector`, salt 0x00..0x0f, 8 MiB and 2
+passes; nonce 0x01..0x18; lineage `devA`, version 7; plaintext `{"hello":"daymark"}`; 4,141 bytes):
+the Kotlin writer makes exactly those bytes under that nonce, and the Kotlin reader opens them, and
+the format-1 envelope of the same inputs. `PaddingTest` holds the padding vector and length table of
+`padding.test.ts`.

@@ -33,9 +33,9 @@ libsodium and no emulator; the `sync` flavour wires it to the Android binding
 | Argon2id floor (256 MiB, 3 passes), 16-byte salt, 32-byte master | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
 | Subkeys, context `dmsync01`: 1 sync key, 2 manifest seed | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
 | Subkeys 3 and 4: the owner's X25519 and Ed25519 seeds | `owner/identity.ts` | — | No: #174 |
-| Snapshot envelope `DMS1 \| 0x01 \| nonce \| ciphertext`, AAD `daymark.snapshot.v1\|lineage\|version` | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
-| Padding before encryption: a `u32` big-endian length, the plaintext, then zeros up to the standard size (#214) | `lib/padding.ts`, with the vector in `lib/padding.test.ts` | — | No: #316 |
-| Padded snapshot envelope, format 2: `pad(plaintext)` under the AAD `daymark.snapshot.v2\|lineage\|version`; format 1 still read (#214) | `sync/crypto.ts`, with the vector in `sync/crypto.test.ts` | — (the Kotlin reader refuses format 2 today) | No: #316 |
+| Snapshot envelope `DMS1 \| 0x01 \| nonce \| ciphertext`, AAD `daymark.snapshot.v1\|lineage\|version`: read, never written | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
+| Padding before encryption: a `u32` big-endian length, the plaintext, then zeros up to the standard size (#214) | `lib/padding.ts`, with the vector in `lib/padding.test.ts` | `Padding.kt` | Yes |
+| Padded snapshot envelope, format 2, the only format written: `pad(plaintext)` under the AAD `daymark.snapshot.v2\|lineage\|version`; format 1 still read (#214) | `sync/crypto.ts`, with the vector in `sync/crypto.test.ts` | `SyncCrypto.kt` | Yes |
 | Manifest signing bytes | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
 | Base64: RFC 4648 §5, URL-safe, no padding | everywhere | `SyncCrypto.kt` (plain `java.util.Base64`, because lazysodium's own helper is standard base64) | Yes |
 | CPace (CPACE-RISTRETTO255-SHA512) | `pairing/cpace.ts` | `CpaceCrypto.kt` | Yes |
@@ -50,11 +50,13 @@ reproduce.
 
 **What the tests pin** (run by `./gradlew test`, which includes `:sync-crypto`): `SyncCryptoTest`
 checks round trips, AAD binding, tampering, the base64 conformance vector of SYNC_PROTOCOL.md §1.2,
-and cross-language vectors generated from `crypto.ts`. `CpaceCryptoTest` checks the CFRG test vectors
-(generator string, generator point, both messages, the key), a live exchange, and that a wrong code
-diverges silently. `LazySodiumParityTest` checks that the Java and Android bindings expose the same
-surface, since the tests run on one and the app on the other. The same checks on a real device are
-not built: #192.
+and cross-language vectors generated from `crypto.ts`, including the format-2 vector, which the
+Kotlin writer makes byte for byte under the vector's nonce, and a format-1 envelope that still
+opens. `PaddingTest` checks the bucket rule, the boundaries, the strict refusals and the vectors of
+`padding.test.ts`. `CpaceCryptoTest` checks the CFRG test vectors (generator string, generator
+point, both messages, the key), a live exchange, and that a wrong code diverges silently.
+`LazySodiumParityTest` checks that the Java and Android bindings expose the same surface, since the
+tests run on one and the app on the other. The same checks on a real device are not built: #192.
 
 ## 2. Sync of the owner's own data
 
