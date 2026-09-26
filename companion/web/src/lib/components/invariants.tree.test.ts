@@ -576,7 +576,7 @@ const FIXED_COPY: { path: string; label: string; sentences: string[] }[] = [
   {
     path: 'src/lib/components/therapist/SharedDataView.svelte',
     label: 'scores-and-bands-only framing (shared data)',
-    sentences: ['Curated view: scores and bands only.'],
+    sentences: ['Self-checks: scores and bands only.'],
   },
 ]
 
@@ -631,14 +631,21 @@ describe('(e) the fixed honesty copy is intact', () => {
     expect(prov!).toContain("custom: 'Custom'")
   })
 
-  it('the curated-share rule survives where it is enforced, not only where it is shown', () => {
-    // "Scores and bands only, never raw entries" is a property of the share pipeline, not a
-    // sentence in a banner. Asserted at the capability description the owner consents to.
-    const describe_ = source.get('src/lib/assignments/describe.ts')
+  it('the share rule survives where it is consented to, not only where it is shown', () => {
+    // "Scores and bands only" is a property of the share pipeline, not a sentence in a banner.
+    // Asserted at the capability description the owner consents to, which also says what a share
+    // is: access until the date set or until it is stopped (#305, #337).
+    const describe_ = code.get('src/lib/assignments/describe.ts')
     expect(describe_, 'describe.ts is missing').toBeDefined()
     expect(describe_!).toContain(
-      'Read the curated data you choose to share (scores and bands only — never raw entries).',
+      "'Read what you choose to share, until the date you set or until you stop it. Self-checks go as scores and bands only.'",
     )
+    // Retired: "curated" (software picking, which the floor forbids) and "never raw entries" (a
+    // default, not a limit, once the owner may send their own words).
+    const RETIRED = 'Read the curated data you choose to share (scores and bands only — never raw entries).'
+    expect(describe_!).not.toContain(RETIRED)
+    // Control: planted back into the real module, the retired description is seen.
+    expect(`${describe_}\nconst planted = '${RETIRED}'`).toContain(RETIRED)
   })
 })
 
@@ -684,6 +691,23 @@ const RETIRED_COPY: { path: string; issue: string; sentences: string[] }[] = [
     path: 'src/lib/components/owner/GrantManager.svelte',
     issue: '#320',
     sentences: ['A true cutoff for past data is a re-key, which is a separate step.'],
+  },
+  {
+    // "Curate" is software picking, which the floor forbids; the toggle's sense is inverted so the
+    // safe choice is the default without being nudged at.
+    path: 'src/lib/components/owner/ShareBuilder.svelte',
+    issue: '#337',
+    sentences: [
+      'Curate exactly what to share.',
+      'Strip free-text notes (recommended)',
+      "The bundle is sealed to {therapist.displayName}'s pinned key and signed by you.",
+    ],
+  },
+  {
+    // False whenever the owner sent their own words; scoped to self-checks it is true in every state.
+    path: 'src/lib/components/therapist/SharedDataView.svelte',
+    issue: '#337',
+    sentences: ['Curated view: scores and bands only.', 'Open the curated data this person chose to share with you.'],
   },
 ]
 

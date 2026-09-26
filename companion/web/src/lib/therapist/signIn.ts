@@ -281,9 +281,11 @@ export const SIGN_IN_CONTRACT: readonly ContractClause[] = [
   {
     id: 'trusted.notARecord',
     section: 'trusted',
+    // A share is access, not a copy (#305, #337): the report is the copy, handed over on paper.
     text:
-      'What you open is a copy of what they chose to export. It is not a clinical record, it is ' +
-      'not complete, and nothing in it is a diagnosis.',
+      'What you open is a share: access to what this person chose, until the date they set or ' +
+      'until they stop it. It is not a clinical record, it is not complete, and nothing in it is a ' +
+      'diagnosis.',
   },
   {
     id: 'sees.signIn',

@@ -325,6 +325,19 @@ describe('the contract this screen shows', () => {
     )
   })
 
+  it('calls what a clinician opens a share — access, not a copy (#337)', () => {
+    const opened = SIGN_IN_CONTRACT.find((c) => c.id === 'trusted.notARecord')!.text
+    expect(opened).toBe(
+      'What you open is a share: access to what this person chose, until the date they set or until ' +
+        'they stop it. It is not a clinical record, it is not complete, and nothing in it is a diagnosis.',
+    )
+    // A report is the copy, handed over on paper (#305); the contract may not call a share one.
+    const A_COPY = /\ba copy of what\b|chose to export/i
+    expect(SIGN_IN_CONTRACT.map((c) => c.text).filter((t) => A_COPY.test(t))).toEqual([])
+    // Control: the retired clause is seen by the same pattern.
+    expect(A_COPY.test('What you open is a copy of what they chose to export.')).toBe(true)
+  })
+
   it('calls the digest the page’s own report, never a control (#320)', () => {
     const scope = SIGN_IN_CONTRACT.find((c) => c.id === 'cannot.scope')!.text
     expect(scope).toBe(

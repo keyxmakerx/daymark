@@ -32,6 +32,7 @@ import {
   sharingStateFrom,
 } from './sharing'
 import { REVOKE_CAVEAT } from '../pairing/copy'
+import { emptySelection } from '../assignments/share'
 
 const meta = (version: number, createdAt: number) => ({ version, size: 10, contentHash: 'h', createdAt })
 
@@ -370,6 +371,62 @@ describe('how long a share lasts (#228, #339)', () => {
     expect(line).toBe('Ends on 9 October 2026. The server then deletes its copy. Anything read before then has already been seen.')
     expect(line).not.toMatch(/un-send|revok/i)
     expect(SHARE_DAYS_OUT_OF_RANGE).toBe('Choose from 1 to 90 whole days.')
+  })
+})
+
+/*
+ * THE BUILDER SAYS WHAT A SHARE IS (#337, decided in #305).
+ *
+ * A report is a copy the person hands over; a share is access that ends on the date they set or
+ * when they stop it. The builder opens with the share's sentence, states the floor — self-checks
+ * as scores and bands, their own words only if they switch them on, whole — and uses the end-date
+ * line beside the days field rather than a second one. The revoke caveat stays at the revoke click.
+ */
+describe('the share builder says what a share is', () => {
+  const builder = readFileSync(
+    fileURLToPath(new URL('../components/owner/ShareBuilder.svelte', import.meta.url)),
+    'utf8',
+  )
+  /** The hint as it reads: the paragraph's text, whitespace collapsed. Takes the source for plants. */
+  const hintOf = (src: string) => {
+    const m = src.replace(/<!--[\s\S]*?-->/g, '')
+    const open = m.indexOf('<p class="hint">')
+    return open < 0 ? '' : m.slice(open + '<p class="hint">'.length, m.indexOf('</p>', open)).replace(/\s+/g, ' ').trim()
+  }
+  const SHARE_IS_ACCESS =
+    'A share is access. {therapist.displayName} can read what you choose here until the date you set, or until you stop it.'
+
+  it('opens with the share’s own sentence, then the floor, whole', () => {
+    expect(hintOf(builder)).toBe(
+      `${SHARE_IS_ACCESS} Self-checks are reduced to scores and bands only — never raw answers. Your own words go ` +
+        "only if you switch them on below, whole, never trimmed. The share is sealed to {therapist.displayName}'s " +
+        'pinned key and signed by you.',
+    )
+    expect(hintOf(builder).startsWith(SHARE_IS_ACCESS)).toBe(true)
+    // Control: a hint that does not open with the sentence fails the same check.
+    const planted = builder.replace('A share is access. ', 'Curate exactly what to share. ')
+    expect(planted).not.toBe(builder)
+    expect(hintOf(planted).startsWith(SHARE_IS_ACCESS)).toBe(false)
+  })
+
+  it('names no copy, curation or report, and does not repeat the revoke caveat or the end-date line', () => {
+    const RETIRED = /\bcurat|\bcopy\b|\breport\b|un-send|already been seen/i
+    expect(hintOf(builder)).not.toMatch(RETIRED)
+    // Control: the retired opening is seen by the same pattern.
+    expect(hintOf(builder.replace('A share is access. ', 'Curate exactly what to share. '))).toMatch(RETIRED)
+    // The end-date sentence is the one beside the field, used once, not a second copy.
+    expect((builder.match(/shareEndsLine\(/g) ?? []).length).toBe(1)
+  })
+
+  it('asks to include the person’s own words, unchecked unless they turn it on', () => {
+    const markup = builder.replace(/<!--[\s\S]*?-->/g, '')
+    expect(markup).toContain('Include my own words (mood notes and journal text)')
+    expect(markup).toContain('checked={sel.includeOwnWords}')
+    expect(emptySelection().includeOwnWords).toBe(false)
+    // The old control, whose sense was inverted and which nudged with "(recommended)", is gone.
+    const RETIRED = /Strip free-text notes|\(recommended\)|stripNotes/
+    expect(markup).not.toMatch(RETIRED)
+    expect(`${markup}<label>Strip free-text notes (recommended)</label>`).toMatch(RETIRED) // control
   })
 })
 

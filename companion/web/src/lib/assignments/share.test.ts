@@ -46,18 +46,32 @@ describe('buildShareBundle — curation & redaction', () => {
     expect(JSON.stringify(b).toLowerCase()).not.toMatch(/item9|item-9|selfharm|self-harm|suicid/)
   })
 
-  it('strips notes when stripNotes is set', () => {
-    const sel = { ...emptySelection(), stripNotes: true, types: { checkIns: false, moods: true, journal: true, sleep: false } }
+  it('leaves the owner’s own words out unless they turn them on — the default, untouched', () => {
+    // Nothing set but the record types: this is the selection the builder starts from (#337).
+    expect(emptySelection().includeOwnWords).toBe(false)
+    const sel = { ...emptySelection(), types: { checkIns: false, moods: true, journal: true, sleep: false } }
     const b = buildShareBundle(sampleData(), sel, meta)
+    expect(b.moods?.length).toBe(2)
     expect(b.moods?.every((m) => m.note === undefined)).toBe(true)
+    expect(b.journal?.length).toBe(1)
     expect(b.journal?.every((j) => j.text === '')).toBe(true)
+    // Nowhere in the bundle, not only not in the fields looked at above.
+    expect(JSON.stringify(b)).not.toMatch(/secret note|private body/)
   })
 
-  it('keeps notes when stripNotes is false', () => {
-    const sel = { ...emptySelection(), stripNotes: false, types: { checkIns: false, moods: true, journal: true, sleep: false } }
+  it('includes them, whole, when the owner turns them on', () => {
+    const sel = { ...emptySelection(), includeOwnWords: true, types: { checkIns: false, moods: true, journal: true, sleep: false } }
     const b = buildShareBundle(sampleData(), sel, meta)
     expect(b.moods?.[0].note).toBe('secret note')
     expect(b.journal?.[0].text).toBe('private body')
+    // Control for the absence above: the same serialised search sees the words when they are there.
+    expect(JSON.stringify(b)).toMatch(/secret note|private body/)
+  })
+
+  it('set explicitly off, the words stay out', () => {
+    const sel = { ...emptySelection(), includeOwnWords: false, types: { checkIns: false, moods: true, journal: true, sleep: false } }
+    const b = buildShareBundle(sampleData(), sel, meta)
+    expect(JSON.stringify(b)).not.toMatch(/secret note|private body/)
   })
 
   it('respects the date range and explicit exclusions', () => {

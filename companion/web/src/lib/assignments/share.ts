@@ -1,8 +1,8 @@
 /*
  * Owner-side SHARE curation. Turns a full BackupData into a curated, redacted ShareBundle
  * (the wire type from ../share/sharecrypto whose self-harm / raw-item slot is STRUCTURALLY
- * ABSENT), applying the owner's selection: date range, per-record-type opt-ins, note stripping,
- * and explicit exclusions. Check-ins carry scores + bands ONLY — never raw item responses.
+ * ABSENT), applying the owner's selection: date range, per-record-type opt-ins, whether their own
+ * words go, and explicit exclusions. Check-ins carry scores + bands ONLY — never raw item responses.
  *
  * Sealing is delegated to ../share/sharecrypto (buildShare): fresh CEK, XChaCha20-Poly1305 under
  * an AAD-bound transcript, CEK sealed to the therapist's pinned X25519 key, owner Ed25519
@@ -21,12 +21,16 @@ export interface ShareSelection {
     journal: boolean
     sleep: boolean
   }
-  stripNotes: boolean
+  /**
+   * Whether the owner's own words go: mood notes, and the text of journal entries. Off unless the
+   * owner turns it on; when on, each one goes whole, never trimmed or picked by software (#305).
+   */
+  includeOwnWords: boolean
   excludeIds: number[] // entry/journal/sleep ids the owner explicitly removed
 }
 
 export function emptySelection(): ShareSelection {
-  return { types: { checkIns: false, moods: false, journal: false, sleep: false }, stripNotes: true, excludeIds: [] }
+  return { types: { checkIns: false, moods: false, journal: false, sleep: false }, includeOwnWords: false, excludeIds: [] }
 }
 
 function inRange(at: number, sel: ShareSelection): boolean {
@@ -65,7 +69,7 @@ export function buildShareBundle(data: BackupData, sel: ShareSelection, meta: Sh
         .filter((e) => inRange(e.dateTime, sel) && !excluded.has(e.id))
         .map((e) => {
           const base: { at: number; level: number; note?: string } = { at: e.dateTime, level: e.moodLevel }
-          if (!sel.stripNotes && e.note) base.note = e.note
+          if (sel.includeOwnWords && e.note) base.note = e.note
           return base
         })
     : undefined
@@ -74,7 +78,7 @@ export function buildShareBundle(data: BackupData, sel: ShareSelection, meta: Sh
   const journal = sel.types.journal
     ? (data.journal ?? [])
         .filter((j) => inRange(j.dateTime, sel) && !excluded.has(j.id))
-        .map((j) => ({ at: j.dateTime, text: sel.stripNotes ? '' : j.body }))
+        .map((j) => ({ at: j.dateTime, text: sel.includeOwnWords ? j.body : '' }))
     : undefined
   if (journal) recordTypes.push('journal')
 

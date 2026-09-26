@@ -137,15 +137,18 @@ The owner decides; the interface makes the safe choice the easy one.
 | Honest limits are stated at the point of consent, not in a document. | No overclaiming. |
 | The self-harm item is absent by construction, never a toggle. | It cannot be shared by mistake. |
 
-As built (`owner/ShareBuilder.svelte`): four record types — self-checks, moods, journal, sleep — all
-unchecked, each with its count; *"Strip free-text notes (recommended)"* on by default; self-checks
-go as scores and bands only; an end of 1–90 days, 14 by default (decided in #228), with the date
-beside the field: *"Ends on {date}. The server then deletes its copy. Anything read before then has
-already been seen."* The share is signed and sealed to the clinician's pinned key in the browser. No
-instrument in the Companion has a self-harm item — the honesty gate refuses one. By the same
-decision a new share covers only the last 30 days; the code still offers everything. Not built: the
-30-day window, #225. A share is named where it is built, as access that ends on its date or when
-revoked, where a report is a copy handed over (#305). Not built: #337.
+As built (`owner/ShareBuilder.svelte`): the builder opens by saying what a share is — *"A share is
+access. {Name} can read what you choose here until the date you set, or until you stop it."* — where
+a report says it is a copy handed over (#305, #337), then states the floor: *"Self-checks are reduced
+to scores and bands only — never raw answers. Your own words go only if you switch them on below,
+whole, never trimmed."* Four record types — self-checks, moods, journal, sleep — all unchecked, each
+with its count; *"Include my own words (mood notes and journal text)"*, unchecked, so mood notes and
+journal text go only when it is ticked, and then whole; self-checks go as scores and bands only; an
+end of 1–90 days, 14 by default (decided in #228), with the date beside the field: *"Ends on {date}.
+The server then deletes its copy. Anything read before then has already been seen."* The share is
+signed and sealed to the clinician's pinned key in the browser. No instrument in the Companion has a
+self-harm item — the honesty gate refuses one. By the same decision a new share covers only the last
+30 days; the code still offers everything. Not built: the 30-day window, #225.
 
 ### 9.2 The consent screen
 

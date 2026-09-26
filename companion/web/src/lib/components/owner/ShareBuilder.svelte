@@ -159,9 +159,17 @@
 <section class="share">
   <NonDiagnosticBanner />
   <h3>Build a share for {therapist.displayName}</h3>
+  <!--
+    What a share is, in the words #305 set: access, not a copy, which ends on the date set or when
+    it is stopped. A report says "a copy" where it is made; this says "access" where a share is
+    built (#337). The end-date line beside the days field does not repeat here, and the revoke
+    caveat stays at the revoke click, not here.
+  -->
   <p class="hint">
-    Curate exactly what to share. Self-checks are reduced to scores and bands only — never raw
-    answers. The bundle is sealed to {therapist.displayName}'s pinned key and signed by you.
+    A share is access. {therapist.displayName} can read what you choose here until the date you
+    set, or until you stop it. Self-checks are reduced to scores and bands only — never raw
+    answers. Your own words go only if you switch them on below, whole, never trimmed. The share
+    is sealed to {therapist.displayName}'s pinned key and signed by you.
   </p>
 
   <fieldset class="types">
@@ -172,9 +180,14 @@
     <label><input type="checkbox" checked={sel.types.sleep} onchange={() => toggle('sleep')} /> Sleep logs ({counts.sleep})</label>
   </fieldset>
 
+  <!--
+    Off unless the person turns it on (#337, #305): the safe choice is the default, so the control
+    names what turning it on does rather than nudging with "(recommended)". It covers both kinds
+    of their own words the bundle can carry — mood notes and journal text — whole or not at all.
+  -->
   <label class="strip">
-    <input type="checkbox" checked={sel.stripNotes} onchange={() => (sel = { ...sel, stripNotes: !sel.stripNotes })} />
-    Strip free-text notes (recommended)
+    <input type="checkbox" checked={sel.includeOwnWords} onchange={() => (sel = { ...sel, includeOwnWords: !sel.includeOwnWords })} />
+    Include my own words (mood notes and journal text)
   </label>
 
   <label class="expiry">

@@ -24,6 +24,15 @@ describe('audit label mapping', () => {
     }
   })
 
+  it('calls an opened share what it is, not a report (#337)', () => {
+    // A share is access; a report is a copy handed over (#305). The line matches its neighbour,
+    // "Ended their access to what you share".
+    expect(auditActionLabel('share.open')).toBe('Opened what you share')
+    expect(auditActionLabel('share.open')).not.toMatch(/report/i)
+    // Control: the retired label is seen by the same pattern.
+    expect('Opened a shared report').toMatch(/report/i)
+  })
+
   it('falls back to the raw code for an unrecognized action rather than hiding it', () => {
     expect(auditActionLabel('some.future.event')).toBe('some.future.event')
   })

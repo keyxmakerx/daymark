@@ -8,7 +8,8 @@ const ACTION_LABELS: Record<string, string> = {
   'auth.fail': 'Failed sign-in attempt',
   lockout: 'Sign-in temporarily locked (too many attempts)',
   'enrol.ok': 'Enrolled a new sign-in credential',
-  'share.open': 'Opened a shared report',
+  // What you share, not "a report": a share is access, and a report is a copy (#305, #337).
+  'share.open': 'Opened what you share',
   'gameplan.open': 'Opened a game plan',
   'assignment.publish': 'Sent a new assignment',
   'gameplan.publish': 'Sent a new game plan',

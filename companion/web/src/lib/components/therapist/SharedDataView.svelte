@@ -1,11 +1,12 @@
 <script lang="ts">
   /*
-   * SHARED DATA view (gated on read.share). Fetches the current curated share, opens+verifies it
-   * against the PINNED owner key, then renders the EXISTING Dashboard over the decrypted bundle.
+   * SHARED DATA view (gated on read.share). Fetches the current share, opens+verifies it against
+   * the PINNED owner key, then renders the EXISTING Dashboard over the decrypted bundle.
    *
    * SECURITY BOUNDARY: on ANY verification failure (forged / spliced / wrong-owner / tampered /
    * expired) fetchShare THROWS and we show a refuse-to-render error — we NEVER hand a bundle to the
-   * Dashboard. The bundle is curated (scores/bands/aggregates only); nothing raw ever appears.
+   * Dashboard. Self-checks arrive as scores and bands only, never item answers; the owner's own
+   * words (mood notes, journal text) arrive only when they chose to include them (#337).
    */
   import { fetchShare, bundleToBackupData, ShareExpiredError, ShareFormatError, ShareOlderError } from '../../therapist/shareClient'
   import type { BackupData } from '../../backup'
@@ -73,12 +74,12 @@
   </div>
 
   {#if data}
-    <p class="prov faint">Verified against the pinned owner key <code>{ctx.pinnedOwnerSigningFp}</code>. Curated view: scores and bands only.</p>
+    <p class="prov faint">Verified against the pinned owner key <code>{ctx.pinnedOwnerSigningFp}</code>. Self-checks: scores and bands only.</p>
     <Dashboard {data} />
   {:else if error}
     <p class="error" role="alert">{error}</p>
   {:else if !loaded}
-    <p class="faint empty">Open the curated data this person chose to share with you.</p>
+    <p class="faint empty">Open what this person chose to share with you.</p>
   {/if}
 </section>
 
