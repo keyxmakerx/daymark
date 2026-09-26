@@ -5,7 +5,8 @@ Welcome to **Daymark**, a free, private mood tracker and journal for Android.
 Daymark helps you notice how your days feel. You log a mood, tag what you did and who you were
 with, write a little about *why*, and over time see patterns appear in Insights and in your sky.
 Everything stays **on your device**: there are no accounts, no servers and no tracking. Nothing
-leaves your phone unless *you* export it.
+leaves your phone unless *you* export it. The separate **Daymark Sync** app can also send an encrypted
+copy to a server you run yourself, and only when you ask (see *Sync with your own server*).
 
 This guide walks through what the app can do, one task at a time. Daymark is not a medical device:
 its self-checks, sleep and breathing features and support are for your own reflection, not a
@@ -532,6 +533,34 @@ wallpaper instead. It starts switched off; if you switched it on before, it stay
 colours never change either way.
 
 ---
+
+## Sync with your own server (Daymark Sync)
+
+Daymark Sync is a separate app for people who run their own Daymark Companion server. It sends your
+server an encrypted copy of your journal, locked on the phone before it leaves with a key only your
+passphrase or recovery code opens, so the server cannot read it. Daymark itself never connects to
+anything. Daymark Sync keeps its own journal: to send the one in Daymark, export a backup there and
+restore it in Daymark Sync first.
+
+**Pair (once):**
+1. On a computer, open your server's page, choose **Connect to your sync server**, type your access
+   token and your sync passphrase, and press **Fetch & decrypt latest**. A **Phones** section appears
+   at the bottom of the card.
+2. Press **Pair a phone**. It shows your server's address and a code like `K7M4R-D96QA`, which works
+   once, for two minutes.
+3. In Daymark Sync, open **Settings → Sync with your server**. Type the address exactly as the page
+   shows it, beginning `https://`, and the code (dashes and small letters are fine), or paste the
+   pairing text into the address.
+4. Tap **Pair**. Check that the page shows the same six words in the same order, then press **Pair
+   this phone** on the page. If the words differ, press **The words don't match**: nothing is stored.
+5. Type your sync passphrase and tap **Open the key**. This takes a few seconds.
+
+**Send a copy:** tap **Send a copy now**. The screen says when your server last took a copy, and the
+name its copies have there. If it says the phone was disconnected, pair again with a new code. To stop,
+tap **Forget this server**, then press **Disconnect** beside the phone on the page; copies already sent
+stay. The phone pairs only with an `https://` address whose certificate Android trusts
+([COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md) §3.4), and its clock must be right to within five
+minutes.
 
 ## Privacy
 

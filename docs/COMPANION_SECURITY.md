@@ -379,8 +379,10 @@ owner's pairing identity. The properties the rest of this document relies on:
 - **Nothing captured can be used again or aimed elsewhere.** The signature covers the method, the
   target, the body, a time within 300 seconds, a nonce the key may use once, and every request header
   an owner route acts on; `SignedHeaderCoverageTest` holds that list to every header the server reads.
-  The time is judged again once the body has arrived, on the same reading of the clock that decides
-  which nonces have lapsed, so holding back a captured request's body buys it nothing. A nonce is
+  The time is judged again once the body has arrived, and once more as the nonce is taken, on the one
+  reading of the clock, under the nonce store's lock, that decides which nonces have lapsed, so
+  holding back a captured request's body buys it nothing, and neither does another request forgetting
+  nonces meanwhile. A nonce is
   spent only by a signature that verified, so a forger writes nothing. Used nonces are kept in
   `owner-account.db`, so a restart does not reopen the window.
 - **A phone is the owner's journal device, not the operator's console.** It reaches every owner route

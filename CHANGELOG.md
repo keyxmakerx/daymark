@@ -59,6 +59,14 @@ All notable changes to this project are documented here. The format is based on
   or as you type it, with or without dashes, catches a mistyped symbol before sending anything, and
   will not pair with an address that is not https. Nothing on the phone scans a code or talks to the
   server yet; that comes next. (#432)
+- **Daymark Sync can pair with your own Companion server and send it an encrypted copy of your
+  journal.** **Settings → Sync with your server** takes the address and pairing code the owner's page
+  shows, typed or pasted, and shows six words to compare while you confirm on the page. Your sync
+  passphrase opens your key, and **Send a copy now** sends your journal, locked on the phone first, as
+  the next copy on your server; the screen says when the server last took one. The pairing and key are
+  kept locked with a key that never leaves the phone. A refused request is never tried again, so a
+  disconnected phone says so once and asks to be paired again. Daymark itself is unchanged and still
+  has no internet permission. Scanning the QR code with the camera comes next. (#432)
 - **Companion — pair your phone with your own server from its web page.** Under *Connect to your sync
   server*, a new **Phones** section makes a two-minute code and a QR code for the phone. Both screens
   then show the same six words; if they match, one click pairs the phone. Every paired phone is listed

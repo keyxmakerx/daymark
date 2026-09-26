@@ -284,18 +284,22 @@ address: `429` for its address's rate or lockout; `401` for a signature header m
 one spelling, or a signed header sent twice or empty; `401` for a time more than 300 seconds from the
 server's clock; `411`; and `413`. Every answer that depends on the key comes after the whole body has
 arrived, in this order:
-- the time, judged again, on the one reading of the clock that also decides which nonces have lapsed;
+- the time, judged again;
 - the key, registered to this owner and not revoked;
 - the signature, checked against a fixed stand-in key when the key is not live, so a forged request
   costs the same whatever key it names;
 - the nonce, taken only once the signature has verified, so a forged request writes nothing and a
-  request refused for its signature has not spent its nonce;
+  request refused for its signature has not spent its nonce. The nonce store takes it on one reading
+  of its own clock, under its lock; that reading judges the end of the window once more and decides
+  which nonces have lapsed, so no other request's forgetting can land between a request's time being
+  found good and its nonce being taken;
 - the key and its revocation, read again just before the handler runs.
 
 Every refusal is the same `401`, whichever check said no, and it counts toward the address's lockout
 exactly as a bad token does. A withheld body gets no answer whatever key it names. The body is hashed
-as it arrives and kept only when the key named was live when the request arrived; for any other key
-it is dropped as it is hashed, so a request naming no live key holds no memory however large its
+as it arrives and kept only when the key named was live when the request arrived, in the chunks it
+arrived in, joined only when the handler reads it, so nothing done after its last byte depends on the
+key; for any other key it is dropped as it is hashed, so a request naming no live key holds no memory however large its
 body. A request carrying any of the four headers is judged by its signature alone, on every owner
 route, the relationship routes included, and its `Authorization` header is not read. Vectors: `companion/server/src/test/kotlin/com/daymark/companion/auth/DeviceSignatureVectorTest.kt`.
 
