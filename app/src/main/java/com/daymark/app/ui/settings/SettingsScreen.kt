@@ -283,9 +283,12 @@ fun SettingsScreen(
                 viewModel.prepareForFilePicker(); csvLauncher.launch("daymark-entries.csv")
             },
         )
+        // "Clinician" is the one word for whoever the person shares with (#158). The row makes no
+        // claim about the verification hash, which no tool checks yet (#311), and says of its file
+        // what the other export rows say of theirs: it is not encrypted.
         ListItem(
-            headlineContent = { Text("Export PDF for therapist") },
-            supportingContent = { Text("A printable mood report with an authenticity stamp") },
+            headlineContent = { Text("Export a PDF report") },
+            supportingContent = { Text("A printable copy to hand to a clinician. Not encrypted.") },
             modifier = Modifier.clickable { showPdfDialog = true },
         )
 

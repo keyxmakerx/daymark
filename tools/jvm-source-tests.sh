@@ -22,8 +22,9 @@
 # takes a second.
 #
 # The same holds for the report's copy. `export/ReportCopySourceTest` reads the PDF renderer, which
-# draws on an Android Canvas and so cannot be compiled here, as text; it imports `repoFile` and the
-# two string helpers in `ui/SourceText.kt`, and neither of those reaches Android or Room.
+# draws on an Android Canvas and so cannot be compiled here, as text, and
+# `ui/settings/ReportExportSourceTest` reads the Compose settings screen the same way. They import
+# `repoFile` and the string helpers in `ui/SourceText.kt`, and none of those reaches Android or Room.
 #
 # WHAT IT WILL NOT CATCH. Everything tools/jvm-tests.sh cannot: anything outside these files, Room's
 # annotation processing, Hilt, resources, R8. And it runs a HAND-LISTED set of test files. A new
@@ -55,10 +56,11 @@ ANNOT=$(find_jar org.jetbrains/annotations "annotations-13.0.jar")
 # The test files this runs, and the helpers they need. Adding a file here is a deliberate act: read
 # its imports first and confirm none of them is a Room or Android type.
 TESTS="com.daymark.app.data.PeopleSchemaTest com.daymark.app.data.TimedOfferSchemaTest
-com.daymark.app.export.ReportCopySourceTest"
+com.daymark.app.export.ReportCopySourceTest com.daymark.app.ui.settings.ReportExportSourceTest"
 SOURCES="$REPO/app/src/test/java/com/daymark/app/data/PeopleSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/TimedOfferSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/export/ReportCopySourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/ui/settings/ReportExportSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/backup/RepoFile.kt
 $REPO/app/src/test/java/com/daymark/app/ui/SourceText.kt"
 

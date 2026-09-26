@@ -7,7 +7,7 @@ enum class PaperSize(val widthPt: Int, val heightPt: Int) {
 }
 
 /**
- * Options for the therapist PDF report. The defaults are the one-tap path; everything
+ * Options for the PDF report. The defaults are the one-tap path; everything
  * else is exposed in an "advanced" expander.
  *
  * The report is four sides (see `docs/DECISIONS.md` §D8). Sides 1, 2 and 4 always print —
