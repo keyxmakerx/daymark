@@ -23,9 +23,8 @@ import java.util.Base64
  * X-Device-Signature  the 64-byte Ed25519 signature, base64url without padding: 86 characters
  * ```
  *
- * The signature is over the UTF-8 bytes of six lines joined by one LF (0x0A), with none after the last
- * ([requestMessage]). No line can hold an LF: a request line cannot, and the rest are base64url and
- * digits.
+ * The signature is over the UTF-8 bytes of eleven lines joined by one LF (0x0A), with none after the
+ * last ([requestMessage]). No line can hold an LF: neither a request line nor a header's value can.
  *
  * ```
  * daymark-request-v1
@@ -34,6 +33,11 @@ import java.util.Base64
  * <base64url of BLAKE2b-256 of the body's bytes; of no bytes when there is no body>
  * <X-Device-Time, as sent>
  * <X-Device-Nonce, as sent>
+ * if-match:<the request's If-Match; nothing after the colon when it carries none>
+ * if-none-match:<its If-None-Match, the same way>
+ * x-rel-token:<its X-Rel-Token, the same way>
+ * x-setting-key:<its X-Setting-Key, the same way>
+ * x-share-meta:<its X-Share-Meta, the same way>
  * ```
  *
  * The target is the request line's, not decoded and not re-encoded: the server checks the target it
@@ -41,6 +45,15 @@ import java.util.Base64
  * a proxy that takes a prefix off — signs the target without that prefix, which is the one the server
  * receives; the API is always at `/v1`. Every base64url value here is the canonical encoding: no
  * padding, only `A–Z a–z 0–9 - _`, and no stray bits in the last character ([decodeCanonical]).
+ *
+ * THE SIGNED HEADERS ([SIGNED_HEADERS]) are every request header an owner route acts on: a key
+ * document's precondition, a relationship's inbox token, a setting's name and a share's end. Each has
+ * its line, in that order, whether the request carries it or not, so a header changed, added or taken
+ * away on the path changes the message. Its name is lower case whatever case the request spells it in;
+ * its value is the one the request carries, which HTTP gives without the whitespace around it. A
+ * request carries each at most once and never empty ([signedHeaderValues]): one that carries a signed
+ * header twice, or with no value, is refused. SignedHeaderCoverageTest holds the list to every header
+ * the server reads.
  */
 object DeviceSignature {
     const val KEY_HEADER = "X-Device-Key"
@@ -50,6 +63,13 @@ object DeviceSignature {
 
     /** The four, in the order a request lists them. Any one of them makes a request a signed one. */
     val HEADERS: List<String> = listOf(KEY_HEADER, TIME_HEADER, NONCE_HEADER, SIGNATURE_HEADER)
+
+    /**
+     * The request headers the signature covers besides its own, in the order of their lines: every one
+     * an owner route acts on. A header added here changes every signed message, so a phone must sign
+     * the new line before any request of it is taken again.
+     */
+    val SIGNED_HEADERS: List<String> = listOf("If-Match", "If-None-Match", "X-Rel-Token", "X-Setting-Key", "X-Share-Meta")
 
     /** The first line of every signed request, so no other message this key signs can pass for one. */
     const val REQUEST_CONTEXT = "daymark-request-v1"
@@ -100,9 +120,26 @@ object DeviceSignature {
     /** The body's line: base64url of BLAKE2b-256 of its bytes. */
     fun bodyHash(body: ByteArray): String = b64url(Secrets.blake2b(body, 32))
 
-    /** The bytes a request's signature is over. See this object's header. */
-    fun requestMessage(method: String, target: String, bodyHash: String, time: String, nonce: String): ByteArray =
-        listOf(REQUEST_CONTEXT, method, target, bodyHash, time, nonce).joinToString("\n").toByteArray(Charsets.UTF_8)
+    /**
+     * The bytes a request's signature is over. See this object's header. [headerValues] is the value of
+     * each of [SIGNED_HEADERS], in order, null for one the request does not carry ([signedHeaderValues]).
+     */
+    fun requestMessage(method: String, target: String, bodyHash: String, time: String, nonce: String, headerValues: List<String?>): ByteArray {
+        require(headerValues.size == SIGNED_HEADERS.size) { "one value, or null, for each signed header" }
+        val headerLines = SIGNED_HEADERS.zip(headerValues) { name, value -> "${name.lowercase()}:${value.orEmpty()}" }
+        return (listOf(REQUEST_CONTEXT, method, target, bodyHash, time, nonce) + headerLines).joinToString("\n").toByteArray(Charsets.UTF_8)
+    }
+
+    /**
+     * The value a request carries for each of [SIGNED_HEADERS], in order, null for one it does not
+     * carry; or null for the whole when it carries one of them more than once, or with no value, which
+     * a phone never sends. [valuesOf] gives every value a request carries for a header, or null for none.
+     */
+    fun signedHeaderValues(valuesOf: (String) -> List<String>?): List<String?>? =
+        SIGNED_HEADERS.map { name ->
+            val values = valuesOf(name)?.takeIf { it.isNotEmpty() } ?: return@map null
+            values.singleOrNull()?.takeIf { it.isNotEmpty() } ?: return null
+        }
 
     /** A pairing code's id: base64url of BLAKE2b-256 of `daymark-pairing-code-v1`, LF, and the code. */
     fun codeIdOf(code: String): String = b64url(Secrets.blake2b("$CODE_CONTEXT\n$code".toByteArray(Charsets.UTF_8), 32))

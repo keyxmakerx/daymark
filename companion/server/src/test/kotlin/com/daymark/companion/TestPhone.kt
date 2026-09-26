@@ -26,22 +26,29 @@ class TestPhone(val seed: ByteArray = ByteArray(32).also { SecureRandom().nextBy
     fun redeemBody(code: String, proof: String = redeemProof(code)): String =
         """{"code":"$code","publicKey":"$publicKeyB64","signature":"$proof"}"""
 
-    /** The four headers a request to [target] with [body] carries, signed at [timeSeconds] with [nonce]. */
+    /**
+     * The headers a request to [target] with [body] carries, signed at [timeSeconds] with [nonce]: the
+     * signature's four, and [signed], the others the request carries. Those of them on
+     * [DeviceSignature.SIGNED_HEADERS] are signed, as a phone signs them; any other is carried unsigned.
+     */
     fun headers(
         method: String,
         target: String,
         body: ByteArray = ByteArray(0),
         timeSeconds: Long = System.currentTimeMillis() / 1000,
         nonce: String = freshNonce(),
+        signed: Map<String, String> = emptyMap(),
     ): Map<String, String> {
         val time = timeSeconds.toString()
-        val message = DeviceSignature.requestMessage(method, target, DeviceSignature.bodyHash(body), time, nonce)
+        val values = DeviceSignature.signedHeaderValues { name -> signed.filterKeys { it.equals(name, ignoreCase = true) }.values.toList() }
+            ?: error("a phone sends each signed header once, and never empty")
+        val message = DeviceSignature.requestMessage(method, target, DeviceSignature.bodyHash(body), time, nonce, values)
         return mapOf(
             DeviceSignature.KEY_HEADER to keyId,
             DeviceSignature.TIME_HEADER to time,
             DeviceSignature.NONCE_HEADER to nonce,
             DeviceSignature.SIGNATURE_HEADER to DeviceSignature.b64url(sign(message)),
-        )
+        ) + signed
     }
 
     companion object {

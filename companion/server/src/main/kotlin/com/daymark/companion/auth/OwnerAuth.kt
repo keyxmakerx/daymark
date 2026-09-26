@@ -36,7 +36,8 @@ data class OwnerPrincipal(val ownerId: String, val kind: CredentialKind, val cre
  *   again once its body has been read; the key it names is registered to this owner and has no
  *   revocation, both read from the database when the request arrives and again once the signature has
  *   been checked, the last thing before the handler; the key has not used the nonce before;
- *   and the signature is that key's over the method, the target, the body, the time and the nonce.
+ *   and the signature is that key's over the method, the target, the body, the time, the nonce and
+ *   every header an owner route acts on ([DeviceSignature.SIGNED_HEADERS]), each at most once.
  *   The nonce is taken before the body is read, so a captured request sent again is refused however
  *   its body is held, and the time judged with the same reading of the clock that decides which
  *   nonces have lapsed. A stranger's nonces cost a failure each, toward the lockout, and lapse with
@@ -184,6 +185,8 @@ class OwnerAuth(
         if (DeviceSignature.decodeCanonical(keyId, DeviceSignature.KEY_ID_BYTES) == null) return Signed.Refused
         if (DeviceSignature.decodeCanonical(nonce, DeviceSignature.NONCE_BYTES) == null) return Signed.Refused
         val signature = DeviceSignature.decodeCanonical(signatureB64, DeviceSignature.SIGNATURE_BYTES) ?: return Signed.Refused
+        // Every header an owner route acts on is in the message, so none can be changed on the path.
+        val headerValues = DeviceSignature.signedHeaderValues { name -> headers.getAll(name) } ?: return Signed.Refused
         val sentAt = (DeviceSignature.parseTime(time) ?: return Signed.Refused) * 1000
         // One reading of the clock judges the request's time and decides which nonces have lapsed, so
         // no later reading can forget the nonce of a request whose time was found good.
@@ -215,6 +218,7 @@ class OwnerAuth(
             DeviceSignature.bodyHash(body),
             time,
             nonce,
+            headerValues,
         )
         if (!DeviceSignature.verify(publicKey, message, signature)) return Signed.Refused
         // Read again, last, with nothing kept from the first reading: a phone revoked while its body was

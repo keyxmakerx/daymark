@@ -82,12 +82,15 @@ class DeviceKeyRevocationTest {
 
     private val jsonBody = "{}".toByteArray()
 
+    /** What every request of the walk carries besides its credential: the relationship's inbox token, which the relationship routes read. */
+    private val carried = mapOf("X-Rel-Token" to inboxToken)
+
+    /** [route] asked with [credential], which attaches [carried] too: a token's request as it is, a phone's signed. */
     private suspend fun HttpClient.ask(route: Mounted, credential: io.ktor.client.request.HttpRequestBuilder.(target: String, body: ByteArray?) -> Unit): Pair<HttpStatusCode, String> {
         val target = pathFor(route.template)
         val body = if (route.method == HttpMethod.Get || route.method == HttpMethod.Delete) null else jsonBody
         val res = request(target) {
             method = route.method
-            header("X-Rel-Token", inboxToken)
             if (body != null) {
                 contentType(ContentType.Application.Json)
                 setBody(body)
@@ -101,7 +104,11 @@ class DeviceKeyRevocationTest {
 
     /** [phone]'s signature on a request to [route], made now with a fresh nonce. */
     private suspend fun HttpClient.signedBy(route: Mounted, phone: TestPhone, server: DeviceServer) =
-        ask(route) { target, body -> signedWith(phone.headers(route.method.value, target, body ?: ByteArray(0), server.seconds)) }
+        ask(route) { target, body -> signedWith(phone.headers(route.method.value, target, body ?: ByteArray(0), server.seconds, signed = carried)) }
+
+    /** The bearer [token]'s request to [route]. */
+    private suspend fun HttpClient.withToken(route: Mounted, token: String) =
+        ask(route) { _, _ -> signedWith(carried + (HttpHeaders.Authorization to "Bearer $token")) }
 
     /**
      * Every route of the running [app], asked with a wrong token, the owner's token and [phone]'s
@@ -114,8 +121,8 @@ class DeviceKeyRevocationTest {
         val ownerRoutes = mutableListOf<Mounted>()
         val problems = mutableListOf<String>()
         for (route in routes) {
-            val wrong = client.ask(route) { _, _ -> header(HttpHeaders.Authorization, "Bearer not-the-owner-token") }
-            val token = client.ask(route) { _, _ -> header(HttpHeaders.Authorization, "Bearer ${server.authToken}") }
+            val wrong = client.withToken(route, "not-the-owner-token")
+            val token = client.withToken(route, server.authToken)
             val signed = client.signedBy(route, phone, server)
             val authenticatesOwner = wrong.first == HttpStatusCode.Unauthorized &&
                 (token.first != HttpStatusCode.Unauthorized || signed.first != HttpStatusCode.Unauthorized)
