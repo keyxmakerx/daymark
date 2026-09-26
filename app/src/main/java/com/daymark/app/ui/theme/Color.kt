@@ -48,5 +48,21 @@ val MoodMehWashDark = Color(0xFF3A3528)
 val MoodGoodWashDark = Color(0xFF2F362A)
 val MoodRadWashDark = Color(0xFF2A3530)
 
-// Error tone reuses the earthy red so nothing breaks the paper palette.
-val ErrorDark = Color(0xFFD08A7C)
+// ---- Alarm ("clay") ----
+// The one alarm colour: an error, a refusal, a destructive action. It is a token of its own and
+// never a mood colour, because a mood colour is the value a person logged (docs/DESIGN.md, "Colour
+// tokens") and a person can recolour their moods; the alarm must not move with them (#395).
+// The values are the web consoles' --clay and --clay-wash (COMPANION_DESIGN_SYSTEM.md §2.3.4 and
+// §2.3.6), so the phone and the consoles draw one alarm. `ColorSchemeSourceTest` holds both.
+//
+// Measured, WCAG 2 contrast. Light: Clay on the sheet 5.58:1, on the paper 5.09:1, on ClayWash
+// 4.58:1; PaperSheet on a Clay fill 5.58:1; InkText on ClayWash 11.68:1. Dark: ClayDark on the sheet
+// 5.36:1, on the paper 5.87:1, on ClayWashDark 4.51:1; PaperBgDark on a ClayDark fill 5.87:1;
+// InkTextDark on ClayWashDark 10.65:1.
+val Clay = Color(0xFF9A5044)
+val ClayWash = Color(0xFFF3E0DB)
+val ClayDark = Color(0xFFCB8473)
+// Shares its value with MoodAwfulWashDark, because both are a warm tint on the same dark ground, as
+// the web's --c-clay-wash-night shares --c-mood-1-wash-night's. It is a token of its own so the
+// alarm can move without dragging a person's data with it.
+val ClayWashDark = Color(0xFF3A2C28)

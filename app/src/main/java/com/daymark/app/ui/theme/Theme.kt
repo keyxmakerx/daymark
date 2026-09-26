@@ -12,6 +12,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
+// No role in either scheme is a mood colour. A mood colour is the value a person logged, and they
+// can recolour it; the alarm roles take the clay tokens instead (Color.kt, "Alarm", #395).
+// `ColorSchemeSourceTest` reads this file and holds it to that.
 private val LightPaperColors = lightColorScheme(
     primary = InkAccent,
     onPrimary = PaperSheet,
@@ -32,9 +35,9 @@ private val LightPaperColors = lightColorScheme(
     surfaceTint = Color.Transparent,
     outline = Hairline,
     outlineVariant = Hairline,
-    error = MoodAwful,
+    error = Clay,
     onError = PaperSheet,
-    errorContainer = MoodAwfulWash,
+    errorContainer = ClayWash,
     onErrorContainer = InkText,
     inverseSurface = InkText,
     inverseOnSurface = PaperBg,
@@ -60,9 +63,9 @@ private val DarkPaperColors = darkColorScheme(
     surfaceTint = Color.Transparent,
     outline = HairlineDark,
     outlineVariant = HairlineDark,
-    error = ErrorDark,
+    error = ClayDark,
     onError = PaperBgDark,
-    errorContainer = MoodAwfulWashDark,
+    errorContainer = ClayWashDark,
     onErrorContainer = InkTextDark,
     inverseSurface = InkTextDark,
     inverseOnSurface = PaperBgDark,
