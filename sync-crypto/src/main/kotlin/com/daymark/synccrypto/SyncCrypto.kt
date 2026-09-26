@@ -16,8 +16,8 @@ import java.util.Base64
  * `docs/SYNC_PROTOCOL.md` for the normative wire format this implements.
  *
  * Contract (per docs/COMPANION_SECURITY.md §4):
- *   the key parameters: passphrase --Argon2id(salt, mem>=256MiB, ops>=3)--> master(32)
- *   the wrapped key:    passphrase or recovery code --Argon2id(the slot's salt, same floor)--> KEK
+ *   the key parameters: passphrase --Argon2id(salt, 256<=mem<=512 MiB, 3<=ops<=8)--> master(32)
+ *   the wrapped key:    passphrase or recovery code --Argon2id(the slot's salt, same range)--> KEK
  *                       KEK --XChaCha20-Poly1305 open(the slot, AAD "daymark.datakey.v1|" + kind)--> master(32)
  *   master --crypto_kdf(ctx="dmsync01")--+- id 1 -> SYNC_KEY        (XChaCha20-Poly1305)
  *                                         +- id 2 -> MANIFEST_SEED   (Ed25519 signing seed)
@@ -39,8 +39,8 @@ import java.util.Base64
  * key parameters (docs/SYNC_PROTOCOL.md §1.2), so [openWithPassphrase] reads either kind and
  * [openWithRecoveryCode] opens the wrapped key with a recovery code, as
  * `companion/web/src/lib/recovery/dataKey.ts` does. [KeyDocument] reads the document strictly and
- * [RecoveryCode] reads the code exactly as the web does. No key is derived below the floor, by any
- * public path: the floor travels in documents the server hands out.
+ * [RecoveryCode] reads the code exactly as the web does. No key is derived below the floor or above
+ * the ceiling ([KdfParams]), by any public path: both travel in documents the server hands out.
  *
  * [sodium] is typed as the shared abstract `com.goterl.lazysodium.LazySodium` base class,
  * which both `lazysodium-java` (LazySodiumJava, used by this module's own unit tests — real
@@ -58,17 +58,33 @@ class SyncCrypto(private val sodium: LazySodium) {
 
     class SyncCryptoException(message: String) : Exception(message)
 
-    /** Argon2id parameters. The algorithm is always Argon2id (ALG_ARGON2ID13); a document naming another is refused. */
+    /**
+     * Argon2id parameters. The algorithm is always Argon2id (ALG_ARGON2ID13); a document naming another is refused.
+     *
+     * Every public path derives only between the floor and the ceiling, the floor checked first, as
+     * the web's `kdfRange` checks it (`companion/web/src/lib/sync/crypto.ts`). The parameters travel
+     * in documents the server hands out, so both bounds are the server's to move: under the floor a
+     * key is cheap to guess from what the server stores, and over the ceiling the server would
+     * decide how much memory and time the phone spends, because Argon2id runs before the AEAD can
+     * refuse anything.
+     */
     class KdfParams(val memMiB: Int, val ops: Int) {
         /** At or above the floor every key this module derives through a public path meets. */
         val meetsFloor: Boolean get() = memMiB >= FLOOR_MEM_MIB && ops >= FLOOR_OPS
+
+        /** At or under the ceiling every key this module derives through a public path keeps to. */
+        val withinCeiling: Boolean get() = memMiB <= CEILING_MEM_MIB && ops <= CEILING_OPS
 
         companion object {
             /** The security doc's floor (docs/SYNC_PROTOCOL.md §1.2): at least 256 MiB and 3 passes. */
             const val FLOOR_MEM_MIB = 256
             const val FLOOR_OPS = 3
 
-            /** Exactly the floor, which is what every writer uses. */
+            /** The ceiling (docs/SYNC_PROTOCOL.md §1.2): at most 512 MiB and 8 passes. */
+            const val CEILING_MEM_MIB = 512
+            const val CEILING_OPS = 8
+
+            /** Exactly the floor, which is what every writer uses: well inside the ceiling. */
             val DEFAULT = KdfParams(memMiB = FLOOR_MEM_MIB, ops = FLOOR_OPS)
         }
     }
@@ -84,18 +100,21 @@ class SyncCrypto(private val sodium: LazySodium) {
 
     /**
      * passphrase + salt + params -> master -> purpose-separated subkeys. Refuses params below the
-     * floor: they arrive in the key parameters the server hands out, and a server that lowered them
-     * would make the master cheap to guess from what it stores.
+     * floor or above the ceiling, before anything is derived: they arrive in the key parameters the
+     * server hands out, and a server that lowered them would make the master cheap to guess from
+     * what it stores, and one that raised them would decide how much memory and time this derivation
+     * takes.
      */
     fun deriveKeys(passphrase: String, salt: ByteArray, params: KdfParams = KdfParams.DEFAULT): OwnerKeys {
         if (!params.meetsFloor) throw SyncCryptoException(BELOW_FLOOR)
+        if (!params.withinCeiling) throw SyncCryptoException(ABOVE_CEILING)
         return deriveKeysWithoutFloor(passphrase, salt, params)
     }
 
     /**
-     * [deriveKeys] without the floor, for the web's conformance vectors only: they are derived at
-     * 8 MiB and 2 passes so that both suites stay fast, and the phone must reproduce them exactly.
-     * Internal, so that nothing outside this module derives a key below the floor.
+     * [deriveKeys] without the floor or the ceiling, for the web's conformance vectors only: they
+     * are derived at 8 MiB and 2 passes so that both suites stay fast, and the phone must reproduce
+     * them exactly. Internal, so that nothing outside this module derives a key outside the range.
      */
     internal fun deriveKeysWithoutFloor(passphrase: String, salt: ByteArray, params: KdfParams): OwnerKeys =
         ownerKeysThenWipe(argon2id(secretBytes(passphrase), salt, params))
@@ -130,7 +149,7 @@ class SyncCrypto(private val sodium: LazySodium) {
     /** [openWithPassphrase] up to the master, which the caller wipes. Internal, so the tests can pin it. */
     internal fun masterWithPassphrase(document: KeyDocument, passphrase: String): ByteArray = when (document) {
         is KeyDocument.KeyParams -> {
-            requireDocumentFloor(document.kdf)
+            requireDocumentRange(document.kdf)
             argon2id(secretBytes(passphrase), document.salt, document.kdf)
         }
         is KeyDocument.WrappedKey -> {
@@ -154,7 +173,7 @@ class SyncCrypto(private val sodium: LazySodium) {
     private fun unwrapSlot(slot: KeyDocument.WrappedKey.Slot, secret: String): ByteArray? {
         // The reader checked all of this for every slot; it is checked again where it is used, and a
         // nonce or ciphertext of another length would be read past its end by libsodium.
-        requireDocumentFloor(slot.kdf)
+        requireDocumentRange(slot.kdf)
         if (slot.nonce.size != KeyDocument.NONCE_BYTES || slot.ciphertext.size != KeyDocument.MASTER_BYTES + KeyDocument.TAG_BYTES) {
             throw KeyDocumentException(KeyDocumentException.Reason.WRONG_LENGTH)
         }
@@ -177,8 +196,9 @@ class SyncCrypto(private val sodium: LazySodium) {
 
     /**
      * One locked copy of [master] under [secret], as the web's `wrapDataKey` makes it: Argon2id over
-     * [salt] at [params], never below the floor, then XChaCha20-Poly1305 under [nonce] with the
-     * slot's associated data. For a recovery slot the secret is the code's 30 canonical symbols.
+     * [salt] at [params], never below the floor or above the ceiling, then XChaCha20-Poly1305 under
+     * [nonce] with the slot's associated data. For a recovery slot the secret is the code's 30
+     * canonical symbols.
      *
      * The salt and nonce are passed in so that the phone's writer is held to the web's byte for byte
      * (KeyDocumentVectorTest). Internal, because no phone flow writes a key document yet; the one that
@@ -193,6 +213,7 @@ class SyncCrypto(private val sodium: LazySodium) {
         nonce: ByteArray,
     ): KeyDocument.WrappedKey.Slot {
         if (!params.meetsFloor) throw SyncCryptoException(BELOW_FLOOR)
+        if (!params.withinCeiling) throw SyncCryptoException(ABOVE_CEILING)
         if (master.size != KeyDocument.MASTER_BYTES) throw SyncCryptoException("master key must be ${KeyDocument.MASTER_BYTES} bytes")
         if (nonce.size != KeyDocument.NONCE_BYTES) throw SyncCryptoException("nonce must be ${KeyDocument.NONCE_BYTES} bytes")
         val kek = argon2id(secretBytes(secret), salt, params)
@@ -211,8 +232,10 @@ class SyncCrypto(private val sodium: LazySodium) {
         }
     }
 
-    private fun requireDocumentFloor(params: KdfParams) {
+    /** The floor first, then the ceiling, as [KeyDocument] reads them. */
+    private fun requireDocumentRange(params: KdfParams) {
         if (!params.meetsFloor) throw KeyDocumentException(KeyDocumentException.Reason.KDF_BELOW_FLOOR)
+        if (!params.withinCeiling) throw KeyDocumentException(KeyDocumentException.Reason.KDF_ABOVE_CEILING)
     }
 
     /**
@@ -397,6 +420,7 @@ class SyncCrypto(private val sodium: LazySodium) {
         private const val SUBKEY_MANIFEST = 2L
 
         private const val BELOW_FLOOR = "KDF parameters are below the security floor; refusing to derive"
+        private const val ABOVE_CEILING = "KDF parameters are above the ceiling; refusing to derive"
         private const val ARGON2ID_FAILED = "Argon2id key derivation failed"
 
         /** A wrapped-key slot's associated data: the kind of secret is part of what the AEAD authenticates. */

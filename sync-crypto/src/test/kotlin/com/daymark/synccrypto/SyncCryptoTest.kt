@@ -147,6 +147,33 @@ class SyncCryptoTest {
     }
 
     @Test
+    fun aboveCeilingParamsAreRefusedBeforeAnythingIsDerived_byTheReaderAndTheWriter() {
+        val counting = CountingSodium()
+        val guarded = SyncCrypto(counting)
+        val salt = ByteArray(16)
+        val nonce = ByteArray(24)
+        val master = ByteArray(32)
+        for (params in listOf(SyncCrypto.KdfParams(memMiB = 513, ops = 3), SyncCrypto.KdfParams(memMiB = 256, ops = 9))) {
+            assertTrue(params.meetsFloor)
+            assertFalse(params.withinCeiling)
+            val derived = assertThrowsSyncCrypto { guarded.deriveKeys("p", salt, params) }
+            assertEquals("KDF parameters are above the ceiling; refusing to derive", derived.message)
+            val wrapped = assertThrowsSyncCrypto { guarded.wrapSlot(master, "p", KeyDocument.SlotKind.PASSPHRASE, params, salt, nonce) }
+            assertEquals("KDF parameters are above the ceiling; refusing to derive", wrapped.message)
+        }
+        assertEquals("refused before Argon2id ran", 0, counting.argon2idRuns)
+        // The positive control: the ceiling itself is in the range, and reaches Argon2id with exactly
+        // its own numbers (a libsodium that derives nothing, so no test spends 512 MiB).
+        val edge = SyncCrypto.KdfParams(memMiB = 512, ops = 8)
+        assertTrue(edge.meetsFloor && edge.withinCeiling)
+        val stub = CountingSodium(deriveNothing = true)
+        val reached = assertThrowsSyncCrypto { SyncCrypto(stub).deriveKeys("p", salt, edge) }
+        assertEquals("Argon2id key derivation failed", reached.message)
+        assertEquals(listOf(8L to 512L * 1024 * 1024), stub.askedFor)
+        assertTrue(SyncCrypto.KdfParams.DEFAULT.withinCeiling)
+    }
+
+    @Test
     fun aSaltOfAnyLengthButSixteenIsRefused() {
         // lazysodium passes the array to libsodium without checking it, and libsodium reads 16 bytes.
         crypto.deriveKeysWithoutFloor("p", ByteArray(16), fast)

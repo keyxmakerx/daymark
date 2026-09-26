@@ -7,10 +7,12 @@ package com.daymark.synccrypto
  *
  * Both are read before any key is derived, and refused whole ([KeyDocumentException]) for anything
  * the web refuses before it derives: a version other than 1, a wrapped key with no slots, and KDF
- * parameters that are not Argon2id at or above the floor on ANY slot, including slots the secret at
- * hand will not open and slots of a kind this reader does not know. The parameters travel inside the
- * document, so they are the server's to lower; a weak sibling slot must not survive a round trip
- * next to a strong one (`companion/web/src/lib/recovery/dataKey.ts`, `validateBlob`).
+ * parameters that are not Argon2id at or above the floor, or that are above the ceiling
+ * ([SyncCrypto.KdfParams]), on ANY slot, including slots the secret at hand will not open and slots
+ * of a kind this reader does not know. The parameters travel inside the document, so they are the
+ * server's to move: a weak sibling slot must not survive a round trip next to a strong one
+ * (`companion/web/src/lib/recovery/dataKey.ts`, `validateBlob`), and no slot may set how much memory
+ * and time a reader spends before anything can refuse it.
  *
  * A slot of a kind other than `passphrase` or `recovery` is then skipped, as the web skips it, so a
  * kind added later (a passkey's PRF output, a Shamir share) does not lock this reader out of a
@@ -24,7 +26,9 @@ package com.daymark.synccrypto
  *    opens.
  *  - `v`, `memMiB` and `ops` must be written as JSON integers: `1.0`, `256.0` and `3e0` are refused,
  *    and so is `"256"`, a string the web reads as the number. The key parameters must name
- *    `xchacha20poly1305`, a field the web does not read.
+ *    `xchacha20poly1305`, a field the web does not read. An integer too large for an Int is read as
+ *    above the ceiling, and one too far below zero as below the floor, which is where the web puts
+ *    the same number.
  *  - A document is at most [MAX_CHARS] characters and [StrictJson.MAX_DEPTH] levels deep, which
  *    the server enforces on what it stores.
  *
@@ -49,8 +53,8 @@ sealed class KeyDocument {
     /**
      * §1.2's wrapped key: the master, locked once per secret, in slots. [slots] holds the slots of
      * the kinds this reader opens, in document order. A slot of any other kind was held to the floor
-     * and skipped, and is not kept here, so this is never a document to write back in place of the
-     * one that was read.
+     * and the ceiling and skipped, and is not kept here, so this is never a document to write back in
+     * place of the one that was read.
      */
     class WrappedKey internal constructor(val slots: List<Slot>) : KeyDocument() {
 
@@ -143,7 +147,7 @@ sealed class KeyDocument {
             val slots = root["slots"] as? List<*> ?: refuse(KeyDocumentException.Reason.NO_SLOTS)
             if (slots.isEmpty()) refuse(KeyDocumentException.Reason.NO_SLOTS)
             // Every slot's KDF first, whatever its kind, before any field of any slot is decoded, as
-            // the web's validateBlob holds every slot to the floor before it opens one.
+            // the web's validateBlob holds every slot to the floor and the ceiling before it opens one.
             val checked = slots.map { slot ->
                 val fields = slot as? Map<*, *> ?: refuse(KeyDocumentException.Reason.NOT_A_KEY_DOCUMENT)
                 fields to kdf(fields["kdf"])
@@ -169,7 +173,12 @@ sealed class KeyDocument {
             if (v !is StrictJson.Number || v.lexeme != "1") refuse(KeyDocumentException.Reason.UNSUPPORTED_FORMAT)
         }
 
-        /** Argon2id, and at or above the floor, or the document is refused before anything is derived. */
+        /**
+         * Argon2id, at or above the floor and at or under the ceiling, or the document is refused
+         * before anything is derived. The floor is checked first, as the web's `kdfRange` checks it,
+         * so parameters under one bound and over the other are refused as below the floor on both
+         * sides.
+         */
         private fun kdf(value: Any?): SyncCrypto.KdfParams {
             val fields = value as? Map<*, *> ?: refuse(KeyDocumentException.Reason.KDF_BELOW_FLOOR)
             if (fields["alg"] != "argon2id") refuse(KeyDocumentException.Reason.KDF_BELOW_FLOOR)
@@ -177,16 +186,21 @@ sealed class KeyDocument {
             val ops = jsonInt(fields["ops"]) ?: refuse(KeyDocumentException.Reason.KDF_BELOW_FLOOR)
             val params = SyncCrypto.KdfParams(memMiB = memMiB, ops = ops)
             if (!params.meetsFloor) refuse(KeyDocumentException.Reason.KDF_BELOW_FLOOR)
+            if (!params.withinCeiling) refuse(KeyDocumentException.Reason.KDF_ABOVE_CEILING)
             return params
         }
 
         private val JSON_INTEGER = Regex("-?(0|[1-9][0-9]*)")
 
-        /** A JSON integer that fits an Int, or null for anything else (a string, a fraction, `1e3`). */
+        /**
+         * A JSON integer, or null for anything else (a string, a fraction, `1e3`). One outside an
+         * Int's range is read as the Int nearest it, which is still above the ceiling or below the
+         * floor, so it is refused for the side it is on.
+         */
         private fun jsonInt(value: Any?): Int? {
             val number = value as? StrictJson.Number ?: return null
             if (!JSON_INTEGER.matches(number.lexeme)) return null
-            return number.lexeme.toIntOrNull()
+            return number.lexeme.toIntOrNull() ?: if (number.lexeme.startsWith("-")) Int.MIN_VALUE else Int.MAX_VALUE
         }
 
         private fun bytes(value: Any?, length: Int): ByteArray {
@@ -222,6 +236,9 @@ class KeyDocumentException internal constructor(val reason: Reason) : Exception(
 
         /** KDF parameters that are not Argon2id at 256 MiB and 3 passes or more, on any slot of any kind. */
         KDF_BELOW_FLOOR("KDF parameters below the security floor; nothing was derived"),
+
+        /** Argon2id parameters above 512 MiB or 8 passes, on any slot of any kind. */
+        KDF_ABOVE_CEILING("KDF parameters above the ceiling; nothing was derived"),
 
         /** A salt, nonce or wrapped key that is not URL-safe base64 without padding. */
         MALFORMED_BASE64("a field that is not URL-safe base64 without padding"),

@@ -114,10 +114,16 @@ internal object KeyDocumentVector {
     fun hex(bytes: ByteArray): String = bytes.joinToString("") { "%02x".format(it) }
 }
 
-/** Real libsodium that counts its Argon2id runs, so a test can say a refusal came before any. */
-internal class CountingSodium : LazySodiumJava(SodiumJava()) {
+/**
+ * Real libsodium that counts its Argon2id runs, so a test can say a refusal came before any, and
+ * records the passes and memory (in bytes) each run was asked for. With [deriveNothing] it fails
+ * every run without deriving, so a test can show parameters at the ceiling reach Argon2id without
+ * spending 512 MiB on it: SyncCrypto reports that failure as "Argon2id key derivation failed".
+ */
+internal class CountingSodium(private val deriveNothing: Boolean = false) : LazySodiumJava(SodiumJava()) {
     var argon2idRuns = 0
         private set
+    val askedFor = mutableListOf<Pair<Long, Long>>()
 
     override fun cryptoPwHash(
         outputHash: ByteArray,
@@ -130,6 +136,8 @@ internal class CountingSodium : LazySodiumJava(SodiumJava()) {
         alg: PwHash.Alg,
     ): Boolean {
         argon2idRuns++
+        askedFor += opsLimit to memLimit.toLong()
+        if (deriveNothing) return false
         return super.cryptoPwHash(outputHash, outputHashLen, password, passwordLen, salt, opsLimit, memLimit, alg)
     }
 }

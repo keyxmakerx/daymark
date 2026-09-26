@@ -17,6 +17,10 @@ import {
   MAGIC,
   FMT_PADDED,
   FMT_UNPADDED,
+  DEFAULT_KDF,
+  KDF_CEILING,
+  KDF_FLOOR,
+  kdfRange,
   type KdfParams,
   type Manifest,
 } from './crypto'
@@ -130,6 +134,47 @@ describe('owner sync crypto', () => {
     expect(verifyManifest(m, signatureB64, publicKeyB64)).toBe(true)
     const tampered: Manifest = { ...m, entries: [{ version: 2, hash: 'EVIL' }] }
     expect(verifyManifest(tampered, signatureB64, publicKeyB64)).toBe(false)
+  })
+})
+
+describe('the range every reader holds KDF parameters to (kdfRange)', () => {
+  // The four readers (recovery/dataKey.ts, recovery/migration.ts, sync/client.ts and
+  // therapist/keyStore.ts) refuse by this and nothing else; sync-crypto's KdfParams keeps the phone
+  // to the same numbers, and recovery/dataKeyVector.test.ts holds both sides to the same documents.
+  const at = (memMiB: number, ops: number): KdfParams => ({ alg: 'argon2id', memMiB, ops })
+
+  it('is 256 to 512 MiB and 3 to 8 passes, both ends included, and every writer uses its floor', () => {
+    expect(KDF_FLOOR).toEqual({ memMiB: 256, ops: 3 })
+    expect(KDF_CEILING).toEqual({ memMiB: 512, ops: 8 })
+    expect(DEFAULT_KDF).toEqual({ alg: 'argon2id', ...KDF_FLOOR })
+    for (const p of [at(256, 3), at(512, 8), at(256, 8), at(512, 3), at(384, 5)]) {
+      expect(kdfRange(p), JSON.stringify(p)).toBe('inRange')
+    }
+  })
+
+  it('refuses one past either end, in memory or in passes', () => {
+    expect(kdfRange(at(255, 3))).toBe('belowFloor')
+    expect(kdfRange(at(256, 2))).toBe('belowFloor')
+    expect(kdfRange(at(513, 8))).toBe('aboveCeiling')
+    expect(kdfRange(at(512, 9))).toBe('aboveCeiling')
+  })
+
+  it('checks the floor first, as the phone does, so parameters under one bound and over the other are below the floor', () => {
+    expect(kdfRange(at(1024, 2))).toBe('belowFloor')
+    expect(kdfRange(at(128, 16))).toBe('belowFloor')
+  })
+
+  it('refuses what is not Argon2id with a number in each member, before libsodium is asked', () => {
+    expect(kdfRange(null)).toBe('belowFloor')
+    expect(kdfRange(undefined)).toBe('belowFloor')
+    expect(kdfRange({ alg: 'argon2i', memMiB: 256, ops: 3 } as unknown as KdfParams)).toBe('belowFloor')
+    expect(kdfRange({ alg: 'argon2id', ops: 3 } as unknown as KdfParams)).toBe('belowFloor')
+    expect(kdfRange({ alg: 'argon2id', memMiB: 256 } as unknown as KdfParams)).toBe('belowFloor')
+    expect(kdfRange(at(Number.NaN, 3))).toBe('belowFloor')
+    expect(kdfRange(at(256, Number.NaN))).toBe('belowFloor')
+    // Past any 32-bit integer, and past every number: above the ceiling, where the phone puts them too.
+    expect(kdfRange(at(4294967552, 3))).toBe('aboveCeiling')
+    expect(kdfRange(at(Number.POSITIVE_INFINITY, 3))).toBe('aboveCeiling')
   })
 })
 

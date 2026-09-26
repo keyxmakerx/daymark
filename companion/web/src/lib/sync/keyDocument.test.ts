@@ -11,18 +11,20 @@
  *
  * integration.test.ts holds the same client to the real server.
  */
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest'
 import { createHash } from 'node:crypto'
 import {
+  COSTLY_KDF,
   KEY_CHANGED_BEFORE_UPLOAD,
   PASSPHRASE_DOES_NOT_OPEN_KEY,
   SNAPSHOTS_WITHOUT_KEY,
   SyncClient,
   SyncError,
+  WEAK_KDF,
   parseKeyDocument,
   type KeyParams,
 } from './client'
-import { initCrypto, deriveKeys, encryptSnapshot, fromBase64, newSalt, toBase64, DEFAULT_KDF } from './crypto'
+import { initCrypto, deriveKeys, encryptSnapshot, fromBase64, newSalt, toBase64, DEFAULT_KDF, type KdfParams } from './crypto'
 import { createRecoverableDataKey, type RecoverableDataKey } from '../recovery/dataKey'
 import { enrolExistingOwner, subkeysFromMaster } from '../recovery/migration'
 
@@ -442,4 +444,77 @@ describe('(f) the key document is read again right before a snapshot is uploaded
     const pulled = await new SyncClient('http://sync.test', 'token', server.doFetch).pullLatest('laptop', PASS)
     expect(dec.decode(pulled.plaintext)).toBe('{"v":0}')
   }, 60_000)
+})
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   (g) KDF parameters outside the range are refused in this client's own words, before anything
+       is derived (crypto.ts kdfRange).
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+describe('(g) KDF parameters under the floor or over the ceiling are refused before anything is derived', () => {
+  /*
+   * Both kinds of key document carry their KDF parameters, so both ends of the range are the
+   * server's to move. Argon2id is replaced by a refusal of its own, so a row that got as far as
+   * deriving says so at once instead of spending 256 MiB or more. The rows are the ones
+   * recovery/dataKeyVector.test.ts and the phone share, read through this client; the edges are
+   * their positive control, and (b) is the one for the words: a passphrase that does not open an
+   * in-range key is PASSPHRASE_DOES_NOT_OPEN_KEY, not either of these.
+   */
+  let so: Awaited<ReturnType<typeof initCrypto>>
+  beforeAll(async () => {
+    so = await initCrypto()
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const REACHED_THE_DERIVATION = 'reached the derivation'
+  const stubDerivation = () =>
+    vi.spyOn(so, 'crypto_pwhash').mockImplementation(() => {
+      throw new Error(REACHED_THE_DERIVATION)
+    })
+  const keyparamsWith = (kdf: Partial<KdfParams>) =>
+    JSON.stringify({ v: 1, alg: 'xchacha20poly1305', kdf: { ...DEFAULT_KDF, ...kdf }, saltB64 } satisfies KeyParams)
+  const wrappedWith = (kind: string, kdf: Partial<KdfParams>) =>
+    JSON.stringify({ ...enrolled.blob, slots: enrolled.blob.slots.map((s) => (s.kind === kind ? { ...s, kdf: { ...s.kdf, ...kdf } } : s)) })
+  type Server = ReturnType<typeof fakeServer>
+
+  const ROWS: Array<[string, (server: Server) => void, string]> = [
+    ['the key parameters at 513 MiB', (sv) => { sv.state.keyparams = keyparamsWith({ memMiB: 513 }) }, COSTLY_KDF],
+    ['the key parameters at 9 passes', (sv) => { sv.state.keyparams = keyparamsWith({ ops: 9 }) }, COSTLY_KDF],
+    ['the key parameters at 255 MiB', (sv) => { sv.state.keyparams = keyparamsWith({ memMiB: 255 }) }, WEAK_KDF],
+    ['a wrapped key whose passphrase slot is at 513 MiB', (sv) => { sv.state.wrapped.push(wrappedWith('passphrase', { memMiB: 513 })) }, COSTLY_KDF],
+    ['a wrapped key whose recovery slot is at 9 passes', (sv) => { sv.state.wrapped.push(wrappedWith('recovery', { ops: 9 })) }, COSTLY_KDF],
+    ['a wrapped key whose recovery slot is at 255 MiB', (sv) => { sv.state.wrapped.push(wrappedWith('recovery', { memMiB: 255 })) }, WEAK_KDF],
+  ]
+  for (const [name, serve, words] of ROWS) {
+    it(`${name}: refused in these words, with nothing derived and no snapshot asked for`, async () => {
+      const server = fakeServer()
+      serve(server)
+      const pwhash = stubDerivation()
+      const refused = await server.client.pullLatest('laptop', PASS).catch((e: unknown) => e)
+      expect(refused).toBeInstanceOf(SyncError)
+      expect((refused as Error).message).toBe(words)
+      expect(pwhash).not.toHaveBeenCalled()
+      expect(requests(server.calls)).toEqual(['GET /v1/keydoc'])
+    })
+  }
+
+  const EDGES: Array<[string, (server: Server) => void]> = [
+    ['the key parameters at 512 MiB and 8 passes', (sv) => { sv.state.keyparams = keyparamsWith({ memMiB: 512, ops: 8 }) }],
+    ['a wrapped key whose passphrase slot is at 512 MiB and 8 passes', (sv) => { sv.state.wrapped.push(wrappedWith('passphrase', { memMiB: 512, ops: 8 })) }],
+  ]
+  for (const [name, serve] of EDGES) {
+    it(`${name}: not refused, and Argon2id is asked for exactly that`, async () => {
+      const server = fakeServer()
+      serve(server)
+      const pwhash = stubDerivation()
+      // The stand-in's refusal comes out as it is from the key parameters, and as a passphrase that
+      // did not open from the wrapped key, which reports any failure past the range that way.
+      const outcome = await server.client.pullLatest('laptop', PASS).catch((e: unknown) => e)
+      expect(outcome).toBeInstanceOf(Error)
+      expect([REACHED_THE_DERIVATION, PASSPHRASE_DOES_NOT_OPEN_KEY]).toContain((outcome as Error).message)
+      expect(pwhash.mock.calls.map((c) => [c[3], c[4]])).toEqual([[8, 512 * 1024 * 1024]])
+    })
+  }
 })

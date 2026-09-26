@@ -41,11 +41,19 @@ import {
   unpaddedSnapshotBlobLength,
   toBase64,
   fromBase64,
+  kdfRange,
   DEFAULT_KDF,
   type KdfParams,
   type OwnerKeys,
 } from './crypto'
-import { DataKeyError, unwrapWithPassphrase, zeroizeDataKey, type RecoverableDataKey } from '../recovery/dataKey'
+import {
+  DataKeyError,
+  KDF_ABOVE_CEILING,
+  KDF_BELOW_FLOOR,
+  unwrapWithPassphrase,
+  zeroizeDataKey,
+  type RecoverableDataKey,
+} from '../recovery/dataKey'
 import { subkeysFromMaster } from '../recovery/migration'
 
 /**
@@ -128,11 +136,18 @@ const CREATE_NAMED_NO_STATE =
   'the server answered 428: this create named no state it was made against, which this client always names'
 
 /** The one refusal for KDF parameters under the floor, wherever on the server they came from. */
-const WEAK_KDF = 'server returned weak/unknown KDF parameters — refusing to derive a key'
+export const WEAK_KDF = 'server returned weak/unknown KDF parameters — refusing to derive a key'
+
+/**
+ * The one refusal for KDF parameters over the ceiling (crypto.ts KDF_CEILING), wherever on the
+ * server they came from: deriving at them would spend this device's memory and time on the
+ * server's say-so, before anything could tell whether they open anything.
+ */
+export const COSTLY_KDF = 'server returned KDF parameters above the ceiling — refusing to derive a key'
 
 const isRecord = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x)
 
-/** The shape of key parameters, and nothing more: the KDF floor is checked where the key is derived. */
+/** The shape of key parameters, and nothing more: the KDF floor and ceiling are checked where the key is derived. */
 function isKeyParams(x: unknown): x is KeyParams {
   return isRecord(x) && x.v === 1 && isRecord(x.kdf) && typeof x.saltB64 === 'string'
 }
@@ -257,11 +272,11 @@ export class SyncClient {
     this.maxBlobBytes = max
   }
 
-  /** Reject server-supplied KDF params below the security-doc floor (downgrade defense). */
+  /** Reject server-supplied KDF params outside the range (crypto.ts kdfRange): a downgrade, or a cost the server chose. */
   private validateKdf(params: KdfParams) {
-    if (params.alg !== 'argon2id' || params.memMiB < 256 || params.ops < 3) {
-      throw new SyncError(WEAK_KDF)
-    }
+    const range = kdfRange(params)
+    if (range === 'belowFloor') throw new SyncError(WEAK_KDF)
+    if (range === 'aboveCeiling') throw new SyncError(COSTLY_KDF)
   }
 
   private derive(passphrase: string, saltB64: string, params: KdfParams): OwnerKeys {
@@ -390,7 +405,8 @@ export class SyncClient {
     try {
       master = await unwrapWithPassphrase(doc.wrapped, passphrase)
     } catch (e) {
-      if (e instanceof DataKeyError && /below the security floor/.test(e.message)) throw new SyncError(WEAK_KDF)
+      if (e instanceof DataKeyError && e.message === KDF_BELOW_FLOOR) throw new SyncError(WEAK_KDF)
+      if (e instanceof DataKeyError && e.message === KDF_ABOVE_CEILING) throw new SyncError(COSTLY_KDF)
       throw new SyncError(PASSPHRASE_DOES_NOT_OPEN_KEY)
     }
     try {

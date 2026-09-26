@@ -10,6 +10,7 @@ import {
   zeroizeDataKey,
   DataKeyError,
   DATA_KEY_BYTES,
+  KDF_ABOVE_CEILING,
   type RecoverableDataKey,
 } from './dataKey'
 import { newRecoveryCode, RecoveryCodeError, type RecoveryCode } from './recoveryCode'
@@ -173,7 +174,7 @@ describe('a mistyped recovery code is caught by the checksum, not by a failed de
   }, 120000)
 })
 
-describe('the KDF floor is enforced (downgrade defence)', () => {
+describe('the KDF floor is enforced (downgrade defence), and the ceiling with it', () => {
   /*
    * Same shape therapist/keyStore.ts and sync/client.ts already implement, and for the same reason:
    * the parameters travel INSIDE the blob, the blob comes from the server, so the parameters are
@@ -216,6 +217,18 @@ describe('the KDF floor is enforced (downgrade defence)', () => {
   it('refuses an unknown KDF algorithm outright', async () => {
     const alien = { alg: 'pbkdf2', memMiB: 4096, ops: 10 } as unknown as KdfParams
     await expect(unwrapWithPassphrase(withKdf(alien, 'passphrase'), PASSPHRASE)).rejects.toThrow(DataKeyError)
+  })
+
+  it('refuses to WRITE a slot above the ceiling, so a blob no reader opens cannot originate here either', async () => {
+    // The readers' rows, and the edges that reach the derivation, are in dataKeyVector.test.ts.
+    for (const params of [
+      { alg: 'argon2id', memMiB: 513, ops: 3 },
+      { alg: 'argon2id', memMiB: 256, ops: 9 },
+    ] as KdfParams[]) {
+      const refused = await wrapDataKey(created.dataKey, PASSPHRASE, 'passphrase', params).catch((e: unknown) => e)
+      expect(refused, JSON.stringify(params)).toBeInstanceOf(DataKeyError)
+      expect((refused as Error).message).toBe(KDF_ABOVE_CEILING)
+    }
   })
 })
 

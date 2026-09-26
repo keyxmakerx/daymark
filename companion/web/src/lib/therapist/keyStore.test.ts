@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, vi } from 'vitest'
 import { wrap, unwrap, zeroize, KeyUnwrapError, type TherapistKeys, type WrappedKeyBlob } from './keyStore'
 import { initAssignmentCrypto, newBoxKeyPair, newSignKeyPair } from '../assignments/crypto'
 
@@ -30,6 +30,25 @@ describe('therapist key custody (wrap/unwrap)', () => {
   it('refuses a below-floor KDF', async () => {
     const weak: WrappedKeyBlob = { ...blob, kdf: { alg: 'argon2id', memMiB: 8, ops: 1 } }
     await expect(unwrap(weak, pass)).rejects.toThrow(KeyUnwrapError)
+  })
+
+  it('refuses a KDF above the ceiling, reading or writing, before anything is derived', async () => {
+    const so = await initAssignmentCrypto()
+    const pwhash = vi.spyOn(so, 'crypto_pwhash')
+    try {
+      for (const kdf of [
+        { alg: 'argon2id', memMiB: 513, ops: 3 },
+        { alg: 'argon2id', memMiB: 256, ops: 9 },
+      ] as WrappedKeyBlob['kdf'][]) {
+        await expect(unwrap({ ...blob, kdf }, pass), JSON.stringify(kdf)).rejects.toThrow(
+          'wrapped-key KDF parameters are above the ceiling — refusing to derive',
+        )
+        await expect(wrap(keys, pass, kdf), JSON.stringify(kdf)).rejects.toThrow(KeyUnwrapError)
+      }
+      expect(pwhash).not.toHaveBeenCalled()
+    } finally {
+      pwhash.mockRestore()
+    }
   })
 
   it('zeroize() overwrites in-memory key material', async () => {

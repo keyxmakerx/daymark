@@ -130,14 +130,15 @@ class KeyDocumentTest {
 
     @Test
     fun membersOfTheWrongTypeAreRefused_asTheWebRefusesThem() {
-        // The web refuses these too: the first three in dataKey.ts, the last in libsodium's own check
-        // that the memory limit is a 32-bit integer.
+        // The web refuses these too, all in dataKey.ts: the last two by kdfRange, which reads the same
+        // numbers as above the ceiling and below the floor.
         assertAllRefused(
             listOf(
                 Triple("v as a string", { it["v"] = "1" }, Reason.UNSUPPORTED_FORMAT),
                 Triple("a slot that is not an object", { it.slots()[0] = Raw("7") }, Reason.NOT_A_KEY_DOCUMENT),
                 Triple("slots that are not a list", { it["slots"] = linkedMapOf<String, Any?>("0" to it.slot(0)) }, Reason.NO_SLOTS),
-                Triple("memMiB past any Int", { it.slot(0).kdf()["memMiB"] = Raw("4294967552") }, Reason.KDF_BELOW_FLOOR),
+                Triple("memMiB past any Int", { it.slot(0).kdf()["memMiB"] = Raw("4294967552") }, Reason.KDF_ABOVE_CEILING),
+                Triple("ops below any Int", { it.slot(0).kdf()["ops"] = Raw("-4294967296") }, Reason.KDF_BELOW_FLOOR),
             ),
         )
     }

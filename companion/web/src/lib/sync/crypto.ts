@@ -5,7 +5,7 @@
  * client MUST produce byte-identical envelopes; see ../../../../docs/SYNC_PROTOCOL.md.
  *
  * Contract (per docs/COMPANION_SECURITY.md §4):
- *   passphrase ──Argon2id(salt, mem≥256MiB, ops≥3)──▶ master(32)
+ *   passphrase ──Argon2id(salt, 256≤mem≤512 MiB, 3≤ops≤8)──▶ master(32)
  *   master ──crypto_kdf(ctx="dmsync01")──┬─ id 1 ▶ SYNC_KEY        (XChaCha20-Poly1305)
  *                                        └─ id 2 ▶ MANIFEST_SEED   (Ed25519 signing seed)
  *   snapshot blob = MAGIC("DMS1") | FMT | nonce(24) | XChaCha20Poly1305(body, AAD, nonce, SYNC_KEY)
@@ -54,7 +54,33 @@ export interface KdfParams {
   ops: number
 }
 
-export const DEFAULT_KDF: KdfParams = { alg: 'argon2id', memMiB: 256, ops: 3 }
+/**
+ * The range every reader holds KDF parameters to before it derives anything (docs/SYNC_PROTOCOL.md
+ * §1.2): Argon2id, at least KDF_FLOOR and at most KDF_CEILING, in memory and in passes alike. The
+ * parameters travel inside what the server hands out, so both ends are the server's to move. Under
+ * the floor, a key is cheap to guess from what the server stores. Over the ceiling, the server
+ * would decide how much memory and time a reader spends, because Argon2id runs before the AEAD can
+ * refuse anything. sync-crypto's SyncCrypto.KdfParams holds the phone to the same four numbers.
+ */
+export const KDF_FLOOR = { memMiB: 256, ops: 3 } as const
+export const KDF_CEILING = { memMiB: 512, ops: 8 } as const
+
+/** Exactly the floor, which is what every writer uses: well inside the ceiling. */
+export const DEFAULT_KDF: KdfParams = { alg: 'argon2id', memMiB: KDF_FLOOR.memMiB, ops: KDF_FLOOR.ops }
+
+/**
+ * Where KDF parameters fall against the range: 'belowFloor' for anything that is not Argon2id at or
+ * above the floor, 'aboveCeiling' for Argon2id past the ceiling, and 'inRange' otherwise. The floor
+ * is checked first, as the phone checks it, so parameters under one bound and over the other are
+ * 'belowFloor' on both sides. Every comparison is written so that a value that is not a number
+ * fails it: a member that is missing is refused here, not handed to libsodium.
+ */
+export function kdfRange(params: KdfParams | undefined | null): 'inRange' | 'belowFloor' | 'aboveCeiling' {
+  if (!params || params.alg !== 'argon2id') return 'belowFloor'
+  if (!(params.memMiB >= KDF_FLOOR.memMiB && params.ops >= KDF_FLOOR.ops)) return 'belowFloor'
+  if (!(params.memMiB <= KDF_CEILING.memMiB && params.ops <= KDF_CEILING.ops)) return 'aboveCeiling'
+  return 'inRange'
+}
 
 export const MAGIC = new Uint8Array([0x44, 0x4d, 0x53, 0x31]) // "DMS1"
 /** The unpadded format of every snapshot stored before #315. Opened, never written. */

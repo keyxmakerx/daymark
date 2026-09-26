@@ -94,7 +94,7 @@
  * ever exports them, delete these and import instead.
  */
 import _sodium from 'libsodium-wrappers-sumo'
-import { initCrypto, DEFAULT_KDF, type KdfParams, type OwnerKeys } from '../sync/crypto'
+import { initCrypto, kdfRange, DEFAULT_KDF, type KdfParams, type OwnerKeys } from '../sync/crypto'
 import { wrapExistingDataKey, DataKeyError, DATA_KEY_BYTES, type RecoverableDataKey } from './dataKey'
 import type { RecoveryCode } from './recoveryCode'
 
@@ -125,10 +125,11 @@ export function subkeysFromMaster(master: Uint8Array): OwnerKeys {
  * Reproduce an existing owner's master from their passphrase and their published keyparams.
  *
  * The parameters are the ones the SERVER published, so they are hostile input and get the same
- * floor check every other derivation in this codebase gets (sync/client.ts validateKdf,
- * therapist/keyStore.ts validateKdf). A server that answers a migration request with 8 MiB / 1 pass
- * is trying to make the resulting master cheap to brute-force from the blob it is about to be
- * handed.
+ * range check every other derivation in this codebase gets (sync/crypto.ts kdfRange, as
+ * sync/client.ts and therapist/keyStore.ts use it). A server that answers a migration request with
+ * 8 MiB / 1 pass is trying to make the resulting master cheap to brute-force from the blob it is
+ * about to be handed; one that answers with more than the ceiling is spending this device's memory
+ * and time on its own say-so.
  */
 export async function masterFromPassphrase(
   passphrase: string,
@@ -136,9 +137,9 @@ export async function masterFromPassphrase(
   params: KdfParams = DEFAULT_KDF,
 ): Promise<Uint8Array> {
   await initCrypto()
-  if (params.alg !== 'argon2id' || params.memMiB < 256 || params.ops < 3) {
-    throw new DataKeyError('published KDF parameters are below the security floor — refusing to derive')
-  }
+  const range = kdfRange(params)
+  if (range === 'belowFloor') throw new DataKeyError('published KDF parameters are below the security floor — refusing to derive')
+  if (range === 'aboveCeiling') throw new DataKeyError('published KDF parameters are above the ceiling — refusing to derive')
   return _sodium.crypto_pwhash(
     DATA_KEY_BYTES,
     passphrase,

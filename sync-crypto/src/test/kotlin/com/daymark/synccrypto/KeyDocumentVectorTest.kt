@@ -31,6 +31,7 @@ import com.daymark.synccrypto.KeyDocumentVector.strayBits
 import com.daymark.synccrypto.KeyDocumentVector.wrappedTree
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -48,7 +49,9 @@ import java.security.MessageDigest
  *
  * Every open here runs Argon2id at the floor, 256 MiB and 3 passes, because the floor is checked on
  * every slot and a vector below it would be refused on both sides. [CountingSodium] counts the runs,
- * so a refusal is shown to come before any.
+ * so a refusal is shown to come before any. The ceiling, 512 MiB and 8 passes, is held the same way
+ * on every slot of every kind and on the key parameters; its edge is shown to reach Argon2id by a
+ * [CountingSodium] that derives nothing, so no test here spends 512 MiB.
  */
 class KeyDocumentVectorTest {
 
@@ -208,6 +211,15 @@ class KeyDocumentVectorTest {
             Triple("the recovery slot at 2 passes", { it.slot(1).kdf()["ops"] = Raw("2") }, Reason.KDF_BELOW_FLOOR),
             Triple("the passphrase slot on argon2i", { it.slot(0).kdf()["alg"] = "argon2i" }, Reason.KDF_BELOW_FLOOR),
             Triple("the passphrase slot with no kdf", { it.slot(0).remove("kdf") }, Reason.KDF_BELOW_FLOOR),
+            Triple("the passphrase slot at 513 MiB", { it.slot(0).kdf()["memMiB"] = Raw("513") }, Reason.KDF_ABOVE_CEILING),
+            Triple("the passphrase slot at 9 passes", { it.slot(0).kdf()["ops"] = Raw("9") }, Reason.KDF_ABOVE_CEILING),
+            Triple("the recovery slot at 513 MiB", { it.slot(1).kdf()["memMiB"] = Raw("513") }, Reason.KDF_ABOVE_CEILING),
+            Triple("the recovery slot at 9 passes", { it.slot(1).kdf()["ops"] = Raw("9") }, Reason.KDF_ABOVE_CEILING),
+            Triple(
+                "the passphrase slot at 1024 MiB and 2 passes",
+                { it.slot(0)["kdf"] = kdfTree().apply { this["memMiB"] = Raw("1024"); this["ops"] = Raw("2") } },
+                Reason.KDF_BELOW_FLOOR,
+            ),
             Triple("a padded salt", { it.slot(0)["saltB64"] = "${it.slot(0)["saltB64"]}==" }, Reason.MALFORMED_BASE64),
             Triple(
                 "a nonce in the standard alphabet",
@@ -240,7 +252,7 @@ class KeyDocumentVectorTest {
     }
 
     @Test
-    fun aSlotOfAnUnknownKindIsSkipped_andStillHeldToTheFloor() {
+    fun aSlotOfAnUnknownKindIsSkipped_andStillHeldToTheRange() {
         // Kinds this reader does not know, as a later writer may add them (a passkey's PRF output, a
         // Shamir share), before, between and after the vector's two slots. Each carries KDF
         // parameters at the floor and nothing a known slot needs: no salt, nonce or ciphertext.
@@ -272,23 +284,112 @@ class KeyDocumentVectorTest {
         assertRefused(Reason.NO_SLOT_OF_THAT_KIND) { crypto.openWithPassphrase(unknownOnly, PASSPHRASE) }
         assertRefused(Reason.NO_SLOT_OF_THAT_KIND) { crypto.openWithRecoveryCode(unknownOnly, CODE) }
 
-        // Still held to the floor, as the web holds every slot before it picks one: a weak slot of a
-        // kind nobody reads must not survive a round trip next to strong ones.
-        val floorRows: List<Pair<String, (MutableMap<String, Any?>) -> Unit>> = listOf(
-            "the unknown slot at 255 MiB" to { it.slot(0).kdf()["memMiB"] = Raw("255") },
-            "the unknown slot at 2 passes" to { it.slot(0).kdf()["ops"] = Raw("2") },
-            "the unknown slot on argon2i" to { it.slot(0).kdf()["alg"] = "argon2i" },
-            "the unknown slot with no kdf" to { it.slot(0).remove("kdf") },
-            "the kindless slot at 255 MiB" to { it.slot(2).kdf()["memMiB"] = Raw("255") },
+        // Still held to the floor and the ceiling, as the web holds every slot before it picks one: a
+        // weak slot of a kind nobody reads must not survive a round trip next to strong ones, and a
+        // costly one must not set what a reader spends.
+        val rangeRows: List<Triple<String, (MutableMap<String, Any?>) -> Unit, Reason>> = listOf(
+            Triple("the unknown slot at 255 MiB", { it.slot(0).kdf()["memMiB"] = Raw("255") }, Reason.KDF_BELOW_FLOOR),
+            Triple("the unknown slot at 2 passes", { it.slot(0).kdf()["ops"] = Raw("2") }, Reason.KDF_BELOW_FLOOR),
+            Triple("the unknown slot on argon2i", { it.slot(0).kdf()["alg"] = "argon2i" }, Reason.KDF_BELOW_FLOOR),
+            Triple("the unknown slot with no kdf", { it.slot(0).remove("kdf") }, Reason.KDF_BELOW_FLOOR),
+            Triple("the kindless slot at 255 MiB", { it.slot(2).kdf()["memMiB"] = Raw("255") }, Reason.KDF_BELOW_FLOOR),
+            Triple("the unknown slot at 513 MiB", { it.slot(0).kdf()["memMiB"] = Raw("513") }, Reason.KDF_ABOVE_CEILING),
+            Triple("the unknown slot at 9 passes", { it.slot(0).kdf()["ops"] = Raw("9") }, Reason.KDF_ABOVE_CEILING),
         )
-        for ((name, mutate) in floorRows) {
+        for ((name, mutate, reason) in rangeRows) {
             val tree = document()
             mutate(tree)
             val mutated = json(tree)
             assertNotEquals("$name must change the document", text, mutated)
-            assertRefused(Reason.KDF_BELOW_FLOOR, name) { crypto.openWithPassphrase(KeyDocument.parse(mutated), PASSPHRASE) }
+            assertRefused(reason, name) { crypto.openWithPassphrase(KeyDocument.parse(mutated), PASSPHRASE) }
         }
         assertEquals("nothing after the positive control ran Argon2id", 2, sodium.argon2idRuns)
+
+        // And the edge is in the range: the unknown slot at 512 MiB and 8 passes is skipped, and the
+        // passphrase slot beside it goes to Argon2id at its own parameters, as it always does.
+        val edge = document().apply { slot(0)["kdf"] = kdfTree().apply { this["memMiB"] = Raw("512"); this["ops"] = Raw("8") } }
+        val edgeText = json(edge)
+        assertNotEquals(text, edgeText)
+        assertEquals(WRAPPED, KeyDocument.parseWrappedKey(edgeText).toJson())
+        assertEdgeReachesArgon2id(listOf(3L to 256L * MIB)) { it.openWithPassphrase(KeyDocument.parse(edgeText), PASSPHRASE) }
+    }
+
+    @Test
+    fun bothEndsOfTheRangeAreInIt_andOnePastEitherIsNot() {
+        // The validator itself, at the edges the rows sit just outside of, with the web's numbers.
+        for ((memMiB, ops) in listOf(256 to 3, 512 to 8, 256 to 8, 512 to 3)) {
+            val params = SyncCrypto.KdfParams(memMiB = memMiB, ops = ops)
+            assertTrue("$memMiB MiB, $ops passes", params.meetsFloor && params.withinCeiling)
+        }
+        assertFalse(SyncCrypto.KdfParams(memMiB = 513, ops = 8).withinCeiling)
+        assertFalse(SyncCrypto.KdfParams(memMiB = 512, ops = 9).withinCeiling)
+        assertEquals(512, SyncCrypto.KdfParams.CEILING_MEM_MIB)
+        assertEquals(8, SyncCrypto.KdfParams.CEILING_OPS)
+    }
+
+    @Test
+    fun aSlotOfEitherKindAt512MiBAnd8PassesIsNotRefused_Argon2idIsAskedForExactlyThat() {
+        fun atTheEdge(index: Int): String = json(
+            wrappedTree().apply { slot(index)["kdf"] = kdfTree().apply { this["memMiB"] = Raw("512"); this["ops"] = Raw("8") } },
+        )
+        val passphraseEdge = atTheEdge(0)
+        val recoveryEdge = atTheEdge(1)
+        assertNotEquals(WRAPPED, passphraseEdge)
+        assertNotEquals(WRAPPED, recoveryEdge)
+        assertEdgeReachesArgon2id(listOf(8L to 512L * MIB)) { it.openWithPassphrase(KeyDocument.parse(passphraseEdge), PASSPHRASE) }
+        assertEdgeReachesArgon2id(listOf(8L to 512L * MIB)) { it.openWithRecoveryCode(KeyDocument.parse(recoveryEdge), TYPED_CODE) }
+    }
+
+    @Test
+    fun theKeyParametersAreHeldToTheSameRange() {
+        // The rows of dataKeyVector.test.ts, "the key parameters are held to the same range".
+        val rows: List<Pair<String, (MutableMap<String, Any?>) -> Unit>> = listOf(
+            "the key parameters at 513 MiB" to { it.kdf()["memMiB"] = Raw("513") },
+            "the key parameters at 9 passes" to { it.kdf()["ops"] = Raw("9") },
+        )
+        for ((name, mutate) in rows) {
+            val tree = keyParamsTree()
+            mutate(tree)
+            val text = json(tree)
+            assertNotEquals("$name must change the document", KEY_PARAMS, text)
+            assertRefused(Reason.KDF_ABOVE_CEILING, name) { crypto.openWithPassphrase(KeyDocument.parse(text), PASSPHRASE) }
+        }
+        assertEquals(0, sodium.argon2idRuns)
+
+        val edge = json(keyParamsTree().apply { kdf()["memMiB"] = Raw("512"); kdf()["ops"] = Raw("8") })
+        assertNotEquals(KEY_PARAMS, edge)
+        assertEdgeReachesArgon2id(listOf(8L to 512L * MIB)) { it.openWithPassphrase(KeyDocument.parse(edge), PASSPHRASE) }
+    }
+
+    @Test
+    fun theRangeIsCheckedAgainWhereAKeyIsDerived_notOnlyWhereADocumentIsRead() {
+        // Documents made in this module without the reader, as a later writer or a test may make them:
+        // the key parameters and the slot in use are held to the range again before Argon2id.
+        val (p, r) = KeyDocument.parseWrappedKey(WRAPPED).slots
+        fun at(slot: KeyDocument.WrappedKey.Slot, kdf: SyncCrypto.KdfParams) =
+            KeyDocument.WrappedKey.Slot(slot.kind, kdf, slot.salt, slot.nonce, slot.ciphertext)
+        val costly = SyncCrypto.KdfParams(memMiB = 513, ops = 3)
+        val weak = SyncCrypto.KdfParams(memMiB = 255, ops = 3)
+        assertRefused(Reason.KDF_ABOVE_CEILING) { crypto.openWithPassphrase(KeyDocument.WrappedKey(listOf(at(p, costly), r)), PASSPHRASE) }
+        assertRefused(Reason.KDF_ABOVE_CEILING) { crypto.openWithRecoveryCode(KeyDocument.WrappedKey(listOf(p, at(r, costly))), TYPED_CODE) }
+        assertRefused(Reason.KDF_ABOVE_CEILING) { crypto.openWithPassphrase(KeyDocument.KeyParams(costly, KEY_PARAMS_SALT), PASSPHRASE) }
+        assertRefused(Reason.KDF_BELOW_FLOOR) { crypto.openWithPassphrase(KeyDocument.KeyParams(weak, KEY_PARAMS_SALT), PASSPHRASE) }
+        assertEquals(0, sodium.argon2idRuns)
+    }
+
+    /**
+     * [open] is not refused by any check before Argon2id: run against libsodium that derives nothing,
+     * it fails in Argon2id itself, having asked for exactly [asked] (passes, bytes).
+     */
+    private fun assertEdgeReachesArgon2id(asked: List<Pair<Long, Long>>, open: (SyncCrypto) -> Unit) {
+        val stub = CountingSodium(deriveNothing = true)
+        try {
+            open(SyncCrypto(stub))
+            fail("expected Argon2id to be reached, and to fail")
+        } catch (e: SyncCrypto.SyncCryptoException) {
+            assertEquals("Argon2id key derivation failed", e.message)
+        }
+        assertEquals(asked, stub.askedFor)
     }
 
     @Test
@@ -333,6 +434,10 @@ class KeyDocumentVectorTest {
     }
 
     private fun sha256(text: String): String = hex(MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8)))
+
+    private companion object {
+        const val MIB = 1024L * 1024
+    }
 
     private fun unhex(h: String): ByteArray = ByteArray(h.length / 2) { h.substring(2 * it, 2 * it + 2).toInt(16).toByte() }
 }
