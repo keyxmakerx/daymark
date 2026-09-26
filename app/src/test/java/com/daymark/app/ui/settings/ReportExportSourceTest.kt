@@ -3,6 +3,7 @@ package com.daymark.app.ui.settings
 import com.daymark.app.backup.repoFile
 import com.daymark.app.ui.stringLiteralsIn
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -10,7 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * What Settings says about the PDF report.
+ * What Settings says about the PDF report: the row that offers it, and the dialog that makes it.
  *
  * ## Why a source test
  *
@@ -41,6 +42,16 @@ class ReportExportSourceTest {
         /** What the row said before, used only to show each absence check a planted example. */
         const val OLD_HEADLINE = "Export PDF for therapist"
         const val OLD_SUPPORTING = "A printable mood report with an authenticity stamp"
+
+        /** The dialog prints the report's own constant for what a report is (#336). */
+        const val SENTENCE_REF = "com.daymark.app.export.Copy.WHAT_A_REPORT_IS"
+
+        /** The sentence itself, which this file must never hold a copy of. */
+        const val REPORT_SENTENCE = "A report is a copy. Once handed over, it cannot be taken back."
+
+        const val NOTES_LABEL = "Include check-in notes"
+        const val OLD_NOTES_LABEL = "Include notes"
+        const val NOTES_START_OFF = "var notes by remember { mutableStateOf(false) }"
     }
 
     private val source: String = repoFile(REL).readText()
@@ -51,6 +62,25 @@ class ReportExportSourceTest {
             .substringAfterLast("ListItem(", "")
 
     private val row: String = rowOf(source)
+
+    /**
+     * The report dialog, from its declaration to the next function, with its line comments removed.
+     * Line comments only: the slice holds no string with two slashes in it, and it is the block
+     * stripper, not this one, that the wildcard MIME type breaks.
+     */
+    private fun dialogOf(text: String): String =
+        text.substringAfter("private fun PdfOptionsDialog(", "")
+            .substringBefore("private fun ToggleRow(", "")
+            .replace(Regex("//[^\n]*"), " ")
+
+    private val dialog: String = dialogOf(source)
+
+    /** Where the dialog's body opens: the first thing in it must be the report's own sentence. */
+    private val sentenceFirst =
+        Regex("""text\s*=\s*\{\s*Column\s*(\([^{]*\))?\s*\{\s*Text\(\s*com\.daymark\.app\.export\.Copy\.WHAT_A_REPORT_IS\b""")
+
+    private fun reportSentenceIn(text: String): String? =
+        stringLiteralsIn(text).firstOrNull { it.contains("A report is a copy") || it.contains("cannot be taken back") }
 
     /** The first string in [text] that names a therapist, in any case. */
     private fun therapistIn(text: String): String? =
@@ -112,5 +142,88 @@ class ReportExportSourceTest {
 
         val found = stampIn(row)
         assertNull("the report row says \"$found\"", found)
+    }
+
+    @Test
+    fun `the report dialog was found`() {
+        assertTrue("the report dialog is gone or renamed", dialog.isNotEmpty())
+        assertTrue("the dialog slice ran past the dialog", dialog.length < 4000)
+        assertTrue("the dialog slice holds no dialog", dialog.contains("AlertDialog("))
+        assertTrue("the dialog no longer builds the report's options", dialog.contains("PdfExportOptions("))
+    }
+
+    /** #336: what a report is, said first, directly under the title and before any choice. */
+    @Test
+    fun `the dialog says what a report is before anything else`() {
+        // The check is first shown the dialog opening on the date range, as it used to.
+        val planted = source.replace(SENTENCE_REF, "\"Date range\"")
+        assertNotEquals("the sentence was not taken out", source, planted)
+        assertFalse("the check passes a dialog that opens on the date range", sentenceFirst.containsMatchIn(dialogOf(planted)))
+
+        assertTrue(
+            "the dialog's title is no longer \"Export PDF report\"",
+            dialog.contains("title = { Text(\"Export PDF report\") }"),
+        )
+        assertTrue(
+            "the dialog no longer opens with what a report is. It is said under the title, before " +
+                "any choice about what goes in the report (#336).",
+            sentenceFirst.containsMatchIn(dialog),
+        )
+    }
+
+    /**
+     * The sentence made a tall dialog taller, and a Material dialog cuts off what does not fit, so the
+     * body scrolls: on a short screen the last switch is reached rather than lost.
+     */
+    @Test
+    fun `the dialog body scrolls`() {
+        val scrolling = Regex("""text\s*=\s*\{\s*Column\(\s*Modifier\.verticalScroll\(\s*rememberScrollState\(\)\s*\)\s*\)\s*\{""")
+        val planted = dialogOf(source.replace("Column(Modifier.verticalScroll(rememberScrollState())) {", "Column {"))
+        assertNotEquals("the fixed-height body was not planted", dialog, planted)
+        assertFalse("the check passes a body that cannot scroll", scrolling.containsMatchIn(planted))
+
+        assertTrue("the report dialog's body no longer scrolls", scrolling.containsMatchIn(dialog))
+    }
+
+    /** One sentence, read from the report's fixed copy: this file never holds a second copy of it. */
+    @Test
+    fun `the dialog prints the report's own sentence, not a copy of it`() {
+        val planted = source.replace(SENTENCE_REF, "\"$REPORT_SENTENCE\"")
+        assertNotEquals("the copy was not planted", source, planted)
+        assertNotNull("the check cannot see the sentence written into Settings", reportSentenceIn(planted))
+
+        val found = reportSentenceIn(source)
+        assertNull(
+            "Settings holds its own copy of the report sentence (\"$found\"). It prints " +
+                "Copy.WHAT_A_REPORT_IS, so the dialog and the report can never say two things.",
+            found,
+        )
+    }
+
+    /**
+     * #336: a check-in note is the person's own words, so the switch starts off. The model's own
+     * default is pinned beside the report, in `export/ReportCopySourceTest`.
+     */
+    @Test
+    fun `check-in notes start off in the dialog, and the switch reaches the report`() {
+        val planted = dialogOf(source.replace(NOTES_START_OFF, NOTES_START_OFF.replace("false", "true")))
+        assertNotEquals("the old default was not planted", dialog, planted)
+        assertFalse("the check accepts notes on by default", planted.contains(NOTES_START_OFF))
+
+        assertTrue("check-in notes no longer start off in the report dialog (#336)", dialog.contains(NOTES_START_OFF))
+        assertTrue("the notes switch no longer reaches the report's options", dialog.contains("includeNotes = notes,"))
+    }
+
+    @Test
+    fun `the notes switch says check-in notes`() {
+        val planted = source.replace("\"$NOTES_LABEL\"", "\"$OLD_NOTES_LABEL\"")
+        assertNotEquals("the old label was not planted", source, planted)
+        assertTrue("the check cannot see the old label", OLD_NOTES_LABEL in stringLiteralsIn(dialogOf(planted)))
+
+        assertTrue(
+            "the notes switch is no longer labelled \"$NOTES_LABEL\"",
+            dialog.contains("ToggleRow(\"$NOTES_LABEL\", notes)"),
+        )
+        assertFalse("the dialog still says \"$OLD_NOTES_LABEL\"", OLD_NOTES_LABEL in stringLiteralsIn(dialog))
     }
 }

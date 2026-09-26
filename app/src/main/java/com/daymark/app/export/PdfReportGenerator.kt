@@ -104,7 +104,7 @@ class PdfReportGenerator @Inject constructor() {
         val sides = if (journalSide) 4 else 3
 
         ctx.sideOneGlance(data, options, sides)
-        ctx.sideTwoDetail(data, sides)
+        ctx.sideTwoDetail(data, options, sides)
         if (journalSide) ctx.sideThreeInTheirWords(data, sides)
         ctx.sideFourForTheConversation(data, options, sides)
 
@@ -144,7 +144,19 @@ private fun fmt1(v: Double) = String.format("%.1f", v)
 // audit caveats are not reworded, reflowed or "improved". Restyle the container, never the prose.
 // ---------------------------------------------------------------------------------------------
 
-private object Copy {
+/**
+ * Internal rather than private for one sentence: the export dialog prints [WHAT_A_REPORT_IS] from
+ * here, so the person is told what a report is in the report's own words, not in a second copy of
+ * them. Everything else in this object is printed by this file alone.
+ */
+internal object Copy {
+
+    /**
+     * What a report is, said on the export dialog before the person chooses anything about it. One
+     * sentence for every place a report is made (#336), so it lives with the report's fixed copy and
+     * the dialog reads it from here. It is not printed on the report itself.
+     */
+    const val WHAT_A_REPORT_IS = "A report is a copy. Once handed over, it cannot be taken back."
 
     const val FOOTER = "Daymark · self-reported data, not a clinical assessment"
 
@@ -179,10 +191,18 @@ private object Copy {
     const val NO_ENTRIES = "No entries in this range."
     const val NO_RESULTS = "No results in this range."
 
+    /** Printed under side 2's tables when check-in notes are on, to say what a note is. */
     const val NOTE_FIELD =
         "“Their note” is the one-line note attached to a check-in — a field that has always existed, " +
             "that they fill in knowing it is part of the check-in. It is not an excerpt lifted out of " +
             "their journal; the journal is side 3 and is a separate decision."
+
+    /**
+     * Printed in [NOTE_FIELD]'s place when check-in notes are off, which is the default (#336). Said
+     * in the form [PROMPTS_OFF] uses, so a choice the person made reads as a choice and never as a
+     * gap in what they logged.
+     */
+    const val NOTES_OFF = "Check-in notes were switched off for this export."
 
     const val COVERAGE_FIXED =
         "The gaps are gaps — nothing is interpolated, and no figure on side 1 is adjusted for them."
@@ -683,6 +703,23 @@ private class PageCtx(
         y += 6f
     }
 
+    /**
+     * The head of side 2's note column, or no column at all. With check-in notes off neither table
+     * has one (#336): a column of dashes would draw the person's own choice as a gap on every row.
+     */
+    private fun noteHead(notes: Boolean, x: Float): Array<Pair<Float, String>> =
+        if (notes) arrayOf(x to "THEIR NOTE") else emptyArray()
+
+    /**
+     * A row's lines in the note column: the note, or a dash for a check-in that has none. With notes
+     * off there is no column, so there are no lines, and nothing stands in for a note.
+     */
+    private fun noteText(notes: Boolean, note: String, p: Paint, width: Float): List<String> = when {
+        !notes -> emptyList()
+        note.isNotBlank() -> wrap(note, p, width)
+        else -> listOf("—")
+    }
+
     /** Every instrument in this report, daily mood first, then each scored self-check. */
     private fun instruments(): List<Instrument> =
         listOf(Plot.moodInstrument(data, rangeStart, rangeDays)) +
@@ -914,7 +951,7 @@ private class PageCtx(
 
     // ---- side 2 · the detail ----
 
-    fun sideTwoDetail(data: ReportData, of: Int) {
+    fun sideTwoDetail(data: ReportData, options: PdfExportOptions, of: Int) {
         sideHeader(
             index = 2,
             of = of,
@@ -928,9 +965,14 @@ private class PageCtx(
             },
         )
 
-        if (data.instrumentSeries.isNotEmpty()) resultsTable(data)
-        entriesTable(data)
-        noteBox(listOf(paint(8f, SOFT) to Copy.NOTE_FIELD))
+        // Check-in notes are the person's own words and print only when they switched them on
+        // (#336). Off, neither table has a note column, and the box that would explain what a note
+        // is says that they were switched off instead.
+        val notes = options.includeNotes
+        if (data.instrumentSeries.isNotEmpty()) resultsTable(data, notes)
+        entriesTable(data, notes)
+        val noteSentence = if (notes) Copy.NOTE_FIELD else Copy.NOTES_OFF
+        noteBox(listOf(paint(8f, SOFT) to noteSentence))
 
         suggestions(data)
         projects(data)
@@ -944,7 +986,7 @@ private class PageCtx(
     }
 
     /** Every self-check result behind the plots, newest first. */
-    private fun resultsTable(data: ReportData) {
+    private fun resultsTable(data: ReportData, notes: Boolean) {
         val rows = data.instrumentSeries
             .flatMap { s -> s.points.map { s to it } }
             .sortedByDescending { it.second.date }
@@ -959,7 +1001,7 @@ private class PageCtx(
         val head = {
             tableHead(
                 colDate to "DATE", colTool to "TOOL", colScore to "SCORE",
-                colBand to "BAND", colNote to "THEIR NOTE",
+                colBand to "BAND", *noteHead(notes, colNote),
             )
         }
         ensure(ReportLayout.TABLE_START_RESERVE)
@@ -968,7 +1010,7 @@ private class PageCtx(
         val body = paint(8.5f, INK)
         val soft = paint(8f, SOFT)
         rows.forEach { (series, point) ->
-            val noteLines = if (point.note.isNotBlank()) wrap(point.note, body, noteW) else listOf("—")
+            val noteLines = noteText(notes, point.note, body, noteW)
             val rowH = (noteLines.size * 11f + 7f).coerceAtLeast(17f)
             if (ensure(rowH)) head()
             canvas.drawText(point.date.format(DAY_MONTH), colDate, y + 8f, body)
@@ -987,7 +1029,7 @@ private class PageCtx(
     }
 
     /** Every daily check-in, newest first — a clinician scanning recent state reads that way. */
-    private fun entriesTable(data: ReportData) {
+    private fun entriesTable(data: ReportData, notes: Boolean) {
         sectionLabel("Daily check-ins (${data.entries.size})")
         val colDate = margin
         val colTime = margin + 82f
@@ -995,10 +1037,19 @@ private class PageCtx(
         val colBand = margin + 168f
         val colNote = margin + 236f
         val noteW = pageW - margin - colNote
+        // The fifth column holds a check-in's note with its activity tags under it. With notes off
+        // it holds the tags alone, so it is headed for them, and a range with no tags has no fifth
+        // column at all. The tags print either way: switching notes off leaves out notes only.
+        val tagsHead: Array<Pair<Float, String>> =
+            if (!notes && data.entries.any { it.activityNames.isNotEmpty() }) {
+                arrayOf(colNote to "ACTIVITY TAGS")
+            } else {
+                emptyArray()
+            }
         val head = {
             tableHead(
                 colDate to "DATE", colTime to "TIME", colScore to "SCORE",
-                colBand to "BAND", colNote to "THEIR NOTE",
+                colBand to "BAND", *noteHead(notes, colNote), *tagsHead,
             )
         }
 
@@ -1014,7 +1065,7 @@ private class PageCtx(
         val body = paint(8.5f, INK)
         val soft = paint(8f, SOFT)
         data.entries.sortedByDescending { it.dateTime }.forEach { e ->
-            val noteLines = if (e.note.isNotBlank()) wrap(e.note, body, noteW) else listOf("—")
+            val noteLines = noteText(notes, e.note, body, noteW)
             val actLines: List<String> = if (e.activityNames.isNotEmpty()) {
                 wrap(e.activityNames.joinToString(" · "), soft, noteW)
             } else {
@@ -1035,8 +1086,11 @@ private class PageCtx(
                 canvas.drawText(ln, colNote, ny + 8f, body)
                 ny += 11f
             }
+            // Under a note the tags sit a point higher. With notes off they are the column's first
+            // line, so they share the row's baseline.
+            val tagDrop = if (noteLines.isEmpty()) 8f else 7f
             actLines.forEach { ln ->
-                canvas.drawText(ln, colNote, ny + 7f, soft)
+                canvas.drawText(ln, colNote, ny + tagDrop, soft)
                 ny += 10f
             }
 

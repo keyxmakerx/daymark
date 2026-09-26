@@ -18,7 +18,15 @@ data class PdfExportOptions(
     val fromMillis: Long,
     val toMillis: Long,
     val rangeLabel: String,
-    val includeNotes: Boolean = true,
+    /**
+     * Whether check-in notes print. Default off (#336): a note is the person's own words, and their
+     * own words go into a report only when they switch them on. Charts carry no words and stay on.
+     *
+     * With this off, side 2 says the notes were switched off where it would have explained them, and
+     * neither of its tables has a note column — not a column of dashes, which would draw the
+     * person's choice as a gap on every row.
+     */
+    val includeNotes: Boolean = false,
     val includeCharts: Boolean = true,
     /**
      * Whether side 3 ("In their words") is emitted at all. Default off.

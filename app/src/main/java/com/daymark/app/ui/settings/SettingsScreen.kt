@@ -429,16 +429,26 @@ private fun PdfOptionsDialog(
     onExport: (com.daymark.app.export.PdfExportOptions) -> Unit,
 ) {
     var days by remember { mutableStateOf(90) } // 0 = all time
-    var notes by remember { mutableStateOf(true) }
+    // Off until switched on (#336): a check-in note is the person's own words. Charts carry none.
+    var notes by remember { mutableStateOf(false) }
     var charts by remember { mutableStateOf(true) }
     var journal by remember { mutableStateOf(false) }
     val ranges = listOf(30 to "Last 30 days", 90 to "Last 90 days", 365 to "Last 12 months", 0 to "All time")
 
+    // What a report is comes first, before any choice about what goes in it (#336). The words are
+    // the report's own, read from its fixed copy, so there is one sentence and never two. The body
+    // scrolls, so on a short screen the last switch is reached rather than cut off.
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Export PDF report") },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(
+                    com.daymark.app.export.Copy.WHAT_A_REPORT_IS,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
                 Text("Date range", style = MaterialTheme.typography.labelLarge)
                 ranges.forEach { (d, label) ->
                     Row(
@@ -450,7 +460,7 @@ private fun PdfOptionsDialog(
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                ToggleRow("Include notes", notes) { notes = it }
+                ToggleRow("Include check-in notes", notes) { notes = it }
                 ToggleRow("Include charts", charts) { charts = it }
                 ToggleRow("Include all journal entries in range", journal) { journal = it }
             }
