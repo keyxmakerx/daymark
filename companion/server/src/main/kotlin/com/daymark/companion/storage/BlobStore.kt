@@ -7,7 +7,6 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.sql.Connection
-import java.sql.DriverManager
 import java.sql.SQLException
 import kotlin.io.path.exists
 
@@ -50,10 +49,8 @@ class BlobStore(
     init {
         Files.createDirectories(blobsDir)
         Files.createDirectories(tmpDir)
-        Class.forName("org.sqlite.JDBC")
-        conn = DriverManager.getConnection("jdbc:sqlite:${root.resolve("index.db")}")
+        conn = SCHEMA.open(root)
         conn.createStatement().use { st ->
-            st.execute("PRAGMA journal_mode=WAL")
             // FULL, not NORMAL. Under WAL, `NORMAL` does not fsync at commit — it is durable
             // across an application crash but can lose recent commits to a power cut or a kernel
             // panic. That is a reasonable default for a cache and the wrong one here: the server
@@ -61,18 +58,6 @@ class BlobStore(
             // legitimately stop being the only copy of it. The cost is one fsync per PUT on a
             // workload measured in snapshots per day.
             st.execute("PRAGMA synchronous=FULL")
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS snapshots (
-                    lineage      TEXT    NOT NULL,
-                    version      INTEGER NOT NULL,
-                    size         INTEGER NOT NULL,
-                    content_hash TEXT    NOT NULL,
-                    created_at   INTEGER NOT NULL,
-                    PRIMARY KEY (lineage, version)
-                )
-                """.trimIndent(),
-            )
         }
     }
 
@@ -251,6 +236,32 @@ class BlobStore(
     }
 
     companion object {
+        /**
+         * index.db, version by version (#193). [Schema] says what a version is, and how a database
+         * written by an earlier release is brought to [Schema.current] before it is served. No
+         * version touches a blob file: they are read as they were written, whatever the index's version.
+         */
+        internal val SCHEMA = Schema(
+            "index.db",
+            listOf(
+                // Version 1: the structure as it stood when versions began to be kept.
+                listOf(
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS snapshots (
+                            lineage      TEXT    NOT NULL,
+                            version      INTEGER NOT NULL,
+                            size         INTEGER NOT NULL,
+                            content_hash TEXT    NOT NULL,
+                            created_at   INTEGER NOT NULL,
+                            PRIMARY KEY (lineage, version)
+                        )
+                        """.trimIndent(),
+                    ),
+                ),
+            ),
+        )
+
         private val NAME = Regex("^[A-Za-z0-9_-]{1,64}$")
 
         /** Server-side validation: lineage ids must be a strict charset so a derived path can never escape. */

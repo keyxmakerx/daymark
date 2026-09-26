@@ -1,12 +1,18 @@
 package com.daymark.companion
 
+import com.daymark.companion.auth.AuthStore
+import com.daymark.companion.storage.BlobStore
+import com.daymark.companion.storage.Schema
 import java.io.File
 import java.nio.file.Files
+import java.security.MessageDigest
+import java.sql.DriverManager
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -132,6 +138,114 @@ class StartupProcessTest {
             dataDir.deleteRecursively()
         }
     }
+
+    /*
+     * A database the release must not open, or cannot change, refuses the start the way a setting does
+     * (#193): one line naming the database and its versions, exit 78, and the file as it was. These
+     * two plant the database and let the real server find it; the correct configuration above, which
+     * starts on an empty volume, is the control that the same settings serve when the database is fine.
+     */
+
+    @Test
+    fun `a database newer than this release exits 78 with one line naming it and both versions, and is left as it was`() {
+        val dataDir = Files.createTempDirectory("startup-refused-newer").toFile()
+        try {
+            val index = File(dataDir, "index.db")
+            DriverManager.getConnection("jdbc:sqlite:${index.path}").use { c ->
+                c.createStatement().use { st ->
+                    st.execute("PRAGMA journal_mode=WAL")
+                    st.execute("CREATE TABLE snapshots (lineage TEXT, version INTEGER)")
+                    st.execute("PRAGMA user_version = ${BlobStore.SCHEMA.current + 1}")
+                }
+            }
+            val before = sha256(index)
+            val run = launch(
+                settings(
+                    dataDir,
+                    "DAYMARK_PUBLIC_BASE_URL" to "https://daymark.example.com",
+                    "DAYMARK_AUTH_TOKEN" to "owner-token-startup-test",
+                ),
+            )
+            val exited = run.process.waitFor(60, TimeUnit.SECONDS)
+            if (!exited) run.process.destroyForcibly()
+            run.reader.join(10_000)
+            assertTrue(exited, "a newer database must stop the start, not be served: ${run.lines}")
+            assertEquals(EXIT_CONFIG, run.process.exitValue(), "${run.lines}")
+            val refusal = run.lines.filter { "Refusing to start" in it }
+            assertEquals(1, refusal.size, "exactly one refusal line: ${run.lines}")
+            val newer = BlobStore.SCHEMA.current + 1
+            assertTrue(
+                " ERROR " in refusal.single() &&
+                    "Refusing to start: index.db is at structure version $newer, newer than version " +
+                    "${BlobStore.SCHEMA.current}, the newest this release knows; nothing was changed." in refusal.single(),
+                refusal.single(),
+            )
+            assertTrue(dataDir.path !in refusal.single(), "no path: ${refusal.single()}")
+            assertTrue(run.lines.none { "Exception" in it || it.trimStart().startsWith("at ") }, "no stack trace: ${run.lines}")
+            assertTrue(run.lines.none { SERVING in it }, "no port was bound: ${run.lines}")
+            assertEquals(before, sha256(index), "the newer database is left byte for byte as it was")
+            assertFalse(File(dataDir, Schema.PRE_MIGRATE_DIR).exists(), "and nothing was copied")
+        } finally {
+            dataDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `a change that fails partway exits 78 with one line naming the database and both versions, and the file is as it was`() {
+        /*
+         * An auth.db from before versions were kept, missing the last_used_step column version 1
+         * adds, and missing the unique index on totp.rel_ref, with two credentials for one
+         * relationship so that the index cannot be built. No real database was ever in this state:
+         * it is the way to make the real version 1 fail after it has already added the column,
+         * through the real server and nothing else.
+         */
+        val dataDir = Files.createTempDirectory("startup-refused-change").toFile()
+        try {
+            val auth = File(dataDir, "auth.db")
+            DriverManager.getConnection("jdbc:sqlite:${auth.path}").use { c ->
+                c.createStatement().use { st ->
+                    st.execute("PRAGMA journal_mode=WAL")
+                    st.execute(
+                        "CREATE TABLE totp (credential_id TEXT NOT NULL PRIMARY KEY, rel_ref TEXT NOT NULL, " +
+                            "secret_b64 TEXT NOT NULL, fail_count INTEGER NOT NULL DEFAULT 0, " +
+                            "locked_until INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)",
+                    )
+                    st.execute("INSERT INTO totp(credential_id, rel_ref, secret_b64, created_at) VALUES ('c1', 'rel', 's1', 1)")
+                    st.execute("INSERT INTO totp(credential_id, rel_ref, secret_b64, created_at) VALUES ('c2', 'rel', 's2', 2)")
+                }
+            }
+            val before = sha256(auth)
+            val run = launch(settings(dataDir, "DAYMARK_PUBLIC_BASE_URL" to "https://daymark.example.com"))
+            val exited = run.process.waitFor(60, TimeUnit.SECONDS)
+            if (!exited) run.process.destroyForcibly()
+            run.reader.join(10_000)
+            assertTrue(exited, "a failed change must stop the start, not be served: ${run.lines}")
+            assertEquals(EXIT_CONFIG, run.process.exitValue(), "${run.lines}")
+            val refusal = run.lines.filter { "Refusing to start" in it }
+            assertEquals(1, refusal.size, "exactly one refusal line: ${run.lines}")
+            assertTrue(
+                " ERROR " in refusal.single() &&
+                    "Refusing to start: auth.db could not be changed from structure version 0 to " +
+                    "${AuthStore.SCHEMA.current} (SQLITE_CONSTRAINT_UNIQUE); the change was rolled back and " +
+                    "the file is as it was" in refusal.single(),
+                refusal.single(),
+            )
+            assertTrue(dataDir.path !in refusal.single() && "'rel'" !in refusal.single(), "no path, no row: ${refusal.single()}")
+            assertTrue(run.lines.none { "Exception" in it || it.trimStart().startsWith("at ") }, "no stack trace: ${run.lines}")
+            assertTrue(run.lines.none { SERVING in it }, "no port was bound: ${run.lines}")
+            assertEquals(before, sha256(auth), "the column added before the failure is rolled back with it")
+            assertEquals(
+                emptyList(),
+                File(dataDir, Schema.PRE_MIGRATE_DIR).list()?.toList().orEmpty(),
+                "the copy taken first is removed: the file it copied is untouched, and a restart must not pile them up",
+            )
+        } finally {
+            dataDir.deleteRecursively()
+        }
+    }
+
+    private fun sha256(file: File): String =
+        MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
 
     private companion object {
         /** What Ktor logs once a connector is bound and taking requests. */

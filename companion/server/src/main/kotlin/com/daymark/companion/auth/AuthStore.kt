@@ -1,9 +1,10 @@
 package com.daymark.companion.auth
 
+import com.daymark.companion.storage.Schema
+import com.daymark.companion.storage.SchemaChange
 import java.nio.file.Files
 import java.nio.file.Path
 import java.sql.Connection
-import java.sql.DriverManager
 
 /**
  * SQLite-backed store for the therapist auth subsystem: single-use invites, TOTP
@@ -33,223 +34,8 @@ class AuthStore(
 
     init {
         Files.createDirectories(root)
-        Class.forName("org.sqlite.JDBC")
-        conn = DriverManager.getConnection("jdbc:sqlite:${root.resolve("auth.db")}")
-        conn.createStatement().use { st ->
-            st.execute("PRAGMA journal_mode=WAL")
-            st.execute("PRAGMA synchronous=NORMAL")
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS invites (
-                    invite_id     TEXT    NOT NULL PRIMARY KEY,
-                    rel_ref       TEXT    NOT NULL,
-                    scope         TEXT    NOT NULL,
-                    secret_argon2 TEXT    NOT NULL,
-                    ttl_expiry    INTEGER NOT NULL,
-                    status        TEXT    NOT NULL,
-                    fail_count    INTEGER NOT NULL DEFAULT 0,
-                    locked_until  INTEGER NOT NULL DEFAULT 0,
-                    created_at    INTEGER NOT NULL
-                )
-                """.trimIndent(),
-            )
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS totp (
-                    credential_id TEXT    NOT NULL PRIMARY KEY,
-                    rel_ref       TEXT    NOT NULL,
-                    secret_b64    TEXT    NOT NULL,
-                    fail_count    INTEGER NOT NULL DEFAULT 0,
-                    locked_until  INTEGER NOT NULL DEFAULT 0,
-                    created_at    INTEGER NOT NULL,
-                    -- Highest TOTP step already spent by this credential. RFC 6238 5.2: a code must
-                    -- be accepted at most once. Without this a code stays replayable for the whole
-                    -- +/-90s window, and every acceptance mints an independent 8h session that
-                    -- outlives the victim logging out.
-                    last_used_step INTEGER NOT NULL DEFAULT 0
-                )
-                """.trimIndent(),
-            )
-            // Databases created before last_used_step existed will not gain it from CREATE TABLE IF
-            // NOT EXISTS. SQLite has no ADD COLUMN IF NOT EXISTS and errors on a duplicate column,
-            // so the failure is swallowed deliberately: this is the additive-column idiom, not a
-            // swallowed bug.
-            runCatching {
-                st.execute("ALTER TABLE totp ADD COLUMN last_used_step INTEGER NOT NULL DEFAULT 0")
-            }
-            // One credential per relationship: a second enroll attempt for a relRef that already
-            // has a live credential is rejected (insert-only enroll), so an attacker cannot enroll
-            // a second forged credential bound to the same relRef.
-            st.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_totp_rel_ref ON totp(rel_ref)")
-            // Short-lived, single-use enrollment tickets minted at invite redemption. TOTP enroll
-            // MUST consume a valid ticket that pins the relRef; this is what closes the
-            // PENDING->REDEEMING->CONSUMED machine and stops unauthenticated enroll takeover.
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS enroll_tickets (
-                    ticket_hash TEXT    NOT NULL PRIMARY KEY,
-                    invite_id   TEXT    NOT NULL,
-                    rel_ref     TEXT    NOT NULL,
-                    scope       TEXT    NOT NULL,
-                    expiry      INTEGER NOT NULL
-                )
-                """.trimIndent(),
-            )
-            // Per-source attempt windows for the surfaces whose security claim is stated in
-            // attempts. See AttemptBudget for which budgets land here and which stay in memory;
-            // see `allowAttempt` for why the source is stored as a digest rather than an address.
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS attempt_windows (
-                    scope      TEXT    NOT NULL,
-                    source_key TEXT    NOT NULL,
-                    started_at INTEGER NOT NULL,
-                    count      INTEGER NOT NULL,
-                    PRIMARY KEY (scope, source_key)
-                )
-                """.trimIndent(),
-            )
-            /*
-             * The therapist's PUBLIC keys, on their way to the owner.
-             *
-             * This is the one link the relationship never had. The owner's console already seals
-             * every share to a therapist's X25519 key and already refuses to seal to a key it has
-             * not pinned, and the therapist's browser already generates and wraps the keypair —
-             * but there was no path by which the public halves could travel from one to the other,
-             * so the pin had nothing to be taken against and the seal had nothing to aim at.
-             * These four columns are that path.
-             *
-             * `rel_ref` is the PRIMARY KEY, and that is the entire enforcement of insert-only.
-             * The alternative — a SELECT before the INSERT, in the route or here — is a rule that
-             * lives in a line of code somebody can later delete, reorder, or forget on a second
-             * write path; this one lives in the schema, so every future caller inherits it whether
-             * or not they know it exists. It matters more here than in most places because the
-             * failure mode of a silent overwrite is not a lost row: it is the owner's next journal
-             * share sealed to whatever key was written last, which is exactly the substitution the
-             * pinning was built to catch.
-             *
-             * Note what is NOT hashed. Every other secret in this file but the TOTP seed (see the
-             * header) and the per-session CSRF token (handed back to the session holder) is stored
-             * as an Argon2id or BLAKE2b digest, because the server has no business being able to
-             * read it back. These are public keys — the point of storing them is to hand them back
-             * verbatim — so they sit here in the clear, and that is correct rather than an
-             * oversight. They are also not sensitive to this server in the way the rest of this
-             * table set is: knowing a therapist's public key lets you seal something TO them, never
-             * open anything OF theirs.
-             *
-             * And the server does not vouch for them. It took delivery of two strings from
-             * whoever held a valid session for this relationship and it will hand the same two
-             * strings back; it cannot tell the therapist's real key from a substituted one, and it
-             * is not trying to. The check that catches a substitution is the owner reading the
-             * fingerprint words back to their therapist on another channel before pinning. See the
-             * route file for the full statement of that division of labour.
-             */
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS therapist_keys (
-                    rel_ref       TEXT    NOT NULL PRIMARY KEY,
-                    box_pub_b64   TEXT    NOT NULL,
-                    sign_pub_b64  TEXT    NOT NULL,
-                    registered_at INTEGER NOT NULL
-                )
-                """.trimIndent(),
-            )
-            /*
-             * The OWNER's public keys, on their way to the therapist.
-             *
-             * The mirror of `therapist_keys`, and it was missing for the same reason that one was:
-             * each side had a use for the other's public halves and no path to carry them. The
-             * consequence was visible on the sign-in form, which asked a clinician to paste the
-             * owner's signing and encryption keys by hand on every visit — two of the nine fields
-             * that made that screen unusable.
-             *
-             * Same rules as its counterpart. `rel_ref` is the PRIMARY KEY, so insert-only is the
-             * schema's job rather than a check a later edit can drop; a silent overwrite here would
-             * repoint the key a clinician verifies shares against, which is exactly the substitution
-             * the pinning exists to catch. Stored in the clear because these are public keys and
-             * handing them back verbatim is the entire point.
-             *
-             * The server does not vouch for these either. It relays them, and what catches a
-             * substituted key is the clinician comparing the fingerprint against what the owner
-             * reads aloud — the same out-of-band step, pointing the other way.
-             */
-
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS owner_keys (
-                    rel_ref       TEXT    NOT NULL PRIMARY KEY,
-                    box_pub_b64   TEXT    NOT NULL,
-                    sign_pub_b64  TEXT    NOT NULL,
-                    registered_at INTEGER NOT NULL
-                )
-                """.trimIndent(),
-            )
-            /*
-             * THE CLINICIAN PUT THIS RELATIONSHIP DOWN (issue #91).
-             *
-             * One row per ended relationship, and the row is the whole mechanism. It does two jobs
-             * that look separate and are not:
-             *
-             *   1. It CLOSES THE CREDENTIAL. The TOTP verify path asks this table before it issues
-             *      a session, so a clinician who left cannot sign in again from anywhere — not from
-             *      a second browser, not from a saved copy of their key record, not with the
-             *      authenticator still on their phone. That is what makes leaving an off switch
-             *      rather than a per-browser act.
-             *   2. It TELLS THE OWNER, in the only two places the fact can actually help them: a
-             *      line in this relationship's access log, and a refusal the next time they try to
-             *      share here. The owner is never messaged; see COMPANION_THERAPIST.md.
-             *
-             * WHY IT IS A ROW HERE RATHER THAN A DELETE OR AN UPDATE ON `totp`. The credential table
-             * is insert-only by design — its whole safety property is that a row, once written, is
-             * never removed or rewritten, so no bug and no stolen session can substitute a
-             * credential for a relationship that already has one. A "disabled" column on `totp`
-             * would be an UPDATE path into exactly that table, and a DELETE would be worse: the
-             * unique index on `rel_ref` is what stops a second enrolment, and removing the row would
-             * hand an attacker who holds the invitation link a way to enrol a fresh credential
-             * against a relationship somebody has already left. So the closure is a SEPARATE
-             * insert-only table, read on the way in, and `totp` is never touched by any of this.
-             *
-             * `rel_ref` IS THE PRIMARY KEY, which is the entire enforcement of insert-only and of
-             * idempotence at once: a second leave writes nothing, reports that it wrote nothing, and
-             * the audit line is therefore appended once — on the ending, not once per probe.
-             *
-             * KEYED ON THE RELATIONSHIP RATHER THAN THE CREDENTIAL, and the two are the same thing
-             * here: `idx_totp_rel_ref` makes a credential per-relationship, so closing one closes
-             * exactly one relationship and reaches no other work the clinician holds. Keying on the
-             * relationship is what makes that a property of the schema rather than a coincidence a
-             * later change could break. It also means the ending survives any future re-enrolment
-             * path: a relationship that was ended stays ended, and the way back is a fresh
-             * invitation — which is a fresh relationship — exactly as the clinician was told.
-             *
-             * `credential_id` is stored because the leave route needs it to cut the clinician's
-             * live sessions, and because a later reader asking "which credential was this" should
-             * not have to join through a table that may by then have been pruned. It is a
-             * therapist-typed username, not a secret, and nothing here is a key.
-             */
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS relationship_endings (
-                    rel_ref       TEXT    NOT NULL PRIMARY KEY,
-                    credential_id TEXT    NOT NULL,
-                    ended_at      INTEGER NOT NULL
-                )
-                """.trimIndent(),
-            )
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS sessions (
-                    session_id_hash TEXT    NOT NULL PRIMARY KEY,
-                    credential_id   TEXT    NOT NULL,
-                    rel_ref         TEXT    NOT NULL,
-                    csrf_token      TEXT    NOT NULL,
-                    created_at      INTEGER NOT NULL,
-                    last_seen       INTEGER NOT NULL,
-                    absolute_expiry INTEGER NOT NULL,
-                    revoked         INTEGER NOT NULL DEFAULT 0
-                )
-                """.trimIndent(),
-            )
-        }
+        conn = SCHEMA.open(root)
+        conn.createStatement().use { st -> st.execute("PRAGMA synchronous=NORMAL") }
     }
 
     // ---- Invites -----------------------------------------------------------------
@@ -1337,6 +1123,227 @@ class AuthStore(
     override fun close() = synchronized(lock) { conn.close() }
 
     companion object {
+        /**
+         * auth.db, version by version (#193). [Schema] says what a version is, and how a database
+         * written by an earlier release is brought to [Schema.current] before it is served.
+         */
+        internal val SCHEMA = Schema(
+            "auth.db",
+            listOf(
+                // Version 1: the structure as it stood when versions began to be kept.
+                listOf(
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS invites (
+                            invite_id     TEXT    NOT NULL PRIMARY KEY,
+                            rel_ref       TEXT    NOT NULL,
+                            scope         TEXT    NOT NULL,
+                            secret_argon2 TEXT    NOT NULL,
+                            ttl_expiry    INTEGER NOT NULL,
+                            status        TEXT    NOT NULL,
+                            fail_count    INTEGER NOT NULL DEFAULT 0,
+                            locked_until  INTEGER NOT NULL DEFAULT 0,
+                            created_at    INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    ),
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS totp (
+                            credential_id TEXT    NOT NULL PRIMARY KEY,
+                            rel_ref       TEXT    NOT NULL,
+                            secret_b64    TEXT    NOT NULL,
+                            fail_count    INTEGER NOT NULL DEFAULT 0,
+                            locked_until  INTEGER NOT NULL DEFAULT 0,
+                            created_at    INTEGER NOT NULL,
+                            -- Highest TOTP step already spent by this credential. RFC 6238 5.2: a code must
+                            -- be accepted at most once. Without this a code stays replayable for the whole
+                            -- +/-90s window, and every acceptance mints an independent 8h session that
+                            -- outlives the victim logging out.
+                            last_used_step INTEGER NOT NULL DEFAULT 0
+                        )
+                        """.trimIndent(),
+                    ),
+                    // A database from before last_used_step existed has a totp table without it, which
+                    // CREATE TABLE IF NOT EXISTS leaves alone; the column is added, and reads 0 for the
+                    // credentials already there.
+                    SchemaChange.Column("totp", "last_used_step", "INTEGER NOT NULL DEFAULT 0"),
+                    // One credential per relationship: a second enroll attempt for a relRef that already
+                    // has a live credential is rejected (insert-only enroll), so an attacker cannot enroll
+                    // a second forged credential bound to the same relRef.
+                    SchemaChange.Index("CREATE UNIQUE INDEX IF NOT EXISTS idx_totp_rel_ref ON totp(rel_ref)"),
+                    // Short-lived, single-use enrollment tickets minted at invite redemption. TOTP enroll
+                    // MUST consume a valid ticket that pins the relRef; this is what closes the
+                    // PENDING->REDEEMING->CONSUMED machine and stops unauthenticated enroll takeover.
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS enroll_tickets (
+                            ticket_hash TEXT    NOT NULL PRIMARY KEY,
+                            invite_id   TEXT    NOT NULL,
+                            rel_ref     TEXT    NOT NULL,
+                            scope       TEXT    NOT NULL,
+                            expiry      INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    ),
+                    // Per-source attempt windows for the surfaces whose security claim is stated in
+                    // attempts. See AttemptBudget for which budgets land here and which stay in memory;
+                    // see `allowAttempt` for why the source is stored as a digest rather than an address.
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS attempt_windows (
+                            scope      TEXT    NOT NULL,
+                            source_key TEXT    NOT NULL,
+                            started_at INTEGER NOT NULL,
+                            count      INTEGER NOT NULL,
+                            PRIMARY KEY (scope, source_key)
+                        )
+                        """.trimIndent(),
+                    ),
+                    /*
+                     * The therapist's PUBLIC keys, on their way to the owner.
+                     *
+                     * This is the one link the relationship never had. The owner's console already seals
+                     * every share to a therapist's X25519 key and already refuses to seal to a key it has
+                     * not pinned, and the therapist's browser already generates and wraps the keypair —
+                     * but there was no path by which the public halves could travel from one to the other,
+                     * so the pin had nothing to be taken against and the seal had nothing to aim at.
+                     * These four columns are that path.
+                     *
+                     * `rel_ref` is the PRIMARY KEY, and that is the entire enforcement of insert-only.
+                     * The alternative — a SELECT before the INSERT, in the route or here — is a rule that
+                     * lives in a line of code somebody can later delete, reorder, or forget on a second
+                     * write path; this one lives in the schema, so every future caller inherits it whether
+                     * or not they know it exists. It matters more here than in most places because the
+                     * failure mode of a silent overwrite is not a lost row: it is the owner's next journal
+                     * share sealed to whatever key was written last, which is exactly the substitution the
+                     * pinning was built to catch.
+                     *
+                     * Note what is NOT hashed. Every other secret in this file but the TOTP seed (see the
+                     * header) and the per-session CSRF token (handed back to the session holder) is stored
+                     * as an Argon2id or BLAKE2b digest, because the server has no business being able to
+                     * read it back. These are public keys — the point of storing them is to hand them back
+                     * verbatim — so they sit here in the clear, and that is correct rather than an
+                     * oversight. They are also not sensitive to this server in the way the rest of this
+                     * table set is: knowing a therapist's public key lets you seal something TO them, never
+                     * open anything OF theirs.
+                     *
+                     * And the server does not vouch for them. It took delivery of two strings from
+                     * whoever held a valid session for this relationship and it will hand the same two
+                     * strings back; it cannot tell the therapist's real key from a substituted one, and it
+                     * is not trying to. The check that catches a substitution is the owner reading the
+                     * fingerprint words back to their therapist on another channel before pinning. See the
+                     * route file for the full statement of that division of labour.
+                     */
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS therapist_keys (
+                            rel_ref       TEXT    NOT NULL PRIMARY KEY,
+                            box_pub_b64   TEXT    NOT NULL,
+                            sign_pub_b64  TEXT    NOT NULL,
+                            registered_at INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    ),
+                    /*
+                     * The OWNER's public keys, on their way to the therapist.
+                     *
+                     * The mirror of `therapist_keys`, and it was missing for the same reason that one was:
+                     * each side had a use for the other's public halves and no path to carry them. The
+                     * consequence was visible on the sign-in form, which asked a clinician to paste the
+                     * owner's signing and encryption keys by hand on every visit — two of the nine fields
+                     * that made that screen unusable.
+                     *
+                     * Same rules as its counterpart. `rel_ref` is the PRIMARY KEY, so insert-only is the
+                     * schema's job rather than a check a later edit can drop; a silent overwrite here would
+                     * repoint the key a clinician verifies shares against, which is exactly the substitution
+                     * the pinning exists to catch. Stored in the clear because these are public keys and
+                     * handing them back verbatim is the entire point.
+                     *
+                     * The server does not vouch for these either. It relays them, and what catches a
+                     * substituted key is the clinician comparing the fingerprint against what the owner
+                     * reads aloud — the same out-of-band step, pointing the other way.
+                     */
+
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS owner_keys (
+                            rel_ref       TEXT    NOT NULL PRIMARY KEY,
+                            box_pub_b64   TEXT    NOT NULL,
+                            sign_pub_b64  TEXT    NOT NULL,
+                            registered_at INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    ),
+                    /*
+                     * THE CLINICIAN PUT THIS RELATIONSHIP DOWN (issue #91).
+                     *
+                     * One row per ended relationship, and the row is the whole mechanism. It does two jobs
+                     * that look separate and are not:
+                     *
+                     *   1. It CLOSES THE CREDENTIAL. The TOTP verify path asks this table before it issues
+                     *      a session, so a clinician who left cannot sign in again from anywhere — not from
+                     *      a second browser, not from a saved copy of their key record, not with the
+                     *      authenticator still on their phone. That is what makes leaving an off switch
+                     *      rather than a per-browser act.
+                     *   2. It TELLS THE OWNER, in the only two places the fact can actually help them: a
+                     *      line in this relationship's access log, and a refusal the next time they try to
+                     *      share here. The owner is never messaged; see COMPANION_THERAPIST.md.
+                     *
+                     * WHY IT IS A ROW HERE RATHER THAN A DELETE OR AN UPDATE ON `totp`. The credential table
+                     * is insert-only by design — its whole safety property is that a row, once written, is
+                     * never removed or rewritten, so no bug and no stolen session can substitute a
+                     * credential for a relationship that already has one. A "disabled" column on `totp`
+                     * would be an UPDATE path into exactly that table, and a DELETE would be worse: the
+                     * unique index on `rel_ref` is what stops a second enrolment, and removing the row would
+                     * hand an attacker who holds the invitation link a way to enrol a fresh credential
+                     * against a relationship somebody has already left. So the closure is a SEPARATE
+                     * insert-only table, read on the way in, and `totp` is never touched by any of this.
+                     *
+                     * `rel_ref` IS THE PRIMARY KEY, which is the entire enforcement of insert-only and of
+                     * idempotence at once: a second leave writes nothing, reports that it wrote nothing, and
+                     * the audit line is therefore appended once — on the ending, not once per probe.
+                     *
+                     * KEYED ON THE RELATIONSHIP RATHER THAN THE CREDENTIAL, and the two are the same thing
+                     * here: `idx_totp_rel_ref` makes a credential per-relationship, so closing one closes
+                     * exactly one relationship and reaches no other work the clinician holds. Keying on the
+                     * relationship is what makes that a property of the schema rather than a coincidence a
+                     * later change could break. It also means the ending survives any future re-enrolment
+                     * path: a relationship that was ended stays ended, and the way back is a fresh
+                     * invitation — which is a fresh relationship — exactly as the clinician was told.
+                     *
+                     * `credential_id` is stored because the leave route needs it to cut the clinician's
+                     * live sessions, and because a later reader asking "which credential was this" should
+                     * not have to join through a table that may by then have been pruned. It is a
+                     * therapist-typed username, not a secret, and nothing here is a key.
+                     */
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS relationship_endings (
+                            rel_ref       TEXT    NOT NULL PRIMARY KEY,
+                            credential_id TEXT    NOT NULL,
+                            ended_at      INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    ),
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS sessions (
+                            session_id_hash TEXT    NOT NULL PRIMARY KEY,
+                            credential_id   TEXT    NOT NULL,
+                            rel_ref         TEXT    NOT NULL,
+                            csrf_token      TEXT    NOT NULL,
+                            created_at      INTEGER NOT NULL,
+                            last_seen       INTEGER NOT NULL,
+                            absolute_expiry INTEGER NOT NULL,
+                            revoked         INTEGER NOT NULL DEFAULT 0
+                        )
+                        """.trimIndent(),
+                    ),
+                ),
+            ),
+        )
+
         /** Enrollment tickets are short-lived — a therapist enrolls TOTP immediately after redeeming. */
         const val ENROLL_TICKET_TTL_MS = 10 * 60 * 1000L
 

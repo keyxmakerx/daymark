@@ -111,18 +111,29 @@ fun main() {
     // NOTE the shape: Ktor 3.0.3 has NO embeddedServer overload taking port/host AND configure
     // together (the compiler will list the three that exist if you get this wrong). Connectors are
     // set inside `configure` instead, via the `connector` extension on ApplicationEngine.Configuration.
-    embeddedServer(
-        Netty,
-        configure = {
-            connector {
-                host = config.bindAddr
-                port = config.port
-            }
-            requestReadTimeoutSeconds = 120
-        },
-    ) {
-        module(config)
-    }.start(wait = true)
+    try {
+        embeddedServer(
+            Netty,
+            configure = {
+                connector {
+                    host = config.bindAddr
+                    port = config.port
+                }
+                requestReadTimeoutSeconds = 120
+            },
+        ) {
+            module(config)
+        }.start(wait = true)
+    } catch (e: Throwable) {
+        // A database this release must not open, or could not change, refuses the start as a setting
+        // does: one line naming the database and its versions, and out with 78 (#193). The stores
+        // raise it as the module opens them, before a port is bound or a request is taken. Logged at
+        // a level DAYMARK_LOG_LEVEL cannot hide, as the settings refusal above is.
+        val refusal = generateSequence(e) { it.cause }.filterIsInstance<StartupRefusal>().firstOrNull() ?: throw e
+        applyLogLevel("error")
+        log.error(refusal.message)
+        exitProcess(EXIT_CONFIG)
+    }
 }
 
 /** Apply DAYMARK_LOG_LEVEL to the app's logger at startup (logback). */

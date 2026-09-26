@@ -5,7 +5,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.sql.Connection
-import java.sql.DriverManager
 import kotlin.io.path.exists
 
 /** Who writes a channel. The routes enforce it by role; the store budgets storage by it. */
@@ -116,63 +115,9 @@ class RelationStore(
     init {
         Files.createDirectories(relDir)
         Files.createDirectories(tmpDir)
-        Class.forName("org.sqlite.JDBC")
-        conn = DriverManager.getConnection("jdbc:sqlite:${root.resolve("rel-index.db")}")
+        conn = SCHEMA.open(root)
         conn.createStatement().use { st ->
-            st.execute("PRAGMA journal_mode=WAL")
             st.execute("PRAGMA synchronous=FULL") // see BlobStore.init for why not NORMAL
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS rel_blobs (
-                    rel_ref      TEXT    NOT NULL,
-                    channel      TEXT    NOT NULL,
-                    lineage      TEXT    NOT NULL,
-                    version      INTEGER NOT NULL,
-                    size         INTEGER NOT NULL,
-                    content_hash TEXT    NOT NULL,
-                    setting_key  TEXT,
-                    created_at   INTEGER NOT NULL,
-                    PRIMARY KEY (rel_ref, channel, lineage, version)
-                )
-                """.trimIndent(),
-            )
-
-            /*
-             * ACCESS STATE — added after the fact, so it arrives by ALTER for existing databases.
-             *
-             * `expiry`  epoch ms of the end the writer chose, or NULL when they chose none: the
-             *           non-share channels, and shares written before this column existed. A NULL
-             *           never means "forever" — see [hasEnded].
-             * `revoked` 1 once the owner withdraws the lineage. NOT NULL DEFAULT 0 because SQLite
-             *           requires a default to add a NOT NULL column to a populated table.
-             * `held`    1 while this row's ciphertext file is on the volume, 0 once withdrawal or the
-             *           sweep has removed it. The quota counts held rows only (#338). DEFAULT 1 is
-             *           true of every older row except a withdrawn one whose file is already gone;
-             *           those have ended, so the start-up sweep finds them and clears the flag.
-             *
-             * All three are NON-SECRET routing metadata, like `size` and `content_hash`. The server
-             * still never decrypts anything; this is access control over ciphertext, not over keys.
-             *
-             * The `runCatching` swallows the duplicate-column error on every start after the first
-             * (the same idiom as AuthStore's session columns). But swallowing ALL errors here would
-             * be its own outage: a genuinely failed ALTER would leave construction succeeding and
-             * every later query throwing, i.e. a 500 on every relationship request, misattributed.
-             * So the columns are VERIFIED outside the catch, and a server that cannot see them
-             * refuses to start. A failed boot is diagnosable; a silent 500 on every request is not.
-             */
-            runCatching { st.execute("ALTER TABLE rel_blobs ADD COLUMN expiry INTEGER") }
-            runCatching { st.execute("ALTER TABLE rel_blobs ADD COLUMN revoked INTEGER NOT NULL DEFAULT 0") }
-            runCatching { st.execute("ALTER TABLE rel_blobs ADD COLUMN held INTEGER NOT NULL DEFAULT 1") }
-            try {
-                st.executeQuery("SELECT expiry, revoked, held FROM rel_blobs LIMIT 0").close()
-            } catch (e: java.sql.SQLException) {
-                throw IllegalStateException(
-                    "rel_blobs is missing the expiry/revoked/held columns and they could not be added: ${e.message}. " +
-                        "Refusing to start: without them the server cannot tell when an item has ended, " +
-                        "or which stored bytes it still holds.",
-                    e,
-                )
-            }
         }
     }
 
@@ -639,6 +584,62 @@ class RelationStore(
     override fun close() = synchronized(lock) { conn.close() }
 
     companion object {
+        /**
+         * rel-index.db, version by version (#193). [Schema] says what a version is, and how a
+         * database written by an earlier release is brought to [Schema.current] before it is served.
+         * No version touches a blob file under `rel/`.
+         */
+        internal val SCHEMA = Schema(
+            "rel-index.db",
+            listOf(
+                // Version 1: the structure as it stood when versions began to be kept.
+                listOf(
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS rel_blobs (
+                            rel_ref      TEXT    NOT NULL,
+                            channel      TEXT    NOT NULL,
+                            lineage      TEXT    NOT NULL,
+                            version      INTEGER NOT NULL,
+                            size         INTEGER NOT NULL,
+                            content_hash TEXT    NOT NULL,
+                            setting_key  TEXT,
+                            created_at   INTEGER NOT NULL,
+                            PRIMARY KEY (rel_ref, channel, lineage, version)
+                        )
+                        """.trimIndent(),
+                    ),
+                    /*
+                     * ACCESS STATE — added after the fact, so it arrives by ALTER, on a new database
+                     * as on an old one.
+                     *
+                     * `expiry`  epoch ms of the end the writer chose, or NULL when they chose none: the
+                     *           non-share channels, and shares written before this column existed. A
+                     *           NULL never means "forever" — see [hasEnded].
+                     * `revoked` 1 once the owner withdraws the lineage. NOT NULL DEFAULT 0 because
+                     *           SQLite requires a default to add a NOT NULL column to a populated table.
+                     * `held`    1 while this row's ciphertext file is on the volume, 0 once withdrawal or
+                     *           the sweep has removed it. The quota counts held rows only (#338).
+                     *           DEFAULT 1 is true of every older row except a withdrawn one whose file is
+                     *           already gone; those have ended, so the start-up sweep finds them and
+                     *           clears the flag.
+                     *
+                     * All three are NON-SECRET routing metadata, like `size` and `content_hash`. The
+                     * server still never decrypts anything; this is access control over ciphertext, not
+                     * over keys.
+                     *
+                     * Without them the server cannot tell when an item has ended, or which stored bytes
+                     * it still holds, and every relationship request would fail. So a database that
+                     * lacks one after its changes, or claims version 1 without it, refuses the start
+                     * ([Schema.open]): a refused start is diagnosable, a 500 on every request is not.
+                     */
+                    SchemaChange.Column("rel_blobs", "expiry", "INTEGER"),
+                    SchemaChange.Column("rel_blobs", "revoked", "INTEGER NOT NULL DEFAULT 0"),
+                    SchemaChange.Column("rel_blobs", "held", "INTEGER NOT NULL DEFAULT 1"),
+                ),
+            ),
+        )
+
         /**
          * The longest the server serves anything the owner and the clinician send each other: 90
          * days after it was written (#332, decided in #228). The sealing has no forward secrecy

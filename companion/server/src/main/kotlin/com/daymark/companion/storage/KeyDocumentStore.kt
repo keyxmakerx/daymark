@@ -12,7 +12,6 @@ import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.sql.Connection
-import java.sql.DriverManager
 import java.sql.SQLException
 
 /**
@@ -105,22 +104,12 @@ class KeyDocumentStore(
 
     init {
         Files.createDirectories(tmpDir)
-        Class.forName("org.sqlite.JDBC")
-        conn = DriverManager.getConnection("jdbc:sqlite:${root.resolve(DB_FILE)}")
+        conn = SCHEMA.open(root)
         conn.createStatement().use { st ->
-            st.execute("PRAGMA journal_mode=WAL")
             // FULL, as in BlobStore: a device told 201 goes on to derive an identity from the master
             // it just wrapped, and a first-run master exists nowhere else. A commit that a power cut
             // can take back is a master nobody can open again.
             st.execute("PRAGMA synchronous=FULL")
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS wrapped_key (
-                    version  INTEGER NOT NULL PRIMARY KEY CHECK (version >= 1),
-                    document BLOB    NOT NULL
-                )
-                """.trimIndent(),
-            )
         }
     }
 
@@ -276,6 +265,28 @@ class KeyDocumentStore(
     companion object {
         /** The wrapped key's versions, in the data directory. */
         const val DB_FILE = "wrapped-key.db"
+
+        /**
+         * [DB_FILE], version by version (#193). [Schema] says what a version is, and how a database
+         * written by an earlier release is brought to [Schema.current] before it is served. Every
+         * change a version can make is additive, so no version rewrites a version of the wrapped key.
+         */
+        internal val SCHEMA = Schema(
+            DB_FILE,
+            listOf(
+                // Version 1: the structure as it stood when versions began to be kept.
+                listOf(
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS wrapped_key (
+                            version  INTEGER NOT NULL PRIMARY KEY CHECK (version >= 1),
+                            document BLOB    NOT NULL
+                        )
+                        """.trimIndent(),
+                    ),
+                ),
+            ),
+        )
 
         /** The key parameters, in the data directory. The path they have always had. */
         const val KEYPARAMS_FILE = "keyparams.json"

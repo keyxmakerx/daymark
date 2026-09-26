@@ -1,10 +1,11 @@
 package com.daymark.companion.mail
 
 import com.daymark.companion.auth.Secrets
+import com.daymark.companion.storage.Schema
+import com.daymark.companion.storage.SchemaChange
 import java.nio.file.Files
 import java.nio.file.Path
 import java.sql.Connection
-import java.sql.DriverManager
 import java.util.concurrent.ConcurrentHashMap
 
 /** The owner's registered notification address + which [MailMessage.ReviewKind] events it wants. */
@@ -64,42 +65,8 @@ class OwnerAccountStore(
 
     init {
         Files.createDirectories(root)
-        Class.forName("org.sqlite.JDBC")
-        conn = DriverManager.getConnection("jdbc:sqlite:${root.resolve("owner-account.db")}")
-        conn.createStatement().use { st ->
-            st.execute("PRAGMA journal_mode=WAL")
-            st.execute("PRAGMA synchronous=NORMAL")
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS owner_token (
-                    id              INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
-                    token           TEXT    NOT NULL,
-                    bootstrap_token TEXT    NOT NULL,
-                    updated_at      INTEGER NOT NULL
-                )
-                """.trimIndent(),
-            )
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS owner_notify (
-                    id         INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
-                    email      TEXT,
-                    events     TEXT    NOT NULL,
-                    updated_at INTEGER NOT NULL
-                )
-                """.trimIndent(),
-            )
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS reissue_confirm (
-                    token_hash TEXT    NOT NULL PRIMARY KEY,
-                    expiry     INTEGER NOT NULL,
-                    status     TEXT    NOT NULL,
-                    created_at INTEGER NOT NULL
-                )
-                """.trimIndent(),
-            )
-        }
+        conn = SCHEMA.open(root)
+        conn.createStatement().use { st -> st.execute("PRAGMA synchronous=NORMAL") }
         synchronized(lock) { bootstrapToken(envToken) }
     }
 
@@ -309,5 +276,48 @@ class OwnerAccountStore(
 
     companion object {
         private const val MAX_RATE_ENTRIES = 50_000
+
+        /**
+         * owner-account.db, version by version (#193). [Schema] says what a version is, and how a
+         * database written by an earlier release is brought to [Schema.current] before it is served.
+         */
+        internal val SCHEMA = Schema(
+            "owner-account.db",
+            listOf(
+                // Version 1: the structure as it stood when versions began to be kept.
+                listOf(
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS owner_token (
+                            id              INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+                            token           TEXT    NOT NULL,
+                            bootstrap_token TEXT    NOT NULL,
+                            updated_at      INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    ),
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS owner_notify (
+                            id         INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+                            email      TEXT,
+                            events     TEXT    NOT NULL,
+                            updated_at INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    ),
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS reissue_confirm (
+                            token_hash TEXT    NOT NULL PRIMARY KEY,
+                            expiry     INTEGER NOT NULL,
+                            status     TEXT    NOT NULL,
+                            created_at INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    ),
+                ),
+            ),
+        )
     }
 }

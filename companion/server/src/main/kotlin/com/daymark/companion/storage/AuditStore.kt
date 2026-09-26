@@ -3,7 +3,6 @@ package com.daymark.companion.storage
 import java.nio.file.Files
 import java.nio.file.Path
 import java.sql.Connection
-import java.sql.DriverManager
 
 /**
  * Who performed the logged action.
@@ -375,27 +374,8 @@ class AuditStore(
 
     init {
         Files.createDirectories(root)
-        Class.forName("org.sqlite.JDBC")
-        conn = DriverManager.getConnection("jdbc:sqlite:${root.resolve(dbName)}")
-        conn.createStatement().use { st ->
-            st.execute("PRAGMA journal_mode=WAL")
-            st.execute("PRAGMA synchronous=NORMAL")
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS audit_events (
-                    rel_ref    TEXT    NOT NULL,
-                    seq        INTEGER NOT NULL,
-                    ts         INTEGER NOT NULL,
-                    actor      TEXT    NOT NULL,
-                    action     TEXT    NOT NULL,
-                    object_ref TEXT,
-                    meta       TEXT,
-                    entry_hash TEXT    NOT NULL,
-                    PRIMARY KEY (rel_ref, seq)
-                )
-                """.trimIndent(),
-            )
-        }
+        conn = schema(dbName).open(root)
+        conn.createStatement().use { st -> st.execute("PRAGMA synchronous=NORMAL") }
     }
 
     /** Append one entry, chained off this relationship's latest entry. Insert-only. */
@@ -613,6 +593,35 @@ class AuditStore(
     companion object {
         const val DEFAULT_RETENTION_SECONDS = 90L * 24 * 3600
         const val MAX_PAGE_SIZE = 200
+
+        /**
+         * What each version of an audit database adds (#193), the same for `audit.db` and
+         * `org-audit.db`. Every change a version can make is additive ([SchemaChange]), so no
+         * version rewrites, re-orders or re-hashes a row of the chain.
+         */
+        internal val VERSIONS: List<List<SchemaChange>> = listOf(
+            // Version 1: the structure as it stood when versions began to be kept.
+            listOf(
+                SchemaChange.Table(
+                    """
+                    CREATE TABLE IF NOT EXISTS audit_events (
+                        rel_ref    TEXT    NOT NULL,
+                        seq        INTEGER NOT NULL,
+                        ts         INTEGER NOT NULL,
+                        actor      TEXT    NOT NULL,
+                        action     TEXT    NOT NULL,
+                        object_ref TEXT,
+                        meta       TEXT,
+                        entry_hash TEXT    NOT NULL,
+                        PRIMARY KEY (rel_ref, seq)
+                    )
+                    """.trimIndent(),
+                ),
+            ),
+        )
+
+        /** The audit database in [dbName], version by version. */
+        internal fun schema(dbName: String): Schema = Schema(dbName, VERSIONS)
 
         /** Fixed genesis hash (64 hex zeros) chained ahead of the first entry for a relationship. */
         private const val GENESIS_HASH = "0000000000000000000000000000000000000000000000000000000000000000"
