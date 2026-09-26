@@ -50,8 +50,10 @@ the issue.
 
 Home is the daily loop, not an archive. It asks one question, "How are you, right now?", over a row
 of faces; tapping one opens the editor with that mood chosen. Below that: the number of entries and
-the last seven days as small bars, where a day with no entry is a faint stub; at most one suggestion
-card (§1.5); and today's entries. **More for you** holds the other suggestions and On this day.
+the last seven days, oldest on the left, each day a slot holding one dot per entry in its own mood
+colour, newest at the top, at most three (a fuller day keeps one dot for each of the three moods
+logged most recently), and a day with no entry an empty slot, which a screen reader hears as the
+month says it; at most one suggestion card (§1.5); and today's entries. **More for you** holds the other suggestions and On this day.
 **All entries** is the whole history, newest first. Home shows no count of consecutive days: it is
 the screen someone lands on after time away. Home's search button searches entry notes; the journal
 has its own search (§2).
@@ -117,10 +119,10 @@ entries are stars in the Sky (§4), and reach the PDF report only when the perso
 - One tab with a **Week / Month / Year** switch. Always shown: the number of entries, the average
   mood, "Days with an entry: 12 of the last 30" (days need not be in a row, and the card is absent
   at zero), mood over the last 30 days, mood distribution, and average mood by activity.
-- **Week** shows this week as bars. **Month** is a calendar of plain days: every day is the same
-  square with its number in ink, and each entry that day is a dot under the number in its own mood
-  colour, in time order, at most six (a fuller day keeps one of every mood it holds; its own page
-  lists every entry). Nothing is averaged or blended, and a day with no entry is the same square with
+- **Week** is the last seven days and **Month** a calendar, both of plain days: every day is the
+  same square with its number in ink, and each entry that day is a dot under the number in its own
+  mood colour, newest first as the day's own page lists them, at most six (a fuller day keeps the
+  newest entry of every mood it holds; its own page lists every entry). Nothing is averaged or blended, and a day with no entry is the same square with
   no dots. A screen reader hears the date and each dot's mood in the person's own words ("3
   September: Good, Meh"), or "nothing recorded". Tapping a day opens its entries. **Year** is either a
   night-card of stars or a grid of coloured squares (Year in Pixels, also under More), and leads to

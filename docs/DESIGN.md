@@ -27,8 +27,13 @@ a lighter "wash" in light mode and a darker one in dark mode.
   colour, and wallpaper colours never recolour it.
 - A mood colour is only ever one entry's own. Nothing blends two mood colours or colours a day by
   its average: Insights → Month draws one dot per entry on plain paper, with the day number in ink
-  (`ui/calendar/CalendarDays.kt`, `MonthGridSourceTest`). The Week bars and Home's week strip still
-  colour a day by its average: not built, #411.
+  (`ui/calendar/CalendarDays.kt`, `MonthGridSourceTest`), and Insights → Week and Home's week strip
+  draw a day the same way (`WeekDaysSourceTest`).
+- **A mood dot always has its ring.** A person can make a mood any colour, so a dot on its own can
+  all but vanish into the sheet (Meh 2.32:1, Good 2.67:1 on the light sheet). Every mood dot is
+  `ui/components/MoodDot.kt`: the 6 dp colour inside a 1 dp ring of the soft ink
+  (`onSurfaceVariant`), drawn outside the colour, 8 dp in all. The ring measures 5.53:1 on the sheet
+  and 5.04:1 on the paper, 7.29:1 and 7.99:1 in the dark theme, over the 3:1 a mark needs.
 
 `ui/theme/Theme.kt` maps the tokens onto the Material 3 `ColorScheme`. `surfaceTint` is transparent
 and tonal elevation is avoided, to keep surfaces flat.
@@ -93,7 +98,7 @@ and the disc is filled with the accent only while Home is the current tab.
 
 ## Components (`ui/components/`)
 
-`MoodFaceIcon` (drawn on a Canvas; outlined, or filled when selected), `PaperSurface`, `EntryRow`
+`MoodFaceIcon` (drawn on a Canvas; outlined, or filled when selected), `MoodDot`, `PaperSurface`, `EntryRow`
 and the day-grouped timeline, `ActivityChip`, `EntryPhoto`, `SwipeToDeleteRow`,
 `ConsistencyHeatmap`, `YearInPixelsGrid`, `YearInStarsGrid`, `PoseFigure` and `ProvenanceBadge`.
 The mood picker's tap target is the whole face and label.

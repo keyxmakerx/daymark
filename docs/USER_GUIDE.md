@@ -48,9 +48,10 @@ already picked, so you can save straight away or add more first.
 Home is for today, not an archive. From the top:
 
 - **The check-in row**: *"How are you, right now?"* Tap a face to start an entry with that mood.
-- **A glance**: how many entries you've written, and the last seven days as small bars. A day you
-  didn't log shows as a faint stub; a week is allowed to have holes in it. Home doesn't count how
-  many days in a row you've been here.
+- **A glance**: how many entries you've written, and the last seven days, each day a small dot for
+  each entry in that mood's colour, newest at the top (up to three). A day you didn't log is simply
+  empty; a week is allowed to have holes in it. Home doesn't count how many days in a row you've been
+  here.
 - **One suggestion**, at most. The rest are under **More for you**, with your *On this day*
   memories.
 - **Today**: the entries you've logged today.
@@ -186,9 +187,9 @@ top.
 - **Days with an entry**, e.g. *12 of the last 30*. The days don't have to be in a row, so missing
   one costs you that day and nothing else. If there are none in the last thirty days, the card isn't
   there.
-- **Week** shows this week as bars. **Month** is a calendar where each entry is a small dot under its
-  date, in that mood's colour, in the order you made them (up to six on a day, always including every
-  mood you logged that day); tap a day to see all its entries. **Year** shows the year as stars or as a grid of coloured
+- **Week** shows the last seven days the way the month does. **Month** is a calendar where each entry
+  is a small dot under its date, in that mood's colour, newest first, the same order as the day's own
+  list (up to six on a day, always including every mood you logged that day); tap a day to see all its entries. **Year** shows the year as stars or as a grid of coloured
   squares, and leads to **Review my year**, a short walk through the year, quarter by quarter. In
   the calendar and the grid, a day with no entry is left plain.
 - **Mood over the last 30 days**, **mood distribution** and **average mood by activity**.
