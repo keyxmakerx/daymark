@@ -373,3 +373,19 @@ describe('how long a share lasts (#228, #339)', () => {
   })
 })
 
+describe('the owner console is given the records the person opened', () => {
+  const app = readFileSync(fileURLToPath(new URL('../../App.svelte', import.meta.url)), 'utf8')
+  // The share builder seals nothing without records (`disabled={busy || !data}`). Handed null, as
+  // it was from the first version, the Paired tab could pair and grant but never share.
+  const handedNothing = /<OwnerConsole\s+data=\{null\}/
+
+  it('passes the backup opened on the file or sync tab through to it', () => {
+    expect(app).toContain('<OwnerConsole {data} />')
+    expect(app).not.toMatch(handedNothing)
+  })
+
+  it('the check for an empty hand-off can fail (positive control)', () => {
+    expect('<OwnerConsole data={null} />').toMatch(handedNothing)
+  })
+})
+

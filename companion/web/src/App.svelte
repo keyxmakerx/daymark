@@ -358,7 +358,9 @@
               -->
               <PracticePlaceholder />
             {:else}
-              <OwnerConsole data={null} />
+              <!-- The records the person opened on the file or sync tab, so the share builder has
+                   something to seal. Handed null, it could never seal anything. -->
+              <OwnerConsole {data} />
             {/if}
 
             {#if error}
