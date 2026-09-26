@@ -18,6 +18,7 @@
   import {
     BEFORE_YOU_NEED_IT,
     EMAIL_LABEL,
+    EMAIL_STORED_NOTE,
     EMAIL_MISSING,
     LOAD_FAILED,
     REGISTER,
@@ -170,7 +171,7 @@
           <p class="para">{view.setup.lede}</p>
           {#if view.setup.registered}<p class="status">{registeredStatement(view.setup.registered)}</p>{/if}
           <label class="field">
-            <span>{EMAIL_LABEL}</span>
+            <span>{EMAIL_LABEL} <em>({EMAIL_STORED_NOTE})</em></span>
             <input type="email" bind:value={draft} placeholder="you@example.com" autocomplete="email" />
           </label>
           <div class="row">

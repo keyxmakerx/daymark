@@ -5,6 +5,7 @@ import * as copy from './recoveryEmail'
 import {
   BEFORE_YOU_NEED_IT,
   EMAIL_LABEL,
+  EMAIL_STORED_NOTE,
   EMAIL_MISSING,
   LOAD_FAILED,
   LOST_TOKEN_HEADING,
@@ -79,6 +80,14 @@ describe('the words, as the copy pass settled them and as the server makes them 
     expect(BEFORE_YOU_NEED_IT).toBe('Before you need it')
     expect(REGISTER_LEDE).toBe('Register an email address for recovery. Nothing else is sent to it on this server.')
     expect(EMAIL_LABEL).toBe('Recovery email')
+    // The field says the address is kept in the clear, in the Notifications tab's own words.
+    const notifications = readFileSync(
+      fileURLToPath(new URL('../components/owner/NotificationSettings.svelte', import.meta.url)),
+      'utf8',
+    )
+    expect(notifications).toContain(`(${EMAIL_STORED_NOTE})`)
+    // Control: the check sees a difference in wording.
+    expect(notifications).not.toContain('(stored on the server)')
     expect(REGISTER).toBe('Register')
     expect(REMOVE).toBe('Remove')
     expect(registeredStatement(EMAIL)).toBe(
@@ -280,7 +289,7 @@ describe('RecoverAccess.svelte renders the view, and App.svelte hands it what it
     const branch = CARD.slice(open, CARD.indexOf('{:else}', open))
     expect(branch).toContain('{view.setup.lede}')
     expect(branch).toContain('{registeredStatement(view.setup.registered)}')
-    expect(branch).toContain('<span>{EMAIL_LABEL}</span>')
+    expect(branch).toContain('<span>{EMAIL_LABEL} <em>({EMAIL_STORED_NOTE})</em></span>')
     expect(branch).toContain('onclick={() => save(draft.trim())}')
     expect(branch).toContain('{REGISTER}</button>')
     expect(branch).toMatch(/\{#if view\.setup\.canRemove\}\s*<button type="button" onclick=\{\(\) => save\(null\)\}[^>]*>\{REMOVE\}<\/button>/)

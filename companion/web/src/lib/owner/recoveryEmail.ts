@@ -68,6 +68,12 @@ export const REGISTER_LEDE =
   'Register an email address for recovery. Nothing else is sent to it on this server.'
 
 export const EMAIL_LABEL = 'Recovery email'
+/**
+ * Beside the field, the same words the owner console's Notifications tab puts beside its own: the
+ * address is kept in the clear on the server (COMPANION_SECURITY.md), and a person typing it here
+ * should know that as much as a person typing it there.
+ */
+export const EMAIL_STORED_NOTE = 'stored in plaintext on the server; see COMPANION_SECURITY.md'
 
 export const REGISTER = 'Register'
 
