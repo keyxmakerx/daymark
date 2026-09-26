@@ -161,10 +161,20 @@ class FaintInkSourceTest {
         val homeCode = codeOnly(home)
         assertEquals("the scanner changed the length", home.length, homeCode.length)
         assertTrue("the scanner ate the code", homeCode.contains("PaperSurface(") && homeCode.contains("Text("))
-        assertTrue("a word only HomeScreen's strings hold is not there to test", home.contains("HOW ARE YOU"))
-        assertFalse("the scanner left a string's contents", homeCode.contains("HOW ARE YOU"))
-        assertTrue("a word only HomeScreen's comments hold is not there to test", home.contains("faint stub"))
-        assertFalse("the scanner left a comment", homeCode.contains("faint stub"))
+
+        // A comment, a call inside one and a string, planted in the real file, each holding a word
+        // the file does not: this rests on nothing HomeScreen's own comments or strings happen to say.
+        val inComment = "plantedwordinacomment"
+        val inString = "plantedwordinastring"
+        for (word in listOf(inComment, inString)) assertFalse("HomeScreen already holds \"$word\"", home.contains(word))
+        val planted = home + "\n// $inComment Text(\"x\", color = MaterialTheme.colorScheme.tertiary)\n" +
+            "/* $inComment */\nprivate val plantedLabel = \"$inString\"\n"
+        val plantedCode = codeOnly(planted)
+        assertTrue("nothing was planted", planted.contains(inComment) && planted.contains(inString))
+        assertFalse("the scanner left a comment", plantedCode.contains(inComment))
+        assertFalse("the scanner left a string's contents", plantedCode.contains(inString))
+        assertTrue("the scanner ate the code beside them", plantedCode.contains("private val plantedLabel ="))
+        assertEquals("the scanner kept a call written in a comment", faintWords(home).size, faintWords(planted).size)
     }
 
     @Test
