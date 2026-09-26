@@ -252,9 +252,13 @@
   .ah { display: flex; justify-content: space-between; align-items: baseline; }
   .trend { width: 100%; height: 34px; }
 
-  /* DATA — this line plots a person's own self-check scores over time, the same class of mark
-     Sparkline draws for mood, and it stays on the data ramp for the same reason: the chart
-     layer is where the ramp belongs. It encodes no state and makes no claim about the scores —
-     the band is stated in words beside it ("latest: …") and in the svg's aria-label. */
-  .trend .line { fill: none; stroke: var(--mood-5); stroke-width: 2; vector-effect: non-scaling-stroke; }
+  /* INK (#420). The line plots a person's own self-check scores over time, and a score is not a
+     mood. The ramp is the legend for a mood level somebody logged; an instrument's scores and
+     bands have no place on it. Drawn in the Rad colour, which is green, the line would be a status
+     colour saying something about the scores, and a mood colour is the value a person logged,
+     never a status (docs/DESIGN.md). The clinician's Record page draws self-checks in the same ink.
+     The line makes no claim about the scores: the band is stated in words beside it ("latest: …")
+     and in the svg's aria-label. dashboardActivities.test.ts holds it, on the person's own view and
+     the clinician's alike, since both draw this card. */
+  .trend .line { fill: none; stroke: var(--ink-accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
 </style>

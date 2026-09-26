@@ -182,13 +182,24 @@ const MOOD_DATA_FILES: Record<string, string> = {
   'src/lib/charts/Sparkline.svelte':
     "the plotted line IS the person's daily mood average, on the ramp's own 1..5 scale",
   'src/lib/components/Dashboard.svelte':
-    'mood distribution (in the person’s own colours where they chose them) and the self-check trend line — charts of a person’s own series; the activity-association bars are ink, not mood (#404)',
+    'the mood distribution, in the person’s own colours where they chose them — a chart of a person’s own moods, and nothing else on the page; the activity-association bars and the self-check trend line are ink, not mood (#404, #420)',
   'src/lib/components/QuestionnaireRunner.svelte':
     'the result edge is the band this person’s own answers scored into, beside the band label in words',
   'src/lib/components/ui/BandTag.svelte':
     'the band tag’s bar: the score band, on the ramp, with the band named in text next to it',
   'src/lib/components/calendar/MoodMark.svelte':
     'one check-in’s mood on the person’s own month: its square, in their colour for it or the ramp’s, with the mood’s word beside it',
+}
+
+/**
+ * Where inside an allowlisted file the ramp may be named, for a file whose allowance is narrower
+ * than the file: the selectors of the marks its entry above names, and no others. The Dashboard
+ * draws cards that are not about a mood beside the one that is, and a rule for one of them could
+ * name the ramp under the file's permission, as the activity bars (#404) and the self-check line
+ * (#420) both once did.
+ */
+const MOOD_DATA_SELECTORS: Record<string, RegExp> = {
+  'src/lib/components/Dashboard.svelte': /^\.dist \.mood-mark(?:\[data-level='[1-5]'\])?$/,
 }
 
 /**
@@ -315,6 +326,33 @@ describe('(a) the mood ramp is a person’s data, and only the data surfaces may
     // the tree lives in one of these files, so a collapse here would empty the check silently.
     expect(moodRules).toBeGreaterThanOrEqual(15)
     expect(offenders).toEqual([])
+  })
+
+  it('and where an allowance is narrower than its file, the ramp stays on the marks it names (#404, #420)', () => {
+    /** Every selector in a style block whose rule names a mood token, and which the allowance does not name. */
+    const outside = (allowed: RegExp, style: string) =>
+      [...style.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+        .filter((m) => /--mood-/.test(m[2]!))
+        .flatMap((m) => m[1]!.split(',').map((s) => s.trim().replace(/\s+/g, ' ')))
+        .filter((selector) => !allowed.test(selector))
+
+    for (const [path, allowed] of Object.entries(MOOD_DATA_SELECTORS)) {
+      expect(Object.keys(MOOD_DATA_FILES), `${path} narrows an allowance it does not have`).toContain(path)
+      const style = styleOf(path)
+      expect(style, `${path} has no style block`).not.toBeNull()
+      // Non-vacuity: the rules the allowance names are there, all five steps and the fill.
+      const named = [...style!.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => /--mood-/.test(m[2]!))
+      expect(named.length, path).toBeGreaterThanOrEqual(6)
+      expect(outside(allowed, style!), path).toEqual([])
+    }
+
+    // Positive control: the self-check line and an activity bar, planted back on the ramp, are seen,
+    // and so is one hiding in a selector list beside an allowed mark.
+    const dashboard = 'src/lib/components/Dashboard.svelte'
+    const planted =
+      styleOf(dashboard)! +
+      '\n.trend .line { stroke: var(--mood-5); }\n.delta .pos { fill: var(--mood-5); }\n.dist .mood-mark, .ah { color: var(--mood-fill); }\n'
+    expect(outside(MOOD_DATA_SELECTORS[dashboard]!, planted)).toEqual(['.trend .line', '.delta .pos', '.ah'])
   })
 })
 
