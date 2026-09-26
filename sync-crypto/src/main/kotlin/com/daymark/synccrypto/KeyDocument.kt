@@ -8,16 +8,20 @@ package com.daymark.synccrypto
  * Both are read before any key is derived, and refused whole ([KeyDocumentException]) for anything
  * the web refuses before it derives: a version other than 1, a wrapped key with no slots, and KDF
  * parameters that are not Argon2id at or above the floor on ANY slot, including slots the secret at
- * hand will not open. The parameters travel inside the document, so they are the server's to lower;
- * a weak sibling slot must not survive a round trip next to a strong one
- * (`companion/web/src/lib/recovery/dataKey.ts`, `validateBlob`). Every salt, nonce and wrapped key is
- * base64 in the protocol's one form, URL-safe without padding ([SyncCrypto.fromBase64]), at its
- * exact length.
+ * hand will not open and slots of a kind this reader does not know. The parameters travel inside the
+ * document, so they are the server's to lower; a weak sibling slot must not survive a round trip
+ * next to a strong one (`companion/web/src/lib/recovery/dataKey.ts`, `validateBlob`).
+ *
+ * A slot of a kind other than `passphrase` or `recovery` is then skipped, as the web skips it, so a
+ * kind added later (a passkey's PRF output, a Shamir share) does not lock this reader out of a
+ * document it can otherwise open. Nothing but its KDF parameters is read from it. Every salt, nonce
+ * and wrapped key of a known slot is base64 in the protocol's one form, URL-safe without padding
+ * ([SyncCrypto.fromBase64]), at its exact length.
  *
  * The phone is stricter than the web in these places, each of which refuses only what no writer
  * produces:
- *  - A slot of a kind other than `passphrase` or `recovery` is refused, where the web skips it.
- *  - Every slot is decoded and length-checked, where the web checks only the slot it opens.
+ *  - Every slot of a known kind is decoded and length-checked, where the web checks only the slot it
+ *    opens.
  *  - `v`, `memMiB` and `ops` must be written as JSON integers: `1.0`, `256.0` and `3e0` are refused,
  *    and so is `"256"`, a string the web reads as the number. The key parameters must name
  *    `xchacha20poly1305`, a field the web does not read.
@@ -42,7 +46,12 @@ sealed class KeyDocument {
         internal val salt: ByteArray,
     ) : KeyDocument()
 
-    /** §1.2's wrapped key: the master, locked once per secret, in slots. */
+    /**
+     * §1.2's wrapped key: the master, locked once per secret, in slots. [slots] holds the slots of
+     * the kinds this reader opens, in document order. A slot of any other kind was held to the floor
+     * and skipped, and is not kept here, so this is never a document to write back in place of the
+     * one that was read.
+     */
     class WrappedKey internal constructor(val slots: List<Slot>) : KeyDocument() {
 
         /** One locked copy of the master. [kind] and [kdf] are public; the bytes are not needed outside. */
@@ -133,16 +142,17 @@ sealed class KeyDocument {
             requireVersion1(root)
             val slots = root["slots"] as? List<*> ?: refuse(KeyDocumentException.Reason.NO_SLOTS)
             if (slots.isEmpty()) refuse(KeyDocumentException.Reason.NO_SLOTS)
-            // Every slot's kind and KDF first, then every slot's bytes: the floor holds for every slot
-            // before any field of any slot is decoded, as the web's validateBlob runs before it opens one.
-            val headers = slots.map { slot ->
+            // Every slot's KDF first, whatever its kind, before any field of any slot is decoded, as
+            // the web's validateBlob holds every slot to the floor before it opens one.
+            val checked = slots.map { slot ->
                 val fields = slot as? Map<*, *> ?: refuse(KeyDocumentException.Reason.NOT_A_KEY_DOCUMENT)
-                val kind = SlotKind.entries.firstOrNull { it.wire == fields["kind"] }
-                    ?: refuse(KeyDocumentException.Reason.UNKNOWN_SLOT_KIND)
-                Triple(fields, kind, kdf(fields["kdf"]))
+                fields to kdf(fields["kdf"])
             }
+            // Then the slots of the kinds this reader opens. A slot of any other kind is skipped, as
+            // the web skips it, and nothing else in it is read.
             return WrappedKey(
-                headers.map { (fields, kind, kdf) ->
+                checked.mapNotNull { (fields, kdf) ->
+                    val kind = SlotKind.entries.firstOrNull { it.wire == fields["kind"] } ?: return@mapNotNull null
                     WrappedKey.Slot(
                         kind = kind,
                         kdf = kdf,
@@ -210,10 +220,7 @@ class KeyDocumentException internal constructor(val reason: Reason) : Exception(
         /** A wrapped key whose `slots` is missing, not a list, or empty. */
         NO_SLOTS("a wrapped key with no slots"),
 
-        /** A slot locked under a kind of secret this reader does not know. */
-        UNKNOWN_SLOT_KIND("a slot of an unknown kind"),
-
-        /** KDF parameters that are not Argon2id at 256 MiB and 3 passes or more, on any slot. */
+        /** KDF parameters that are not Argon2id at 256 MiB and 3 passes or more, on any slot of any kind. */
         KDF_BELOW_FLOOR("KDF parameters below the security floor; nothing was derived"),
 
         /** A salt, nonce or wrapped key that is not URL-safe base64 without padding. */
@@ -222,7 +229,10 @@ class KeyDocumentException internal constructor(val reason: Reason) : Exception(
         /** A salt, nonce or wrapped key of the wrong length. */
         WRONG_LENGTH("a field of the wrong length"),
 
-        /** No slot opens with the kind of secret offered: key parameters have no recovery slot. */
+        /**
+         * No slot opens with the kind of secret offered: the key parameters have no recovery slot, and
+         * a wrapped key may hold only slots of other kinds.
+         */
         NO_SLOT_OF_THAT_KIND("no slot opens with that kind of secret"),
 
         /**

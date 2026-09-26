@@ -23,6 +23,7 @@ import com.daymark.synccrypto.KeyDocumentVector.WRAPPED_SHA256
 import com.daymark.synccrypto.KeyDocumentVector.hex
 import com.daymark.synccrypto.KeyDocumentVector.json
 import com.daymark.synccrypto.KeyDocumentVector.kdf
+import com.daymark.synccrypto.KeyDocumentVector.kdfTree
 import com.daymark.synccrypto.KeyDocumentVector.keyParamsTree
 import com.daymark.synccrypto.KeyDocumentVector.slot
 import com.daymark.synccrypto.KeyDocumentVector.slots
@@ -236,6 +237,58 @@ class KeyDocumentVectorTest {
             assertRefused(reason, name) { crypto.openWithPassphrase(KeyDocument.parse(text), PASSPHRASE) }
         }
         assertEquals(0, sodium.argon2idRuns)
+    }
+
+    @Test
+    fun aSlotOfAnUnknownKindIsSkipped_andStillHeldToTheFloor() {
+        // Kinds this reader does not know, as a later writer may add them (a passkey's PRF output, a
+        // Shamir share), before, between and after the vector's two slots. Each carries KDF
+        // parameters at the floor and nothing a known slot needs: no salt, nonce or ciphertext.
+        fun unknownSlots(): MutableList<Any?> = mutableListOf(
+            linkedMapOf<String, Any?>("kind" to "webauthn-prf", "kdf" to kdfTree(), "credentialId" to "not base64 !!"),
+            linkedMapOf<String, Any?>("kdf" to kdfTree()), // no kind at all
+            linkedMapOf<String, Any?>("kind" to Raw("1"), "kdf" to kdfTree()), // a kind that is not a string
+        )
+        fun document(): MutableMap<String, Any?> = wrappedTree().apply {
+            val (prf, kindless, numbered) = unknownSlots()
+            slots().add(0, prf)
+            slots().add(2, kindless)
+            slots().add(numbered)
+        }
+        val text = json(document())
+        assertNotEquals(WRAPPED, text)
+
+        // Skipped: what is read is exactly the vector's two slots, in order.
+        val read = KeyDocument.parseWrappedKey(text)
+        assertEquals(WRAPPED, read.toJson())
+        // The positive control: the known slots beside them still open, with either secret.
+        assertEquals(SUBKEY_1, hex(crypto.openWithPassphrase(read, PASSPHRASE).syncKey))
+        assertEquals(SUBKEY_1, hex(crypto.openWithRecoveryCode(read, TYPED_CODE).syncKey))
+        assertEquals(2, sodium.argon2idRuns)
+
+        // A wrapped key of unknown kinds only is read, and has no slot for either secret: the same
+        // refusal as any document without that kind.
+        val unknownOnly = KeyDocument.parse(json(linkedMapOf<String, Any?>("v" to Raw("1"), "slots" to unknownSlots())))
+        assertRefused(Reason.NO_SLOT_OF_THAT_KIND) { crypto.openWithPassphrase(unknownOnly, PASSPHRASE) }
+        assertRefused(Reason.NO_SLOT_OF_THAT_KIND) { crypto.openWithRecoveryCode(unknownOnly, CODE) }
+
+        // Still held to the floor, as the web holds every slot before it picks one: a weak slot of a
+        // kind nobody reads must not survive a round trip next to strong ones.
+        val floorRows: List<Pair<String, (MutableMap<String, Any?>) -> Unit>> = listOf(
+            "the unknown slot at 255 MiB" to { it.slot(0).kdf()["memMiB"] = Raw("255") },
+            "the unknown slot at 2 passes" to { it.slot(0).kdf()["ops"] = Raw("2") },
+            "the unknown slot on argon2i" to { it.slot(0).kdf()["alg"] = "argon2i" },
+            "the unknown slot with no kdf" to { it.slot(0).remove("kdf") },
+            "the kindless slot at 255 MiB" to { it.slot(2).kdf()["memMiB"] = Raw("255") },
+        )
+        for ((name, mutate) in floorRows) {
+            val tree = document()
+            mutate(tree)
+            val mutated = json(tree)
+            assertNotEquals("$name must change the document", text, mutated)
+            assertRefused(Reason.KDF_BELOW_FLOOR, name) { crypto.openWithPassphrase(KeyDocument.parse(mutated), PASSPHRASE) }
+        }
+        assertEquals("nothing after the positive control ran Argon2id", 2, sodium.argon2idRuns)
     }
 
     @Test

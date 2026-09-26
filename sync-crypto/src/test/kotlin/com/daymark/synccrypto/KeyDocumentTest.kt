@@ -106,13 +106,10 @@ class KeyDocumentTest {
     @Test
     fun theWrappedKeyIsReadMoreStrictlyThanTheWebReadsIt_whereNoWriterDiffers() {
         // Each of these opens on the web with the vector's passphrase (checked against dataKey.ts when
-        // this was written): it skips a slot of a kind it does not know, decodes only the slot it
-        // opens, and compares numbers loosely. No writer on either side produces any of them.
+        // this was written): it decodes only the slot it opens, and compares numbers loosely. No
+        // writer on either side produces any of them.
         assertAllRefused(
             listOf(
-                Triple("a sibling slot of an unknown kind", { it.slot(1)["kind"] = "webauthn-prf" }, Reason.UNKNOWN_SLOT_KIND),
-                Triple("a slot with no kind", { it.slot(1).remove("kind") }, Reason.UNKNOWN_SLOT_KIND),
-                Triple("a kind that is not a string", { it.slot(1)["kind"] = Raw("1") }, Reason.UNKNOWN_SLOT_KIND),
                 Triple(
                     "a malformed nonce in the slot a passphrase does not open",
                     { it.slot(1)["nonceB64"] = "${it.slot(1)["nonceB64"]}=" },
