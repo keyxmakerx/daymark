@@ -356,6 +356,14 @@ All notable changes to this project are documented here. The format is based on
   quiet notice that names nobody and counts nothing.
 
 ### Fixed
+- **Warnings and Delete buttons have a colour of their own.** The phone drew Delete, the lock
+  screen's "Incorrect PIN" and the safety plan's crisis button in the same red as an Awful mood, so
+  the colour of someone's worst day doubled as a warning. They now use a separate clay red, the same
+  one the web console uses, and recolouring your moods never changes it. (#395)
+- **Small grey labels are easier to read.** TODAY, HOW ARE YOU, RIGHT NOW?, the card labels on
+  Insights and Stats, section headings, and the times on your entries were printed in a pale grey
+  that was hard to read, especially outdoors. They now use the darker grey the rest of the app uses
+  for secondary text, in light and dark mode. (#396)
 - **If the person you share with has ended their access, the owner console notices before it does
   anything.** It now asks before it records their keys or seals the share, so "Nothing was sealed or
   sent" is exactly true. (#275)

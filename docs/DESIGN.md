@@ -10,9 +10,10 @@ with the project. The web consoles' sibling system is
 ## Colour tokens (`ui/theme/Color.kt`)
 
 **Light:** paper `#F4EFE6` · sheet/surface `#FCFAF5` · ink `#2A2722` · soft `#6B655B` ·
-faint `#A49C8E` · hairline `#E7DFD1` · accent (ink) `#33302A`.
+faint `#A49C8E` · hairline `#E7DFD1` · accent (ink) `#33302A` · alarm (clay) `#9A5044` on `#F3E0DB`.
 **Dark ("night paper"):** bg `#1B1A17` · surface `#24221D` · ink `#EBE5D8` · soft `#B7AF9E` ·
-faint `#7C7568` · lines `#34312A` · the accent inverts to `#EBE5D8` (text on it `#1B1A17`).
+faint `#7C7568` · lines `#34312A` · the accent inverts to `#EBE5D8` (text on it `#1B1A17`) · alarm
+`#CB8473` on `#3A2C28`.
 
 **Mood scale (Awful → Rad):** `#AE5747` · `#C27C46` · `#C6A24E` · `#8FA268` · `#5E8A66`, each with
 a lighter "wash" for calendar tints in light mode and a darker one in dark mode.
@@ -27,6 +28,21 @@ a lighter "wash" for calendar tints in light mode and a darker one in dark mode.
 
 `ui/theme/Theme.kt` maps the tokens onto the Material 3 `ColorScheme`. `surfaceTint` is transparent
 and tonal elevation is avoided, to keep surfaces flat.
+
+**The alarm is its own colour.** Errors, refusals and destructive actions (a Delete label, the lock
+screen's error, the crisis button) use the clay tokens in `ui/theme/Color.kt`, which are the web
+consoles' `--clay` and `--clay-wash`, value for value
+([COMPANION_DESIGN_SYSTEM.md](COMPANION_DESIGN_SYSTEM.md) §2.3.4). `ui/theme/Theme.kt` maps them onto
+`error` and `errorContainer`. No colour-scheme role is ever a mood colour, so recolouring a mood never
+moves the alarm; `ColorSchemeSourceTest` holds the scheme to that and to the web's values. The dark
+wash shares its value with the dark Awful wash and is still a token of its own. With dynamic colour
+on, the system supplies every role, the error roles included (#309).
+
+**The faint ink never carries words.** Faint (`tertiary`) measures 2.61:1 on the sheet and is for
+decoration only: rules and empty marks. A word that steps back takes the soft ink
+(`onSurfaceVariant`), which clears 4.5:1 on the sheet, the paper and a menu in both themes.
+`FaintInkSourceTest` fails when the faint ink reaches words. Three small labels on the hairline fill
+measure 4.36:1 in the light theme: not built, #408.
 
 **Dynamic colour** is a Settings switch on Android 12 and later. The stored setting defaults to on
 (`data/SettingsRepository.kt`), so a fresh install on those phones takes its colours from the
