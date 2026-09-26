@@ -136,6 +136,22 @@ export class AssignmentOpenError extends Error {}
  * (message-type confusion), or recipientOwnerFp is not this owner (mis-addressed / spliced).
  */
 export function openAssignment(blob: Uint8Array, ownerBox: BoxKeyPair, pinnedTherapistSignPub: Uint8Array): Assignment {
+  return openAssignmentSigned(blob, ownerBox, pinnedTherapistSignPub).assignment
+}
+
+/** An opened assignment, with the two strings its signature covers exactly as they were sealed. */
+export interface OpenedAssignment {
+  assignment: Assignment
+  payloadJson: string
+  sigB64: string
+}
+
+/**
+ * openAssignment, also handing back the signed envelope verbatim: what an owner's accept or decline
+ * carries in the lane, so the phone can check the signature itself long after the server has let
+ * the sealed item go (lane/record.ts, #345). Every check is openAssignment's, in the same order.
+ */
+export function openAssignmentSigned(blob: Uint8Array, ownerBox: BoxKeyPair, pinnedTherapistSignPub: Uint8Array): OpenedAssignment {
   const so = s()
   let openedBytes: Uint8Array
   try {
@@ -161,5 +177,5 @@ export function openAssignment(blob: Uint8Array, ownerBox: BoxKeyPair, pinnedThe
   if (signed.recipientOwnerFp !== fingerprint(ownerBox.publicKey)) {
     throw new AssignmentOpenError('assignment is addressed to a different owner')
   }
-  return signed.assignment
+  return { assignment: signed.assignment, payloadJson: env.payloadJson, sigB64: env.sigB64 }
 }

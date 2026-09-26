@@ -19,8 +19,9 @@
  *              Tick self-checks, moods and sleep, leave the journal unticked, seal a share.
  *   clinician  sign in (authenticator, reading passphrase, and the inbox token handed over by
  *              hand); open the share: the ticked types, and no journal. Send an assignment.
- *   owner      the inbox lists it, verified, from the clinician the owner named. Lock the console,
- *              and open it again from the server's key with the recovery code alone: the same
+ *   owner      the inbox lists it, verified, from the clinician the owner named. Accept it: the
+ *              decision is kept in the owner's lane on the server (#345), and Refresh reads it back.
+ *              Lock the console, and open it again from the server's key with the recovery code alone: the same
  *              fingerprint the clinician checked. Then, on the Recovery code screen, the code and the
  *              token alone store a new passphrase; the old one opens nothing the server hands out,
  *              and the new one opens the same fingerprint again.
@@ -727,6 +728,50 @@ it('the paired loop: pair, grant, seal a share, read it, and send an assignment 
     expect((await card.locator('.badge').innerText()).trim().toLowerCase()).toBe('verified')
     expect((await card.locator('.from').innerText()).trim()).toBe(`from ${OWNER_NAMES_THEM}`)
     expect((await card.locator('.note').innerText()).trim()).toBe(`“${ASSIGNMENT_NOTE}”`)
+  })
+
+  /** The lineages the server lists with the owner token, and the versions of one of them. */
+  const lineages = async () => {
+    const res = await fetch(`${BASE}/v1/snapshots`, { headers: { Authorization: `Bearer ${OWNER_TOKEN}` } })
+    return ((await res.json()) as { lineages: string[] }).lineages
+  }
+  const versionsOf = async (lineage: string) => {
+    const res = await fetch(`${BASE}/v1/snapshots/${lineage}`, { headers: { Authorization: `Bearer ${OWNER_TOKEN}` } })
+    return ((await res.json()) as { versions: { version: number }[] }).versions.map((v) => v.version)
+  }
+
+  await step('the owner accepts it: the decision is kept in the owner’s lane, and Refresh reads it back (#345)', async () => {
+    const inbox = consoleSection().locator('section.inbox')
+    const card = inbox.locator('article.item').first()
+    // Nothing is in a lane before the decision.
+    expect((await lineages()).filter((l) => l.startsWith('lane_'))).toEqual([])
+    await asAPerson()
+    await card.getByRole('button', { name: 'Accept' }).click()
+    await card.locator('.decided').waitFor({ timeout: 30_000 })
+    expect((await card.locator('.decided').innerText()).trim().toLowerCase()).toBe('accepted')
+    // The server took one version of one lane, and holds it as ciphertext: the lane's name, no more.
+    const lanes = (await lineages()).filter((l) => l.startsWith('lane_'))
+    expect(lanes).toHaveLength(1)
+    expect(lanes[0]).toMatch(/^lane_[A-Za-z0-9_-]{21}[AQgw]$/)
+    expect(await versionsOf(lanes[0]!)).toEqual([0])
+    // Refresh builds the inbox again from the server, and the decision comes back from the lane:
+    // the refresh reads the lane's version 0, which the accept itself never asked for, and the
+    // button reads "Refresh" again only once the items are rebuilt. The server's own allowance
+    // (five requests a second) can answer a read 429 first; the lane asks again, so what is waited
+    // for is the answer that carried the version.
+    await asAPerson()
+    const laneRead = owner.waitForResponse(
+      (r) => r.request().method() === 'GET' && r.status() === 200 && new URL(r.url()).pathname === `/v1/snapshots/${lanes[0]}/0`,
+      { timeout: 30_000 },
+    )
+    await inbox.getByRole('button', { name: 'Refresh' }).click()
+    await laneRead
+    await inbox.getByRole('button', { name: 'Refresh', disabled: false }).waitFor({ timeout: 30_000 })
+    const again = inbox.locator('article.item').first()
+    await again.locator('.decided').waitFor({ timeout: 30_000 })
+    expect((await again.locator('.decided').innerText()).trim().toLowerCase()).toBe('accepted')
+    expect(await again.getByRole('button', { name: 'Accept' }).count()).toBe(0)
+    expect(await inbox.locator('[role="alert"], [data-tone="warn"]').count()).toBe(0)
   })
 
   await step('lock, and the recovery code alone opens the server’s key again, to the same fingerprint', async () => {

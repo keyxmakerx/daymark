@@ -22,6 +22,7 @@
   import type { OwnerEndpoint } from '../../owner/therapistKeys'
   import type { OwnerConnection } from '../../owner/recoveryEmail'
   import type { Grant } from '../../assignments/types'
+  import type { OwnerLane } from '../../lane/lane'
 
   let { data }: { data: BackupData | null } = $props()
 
@@ -61,6 +62,12 @@
    */
   let endpoint = $state<OwnerEndpoint | null>(null)
   let connectStatus = $state('')
+  /**
+   * The owner's lane on the same server, with the same address and token, and the sync key the
+   * session was opened with (#345): where the inbox keeps an accept or a decline, and reads them
+   * back. What the phone has taken in is read from the snapshot this console has open, if any.
+   */
+  let lane = $state.raw<OwnerLane | null>(null)
 
   const selected = $derived(session?.pinned.find((t) => t.id === selectedId) ?? null)
 
@@ -83,6 +90,7 @@
     session = null
     client = null
     endpoint = null
+    lane = null
     selectedId = null
   }
 
@@ -91,6 +99,8 @@
     if (!token) { connectStatus = 'Enter your owner access token.'; return }
     const c = new PortalClient(serverUrl, token)
     const e: OwnerEndpoint = { baseUrl: serverUrl, token }
+    // A lane that cannot be loaded is none: the inbox then says nothing can be saved (#345).
+    lane = session ? await laneOn(serverUrl, token, session).catch(() => null) : null
     try {
       const cfg = await c.getConfig()
       smtpEnabled = cfg.smtpEnabled
@@ -102,6 +112,16 @@
       endpoint = e
       connectStatus = 'Connected (config probe failed; email invites hidden).'
     }
+  }
+
+  /** The owner's lane over the sync API, loaded when the console connects. */
+  async function laneOn(url: string, tok: string, s: OwnerSession): Promise<OwnerLane> {
+    const [{ SyncClient }, { ownerLane }, { takenInIds }] = await Promise.all([
+      import('../../sync/client'),
+      import('../../lane/lane'),
+      import('../../lane/record'),
+    ])
+    return ownerLane(new SyncClient(url, tok), s.lane, { takenIn: () => takenInIds(data) })
   }
 
   /*
@@ -214,7 +234,7 @@
       {:else if sub === 'grants'}
         <GrantManager {session} therapist={selected} {client} {onGrantChange} />
       {:else if sub === 'inbox'}
-        <AssignmentInbox {session} {client} />
+        <AssignmentInbox {session} {client} {lane} />
       {:else if sub === 'published-keys'}
         <TherapistKeyIntake therapist={selected} {endpoint} onkeys={keysArrived} />
       {:else if sub === 'share'}

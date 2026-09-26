@@ -11,11 +11,12 @@
  * tampered / ungranted / off-allowlist item is never applyable.
  */
 import type { Assignment } from './types'
-import { openAssignment, AssignmentOpenError, type BoxKeyPair } from './crypto'
+import { openAssignmentSigned, AssignmentOpenError, type BoxKeyPair } from './crypto'
 import { validateAssignment, shouldAutoApply, type AssignmentCheck } from './validate'
 import { describeAssignment } from './describe'
 import type { Grant } from './types'
 import { PortalError, type RelMeta } from '../sync/portal'
+import type { SignedEnvelope } from '../lane/record'
 
 export type Verdict = 'VERIFIED' | 'REJECTED' | 'UNTRUSTED_KEY' | 'OPEN_FAILED'
 export type Decision = 'accepted' | 'declined' | 'snoozed'
@@ -47,6 +48,12 @@ export interface InboxItem {
   errors: string[]
   raw: { lineage: string; version: number }
   decision?: Decision
+  /**
+   * The assignment as the clinician signed it, verbatim, for an item whose signature verified
+   * against the pinned key (VERIFIED or REJECTED): what an accept or decline carries in the owner's
+   * lane, and how a decision read back from it finds this item again (inboxLane.ts, #345).
+   */
+  signed?: SignedEnvelope
 }
 
 /**
@@ -61,8 +68,11 @@ export function evaluateBlob(raw: RawAssignmentBlob, therapist: PinnedTherapist,
   }
 
   let assignment: Assignment
+  let signed: SignedEnvelope
   try {
-    assignment = openAssignment(raw.bytes, ownerBox, therapist.signPub)
+    const opened = openAssignmentSigned(raw.bytes, ownerBox, therapist.signPub)
+    assignment = opened.assignment
+    signed = { payloadJson: opened.payloadJson, sigB64: opened.sigB64 }
   } catch (e) {
     // A signature mismatch means the author is not the pinned therapist (forged / substituted
     // key) — call that out distinctly from a sealed-box failure (not-for-us / tampered).
@@ -98,6 +108,7 @@ export function evaluateBlob(raw: RawAssignmentBlob, therapist: PinnedTherapist,
     return {
       ...base,
       assignment,
+      signed,
       verdict: 'REJECTED',
       check,
       requiresAccept: false,
@@ -113,6 +124,7 @@ export function evaluateBlob(raw: RawAssignmentBlob, therapist: PinnedTherapist,
   return {
     ...base,
     assignment,
+    signed,
     verdict: 'VERIFIED',
     check,
     requiresAccept,
