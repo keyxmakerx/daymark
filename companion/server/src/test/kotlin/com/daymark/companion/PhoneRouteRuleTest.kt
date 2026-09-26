@@ -250,4 +250,24 @@ class PhoneRouteRuleTest {
         assertEquals(Triple("wrapped", "2", String(wrappedKey("V2"))), Triple(written.kind, written.version, written.body))
         assertEquals(Triple(200, written.body, written.etag), client.readByPhone("/v1/keydoc", server, phone))
     }
+
+    @Test
+    fun `a phone cannot revoke another phone`() = testApplication {
+        val server = DeviceServer()
+        server.start(this)
+        val a = TestPhone()
+        val b = TestPhone()
+        server.pair(client, a)
+        server.pair(client, b)
+        val target = "/v1/devices/${b.keyId}/revoke"
+
+        val byPhone = client.post(target) { signedWith(a.headers("POST", target, timeSeconds = server.seconds)) }
+        assertEquals(phoneRefused, byPhone.status to byPhone.bodyAsText())
+        assertEquals(HttpStatusCode.OK, server.signedGet(client, b, "/v1/snapshots").status, "B still works")
+
+        // Control: the console's Revoke of B is taken, and B is refused from then on.
+        assertEquals(HttpStatusCode.NoContent, client.post(target) { header(HttpHeaders.Authorization, "Bearer ${server.authToken}") }.status)
+        val afterRevoke = server.signedGet(client, b, "/v1/snapshots")
+        assertEquals(HttpStatusCode.Unauthorized to """{"error":"unauthorized"}""", afterRevoke.status to afterRevoke.bodyAsText())
+    }
 }

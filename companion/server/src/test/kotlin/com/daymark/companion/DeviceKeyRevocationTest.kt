@@ -1,6 +1,7 @@
 package com.daymark.companion
 
 import com.daymark.companion.auth.AuthGuard
+import com.daymark.companion.auth.CredentialKind
 import com.daymark.companion.auth.OwnerAuth
 import com.daymark.companion.auth.Secrets
 import com.daymark.companion.routes.ErrorDto
@@ -45,10 +46,16 @@ import kotlin.test.assertTrue
  * nothing. Once the console revokes the phone, every owner route must answer each of its requests —
  * fresh time, fresh nonce — the one 401 every refusal gets.
  *
- * A route added later is walked without anyone listing it. The positive control plants three: one
+ * A route added later is walked without anyone listing it. The positive control plants four: one
  * taking only the token, which is caught; an operator route on the gate's list, which is walked and
- * answers the phone 403; and one the list names but whose handler lets the phone through, which is
- * caught.
+ * answers the phone 403; one the list names but whose handler lets the phone through, which is
+ * caught; and one that answers the phone "not found" where it serves the token, which is caught.
+ *
+ * No placeholder can stand in for a device or a code the route acts on: the phone names its own key
+ * where a route takes one, the token a second phone's, and every credential a code the console minted.
+ * So a route that let a phone revoke a key would revoke the walking phone, and every route after it
+ * would say so. A phone's 404 is not taken for "reached" unless the token got the same 404 from the
+ * same route: a placeholder the route could not find hides whether the phone got as far as it.
  */
 class DeviceKeyRevocationTest {
 
@@ -70,13 +77,21 @@ class DeviceKeyRevocationTest {
         return Mounted(HttpMethod.parse(method.groupValues[1]), template)
     }
 
-    /** A concrete path for [template]: the fixture's relationship and a channel it has, and a filler elsewhere. */
-    private fun pathFor(template: String): String = template.split('/').joinToString("/") { segment ->
+    /** What a walk's requests name where a route takes a device or a code: a real one of each. */
+    private data class Named(val keyId: String, val codeId: String)
+
+    /**
+     * A concrete path for [template]: the fixture's relationship and a channel it has, the device and the
+     * code [named] gives, and a filler elsewhere.
+     */
+    private fun pathFor(template: String, named: Named): String = template.split('/').joinToString("/") { segment ->
         when (segment) {
             "{relRef}" -> relRef
             "{channel}" -> "grants"
             "{lineage}" -> "lin1"
             "{version}" -> "1"
+            "{keyId}" -> named.keyId
+            "{codeId}" -> named.codeId
             else -> if (segment.startsWith("{")) "x" else segment
         }
     }
@@ -87,8 +102,8 @@ class DeviceKeyRevocationTest {
     private val carried = mapOf("X-Rel-Token" to inboxToken)
 
     /** [route] asked with [credential], which attaches [carried] too: a token's request as it is, a phone's signed. */
-    private suspend fun HttpClient.ask(route: Mounted, credential: io.ktor.client.request.HttpRequestBuilder.(target: String, body: ByteArray?) -> Unit): Pair<HttpStatusCode, String> {
-        val target = pathFor(route.template)
+    private suspend fun HttpClient.ask(route: Mounted, named: Named, credential: io.ktor.client.request.HttpRequestBuilder.(target: String, body: ByteArray?) -> Unit): Pair<HttpStatusCode, String> {
+        val target = pathFor(route.template, named)
         val body = if (route.method == HttpMethod.Get || route.method == HttpMethod.Delete) null else jsonBody
         val res = request(target) {
             method = route.method
@@ -103,13 +118,15 @@ class DeviceKeyRevocationTest {
 
     private class Walk(val ownerRoutes: List<Mounted>, val problems: List<String>, val all: List<String>)
 
-    /** [phone]'s signature on a request to [route], made now with a fresh nonce. */
-    private suspend fun HttpClient.signedBy(route: Mounted, phone: TestPhone, server: DeviceServer) =
-        ask(route) { target, body -> signedWith(phone.headers(route.method.value, target, body ?: ByteArray(0), server.seconds, signed = carried)) }
+    /** [phone]'s signature on a request to [route], made now with a fresh nonce, naming [phone]'s own key where the route takes one. */
+    private suspend fun HttpClient.signedBy(route: Mounted, phone: TestPhone, server: DeviceServer, codeId: String = "x") =
+        ask(route, Named(phone.keyId, codeId)) { target, body ->
+            signedWith(phone.headers(route.method.value, target, body ?: ByteArray(0), server.seconds, signed = carried))
+        }
 
-    /** The bearer [token]'s request to [route]. */
-    private suspend fun HttpClient.withToken(route: Mounted, token: String) =
-        ask(route) { _, _ -> signedWith(carried + (HttpHeaders.Authorization to "Bearer $token")) }
+    /** The bearer [token]'s request to [route], naming [named]'s device and code. */
+    private suspend fun HttpClient.withToken(route: Mounted, token: String, named: Named) =
+        ask(route, named) { _, _ -> signedWith(carried + (HttpHeaders.Authorization to "Bearer $token")) }
 
     /**
      * Every route of the running [app], asked with a wrong token, the owner's token and [phone]'s
@@ -119,12 +136,17 @@ class DeviceKeyRevocationTest {
      */
     private suspend fun ApplicationTestBuilder.walk(app: Application, server: DeviceServer, phone: TestPhone, refused: Set<String>): Walk {
         val routes = app.routing { }.getAllRoutes().mapNotNull { mounted(it.toString()) }.distinct()
+        // The device the tokens name, and a code: real ones, so no route answers them "not found".
+        val bystander = TestPhone()
+        server.pair(client, bystander)
+        val code = server.mint(client).codeId
+        val forTokens = Named(bystander.keyId, code)
         val ownerRoutes = mutableListOf<Mounted>()
         val problems = mutableListOf<String>()
         for (route in routes) {
-            val wrong = client.withToken(route, "not-the-owner-token")
-            val token = client.withToken(route, server.authToken)
-            val signed = client.signedBy(route, phone, server)
+            val wrong = client.withToken(route, "not-the-owner-token", forTokens)
+            val token = client.withToken(route, server.authToken, forTokens)
+            val signed = client.signedBy(route, phone, server, code)
             val authenticatesOwner = wrong.first == HttpStatusCode.Unauthorized &&
                 (token.first != HttpStatusCode.Unauthorized || signed.first != HttpStatusCode.Unauthorized)
             if (!authenticatesOwner) continue
@@ -137,10 +159,15 @@ class DeviceKeyRevocationTest {
                     problems += "$route refused a registered phone: ${signed.first.value} ${signed.second}"
                 !listed && signed == phoneRefused ->
                     problems += "$route answered the phone the list's 403, and is not on the list"
+                !listed && signed.first == HttpStatusCode.NotFound && token.first != HttpStatusCode.NotFound ->
+                    problems += "$route answered the phone 404 and the token ${token.first.value}: the phone did not reach what the token did"
             }
         }
         val walked = ownerRoutes.map { it.toString() }.toSet()
         for (entry in refused - walked) problems += "$entry is on the list, and the server mounts no such owner route"
+        // The phone is as the walk found it: no route it was let through took its key away.
+        val after = server.signedGet(client, phone, "/v1/snapshots")
+        if (after.status != HttpStatusCode.OK) problems += "after the walk the phone is refused: ${after.status.value} ${after.bodyAsText()}"
         return Walk(ownerRoutes, problems, routes.map { it.toString() })
     }
 
@@ -240,6 +267,11 @@ class DeviceKeyRevocationTest {
                         if (gate.check(call) !is OwnerAuth.Outcome.Ok) return@post call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized"))
                         call.respond(HttpStatusCode.Created)
                     }
+                    // Not on the list, and answers the phone "not found" where it serves the token.
+                    get("/v1/planted-phone-not-found") {
+                        val owner = call.owner(gate) ?: return@get
+                        if (owner.kind == CredentialKind.DEVICE) call.respond(HttpStatusCode.NotFound, ErrorDto("not found")) else call.respond(HttpStatusCode.OK)
+                    }
                 }
             }
             startApplication()
@@ -247,17 +279,18 @@ class DeviceKeyRevocationTest {
             server.pair(client, phone)
             val walked = walk(app, server, phone, PHONE_REFUSED_ROUTES + operator + ungated)
             val owners = walked.ownerRoutes.map { it.toString() }
-            for (planted in listOf("GET /v1/planted-token-only", operator, ungated)) {
+            for (planted in listOf("GET /v1/planted-token-only", "GET /v1/planted-phone-not-found", operator, ungated)) {
                 assertTrue(planted in walked.all, "the walk reads the real tree: $planted in ${walked.all}")
                 assertTrue(planted in owners, "and asks $planted as an owner route")
             }
             assertEquals(
                 listOf(
+                    "GET /v1/planted-phone-not-found answered the phone 404 and the token 200: the phone did not reach what the token did",
                     "GET /v1/planted-token-only refused a registered phone: 401",
                     "$ungated is on the list, and answered the phone 201",
                 ),
                 walked.problems.map { it.substringBefore(" {").trimEnd() }.sorted(),
-                "exactly the two wrong planted routes are caught, and the new operator route is not: ${walked.problems}",
+                "exactly the three wrong planted routes are caught, and the new operator route is not: ${walked.problems}",
             )
             // The new operator route answers the phone the one 403, and the owner's token as before.
             val byPhone = client.post("/v1/planted-operator") { signedWith(phone.headers("POST", "/v1/planted-operator", timeSeconds = server.seconds)) }
