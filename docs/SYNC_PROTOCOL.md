@@ -26,8 +26,7 @@ Ids 3 and 4 are the owner's pairing identity (`crypto_box_seed_keypair` and
 They are reserved on every platform; the next free id is 5. A recovery code opens a master through
 the wrapped key (§1.2; `companion/web/src/lib/recovery/dataKey.ts`); wrapping an existing owner's
 passphrase-derived master (`companion/web/src/lib/recovery/migration.ts`) is what makes the code yield
-these same subkeys. The server stores the wrapped key (§2). Enrolling an existing owner that way, and
-the consoles reading and writing the wrapped key, are not built: #258.
+these same subkeys. The server stores the wrapped key (§2), and every client reads it there (§3).
 
 ### 1.1 Snapshot envelope (the stored blob bytes)
 
@@ -186,9 +185,16 @@ hard-deleted), `PER_TOKEN_QUOTA_BYTES` (5 GiB, fail-closed), `RATE_LIMIT_RPS` (5
 
 ## 3. Client flows
 
-**Push (writer).** Ensure keyparams (GET, or create a fresh salt and PUT; the PUT is create-only, so
-of two writers publishing at once the second gets `409`) → derive keys → `version =
-max(existing)+1` → pad and encrypt → `PUT` the envelope. Before it derives a key or sends anything,
+**Push (writer).** Read the key document (`GET /v1/keydoc`). A wrapped key: open its passphrase slot
+→ master → subkeys. Key params: derive as before. Nothing (`404`): list the stored lineages first,
+and if the server stores any snapshot, refuse in fixed words having sent nothing, because a fresh salt
+would open none of them; otherwise make a fresh salt and `PUT /v1/keyparams`, which is create-only,
+so a writer that gets `409` (another writer's key params) or `410` (a wrapped key got there first)
+reads the key document again and uses what is there. Then `version = max(existing)+1` → pad and
+encrypt → read the key document again, and go on only if what it holds now opens, with the same
+passphrase, to the key the snapshot was encrypted under (an enrolment or a first run can land between
+the two reads, after which the snapshot would open with nothing the server serves); otherwise refuse
+in fixed words and send nothing → `PUT` the envelope. Before it derives a key or sends anything,
 the writer refuses a snapshot whose padded envelope is larger than the server accepts, and says so;
 it never falls back to an unpadded write. The limit it assumes is the server's default, 26,214,400
 bytes; for a server whose operator raised `DAYMARK_MAX_BLOB_BYTES`, pass the same number with
@@ -196,13 +202,36 @@ bytes; for a server whose operator raised `DAYMARK_MAX_BLOB_BYTES`, pass the sam
 command-line tool (`pnpm push` in `companion/web`), which reads the passphrase and the access token
 from the environment. The phone's is not built: #168.
 
-**Pull (reader — the browser).** GET keyparams → derive keys → list versions → fetch the head →
-decrypt (the AEAD verifies integrity). A wrong passphrase makes decryption fail, with no oracle
-beyond that.
+**Pull (reader — the browser).** Read the key document → open its passphrase slot, or derive from
+the key params → list versions → fetch the head → decrypt (the AEAD verifies integrity). A wrong
+passphrase makes the slot or the decryption fail, with no oracle beyond that. A server with no key
+document has had nothing synced to it, and the reader says so.
 
-Both flows read `/v1/keyparams`, so once a wrapped key exists they stop at its `410`. The phone's
-crypto opens either document (#403); nothing fetches `/v1/keydoc` yet: #168 for the phone, #258 for
-the consoles.
+Neither flow reads `/v1/keyparams`; the writer's create-only `PUT` is the one request left there
+(`companion/web/src/lib/sync/client.ts`). The phone's crypto opens either key document (#403); the
+phone fetching it is #168.
+
+**The owner's key (the consoles).** The owner console and the Recovery code screen read the key
+document with the owner's access token (`companion/web/src/lib/recovery/serverKey.ts`). Nothing: a
+first run — a random master is locked under the passphrase (typed twice) and a new recovery code,
+both locks are opened locally to that master, and the document is created with `If-None-Match: *`;
+refused where the server stores snapshots. Key params only: an enrolment — subkey 1 of the
+passphrase's master must open the newest stored snapshot (by `createdAt`, across lineages), or with
+none stored the passphrase is typed twice; both locks must open locally to the directly derived
+master, and the create names the key params' `ETag` in `If-Match`, exactly as received. A wrapped key:
+an unlock, with either secret. After a create the document is read back and must open with the
+passphrase to the same master, not merely open, since a lock made under the same passphrase over
+another master opens too; only then is the pairing identity derived. `412` reads again and acts on
+what is there; `428` cannot arise, because the client always names one state. A create with no
+answer the client can trust (the request failed, or a proxy answered `502` or `504` after passing it
+on) is followed by a read, and a document that opens with the passphrase to the master that was sent
+means it landed. A create the server took (`201`) whose read-back cannot be read, after asking again
+(a `429`, a `5xx` or no answer, paced, at most five times), still shows the recovery code, and a later
+read is compared byte for byte with the document sent. The recovery code is shown once, only when the
+server may hold its lock, and checked as written down. A new passphrase set with the recovery code is
+`PUT /v1/keydoc/{n+1}`, read back and opened to the same master; `409` reads again; a version whose
+answer was lost or whose read-back cannot be read is compared by a later read with the version sent.
+Replacing a recovery code is not built: #407.
 
 Sync is single-writer and last-snapshot-wins: the newest full snapshot is authoritative, and rows are
 never merged, because the app's schema has no per-row ids or timestamps. That is settled (#200): the

@@ -27,14 +27,18 @@ is a side effect.
 
 - **The passphrase is the key.** The sync key is derived from the passphrase alone (Argon2id, then
   purpose-separated subkeys; SYNC_PROTOCOL.md §1). Nothing is bound to the handset, so a new device
-  with the same passphrase reads everything. The other half of the same fact: **forget the passphrase
-  and the copy on the server is gone** — to the owner, to the operator, to Daymark. The server has
-  never had the key. That sentence belongs where the passphrase is chosen, not in a footnote.
-- **A recovery code** is the designed second way in: one data key wrapped under the passphrase and
-  again under the code, so either opens it. The cryptography is built and tested
-  (`companion/web/src/lib/recovery/`), and the owner console already opens with such a key file and
-  either secret. Wrapping an existing owner's sync key this way, and storing the file on the server
-  so a code works from a new device, are not built: #258. Until then, the sentence above stands.
+  with the same passphrase reads everything. The other half of the same fact: **forget the passphrase,
+  with no recovery code, and the copy on the server is gone** — to the owner, to the operator, to
+  Daymark. The server has never had the key. That sentence belongs where the passphrase is chosen,
+  not in a footnote.
+- **A recovery code** is the designed second way in: one key locked under the passphrase and again
+  under the recovery code, so either opens it (`companion/web/src/lib/recovery/`). The server keeps
+  both locks and can open neither, and the owner console and the Recovery code screen read them with
+  the owner's access token (#258): on a server with no key a first visit makes one; where the server
+  already serves what the passphrase needs (SYNC_PROTOCOL.md §1.2), the key the passphrase opens is
+  locked under a new recovery code after the passphrase is tried on the newest snapshot; either secret
+  then opens it from any device. Replacing a recovery code is not built: #407. Lose both and the
+  sentence above stands.
 - **One copy, on one disk.** The server keeps what it is sent and copies it nowhere. The phone keeps
   its own local copy, which stays the primary one.
 - **Getting a copy there.** The phone cannot send one yet: #168. Today a snapshot is pushed from an
@@ -141,7 +145,8 @@ console" (#158).
 
 - **Owner console** (`index.html`): open an exported backup file; read the encrypted copy from the
   server; the self-check engine and a focus task (COMPANION_FEATURES.md); the tool builder; access
-  recovery; and, unlocked with a key file and the passphrase or recovery code, invite and pair a
+  recovery; and, unlocked from the key the server keeps, with the passphrase or the recovery code,
+  invite and pair a
   clinician, grant capabilities, build shares, review assignments, read the access log, set
   notifications.
 - **Clinician console** (`therapist.html`, at `/therapist`; invitation links arrive at

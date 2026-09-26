@@ -211,9 +211,9 @@ nothing that decrypts a record or authors content.
   (`OWNER_KEY_UNPINNED_CAVEAT`, `lib/therapist/inviteAccept.ts`).
 - **No escrow (O6).** Forget the passphrase and have no recovery code, and the data is gone: nobody —
   not the maintainer, not the operator — can get it back. That is what makes it safe and what makes it
-  unforgiving. A recovery code wraps the master in the browser (`lib/recovery/`), and the server can
-  hold the wrapped key, but no console reads or writes it yet, so the code cannot be used from
-  another device (#258). The format has room for more slots, though a passkey is not one, because it
+  unforgiving. A recovery code locks the master in the browser (`lib/recovery/`), and the server
+  keeps the lock, so the recovery code opens the master on any device that has the owner's access
+  token (#258). Replacing a recovery code is not built: #407. The format has room for more slots, though a passkey is not one, because it
   only signs in (#205). A lost clinician key means a fresh invitation and re-pairing.
 - **The wrapped key supersedes the key parameters by presence (#258).** The first version is created
   against the state its writer read. For a first run that is no key document of either kind; for an
@@ -227,6 +227,25 @@ nothing that decrypts a record or authors content.
   per guess. A changed passphrase or code therefore opens nothing the server hands out. It still opens
   the older versions in a copy of the volume or a backup: it is retired against the live server, not
   against copies. Retiring the master itself is key rotation, which is not built: #297.
+- **A set-up proves the passphrase before it writes, and believes the server only once it reads
+  back (#258).** The server stores no manifest (#179), so for an enrolment subkey 1 of the
+  passphrase's master must open the newest stored snapshot; a passphrase that does not writes
+  nothing. With no snapshot stored it is typed twice, which proves only that it was typed the same
+  way twice. Before upload the new document must open with both secrets to the directly derived
+  master; after the create it is read back and must open with the passphrase to that same master —
+  opening alone is not enough — and only then is an identity derived. A random master is made only on
+  a server holding no key document and no snapshot. A create or a new passphrase whose answer was
+  lost is settled by a later read, never assumed: a recovery code whose lock the server may hold is
+  always shown. The three doors give one pinned set of pairing and manifest keys
+  (`companion/web/src/lib/owner/identity.test.ts`).
+- **The writer sends nothing the server's key would not open (#258).** `pnpm push` makes no key on a
+  server that stores snapshots but no key document, and reads the key document again right before an
+  upload; if the passphrase no longer opens what the server holds to the key the snapshot was
+  encrypted under, the snapshot is not sent.
+- **Key files are retired.** Nothing reads or writes the stand-in key files. A relationship paired
+  while the console was opened with one is bound to an identity the real master cannot reproduce, and
+  must be ended and paired again. A relationship is held only by the session that made it, so no later
+  session can reach one to tell.
 - **The browser consoles are the convenience path.** The phone is meant to become the secret-handling
   path (#138); until then the lower-assurance banner says so wherever keys are handled.
 

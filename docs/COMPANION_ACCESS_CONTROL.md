@@ -174,9 +174,9 @@ Three things must all be possible:
 
 ## Key recovery
 
-**Status:** built: server-access recovery, and a recovery code that wraps the web archive's key in the
-browser (`lib/recovery/`). Not built: using that code from another device (#258) and split recovery
-(#261). On the phone, the journal key's PIN and recovery-code wraps are #109.
+**Status:** built: server-access recovery, and a recovery code that locks the web archive's key in the
+browser, with the server keeping the locks so the recovery code opens it from another device
+(`lib/recovery/`, #258). Not built: replacing a recovery code (#407) and split recovery (#261). On the phone, the journal key's PIN and recovery-code wraps are #109.
 
 E2E's hardest UX problem: a lost passphrase currently means lost data, and the
 design deliberately has **no key escrow** (no backdoor). We keep no‑escrow and

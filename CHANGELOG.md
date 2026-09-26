@@ -240,6 +240,22 @@ All notable changes to this project are documented here. The format is based on
   both jobs.
 
 ### Changed
+- **Companion — a recovery code now works from any device, and the owner console no longer needs a
+  key file.** The owner console opens your key from your own server: you give it the server's address
+  and your access token, then your passphrase or, instead, your recovery code. The first time, on a
+  server with no key yet, it makes one and shows your recovery code once — "Once you leave this page,
+  it cannot be shown again. Write it down before you go on." — then asks you to type two of its groups
+  back. If you already sync with a passphrase, adding a recovery code keeps the key you have: your
+  passphrase is first tried on your newest snapshot, so a mistyped one stores nothing, and nothing
+  already stored is encrypted again. If the server takes your key but cannot be read back to check it,
+  your recovery code is still shown, with a button to check it. On the Recovery code screen, "Use a
+  code" opens your key with the recovery code alone and lets you choose a new passphrase; this server
+  then hands out only the lock made with the new passphrase, but a backup of the server taken before
+  still holds the old lock, which the old passphrase still opens. Key files saved by earlier versions
+  are no longer used; a clinician paired while the console was opened with one has to be invited
+  again. The sync card and `pnpm push` read the key the same way, and `pnpm push` now sends nothing if
+  the server's key changed while a snapshot was being encrypted, or if the server stores snapshots but
+  no key. Replacing a recovery code is not built yet (#407). (#258)
 - **The month calendar in Insights shows each entry as its own dot, and no longer paints a day with
   an average.** Each day used to be filled with a colour mixed from the average of that day's moods,
   so a day with one bad moment and one good one came out in a colour you never chose, and the date on

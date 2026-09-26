@@ -17,8 +17,8 @@ been built differently. The old text is
 ## 1. Design principles
 
 1. **A served page is the convenient path, never the strongest one.** The consoles run in a browser
-   the server supplies. The owner console opens the owner's own key file in the browser and signs and
-   seals shares there (`owner/OwnerUnlock.svelte`); the clinician portal makes and keeps its keys in
+   the server supplies. The owner console reads the owner's locked key from their server with their access
+   token, opens it in the browser, and signs and seals shares there (`owner/OwnerUnlock.svelte`); the clinician portal makes and keeps its keys in
    the browser. So no surface claims a guarantee a page cannot make about itself
    ([COMPANION_SECURITY.md](COMPANION_SECURITY.md) R5), and the owner's unlock, sync set-up and
    pairing screens and the clinician's sign-in and invitation screens carry the fixed lower-assurance
@@ -118,6 +118,31 @@ console — or the clinician themselves, by leaving the relationship from theirs
 That is the fired-clinician case, and it is copy rather than mechanism on purpose: a practice has no
 standing over a patient's relationship, and giving it one would be the practice reaching into the
 thing the access model refuses. `docs/COMPANION_THERAPIST.md` §9a states it in full.
+
+### 7.10 The owner's key (owner)
+
+The owner console's door and the Recovery code screen read what this server holds, with the server
+address and the access token, and act on one of three answers. Nothing: *"This server holds no key
+yet. …"*, and **Make my key** makes it, with the passphrase typed twice. What the passphrase needs
+and no recovery code: before anything is typed, *"Your passphrase is tried on the newest snapshot
+this server stores. If the passphrase does not open that snapshot, nothing is stored."*, and **Add a
+recovery code**. A locked key: open it with the passphrase or, instead, the recovery code.
+
+The recovery code is shown once, with exactly one line directly above it, on screen only — *"Once you
+leave this page, it cannot be shown again. Write it down before you go on."* — and everything else
+about it after it; then two of its groups are typed back. Every message that asks for a read has
+**Read what this server holds** directly under it. A key the server accepted but could not hand back
+keeps its code on screen, with *"The server accepted your key, but it could not be read back to check
+just now. Write your recovery code down, then use Read what this server holds to check it."* A new
+passphrase set with the recovery code says, in a callout's body and never its heading, *"The key
+itself did not change. This server now hands out only the lock made with the new passphrase. A backup
+of the server taken before now still holds the old lock, and the old passphrase still opens that.
+This console cannot yet replace the key itself."* — never "your old passphrase no longer works".
+
+The words: key; lock, locked under (never copy, slot or key parameters); passphrase; recovery code
+(bare "code" only in a tab's name); access token; this server. Tabs by their labels (*Get a code*,
+*Use a code*). A wait on the key derivation ends *"— this takes a few seconds"*. Replacing a recovery
+code is not built: #407.
 
 ## 9. Consent and sharing (no dark patterns)
 
@@ -299,6 +324,14 @@ screen can."* — and no banner on any console asks a person to verify a digest 
 | Leave refused | Clinician | *"Nothing has changed. Your keys are still in this browser, you are still signed in, and nothing was sent to the person who invited you. You can try again."* |
 | An older copy of a share | Clinician, shared data | *"This copy was sealed before one you have already opened, so it stays closed. Ask for a fresh one."* It says nothing about the server, which the portal cannot know about. |
 | An item the server no longer keeps | Owner, assignment inbox | *"Sent by {name} on {date}. The server keeps items for 90 days."* One line in ink among the rest: the normal end of an item, never an error. |
+| Set-up refused | Owner, door and Get a code | Each ends *"…nothing has been stored."* (§7.10) |
+| The server changed under a set-up | Owner, door and Get a code | *"What the server holds changed after it was read here, so nothing from here was stored. What it holds now is below."* |
+| Read-back did not open | Owner, door and Get a code | *"The server accepted the new key, but what it handed back did not open to the same key, so the recovery code is not shown. Your snapshots are unchanged. …"* It does not say nothing was stored; the read button is under it |
+| Read-back could not be read | Owner, door and Get a code | *"The server accepted your key, but it could not be read back to check just now. …"* The recovery code stays on screen |
+| A missing lock | Owner, door | *"This server holds no recovery code lock for your key, so a recovery code cannot open it. Use your passphrase."*, or the same for a passphrase |
+| Did not open | Owner, door | *"That did not open the key this server holds. Nothing has changed. Check what you typed and try again."* |
+| Snapshots and no key | `pnpm push`, set-up | *"This server stores snapshots but not what is needed to open them. A new key would not open those snapshots, so none was made, and nothing has been stored."* |
+| Key changed before upload | `pnpm push` | *"The snapshot was not sent. The key this server holds changed while the snapshot was being encrypted, and this passphrase does not open it to the key the snapshot was encrypted under."* |
 
 ## 12. Accessibility, language, motion
 
