@@ -7,7 +7,15 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { PRINT_ATTRIBUTE, PRINT_ROOT_ATTRIBUTE, PRINT_VALUE, printMonth, type PrintPort } from './print'
+import {
+  PRINT_ATTRIBUTE,
+  PRINT_CODE_SHEET,
+  PRINT_ROOT_ATTRIBUTE,
+  PRINT_VALUE,
+  printCodeSheet,
+  printMonth,
+  type PrintPort,
+} from './print'
 
 interface Recorder {
   port: PrintPort
@@ -88,5 +96,54 @@ describe('printing the month', () => {
   it('names the print root the month is marked with, and it is not the flag', () => {
     expect(PRINT_ROOT_ATTRIBUTE).toBe('data-print-root')
     expect(PRINT_ROOT_ATTRIBUTE).not.toBe(PRINT_ATTRIBUTE)
+  })
+})
+
+/*
+ * Printing the recovery code sheet (#417): the same switch, so the same order. The code is the
+ * owner's way back in if the passphrase is lost, and printed from the night theme it could go onto
+ * the paper as pale ink.
+ */
+describe('printing the recovery code sheet', () => {
+  it('sets the light theme and its own flag before the dialog opens', () => {
+    const r = recorder({ 'data-theme': 'dark' })
+    printCodeSheet(r.port)
+    expect(r.calls).toEqual([`set data-theme=light`, `set ${PRINT_ATTRIBUTE}=${PRINT_CODE_SHEET}`, 'listen afterprint', 'print'])
+    expect(r.attributes.get('data-theme')).toBe('light')
+  })
+
+  it('never raises the month’s flag, whose print stylesheet leaves everything but the month off the paper', () => {
+    // Control: the month's print does raise it, so a sheet printed under it would be blank.
+    const month = recorder()
+    printMonth(month.port)
+    expect(month.attributes.get(PRINT_ATTRIBUTE)).toBe(PRINT_VALUE)
+    const sheet = recorder()
+    printCodeSheet(sheet.port)
+    expect(PRINT_CODE_SHEET).not.toBe(PRINT_VALUE)
+    expect(sheet.attributes.get(PRINT_ATTRIBUTE)).toBe(PRINT_CODE_SHEET)
+    expect(sheet.calls).not.toContain(`set ${PRINT_ATTRIBUTE}=${PRINT_VALUE}`)
+  })
+
+  it('puts back the theme the person chose once the dialog closes, or none where none was', () => {
+    const dark = recorder({ 'data-theme': 'dark' })
+    printCodeSheet(dark.port)
+    dark.closeDialog()
+    expect(dark.calls.slice(-3)).toEqual(['dialog closed', `remove ${PRINT_ATTRIBUTE}`, 'set data-theme=dark'])
+    expect(Object.fromEntries(dark.attributes)).toEqual({ 'data-theme': 'dark' })
+    const none = recorder()
+    printCodeSheet(none.port)
+    none.closeDialog()
+    expect(Object.fromEntries(none.attributes)).toEqual({})
+  })
+
+  it('a print asked for while another is still open keeps the person’s theme to put back', () => {
+    const r = recorder({ 'data-theme': 'dark' })
+    printCodeSheet(r.port)
+    printCodeSheet(r.port)
+    printMonth(r.port)
+    // Neither later print read the light theme the first set, and neither set anything of its own.
+    expect(r.calls).toEqual([`set data-theme=light`, `set ${PRINT_ATTRIBUTE}=${PRINT_CODE_SHEET}`, 'listen afterprint', 'print', 'print', 'print'])
+    r.closeDialog()
+    expect(Object.fromEntries(r.attributes)).toEqual({ 'data-theme': 'dark' })
   })
 })

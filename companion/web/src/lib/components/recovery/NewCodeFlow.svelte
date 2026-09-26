@@ -43,6 +43,7 @@
    * it arrives.
    */
   import { Callout, Card } from '../ui'
+  import { browserPrintPort, printCodeSheet } from '../../calendar/print'
   import CodeSheet from './CodeSheet.svelte'
   import WriteDownCheck from './WriteDownCheck.svelte'
   import KeySetup from './KeySetup.svelte'
@@ -306,7 +307,8 @@
           <button type="button" class="primary" onclick={() => (step = 'confirm')}>
             I have written it down
           </button>
-          <button type="button" onclick={() => window.print()}>Print this page</button>
+          <!-- In the light theme for the print, whatever the screen is in: dark ink on white (#417). -->
+          <button type="button" onclick={() => printCodeSheet(browserPrintPort())}>Print this page</button>
           <button type="button" onclick={downloadCode}>Download as a text file</button>
         </div>
 

@@ -217,6 +217,18 @@ describe('(a) the cost of losing both secrets is stated where it is incurred', (
     expect(codeOf('NewCodeFlow.svelte')).toContain('WHAT_THIS_OPENS')
   })
 
+  it('prints the code in dark ink on white, whatever theme the screen is in (#417)', () => {
+    // The print button goes through the switch the month uses (calendar/print.ts), which puts the
+    // page in the light theme for the print and back afterwards; print.test.ts holds the order.
+    const flow = codeOf('NewCodeFlow.svelte')
+    expect(flow).toContain("import { browserPrintPort, printCodeSheet } from '../../calendar/print'")
+    expect(flow).toMatch(/<button type="button" onclick=\{\(\) => printCodeSheet\(browserPrintPort\(\)\)\}>Print this page<\/button>/)
+    // And no file here opens the print dialog directly, which would print in the screen's theme.
+    const BARE = /\bwindow\s*\.\s*print\s*\(/
+    expect(BARE.test('<button onclick={() => window.print()}>Print this page</button>')).toBe(true)
+    expect(componentFiles.filter((f) => BARE.test(codeOf(f)))).toEqual([])
+  })
+
   it('says, wherever the code is shown and on paper, that it can act as the person', () => {
     // The code opens the master, and the owner's signing identity is derived from it
     // (owner/identity.ts), so the paper is not read-only. Said without naming a console or a
