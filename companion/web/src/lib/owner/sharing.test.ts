@@ -379,13 +379,38 @@ describe('the owner console is given the records the person opened', () => {
   // it was from the first version, the Paired tab could pair and grant but never share.
   const handedNothing = /<OwnerConsole\s+data=\{null\}/
 
+  /**
+   * Whether a loaded backup and the owner console can be on screen together. Passing the records
+   * is not enough: the page used to show its navigation, and the owner console inside it, only
+   * `{:else if !data}`, and a dashboard-only branch once a backup was open, so the two were never
+   * both true and the seal button stayed disabled in every state a person could reach. Both now
+   * render inside the navigation, which stays whether or not a backup is open.
+   */
+  function canBothBeOnScreen(page: string): boolean {
+    const src = page.replace(/<!--[\s\S]*?-->/g, '') // what ships, not what the comments say
+    const start = src.indexOf('<Orientation')
+    const end = src.indexOf('</Orientation>')
+    if (start === -1 || end === -1) return false
+    const nav = src.slice(start, end)
+    return nav.includes('<OwnerConsole {data} />') && nav.includes('<Dashboard {data} />') && !/\{:else if !data\}/.test(src)
+  }
+
   it('passes the backup opened on the file or sync tab through to it', () => {
     expect(app).toContain('<OwnerConsole {data} />')
     expect(app).not.toMatch(handedNothing)
   })
 
-  it('the check for an empty hand-off can fail (positive control)', () => {
+  it('keeps the navigation, and the owner console with it, on screen once a backup is open', () => {
+    expect(canBothBeOnScreen(app)).toBe(true)
+  })
+
+  it('both checks can fail: the page as it was fails them (positive control)', () => {
     expect('<OwnerConsole data={null} />').toMatch(handedNothing)
+    const asItWas = [
+      '{#if setupGateOpen}<SetupEntry />',
+      '{:else if !data}<Orientation>{#if source === \'file\'}<Dropzone />{:else}<OwnerConsole {data} />{/if}</Orientation>',
+      '{:else}<Dashboard {data} />{/if}',
+    ].join('\n')
+    expect(canBothBeOnScreen(asItWas)).toBe(false)
   })
 })
-

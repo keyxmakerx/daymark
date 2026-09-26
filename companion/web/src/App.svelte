@@ -289,7 +289,15 @@
         complaint ("there's like 10 different buttons.. why") with one more thing on top.
       -->
       <SetupEntry {decision} {config} onchoose={chooseShape} {storageRefused} />
-    {:else if !data}
+    {:else}
+      <!--
+        SET UP: the navigation stays, loaded backup or not. This used to be `{:else if !data}`, with
+        a dashboard-only branch after it, so opening a backup unmounted the routes and the owner
+        console with them: a backup loaded and the owner console on screen could never both be
+        true, and the share builder, which seals only the records it is given, could never seal.
+        Now the dashboard is what the file and sync routes show once a backup is open, and the
+        owner console is handed the same records.
+      -->
       <section class="intro">
         <!--
           ALREADY SET UP: the strip states the answer and gets out of the way. Everything below it
@@ -339,7 +347,14 @@
           onchoose={(id) => (source = id)}
         >
           {#snippet surface()}
-            {#if source === 'file'}
+            {#if (source === 'file' || source === 'sync') && data}
+              <section class="loaded">
+                <p class="muted filemeta">
+                  <strong>{fileName}</strong> · backup v{data.version} · exported {formatDate(data.exportedAt)}
+                </p>
+                <Dashboard {data} />
+              </section>
+            {:else if source === 'file'}
               <Dropzone onload={load} onerror={(m) => (error = m)} />
             {:else if source === 'sync'}
               <SyncPanel onload={loadData} />
@@ -369,7 +384,7 @@
             <!-- 'practice' joins the exclusions: that panel is about a clinic's machine, and the
                  note below is instructions for dropping your own backup file on the two tabs that
                  take one. It stays with the drop zone, because "above" has to stay true. -->
-            {#if source !== 'assess' && source !== 'build' && source !== 'owner' && source !== 'recover' && source !== 'practice'}
+            {#if !data && source !== 'assess' && source !== 'build' && source !== 'owner' && source !== 'recover' && source !== 'practice'}
               <p class="faint note">
                 Non-diagnostic: Daymark is a self-tracking and journaling tool. Nothing here
                 is a medical assessment. Export a backup from the app via
@@ -379,14 +394,6 @@
             {/if}
           {/snippet}
         </Orientation>
-      </section>
-    {:else}
-      <section class="loaded">
-        <p class="muted filemeta">
-          <strong>{fileName}</strong> · backup v{data.version} · exported {formatDate(data.exportedAt)}
-        </p>
-
-        <Dashboard {data} />
       </section>
     {/if}
   </main>
