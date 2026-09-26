@@ -46,7 +46,9 @@
  * recovery code.
  */
 import { decryptSnapshot, fromBase64, initCrypto } from '../sync/crypto'
-import { SyncError, type CreateAgainst, type KeyDocument, type SyncClient } from '../sync/client'
+import type { CreateAgainst, KeyDocument, SyncClient } from '../sync/client'
+import { paced, pause, type Wait } from '../sync/paced'
+import { isLaneLineage } from '../lane/lineage'
 import {
   createRecoverableDataKey,
   replacePassphrase,
@@ -386,39 +388,22 @@ export async function replacePassphraseOnServer(
    The ports, over the sync client.
    ═══════════════════════════════════════════════════════════════════════════════════════════ */
 
-const pause = (ms: number) => new Promise<void>((done) => setTimeout(done, ms))
-
 /**
- * Whether a failed read is worth asking again: the server's 429, a 5xx (from the server or a proxy
- * in front of it), or a request that got no answer at all. A 401, a 404 or an answer this client
- * could not read is the answer, and asking again would only repeat it.
+ * The ports as the real server answers them, through a SyncClient holding the owner's token.
+ *
+ * Every read that failed for a transient reason is asked again, a little later, a few times
+ * (sync/paced.ts). Finding the newest snapshot is one request per lineage, and the server's default
+ * allowance is five a second from one address, so an owner with several devices' lineages would
+ * otherwise be refused an enrolment by the pace of this console's own reads. The read-back after a
+ * create is asked again the same way, because a code whose lock was taken is shown whatever the
+ * read-back does, and a read that succeeds on the second try saves the person a check of their own
+ * (#258).
+ *
+ * The newest snapshot is looked for among snapshots only: a lineage that names a web console's lane
+ * (lane/lineage.ts) is sealed under the lane's own associated data, never opens as a snapshot, and
+ * would make the right passphrase fail the enrolment anchor (#345).
  */
-function transient(e: unknown): boolean {
-  if (e instanceof SyncError) return e.status === 429 || (e.status !== undefined && e.status >= 500)
-  return e instanceof TypeError
-}
-
-/**
- * A read that failed for a transient reason is asked again, a little later, a few times. Finding
- * the newest snapshot is one request per lineage, and the server's default allowance is five a
- * second from one address, so an owner with several devices' lineages would otherwise be refused an
- * enrolment by the pace of this console's own reads. The read-back after a create is asked again
- * the same way, because a code whose lock was taken is shown whatever the read-back does, and a read
- * that succeeds on the second try saves the person a check of their own (#258).
- */
-async function paced<T>(read: () => Promise<T>, wait: (ms: number) => Promise<void>): Promise<T> {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await read()
-    } catch (e) {
-      if (!transient(e) || attempt >= 5) throw e
-      await wait(300 * attempt)
-    }
-  }
-}
-
-/** The ports as the real server answers them, through a SyncClient holding the owner's token. */
-export function serverKeyPorts(client: SyncClient, wait: (ms: number) => Promise<void> = pause): ServerKeyPorts {
+export function serverKeyPorts(client: SyncClient, wait: Wait = pause): ServerKeyPorts {
   return {
     read: () => paced(() => client.getKeyDocument(), wait),
     create: (wrapped, against) => client.createKeyDocument(wrapped, against),
@@ -426,6 +411,7 @@ export function serverKeyPorts(client: SyncClient, wait: (ms: number) => Promise
     async newestSnapshot() {
       let newest: (SnapshotRef & { createdAt: number }) | null = null
       for (const lineage of await paced(() => client.listLineages(), wait)) {
+        if (isLaneLineage(lineage)) continue
         for (const v of await paced(() => client.listVersions(lineage), wait)) {
           const later = !newest || v.createdAt > newest.createdAt || (v.createdAt === newest.createdAt && v.version > newest.version)
           if (later) newest = { lineage, version: v.version, createdAt: v.createdAt }

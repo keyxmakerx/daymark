@@ -26,7 +26,8 @@
  * cannot start. `--help` prints the usage below and sends nothing.
  */
 import { readFileSync } from 'node:fs'
-import { DEFAULT_MAX_BLOB_BYTES, SnapshotTooLargeError, SyncClient } from '../lib/sync/client'
+import { DEFAULT_MAX_BLOB_BYTES, LANE_IS_NOT_A_SNAPSHOT, SnapshotTooLargeError, SyncClient } from '../lib/sync/client'
+import { isLaneLineage } from '../lib/lane/lineage'
 
 const USAGE = [
   'Usage:',
@@ -38,7 +39,8 @@ const USAGE = [
   'command line, where other users of this machine could read them.',
   '',
   '  --server <url>          your Companion (default http://localhost:8080)',
-  '  --lineage <name>        the name this copy is filed under, 1 to 64 of A-Z a-z 0-9 _ - (default laptop)',
+  '  --lineage <name>        the name this copy is filed under, 1 to 64 of A-Z a-z 0-9 _ - (default laptop),',
+  '                          never beginning lane_, which names the web console\'s lanes',
   '  --backup <file.json>    the backup exported from the app',
   '  --max-blob-bytes <n>    the largest snapshot your server accepts (default 26214400, the server default)',
   '  --help                  print this and send nothing',
@@ -72,6 +74,8 @@ async function main() {
   if (!backupPath) throw new Error('missing --backup <path to a Daymark backup .json>')
   if (!passphrase) throw new Error('set DAYMARK_SYNC_PASSPHRASE in the environment')
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(lineage)) throw new Error('--lineage must be 1–64 chars of [A-Za-z0-9_-]')
+  // A lane is where the web console keeps what it adds (#345): never filed as a snapshot.
+  if (isLaneLineage(lineage)) throw new Error(LANE_IS_NOT_A_SNAPSHOT)
   if (maxBlobArg !== undefined && !/^[1-9][0-9]{0,14}$/.test(maxBlobArg)) {
     throw new Error('--max-blob-bytes must be a whole number of bytes, such as 26214400')
   }

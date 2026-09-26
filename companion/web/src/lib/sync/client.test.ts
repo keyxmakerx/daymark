@@ -11,8 +11,10 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
   DEFAULT_MAX_BLOB_BYTES,
+  LANE_IS_NOT_A_SNAPSHOT,
   SnapshotTooLargeError,
   SyncClient,
+  SyncError,
   snapshotRefusedText,
   snapshotTooLargeText,
 } from './client'
@@ -184,6 +186,25 @@ describe('the limit a writer is given', () => {
   })
 })
 
+describe('a lane is never a snapshot (#345)', () => {
+  it('a lineage that names a lane is refused, in fixed words, before any request, to the writer and the reader', async () => {
+    const lane = 'lane_AAECAwQFBgcICQoLDA0ODw'
+    const server = fakeServer()
+    const client = new SyncClient('http://sync.test', 'token', server.doFetch)
+    for (const refused of [
+      await client.pushSnapshot(lane, 0, new TextEncoder().encode('{}'), 'pass').catch((e: unknown) => e),
+      await client.pullLatest(lane, 'pass').catch((e: unknown) => e),
+    ]) {
+      expect(refused).toBeInstanceOf(SyncError)
+      expect((refused as Error).message).toBe(LANE_IS_NOT_A_SNAPSHOT)
+    }
+    expect(server.calls).toEqual([])
+    // Positive control: a name that only contains the word is a snapshot's, and is asked about.
+    await client.pullLatest('my_lane_laptop', 'pass').catch(() => undefined)
+    expect(server.calls.length).toBeGreaterThan(0)
+  })
+})
+
 describe('the command-line writer', () => {
   const read = (rel: string) => readFileSync(resolve(process.cwd(), rel), 'utf8')
   /** Source with commentary removed: what actually runs. */
@@ -199,6 +220,12 @@ describe('the command-line writer', () => {
     expect(push).toBeGreaterThan(-1)
     expect(check).toBeLessThan(firstRequest)
     expect(firstRequest).toBeLessThan(push)
+  })
+
+  it('refuses the name of a lane before its first request (#345)', () => {
+    const guard = PUSH.indexOf('if (isLaneLineage(lineage)) throw new Error(LANE_IS_NOT_A_SNAPSHOT)')
+    expect(guard).toBeGreaterThan(-1)
+    expect(guard).toBeLessThan(PUSH.indexOf('client.listVersions('))
   })
 
   it('passes the limit it was given to the client', () => {

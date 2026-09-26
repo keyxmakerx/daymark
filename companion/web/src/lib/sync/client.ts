@@ -55,6 +55,7 @@ import {
   type RecoverableDataKey,
 } from '../recovery/dataKey'
 import { subkeysFromMaster } from '../recovery/migration'
+import { isLaneLineage } from '../lane/lineage'
 
 /**
  * The largest blob a Daymark server stores unless its operator sets DAYMARK_MAX_BLOB_BYTES
@@ -130,6 +131,14 @@ export const KEY_CHANGED_BEFORE_UPLOAD =
  * there is nothing to open. Shown by the sync card as it stands.
  */
 export const HOLDS_NO_KEY = 'This server holds no key: nothing has been synced to it.'
+
+/**
+ * The refusal of a lineage that names the web console's lane (#345; lane/lineage.ts). A lane holds
+ * what the console adds, sealed under its own associated data, and is never written or read as a
+ * snapshot, so every lane stays findable by its name alone. Said before any request.
+ */
+export const LANE_IS_NOT_A_SNAPSHOT =
+  'A lineage whose name begins "lane_" holds what the web console adds, never a snapshot. Nothing was read or sent.'
 
 /** A server that asks which state a create was made against is answering a fault in this client. */
 const CREATE_NAMED_NO_STATE =
@@ -456,6 +465,7 @@ export class SyncClient {
    * refusal's "nothing was sent" holds even for the key parameters (see the header).
    */
   async pushSnapshot(lineage: string, version: number, plaintext: Uint8Array, passphrase: string): Promise<SnapshotMeta> {
+    if (isLaneLineage(lineage)) throw new SyncError(LANE_IS_NOT_A_SNAPSHOT)
     this.assertSnapshotFits(plaintext.length)
     const keys = await this.ensureKeys(passphrase)
     const blob = encryptSnapshot(plaintext, keys.syncKey, lineage, version)
@@ -506,6 +516,7 @@ export class SyncClient {
 
   /** Fetch + decrypt the highest version of a lineage. Throws if no key document/snapshots. */
   async pullLatest(lineage: string, passphrase: string): Promise<{ version: number; plaintext: Uint8Array }> {
+    if (isLaneLineage(lineage)) throw new SyncError(LANE_IS_NOT_A_SNAPSHOT)
     await initCrypto()
     const doc = await this.getKeyDocument()
     if (doc.kind === 'none') throw new SyncError(HOLDS_NO_KEY)

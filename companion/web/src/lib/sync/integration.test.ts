@@ -18,10 +18,21 @@ import { existsSync, mkdtempSync } from 'node:fs'
 import { createServer, type AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { DEFAULT_MAX_BLOB_BYTES, PASSPHRASE_DOES_NOT_OPEN_KEY, SnapshotTooLargeError, SyncClient, SyncError } from './client'
+import {
+  DEFAULT_MAX_BLOB_BYTES,
+  LANE_IS_NOT_A_SNAPSHOT,
+  PASSPHRASE_DOES_NOT_OPEN_KEY,
+  SnapshotTooLargeError,
+  SyncClient,
+  SyncError,
+} from './client'
 import { fromBase64 } from './crypto'
 import { createRecoverableDataKey, replacePassphrase, unwrapWithPassphrase, zeroizeDataKey } from '../recovery/dataKey'
-import { enrolExistingOwner } from '../recovery/migration'
+import { enrolExistingOwner, subkeysFromMaster } from '../recovery/migration'
+import { LaneWriteError, ownerLane, readLanes, type LaneKey } from '../lane/lane'
+import { LANE_STORAGE_KEY, type LaneStorage } from '../lane/laneId'
+import { isLaneLineage } from '../lane/lineage'
+import { assignmentDecisionRecord, instrumentResultRecord, takenInIds, type LaneRecord } from '../lane/record'
 
 const JAR = process.env.DAYMARK_SERVER_JAR || resolve(process.cwd(), '../server/build/libs/daymark-companion.jar')
 const HAVE_JAR = existsSync(JAR)
@@ -45,8 +56,8 @@ function freePort(): Promise<number> {
   })
 }
 
-/** The jar on `port`, with an empty data directory. */
-function startServer(port: number): ChildProcess {
+/** The jar on `port`, with an empty data directory, and any other settings given. */
+function startServer(port: number, settings: Record<string, string> = {}): ChildProcess {
   return spawn('java', ['-jar', JAR], {
     env: {
       ...process.env,
@@ -56,6 +67,7 @@ function startServer(port: number): ChildProcess {
       DAYMARK_WEB_DIR: '/nonexistent-web',
       DAYMARK_LOG_LEVEL: 'warn',
       DAYMARK_RATE_LIMIT_RPS: '2000', // the test fires many requests from one IP; don't rate-limit it
+      ...settings,
     },
     stdio: 'ignore',
   })
@@ -286,4 +298,117 @@ describe.skipIf(!HAVE_JAR)('a first run on a server holding no key document (rea
     })
     expect(bare.status).toBe(428)
   }, 60000)
+})
+
+describe.skipIf(!HAVE_JAR)('the web console\'s lane on the owner\'s server (real server, #345)', () => {
+  /*
+   * A server that keeps three versions of a lineage, so pruning happens within the test, and holds
+   * a wrapped key made by a first run, as the owner console makes one. The key is the sync key of
+   * that master, with the ETag the server serves the document under.
+   */
+  let proc: ChildProcess
+  let base = ''
+  let key: LaneKey
+  let master: Uint8Array
+  let made: Awaited<ReturnType<typeof createRecoverableDataKey>>
+  const PASS = 'a-lane-owner-passphrase'
+  const SIGNED = { payloadJson: '{"context":"daymark.assignment.v1","assignment":{"lineageId":"as-1","version":0}}', sigB64: 'c2lnbmF0dXJl' }
+  const RESULT = { instrumentId: 'wellbeing-check', instrumentVersion: '1.0.0', takenAt: 1, scales: [{ scaleId: 'total', score: 4, bandLabel: 'Some days', tone: 'neutral' as const }] }
+  const storage = (): LaneStorage & { map: Map<string, string> } => {
+    const map = new Map<string, string>()
+    return { map, getItem: (k) => map.get(k) ?? null, setItem: (k, v) => void map.set(k, v) }
+  }
+  const ids = (records: readonly LaneRecord[]) => records.map((r) => r.id)
+
+  beforeAll(async () => {
+    const port = await freePort()
+    base = `http://127.0.0.1:${port}`
+    proc = startServer(port, { DAYMARK_MAX_VERSIONS: '3' })
+    await waitForHealth(`${base}/healthz`)
+    const client = new SyncClient(base, TOKEN)
+    made = await createRecoverableDataKey(PASS)
+    expect(await client.createKeyDocument(made.blob, { kind: 'firstRun' })).toBe('created')
+    const read = await client.getKeyDocument()
+    if (read.kind !== 'wrapped') throw new Error('the server did not serve the wrapped key it took')
+    master = made.dataKey
+    key = { syncKey: subkeysFromMaster(master).syncKey, keyDocumentEtag: read.etag }
+  }, 180000)
+
+  afterAll(() => {
+    proc?.kill('SIGKILL')
+    zeroizeDataKey(master)
+  })
+
+  it('the round trip keeps each record and its id, through the real server', async () => {
+    const lane = ownerLane(new SyncClient(base, TOKEN), key, { storage: storage() })
+    const records = [assignmentDecisionRecord(SIGNED, 'accepted'), instrumentResultRecord(RESULT)]
+    for (const r of records) await lane.add(r)
+    const read = await readLanes(new SyncClient(base, TOKEN), key)
+    expect(ids(read.records)).toEqual(ids(records))
+    expect(read.records).toEqual(records)
+    expect(read.unopened).toEqual([])
+  }, 60000)
+
+  it('a decision is read back after a refresh: a new client and a new console, in the same browser', async () => {
+    const browser = storage()
+    const decision = assignmentDecisionRecord(SIGNED, 'declined')
+    await ownerLane(new SyncClient(base, TOKEN), key, { storage: browser }).add(decision)
+    const again = await ownerLane(new SyncClient(base, TOKEN), key, { storage: browser }).read()
+    expect(ids(again.records)).toContain(decision.id)
+    expect(again.records.find((r) => r.id === decision.id)).toEqual(decision)
+  }, 60000)
+
+  it('with three versions kept, six additions lose nothing, and one taken in leaves', async () => {
+    const browser = storage()
+    let phoneCopy: { laneRecordsTakenIn?: string[] } = {}
+    const lane = ownerLane(new SyncClient(base, TOKEN), key, { storage: browser, takenIn: () => takenInIds(phoneCopy) })
+    const added: LaneRecord[] = []
+    for (let i = 0; i < 6; i++) {
+      const r = assignmentDecisionRecord({ ...SIGNED, payloadJson: `{"item":${i}}` }, 'accepted')
+      added.push(r)
+      await lane.add(r)
+    }
+    const lineage = browser.map.get(LANE_STORAGE_KEY)!
+    const kept = (await new SyncClient(base, TOKEN).listVersions(lineage)).map((v) => v.version)
+    expect(kept).toEqual([3, 4, 5])
+    const mine = (records: readonly LaneRecord[]) => ids(records).filter((id) => ids(added).includes(id))
+    expect(mine((await lane.read()).records)).toEqual(ids(added))
+    phoneCopy = { laneRecordsTakenIn: [added[0]!.id] }
+    await lane.add(instrumentResultRecord(RESULT))
+    expect(mine((await lane.read()).records)).toEqual(ids(added.slice(1)))
+  }, 120000)
+
+  it('a lane is listed beside the snapshots, never opens as one, and the server holds none of it in the clear', async () => {
+    const client = new SyncClient(base, TOKEN)
+    const marker = 'UNIQUE-LANE-MARKER-on-the-real-server'
+    const browser = storage()
+    await ownerLane(client, key, { storage: browser }).add(assignmentDecisionRecord({ ...SIGNED, payloadJson: `{"note":"${marker}"}` }, 'accepted'))
+    const lineage = browser.map.get(LANE_STORAGE_KEY)!
+    expect(isLaneLineage(lineage)).toBe(true)
+    expect(await client.listLineages()).toContain(lineage)
+    const raw = await client.getBlob(lineage, 0)
+    expect(Buffer.from(raw).toString('latin1').includes(marker)).toBe(false)
+    const refused = await client.pullLatest(lineage, PASS).catch((e: unknown) => e)
+    expect((refused as Error).message).toBe(LANE_IS_NOT_A_SNAPSHOT)
+  }, 60000)
+
+  it('after a new passphrase on another device, nothing more is sent until the console opens the key again', async () => {
+    const client = new SyncClient(base, TOKEN)
+    const browser = storage()
+    const lane = ownerLane(client, key, { storage: browser })
+    await lane.add(instrumentResultRecord(RESULT))
+    const lineage = browser.map.get(LANE_STORAGE_KEY)!
+    const read = await client.getKeyDocument()
+    if (read.kind !== 'wrapped') throw new Error('no wrapped key')
+    expect(await client.putKeyDocumentVersion(read.version + 1, await replacePassphrase(read.wrapped, master, 'a-new-passphrase-elsewhere'))).toBe('written')
+    const refused = await lane.add(assignmentDecisionRecord(SIGNED, 'accepted')).catch((e: unknown) => e)
+    expect(refused).toBeInstanceOf(LaneWriteError)
+    expect((refused as LaneWriteError).fault).toBe('keyChanged')
+    expect((await client.listVersions(lineage)).map((v) => v.version)).toEqual([0])
+    // Opened again, from the document the server serves now, the same master adds as before.
+    const now = await client.getKeyDocument()
+    if (now.kind !== 'wrapped') throw new Error('no wrapped key')
+    await ownerLane(client, { ...key, keyDocumentEtag: now.etag }, { storage: browser }).add(assignmentDecisionRecord(SIGNED, 'accepted'))
+    expect((await client.listVersions(lineage)).map((v) => v.version)).toEqual([0, 1])
+  }, 120000)
 })

@@ -582,6 +582,31 @@ describe('(e) the ports over the sync client', () => {
     expect(waits).toHaveLength(1)
   })
 
+  it('looks past the web console\'s lanes, which never open as a snapshot, even when one is newer (#345)', async () => {
+    const asked: string[] = []
+    const lanes = ['lane_AAECAwQFBgcICQoLDA0ODw', 'lane_EBESExQVFhcYGRobHB0eHw']
+    const listing = (lineages: string[]) =>
+      (async (input: RequestInfo | URL) => {
+        const path = new URL(String(input)).pathname
+        asked.push(path)
+        const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200 })
+        if (path === '/v1/snapshots') return json({ lineages })
+        if (path === '/v1/snapshots/laptop') return json({ versions: [{ version: 3, size: 1, contentHash: 'x', createdAt: 100 }] })
+        return json({ versions: [{ version: 7, size: 1, contentHash: 'x', createdAt: 999 }] })
+      }) as typeof fetch
+    // Control: the same newer version under a snapshot's name is taken as the newest.
+    expect(await serverKeyPorts(new SyncClient('http://sync.test', 'token', listing(['desk', 'laptop'])), async () => {}).newestSnapshot()).toEqual({
+      lineage: 'desk',
+      version: 7,
+    })
+    asked.length = 0
+    const ports = serverKeyPorts(new SyncClient('http://sync.test', 'token', listing([...lanes, 'laptop'])), async () => {})
+    expect(await ports.newestSnapshot()).toEqual({ lineage: 'laptop', version: 3 })
+    expect(asked).toEqual(['/v1/snapshots', '/v1/snapshots/laptop'])
+    // And lanes alone are no snapshot at all.
+    expect(await serverKeyPorts(new SyncClient('http://sync.test', 'token', listing(lanes)), async () => {}).newestSnapshot()).toBeNull()
+  })
+
   it('a server storing no snapshot has no newest one', async () => {
     const doFetch = (async () => new Response(JSON.stringify({ lineages: [] }), { status: 200 })) as unknown as typeof fetch
     expect(await serverKeyPorts(new SyncClient('http://sync.test', 'token', doFetch)).newestSnapshot()).toBeNull()
