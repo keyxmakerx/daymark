@@ -656,9 +656,13 @@ describe('the offer and the approval', () => {
       doFetch,
     )
     const therapist = await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, makeOffer: async () => OFFER, code: CODE }, doFetch)
-    // One byte of ciphertext turned: the AEAD refuses, and the key is untouched.
+    // One byte of ciphertext turned: the AEAD refuses, and the key is untouched. The replacement is
+    // chosen from the character it replaces (CLAUDE.md §5); choosing it from the last character
+    // left this a no-op about one run in 64, and a valid envelope then failed the test.
     const sealed = exchange.envB64!
-    exchange.envB64 = sealed.slice(0, -3) + (sealed.endsWith('A') ? 'B' : 'A') + sealed.slice(-2)
+    const at = sealed.length - 3
+    exchange.envB64 = sealed.slice(0, at) + (sealed[at] === 'A' ? 'B' : 'A') + sealed.slice(at + 1)
+    expect(exchange.envB64).not.toBe(sealed)
     const tampered = await ownerCollectPairing({ relRef: REL_REF, bearerToken: BEARER, pairing: opened }, doFetch)
     expect(tampered.state === 'complete' && tampered.offer).toBeNull()
     expect(tampered.state === 'complete' && hex(tampered.isk)).toBe(hex(therapist.isk))
