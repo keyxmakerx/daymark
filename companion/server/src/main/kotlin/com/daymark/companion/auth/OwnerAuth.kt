@@ -4,8 +4,10 @@ import com.daymark.companion.clientAddress
 import io.ktor.http.HttpHeaders
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.httpMethod
-import io.ktor.server.request.receiveStream
+import io.ktor.server.request.receiveChannel
 import io.ktor.util.AttributeKey
+import io.ktor.utils.io.readAvailable
+import org.bouncycastle.math.ec.rfc8032.Ed25519
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
 
@@ -34,14 +36,21 @@ data class OwnerPrincipal(val ownerId: String, val kind: CredentialKind, val cre
  * - A SIGNATURE IS TAKEN when every header is there in its one spelling; its time is within
  *   [DeviceSignature.WINDOW_SECONDS] of the server's clock, either way, when the request arrives and
  *   again once its body has been read; the key it names is registered to this owner and has no
- *   revocation, both read from the database when the request arrives and again once the signature has
- *   been checked, the last thing before the handler; the key has not used the nonce before;
- *   and the signature is that key's over the method, the target, the body, the time, the nonce and
- *   every header an owner route acts on ([DeviceSignature.SIGNED_HEADERS]), each at most once.
- *   The nonce is taken before the body is read, so a captured request sent again is refused however
- *   its body is held, and the time judged with the same reading of the clock that decides which
- *   nonces have lapsed. A stranger's nonces cost a failure each, toward the lockout, and lapse with
- *   the window.
+ *   revocation; the signature is that key's over the method, the target, the body, the time, the
+ *   nonce and every header an owner route acts on ([DeviceSignature.SIGNED_HEADERS]), each at most
+ *   once; and the key has not used the nonce before. The key and its revocation are read again once
+ *   the nonce is taken, the last thing before the handler.
+ * - NOTHING THAT DEPENDS ON THE KEY IS ANSWERED BEFORE THE BODY. Before it, only what the request's
+ *   own headers and the clock can tell, and its address in [check]: a header missing or misspelled, a
+ *   signed header twice or empty, a time outside the window, a length not stated (411) or over the cap
+ *   (413), a rate or a lockout (429). Everything that reads the key or the nonce waits until the whole
+ *   body has been read, so a body held back is answered no sooner for a key nobody paired than for a
+ *   live one; and a key that is not live is checked against a key nobody's request can use, so a
+ *   forged request costs the same work whatever key it names.
+ * - A NONCE IS TAKEN ONLY BY A REQUEST ITS KEY SIGNED, after the signature is checked: a forged request
+ *   leaves nothing behind. The time is judged after the body with the same reading of the clock that
+ *   decides which nonces have lapsed, so a captured request sent again meets its nonce while it is
+ *   inside its window, and is refused for its time once it is past it, however its body is held.
  * - EVERY REFUSAL IS THE SAME 401, whichever check said no. A failed signature counts toward the
  *   source's lockout exactly as a bad token does, in the same [AuthGuard], so one source has one
  *   budget whichever credential it tries. The lockout's audit row is written on arming, never per
@@ -175,7 +184,10 @@ class OwnerAuth(
         data object LengthRequired : Signed
     }
 
-    /** DeviceSignature's checks, cheapest first; the body is read only for a key that could pass. */
+    /**
+     * DeviceSignature's checks. Before the body, only what the request's own headers and the clock can
+     * tell; everything that reads the key or the nonce once the whole body is in.
+     */
     private suspend fun verifySigned(call: ApplicationCall, allowPending: Boolean): Signed {
         val headers = call.request.headers
         val keyId = headers[DeviceSignature.KEY_HEADER] ?: return Signed.Refused
@@ -188,30 +200,21 @@ class OwnerAuth(
         // Every header an owner route acts on is in the message, so none can be changed on the path.
         val headerValues = DeviceSignature.signedHeaderValues { name -> headers.getAll(name) } ?: return Signed.Refused
         val sentAt = (DeviceSignature.parseTime(time) ?: return Signed.Refused) * 1000
-        // One reading of the clock judges the request's time and decides which nonces have lapsed, so
-        // no later reading can forget the nonce of a request whose time was found good.
-        val now = devices.now()
-        if (!withinWindow(now, sentAt)) return Signed.Refused
-
-        // The body's size is settled before any key is looked up, so a body too large, or one that does
-        // not state its length, gets the same answer whatever key the request names: no answer tells a
-        // live key from one nobody paired.
-        if (call.request.headers[HttpHeaders.TransferEncoding] != null) return Signed.LengthRequired
-        val declared = call.request.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+        // A request whose own time is already outside the window is refused before its body is read.
+        if (!withinWindow(devices.now(), sentAt)) return Signed.Refused
+        if (headers[HttpHeaders.TransferEncoding] != null) return Signed.LengthRequired
+        val declared = headers[HttpHeaders.ContentLength]?.toLongOrNull()
         if (declared != null && declared > maxBodyBytes) return Signed.TooLarge
 
-        // The key and its revocation, read now: no verdict is kept between requests.
-        val (publicKey, _) = liveKey(keyId, allowPending) ?: return Signed.Refused
-
-        // The nonce is taken before the body is read, so a captured request sent again is refused
-        // however slowly its body comes, and before any of it is read.
-        if (!devices.rememberNonce(keyId, nonce, keepUntil = sentAt + DeviceSignature.WINDOW_MS, now = now)) return Signed.Refused
-
+        // The whole body, before anything that depends on the key or the nonce.
         val body = call.requestBody(maxBodyBytes) ?: return Signed.TooLarge
-        // A body finished after the request's window has closed is refused: a request that could be
-        // held open past its time could be completed by whoever held it.
-        if (!withinWindow(devices.now(), sentAt)) return Signed.Refused
 
+        // One reading of the clock judges the request's time and decides which nonces have lapsed: a body
+        // finished after the window is refused, and inside it a nonce already used is still kept.
+        val now = devices.now()
+        if (!withinWindow(now, sentAt)) return Signed.Refused
+        // The key and its revocation, read now: no verdict is kept between requests.
+        val live = liveKey(keyId, allowPending)
         val message = DeviceSignature.requestMessage(
             call.request.httpMethod.value,
             call.request.local.uri,
@@ -220,9 +223,12 @@ class OwnerAuth(
             nonce,
             headerValues,
         )
-        if (!DeviceSignature.verify(publicKey, message, signature)) return Signed.Refused
-        // Read again, last, with nothing kept from the first reading: a phone revoked while its body was
-        // on the way is refused, and the handler never runs for it.
+        val signedByKey = DeviceSignature.verify(live?.first ?: NOBODYS_KEY, message, signature)
+        if (live == null || !signedByKey) return Signed.Refused
+        // Only a request its key signed takes a nonce, so a forged one leaves no row behind.
+        if (!devices.rememberNonce(keyId, nonce, keepUntil = sentAt + DeviceSignature.WINDOW_MS, now = now)) return Signed.Refused
+        // Read again, last, with nothing kept from the first reading: a phone revoked in between is
+        // refused, and the handler never runs for it.
         return liveKey(keyId, allowPending)?.second ?: Signed.Refused
     }
 
@@ -248,6 +254,14 @@ class OwnerAuth(
         const val TOKEN_CREDENTIAL_ID = "token"
 
         /**
+         * The key a signature is checked against when the key the request names is not live. What that
+         * check answers is never taken; it is made so that a forged request costs the same whatever key
+         * it names.
+         */
+        private val NOBODYS_KEY: ByteArray =
+            ByteArray(DeviceSignature.PUBLIC_KEY_BYTES).also { Ed25519.generatePublicKey(ByteArray(32) { 0x5a }, 0, it, 0) }
+
+        /**
          * The fewest milliseconds between two lockout rows in the owner's log. Each source arms at most
          * one lockout per episode; this bounds how many episodes at once reach the log.
          */
@@ -264,17 +278,19 @@ private val REQUEST_BODY_TOO_LARGE = AttributeKey<Unit>("daymark.requestBodyTooL
  * then reads the same bytes; a handler that read first leaves them for the check.
  *
  * Streamed, so a body over the cap is refused as soon as it crosses it. What was read of one that
- * crossed is not kept, and every later read of it answers null.
+ * crossed is not kept, and every later read of it answers null. Read by suspending, so a body held
+ * back on the path holds no thread while it waits: every signed request's body is read before its
+ * answer.
  */
 suspend fun ApplicationCall.requestBody(max: Long): ByteArray? {
     if (attributes.contains(REQUEST_BODY_TOO_LARGE)) return null
     attributes.getOrNull(REQUEST_BODY)?.let { return if (it.size > max) null else it }
-    val stream = receiveStream()
+    val channel = receiveChannel()
     val buf = ByteArray(8 * 1024)
     val out = java.io.ByteArrayOutputStream()
     var total = 0L
     while (true) {
-        val n = stream.read(buf)
+        val n = channel.readAvailable(buf, 0, buf.size)
         if (n < 0) break
         total += n
         if (total > max) {

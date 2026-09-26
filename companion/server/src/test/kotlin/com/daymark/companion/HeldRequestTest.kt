@@ -1,19 +1,15 @@
 package com.daymark.companion
 
 import com.daymark.companion.auth.DeviceSignature
-import java.io.File
-import java.sql.DriverManager
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import kotlin.test.assertNull
 
 /**
  * A signed request whose body arrives slowly (#186): on a real Netty engine, with the request written
  * by hand, so its body can stop halfway — framed by Content-Length and held, or chunked with the last
- * chunk held — exactly as a person on the path could send it. The server's clock is the test's, and
- * [DeviceServer.onClockRead] says when the server has read the request's time.
+ * chunk held — exactly as a person on the path could send it. The server's clock is the test's. A
+ * request the server is still holding open after [HELD_MS] is one waiting for the rest of its body.
  */
 class HeldRequestTest {
 
@@ -28,25 +24,20 @@ class HeldRequestTest {
     }
 
     /**
-     * Send [headers] for a PUT of [body], stop after four bytes until the server has read the request's
-     * time, then set the clock to [then] and finish the body: the server's answer, whenever it came.
+     * Send [headers] for a PUT of [body] and stop after four bytes. A server that refuses without the
+     * rest of the body has answered within [HELD_MS]; one still holding the request open then has its
+     * clock set to [then] and the body finished: the server's answer, whenever it came.
      */
-    private fun heldUntil(live: LiveServer, headers: Map<String, String>, chunked: Boolean, then: Long): RawResponse {
-        val sawTime = CountDownLatch(1)
-        live.server.onClockRead = { sawTime.countDown() }
+    private fun heldUntil(live: LiveServer, headers: Map<String, String>, chunked: Boolean, then: Long): RawResponse =
         live.open().use { c ->
             c.write(LiveServer.head("PUT", target, headers, chunked, body.size.toLong()))
             c.write(part(chunked, 0, 4, last = false))
-            assertTrue(sawTime.await(10, TimeUnit.SECONDS), "the server read the request's time")
-            live.server.onClockRead = null
-            live.server.now = then
-            // A server that refused without the rest of the body has answered already.
-            return c.answerWithin(300) ?: run {
+            c.answerWithin(HELD_MS) ?: run {
+                live.server.now = then
                 c.writeIfOpen(part(chunked, 4, body.size, last = true))
                 c.readResponse()
             }
         }
-    }
 
     @Test
     fun `a captured request replayed with its body held past its window is refused`() {
@@ -69,15 +60,6 @@ class HeldRequestTest {
         }
     }
 
-    /** Whether the server has taken [nonce]: it has checked the request's key and is reading its body. */
-    private fun nonceTaken(server: DeviceServer, nonce: String): Boolean =
-        DriverManager.getConnection("jdbc:sqlite:${File(server.dataDir, "owner-account.db").path}").use { c ->
-            c.prepareStatement("SELECT 1 FROM seen_nonces WHERE nonce=?").use { ps ->
-                ps.setString(1, nonce)
-                ps.executeQuery().use { it.next() }
-            }
-        }
-
     @Test
     fun `a phone revoked while its request's body is on the way is refused, and nothing is stored`() {
         val server = DeviceServer()
@@ -88,12 +70,8 @@ class HeldRequestTest {
             live.open().use { c ->
                 c.write(LiveServer.head("PUT", target, headers, chunked = false, length = body.size.toLong()))
                 c.write(body.copyOfRange(0, 4))
-                // The server has found the key good and taken the nonce, and waits for the rest of the body.
-                val deadline = System.currentTimeMillis() + 10_000
-                while (!nonceTaken(server, headers.getValue("X-Device-Nonce"))) {
-                    assertTrue(System.currentTimeMillis() < deadline, "the server took the request's nonce")
-                    Thread.sleep(5)
-                }
+                // The server holds the request open, waiting for the rest of its body.
+                assertNull(c.answerWithin(HELD_MS), "the server waits for the body")
                 assertEquals(204, live.owner("POST", "/v1/devices/${phone.keyId}/revoke").status, "the console's Revoke")
                 c.write(body.copyOfRange(4, body.size))
                 val answer = c.readResponse()
@@ -108,7 +86,7 @@ class HeldRequestTest {
     private fun put(live: LiveServer, phone: TestPhone, bytes: ByteArray, chunked: Boolean): RawResponse = live.open().use { c ->
         val headers = phone.headers("PUT", target, bytes, live.server.seconds)
         c.write(LiveServer.head("PUT", target, headers, chunked, bytes.size.toLong()))
-        c.answerWithin(300) ?: run {
+        c.answerWithin(HELD_MS) ?: run {
             c.writeIfOpen(if (chunked) LiveServer.chunk(bytes) + LiveServer.LAST_CHUNK else bytes)
             c.readResponse()
         }
@@ -155,5 +133,40 @@ class HeldRequestTest {
             val prompt = live.send("PUT", "/v1/snapshots/devA/2", fresh, body)
             assertEquals(201, prompt.status, prompt.body)
         }
+    }
+
+    @Test
+    fun `a body held back gets no answer before it is whole, whatever key the request names, and then the same one`() {
+        val server = DeviceServer()
+        server.startNetty().use { live ->
+            val paired = TestPhone()
+            live.pair(paired)
+            val revoked = TestPhone()
+            live.pair(revoked)
+            assertEquals(204, live.owner("POST", "/v1/devices/${revoked.keyId}/revoke").status)
+            val stranger = TestPhone() // a key nobody paired
+
+            // Each request is forged: signed by the stranger's key, naming the key given.
+            val named = mapOf("a live key" to paired.keyId, "a revoked key" to revoked.keyId, "a key nobody paired" to stranger.keyId)
+            val answers = named.mapValues { (what, keyId) ->
+                val forged = stranger.headers("PUT", target, body, server.seconds) + (DeviceSignature.KEY_HEADER to keyId)
+                live.open().use { c ->
+                    c.write(LiveServer.head("PUT", target, forged, chunked = false, length = body.size.toLong()))
+                    c.write(body.copyOfRange(0, 4))
+                    assertNull(c.answerWithin(HELD_MS), "$what: no answer while the body is held back")
+                    c.write(body.copyOfRange(4, body.size))
+                    c.readResponse()
+                }
+            }
+            assertEquals(named.mapValues { RawResponse(401, """{"error":"unauthorized"}""") }, answers, "the same answer for each, once its body is whole")
+
+            // Control: the live key's own request, its body whole, is taken.
+            assertEquals(201, live.send("PUT", target, paired.headers("PUT", target, body, server.seconds), body).status)
+        }
+    }
+
+    private companion object {
+        /** How long a request is held open, part of its body sent, before the test takes it that the server waits for the rest. */
+        const val HELD_MS = 1_000L
     }
 }

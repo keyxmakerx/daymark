@@ -121,11 +121,13 @@ class SignedRequestTest {
         val alteredQuery = "/v1/owner/audit?limit=2"
         val queryHeaders = phone.headers("GET", signedQuery, timeSeconds = server.seconds)
         assertEquals(unauthorized, client.send(HttpMethod.Get, alteredQuery, queryHeaders).answer(), "the query")
-        // Controls: each, signed afresh and sent as signed, is taken. (The headers tried above are spent:
-        // a nonce is taken before the signature is checked, so a request sent wrongly once is not sent again.)
+        // Controls: each, signed afresh and sent as signed, is taken.
         assertEquals(HttpStatusCode.OK, client.send(HttpMethod.Get, signedPath, phone.headers("GET", signedPath, timeSeconds = server.seconds)).status)
         assertEquals(HttpStatusCode.OK, client.send(HttpMethod.Get, signedQuery, phone.headers("GET", signedQuery, timeSeconds = server.seconds)).status)
-        assertEquals(unauthorized, client.send(HttpMethod.Get, signedQuery, queryHeaders).answer(), "the headers tried against the altered query are spent")
+        // A request its signature refused took no nonce: the headers tried against the altered query are
+        // good once for the query they name, and then spent.
+        assertEquals(HttpStatusCode.OK, client.send(HttpMethod.Get, signedQuery, queryHeaders).status, "not spent by the refusal")
+        assertEquals(unauthorized, client.send(HttpMethod.Get, signedQuery, queryHeaders).answer(), "spent by their one use")
     }
 
     @Test
