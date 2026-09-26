@@ -279,7 +279,7 @@ const NOW: Record<string, string[]> = {
   ],
   'src/lib/components/owner/TherapistKeyIntake.svelte': [
     'A clinician who changed their keys and someone substituting their own look identical from here.',
-    "Your clinician's clinician console publishes their two public keys to the server",
+    "Your clinician's console publishes their two public keys to the server",
     "it cannot tell your clinician's real key from one substituted for it",
   ],
   'src/lib/components/owner/NonDiagnosticBanner.svelte': [

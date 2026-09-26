@@ -205,7 +205,7 @@
     <div class="stack">
       <h4>Keys {therapist.displayName} published</h4>
       <p class="hint">
-        Your clinician's clinician console publishes their two public keys to the server, and this
+        Your clinician's console publishes their two public keys to the server, and this
         reads them back. What it shows you are their FINGERPRINTS — a short value worked out from
         each key, short enough that two people can read it to each other and different for every
         key. The server carries the keys and does not vouch for them: it cannot tell your
