@@ -176,7 +176,11 @@ describe('the copy', () => {
      */
     expect(INVITE_ACCEPTANCE, 'the acceptance screen no longer mentions the inbox token')
       .toMatch(/inbox token/i)
-    expect(INVITE_ACCEPTANCE).toMatch(/only they can give you those/i)
+    // The card after acceptance says it in its own words (#312): the token comes from the person
+    // who invited you, and it is the one value the text copy does not hold.
+    expect(INVITE_ACCEPTANCE).toMatch(/the inbox token comes from the person who invited you/i)
+    expect(FIELD_HELP.inboxToken.where).toMatch(/the one thing that is not in the invitation/i)
+    expect(FIELD_HELP.inboxToken.where).toMatch(/ask them/i)
   })
 
   it('does not lead with jargon a reader would have to already know', () => {

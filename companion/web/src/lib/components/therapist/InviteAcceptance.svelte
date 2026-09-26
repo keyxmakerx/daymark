@@ -670,12 +670,20 @@
 
     <Card title="Signing in from now on">
       <div class="stack">
+        <!--
+          The fields named here are the fields LoginGate draws, by their fieldHelp.ts labels and in
+          its order: the stored path, then the fallback. "All but the inbox token" is what
+          `portalCard` below holds. loginGate.test.ts reads both files and holds them together
+          (#312).
+        -->
         <p>
-          Your authenticator and your reading passphrase are what get you back in. The sign-in screen
-          asks for a wrapped key, a relationship id and a credential id: they are the three values in
-          the text below, which this browser is now holding for you. It also asks for two of the
-          other person's public keys and your inbox token — only they can give you those, and nothing
-          on this page can produce them.
+          Your authenticator and your reading passphrase are what get you back in. In the browser
+          that accepted this invitation, the sign-in screen asks for an authenticator code, your
+          reading passphrase, and — once per tab — your inbox token. From a browser with no record of
+          accepting, it asks for the connection by hand: the server address, the inbox token, the
+          relationship id, the credential id and your wrapped reading key. All but the inbox token are
+          in the text below; the inbox token comes from the person who invited you. The other
+          person's public keys are fetched for you and never typed.
         </p>
         <p>
           Clearing site data for this page erases what this browser is holding, and nothing anywhere
