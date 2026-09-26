@@ -41,6 +41,7 @@
     type PhonesState,
   } from '../../phones/ceremony'
   import { DISCONNECT } from '../../phones/copy'
+  import { qrDrawing } from '../../phones/qr'
 
   let {
     /** The server address and access token the sync card proved in this visit, or null. */
@@ -60,6 +61,14 @@
 
   const view = $derived(phonesView(phones, now))
   const uid = $props.id()
+
+  /*
+   * THE QR CODE CARRIES THE VIEW'S qrText AND NOTHING ELSE: the https address and the ten symbols,
+   * spelled as the phone reads them (ceremony.ts, pairingQrText). Drawn once per code rather than
+   * once a second: the text is a string, so the clock's ticks do not change it.
+   */
+  const qrText = $derived(view.area?.kind === 'code' ? view.area.qrText : null)
+  const qr = $derived(qrText === null ? null : qrDrawing(qrText))
 
   function portsFor(c: OwnerConnection): PhonesPorts {
     return {
@@ -199,6 +208,18 @@
     <div class="area">
       {#if area.kind === 'code'}
         <p class="para">{area.lede}</p>
+        {#if qr}
+          <!--
+            Hidden from assistive technology: its text alternative is the address and the code printed
+            beside it, which is what "or type the server address and the code" asks for.
+          -->
+          <div class="qr-tile">
+            <svg class="qr" viewBox="0 0 {qr.extent} {qr.extent}" aria-hidden="true" focusable="false" shape-rendering="crispEdges">
+              <rect class="qr-paper" width={qr.extent} height={qr.extent} />
+              <path class="qr-ink" d={qr.path} />
+            </svg>
+          </div>
+        {/if}
         <dl class="facts">
           <dt>{area.addressLabel}</dt>
           <dd class="address">{area.address}</dd>
@@ -277,6 +298,18 @@
   .area { display: flex; flex-direction: column; gap: var(--space-3); align-self: stretch; }
   .para { margin: 0; font-size: 0.9rem; line-height: 1.55; color: var(--ink-text); }
   .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+  /* Day ink on a day-paper tile whatever the theme, with a thin edge so it reads as an object on a
+     dark page. The quiet zone a reader needs is inside the drawing. */
+  .qr-tile {
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--scan-paper);
+    line-height: 0;
+  }
+  .qr { display: block; width: 14rem; height: 14rem; max-width: 100%; }
+  .qr-paper { fill: var(--scan-paper); }
+  .qr-ink { fill: var(--scan-ink); }
 
   .facts { margin: 0; display: flex; flex-direction: column; gap: var(--space-1); }
   .facts dt { font-size: 0.8rem; color: var(--ink-soft); }

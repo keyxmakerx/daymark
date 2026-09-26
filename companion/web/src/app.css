@@ -364,6 +364,14 @@
   --mood-4-wash: var(--c-mood-4-wash-day);
   --mood-5-wash: var(--c-mood-5-wash-day);
 
+  /* ---- A code a camera reads: day ink on day paper, in every theme -------- */
+  /* The phone's pairing QR code (#431). Cameras read dark modules on a light
+     ground, and some readers refuse a code drawn light on dark, so the tile
+     keeps the day palette at midnight, as a printed sheet would. Deliberately
+     not redefined in the dark blocks below. */
+  --scan-ink: var(--c-ink);
+  --scan-paper: var(--c-sheet);
+
   color-scheme: light dark;
 }
 

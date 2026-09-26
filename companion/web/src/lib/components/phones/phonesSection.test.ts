@@ -105,10 +105,43 @@ describe('colour', () => {
   })
 })
 
+describe('the QR code', () => {
+  it("draws the view's qrText and nothing else, once, hidden from assistive technology", () => {
+    const script = scriptOf(SOURCE)
+    expect(script).toMatch(/const qrText = \$derived\(view\.area\?\.kind === 'code' \? view\.area\.qrText : null\)/)
+    expect(script.match(/qrDrawing\(/g)).toHaveLength(1)
+    expect(script).toMatch(/qrDrawing\(qrText\)/)
+    const svg = /<svg class="qr"[^>]*>/.exec(markupOf(SOURCE))?.[0] ?? ''
+    expect(svg).toContain('aria-hidden="true"')
+    // Positive control: the count sees a second drawing of anything else.
+    expect(`${script} qrDrawing(view.lede)`.match(/qrDrawing\(/g)).toHaveLength(2)
+  })
+
+  it('is day ink on day paper in every theme', () => {
+    const css = readFileSync(new URL('../../../app.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+    const darkBlocks = (text: string) =>
+      [...text.matchAll(/:root:not\(\[data-theme="light"\]\)\s*\{[^}]*\}|:root\[data-theme="dark"\]\s*\{[^}]*\}/g)].map((m) => m[0])
+    // Both dark palettes, and the colour-scheme line beside them.
+    expect(darkBlocks(css).filter((b) => b.includes('--paper-bg'))).toHaveLength(2)
+    expect(css).toMatch(/--scan-ink:\s*var\(--c-ink\);/)
+    expect(css).toMatch(/--scan-paper:\s*var\(--c-sheet\);/)
+    for (const block of darkBlocks(css)) expect(block).not.toMatch(/--scan-/)
+    // Positive control: a themed value planted in a dark block is seen.
+    const planted = css.replace(':root[data-theme="dark"] {', ':root[data-theme="dark"] {\n  --scan-ink: var(--ink-text);')
+    expect(planted).not.toBe(css)
+    expect(darkBlocks(planted).some((b) => /--scan-/.test(b))).toBe(true)
+    // And the tile paints with them and nothing themed.
+    const style = (/<style>([\s\S]*?)<\/style>/.exec(SOURCE)?.[1] ?? '').replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(style).toMatch(/\.qr-ink \{ fill: var\(--scan-ink\); \}/)
+    expect(style).toMatch(/\.qr-paper \{ fill: var\(--scan-paper\); \}/)
+  })
+})
+
 describe('time on screen', () => {
   it('every clock sits in a silent region, and the one polite region carries only the announcement', () => {
     const markup = markupOf(SOURCE)
-    const clocks = [...markup.matchAll(/<p[^>]*>(?:(?!<\/p>)[\s\S])*?<span class="clock">/g)].map((m) => m[0])
+    // `<p` and a space or `>`, so an SVG `<path>` is not a paragraph.
+    const clocks = [...markup.matchAll(/<p(?=[\s>])[^>]*>(?:(?!<\/p>)[\s\S])*?<span class="clock">/g)].map((m) => m[0])
     expect(clocks.length).toBe(2)
     for (const c of clocks) expect(c).toMatch(/^<p[^>]*aria-live="off"/)
     const polite = [...markup.matchAll(/<[^>]*aria-live="polite"[^>]*>([^<]*)</g)].map((m) => m[1]!.trim())
