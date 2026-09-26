@@ -267,12 +267,12 @@ class TimedOfferSchemaTest {
     }
 
     /**
-     * The slicer stops at the next migration, shown on a source that has one.
+     * The slicer stops at the next migration, shown on a source built to have one.
      *
-     * The assertion below it cannot demonstrate this today: v18 is the newest migration, so
-     * "stop at the next migration" and "stop at the end of the companion object" take the same
-     * slice, and a mutation between them changes nothing. The day that stops being true is the day
-     * the difference matters, so the case is built here instead of waited for.
+     * The test below makes the same claim of the real file, where v19 follows v18. This one keeps
+     * the claim independent of which migration is the newest there: when the migration sliced is the
+     * newest, "stop at the next migration" and "stop at the end of the companion object" take the
+     * same slice, and a mutation between them changes nothing.
      */
     @Test
     fun `the slicer stops at a later migration when there is one`() {
@@ -315,6 +315,14 @@ class TimedOfferSchemaTest {
         // six are the people tables and nothing else; this line only says the slice stopped.
         assertEquals("the slice runs past this migration", 9, body.split("execSQL").size - 1)
         assertFalse("the slice swallowed a later migration", body.contains("val MIGRATION_"))
+
+        // Positive control: there IS a later migration in the file for the slice to have run into, so
+        // the two lines above say the slice stopped, not that there was nothing to stop at.
+        val later = Regex("""val MIGRATION_(\d+)_\d+ = object""").findAll(database)
+            .map { it.groupValues[1].toInt() }
+            .filter { it > 17 }
+            .toList()
+        assertTrue("no migration after 17_18 exists, so this guard proved nothing", later.isNotEmpty())
 
         // Positive control: the slice does end, and it ends before the rest of the companion object.
         assertFalse("the slice ran to the end of the companion object", body.contains("DEFAULT_ACTIVITIES"))
@@ -404,12 +412,13 @@ class TimedOfferSchemaTest {
     }
 
     /**
-     * The chain runs 1 → the declared version with no gap, and the migration that adds these columns
-     * is the one that arrives at it.
+     * The chain runs 1 → the declared version with no gap, and the declared version is at or past the
+     * migration that adds these columns.
      *
-     * The version is read from the migration that adds `offeredHour`, not from a literal 18: a
-     * literal goes red on the next unrelated column anyone adds, and a guard that fails for reasons
-     * its reader did not cause is a guard that gets its number bumped without thought.
+     * The version is read from the migration that adds `offeredHour`, not from a literal 18, and
+     * compared with `>=`, not `==`: a later migration that has nothing to do with the ledger must not
+     * turn this red, and a guard that fails for reasons its reader did not cause is a guard that gets
+     * its number bumped without thought. `GoalReachedSchemaTest` checks its own column the same way.
      */
     @Test
     fun `the migration chain reaches the declared database version without a gap`() {
@@ -442,10 +451,10 @@ class TimedOfferSchemaTest {
                 .contains("ADD COLUMN offeredHour")
         }
         assertTrue("no migration adds the offeredHour column", adds != null)
-        assertEquals(
-            "the migration that adds the timing columns is not the one that reaches the declared version",
-            version,
-            adds!!.groupValues[2].toInt(),
+        val addedAt = adds!!.groupValues[2].toInt()
+        assertTrue(
+            "the schema version ($version) is behind the migration that adds the timing columns ($addedAt)",
+            version >= addedAt,
         )
     }
 

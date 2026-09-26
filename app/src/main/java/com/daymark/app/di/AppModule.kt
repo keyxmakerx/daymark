@@ -83,6 +83,7 @@ object AppModule {
                 AppDatabase.MIGRATION_15_16,
                 AppDatabase.MIGRATION_16_17,
                 AppDatabase.MIGRATION_17_18,
+                AppDatabase.MIGRATION_18_19,
             )
             .build()
 
@@ -153,6 +154,14 @@ object AppModule {
      */
     @Provides
     fun provideEntryPersonDao(db: AppDatabase): com.daymark.app.data.dao.EntryPersonDao = db.entryPersonDao()
+
+    /**
+     * The Companion's six tables — game plans, their items, the owner's progress, accepted
+     * assignments, and self-check and task results (#177). `BackupManager` takes it to empty them on
+     * "Replace all current data".
+     */
+    @Provides
+    fun provideCompanionDao(db: AppDatabase): com.daymark.app.data.dao.CompanionDao = db.companionDao()
 
     @Provides
     @Singleton

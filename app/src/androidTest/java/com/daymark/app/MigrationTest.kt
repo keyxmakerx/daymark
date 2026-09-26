@@ -343,6 +343,86 @@ class MigrationTest {
     }
 
     @Test
+    fun migrate18To19_createsTheCompanionTables_andLeavesTreatmentsAlone() {
+        helper.createDatabase(TEST_DB, 18).use { db ->
+            db.execSQL(
+                "INSERT INTO treatments (id, kind, startedAt, note) VALUES (1, 'CPAP', 1000, 'my own note')",
+            )
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 19, true, AppDatabase.MIGRATION_18_19).use { db ->
+            db.execSQL("PRAGMA foreign_keys = ON")
+
+            // The owner's own treatment marker is exactly as it was. A clinician's game plan never
+            // lands in `treatments` (#177), and this migration does not so much as read the table.
+            db.query("SELECT kind, note FROM treatments WHERE id = 1").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("CPAP", c.getString(0))
+                assertEquals("my own note", c.getString(1))
+            }
+
+            // One accepted plan version, one item of it, and the owner's own mark against the item.
+            db.execSQL(
+                "INSERT INTO game_plans (lineageId, version, supersedes, status, reviewEvery, " +
+                    "reviewCount, authorFingerprint, issuedAt, acceptedAt, payloadJson, sigB64) " +
+                    "VALUES ('gp-1', 0, NULL, 'active', 'week', 1, 'fp', 100, 200, '{}', 'sig')",
+            )
+            db.execSQL(
+                "INSERT INTO game_plan_items (lineageId, version, itemRef, position, kind, title, " +
+                    "detail, targetPerWeek, dueAt, recurrence) " +
+                    "VALUES ('gp-1', 0, 'it-a', 0, 'goal', 'A walk after lunch', NULL, 3, NULL, NULL)",
+            )
+            db.execSQL("INSERT INTO game_plan_progress (lineageId, itemRef, state) VALUES ('gp-1', 'it-a', 'doing')")
+            db.query("SELECT title, targetPerWeek, detail FROM game_plan_items WHERE itemRef = 'it-a'").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("A walk after lunch", c.getString(0))
+                assertEquals(3, c.getInt(1))
+                assertTrue("an optional field came back filled in", c.isNull(2))
+            }
+
+            // Signed content is append-only: a version already stored cannot be written again.
+            val again = runCatching {
+                db.execSQL(
+                    "INSERT INTO game_plans (lineageId, version, supersedes, status, reviewEvery, " +
+                        "reviewCount, authorFingerprint, issuedAt, acceptedAt, payloadJson, sigB64) " +
+                        "VALUES ('gp-1', 0, NULL, 'withdrawn', NULL, NULL, 'fp', 300, 400, '{}', 'sig')",
+                )
+            }
+            assertTrue("a stored plan version was written a second time", again.isFailure)
+
+            // The other three tables accept a row each.
+            db.execSQL(
+                "INSERT INTO assignments (lineageId, version, type, authorFingerprint, issuedAt, " +
+                    "acceptedAt, payloadJson, sigB64) VALUES ('as-1', 0, 'questionnaire', 'fp', 100, 200, '{}', 'sig')",
+            )
+            db.execSQL(
+                "INSERT INTO instrument_results (instrumentId, instrumentVersion, takenAt, scaleId, " +
+                    "score, bandLabel) VALUES ('wellbeing-selfcheck', '1.0.0', 500, 'total', 12.5, 'A middle range')",
+            )
+            db.execSQL(
+                "INSERT INTO task_results (taskId, taskVersion, takenAt, timingFlag, metric, value) " +
+                    "VALUES ('steady-attention', '1.0.0', 600, 'ok', 'accuracyPct', 92.5)",
+            )
+            db.query("SELECT score FROM instrument_results").use { c ->
+                assertTrue(c.moveToFirst())
+                // REAL, not INTEGER: a score need not be whole, and the half must survive.
+                assertEquals(12.5, c.getDouble(0), 0.0)
+            }
+
+            // The cascade takes a plan version's items with it, and leaves the owner's own mark:
+            // progress belongs to the owner and outlives any one version of the clinician's plan.
+            db.execSQL("DELETE FROM game_plans WHERE lineageId = 'gp-1' AND version = 0")
+            db.query("SELECT COUNT(*) FROM game_plan_items").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals(0, c.getInt(0))
+            }
+            db.query("SELECT state FROM game_plan_progress WHERE lineageId = 'gp-1' AND itemRef = 'it-a'").use { c ->
+                assertTrue("the owner's progress went with the clinician's plan", c.moveToFirst())
+                assertEquals("doing", c.getString(0))
+            }
+        }
+    }
+
+    @Test
     fun migrateAll_from3_toLatest() {
         helper.createDatabase(TEST_DB, 3).use { db ->
             db.execSQL(

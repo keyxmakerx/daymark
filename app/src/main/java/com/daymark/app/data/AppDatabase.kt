@@ -38,8 +38,14 @@ import com.daymark.app.data.entity.Treatment
         com.daymark.app.data.entity.PersonNote::class,
         com.daymark.app.data.entity.EntryPersonCrossRef::class,
         com.daymark.app.data.entity.PersonGroupShare::class,
+        com.daymark.app.data.entity.GamePlan::class,
+        com.daymark.app.data.entity.GamePlanItem::class,
+        com.daymark.app.data.entity.GamePlanProgress::class,
+        com.daymark.app.data.entity.AcceptedAssignment::class,
+        com.daymark.app.data.entity.InstrumentResult::class,
+        com.daymark.app.data.entity.TaskResult::class,
     ],
-    version = 18,
+    version = 19,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -61,6 +67,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun personDao(): com.daymark.app.data.dao.PersonDao
     abstract fun personNoteDao(): com.daymark.app.data.dao.PersonNoteDao
     abstract fun entryPersonDao(): com.daymark.app.data.dao.EntryPersonDao
+    abstract fun companionDao(): com.daymark.app.data.dao.CompanionDao
 
     /** Seeds a sensible set of starter activities on first install. */
     class SeedCallback : Callback() {
@@ -556,6 +563,124 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE offer_records ADD COLUMN offeredHour INTEGER NOT NULL DEFAULT -1")
                 db.execSQL("ALTER TABLE offer_records ADD COLUMN offeredWeekday INTEGER NOT NULL DEFAULT -1")
                 db.execSQL("ALTER TABLE offer_records ADD COLUMN responded INTEGER")
+            }
+        }
+
+        /**
+         * v19 adds the six tables that hold what a clinician sends through the Companion and what the
+         * owner does with it: `game_plans`, `game_plan_items`, `game_plan_progress`, `assignments`,
+         * `instrument_results` and `task_results` (#177). Existing data is preserved and no existing
+         * table is touched — `treatments` least of all, which a clinician's game plan must never reach
+         * ([com.daymark.app.data.entity.GamePlan] says why).
+         *
+         * `docs/COMPANION_PHONE.md` §3 is the design; each entity carries the reasoning for its table.
+         *
+         * Every statement is Room's own generated form for the entity it creates — column for column,
+         * in declaration order, in Room's wording — because `runMigrationsAndValidate` compares each
+         * table against the SQL Room would have written. That comparison runs on a device, which CI
+         * does not have. `CompanionSchemaTest` asserts the same agreement against the entities where it
+         * does run, and `MigrationSchemaExportTest` against the text Room itself exports, once the v19
+         * schema is committed.
+         *
+         * ## The keys
+         *
+         * What a clinician signed is keyed by what was signed: `(lineageId, version)` for `game_plans`
+         * and `assignments`, and `(lineageId, version, itemRef)` for `game_plan_items`. The owner's
+         * `game_plan_progress` is keyed by `(lineageId, itemRef)`, so it carries across versions. The
+         * two results tables have an autoincrement id, like `assessment_results`.
+         *
+         * ## The one foreign key, and the tables deliberately without one
+         *
+         * `game_plan_items` references `game_plans` on `(lineageId, version)` with `ON UPDATE NO ACTION
+         * ON DELETE CASCADE`, in the wording [MIGRATION_14_15] established for `goal_steps`, down to
+         * the space before the closing paren. It is the schema's first composite foreign key, and the
+         * parent is created first. No other table here has one, and each entity says why not.
+         *
+         * ## No index beyond the keys
+         *
+         * The items' foreign-key columns lead their primary key, so SQLite's primary-key index serves
+         * the cascade and no entity declares a second one. An index on the results tables comes with
+         * the reader that needs it, when the question it answers is known.
+         *
+         * ## No DEFAULT, and nothing seeded
+         *
+         * These are new tables with no rows to give a value to, no entity here declares an
+         * `@ColumnInfo(defaultValue = …)`, and a `DEFAULT` in the SQL alone would fail Room's
+         * comparison. Nothing is inserted: a game plan or an assignment is here only once the owner has
+         * accepted it, and a migration is not the owner.
+         */
+        val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `game_plans` (" +
+                        "`lineageId` TEXT NOT NULL, " +
+                        "`version` INTEGER NOT NULL, " +
+                        "`supersedes` INTEGER, " +
+                        "`status` TEXT NOT NULL, " +
+                        "`reviewEvery` TEXT, " +
+                        "`reviewCount` INTEGER, " +
+                        "`authorFingerprint` TEXT NOT NULL, " +
+                        "`issuedAt` INTEGER NOT NULL, " +
+                        "`acceptedAt` INTEGER NOT NULL, " +
+                        "`payloadJson` TEXT NOT NULL, " +
+                        "`sigB64` TEXT NOT NULL, " +
+                        "PRIMARY KEY(`lineageId`, `version`))",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `game_plan_items` (" +
+                        "`lineageId` TEXT NOT NULL, " +
+                        "`version` INTEGER NOT NULL, " +
+                        "`itemRef` TEXT NOT NULL, " +
+                        "`position` INTEGER NOT NULL, " +
+                        "`kind` TEXT NOT NULL, " +
+                        "`title` TEXT NOT NULL, " +
+                        "`detail` TEXT, " +
+                        "`targetPerWeek` INTEGER, " +
+                        "`dueAt` INTEGER, " +
+                        "`recurrence` TEXT, " +
+                        "PRIMARY KEY(`lineageId`, `version`, `itemRef`), " +
+                        "FOREIGN KEY(`lineageId`, `version`) REFERENCES `game_plans`(`lineageId`, `version`) " +
+                        "ON UPDATE NO ACTION ON DELETE CASCADE )",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `game_plan_progress` (" +
+                        "`lineageId` TEXT NOT NULL, " +
+                        "`itemRef` TEXT NOT NULL, " +
+                        "`state` TEXT NOT NULL, " +
+                        "PRIMARY KEY(`lineageId`, `itemRef`))",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `assignments` (" +
+                        "`lineageId` TEXT NOT NULL, " +
+                        "`version` INTEGER NOT NULL, " +
+                        "`type` TEXT NOT NULL, " +
+                        "`authorFingerprint` TEXT NOT NULL, " +
+                        "`issuedAt` INTEGER NOT NULL, " +
+                        "`acceptedAt` INTEGER NOT NULL, " +
+                        "`payloadJson` TEXT NOT NULL, " +
+                        "`sigB64` TEXT NOT NULL, " +
+                        "PRIMARY KEY(`lineageId`, `version`))",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `instrument_results` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`instrumentId` TEXT NOT NULL, " +
+                        "`instrumentVersion` TEXT NOT NULL, " +
+                        "`takenAt` INTEGER NOT NULL, " +
+                        "`scaleId` TEXT NOT NULL, " +
+                        "`score` REAL NOT NULL, " +
+                        "`bandLabel` TEXT NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `task_results` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`taskId` TEXT NOT NULL, " +
+                        "`taskVersion` TEXT NOT NULL, " +
+                        "`takenAt` INTEGER NOT NULL, " +
+                        "`timingFlag` TEXT NOT NULL, " +
+                        "`metric` TEXT NOT NULL, " +
+                        "`value` REAL NOT NULL)",
+                )
             }
         }
 

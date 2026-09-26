@@ -54,11 +54,17 @@ HAMCREST="$GL/hamcrest-core-1.3.jar"
 ANNOT=$(find_jar org.jetbrains/annotations "annotations-13.0.jar")
 
 # The test files this runs, and the helpers they need. Adding a file here is a deliberate act: read
-# its imports first and confirm none of them is a Room or Android type.
+# its imports first and confirm none of them is a Room or Android type. `CompanionSchemaTest` and
+# `MigrationSchemaExportTest` import `repoFile`, JUnit and `java.io.File` and nothing else; the
+# second reads the exported schemas under app/schemas as JSON text. The two report tests also use
+# `ui/SourceText.kt`, which imports nothing from the app.
 TESTS="com.daymark.app.data.PeopleSchemaTest com.daymark.app.data.TimedOfferSchemaTest
+com.daymark.app.data.CompanionSchemaTest com.daymark.app.data.MigrationSchemaExportTest
 com.daymark.app.export.ReportCopySourceTest com.daymark.app.ui.settings.ReportExportSourceTest"
 SOURCES="$REPO/app/src/test/java/com/daymark/app/data/PeopleSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/TimedOfferSchemaTest.kt
+$REPO/app/src/test/java/com/daymark/app/data/CompanionSchemaTest.kt
+$REPO/app/src/test/java/com/daymark/app/data/MigrationSchemaExportTest.kt
 $REPO/app/src/test/java/com/daymark/app/export/ReportCopySourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/settings/ReportExportSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/backup/RepoFile.kt
