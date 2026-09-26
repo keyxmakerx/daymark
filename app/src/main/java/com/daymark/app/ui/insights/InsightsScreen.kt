@@ -11,10 +11,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -43,6 +45,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -52,6 +57,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.daymark.app.ui.theme.moodColors
 import com.daymark.app.ui.theme.moodLabels
 import com.daymark.app.model.Mood
+import com.daymark.app.ui.calendar.CalendarDays
 import com.daymark.app.ui.calendar.CalendarViewModel
 import com.daymark.app.ui.calendar.YearPixelsViewModel
 import com.daymark.app.ui.components.MoodFaceIcon
@@ -381,7 +387,7 @@ private fun PeriodHeader(label: String, onPrev: () -> Unit, onNext: () -> Unit) 
 
 /** Non-lazy month grid (safe inside a scrolling Column, unlike LazyVerticalGrid). */
 @Composable
-private fun MonthGrid(month: java.time.YearMonth, dayMoods: Map<LocalDate, Double>, onDayClick: (LocalDate) -> Unit) {
+private fun MonthGrid(month: java.time.YearMonth, dayMoods: Map<LocalDate, List<Int>>, onDayClick: (LocalDate) -> Unit) {
     Column {
         Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
             DayOfWeek.entries.forEach { dow ->
@@ -402,7 +408,7 @@ private fun MonthGrid(month: java.time.YearMonth, dayMoods: Map<LocalDate, Doubl
             Row(Modifier.fillMaxWidth()) {
                 week.forEach { date ->
                     Box(Modifier.weight(1f)) {
-                        if (date != null) DayCell(date, dayMoods[date], onClick = { onDayClick(date) })
+                        if (date != null) DayCell(date, dayMoods[date].orEmpty(), onClick = { onDayClick(date) })
                     }
                 }
             }
@@ -440,37 +446,84 @@ private fun WeekBars(trend: List<Double?>, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * One day of the month (#397): the same paper square for every day, its number in the full ink, and
+ * one dot per entry beneath the number ([MoodDots]). Nothing fills the square, so no day is ever a
+ * mood colour, a blend of two, or dimmer than another; a day with no entry is this same square with
+ * no dots. The number is onSurface on the sheet on every day: 14.26:1 light, 12.66:1 dark. Today
+ * keeps its ink ring and bold number, which are structure and never a mood colour.
+ *
+ * A screen reader hears [CalendarDays.description] in place of the number: the date, then the mood
+ * of each dot in the person's own words, or "nothing recorded".
+ */
 @Composable
-private fun DayCell(date: LocalDate, moodLevel: Double?, onClick: () -> Unit) {
-    val hasMood = moodLevel != null
-    val fill = if (hasMood) moodColor(moodLevel!!, MaterialTheme.moodColors) else MaterialTheme.colorScheme.surfaceVariant
+private fun DayCell(date: LocalDate, moods: List<Int>, onClick: () -> Unit) {
     val isToday = date == LocalDate.now()
     val shape = RoundedCornerShape(11.dp)
+    val labels = MaterialTheme.moodLabels
+    val description = CalendarDays.description(date, moods, isToday, { labels.forLevel(it) }, Locale.getDefault())
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
             .clickable { onClick() }
+            .semantics { contentDescription = description }
             .padding(3.dp),
         contentAlignment = Alignment.Center,
     ) {
+        // The number and the dots say nothing of their own: the description above says both, and a
+        // day is never read as a lone number, an average or a count.
         Box(
             modifier = Modifier
-                .size(38.dp)
-                .clip(shape)
-                .background(fill)
-                .then(if (isToday) Modifier.border(2.dp, MaterialTheme.colorScheme.onSurface, shape) else Modifier),
+                .width(38.dp)
+                .heightIn(min = 38.dp)
+                .then(if (isToday) Modifier.border(2.dp, MaterialTheme.colorScheme.onSurface, shape) else Modifier)
+                .clearAndSetSemantics {},
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                date.dayOfMonth.toString(),
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
-                color = if (hasMood) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    date.dayOfMonth.toString(),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                MoodDots(CalendarDays.dots(moods), modifier = Modifier.padding(top = DOT_GAP_DP.dp))
+            }
         }
     }
 }
+
+/**
+ * A day's dots, three to a row: one per entry, each in that entry's own mood colour as the person
+ * has it, beneath the number and never behind it. This is the only place the month reads a mood
+ * colour, one entry's level at a time. The rows keep the same height on every day, with dots or
+ * without, so every number sits at the same place and an empty day is not a shorter one.
+ */
+@Composable
+private fun MoodDots(levels: List<Int>, modifier: Modifier = Modifier) {
+    val moods = MaterialTheme.moodColors
+    Column(
+        modifier = modifier.height(DOT_AREA_DP.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(DOT_GAP_DP.dp),
+    ) {
+        levels.chunked(DOTS_PER_ROW).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(DOT_GAP_DP.dp)) {
+                row.forEach { level ->
+                    Box(Modifier.size(DOT_DP.dp).clip(CircleShape).background(moods.forLevel(level)))
+                }
+            }
+        }
+    }
+}
+
+// A dot is 6 dp, large enough to tell its colour at a glance, and three fit in the narrowest cell.
+private const val DOT_DP = 6
+private const val DOT_GAP_DP = 2
+private const val DOTS_PER_ROW = 3
+private const val DOT_ROWS = (CalendarDays.MAX_DOTS + DOTS_PER_ROW - 1) / DOTS_PER_ROW
+private const val DOT_AREA_DP = DOT_ROWS * DOT_DP + (DOT_ROWS - 1) * DOT_GAP_DP
 
 @Composable
 private fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {

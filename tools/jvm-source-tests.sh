@@ -27,7 +27,9 @@
 # `repoFile` and the string helpers in `ui/SourceText.kt`, and none of those reaches Android or Room.
 # So does the theme: `ui/theme/ColorSchemeSourceTest` reads Theme.kt and Color.kt, which import
 # Compose, and holds every colour-scheme role off the mood colours; `ui/FaintInkSourceTest` reads
-# every production file and holds the faint ink off every word.
+# every production file and holds the faint ink off every word. And the Insights month:
+# `ui/insights/MonthGridSourceTest` reads InsightsScreen.kt and the calendar's view model and day
+# model, and holds every day off a mood fill, a blend and an average (#397).
 #
 # WHAT IT WILL NOT CATCH. Everything tools/jvm-tests.sh cannot: anything outside these files, Room's
 # annotation processing, Hilt, resources, R8. And it runs a HAND-LISTED set of test files. A new
@@ -61,11 +63,13 @@ ANNOT=$(find_jar org.jetbrains/annotations "annotations-13.0.jar")
 # `MigrationSchemaExportTest` import `repoFile`, JUnit and `java.io.File` and nothing else; the
 # second reads the exported schemas under app/schemas as JSON text. The two report tests also use
 # `ui/SourceText.kt`, which imports nothing from the app, and so do `ColorSchemeSourceTest`, which
-# also reads the web's token sheet as text, and `FaintInkSourceTest`, which also imports `java.io.File`.
+# also reads the web's token sheet as text, `FaintInkSourceTest`, which also imports `java.io.File`,
+# and `MonthGridSourceTest`, which imports `repoFile`, `codeOnly`, `argumentsOfCall` and JUnit only.
 TESTS="com.daymark.app.data.PeopleSchemaTest com.daymark.app.data.TimedOfferSchemaTest
 com.daymark.app.data.CompanionSchemaTest com.daymark.app.data.MigrationSchemaExportTest
 com.daymark.app.export.ReportCopySourceTest com.daymark.app.ui.settings.ReportExportSourceTest
-com.daymark.app.ui.theme.ColorSchemeSourceTest com.daymark.app.ui.FaintInkSourceTest"
+com.daymark.app.ui.theme.ColorSchemeSourceTest com.daymark.app.ui.FaintInkSourceTest
+com.daymark.app.ui.insights.MonthGridSourceTest"
 SOURCES="$REPO/app/src/test/java/com/daymark/app/data/PeopleSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/TimedOfferSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/CompanionSchemaTest.kt
@@ -74,6 +78,7 @@ $REPO/app/src/test/java/com/daymark/app/export/ReportCopySourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/settings/ReportExportSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/theme/ColorSchemeSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/FaintInkSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/ui/insights/MonthGridSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/backup/RepoFile.kt
 $REPO/app/src/test/java/com/daymark/app/ui/SourceText.kt"
 

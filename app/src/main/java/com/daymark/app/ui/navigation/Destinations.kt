@@ -5,7 +5,6 @@ import com.daymark.app.R
 
 object Routes {
     const val HOME = "home"
-    const val CALENDAR = "calendar"
     const val STATS = "stats"
     const val INSIGHTS = "insights"
     const val JOURNAL = "journal"
