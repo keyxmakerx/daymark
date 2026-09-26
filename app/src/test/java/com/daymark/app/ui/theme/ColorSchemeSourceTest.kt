@@ -29,6 +29,14 @@ import org.junit.Test
  * other name. Each of those is shown a planted example below, derived from the file rather than
  * written out, and has to see it.
  *
+ * ## The surface containers
+ *
+ * Dialogs, menus, a switch's track and the time picker's dial are drawn on the seven surface
+ * container roles, and Material fills any a scheme leaves unset with its own lavender grey, a hue from
+ * outside the palette (#410). So both schemes set all seven, and onSurface and onSurfaceVariant
+ * measure at least 4.5:1 on each, computed here from the values the roles land on. A scheme missing a
+ * role and a container on the hairline fill are each planted, and each has to be seen.
+ *
  * ## Why a source test
  *
  * Theme.kt imports Compose and Android, so nothing on a plain JVM can build a scheme and ask it. The
@@ -61,6 +69,22 @@ class ColorSchemeSourceTest {
 
         /** A call that builds a colour scheme or copies one; the match ends on its open parenthesis. */
         val SCHEME_CALL = Regex("""\b(lightColorScheme|darkColorScheme)\s*\(|\.(copy)\s*\(""")
+
+        /**
+         * The grounds dialogs, menus, sheets, a switch's track and the time picker's dial are drawn on.
+         * Material fills any of them a scheme leaves unset with its own lavender grey, a hue from
+         * outside the palette (#410), so both schemes set every one.
+         */
+        val SURFACE_CONTAINERS = listOf(
+            "surfaceContainerLowest", "surfaceContainerLow", "surfaceContainer", "surfaceContainerHigh",
+            "surfaceContainerHighest", "surfaceBright", "surfaceDim",
+        )
+
+        /** The inks words take on those grounds, each held to [WORDS_FLOOR] on every one. */
+        val WORD_INKS = listOf("onSurface", "onSurfaceVariant")
+
+        /** WCAG 2's floor for small text. */
+        const val WORDS_FLOOR = 4.5
     }
 
     private val themeSource: String = repoFile(THEME).readText()
@@ -151,6 +175,49 @@ class ColorSchemeSourceTest {
                 else -> null
             }
         }
+    }
+
+    /** Each scheme's surface containers that it does not set exactly once, as "call: role". */
+    private fun unsetContainers(themeCode: String): List<String> {
+        val all = assignments(themeCode)
+        return listOf("lightColorScheme", "darkColorScheme").flatMap { call ->
+            val roles = all.filter { it.call == call }.map { it.role }
+            SURFACE_CONTAINERS.filter { role -> roles.count { it == role } != 1 }.map { role -> "$call: $role" }
+        }
+    }
+
+    /** WCAG 2 contrast between two RRGGBB colours. */
+    private fun contrast(a: String, b: String): Double {
+        fun channel(hex: String, at: Int): Double {
+            val c = hex.substring(at, at + 2).toInt(16) / 255.0
+            return if (c <= 0.03928) c / 12.92 else Math.pow((c + 0.055) / 1.055, 2.4)
+        }
+        fun luminance(hex: String) = 0.2126 * channel(hex, 0) + 0.7152 * channel(hex, 2) + 0.0722 * channel(hex, 4)
+        val (hi, lo) = listOf(luminance(a), luminance(b)).sortedDescending()
+        return (hi + 0.05) / (lo + 0.05)
+    }
+
+    /** Every word ink under [WORDS_FLOOR] on a surface container a scheme sets, said in a line each. */
+    private fun faintOnContainers(themeCode: String, colorsCode: String): List<String> {
+        val decls = declarations(colorsCode)
+        val all = assignments(themeCode)
+        val found = ArrayList<String>()
+        for (call in listOf("lightColorScheme", "darkColorScheme")) {
+            val landed = all.filter { it.call == call }.associate { it.role to land(it.expression, decls).rgb }
+            for (ground in SURFACE_CONTAINERS.filter { it in landed }) {
+                val g = landed[ground]
+                for (ink in WORD_INKS) {
+                    val i = landed[ink]
+                    if (g == null || i == null) {
+                        found += "$call: $ink on $ground cannot be measured, one of them lands on no colour"
+                        continue
+                    }
+                    val ratio = contrast(i, g)
+                    if (ratio < WORDS_FLOOR) found += "$call: $ink #$i on $ground #$g measures ${"%.2f".format(ratio)}:1"
+                }
+            }
+        }
+        return found
     }
 
     /** The RRGGBB of `--name: #rrggbb;` in the web's token sheet, or null. */
@@ -253,6 +320,73 @@ class ColorSchemeSourceTest {
         assertTrue(
             "the check cannot see a token that is an alias of MoodAwful: $byAlias",
             byAlias.any { it.contains(": error = PlantedAlarm names a mood colour (MoodAwful)") },
+        )
+    }
+
+    @Test
+    fun `both schemes set every surface container`() {
+        val unset = unsetContainers(theme)
+        assertTrue(
+            "Dialogs, menus and sheets are drawn on these roles, and Material fills any a scheme leaves " +
+                "unset with its own lavender grey, from outside the palette (#410). Not set exactly " +
+                "once:\n" + unset.joinToString("\n"),
+            unset.isEmpty(),
+        )
+    }
+
+    @Test
+    fun `the check sees a scheme missing a surface container`() {
+        // The first container the dark scheme sets, taken out whatever it is set to, and counted
+        // against the file as it is, so this still means something while the test above is red.
+        val dark = themeSource.indexOf("darkColorScheme(")
+        assertTrue("the dark scheme is not in Theme.kt", dark >= 0)
+        val (role, line) = SURFACE_CONTAINERS.asSequence()
+            .mapNotNull { r -> Regex("""\n[ \t]*$r\s*=\s*\w+\s*,""").find(themeSource, dark)?.let { r to it } }
+            .firstOrNull()
+            ?: error("the dark scheme sets no surface container, so there is nothing to take out")
+        val planted = themeSource.removeRange(line.range)
+        assertNotEquals("nothing was planted", themeSource, planted)
+
+        assertEquals(
+            "the check cannot see the dark scheme without $role",
+            (unsetContainers(theme) + "darkColorScheme: $role").sorted(),
+            unsetContainers(withoutComments(planted)).sorted(),
+        )
+    }
+
+    @Test
+    fun `words clear the small-text floor on every surface container`() {
+        val found = faintOnContainers(theme, colors)
+        assertTrue(
+            "Every word in a dialog, a menu or a sheet is drawn in onSurface or onSurfaceVariant on one " +
+                "of these grounds (#410). These do not clear $WORDS_FLOOR:1:\n" + found.joinToString("\n"),
+            found.isEmpty(),
+        )
+    }
+
+    @Test
+    fun `the contrast check measures as the palette's own figures do, and sees the hairline`() {
+        // Figures Color.kt and FaintInkSourceTest state, measured again here: a contrast function
+        // that is wrong in either direction cannot reproduce both.
+        val decls = declarations(colors)
+        fun rgb(token: String) = land(token, decls).rgb!!
+        assertEquals(5.58, contrast(rgb("Clay"), rgb("PaperSheet")), 0.005)
+        assertEquals(4.36, contrast(rgb("InkSoft"), rgb("Hairline")), 0.005)
+        assertEquals(14.26, contrast(rgb("PaperSheet"), rgb("InkText")), 0.005)
+
+        // The light scheme's Highest put on the hairline fill, where the soft ink measures 4.36:1.
+        val light = themeSource.indexOf("lightColorScheme(")
+        val highest = Regex("""(\n[ \t]*surfaceContainerHighest\s*=\s*)(\w+)""").find(themeSource, light)
+        assertNotNull("the light scheme does not set surfaceContainerHighest", highest)
+        val was = highest!!.groupValues[2]
+        val hairline = if (was == "Hairline") "HairlineDark" else "Hairline"
+        val planted = themeSource.replaceRange(highest.range, highest.groupValues[1] + hairline)
+        assertNotEquals("nothing was planted", themeSource, planted)
+
+        val found = faintOnContainers(withoutComments(planted), colors)
+        assertTrue(
+            "the check cannot see the soft ink on a hairline container: $found",
+            found.any { it.startsWith("lightColorScheme: onSurfaceVariant #") && "on surfaceContainerHighest #" in it },
         )
     }
 

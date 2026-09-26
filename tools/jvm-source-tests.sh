@@ -26,7 +26,8 @@
 # `ui/settings/ReportExportSourceTest` reads the Compose settings screen the same way. They import
 # `repoFile` and the string helpers in `ui/SourceText.kt`, and none of those reaches Android or Room.
 # So does the theme: `ui/theme/ColorSchemeSourceTest` reads Theme.kt and Color.kt, which import
-# Compose, and holds every colour-scheme role off the mood colours; `ui/FaintInkSourceTest` reads
+# Compose, holds every colour-scheme role off the mood colours, and holds both schemes to setting
+# every surface container with words at 4.5:1 on each (#410); `ui/FaintInkSourceTest` reads
 # every production file and holds the faint ink off every word. And the Insights month:
 # `ui/insights/MonthGridSourceTest` reads InsightsScreen.kt and the calendar's view model and day
 # model, and holds every day off a mood fill, a blend and an average (#397). `ui/WeekDaysSourceTest`

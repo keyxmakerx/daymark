@@ -32,6 +32,16 @@ private val LightPaperColors = lightColorScheme(
     onSurface = InkText,
     surfaceVariant = Hairline,
     onSurfaceVariant = InkSoft,
+    // Dialogs, menus and sheets are the sheet, lifted by their whisper of shadow; the one recessed
+    // role, Highest (a switch's track, the time picker's dial), is the paper under it. Material fills
+    // any of these a scheme leaves unset with its own lavender grey (#410).
+    surfaceContainerLowest = PaperSheet,
+    surfaceContainerLow = PaperSheet,
+    surfaceContainer = PaperSheet,
+    surfaceContainerHigh = PaperSheet,
+    surfaceContainerHighest = PaperBg,
+    surfaceBright = PaperSheet,
+    surfaceDim = PaperBg,
     surfaceTint = Color.Transparent,
     outline = Hairline,
     outlineVariant = Hairline,
@@ -60,6 +70,15 @@ private val DarkPaperColors = darkColorScheme(
     onSurface = InkTextDark,
     surfaceVariant = HairlineDark,
     onSurfaceVariant = InkSoftDark,
+    // A shadow barely shows on the dark ground, so menus and dialogs are lifted by tone, a step above
+    // the sheet, and Highest one step further, to the lines. Sheets are the sheet (#410).
+    surfaceContainerLowest = PaperBgDark,
+    surfaceContainerLow = PaperSheetDark,
+    surfaceContainer = PaperRaisedDark,
+    surfaceContainerHigh = PaperRaisedDark,
+    surfaceContainerHighest = HairlineDark,
+    surfaceBright = HairlineDark,
+    surfaceDim = PaperBgDark,
     surfaceTint = Color.Transparent,
     outline = HairlineDark,
     outlineVariant = HairlineDark,

@@ -20,6 +20,11 @@ val InkAccent = Color(0xFF33302A) // primary buttons / selected (dark ink)
 // ---- Dark ("night paper") ----
 val PaperBgDark = Color(0xFF1B1A17)
 val PaperSheetDark = Color(0xFF24221D)
+// A menu or a dialog in the dark theme, halfway from the sheet to the lines. A shadow barely shows on
+// the dark ground and paper surfaces carry none there (docs/DESIGN.md, "Shape, spacing, elevation"),
+// so a surface laid over the sheet is lifted by tone instead. Measured, WCAG 2: ink on it 11.43:1,
+// soft ink 6.59:1, the alarm 4.84:1.
+val PaperRaisedDark = Color(0xFF2C2A24)
 val InkTextDark = Color(0xFFEBE5D8)
 val InkSoftDark = Color(0xFFB7AF9E)
 val InkFaintDark = Color(0xFF7C7568)
