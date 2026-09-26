@@ -55,7 +55,9 @@ data class OwnerPrincipal(val ownerId: String, val kind: CredentialKind, val cre
  *   source's lockout exactly as a bad token does, in the same [AuthGuard], so one source has one
  *   budget whichever credential it tries. The lockout's audit row is written on arming, never per
  *   probe, and at most one a minute server-wide ([LOCKOUT_ROW_GAP_MS]), so sources without number
- *   cannot turn the owner's log into a disk-filler.
+ *   cannot turn the owner's log into a disk-filler. A row therefore says that at least one address
+ *   was paused that minute, not which ones: the first lockout armed in the minute takes its row, a
+ *   decoy's as readily as any other.
  * - A KEY AWAITING ITS CONSOLE'S CONFIRMATION authenticates nothing. The one exception is
  *   [checkRegistration], which answers such a key "pending" and nothing more.
  * - A REGISTERED KEY reaches every owner route but those in [phoneRefusedRoutes], which the routes'
@@ -169,6 +171,10 @@ class OwnerAuth(
 
     private val lastLockoutRow = AtomicLong(Long.MIN_VALUE / 2)
 
+    /**
+     * The owner's log row for a lockout [source] has just armed, unless one was written in the last
+     * minute: the row says that at least one address was paused this minute, and is the first one's.
+     */
     private fun reportLockout(source: String, credential: String) {
         val now = devices.now()
         val previous = lastLockoutRow.get()
@@ -263,7 +269,9 @@ class OwnerAuth(
 
         /**
          * The fewest milliseconds between two lockout rows in the owner's log. Each source arms at most
-         * one lockout per episode; this bounds how many episodes at once reach the log.
+         * one lockout per episode; this bounds how many episodes at once reach the log. A row means that
+         * at least one address was paused in the minute it opens, not that it was the only one: the
+         * lockouts armed after it in that minute write none.
          */
         const val LOCKOUT_ROW_GAP_MS = 60_000L
     }
