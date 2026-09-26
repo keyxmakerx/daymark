@@ -26,6 +26,7 @@ import {
   WHY_SO_FEW_CHECKS,
   compactSummary,
   forgetDismissal,
+  offersRoute,
   orientationEndpoints,
   orientationView,
   rankOwnerRoutes,
@@ -35,6 +36,7 @@ import {
   routeNoteFor,
   showsReachWhenCompact,
   shownAudiences,
+  shownRoutes,
   type OrientationStorage,
   type OwnerRoute,
   type OwnerRouteId,
@@ -419,6 +421,81 @@ describe('rankOwnerRoutes', () => {
     rankOwnerRoutes()
     rankOwnerRoutes(OWNER_ROUTES)
     expect(OWNER_ROUTES.map((r) => r.id)).toEqual(before)
+  })
+})
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   2a. Which entry points the screen offers (#330).
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+describe('the entry points offered, by published shape', () => {
+  const ALL = OWNER_ROUTES.map((r) => r.id)
+  const ids = (published: ShapeId | null) => shownRoutes(published).map((r) => r.id)
+
+  it('marks the one entry point a shape can switch off: the owner console, with the clinician’s page', () => {
+    expect(OWNER_ROUTES.map((r) => [r.id, r.servedWith])).toEqual([
+      ['file', null],
+      ['sync', null],
+      ['assess', null],
+      ['owner', 'clinician'],
+      ['recover', null],
+      ['build', null],
+    ])
+  })
+
+  it('offers every entry point where nothing was published, because the page cannot tell', () => {
+    expect(ids(null)).toEqual(ALL)
+    expect(shownRoutes().map((r) => r.id)).toEqual(ALL)
+    expect(offersRoute('owner', null)).toBe(true)
+  })
+
+  it('hides the owner console’s card where the published shape is solo, and only that card', () => {
+    // The planted-ungated control: the same catalogue with the rule taken off shows the card on a
+    // solo server. So the card is really there to hide, and its absence below is the rule.
+    const ungated = OWNER_ROUTES.map((r) => ({ ...r, servedWith: null }))
+    expect(shownRoutes('solo', ungated).map((r) => r.id)).toContain('owner')
+    expect(ids('solo')).not.toContain('owner')
+    expect(ids('solo')).toEqual(ALL.filter((id) => id !== 'owner'))
+    expect(offersRoute('owner', 'solo')).toBe(false)
+  })
+
+  it('offers it where the published shape is paired or practice', () => {
+    for (const shape of ['paired', 'practice'] as const) {
+      expect(ids(shape), shape).toEqual(ALL)
+      expect(offersRoute('owner', shape), shape).toBe(true)
+    }
+  })
+
+  it('withholds nothing else in any shape', () => {
+    for (const shape of [null, ...SHAPE_IDS]) {
+      for (const id of ALL.filter((id) => id !== 'owner')) {
+        expect(offersRoute(id, shape), `${String(shape)}: ${id}`).toBe(true)
+      }
+    }
+  })
+
+  it('still ranks what is left into both groups, with the owner console in neither on solo', () => {
+    const ranked = rankOwnerRoutes(shownRoutes('solo'))
+    expect(ranked.map((g) => g.group)).toEqual([...GROUP_ORDER])
+    expect(ranked.find((g) => g.group === 'occasional')!.routes.map((r) => r.id)).toEqual(['recover', 'build'])
+    expect(ranked.flatMap((g) => g.routes.map((r) => r.id))).not.toContain('owner')
+    // Control: the same ranking with nothing published has it, first among the occasional ones.
+    expect(rankOwnerRoutes(shownRoutes(null)).find((g) => g.group === 'occasional')!.routes[0]!.id).toBe('owner')
+  })
+
+  it('Orientation.svelte ranks only the entry points offered', () => {
+    const code = readFileSync(
+      fileURLToPath(new URL('../components/onboarding/Orientation.svelte', import.meta.url)),
+      'utf8',
+    )
+      .replace(/<!--[\s\S]*?-->/g, ' ')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    expect(code).toContain('const groups = $derived(rankOwnerRoutes(shownRoutes(published)))')
+    expect(code).toContain('{#each groups as group (group.group)}')
+    // The ranking as it was, over the whole catalogue, is seen by the detector and is gone.
+    const WHOLE_CATALOGUE = /rankOwnerRoutes\(\s*\)|rankOwnerRoutes\(OWNER_ROUTES\)/
+    expect('const groups = rankOwnerRoutes()').toMatch(WHOLE_CATALOGUE)
+    expect(code).not.toMatch(WHOLE_CATALOGUE)
   })
 })
 

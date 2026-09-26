@@ -210,6 +210,11 @@ export interface OwnerRoute {
   /** Order within the group; lower first. */
   order: number
   needs: RouteNeeds
+  /**
+   * The page whose routes this entry point is for, when a shape can switch them off
+   * (lib/setup/pages.ts); null when every shape serves what it calls. [shownRoutes] reads it.
+   */
+  servedWith: ShapePage | null
 }
 
 export const GROUP_ORDER: readonly RouteGroup[] = ['arrive', 'occasional']
@@ -241,6 +246,7 @@ export const OWNER_ROUTES: readonly OwnerRoute[] = [
     group: 'arrive',
     order: 1,
     needs: 'this-browser',
+    servedWith: null,
   },
   {
     id: 'sync',
@@ -250,6 +256,7 @@ export const OWNER_ROUTES: readonly OwnerRoute[] = [
     group: 'arrive',
     order: 2,
     needs: 'the-server',
+    servedWith: null,
   },
   {
     id: 'assess',
@@ -259,6 +266,7 @@ export const OWNER_ROUTES: readonly OwnerRoute[] = [
     group: 'arrive',
     order: 3,
     needs: 'this-browser',
+    servedWith: null,
   },
   {
     id: 'owner',
@@ -268,6 +276,13 @@ export const OWNER_ROUTES: readonly OwnerRoute[] = [
     group: 'occasional',
     order: 1,
     needs: 'the-server',
+    /*
+     * For clinicians and shares, whose routes come with the clinician's page and answer 503 where
+     * a shape leaves it off (#330). Hidden with it on such a server: the console's Notifications
+     * tab, which calls the owner's routes every shape serves, and is where the email that "Recover
+     * access" sends to is registered.
+     */
+    servedWith: 'clinician',
   },
   {
     id: 'recover',
@@ -277,6 +292,7 @@ export const OWNER_ROUTES: readonly OwnerRoute[] = [
     group: 'occasional',
     order: 2,
     needs: 'the-server',
+    servedWith: null,
   },
   {
     id: 'build',
@@ -286,8 +302,32 @@ export const OWNER_ROUTES: readonly OwnerRoute[] = [
     group: 'occasional',
     order: 3,
     needs: 'this-browser',
+    servedWith: null,
   },
 ]
+
+/**
+ * The entry points the screen offers for a published shape, in catalogue order: those every shape
+ * serves, and those whose page the published shape serves — or all of them when nothing was
+ * published, because this page cannot tell (lib/setup/pages.ts). On a server whose published
+ * shape leaves the clinician's page off, that is every entry point but the owner console.
+ *
+ * `routes` is the catalogue to filter, so a test can hand it one with the rule taken off.
+ */
+export function shownRoutes(
+  published: ShapeId | null = null,
+  routes: readonly OwnerRoute[] = OWNER_ROUTES,
+): OwnerRoute[] {
+  return routes.filter((r) => r.servedWith === null || linksTo(r.servedWith, published))
+}
+
+/**
+ * Whether the screen offers the entry point [id]. Anything elsewhere on the page that names one
+ * asks this, so it cannot point at an entry point the screen has withheld.
+ */
+export function offersRoute(id: OwnerRouteId, published: ShapeId | null = null): boolean {
+  return shownRoutes(published).some((r) => r.id === id)
+}
 
 export interface RankedGroup {
   group: RouteGroup

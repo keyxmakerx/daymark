@@ -280,6 +280,22 @@ export const FILE_IS_A_STAND_IN =
   'format, and no server would accept it. The file holds two locked boxes and no secret: neither ' +
   'your passphrase nor your code is in it or derivable from it.'
 
+/**
+ * The same paragraph on a page that does not offer the owner console — a server whose published
+ * shape switches the clinician routes off (#330), where the console is withheld and a sentence
+ * sending someone to it would point at nothing. That sentence goes; the rest is the paragraph
+ * above, word for word.
+ */
+export const FILE_IS_A_STAND_IN_WITHOUT_OWNER_CONSOLE =
+  'Saving the wrapped key to a file is the same stand-in written to disk, so both flows can be tried ' +
+  'across a reload. It is not a wire format, and no server would accept it. The file holds two ' +
+  'locked boxes and no secret: neither your passphrase nor your code is in it or derivable from it.'
+
+/** Which of the two to show, by whether the page offers the owner console (`offersRoute`). */
+export function fileIsAStandIn(ownerConsoleOffered: boolean): string {
+  return ownerConsoleOffered ? FILE_IS_A_STAND_IN : FILE_IS_A_STAND_IN_WITHOUT_OWNER_CONSOLE
+}
+
 export const NOTHING_TO_OPEN =
   'There is no wrapped key in this page to open. Nothing fetches one, because no endpoint serves ' +
   'one. Make one in the other flow, or load a file you saved there.'

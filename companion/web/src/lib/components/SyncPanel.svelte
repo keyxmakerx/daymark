@@ -2,7 +2,17 @@
   import type { Component } from 'svelte'
   import { parseBackup, type BackupData } from '../backup'
 
-  let { onload }: { onload: (data: BackupData, source: string) => void } = $props()
+  let {
+    onload,
+    /**
+     * Whether the owner's page offers the owner console (#330). The recovery code screen below
+     * names that console in one paragraph, and says it only where the console is offered.
+     */
+    ownerConsoleOffered = true,
+  }: {
+    onload: (data: BackupData, source: string) => void
+    ownerConsoleOffered?: boolean
+  } = $props()
 
   // Default to the same origin (this portal is served by the companion). Users behind a
   // separate URL can override.
@@ -58,7 +68,7 @@
    * Held as a component value rather than behind an `{#await}` so that opening it is one decision
    * with one loading state, and so it stays mounted once it is there.
    */
-  let RecoveryPanel = $state<Component | null>(null)
+  let RecoveryPanel = $state<Component<{ ownerConsoleOffered?: boolean }> | null>(null)
   let loadingRecovery = $state(false)
   let recoveryError = $state('')
 
@@ -119,7 +129,7 @@
 -->
 <section class="recovery">
   {#if RecoveryPanel}
-    <RecoveryPanel />
+    <RecoveryPanel {ownerConsoleOffered} />
   {:else}
     <h2 class="recovery-title">Recovery code</h2>
     <p class="recovery-lede">

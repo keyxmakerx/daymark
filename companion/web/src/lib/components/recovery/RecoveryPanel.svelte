@@ -53,6 +53,13 @@
      because it is the one that changes how everything else on the panel should be read. */
   const rest = PLACEHOLDERS.filter((p) => p.id !== 'storage' && p.id !== 'enrolment')
 
+  let {
+    /** Whether the owner's page offers the owner console; handed to the flow that names it. */
+    ownerConsoleOffered = true,
+  }: {
+    ownerConsoleOffered?: boolean
+  } = $props()
+
   const panelId = $props.id()
 </script>
 
@@ -120,7 +127,7 @@
       -->
       <NewCodeFlow onhandoff={() => (flow = 'use')} />
     {:else}
-      <UseCodeFlow />
+      <UseCodeFlow {ownerConsoleOffered} />
     {/if}
   </div>
 

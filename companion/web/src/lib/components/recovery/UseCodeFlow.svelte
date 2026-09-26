@@ -57,7 +57,6 @@
   import type { RecoverableDataKey } from '../../recovery/dataKey'
   import {
     CODE_DOES_NOT_OPEN_THIS,
-    FILE_IS_A_STAND_IN,
     HOW_ENTRY_WORKS,
     NEW_PASSPHRASE_LEDE,
     NOTHING_TO_OPEN,
@@ -67,7 +66,19 @@
     PASSPHRASE_CHANGE_IS_NOT_A_REVOCATION,
     PLACEHOLDERS,
     HANDOFF_IS_A_STAND_IN,
+    fileIsAStandIn,
   } from './copy'
+
+  let {
+    /**
+     * Whether the owner's page offers the owner console (`offersRoute`, in
+     * lib/onboarding/audience.ts). Where it does not — a server whose published shape switches
+     * the clinician routes off (#330) — the paragraph about the key file sends nobody to it.
+     */
+    ownerConsoleOffered = true,
+  }: {
+    ownerConsoleOffered?: boolean
+  } = $props()
 
   type Step = 'entry' | 'opened' | 'rewrapped'
 
@@ -200,7 +211,7 @@
           <span class="label">Load a wrapped key saved by the other flow</span>
           <input type="file" accept="application/json,.json" onchange={loadFile} />
         </label>
-        <p class="para small">{FILE_IS_A_STAND_IN}</p>
+        <p class="para small">{fileIsAStandIn(ownerConsoleOffered)}</p>
 
         {#if fault}
           <Callout tone="warn" title="That file was not loaded">

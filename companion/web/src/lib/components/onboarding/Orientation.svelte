@@ -71,6 +71,7 @@
     routeNoteFor,
     showsReachWhenCompact,
     shownAudiences,
+    shownRoutes,
     type OrientationStorage,
     type OrientationView,
     type OwnerRouteId,
@@ -101,9 +102,10 @@
     adminLink = false,
     /**
      * The shape the server published, or null when this page has read none. A published shape
-     * withholds the clinician's card, its link and its clause in the compact line wherever that
-     * shape does not serve the clinician's page (#330); null withholds nothing, because this page
-     * cannot tell. See shownAudiences in audience.ts.
+     * withholds the clinician's card, its link, its clause in the compact line and the owner
+     * console's route card wherever that shape does not serve the clinician's page (#330); null
+     * withholds nothing, because this page cannot tell. See shownAudiences and shownRoutes in
+     * audience.ts.
      */
     published = null,
     /**
@@ -193,7 +195,9 @@
     view = 'full'
   }
 
-  const groups = rankOwnerRoutes()
+  /* The entry points the published shape serves: on a solo server, every one but the owner
+     console, whose routes that shape switches off (shownRoutes in audience.ts). */
+  const groups = $derived(rankOwnerRoutes(shownRoutes(published)))
 
   /* Both views render this list and nothing else, so a card withheld from one is withheld from
      the other. */

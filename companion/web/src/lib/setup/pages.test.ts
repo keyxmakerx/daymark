@@ -2,8 +2,20 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { SHAPES_SERVING, linksTo, type ShapePage } from './pages'
-import { LABELS, SHAPE_IDS, type ShapeId } from './shape'
-import { AUDIENCES, shownAudiences } from '../onboarding/audience'
+import { LABELS, SHAPE_IDS, opensOnStatement, shapeById, type ShapeId } from './shape'
+import {
+  AUDIENCES,
+  OWNER_ROUTES,
+  compactSummary,
+  offersRoute,
+  shownAudiences,
+  shownRoutes,
+} from '../onboarding/audience'
+import {
+  FILE_IS_A_STAND_IN,
+  FILE_IS_A_STAND_IN_WITHOUT_OWNER_CONSOLE,
+  fileIsAStandIn,
+} from '../components/recovery/copy'
 
 /*
  * WHAT THIS SUITE IS FOR (#330)
@@ -11,12 +23,15 @@ import { AUDIENCES, shownAudiences } from '../onboarding/audience'
  * The owner's page links two pages a shape can refuse: the clinician console, from the
  * orientation's clinician card and compact line, and the practice console, from the practice
  * panel. A shape that leaves one off answers it 403. So each published shape must link exactly the
- * pages it serves, and no published shape must link them all, because the page cannot tell.
+ * pages it serves, and no published shape must link them all, because the page cannot tell. The
+ * same goes for the one entry point on the owner's page that calls a refusable page's routes: the
+ * owner console, for clinicians and shares, whose routes come with the clinician's page.
  *
- * Two things make that more than a restatement of pages.ts. The table is checked against the one
- * the server's own suite proves over real responses (ShapeRoutingTest.kt), so the two sides cannot
- * drift apart with both suites green. And the check runs over the links the owner's page actually
- * renders — the audiences it shows and the practice anchor — rather than over the table alone.
+ * Two things make that more than a restatement of pages.ts. The table is checked against the two
+ * the server's own suite proves over real responses (ShapeRoutingTest.kt) — which shapes serve
+ * each page, and which switch each group of routes on — so the sides cannot drift apart with both
+ * suites green. And the checks run over what the owner's page actually renders — the audiences it
+ * shows, the practice anchor, the entry points it offers — rather than over the table alone.
  */
 
 const PAGES: readonly ShapePage[] = ['clinician', 'practice']
@@ -24,23 +39,31 @@ const PAGES: readonly ShapePage[] = ['clinician', 'practice']
 /** The file a sibling-relative link opens. */
 const fileOf = (href: string) => href.replace(/^\.\//, '')
 
+const SERVER_TEST = readFileSync(
+  fileURLToPath(new URL('../../../../server/src/test/kotlin/com/daymark/companion/ShapeRoutingTest.kt', import.meta.url)),
+  'utf8',
+)
+
 /**
- * The server suite's table of which shapes serve each page, read out of its source: the table
- * ShapeRoutingTest asserts, shape by shape, against what the server answers for each page.
+ * One of the server suite's tables of which shapes switch something on, read out of its source:
+ * `SERVED_IN` for pages and `GROUP_ON_IN` for route groups, each asserted shape by shape against
+ * what the server answers.
  */
-function serverTable(): Map<string, Set<ShapeId>> {
-  const path = new URL('../../../../server/src/test/kotlin/com/daymark/companion/ShapeRoutingTest.kt', import.meta.url)
-  const source = readFileSync(fileURLToPath(path), 'utf8')
-  const start = source.indexOf('val SERVED_IN = mapOf(')
-  const block = start < 0 ? '' : source.slice(start, source.indexOf('\n\n', start))
+function serverTable(name: string, key: string): Map<string, Set<ShapeId>> {
+  const start = SERVER_TEST.indexOf(`val ${name} = mapOf(`)
+  const block = start < 0 ? '' : SERVER_TEST.slice(start, SERVER_TEST.indexOf('\n\n', start))
   const table = new Map<string, Set<ShapeId>>()
-  for (const m of block.matchAll(/"([a-z]+\.html)" to setOf\(([A-Z, ]*)\)/g)) {
+  for (const m of block.matchAll(new RegExp(`${key} to setOf\\(([A-Z, ]*)\\)`, 'g'))) {
     table.set(m[1]!, new Set(m[2]!.split(',').map((s) => s.trim().toLowerCase() as ShapeId)))
   }
   return table
 }
 
-const SERVED_IN = serverTable()
+const SERVED_IN = serverTable('SERVED_IN', '"([a-z]+\\.html)"')
+const GROUP_ON_IN = serverTable('GROUP_ON_IN', 'Group\\.([A-Z_]+)')
+
+/** The server's name for the group of routes that comes with each page. */
+const PAGE_GROUP: Record<ShapePage, string> = { clinician: 'CLINICIAN', practice: 'PRACTICE' }
 
 /** The file each gated page is, as the owner's page links it. */
 const PAGE_FILE: Record<ShapePage, string> = {
@@ -142,5 +165,108 @@ describe('the links the owner’s page renders, shape by shape', () => {
         expect(linksRendered(shape).includes(`./${PAGE_FILE[page]}`), `${shape}: ${page}`).toBe(served)
       }
     }
+  })
+})
+
+describe('a page and its routes are switched together, so one table decides both', () => {
+  it('reads the server suite’s table of route groups, and finds the two a shape can switch off', () => {
+    expect([...GROUP_ON_IN.keys()].sort()).toEqual(['CLINICIAN', 'PRACTICE'])
+  })
+
+  it('agrees with it: each page’s shapes are the shapes that switch its routes on', () => {
+    for (const page of PAGES) {
+      expect(GROUP_ON_IN.get(PAGE_GROUP[page]), page).toEqual(new Set(SHAPES_SERVING[page]))
+      expect(SERVED_IN.get(PAGE_FILE[page]), page).toEqual(GROUP_ON_IN.get(PAGE_GROUP[page]))
+    }
+    // Control: a planted table offering the clinician's routes on solo is seen to disagree.
+    const planted = new Set<ShapeId>(['solo', ...SHAPES_SERVING.clinician])
+    expect(GROUP_ON_IN.get('CLINICIAN')).not.toEqual(planted)
+  })
+})
+
+describe('the entry points the owner’s page offers, shape by shape', () => {
+  /** The server's route group each offered entry point calls, where a shape can switch it off. */
+  const groupsCalled = (published: ShapeId | null) =>
+    shownRoutes(published).flatMap((r) => (r.servedWith === null ? [] : [[r.id, PAGE_GROUP[r.servedWith]] as const]))
+
+  it('calls only route groups the published shape switches on', () => {
+    // Non-vacuity: with nothing published the owner console is offered, and it calls a group.
+    expect(groupsCalled(null)).toEqual([['owner', 'CLINICIAN']])
+    for (const shape of SHAPE_IDS) {
+      for (const [id, group] of groupsCalled(shape)) {
+        expect(GROUP_ON_IN.get(group), `${shape} offers ${id}`).toContain(shape)
+      }
+    }
+  })
+
+  it('withholds nothing whose routes the published shape switches on', () => {
+    const gated = OWNER_ROUTES.filter((r) => r.servedWith !== null)
+    expect(gated.map((r) => r.id)).toEqual(['owner'])
+    for (const shape of SHAPE_IDS) {
+      for (const r of gated) {
+        const on = GROUP_ON_IN.get(PAGE_GROUP[r.servedWith!])!.has(shape)
+        expect(offersRoute(r.id, shape), `${shape}: ${r.id}`).toBe(on)
+      }
+    }
+  })
+})
+
+describe('nothing on a published solo page points at the owner console it withholds', () => {
+  const OWNER_CONSOLE = /\bowner console\b/i
+
+  /** The words the owner's page renders from these modules for one published shape. */
+  function wordsFor(published: ShapeId) {
+    const shape = shapeById(published)
+    return [
+      ...shownRoutes(published).flatMap((r) => [r.label, r.blurb]),
+      ...shownAudiences({ adminLink: true, published }).flatMap((a) => [
+        a.question,
+        a.who,
+        a.entryCondition,
+        a.linkLabel ?? '',
+      ]),
+      compactSummary(published),
+      shape.label,
+      shape.arrangement,
+      shape.summary,
+      shape.buildNote,
+      opensOnStatement(published),
+      fileIsAStandIn(offersRoute('owner', published)),
+    ]
+  }
+
+  it('says nothing about the owner console on solo', () => {
+    // Control: on paired the same words do name it — its card, and the paragraph about the key
+    // file — so the detector and the word list both see it before it is asserted absent.
+    expect(wordsFor('paired').filter((w) => OWNER_CONSOLE.test(w)).length).toBeGreaterThanOrEqual(2)
+    expect(wordsFor('solo').filter((w) => OWNER_CONSOLE.test(w))).toEqual([])
+  })
+
+  it('drops only the sentence about the console from the key file paragraph', () => {
+    const sentence =
+      'It is also what the owner console opens with: that screen asks for this file and one of ' +
+      'these two secrets every visit, because it keeps nothing between them. '
+    expect(FILE_IS_A_STAND_IN).toContain(sentence)
+    expect(FILE_IS_A_STAND_IN.replace(sentence, '')).toBe(FILE_IS_A_STAND_IN_WITHOUT_OWNER_CONSOLE)
+    expect(fileIsAStandIn(true)).toBe(FILE_IS_A_STAND_IN)
+    expect(fileIsAStandIn(false)).toBe(FILE_IS_A_STAND_IN_WITHOUT_OWNER_CONSOLE)
+  })
+
+  it('hands the owner-console rule down to the paragraph, from App.svelte to the flow that renders it', () => {
+    const read = (rel: string) =>
+      readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8')
+        .replace(/<!--[\s\S]*?-->/g, ' ')
+        .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    const app = read('../../App.svelte')
+    expect(app).toContain("const ownerConsoleOffered = $derived(offersRoute('owner', published))")
+    expect(app).toContain('<SyncPanel onload={loadData} {ownerConsoleOffered} />')
+    expect(read('../components/SyncPanel.svelte')).toContain('<RecoveryPanel {ownerConsoleOffered} />')
+    expect(read('../components/recovery/RecoveryPanel.svelte')).toContain('<UseCodeFlow {ownerConsoleOffered} />')
+    const flow = read('../components/recovery/UseCodeFlow.svelte')
+    expect(flow).toContain('{fileIsAStandIn(ownerConsoleOffered)}')
+    // The paragraph as it was, rendered whole whatever the shape, is seen and is gone.
+    const WHOLE = /\{FILE_IS_A_STAND_IN\}/
+    expect('<p class="para small">{FILE_IS_A_STAND_IN}</p>').toMatch(WHOLE)
+    expect(flow).not.toMatch(WHOLE)
   })
 })
