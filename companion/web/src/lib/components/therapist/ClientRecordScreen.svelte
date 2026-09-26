@@ -298,11 +298,22 @@
         This page holds self-check runs and nothing else: the day each one was taken, the band it
         fell in, and where that band's wording comes from.
       </p>
+      <!--
+        What is NOT on this page, and where it is shown when it is shown at all. A share carries a
+        person's journal text and check-in notes when they tick "Include my own words"
+        (owner/ShareBuilder.svelte, assignments/share.ts), so the note says where those words
+        appear rather than that they never arrive. Answers to individual questions have no slot in
+        a share: a self-check travels as its score and band. recordEdge.test.ts pins both (#399).
+      -->
       <p class="para">
-        It does not hold the person's journal or anything written in it, their check-in notes, or
-        their answers to any individual question — those stay on their phone and are not in a share
-        at all. It does not hold their totals, which are in the file and are left undrawn on
-        purpose.
+        It does not hold their answers to any individual question: a self-check is shared as its
+        score and band, and its answers are not in a share at all. It does not hold their totals
+        either, which are in the file and are left undrawn on purpose.
+      </p>
+      <p class="para">
+        It does not hold anything they wrote in their journal or in a check-in note. That reaches you
+        only if they chose to include their own words when they made the share, and then it is shown
+        elsewhere: their journal under Shared data, each note with its check-in in the Calendar.
       </p>
       <p class="para">
         It covers only the tools that were actually run. A tool that does not appear above was not
