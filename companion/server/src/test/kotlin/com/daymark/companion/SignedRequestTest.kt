@@ -353,7 +353,7 @@ class SignedRequestTest {
     }
 
     @Test
-    fun `seen nonces are forgotten once their time has passed, and forgetting them revokes nothing`() = testApplication {
+    fun `seen nonces are forgotten a minute after their time has passed, and forgetting them revokes nothing`() = testApplication {
         val server = DeviceServer()
         server.start(this)
         val phone = TestPhone()
@@ -362,9 +362,9 @@ class SignedRequestTest {
         old.forEach { assertEquals(HttpStatusCode.OK, client.send(HttpMethod.Get, "/v1/snapshots", it).status) }
         assertEquals(3, nonceRows(server.dataDir), "control: the three are remembered")
 
-        server.now += DeviceSignature.WINDOW_MS + 1_000
+        server.now += DeviceSignature.WINDOW_MS + DeviceKeyStore.NONCE_FORGET_MARGIN_MS + 1_000
         assertEquals(HttpStatusCode.OK, server.signedGet(client, phone, "/v1/snapshots").status, "the key still works")
-        assertEquals(1, nonceRows(server.dataDir), "the three past their time are gone; the new one is kept")
+        assertEquals(1, nonceRows(server.dataDir), "the three a minute past their time are gone; the new one is kept")
         old.forEach { assertEquals(unauthorized, client.send(HttpMethod.Get, "/v1/snapshots", it).answer(), "and a replay of one is refused by its time") }
     }
 
@@ -465,9 +465,10 @@ class SignedRequestTest {
 
     @Test
     fun `a replay judged at the last millisecond of its window is refused, whatever another request forgets meanwhile`() {
-        // Another request, a millisecond later, forgets every nonce whose time has passed: the replay's
-        // first row among them. It lands just before the replay reads the clock to take its nonce; just
-        // after that reading, from a thread of its own, as a second request runs; and, the control, nowhere.
+        // Another request, a minute and a millisecond after the window closed, forgets every nonce whose
+        // time passed more than a minute ago: the replay's first row among them. It lands just before the
+        // replay reads the clock to take its nonce; just after that reading, from a thread of its own, as
+        // a second request runs; and, the control, nowhere.
         val landings: Map<String, (DeviceServer, () -> Unit) -> AtomicBoolean?> = mapOf(
             "just before the replay reads the clock to take its nonce" to { server, forget -> atNonce(server, before = true, act = forget) },
             "just after that reading" to { server, forget -> atNonce(server, before = false) { alongside(forget) } },
@@ -487,7 +488,7 @@ class SignedRequestTest {
             server.now = sentAt + DeviceSignature.WINDOW_MS
             val forgot = CompletableFuture<Boolean>()
             val landed = land(server) {
-                server.now = sentAt + DeviceSignature.WINDOW_MS + 1
+                server.now = sentAt + DeviceSignature.WINDOW_MS + DeviceKeyStore.NONCE_FORGET_MARGIN_MS + 1
                 forgot.complete(server.account.devices.rememberNonce(phone.keyId, TestPhone.freshNonce(), keepUntil = server.now + DeviceSignature.WINDOW_MS))
             }
             val replay = client.send(HttpMethod.Put, target, captured, body).answer()
@@ -509,6 +510,44 @@ class SignedRequestTest {
             // Control: a request the phone makes then is taken.
             assertEquals(HttpStatusCode.OK, server.signedGet(client, phone, "/v1/snapshots").status, where)
         }
+    }
+
+    @Test
+    fun `a replay is refused though the server's clock is stepped back between its first use and the replay, since a nonce is kept a minute past its time`() = testApplication {
+        val server = DeviceServer()
+        server.start(this)
+        val phone = TestPhone()
+        server.pair(client, phone)
+        val target = "/v1/snapshots/devA/1"
+        val body = byteArrayOf(4, 5, 6)
+        val sentAt = server.now
+        val windowEnd = sentAt + DeviceSignature.WINDOW_MS
+        val captured = phone.headers("PUT", target, body, server.seconds)
+        val nonce = captured.getValue(DeviceSignature.NONCE_HEADER)
+        assertEquals(HttpStatusCode.Created, client.send(HttpMethod.Put, target, captured, body).status, "the phone's own request is taken")
+
+        // Control: with the clock inside the window and moved nowhere, the replay is refused and a fresh request is taken.
+        assertEquals(unauthorized, client.send(HttpMethod.Put, target, captured, body).answer(), "control: the replay inside its window")
+        assertEquals(HttpStatusCode.OK, server.signedGet(client, phone, "/v1/snapshots").status, "control: a fresh request")
+
+        // Thirty seconds after the window closed, a request is taken, forgetting what lapsed more than a
+        // minute before; then the clock is stepped back thirty seconds, to the window's last millisecond.
+        server.now = windowEnd + 30_000
+        assertEquals(HttpStatusCode.OK, server.signedGet(client, phone, "/v1/snapshots").status, "a request thirty seconds after the window")
+        server.now -= 30_000
+        assertEquals(unauthorized, client.send(HttpMethod.Put, target, captured, body).answer(), "the replay after the clock is stepped back")
+        assertEquals(listOf(windowEnd), keptUntil(server, nonce), "its first row is still kept")
+        val versions = server.signedGet(client, phone, "/v1/snapshots/devA").bodyAsText()
+        assertEquals(1, Regex("\"version\":").findAll(versions).count(), "nothing more was stored: $versions")
+
+        // The margin, to the millisecond: a request taken a minute after the window closed keeps the
+        // nonce, and one taken a millisecond later forgets it.
+        server.now = windowEnd + DeviceKeyStore.NONCE_FORGET_MARGIN_MS
+        assertEquals(HttpStatusCode.OK, server.signedGet(client, phone, "/v1/snapshots").status)
+        assertEquals(listOf(windowEnd), keptUntil(server, nonce), "kept a minute past its time")
+        server.now = windowEnd + DeviceKeyStore.NONCE_FORGET_MARGIN_MS + 1
+        assertEquals(HttpStatusCode.OK, server.signedGet(client, phone, "/v1/snapshots").status)
+        assertEquals(emptyList(), keptUntil(server, nonce), "and no longer")
     }
 
     @Test

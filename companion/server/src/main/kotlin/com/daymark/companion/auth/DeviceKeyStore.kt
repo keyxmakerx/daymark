@@ -12,8 +12,8 @@ import java.sql.Connection
  * `device_key_revocations`, never a flag on it. A pairing code is taken by the first row for its id in
  * `pairing_redemptions`, which also holds the key waiting for the console's confirmation. A code and a
  * waiting key lapse by their timestamps, so nothing is updated when they do. `seen_nonces` is the one
- * table rows leave: a nonce is kept until a request carrying it would be too old to take anyway, and
- * no longer. It answers "has this request been made before", never "is this key revoked".
+ * table rows leave: a nonce is kept until a minute after a request carrying it would be too old to take
+ * anyway, and no longer. It answers "has this request been made before", never "is this key revoked".
  *
  * NO VERDICT IS CACHED. [registeredKey] reads the key and its revocation from the database on every
  * call, so a revocation holds from the next request on.
@@ -88,21 +88,24 @@ class DeviceKeyStore internal constructor(
     /**
      * Record that [keyId] has used [nonce], to be remembered until [keepUntil], the end of its request's
      * window; false when it already had, which makes the request a replay, and false when [keepUntil]
-     * has passed, which makes it too old. Nonces whose time has passed are forgotten first, in the same
-     * transaction: a request carrying one is refused by its time alone.
+     * has passed, which makes it too old. Nonces whose time passed more than [NONCE_FORGET_MARGIN_MS]
+     * ago are forgotten first, in the same transaction: a request carrying one is refused by its time
+     * alone.
      *
      * ONE READING OF THE CLOCK, TAKEN UNDER THE LOCK, judges [keepUntil] and decides which nonces have
      * lapsed, and the nonce is taken in the same hold of the lock. So no other request's forgetting can
      * come between this request's time being found good and its nonce being taken: whatever another
      * request forgot had lapsed at a reading no later than this one, and a request carrying it is refused
-     * here by its time (#186).
+     * here by its time (#186). The margin holds that when the clock is stepped back between two
+     * readings: a nonce forgotten at one reading belongs to a request more than a minute past its window
+     * by that reading, so only a step back of more than a minute could bring the request inside it again.
      */
     fun rememberNonce(keyId: String, nonce: String, keepUntil: Long): Boolean = synchronized(lock) {
         val now = clock()
         if (keepUntil < now) return false
         conn.inTransaction {
             conn.prepareStatement("DELETE FROM seen_nonces WHERE keep_until < ?").use { ps ->
-                ps.setLong(1, now)
+                ps.setLong(1, now - NONCE_FORGET_MARGIN_MS)
                 ps.executeUpdate()
             }
             conn.prepareStatement("INSERT OR IGNORE INTO seen_nonces(key_id, nonce, keep_until) VALUES (?,?,?)").use { ps ->
@@ -332,6 +335,13 @@ class DeviceKeyStore internal constructor(
          * the words on two screens and press once. After it, the key authenticated nothing and never will.
          */
         const val CONFIRM_WINDOW_MS = 120_000L
+
+        /**
+         * How long a nonce is kept after its request's window has closed: a minute, so a clock stepped
+         * back by up to a minute between two requests cannot bring a forgotten nonce's request back
+         * inside its window (#186).
+         */
+        const val NONCE_FORGET_MARGIN_MS = 60_000L
 
         /** Draws before [mintCode] gives up; two codes out of 31^9 meeting is what a second draw is for. */
         private const val MINT_DRAWS = 8
