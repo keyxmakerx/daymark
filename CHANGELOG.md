@@ -402,6 +402,30 @@ All notable changes to this project are documented here. The format is based on
   quiet notice that names nobody and counts nothing.
 
 ### Fixed
+- **Companion — the clinician's Record page no longer says a person's own words are never shared.**
+  It said a person's journal and check-in notes "stay on their phone and are not in a share at all",
+  which is untrue when they tick "Include my own words". It now says the page holds self-check results
+  only, answers to individual questions are never in a share, and a person's journal and notes reach
+  the clinician only if they chose to include them, shown under Shared data and in the Calendar. (#399)
+- **Companion — buttons say what they do instead of "Cancel".** The clinician's publish dialog offers
+  "Not now". The practice console's removal confirm offers "Keep their seat" and "Remove from
+  practice", and its role editor "Keep their role" and "Change role". (#400)
+- **Companion — removing someone from a practice is shown as the serious step it is, and a failed
+  change says what did not happen.** The removal confirm now uses the one alarm colour instead of the
+  amber used for warnings. When changing a role, removing someone or accepting your own seat fails,
+  the heading says what did not happen, such as "The member was not removed". If the server's answer
+  was lost, it says it is not known whether it happened, and that message no longer disappears when
+  the list reloads. (#401)
+- **Companion — the Activities & mood chart no longer colours activities as good or bad.** Bars were
+  green above the average and orange below, in mood colours. They are now plain ink; the side of the
+  line and the number beside each bar still show the difference, on your own view and on what a
+  clinician sees. (#404)
+- **Companion — the clinician's calendar shows a night's sleep at the times it was logged.** A sleep
+  log showed a clock time taken from its date that nobody recorded (for example 02:00 in Central
+  Europe). It now shows bedtime and wake time, as the person's own month does. (#416)
+- **Companion — the recovery code prints in dark ink on white, even from dark mode.** "Print this
+  page" on the Recovery code screen switches the page to the light theme for the print and back
+  afterwards, as "Print this month" does. (#417)
 - **Companion — your own mood names and colours now show in the browser.** If you renamed or
   recoloured your moods on the phone, the web still showed the app's original ones. On your own data,
   the mood chart and the new calendar now use your names and colours; any mood you left as it was

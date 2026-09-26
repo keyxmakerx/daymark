@@ -435,7 +435,8 @@ A chart of a person's mood is drawn on the mood ramp, because there **the ramp i
 (counts, durations) would need its own low-chroma, colour-blind-safe series palette that does not
 overlap the ramp's meaning; none exists yet. Every chart should have a text or table equivalent and
 print cleanly. The month calendar has both: its day panel lists the chosen day in words, and **Print
-this month** prints the month alone, ink on white (`calendar/print.ts`). Not built for every chart:
+this month** prints the month alone, ink on white (`calendar/print.ts`). The Recovery code screen's
+**Print this page** uses the same switch. Not built for every chart:
 #259.
 
 ## 6. Responsive and accessibility

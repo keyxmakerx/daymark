@@ -120,6 +120,9 @@ That is the fired-clinician case, and it is copy rather than mechanism on purpos
 standing over a patient's relationship, and giving it one would be the practice reaching into the
 thing the access model refuses. `docs/COMPANION_THERAPIST.md` §9a states it in full.
 
+The confirm is drawn in clay, the alarm hue for a destructive act; its buttons are **Keep their seat**
+and **Remove from practice**. Changing a role offers **Keep their role** and **Change role**.
+
 ### 7.10 The owner's key (owner)
 
 The owner console's door and the Recovery code screen read what this server holds, with the server
@@ -142,8 +145,9 @@ This console cannot yet replace the key itself."* — never "your old passphrase
 
 The words: key; lock, locked under (never copy, slot or key parameters); passphrase; recovery code
 (bare "code" only in a tab's name); access token; this server. Tabs by their labels (*Get a code*,
-*Use a code*). A wait on the key derivation ends *"— this takes a few seconds"*. Replacing a recovery
-code is not built: #407.
+*Use a code*). A wait on the key derivation ends *"— this takes a few seconds"*. **Print this page**
+prints the recovery code in dark ink on white whatever the screen's theme. Replacing a recovery code
+is not built: #407.
 
 ### 7.11 The person's own month (owner)
 
@@ -203,7 +207,7 @@ self-harm item — the honesty gate refuses one. By the same decision a new shar
 
 Not built: #225. Before anything is sealed, it states in plain words what is going (counts per type
 and the window, "scores and bands only — no individual answers"), to whom, and the date access ends;
-then, with **Cancel** and **Share this** equally weighted:
+then, with **Not now** and **Share this** equally weighted:
 
 - *"You're sending real entries to another person. Once they open it, you can't un-see it for
   them."*
@@ -357,6 +361,7 @@ screen can."* — and no banner on any console asks a person to verify a digest 
 | Snapshots and no key | `pnpm push`, set-up | *"This server stores snapshots but not what is needed to open them. A new key would not open those snapshots, so none was made, and nothing has been stored."* |
 | Key changed before upload | `pnpm push` | *"The snapshot was not sent. The key this server holds changed while the snapshot was being encrypted, and this passphrase does not open it to the key the snapshot was encrypted under."* |
 | A day with nothing on it | Owner, month calendar | The same plain square with no marks; heard as *"{date}: nothing recorded"*; the panel says *"Nothing recorded."* |
+| Roster act failed | Practice console, roster | Headed with what did not happen: *"The role was not changed"*, *"The member was not removed"*, *"Your own seat was not accepted"*, *"The roster was not read"*; where the answer was lost, *"Whether the role was changed is not known from here"* (and the same for a removal or a seat), which stays on screen when the roster is read again |
 
 ## 12. Accessibility, language, motion
 

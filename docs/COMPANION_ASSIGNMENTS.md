@@ -117,7 +117,8 @@ reading an exported file or their synced copy, the owner console, and the clinic
 charting library, no network.
 
 It has four expandable cards: mood over time with 30-day, 90-day, one-year and all-time ranges;
-activities and mood, labelled as association and not cause; self-check history, one descriptive
+activities and mood, labelled as association and not cause, each activity's difference from the
+average drawn as an ink bar either side of a centre line, never in a mood colour (#404); self-check history, one descriptive
 trend per instrument; and a journal reader. Every panel keeps the non-diagnostic framing. A PDF or CSV
 export is not part of it.
 
