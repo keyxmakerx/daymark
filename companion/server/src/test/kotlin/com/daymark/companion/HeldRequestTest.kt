@@ -62,7 +62,9 @@ class HeldRequestTest {
                 // Sent again 100 s later, its body finished a millisecond after the window closed.
                 server.now = sentAt + 100_000
                 val replay = heldUntil(live, captured, chunked, then = sentAt + DeviceSignature.WINDOW_MS + 1)
-                assertEquals(unauthorized, replay.status to replay.body, if (chunked) "chunked, the last chunk held" else "the body held")
+                // Chunked, it is refused for not stating its length, before its key or nonce is looked at.
+                val refused = if (chunked) 411 to """{"error":"a signed request must state its length"}""" else unauthorized
+                assertEquals(refused, replay.status to replay.body, if (chunked) "chunked, the last chunk held" else "the body held")
             }
         }
     }
@@ -99,6 +101,39 @@ class HeldRequestTest {
             }
             val stored = live.owner("GET", "/v1/snapshots/devA")
             assertEquals(200 to """{"lineage":"devA","versions":[]}""", stored.status to stored.body, "nothing was stored")
+        }
+    }
+
+    /** A PUT by [phone] of [bytes], framed by Content-Length or chunked: the answer, early or after the body. */
+    private fun put(live: LiveServer, phone: TestPhone, bytes: ByteArray, chunked: Boolean): RawResponse = live.open().use { c ->
+        val headers = phone.headers("PUT", target, bytes, live.server.seconds)
+        c.write(LiveServer.head("PUT", target, headers, chunked, bytes.size.toLong()))
+        c.answerWithin(300) ?: run {
+            c.writeIfOpen(if (chunked) LiveServer.chunk(bytes) + LiveServer.LAST_CHUNK else bytes)
+            c.readResponse()
+        }
+    }
+
+    @Test
+    fun `a body too large, or of a length it does not state, gets the same answer whatever key it names`() {
+        val server = DeviceServer(maxRequestBytes = 4_096)
+        server.startNetty().use { live ->
+            val paired = TestPhone()
+            live.pair(paired)
+            val stranger = TestPhone() // a key nobody paired
+            val tooLarge = ByteArray(4_097) { it.toByte() }
+            for (chunked in listOf(false, true)) {
+                val byPaired = put(live, paired, tooLarge, chunked)
+                val byStranger = put(live, stranger, tooLarge, chunked)
+                assertEquals(byPaired, byStranger, "chunked=$chunked: a live key and a key nobody paired get the same answer")
+            }
+            assertEquals(RawResponse(413, """{"error":"request body too large"}"""), put(live, stranger, tooLarge, chunked = false))
+            // A signed body that does not state its length is refused whatever its size and its key.
+            val small = ByteArray(16) { 1 }
+            assertEquals(RawResponse(411, """{"error":"a signed request must state its length"}"""), put(live, paired, small, chunked = true))
+            // Controls: the paired phone's small body, stating its length, is taken; the stranger's is refused.
+            assertEquals(201, put(live, paired, small, chunked = false).status)
+            assertEquals(RawResponse(401, """{"error":"unauthorized"}"""), put(live, stranger, small, chunked = false))
         }
     }
 

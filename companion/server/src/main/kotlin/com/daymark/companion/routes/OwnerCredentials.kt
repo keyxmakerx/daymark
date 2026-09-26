@@ -111,5 +111,9 @@ internal suspend fun ApplicationCall.refuse(outcome: OwnerAuth.Outcome) {
         OwnerAuth.Outcome.Locked -> respond(HttpStatusCode.TooManyRequests, ErrorDto("temporarily locked"))
         OwnerAuth.Outcome.Unauthorized -> respond(HttpStatusCode.Unauthorized, ErrorDto(UNAUTHORIZED_MESSAGE))
         OwnerAuth.Outcome.TooLarge -> respond(HttpStatusCode.PayloadTooLarge, ErrorDto("request body too large"))
+        OwnerAuth.Outcome.LengthRequired -> respond(HttpStatusCode.LengthRequired, ErrorDto(LENGTH_REQUIRED_MESSAGE))
     }
 }
+
+/** The answer, 411, to a signed request whose body does not state its length: a chunked one (#186). */
+const val LENGTH_REQUIRED_MESSAGE = "a signed request must state its length"

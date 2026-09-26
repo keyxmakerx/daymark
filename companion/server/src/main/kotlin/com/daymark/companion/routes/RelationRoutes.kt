@@ -452,7 +452,8 @@ private suspend fun io.ktor.server.routing.RoutingContext.resolve(
     // (requireCsrf), a missing/mismatched X-CSRF-Token is a rejection, not a bypass — the cookie alone
     // must not authorize a write.
     val owner = if (ownerGuard.presentsCredential(call)) ownerGuard.check(call) else null
-    if (owner == OwnerAuth.Outcome.TooLarge) {
+    // A signed body's size is answered as such, whoever the request claims to be.
+    if (owner == OwnerAuth.Outcome.TooLarge || owner == OwnerAuth.Outcome.LengthRequired) {
         call.refuse(owner); return null
     }
     val role = (if (owner is OwnerAuth.Outcome.Ok) Role.OWNER else null)

@@ -77,6 +77,9 @@ class OwnerAuth(
 
         /** A signed request's body is larger than any route takes. Answered 413; not a failure. */
         data object TooLarge : Outcome
+
+        /** A signed request's body does not state its length (it is chunked). Answered 411; not a failure. */
+        data object LengthRequired : Outcome
     }
 
     /** Where a key that signed the registration poll stands. */
@@ -101,6 +104,7 @@ class OwnerAuth(
             return when (val signed = verifySigned(call, allowPending = false)) {
                 is Signed.Registered -> settle(source, Outcome.Ok(OwnerPrincipal(ownerId, CredentialKind.DEVICE, signed.keyId)), CredentialKind.DEVICE.wire)
                 Signed.TooLarge -> Outcome.TooLarge
+                Signed.LengthRequired -> Outcome.LengthRequired
                 else -> settle(source, null, CredentialKind.DEVICE.wire)
             }
         }
@@ -121,6 +125,7 @@ class OwnerAuth(
             is Signed.Registered -> { guard.recordSuccess(source); Registration.Registered }
             is Signed.Pending -> { guard.recordSuccess(source); Registration.Pending(signed.confirmBy) }
             Signed.TooLarge -> Registration.Refused(Outcome.TooLarge)
+            Signed.LengthRequired -> Registration.Refused(Outcome.LengthRequired)
             Signed.Refused -> Registration.Refused(settle(source, null, CredentialKind.DEVICE.wire))
         }
     }
@@ -166,6 +171,7 @@ class OwnerAuth(
         data class Pending(val keyId: String, val confirmBy: Long) : Signed
         data object Refused : Signed
         data object TooLarge : Signed
+        data object LengthRequired : Signed
     }
 
     /** DeviceSignature's checks, cheapest first; the body is read only for a key that could pass. */
@@ -183,6 +189,13 @@ class OwnerAuth(
         // no later reading can forget the nonce of a request whose time was found good.
         val now = devices.now()
         if (!withinWindow(now, sentAt)) return Signed.Refused
+
+        // The body's size is settled before any key is looked up, so a body too large, or one that does
+        // not state its length, gets the same answer whatever key the request names: no answer tells a
+        // live key from one nobody paired.
+        if (call.request.headers[HttpHeaders.TransferEncoding] != null) return Signed.LengthRequired
+        val declared = call.request.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+        if (declared != null && declared > maxBodyBytes) return Signed.TooLarge
 
         // The key and its revocation, read now: no verdict is kept between requests.
         val (publicKey, _) = liveKey(keyId, allowPending) ?: return Signed.Refused
