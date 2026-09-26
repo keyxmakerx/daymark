@@ -11,6 +11,8 @@ package com.daymark.app.ui
  * pass; a literal extractor that matches nothing makes every presence check fail loudly — which is
  * the safe direction — but makes every *forbidden phrase* check pass silently. So they are written
  * once, and every caller is required to show them a planted example before believing a result.
+ * [plantAfter] and [replaceOnce] are how a caller plants one, and each refuses a plant that changed
+ * nothing.
  *
  * ## The gap this does not close
  *
@@ -150,6 +152,66 @@ internal fun firstPhraseIn(strings: List<String>, phrases: List<String>): String
     }
     return null
 }
+
+/**
+ * Where the body of `fun [name](…) { … }` lies in [code], braces balanced: from just inside its
+ * opening brace to just before its closing one. Null when there is no such function, or when it has
+ * an expression body, which is not how the functions these checks read are written; saying so is
+ * better than reading the next function by mistake. [code] must be code only ([codeOnly]), so a
+ * bracket in a string or a comment cannot unbalance it.
+ */
+internal fun functionBodyRange(code: String, name: String): IntRange? {
+    val start = Regex("""\bfun\s+$name\s*\(""").find(code) ?: return null
+    var i = start.range.last
+    var depth = 0
+    while (i < code.length) {
+        when (code[i]) {
+            '(' -> depth++
+            ')' -> {
+                depth--
+                if (depth == 0) break
+            }
+        }
+        i++
+    }
+    val open = code.indexOf('{', i)
+    if (open < 0 || code.substring(i + 1, open).contains('=')) return null
+    depth = 0
+    for (j in open until code.length) {
+        when (code[j]) {
+            '{' -> depth++
+            '}' -> {
+                depth--
+                if (depth == 0) return (open + 1) until j
+            }
+        }
+    }
+    return null
+}
+
+/**
+ * [source] with [addition] written straight after [anchor], which must be there exactly once, for a
+ * control that plants a counter-example in a copy of a real file. Fails when nothing changed, so a
+ * control can never pass on a plant that did not happen (CLAUDE.md §5).
+ */
+internal fun plantAfter(source: String, anchor: String, addition: String): String {
+    check(source.split(anchor).size - 1 == 1) { "the anchor \"$anchor\" is not there exactly once" }
+    val planted = source.replace(anchor, anchor + addition)
+    check(planted != source) { "nothing was planted after \"$anchor\"" }
+    return planted
+}
+
+/** [source] with [old], which must be there exactly once, replaced by [new]; fails when nothing changed. */
+internal fun replaceOnce(source: String, old: String, new: String): String {
+    check(source.split(old).size - 1 == 1) { "\"$old\" is not there exactly once" }
+    val changed = source.replace(old, new)
+    check(changed != source) { "replacing \"$old\" changed nothing" }
+    return changed
+}
+
+/** The findings a plant added: those in [planted], less one of each already in [real]. */
+internal fun findingsAdded(planted: List<String>, real: List<String>): List<String> =
+    planted.toMutableList().apply { real.forEach { remove(it) } }
 
 /**
  * The argument text of the first call to [callee] in [source], parentheses balanced, or `null`

@@ -3,6 +3,9 @@ package com.daymark.app.ui.insights
 import com.daymark.app.backup.repoFile
 import com.daymark.app.ui.argumentsOfCall
 import com.daymark.app.ui.codeOnly
+import com.daymark.app.ui.findingsAdded
+import com.daymark.app.ui.functionBodyRange
+import com.daymark.app.ui.plantAfter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -14,16 +17,19 @@ import org.junit.Test
  * Insights → Month never fills a day with a mood colour, never blends two moods, and never reduces a
  * day to an average (#397).
  *
- * Three composables in `InsightsScreen.kt` draw the month: `MonthGrid` lays out the weeks, `DayCell`
- * draws one day, and `MoodDots` draws that day's dots. The days come from `CalendarViewModel`
+ * Five composables in `InsightsScreen.kt` draw the month: `MonthGrid` lays out the weeks,
+ * `WeekdayHeader` and `DayRow` draw the names over them and each week's row of days (Insights → Week
+ * draws its one row with the same two), `DayCell` draws one day, and `MoodDots` lays out that day's
+ * dots, each a `MoodDot` (`ui/components/MoodDot.kt`). The days come from `CalendarViewModel`
  * through `CalendarDays`, whose behaviour `CalendarDaysTest` runs. What is left is the shape of the
  * Compose code, which this module cannot run, so it is read as text through [codeOnly], where
  * neither a comment nor a string can hide a call or fake one:
  *
- *  - `MonthGrid` and `DayCell` name no mood colour, and paint no fill at all, so every day is the
- *    same paper;
+ *  - `MonthGrid`, `WeekdayHeader`, `DayRow` and `DayCell` name no mood colour, and paint no fill at
+ *    all, so every day is the same paper;
  *  - the day number takes `onSurface` and nothing else, so a day with no entry is not dimmer;
- *  - `MoodDots` is the one place the month reads a mood colour: a fixed-size dot per entry's level;
+ *  - `MoodDots` draws one `MoodDot` per entry's level, and `MoodDot` is the one place a day's mood
+ *    colour is read; `WeekDaysSourceTest` holds its ring;
  *  - nothing in the month, its view model or its day model averages, blends or holds a `Double`.
  *
  * Every check is shown a planted example in the real file first (CLAUDE.md §5), and each plant is
@@ -37,6 +43,10 @@ class MonthGridSourceTest {
         const val INSIGHTS = "app/src/main/java/com/daymark/app/ui/insights/InsightsScreen.kt"
         const val VIEW_MODEL = "app/src/main/java/com/daymark/app/ui/calendar/CalendarViewModel.kt"
         const val DAY_MODEL = "app/src/main/java/com/daymark/app/ui/calendar/CalendarDays.kt"
+        const val MOOD_DOT = "app/src/main/java/com/daymark/app/ui/components/MoodDot.kt"
+
+        /** The month's composables that lay out and draw days, as opposed to the dots inside one. */
+        val GRID = listOf("MonthGrid", "WeekdayHeader", "DayRow", "DayCell")
 
         /** The number's colour as it must be written. */
         const val INK = "MaterialTheme.colorScheme.onSurface"
@@ -66,44 +76,11 @@ class MonthGridSourceTest {
     private val insights: String = repoFile(INSIGHTS).readText()
     private val viewModel: String = repoFile(VIEW_MODEL).readText()
     private val dayModel: String = repoFile(DAY_MODEL).readText()
-
-    /**
-     * The body of `fun [name](...) { ... }` in [code], braces balanced, or null when there is none.
-     * [code] is code only, so a brace in a string or a comment cannot unbalance it.
-     */
-    private fun bodyRange(code: String, name: String): IntRange? {
-        val start = Regex("""\bfun\s+$name\s*\(""").find(code) ?: return null
-        var i = start.range.last
-        var depth = 0
-        while (i < code.length) {
-            when (code[i]) {
-                '(' -> depth++
-                ')' -> {
-                    depth--
-                    if (depth == 0) break
-                }
-            }
-            i++
-        }
-        val open = code.indexOf('{', i)
-        // An expression body is not how these are written; say so rather than read the next function.
-        if (open < 0 || code.substring(i + 1, open).contains('=')) return null
-        depth = 0
-        for (j in open until code.length) {
-            when (code[j]) {
-                '{' -> depth++
-                '}' -> {
-                    depth--
-                    if (depth == 0) return (open + 1) until j
-                }
-            }
-        }
-        return null
-    }
+    private val moodDot: String = repoFile(MOOD_DOT).readText()
 
     private fun body(source: String, name: String): String {
         val code = codeOnly(source)
-        val range = bodyRange(code, name)
+        val range = functionBodyRange(code, name)
         assertNotNull("fun $name is gone from the month's code, or is no longer a block body", range)
         return code.substring(range!!)
     }
@@ -117,9 +94,9 @@ class MonthGridSourceTest {
         return code.substring(from, until)
     }
 
-    /** Every fill and every mood colour in `MonthGrid` and `DayCell`, one line each. */
+    /** Every fill and every mood colour in the month's grid composables ([GRID]), one line each. */
     private fun fillsAndMoodColours(source: String): List<String> =
-        listOf("MonthGrid", "DayCell").flatMap { name ->
+        GRID.flatMap { name ->
             val code = body(source, name)
             MOOD_COLOUR.findAll(code).map { "$name names a mood colour: ${it.value}" }.toList() +
                 FILL.findAll(code).map { "$name paints a fill: ${it.value}" }.toList()
@@ -127,9 +104,7 @@ class MonthGridSourceTest {
 
     /** Every average or blend in the month's code, its view model and its day model, one line each. */
     private fun averagesAndBlends(insightsSource: String, viewModelSource: String, dayModelSource: String): List<String> {
-        val places = listOf(
-            "MonthGrid" to body(insightsSource, "MonthGrid"),
-            "DayCell" to body(insightsSource, "DayCell"),
+        val places = GRID.map { it to body(insightsSource, it) } + listOf(
             "MoodDots" to body(insightsSource, "MoodDots"),
             "the Month branch" to monthBranch(insightsSource),
             "CalendarViewModel.kt" to codeOnly(viewModelSource),
@@ -141,7 +116,7 @@ class MonthGridSourceTest {
     /** Where in [source] the day number's colour is written: the `color =` argument of DayCell's `Text`. */
     private fun numberColourRange(source: String): IntRange {
         val code = codeOnly(source)
-        val cell = bodyRange(code, "DayCell")
+        val cell = functionBodyRange(code, "DayCell")
         assertNotNull("fun DayCell is gone from the month's code", cell)
         val text = code.indexOf("Text(", cell!!.first)
         assertTrue("DayCell no longer draws its number with Text", text in cell)
@@ -156,24 +131,17 @@ class MonthGridSourceTest {
     private fun numberColour(source: String): String =
         source.substring(numberColourRange(source)).replace(Regex("\\s+"), " ").trim()
 
-    /** [source] with [addition] written straight after [anchor], which must be there exactly once. */
-    private fun plantAfter(source: String, anchor: String, addition: String): String {
-        assertEquals("the anchor \"$anchor\" is not there exactly once", 1, source.split(anchor).size - 1)
-        val planted = source.replace(anchor, anchor + addition)
-        assertNotEquals("nothing was planted", source, planted)
-        return planted
-    }
-
-    /** The findings a plant added: those in [planted], less one of each already in [real]. */
-    private fun added(planted: List<String>, real: List<String>): List<String> =
-        planted.toMutableList().apply { real.forEach { remove(it) } }
+    /** The findings a plant added, less those the real files already hold. */
+    private fun added(planted: List<String>, real: List<String>): List<String> = findingsAdded(planted, real)
 
     @Test
     fun `the month's code was found, and the scanner reads code and only code`() {
         val cell = body(insights, "DayCell")
-        assertTrue("MonthGrid no longer draws DayCell", body(insights, "MonthGrid").contains("DayCell("))
+        assertTrue("MonthGrid no longer draws its weeks with DayRow", body(insights, "MonthGrid").contains("DayRow("))
+        assertTrue("MonthGrid no longer names the weekdays with WeekdayHeader", body(insights, "MonthGrid").contains("WeekdayHeader("))
+        assertTrue("DayRow no longer draws DayCell", body(insights, "DayRow").contains("DayCell("))
         assertTrue("the scanner ate DayCell's code", cell.contains("Text(") && cell.contains("clickable"))
-        assertTrue("the scanner ate MoodDots' code", body(insights, "MoodDots").let { it.contains("Box(") && it.contains("chunked(") })
+        assertTrue("the scanner ate MoodDots' code", body(insights, "MoodDots").let { it.contains("MoodDot(") && it.contains("chunked(") })
         assertTrue("the Month branch no longer draws MonthGrid", monthBranch(insights).contains("MonthGrid("))
         assertTrue("the view model no longer builds its days through CalendarDays", codeOnly(viewModel).contains("CalendarDays.moodsByDay("))
         assertTrue("CalendarDays.kt lost its dots", codeOnly(dayModel).contains("fun dots("))
@@ -183,7 +151,7 @@ class MonthGridSourceTest {
         val code = codeOnly(insights)
         assertEquals("the scanner changed the length", insights.length, code.length)
         val phrase = "never read as a lone number"
-        assertTrue("DayCell's comment no longer says \"$phrase\"; choose another", insights.substring(bodyRange(code, "DayCell")!!).contains(phrase))
+        assertTrue("DayCell's comment no longer says \"$phrase\"; choose another", insights.substring(functionBodyRange(code, "DayCell")!!).contains(phrase))
         assertFalse("the scanner left a comment", cell.contains(phrase))
     }
 
@@ -191,8 +159,8 @@ class MonthGridSourceTest {
     fun `no day in the month is filled, and none with a mood colour`() {
         val found = fillsAndMoodColours(insights)
         assertTrue(
-            "Every day is the same paper, and a mood colour is drawn only as an entry's own dot, in " +
-                "MoodDots (#397). These fill a day or colour it by mood:\n" + found.joinToString("\n"),
+            "Every day is the same paper, and a mood colour is drawn only as an entry's own dot, a " +
+                "MoodDot (#397). These fill a day or colour it by mood:\n" + found.joinToString("\n"),
             found.isEmpty(),
         )
     }
@@ -216,11 +184,18 @@ class MonthGridSourceTest {
             Regex("""\bfun\s+MoodDots\s*\(\s*levels\s*:\s*List<Int>""").containsMatchIn(codeOnly(insights)),
         )
         val dots = body(insights, "MoodDots")
+        assertTrue("MoodDots draws one MoodDot per entry's level", dots.contains("row.forEach { level -> MoodDot(level) }"))
         assertTrue(
-            "a dot is a fixed-size circle filled with one entry's own mood colour",
-            dots.contains(".size(DOT_DP.dp).clip(CircleShape).background(moods.forLevel(level))"),
+            "MoodDots reads no mood colour of its own; every dot's colour comes through MoodDot",
+            MOOD_COLOUR.findAll(dots).none(),
         )
-        assertTrue("MoodDots reads the person's own mood colours", dots.contains("val moods = MaterialTheme.moodColors"))
+        assertTrue(
+            "a dot is a fixed-size circle filled with one entry's own mood colour, as the person has it",
+            body(moodDot, "MoodDot").replace(Regex("\\s+"), "").let {
+                it.contains(".size(MOOD_DOT_MARK_DP.dp).clip(CircleShape)") &&
+                    it.contains(".clip(CircleShape).background(MaterialTheme.moodColors.forLevel(level))")
+            },
+        )
         assertTrue(
             "DayCell draws the dots CalendarDays chose, which CalendarDaysTest holds",
             body(insights, "DayCell").contains("MoodDots(CalendarDays.dots(moods)"),
@@ -271,11 +246,20 @@ class MonthGridSourceTest {
         // ...a mood colour reached through the enum is a mood colour...
         val enumColour = plantAfter(insights, box, "                .border(1.dp, Mood.fromLevel(moods.first()).color, shape)\n")
         assertEquals(listOf("DayCell names a mood colour: .color"), added(fillsAndMoodColours(enumColour), real))
-        // ...and the grid is read as well as the day.
-        val grid = plantAfter(
+        // ...and the rows and the grid are read as well as the day.
+        val row = plantAfter(
             insights,
             "Box(Modifier.weight(1f)) {\n",
-            "                        Box(Modifier.background(MaterialTheme.moodColors.forLevel(3)))\n",
+            "                Box(Modifier.background(MaterialTheme.moodColors.forLevel(3)))\n",
+        )
+        assertEquals(
+            listOf("DayRow names a mood colour: moodColors", "DayRow paints a fill: background("),
+            added(fillsAndMoodColours(row), real),
+        )
+        val grid = plantAfter(
+            insights,
+            "WeekdayHeader(DayOfWeek.entries)\n",
+            "        Box(Modifier.background(MaterialTheme.moodColors.forLevel(3)))\n",
         )
         assertEquals(
             listOf("MonthGrid names a mood colour: moodColors", "MonthGrid paints a fill: background("),
@@ -306,8 +290,11 @@ class MonthGridSourceTest {
         val grid = plantAfter(insights, "val leadingPad = month.atDay(1).dayOfWeek.value - DayOfWeek.MONDAY.value\n", "        $average")
         assertEquals(listOf("MonthGrid: average"), added(averagesAndBlends(grid, viewModel, dayModel), real))
 
-        val dots = plantAfter(insights, "    val moods = MaterialTheme.moodColors\n", "    $average")
+        val dots = plantAfter(insights, "Row(horizontalArrangement = Arrangement.spacedBy(DOT_GAP_DP.dp)) {\n", "                $average")
         assertEquals(listOf("MoodDots: average"), added(averagesAndBlends(dots, viewModel, dayModel), real))
+
+        val row = plantAfter(insights, "Box(Modifier.weight(1f)) {\n", "                $average")
+        assertEquals(listOf("DayRow: average"), added(averagesAndBlends(row, viewModel, dayModel), real))
 
         val branch = plantAfter(insights, "MonthGrid(calendar.month, calendar.dayMoods, onDayClick)\n", "                    $average")
         assertEquals(listOf("the Month branch: average"), added(averagesAndBlends(branch, viewModel, dayModel), real))

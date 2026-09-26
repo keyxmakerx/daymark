@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -38,7 +39,9 @@ import com.daymark.app.data.entity.EntryWithActivities
 import com.daymark.app.model.Mood
 import com.daymark.app.stats.Greeting
 import com.daymark.app.stats.Signals
+import com.daymark.app.ui.calendar.CalendarDays
 import com.daymark.app.ui.components.CompactEntryRow
+import com.daymark.app.ui.components.MoodDot
 import com.daymark.app.ui.components.MoodFaceIcon
 import com.daymark.app.ui.components.PaperSurface
 import com.daymark.app.ui.components.SwipeToDeleteRow
@@ -47,12 +50,11 @@ import com.daymark.app.ui.insights.SignalCards
 import com.daymark.app.ui.insights.SignalDismissalSaver
 import com.daymark.app.ui.insights.SignalsViewModel
 import com.daymark.app.ui.insights.visibleSignalCount
-import com.daymark.app.ui.theme.LocalMoodColors
 import com.daymark.app.ui.theme.moodLabels
 import com.daymark.app.util.DateUtils
 import java.time.LocalDate
 import java.time.LocalTime
-import kotlin.math.roundToInt
+import java.util.Locale
 
 /**
  * Home — the daily loop.
@@ -135,7 +137,6 @@ fun HomeScreen(
             GlanceRow(
                 totalEntries = state.totalEntries,
                 week = state.week,
-                daysLogged = state.daysLoggedThisWeek,
                 modifier = Modifier.animateItem(),
             )
         }
@@ -220,8 +221,8 @@ private fun CheckInCard(
 }
 
 /**
- * The glance: one number worth knowing, and the shape of the last week. Both are plain counts of
- * the person's own entries — nothing inferred, nothing interpreted.
+ * The glance: one number worth knowing, and the last week as it was logged. Both are the person's
+ * own entries as they are — nothing inferred, nothing interpreted.
  *
  * The pill used to prefer a streak over the entry total whenever a run was alive, and nothing took
  * its place when the streak came out. Home is the screen a person lands on after four days away,
@@ -232,8 +233,7 @@ private fun CheckInCard(
 @Composable
 private fun GlanceRow(
     totalEntries: Int,
-    week: List<Double?>,
-    daysLogged: Int,
+    week: CalendarDays.Week,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -245,7 +245,7 @@ private fun GlanceRow(
             text = if (totalEntries == 1) "1 entry" else "$totalEntries entries",
             modifier = Modifier.weight(1f),
         )
-        WeekGlance(week = week, daysLogged = daysLogged, modifier = Modifier.weight(1f))
+        WeekGlance(week = week, modifier = Modifier.weight(1f))
     }
 }
 
@@ -263,51 +263,65 @@ private fun GlancePill(text: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * The last seven days as seven small bars, oldest on the left. Bar height tracks that day's mean
- * mood and its colour comes from the person's own mood palette; an unlogged day is a faint stub,
- * not a gap — a week is allowed to have holes in it.
+ * The last seven days, oldest on the left and today on the right, as the month draws a day (#411).
+ * Each day is a slot of the same size holding one [MoodDot] per entry, newest at the top as the
+ * day's own list runs, each in that entry's own mood colour as the person has it, inside the ring
+ * that keeps it visible on the sheet whatever the colour (#412). Nothing averages a day, blends two
+ * moods, or sizes anything by what a day holds, and the dots sit in the middle of the slot rather
+ * than on a common floor, so the week does not read as bars.
+ *
+ * At most [CalendarDays.STRIP_MAX_DOTS] a day, in one column: three ringed dots and their gaps take
+ * 28 dp of the strip's 30. A fuller day keeps the newest entry of each mood it holds, up to three
+ * moods ([CalendarDays.dots]); the day's own view lists every entry, so there is no count and no
+ * "+n". A day with no entry is the same slot with no dots: no faint stub and no mark of any kind.
+ * Whether an empty day should carry one is #398.
+ *
+ * A screen reader hears each day as the month says it ([CalendarDays.description]), in words for
+ * exactly the dots drawn: "3 September: Good, Meh", "3 September: nothing recorded", and
+ * "26 September, today: …".
  */
 @Composable
 private fun WeekGlance(
-    week: List<Double?>,
-    daysLogged: Int,
+    week: CalendarDays.Week,
     modifier: Modifier = Modifier,
 ) {
-    val moodColors = LocalMoodColors.current
-    val emptyColor = MaterialTheme.colorScheme.outlineVariant
-    val description = if (daysLogged == 1) {
-        "Last 7 days: 1 day logged"
-    } else {
-        "Last 7 days: $daysLogged days logged"
-    }
+    val labels = MaterialTheme.moodLabels
+    val today = LocalDate.now()
     PaperSurface(modifier = modifier) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(WeekGlanceHeight + 20.dp)
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-                .semantics { contentDescription = description },
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.Bottom,
         ) {
-            week.forEach { mean ->
-                // 1..5 maps onto a quarter..full bar, so a rough day still reads as a logged day.
-                val fraction = mean?.let { (0.25f + ((it - 1.0) / 4.0).toFloat() * 0.75f) }
-                Box(
+            week.days.forEach { date ->
+                val moods = week.moods[date].orEmpty()
+                val description = CalendarDays.description(
+                    date,
+                    moods,
+                    date == today,
+                    { labels.forLevel(it) },
+                    Locale.getDefault(),
+                    cap = CalendarDays.STRIP_MAX_DOTS,
+                )
+                Column(
                     modifier = Modifier
                         .weight(1f)
-                        .height(if (fraction == null) 3.dp else WeekGlanceHeight * fraction)
-                        .clip(MaterialTheme.shapes.extraSmall)
-                        .background(
-                            if (mean == null) emptyColor else moodColors.forLevel(mean.roundToInt()),
-                        ),
-                )
+                        .fillMaxHeight()
+                        .semantics { contentDescription = description },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(StripDotGap, Alignment.CenterVertically),
+                ) {
+                    CalendarDays.dots(moods, cap = CalendarDays.STRIP_MAX_DOTS).forEach { level -> MoodDot(level) }
+                }
             }
         }
     }
 }
 
 private val WeekGlanceHeight = 30.dp
+private val StripDotGap = 2.dp
 
 /**
  * Today's entries — or a single quiet line when there aren't any yet. Kept as its own sheet so the

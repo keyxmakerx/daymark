@@ -21,8 +21,9 @@ import javax.inject.Inject
 data class CalendarUiState(
     val month: YearMonth = YearMonth.now(),
     /**
-     * date -> the mood level (1..5) of each entry that day, in the order logged, for days that have
-     * entries. Each entry keeps its own mood; a day is never reduced to one number (#397).
+     * date -> the mood level (1..5) of each entry that day, in the day's own order, newest first
+     * (#412), for days that have entries. Each entry keeps its own mood; a day is never reduced to
+     * one number (#397).
      */
     val dayMoods: Map<LocalDate, List<Int>> = emptyMap(),
 )
@@ -40,16 +41,7 @@ class CalendarViewModel @Inject constructor(
         val from = DateUtils.startOfDay(ym.atDay(1))
         val to = DateUtils.endOfDay(ym.atEndOfMonth())
         entryRepository.observeBetween(from, to).map { entries ->
-            CalendarDays.moodsByDay(
-                entries.map {
-                    DayEntry(
-                        date = DateUtils.toLocalDate(it.entry.dateTime),
-                        epochMillis = it.entry.dateTime,
-                        id = it.entry.id,
-                        moodLevel = it.entry.moodLevel,
-                    )
-                },
-            )
+            CalendarDays.moodsByDay(entries.map { it.toDayEntry() })
         }
     }
 
