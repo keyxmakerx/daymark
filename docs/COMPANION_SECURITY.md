@@ -158,7 +158,7 @@ the JVM (lazysodium). No custom crypto. The server's own hashing, in the last ro
 
 | Purpose | Primitive | As built |
 |---|---|---|
-| Passphrase to master key | Argon2id, the only KDF | 256 MiB, 3 passes, random 16-byte salt, 32-byte output, client-side only. The salt and cost live in the owner's public `keyparams.json`. |
+| Passphrase to master key | Argon2id, the only KDF | 256 MiB, 3 passes, random 16-byte salt, 32-byte output, client-side only. The salt and cost live in the owner's public `keyparams.json`, served until a wrapped key supersedes it. |
 | Purpose separation | `crypto_kdf`, context `dmsync01` | Subkey 1: sync key. 2: manifest signing seed. 3 and 4: the owner's X25519 and Ed25519 seeds. |
 | Content encryption | XChaCha20-Poly1305, random 192-bit nonce | Everywhere. AES-256-GCM is not an accepted equivalent (R1). |
 | Per-share key | Random 256-bit CEK | Fresh for every share version. |
@@ -166,6 +166,7 @@ the JVM (lazysodium). No custom crypto. The server's own hashing, in the last ro
 | Signing | Ed25519 | The owner signs shares and grants; the clinician signs game plans and assignments. |
 | Fingerprints | BLAKE2b over the raw public key | Shown as words for comparison. |
 | Clinician key custody | Argon2id-wrapped under a reading passphrase that is not the sign-in code | Stored only in the clinician's own browser; the server never holds it, so a cleared browser loses the keys. The reading passphrase is the only wrap, by decision: a passkey signs in and never unwraps keys (#205). |
+| Recovery: the wrapped key | XChaCha20-Poly1305, one slot per secret, each key from Argon2id at the same floor | The master, wrapped under the passphrase and under the recovery code (`lib/recovery/dataKey.ts`). The server keeps every version in `wrapped-key.db`, serves only the newest and only with the owner's token, and can open none of them. |
 | Inbox token | 256-bit random, base64url | Minted by the owner console when a clinician is added (`lib/owner/inboxToken.ts`), shown once, delivered out of band. The invitation cannot carry it: the server only ever sees its digest. |
 | Server-side hashing | Argon2id (invitation secrets); BLAKE2b-256 (session ids, inbox tokens, the owner bearer token) | `auth/Secrets.kt`. Constant-time comparisons. |
 
@@ -175,6 +176,8 @@ OWNER
                                                                   ├─ 2 ▶ manifest signing seed (Ed25519)
                                                                   ├─ 3 ▶ owner X25519 seed  ┐ the pairing identity
                                                                   └─ 4 ▶ owner Ed25519 seed ┘ (lib/owner/identity.ts)
+  master ──XChaCha20-Poly1305 under Argon2id(passphrase), and again under Argon2id(recovery code)──▶ wrapped key
+                                                                   (the server keeps it and cannot open it)
   owner public keys ──▶ published to the server; the clinician pins them at pairing
 
 CLINICIAN
@@ -208,10 +211,22 @@ nothing that decrypts a record or authors content.
   (`OWNER_KEY_UNPINNED_CAVEAT`, `lib/therapist/inviteAccept.ts`).
 - **No escrow (O6).** Forget the passphrase and have no recovery code, and the data is gone: nobody —
   not the maintainer, not the operator — can get it back. That is what makes it safe and what makes it
-  unforgiving. A recovery code can wrap the master in the browser (`lib/recovery/`), but the wrapped
-  key has nowhere to live yet, so the code cannot be used from another device (#258); the format has
-  room for more slots, though a passkey is not one, because it only signs in (#205). A lost
-  clinician key means a fresh invitation and re-pairing.
+  unforgiving. A recovery code wraps the master in the browser (`lib/recovery/`), and the server can
+  hold the wrapped key, but no console reads or writes it yet, so the code cannot be used from
+  another device (#258). The format has room for more slots, though a passkey is not one, because it
+  only signs in (#205). A lost clinician key means a fresh invitation and re-pairing.
+- **The wrapped key supersedes the key parameters by presence (#258).** The first version is created
+  against the state its writer read. For a first run that is no key document of either kind; for an
+  enrolment it is the key parameters' exact bytes, named by their ETag. So two devices never both
+  mint a master, and no enrolment wraps the master of a salt that is no longer the one on the server.
+  The key parameters are written once and never replaced. Once any version of the wrapped key exists,
+  the server stops serving the parameters and takes no new ones. It keeps the file, because otherwise
+  a changed passphrase and the still-published salt would reproduce the master. Each change is a new
+  version, never changed or deleted. The server serves only the newest, and only with the owner's
+  token, because whoever holds the document can guess at the passphrase offline at Argon2id's cost
+  per guess. A changed passphrase or code therefore opens nothing the server hands out. It still opens
+  the older versions in a copy of the volume or a backup: it is retired against the live server, not
+  against copies. Retiring the master itself is key rotation, which is not built: #297.
 - **The browser consoles are the convenience path.** The phone is meant to become the secret-handling
   path (#138); until then the lower-assurance banner says so wherever keys are handled.
 

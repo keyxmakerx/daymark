@@ -313,7 +313,8 @@ The volume is `daymark-companion_blobs`, mounted at `/data`.
 | Path | Holds | Present when |
 |---|---|---|
 | `index.db` and `blobs/<lineage>/<version>.blob` | Snapshot ciphertext and its index | a bearer token is set |
-| `keyparams.json` | The owner's key-derivation parameters (salt and cost; public) | an owner has published them |
+| `keyparams.json` | The owner's key-derivation parameters (salt and cost; public). Kept, and no longer served, once `wrapped-key.db` holds a version | an owner has published them |
+| `wrapped-key.db` | The owner's wrapped key: the master locked under the passphrase and under the recovery code. Every version is kept; only the newest is served | a bearer token is set |
 | `owner-account.db` | The bearer-token digest, the notification email (plaintext), recovery-link digests | a bearer token is set |
 | `auth.db` | Invitations (Argon2id), sign-in code seeds (**in the clear**), session digests, attempt counters, public keys, relationship endings | the `paired` or `practice` shape (§0) |
 | `rel-index.db` and `rel/<relRef>/<channel>/<lineage>/<version>.blob` | Relationship ciphertext and its index | the `paired` or `practice` shape (§0) |
@@ -323,18 +324,20 @@ The volume is `daymark-companion_blobs`, mounted at `/data`.
 | `pairing.db` | Pairing messages in transit | the `paired` or `practice` shape (§0) |
 | `tmp/` | Staging for atomic writes | with either blob store |
 
-That is eight SQLite databases, all in WAL mode: each may have `-wal` and `-shm` files beside it,
+That is nine SQLite databases, all in WAL mode: each may have `-wal` and `-shm` files beside it,
 and those belong to it. Also present and not worth keeping: `.readyz` (the readiness probe's file)
 and the SQLite native library the server unpacks at every start. A server that changes shape keeps
 the files it no longer opens: nothing is migrated or deleted.
 
 The volume holds **sign-in secrets**: anyone with a copy of `auth.db` can mint sign-in codes for every
-enrolled clinician (COMPANION_SECURITY.md §5.2). Protect backups like a password file — encrypted at
-rest, readable by few.
+enrolled clinician (COMPANION_SECURITY.md §5.2). It also holds the owner's wrapped key. That opens
+nothing without the passphrase or the recovery code, but whoever copies `wrapped-key.db` can guess at
+the passphrase offline, and a passphrase or code the owner has since changed still opens the older
+versions in it. Protect backups like a password file — encrypted at rest, readable by few.
 
 ### 6.2 Back up
 
-Stop the container for the few seconds a copy takes. Eight databases and their blob files must come
+Stop the container for the few seconds a copy takes. Nine databases and their blob files must come
 from one moment, and the image has no shell or `sqlite3` to take a live copy.
 
 ```sh

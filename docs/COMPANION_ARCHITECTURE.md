@@ -117,7 +117,7 @@ Kotlin and Ktor, in a non-root, read-only, distroless container with no outbound
 
 | Store | Holds |
 | --- | --- |
-| `index.db`, `blobs/`, `keyparams.json` | Sync: append-only snapshot ciphertext per lineage, and the published KDF parameters |
+| `index.db`, `blobs/`, `keyparams.json`, `wrapped-key.db` | Sync: append-only snapshot ciphertext per lineage, the published KDF parameters, and the owner's wrapped key |
 | `rel-index.db`, `rel/` | Per-relationship channels — grants, assignments, shares, game plans — as opaque signed-and-sealed blobs |
 | `auth.db` | Invitations, enrolment tickets, TOTP credentials, sessions, published public keys, attempt windows, relationship endings |
 | `pairing.db` | Pairing runs: two CPace messages and two sealed envelopes each |
@@ -125,7 +125,7 @@ Kotlin and Ktor, in a non-root, read-only, distroless container with no outbound
 | `org.db` | Practices and memberships |
 | `owner-account.db` | The owner token's digest, the notification address, recovery-link state |
 
-Route groups: sync (`/v1/keyparams`, `/v1/snapshots`); relationship channels (`/v1/rel/…`);
+Route groups: sync (`/v1/keyparams`, `/v1/keydoc`, `/v1/snapshots`); relationship channels (`/v1/rel/…`);
 invitations, pairing and sign-in (`/v1/invite…`, `/v1/relations/{relRef}/pairing…`, `/v1/totp/…`);
 keys, endings and the access log (`/v1/relations/{relRef}/…`); owner notifications and access recovery
 (`/v1/owner/notifications`, `/v1/recovery/…`); practices (`/v1/orgs…`); and the unauthenticated

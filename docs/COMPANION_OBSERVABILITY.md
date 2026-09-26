@@ -214,6 +214,7 @@ the code has changed.
 | WARN | `…companion.audit` | `audit log append failed` **with a stack trace** (`auditSafely` in the relationship, auth, key, ending and pairing routes) | Fixed messages and column names today; a stack trace all the same |
 | WARN | `…companion.audit` | `org audit append failed` with a stack trace (`orgRoutes`) | The same |
 | WARN | `…companion.routes` | `blob store I/O error: {}` (`failBlob` in `SyncRoutes.kt`, on a full disk) | **A file path containing the lineage id** (#160) |
+| WARN | `…companion.routes` | `key document store I/O error: {}` (`failKeyDocument` in `SyncRoutes.kt`, when the volume refuses a read or write of the key params or the wrapped key) | An exception class name |
 | INFO, or WARN when any copy could not be removed | `…companion.housekeeping` | `relationship sweep: {} stored copies removed, {} already gone, {} could not be removed and are retried next sweep` (`Housekeeping`, at start-up and hourly; #338) | Three counts; never a `relRef`, channel, lineage, version or size |
 | DEBUG | `…companion.housekeeping` | `relationship sweep: nothing had ended` | Nothing |
 | WARN | `…companion.housekeeping` | `housekeeping job failed (job={}): {}` | A job name and an exception class name |
@@ -400,7 +401,7 @@ curl -s -o /dev/null -w '%{http_code}\n' https://daymark.example.com/readyz    #
 
 # 3. The patterns that mean something. There is no access log, so this is the whole check.
 docker compose logs --since 24h companion | grep -E \
-  'NOT READY|X-Forwarded-For|AuthGuard is tracking|unhandled error|blob store I/O error|content guard rejected|mail send failed|audit append failed|audit log append failed'
+  'NOT READY|X-Forwarded-For|AuthGuard is tracking|unhandled error|blob store I/O error|key document store I/O error|content guard rejected|mail send failed|audit append failed|audit log append failed'
 ```
 
 ### 6.2 Weekly — about ten minutes
@@ -430,6 +431,7 @@ docker system df -v | grep daymark-companion_blobs
 | `AuthGuard is tracking N active sources … a sweep freed none` | A wide flood, or an allowlist that matches something varying per request (§1.5 C or D) | Check the allowlist is not a broad range; look at your proxy's own limits |
 | `unhandled error on <path>` with a stack trace | A 500. **The path can hold a raw `relRef` and lineage id** | Treat the line as sensitive; redact the path before sharing it (#160) |
 | `blob store I/O error: disk write failed: …` | The snapshot store could not write. **The message can hold a lineage id** | Free space or permissions; redact before sharing. The relationship store's equivalent logs nothing (#161) |
+| `key document store I/O error: …` | The key params or the wrapped key could not be read or written; the owner's devices cannot open or change their key | Free space, the volume's ownership (UID 65532), a read-only mount |
 | `refusing to send: content guard rejected message` | Something tried to put non-template text into an email; nothing was sent | Investigate as a bug or an attack |
 | `mail send failed (kind=…)` | The one outbound path is broken; the owner is not hearing about invitations, reviews or token re-issues | §3.6 |
 | `audit log append failed`, `org audit append failed` | Access is still served but no longer recorded. The owner's log is now incomplete, and nothing in the chain will ever show it | The most urgent storage error: check the data directory. The append never blocks a request (`auditSafely`), which is right, and is why only you see this |

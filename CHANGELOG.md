@@ -37,6 +37,20 @@ All notable changes to this project are documented here. The format is based on
   still contains unlock times restores normally; the badges in it are just not brought back.
 
 ### Added
+- **Companion — the server can now keep the locked copy of your key that a recovery code opens.**
+  A recovery code only helps on another device if that device can reach the locked copy of your
+  key. Until now there was nowhere to put it, so the Recovery code screen saved a key file instead.
+  The server can now keep that copy: your key, locked once under your passphrase and once under
+  your recovery code. The server cannot open it. It gives the copy only to someone with your
+  access token, because whoever holds it can try guesses at your passphrase on their own computer.
+  Each change, such as a new passphrase or a new recovery code, is kept as a new version. Old
+  versions are never changed or deleted, and only the newest is ever given out. Only one device can
+  ever create it: if two try at once, or if the settings changed since a device last looked, the
+  server refuses and the device must look again. Once a locked copy exists, the server stops giving
+  out the settings that turn your passphrase straight into your key, so a passphrase you change
+  stops opening anything this server gives out. It still opens copies that anyone kept, including
+  backups of the server. Nothing in the consoles uses the locked copy yet, so for now the recovery
+  code still needs its key file. (#258)
 - **The phone has a place for a clinician's game plans and assignments, kept apart from what you
   write yourself, and checks them the way the web console does.** Nothing reaches it yet, because
   the phone does not talk to the Companion. A plan or an assignment is only ever written there after
