@@ -2,6 +2,8 @@ package com.daymark.companion
 
 import com.daymark.companion.auth.DeviceSignature
 import com.daymark.companion.auth.PairingCode
+import com.daymark.companion.auth.SIGNED_BODY
+import com.daymark.companion.auth.SignedBody
 import com.daymark.companion.routes.PAIRING_CODE_CREDENTIAL
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
@@ -18,6 +20,8 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.server.application.call
+import io.ktor.server.response.ApplicationSendPipeline
 import io.ktor.server.testing.testApplication
 import java.io.File
 import java.sql.DriverManager
@@ -346,5 +350,40 @@ class SignedRequestTest {
             assertEquals(unauthorized, client.send(HttpMethod.Get, "/v1/snapshots", sent).answer(), "at the end of its own window")
             assertEquals(HttpStatusCode.OK, server.signedGet(client, phone, "/v1/snapshots").status, "control: a request made then is taken")
         }
+    }
+
+    @Test
+    fun `a body sent for a key that is not live is read to its end and hashed, and none of it is kept`() = testApplication {
+        val cap = 256L * 1024
+        val server = DeviceServer(maxRequestBytes = cap, maxBlobBytes = cap)
+        server.start(this)
+        // What the check's reader left on each call, taken as the call is answered.
+        val reads = java.util.Collections.synchronizedList(mutableListOf<SignedBody>())
+        application {
+            sendPipeline.intercept(ApplicationSendPipeline.Before) { call.attributes.getOrNull(SIGNED_BODY)?.let { reads += it } }
+        }
+        val phone = TestPhone()
+        server.pair(client, phone)
+        val revoked = TestPhone()
+        server.pair(client, revoked)
+        assertEquals(HttpStatusCode.NoContent, client.post("/v1/devices/${revoked.keyId}/revoke") { header(HttpHeaders.Authorization, "Bearer ${server.authToken}") }.status)
+        val stranger = TestPhone() // a key nobody paired
+        val target = "/v1/snapshots/devA/1"
+        val body = ByteArray(cap.toInt()) { (it * 31 + 7).toByte() } // a whole body, at the cap
+        val line = DeviceSignature.bodyHash(body)
+
+        for ((what, signer) in mapOf("a key nobody paired" to stranger, "a revoked key" to revoked)) {
+            reads.clear()
+            val res = client.send(HttpMethod.Put, target, signer.headers("PUT", target, body, server.seconds), body)
+            assertEquals(unauthorized, res.answer(), what)
+            assertEquals(listOf(SignedBody(line, kept = false, keptBytes = 0)), reads.distinct(), "$what: read to its end and hashed, and none of it kept")
+        }
+
+        // Control: the same body from the live key is kept, taken, and stored as it was sent.
+        reads.clear()
+        val res = client.send(HttpMethod.Put, target, phone.headers("PUT", target, body, server.seconds), body)
+        assertEquals(HttpStatusCode.Created, res.status, res.bodyAsText())
+        assertEquals(listOf(SignedBody(line, kept = true, keptBytes = cap.toInt())), reads.distinct())
+        assertContentEquals(body, server.signedGet(client, phone, target).bodyAsBytes())
     }
 }

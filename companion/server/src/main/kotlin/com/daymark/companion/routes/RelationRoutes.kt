@@ -460,6 +460,11 @@ private suspend fun io.ktor.server.routing.RoutingContext.resolve(
     }
     // The owner's side keeps the rule every owner route keeps: a route on the list refuses a phone here too.
     if (owner is OwnerAuth.Outcome.Ok && !call.mayUseRoute(owner.principal, ownerGuard)) return null
+    // A signed request is judged by its signature alone, as on every owner route: refused, it is not
+    // tried as a clinician's, and no handler runs for it.
+    if (owner != null && owner !is OwnerAuth.Outcome.Ok && ownerGuard.isSigned(call)) {
+        call.refuse(owner); return null
+    }
     val role = (if (owner is OwnerAuth.Outcome.Ok) Role.OWNER else null)
         ?: resolveTherapist(call, authStore, sessionIdleSeconds, pathRelRef, requireCsrf, auditStore, auditSourceIp)
         ?: run {

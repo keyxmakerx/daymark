@@ -7,6 +7,7 @@ import io.ktor.server.request.httpMethod
 import io.ktor.server.request.receiveChannel
 import io.ktor.util.AttributeKey
 import io.ktor.utils.io.readAvailable
+import org.bouncycastle.crypto.digests.Blake2bDigest
 import org.bouncycastle.math.ec.rfc8032.Ed25519
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
@@ -47,6 +48,11 @@ data class OwnerPrincipal(val ownerId: String, val kind: CredentialKind, val cre
  *   body has been read, so a body held back is answered no sooner for a key nobody paired than for a
  *   live one; and a key that is not live is checked against a key nobody's request can use, so a
  *   forged request costs the same work whatever key it names.
+ * - A BODY IS KEPT ONLY FOR A KEY LIVE WHEN THE REQUEST ARRIVES. Every body is read to its end and
+ *   hashed as it streams in; the key is looked up on arrival only to decide whether its bytes are kept
+ *   for the handler, and nothing anyone can see depends on that. The body of a request naming any other
+ *   key is dropped as it is hashed, so a request with no live key behind it holds one chunk of memory
+ *   however large its body. A key that becomes live while its body is on the way is refused.
  * - A NONCE IS TAKEN ONLY BY A REQUEST ITS KEY SIGNED, after the signature is checked: a forged request
  *   leaves nothing behind. The time is judged after the body with the same reading of the clock that
  *   decides which nonces have lapsed, so a captured request sent again meets its nonce while it is
@@ -212,8 +218,10 @@ class OwnerAuth(
         val declared = headers[HttpHeaders.ContentLength]?.toLongOrNull()
         if (declared != null && declared > maxBodyBytes) return Signed.TooLarge
 
-        // The whole body, before anything that depends on the key or the nonce.
-        val body = call.requestBody(maxBodyBytes) ?: return Signed.TooLarge
+        // The whole body, before anything that depends on the key or the nonce, hashed as it streams in.
+        // Its bytes are kept only for a key live now; nothing observable depends on which.
+        val keep = liveKey(keyId, allowPending) != null
+        val body = call.readSignedBody(maxBodyBytes, keep) ?: return Signed.TooLarge
 
         // One reading of the clock judges the request's time and decides which nonces have lapsed: a body
         // finished after the window is refused, and inside it a nonce already used is still kept.
@@ -224,13 +232,16 @@ class OwnerAuth(
         val message = DeviceSignature.requestMessage(
             call.request.httpMethod.value,
             call.request.local.uri,
-            DeviceSignature.bodyHash(body),
+            body.hash,
             time,
             nonce,
             headerValues,
         )
         val signedByKey = DeviceSignature.verify(live?.first ?: NOBODYS_KEY, message, signature)
         if (live == null || !signedByKey) return Signed.Refused
+        // A key that became live while its body was on the way had that body dropped: refused, never
+        // handed to a handler that would find nothing to read.
+        if (!body.kept) return Signed.Refused
         // Only a request its key signed takes a nonce, so a forged one leaves no row behind.
         if (!devices.rememberNonce(keyId, nonce, keepUntil = sentAt + DeviceSignature.WINDOW_MS, now = now)) return Signed.Refused
         // Read again, last, with nothing kept from the first reading: a phone revoked in between is
@@ -279,6 +290,52 @@ class OwnerAuth(
 
 private val REQUEST_BODY = AttributeKey<ByteArray>("daymark.requestBody")
 private val REQUEST_BODY_TOO_LARGE = AttributeKey<Unit>("daymark.requestBodyTooLarge")
+private val REQUEST_BODY_DROPPED = AttributeKey<Unit>("daymark.requestBodyDropped")
+
+/**
+ * What reading a signed request's body left on the call: the body's line in the signed message
+ * (base64url of BLAKE2b-256 of its bytes), whether its bytes were kept for the handler, and how many
+ * bytes are held.
+ */
+internal data class SignedBody(val hash: String, val kept: Boolean, val keptBytes: Int)
+
+/** The [SignedBody] a signed request's check read, on the call it read it for. */
+internal val SIGNED_BODY = AttributeKey<SignedBody>("daymark.signedBody")
+
+/**
+ * A signed request's body, read to its end and hashed as it streams in, whatever key the request
+ * names; null when it runs over [max]. Its bytes are kept for the handler, as [requestBody] keeps them,
+ * only when [keep]. Otherwise each chunk is dropped once it is hashed, so the body costs one chunk of
+ * memory however large it is, and no later reader on the call can have it.
+ */
+internal suspend fun ApplicationCall.readSignedBody(max: Long, keep: Boolean): SignedBody? {
+    if (attributes.contains(REQUEST_BODY_TOO_LARGE)) return null
+    // A handler that read the body before the check left its bytes: they are hashed as they are.
+    attributes.getOrNull(REQUEST_BODY)?.let { read ->
+        if (read.size > max) return null
+        return SignedBody(DeviceSignature.bodyHash(read), kept = true, keptBytes = read.size).also { attributes.put(SIGNED_BODY, it) }
+    }
+    val digest = Blake2bDigest(256)
+    val kept = if (keep) java.io.ByteArrayOutputStream() else null
+    val channel = receiveChannel()
+    val buf = ByteArray(8 * 1024)
+    var total = 0L
+    while (true) {
+        val n = channel.readAvailable(buf, 0, buf.size)
+        if (n < 0) break
+        total += n
+        if (total > max) {
+            attributes.put(REQUEST_BODY_TOO_LARGE, Unit)
+            return null
+        }
+        digest.update(buf, 0, n)
+        kept?.write(buf, 0, n)
+    }
+    val hash = ByteArray(32).also { digest.doFinal(it, 0) }
+    val bytes = kept?.toByteArray()
+    if (bytes != null) attributes.put(REQUEST_BODY, bytes) else attributes.put(REQUEST_BODY_DROPPED, Unit)
+    return SignedBody(DeviceSignature.b64url(hash), kept = bytes != null, keptBytes = bytes?.size ?: 0).also { attributes.put(SIGNED_BODY, it) }
+}
 
 /**
  * The request's body, up to [max] bytes, read from the network once and kept for every later reader on
@@ -292,6 +349,8 @@ private val REQUEST_BODY_TOO_LARGE = AttributeKey<Unit>("daymark.requestBodyTooL
  */
 suspend fun ApplicationCall.requestBody(max: Long): ByteArray? {
     if (attributes.contains(REQUEST_BODY_TOO_LARGE)) return null
+    // A signed request whose body was dropped as it was hashed is refused before any handler runs.
+    check(!attributes.contains(REQUEST_BODY_DROPPED)) { "a signed request's body was dropped, and its handler must not run" }
     attributes.getOrNull(REQUEST_BODY)?.let { return if (it.size > max) null else it }
     val channel = receiveChannel()
     val buf = ByteArray(8 * 1024)

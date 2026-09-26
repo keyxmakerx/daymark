@@ -47,6 +47,8 @@ internal class DeviceServer(
     val rateLimitRps: Int = 100_000,
     val authToken: String = DEVICE_TEST_TOKEN,
     val maxRequestBytes: Long = 2_097_152L,
+    /** The largest snapshot the server stores: half the request cap unless a test asks for more. */
+    val maxBlobBytes: Long = maxRequestBytes / 2,
     /** The server's mail, for a test that reads what was sent; null for the configuration's own. */
     val mailer: Mailer? = null,
     /** `DAYMARK_TRUSTED_PROXIES`: a test on Netty trusts 127.0.0.1 to send requests from addresses of its choosing. */
@@ -60,7 +62,7 @@ internal class DeviceServer(
     fun config() = Config(
         bindAddr = "127.0.0.1", port = 8080, dataDir = dataDir.path, basePath = "/",
         webDir = "build/test-web", logLevel = "info", authToken = authToken,
-        maxBlobBytes = maxRequestBytes / 2, maxRequestBytes = maxRequestBytes,
+        maxBlobBytes = maxBlobBytes, maxRequestBytes = maxRequestBytes,
         maxVersions = 200, perTokenQuotaBytes = 5_368_709_120L,
         authLockoutFails = lockoutFails, authLockoutSeconds = 900L, rateLimitRps = rateLimitRps,
         setupMode = mode, publicBaseUrl = publicBaseUrl,
