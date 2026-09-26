@@ -103,9 +103,14 @@
     {/each}
   </div>
 
+  <!--
+    The caveat is the last word here (#320). Nothing reaches back to what was already read: pairing
+    again protects only what is sealed afterwards, which the replace-keys screen says in full
+    (pairing/copy.ts, replaceBody). A second explanation at this click would promise a cutoff that
+    does not exist.
+  -->
   <p class="revoke-note faint">
-    Revoking (turning a grant off) stops <em>future</em> server-mediated delivery. {REVOKE_CAVEAT} A
-    true cutoff for past data is a re-key, which is a separate step.
+    Revoking (turning a grant off) stops <em>future</em> server-mediated delivery. {REVOKE_CAVEAT}
   </p>
 
   <div class="actions">

@@ -325,6 +325,27 @@ describe('the contract this screen shows', () => {
     )
   })
 
+  it('calls the digest the page’s own report, never a control (#320)', () => {
+    const scope = SIGN_IN_CONTRACT.find((c) => c.id === 'cannot.scope')!.text
+    expect(scope).toBe(
+      'Both of those describe the software as released, not the page in front of you. That is what ' +
+        "the notice at the top of this screen is about. The digest shown here is this page's own report " +
+        'of what it is running; whoever runs the server can compare it against the release they ' +
+        'pulled, and nothing on this screen can.',
+    )
+    // A changed page can print the right value, so nothing may present the digest as a check.
+    const A_CONTROL = /\ba control\b|rather than a footnote|verify the (?:released )?(?:image )?digest/i
+    const everything = [...SIGN_IN_CONTRACT.map((c) => c.text), ...Object.values(SCREEN_COPY)]
+    expect(everything.filter((t) => A_CONTROL.test(t))).toEqual([])
+    // Control: the retired clause is seen by the same pattern.
+    expect(
+      A_CONTROL.test(
+        'Both of those describe the software as released, not the page in front of you — which is what the ' +
+          'notice at the top of this screen is about, and why the image digest is a control here rather than a footnote.',
+      ),
+    ).toBe(true)
+  })
+
   it('groups into reading order without losing or duplicating a clause', () => {
     const groups = contractSections()
     expect(groups.map((g) => g.section)).toEqual([...SECTION_ORDER])

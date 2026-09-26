@@ -326,10 +326,13 @@ export const SIGN_IN_CONTRACT: readonly ContractClause[] = [
   {
     id: 'cannot.scope',
     section: 'serverCannotSee',
+    // The digest is the page's own report, never a control (#222, #320): a changed page can print
+    // the right value, so only a comparison made somewhere else counts for anything.
     text:
-      'Both of those describe the software as released, not the page in front of you — which is ' +
-      'what the notice at the top of this screen is about, and why the image digest is a control ' +
-      'here rather than a footnote.',
+      'Both of those describe the software as released, not the page in front of you. That is what ' +
+      "the notice at the top of this screen is about. The digest shown here is this page's own report " +
+      'of what it is running; whoever runs the server can compare it against the release they ' +
+      'pulled, and nothing on this screen can.',
   },
   {
     id: 'session.memory',

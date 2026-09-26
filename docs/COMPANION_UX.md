@@ -62,8 +62,8 @@ accepting or declining a game plan in the owner console: #231.
    copies and writes a `share.revoke` row to the relationship's audit log. If some copies could not
    be deleted, the strip is replaced by a warning that says so with the count — never a clean
    "withdrawn".
-4. Turning a grant off in the grant manager carries the same caveat, then *"A true cutoff for past
-   data is a re-key, which is a separate step."*
+4. Turning a grant off in the grant manager carries the same caveat, as the last words of its
+   paragraph. Nothing follows it: no step reaches back to what was already read (#320).
 5. The cut-off for future shares that does not rely on the server's honesty is re-pairing: a fresh
    invitation and code. When a clinician comes back with new keys, the owner sees *"Replace the keys
    held for {name}"*, whose third paragraph says replacing does not reach what was already sealed to
@@ -272,8 +272,9 @@ whoever runs the server, never a control or a source of trust, because a changed
 right value (#222). The page never compares it and never says it is right — a tampered page would
 report that it matched. Trust in a page comes only from code the server does not deliver, or from
 the operator checking what they run against a signed release (not built: #241). "Copied" is a word,
-not a tick. Not built: dropping the contract clause that calls the digest a control, and the
-banner's request to verify it: #320.
+not a tick. The contract says so — *"The digest shown here is this page's own report of what it is
+running; whoever runs the server can compare it against the release they pulled, and nothing on this
+screen can."* — and no banner on any console asks a person to verify a digest (#320).
 
 ## 11. Empty, loading, error and refusal states
 

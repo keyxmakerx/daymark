@@ -542,21 +542,21 @@ const FIXED_COPY: { path: string; label: string; sentences: string[] }[] = [
     path: 'src/lib/components/SyncPanel.svelte',
     label: 'lower-assurance banner (sync)',
     sentences: [
-      'Lower-assurance path. Decrypting in the browser is convenient but the page is served by the server it talks to; a malicious server could tamper with it. Your phone (the future Sync flavor) is the trusted, secret-handling path. Use a passphrase you are comfortable entering here, and verify the released image digest.',
+      'Lower-assurance path. Decrypting in the browser is convenient but the page is served by the server it talks to; a malicious server could tamper with it. Your phone (the future Sync flavor) is the trusted, secret-handling path. Use a passphrase you are comfortable entering here.',
     ],
   },
   {
     path: 'src/lib/components/owner/LowerAssuranceBanner.svelte',
     label: 'lower-assurance banner (owner console)',
     sentences: [
-      'Lower-assurance path. The owner console holds your private keys in this browser to open sealed items and sign grants. This is a convenience path — the page is served by the server it talks to, so a tampered page could misbehave. Keys stay in memory and are dropped when you lock. Verify the released image digest; your phone remains the trusted, secret-handling path.',
+      'Lower-assurance path. The owner console holds your private keys in this browser to open sealed items and sign grants. This is a convenience path — the page is served by the server it talks to, so a tampered page could misbehave. Keys stay in memory and are dropped when you lock. Your phone remains the path that handles your secrets.',
     ],
   },
   {
     path: 'src/lib/components/therapist/LowerAssuranceBanner.svelte',
-    label: 'lower-assurance banner (therapist portal, TOTP)',
+    label: 'lower-assurance banner (clinician console, TOTP)',
     sentences: [
-      'Lower-assurance path (TOTP). Your reading key is unwrapped in this browser under a passphrase. Because the page is served by the server it talks to, a tampered page could capture your passphrase or keys — this is a convenience path, not a zero-knowledge guarantee. Keys are held in memory only and wiped when you log out or go idle. Verify the released image digest; a hardware passkey (WebAuthn) is the stronger path when available.',
+      'Lower-assurance path (TOTP). Your reading key is unwrapped in this browser under a passphrase. Because the page is served by the server it talks to, a tampered page could capture your passphrase or keys — this is a convenience path, not a zero-knowledge guarantee. Keys are held in memory only and wiped when you log out or go idle.',
     ],
   },
   {
@@ -661,9 +661,43 @@ const RETIRED_COPY: { path: string; issue: string; sentences: string[] }[] = [
       'Anything a therapist assigns or shares here is guidance from your real clinician — never a diagnosis.',
     ],
   },
+  {
+    // An instruction nobody can carry out (no release publishes a digest, #241, and a changed page
+    // can print the right one), and a passkey called stronger against a changed page, which it is
+    // not: an unlocked key still passes through the page.
+    path: 'src/lib/components/therapist/LowerAssuranceBanner.svelte',
+    issue: '#320',
+    sentences: ['Verify the released image digest; a hardware passkey (WebAuthn) is the stronger path when available.'],
+  },
+  {
+    path: 'src/lib/components/owner/LowerAssuranceBanner.svelte',
+    issue: '#320',
+    sentences: ['Verify the released image digest; your phone remains the trusted, secret-handling path.'],
+  },
+  {
+    path: 'src/lib/components/SyncPanel.svelte',
+    issue: '#320',
+    sentences: ['Use a passphrase you are comfortable entering here, and verify the released image digest.'],
+  },
+  {
+    // Pairing again protects only what is sealed afterwards; nothing reaches what was already read.
+    path: 'src/lib/components/owner/GrantManager.svelte',
+    issue: '#320',
+    sentences: ['A true cutoff for past data is a re-key, which is a separate step.'],
+  },
 ]
 
 describe('(f) retired copy stays retired', () => {
+  it('no screen asks anyone to verify the released image digest (#320)', () => {
+    const ASKS = /verify (?:the|this) (?:released )?(?:image )?digest|verify this build/i
+    const offenders = components.filter((p) => ASKS.test(proseOf(p)))
+    expect(components.length).toBeGreaterThan(60)
+    expect(offenders).toEqual([])
+    // Control: the retired sentence, planted into a real component, is seen.
+    const planted = `${source.get('src/lib/components/SyncPanel.svelte')}\n<p>Verify the released image digest.</p>\n`
+    expect(ASKS.test(proseOfText(planted))).toBe(true)
+  })
+
   it('every entry names a real file, and the check sees a planted copy of each retired sentence', () => {
     expect(RETIRED_COPY.length).toBeGreaterThan(0)
     for (const { path, sentences } of RETIRED_COPY) {

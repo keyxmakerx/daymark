@@ -1,6 +1,6 @@
 <script lang="ts">
   /*
-   * SIGN-IN — the two-column contract, and the deployment's digest as a control.
+   * SIGN-IN — the two-column contract, and the digest the deployment reports about itself.
    *
    * WHAT THIS FILE IS ALLOWED TO DECIDE. Arrangement, and nothing else. Every sentence on this
    * screen is a premade constant in lib/therapist/signIn.ts, every rule about whether the
@@ -39,11 +39,12 @@
    * page's own subject in the outline that heading-navigation users rely on — the same reason
    * the NavRail's brand block is not a heading.
    *
-   * WHY THE DIGEST SITS ABOVE THE FIELDS AND NOT UNDER THEM. "A control, not a footnote"
-   * (COMPANION_UX.md §10.4) is a claim about placement as much as about markup: which image is
-   * serving this page is something to read BEFORE typing a passphrase into it, so it is the first
-   * thing in the credential column, at the same weight as everything else there, with its value
-   * legible in mono and copyable in one click.
+   * WHY THE DIGEST SITS ABOVE THE FIELDS AND NOT UNDER THEM. It is the page's own report of what
+   * it is running (COMPANION_UX.md §10.4) — information for whoever runs the server, never a
+   * control, because a changed page can print the right value (#222, #320). Which image says it is
+   * serving this page is still something to read BEFORE typing a passphrase into it, so it is the
+   * first thing in the credential column, at the same weight as everything else there, with its
+   * value legible in mono and copyable in one click.
    *
    * WHY NOTHING HERE SAYS WHETHER THE DIGEST IS RIGHT. There is no expected value on this
    * screen, no comparison and no verdict. The comparison would be performed by the same page
