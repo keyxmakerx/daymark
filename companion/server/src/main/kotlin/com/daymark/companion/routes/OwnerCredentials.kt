@@ -27,7 +27,8 @@ const val PHONE_REFUSED_MESSAGE = "a paired phone cannot do this"
 
 /**
  * The routes a paired phone may not use, by method and path as the route tree names them (#186, #189):
- * the one list, read by [owner] on every request and by DeviceKeyRevocationTest's walk of the route tree.
+ * the one list, read by [mayUseRoute] on every request an owner credential passes, and by
+ * DeviceKeyRevocationTest's walk of the route tree.
  *
  * A phone is the owner's journal device, not the server operator's console. It is kept off:
  *  - DEVICE MANAGEMENT: minting a pairing code and reading one, confirming one, the device list and
@@ -67,13 +68,9 @@ internal val PHONE_REFUSED_ROUTES: Set<String> = setOf(
  * The owner behind this request, or null once it has been answered: the gate every owner route shares,
  * for the bearer token and a registered device's signature alike (#186). Refusals are fixed and
  * non-enumerating: 401 for any credential that does not pass, 429 for a source over its rate or locked
- * out, 413 for a signed body larger than any route takes.
+ * out, 413 for a signed body larger than any route takes, 411 for one that does not state its length.
  *
- * THE RULE FOR WHICH ROUTES A DEVICE REACHES: every owner route but those in the gate's
- * [OwnerAuth.phoneRefusedRoutes] ([PHONE_REFUSED_ROUTES] in a running server), which answer a phone that
- * has authenticated 403 [PHONE_REFUSED_MESSAGE]. A revoked or pending key never gets that far: it is
- * answered the 401 every route gives it. A route whose name cannot be read is refused to a phone,
- * never opened to one.
+ * Which routes a device reaches is [mayUseRoute]'s to say, once the credential has passed.
  */
 internal suspend fun ApplicationCall.owner(auth: OwnerAuth): OwnerPrincipal? {
     val principal = when (val outcome = auth.check(this)) {
@@ -83,14 +80,27 @@ internal suspend fun ApplicationCall.owner(auth: OwnerAuth): OwnerPrincipal? {
             return null
         }
     }
-    if (principal.kind == CredentialKind.DEVICE) {
-        val route = (this as? RoutingCall)?.route?.let(::routeKey)
-        if (route == null || route in auth.phoneRefusedRoutes) {
-            respond(HttpStatusCode.Forbidden, ErrorDto(PHONE_REFUSED_MESSAGE))
-            return null
-        }
-    }
-    return principal
+    return if (mayUseRoute(principal, auth)) principal else null
+}
+
+/**
+ * THE RULE FOR WHICH ROUTES A DEVICE REACHES: whether [principal], whose credential has passed, may use
+ * the route this call is on; false once the one 403 [PHONE_REFUSED_MESSAGE] has been answered. The
+ * token may use every owner route; a registered phone every one but those in the gate's
+ * [OwnerAuth.phoneRefusedRoutes] ([PHONE_REFUSED_ROUTES] in a running server). A route whose name
+ * cannot be read is refused to a phone, never opened to one. A revoked or pending key never gets this
+ * far: it is answered the 401 every route gives it.
+ *
+ * Every owner check goes through here: [owner] for the owner's routes, and the relationship routes,
+ * which take the owner or a clinician, for the owner's side. So a route put on the list is refused to
+ * a phone wherever it is mounted.
+ */
+internal suspend fun ApplicationCall.mayUseRoute(principal: OwnerPrincipal, auth: OwnerAuth): Boolean {
+    if (principal.kind != CredentialKind.DEVICE) return true
+    val route = (this as? RoutingCall)?.route?.let(::routeKey)
+    if (route != null && route !in auth.phoneRefusedRoutes) return true
+    respond(HttpStatusCode.Forbidden, ErrorDto(PHONE_REFUSED_MESSAGE))
+    return false
 }
 
 /** [owner], for the routes that need only to know the caller is the owner. */

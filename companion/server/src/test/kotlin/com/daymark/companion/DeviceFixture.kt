@@ -2,6 +2,7 @@ package com.daymark.companion
 
 import com.daymark.companion.mail.Mailer
 import com.daymark.companion.mail.OwnerAccountStore
+import com.daymark.companion.routes.PHONE_REFUSED_ROUTES
 import com.daymark.companion.storage.AuditStore
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
@@ -50,6 +51,8 @@ internal class DeviceServer(
     val mailer: Mailer? = null,
     /** `DAYMARK_TRUSTED_PROXIES`: a test on Netty trusts 127.0.0.1 to send requests from addresses of its choosing. */
     val trustedProxies: String? = null,
+    /** The routes the server's gate refuses a phone: the one list, or the one list with a route planted on it. */
+    val phoneRefusedRoutes: Set<String> = PHONE_REFUSED_ROUTES,
 ) {
     lateinit var account: OwnerAccountStore
     lateinit var ownerAudit: AuditStore
@@ -75,7 +78,7 @@ internal class DeviceServer(
     fun start(builder: ApplicationTestBuilder) {
         open()
         val cfg = config()
-        builder.application { module(cfg, mailer = mailer, accountStore = account, ownerAuditStore = ownerAudit) }
+        builder.application { module(cfg, mailer = mailer, accountStore = account, ownerAuditStore = ownerAudit, phoneRefusedRoutes = phoneRefusedRoutes) }
     }
 
     /** The same server on a real Netty engine on a free local port; close it when done. */
@@ -83,7 +86,7 @@ internal class DeviceServer(
         open()
         val cfg = config()
         val engine = embeddedServer(Netty, configure = { connector { host = "127.0.0.1"; port = 0 } }) {
-            module(cfg, mailer = mailer, accountStore = account, ownerAuditStore = ownerAudit)
+            module(cfg, mailer = mailer, accountStore = account, ownerAuditStore = ownerAudit, phoneRefusedRoutes = phoneRefusedRoutes)
         }.start(wait = false)
         val port = runBlocking { engine.engine.resolvedConnectors().first().port }
         return LiveServer(this, port) { engine.stop(100, 2_000) }

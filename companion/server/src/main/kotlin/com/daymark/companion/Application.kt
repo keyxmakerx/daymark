@@ -179,6 +179,8 @@ fun Application.module(
     housekeeping: Housekeeping? = null,
     /** The owner's own log, `owner-audit.db` (#189). Injectable so a test can read what was written. */
     ownerAuditStore: AuditStore? = null,
+    /** The routes a paired phone may not use: [PHONE_REFUSED_ROUTES]. Injectable so a test can plant one. */
+    phoneRefusedRoutes: Set<String> = PHONE_REFUSED_ROUTES,
 ) {
     // Publish the trusted-proxy allowlist before any route runs: every per-client lockout and rate
     // limit reads it via ApplicationCall.clientAddress(). Empty (the default) means forwarded
@@ -244,7 +246,7 @@ fun Application.module(
     // id. Every owner route below takes this, never the token's digest.
     val ownerAuth = if (account != null && guard != null && ownerAudit != null) {
         // One row when a lockout is armed, never per probe; OwnerAuth spaces them out server-wide.
-        OwnerAuth(guard, account.devices, config.maxRequestBytes, PHONE_REFUSED_ROUTES) { source, credential ->
+        OwnerAuth(guard, account.devices, config.maxRequestBytes, phoneRefusedRoutes) { source, credential ->
             auditLockout(ownerAudit, account.devices.ownerId, credential, source.takeIf { config.auditSourceIpEnabled })
         }
     } else {

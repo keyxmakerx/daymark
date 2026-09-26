@@ -285,10 +285,12 @@ fun Route.relationRoutes(
                  * owner can do about it — but a rule that lives only in a screen is a rule that a
                  * second client, a retry, or a future edit does not inherit.
                  *
-                 * BEFORE THE BODY IS READ. Refusing after would mean taking delivery of somebody's
-                 * sealed journal in order to throw it away, which is a strange thing for a server
-                 * that holds no content to do. 410 rather than 403 because the caller's authority is
-                 * not in question; the thing they are addressing has ended.
+                 * BEFORE THE HANDLER READS THE BODY. Refusing after would mean taking delivery of
+                 * somebody's sealed journal in order to throw it away, which is a strange thing for a
+                 * server that holds no content to do. (A phone's signed request has had its body read
+                 * already, since its signature covers it; it is refused here all the same.) 410 rather
+                 * than 403 because the caller's authority is not in question; the thing they are
+                 * addressing has ended.
                  *
                  * SHARES ONLY. The other channels are untouched and deliberately so: this branch is
                  * already the shares-only branch, and widening it would be inventing rules for
@@ -456,6 +458,8 @@ private suspend fun io.ktor.server.routing.RoutingContext.resolve(
     if (owner == OwnerAuth.Outcome.TooLarge || owner == OwnerAuth.Outcome.LengthRequired) {
         call.refuse(owner); return null
     }
+    // The owner's side keeps the rule every owner route keeps: a route on the list refuses a phone here too.
+    if (owner is OwnerAuth.Outcome.Ok && !call.mayUseRoute(owner.principal, ownerGuard)) return null
     val role = (if (owner is OwnerAuth.Outcome.Ok) Role.OWNER else null)
         ?: resolveTherapist(call, authStore, sessionIdleSeconds, pathRelRef, requireCsrf, auditStore, auditSourceIp)
         ?: run {

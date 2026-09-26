@@ -7,6 +7,7 @@ import com.daymark.companion.routes.ErrorDto
 import com.daymark.companion.routes.PHONE_REFUSED_ROUTES
 import com.daymark.companion.routes.owner
 import io.ktor.client.HttpClient
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.put
@@ -270,6 +271,31 @@ class DeviceKeyRevocationTest {
                 "POST /v1/planted-no-such-route is on the list, and the server mounts no such owner route" in stale.problems,
                 "a stale entry is named: ${stale.problems}",
             )
+        }
+    }
+
+    @Test
+    fun `a relationship route put on the list is refused to a phone, as every route on it is`() {
+        val planted = "GET /v1/rel/{relRef}/{channel}/{lineage}"
+        assertTrue(planted !in PHONE_REFUSED_ROUTES, "the planted route is not on the list already")
+        val server = DeviceServer(mode = SetupMode.PRACTICE, phoneRefusedRoutes = PHONE_REFUSED_ROUTES + planted)
+        testApplication {
+            lateinit var app: Application
+            server.start(this)
+            application { app = this }
+            startApplication()
+            val phone = TestPhone()
+            server.pair(client, phone)
+            val walked = walk(app, server, phone, PHONE_REFUSED_ROUTES + planted)
+            assertTrue(planted in walked.ownerRoutes.map { it.toString() }, "control: the walk asks the planted route as an owner route")
+            assertEquals(emptyList(), walked.problems, "the relationship route on the list answers the phone the one 403")
+
+            // Asked directly: the phone gets the 403, and the owner's token the lineage.
+            val target = "/v1/rel/$relRef/grants/lin1"
+            val byPhone = client.get(target) { signedWith(phone.headers("GET", target, timeSeconds = server.seconds, signed = carried)) }
+            assertEquals(phoneRefused, byPhone.status to byPhone.bodyAsText())
+            val byToken = client.get(target) { signedWith(carried + (HttpHeaders.Authorization to "Bearer ${server.authToken}")) }
+            assertEquals(HttpStatusCode.OK, byToken.status, byToken.bodyAsText())
         }
     }
 
