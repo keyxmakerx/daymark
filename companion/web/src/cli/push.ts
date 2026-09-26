@@ -4,12 +4,14 @@
  * Companion as the next append-only version. The server only ever sees ciphertext.
  *
  * Usage:
- *   DAYMARK_SYNC_PASSPHRASE='…' pnpm --silent push -- \
- *     --server http://localhost:8080 --token "$TOKEN" --lineage laptop --backup backup.json
+ *   DAYMARK_SYNC_PASSPHRASE='…' DAYMARK_AUTH_TOKEN='…' pnpm --silent push -- \
+ *     --server http://localhost:8080 --lineage laptop --backup backup.json
  *
- * The passphrase is read from DAYMARK_SYNC_PASSPHRASE (never passed on the command line).
- * `--silent` is part of the command, not decoration: without it pnpm prints the command line it
- * runs, token included, before this file does anything.
+ * THE SECRETS COME FROM THE ENVIRONMENT, NEVER THE COMMAND LINE. The passphrase is read from
+ * DAYMARK_SYNC_PASSPHRASE and the server's access token from DAYMARK_AUTH_TOKEN. A process's
+ * arguments can be read by other users of the same machine while it runs (`ps`, /proc), and pnpm
+ * prints them unless `--silent` is given, so a `--token` argument is refused before anything is
+ * sent, and the refusal never repeats it (#384).
  *
  * The snapshot is padded before it is encrypted (#315). If the padded snapshot is larger than
  * --max-blob-bytes (default: the server's default limit, 25 MiB), nothing is sent and the reason is
@@ -28,15 +30,14 @@ import { DEFAULT_MAX_BLOB_BYTES, SnapshotTooLargeError, SyncClient } from '../li
 
 const USAGE = [
   'Usage:',
-  "  DAYMARK_SYNC_PASSPHRASE='…' pnpm --silent push -- --server <url> --token <token> --lineage <name> --backup <file.json>",
+  "  DAYMARK_SYNC_PASSPHRASE='…' DAYMARK_AUTH_TOKEN='…' pnpm --silent push -- --server <url> --lineage <name> --backup <file.json>",
   '',
   'Encrypts a Daymark backup export with your sync passphrase and uploads it to your Companion as the',
   'next version. The server only ever receives ciphertext. The passphrase is read from',
-  'DAYMARK_SYNC_PASSPHRASE, never from the command line. Without --silent, pnpm prints the command',
-  'line before running it, and the token with it.',
+  'DAYMARK_SYNC_PASSPHRASE and the server access token from DAYMARK_AUTH_TOKEN, never from the',
+  'command line, where other users of this machine could read them.',
   '',
   '  --server <url>          your Companion (default http://localhost:8080)',
-  '  --token <token>         the server access token',
   '  --lineage <name>        the name this copy is filed under, 1 to 64 of A-Z a-z 0-9 _ - (default laptop)',
   '  --backup <file.json>    the backup exported from the app',
   '  --max-blob-bytes <n>    the largest snapshot your server accepts (default 26214400, the server default)',
@@ -53,15 +54,21 @@ async function main() {
     process.stdout.write(`${USAGE}\n`)
     return
   }
+  if (process.argv.includes('--token')) {
+    throw new Error(
+      'the access token is read from DAYMARK_AUTH_TOKEN, never from the command line, where other ' +
+        'users of this machine could read it. Nothing was sent.',
+    )
+  }
   const server = arg('server') ?? 'http://localhost:8080'
-  const token = arg('token')
+  const token = process.env.DAYMARK_AUTH_TOKEN
   const lineage = arg('lineage') ?? 'laptop'
   const backupPath = arg('backup')
   const passphrase = process.env.DAYMARK_SYNC_PASSPHRASE
 
   const maxBlobArg = arg('max-blob-bytes')
 
-  if (!token) throw new Error('missing --token (the server access token)')
+  if (!token) throw new Error('set DAYMARK_AUTH_TOKEN in the environment (the server access token)')
   if (!backupPath) throw new Error('missing --backup <path to a Daymark backup .json>')
   if (!passphrase) throw new Error('set DAYMARK_SYNC_PASSPHRASE in the environment')
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(lineage)) throw new Error('--lineage must be 1–64 chars of [A-Za-z0-9_-]')

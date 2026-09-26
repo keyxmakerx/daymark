@@ -38,7 +38,7 @@ const ENTRY = 'src/cli/push.ts'
 const PUSH_SCRIPT: string = JSON.parse(readFileSync(resolve(WEB, 'package.json'), 'utf8')).scripts.push
 
 /** Lines only the writer's usage contains: pnpm's own output and a stack trace contain neither. */
-const USAGE_MARKS = ['Usage:', "pnpm --silent push -- --server <url> --token <token> --lineage <name> --backup <file.json>"]
+const USAGE_MARKS = ['Usage:', "pnpm --silent push -- --server <url> --lineage <name> --backup <file.json>"]
 
 interface Run {
   status: number | null
@@ -57,13 +57,13 @@ function packageManager(): [string, string[]] {
 
 /**
  * The environment a person's shell would give the command: this process's, less what vitest adds
- * about itself and less any sync passphrase the caller happens to have set.
+ * about itself and less any sync passphrase or access token the caller happens to have set.
  */
 function shellEnv(extra: Record<string, string>): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [k, v] of Object.entries(process.env)) {
     if (v === undefined || k.startsWith('VITEST') || k === 'TEST' || k === 'NODE_ENV') continue
-    if (k === 'DAYMARK_SYNC_PASSPHRASE') continue
+    if (k === 'DAYMARK_SYNC_PASSPHRASE' || k === 'DAYMARK_AUTH_TOKEN') continue
     env[k] = v
   }
   return { ...env, ...extra }
@@ -88,7 +88,7 @@ function spawnRun(args: string[], extraEnv: Record<string, string> = {}): Promis
 
 /**
  * `pnpm --silent push -- <args>`: the script package.json declares, run in the documented form.
- * `--silent` is in the documented form because pnpm otherwise prints the command line, token and all.
+ * `--silent` keeps pnpm's own banner out of the output the tests read.
  */
 const push = (args: string[], env: Record<string, string> = {}) => spawnRun(['--silent', 'push', '--', ...args], env)
 
@@ -138,11 +138,13 @@ describe('pnpm push refuses a snapshot too large once padded, and sends nothing 
   let listener: Server
   let base = ''
   const seen: string[] = []
+  const auth: (string | undefined)[] = []
 
   beforeAll(async () => {
     // Every request is counted and refused, so no run here can store anything or derive a key.
     listener = createServer((req, res) => {
       seen.push(`${req.method} ${req.url}`)
+      auth.push(req.headers.authorization)
       res.writeHead(401, { 'content-type': 'application/json' }).end('{"error":"unauthorized"}')
     })
     await new Promise<void>((ready) => listener.listen(0, '127.0.0.1', ready))
@@ -159,8 +161,9 @@ describe('pnpm push refuses a snapshot too large once padded, and sends nothing 
     writeFileSync(path, JSON.stringify({ version: 6, exportedAt: 0, entries: [], activities: [] }))
     return path
   }
-  const args = (extra: string[]) => ['--server', base, '--token', 'spawn-test-token', '--lineage', 'cli-test', '--backup', backup(), ...extra]
-  const env = { DAYMARK_SYNC_PASSPHRASE: 'a passphrase used only by this test' }
+  const args = (extra: string[]) => ['--server', base, '--lineage', 'cli-test', '--backup', backup(), ...extra]
+  const TOKEN = 'spawn-test-token'
+  const env = { DAYMARK_SYNC_PASSPHRASE: 'a passphrase used only by this test', DAYMARK_AUTH_TOKEN: TOKEN }
 
   it('over --max-blob-bytes only once padded: the fixed refusal, and the listener counts no request', async () => {
     const length = readFileSync(backup()).length
@@ -181,9 +184,62 @@ describe('pnpm push refuses a snapshot too large once padded, and sends nothing 
 
   it('positive control: at the default limit the listener sees the requests, the second after libsodium is up', async () => {
     seen.length = 0
+    auth.length = 0
     const run = await push(args([]), env)
     expect(run.status).toBe(1)
     expect(run.stderr).toContain('push failed: keyparams fetch failed')
     expect(seen).toEqual(['GET /v1/snapshots/cli-test', 'GET /v1/keyparams'])
+    // The token that reached the server is the one from the environment (#384).
+    expect(auth).toEqual([`Bearer ${TOKEN}`, `Bearer ${TOKEN}`])
+  }, 120_000)
+})
+
+describe('pnpm push takes the access token from the environment, never the command line (#384)', () => {
+  let listener: Server
+  let base = ''
+  const seen: string[] = []
+
+  beforeAll(async () => {
+    listener = createServer((req, res) => {
+      seen.push(`${req.method} ${req.url}`)
+      res.writeHead(401, { 'content-type': 'application/json' }).end('{"error":"unauthorized"}')
+    })
+    await new Promise<void>((ready) => listener.listen(0, '127.0.0.1', ready))
+    base = `http://127.0.0.1:${(listener.address() as AddressInfo).port}`
+  })
+
+  afterAll(async () => {
+    await new Promise<void>((closed) => listener.close(() => closed()))
+  })
+
+  const backup = () => {
+    const path = join(scratch, 'backup-token.json')
+    writeFileSync(path, JSON.stringify({ version: 6, exportedAt: 0, entries: [], activities: [] }))
+    return path
+  }
+  const passphraseOnly = { DAYMARK_SYNC_PASSPHRASE: 'a passphrase used only by this test' }
+  // Distinctive, so finding it (or not) in the output means something.
+  const ARG_TOKEN = 'token-typed-on-the-command-line-7f3a'
+
+  it('a --token argument is refused before anything is sent, and never repeated', async () => {
+    seen.length = 0
+    const run = await push(['--server', base, '--token', ARG_TOKEN, '--lineage', 'cli-test', '--backup', backup()], {
+      ...passphraseOnly,
+      DAYMARK_AUTH_TOKEN: 'an-environment-token-that-would-otherwise-be-used',
+    })
+    expect(run.status).toBe(1)
+    expect(run.stderr).toContain(
+      'push failed: the access token is read from DAYMARK_AUTH_TOKEN, never from the command line, where other users of this machine could read it. Nothing was sent.',
+    )
+    expect(run.stdout + run.stderr).not.toContain(ARG_TOKEN)
+    expect(seen).toEqual([])
+  }, 120_000)
+
+  it('with no DAYMARK_AUTH_TOKEN, it says so and sends nothing', async () => {
+    seen.length = 0
+    const run = await push(['--server', base, '--lineage', 'cli-test', '--backup', backup()], passphraseOnly)
+    expect(run.status).toBe(1)
+    expect(run.stderr).toContain('push failed: set DAYMARK_AUTH_TOKEN in the environment (the server access token)')
+    expect(seen).toEqual([])
   }, 120_000)
 })
