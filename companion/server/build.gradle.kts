@@ -63,6 +63,15 @@ application {
 
 tasks.test {
     useJUnitPlatform()
+    // DeploymentLogLevelTest reads these files from the directory above. Declared as inputs so an
+    // edit to one of them runs the tests again, instead of leaving the task up to date on a verdict
+    // about the file as it was.
+    inputs.files(
+        "../Dockerfile",
+        "../docker-compose.yml",
+        "../docker-compose.no-egress.yml",
+        "../.env.example",
+    ).withPropertyName("deploymentFiles").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 tasks.shadowJar {

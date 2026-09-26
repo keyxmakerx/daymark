@@ -98,7 +98,10 @@ services:
       DAYMARK_DATA_DIR:  "/data"
       DAYMARK_WEB_DIR:   "/app/web"
       DAYMARK_BASE_PATH: "/"
-      DAYMARK_LOG_LEVEL: "warn"
+      # info, the code's own default (#367). warn would hide the startup settings line
+      # (address, base path, sync and SMTP on or off), the SMTP-enabled line and "readiness
+      # restored", without which a cleared storage outage looks permanent in the log.
+      DAYMARK_LOG_LEVEL: "info"
       TZ:                "UTC"
 
       # THE most important line in this file, and it is EMPTY BY DEFAULT ON PURPOSE:

@@ -42,6 +42,9 @@ class StartupProcessTest {
         "DAYMARK_DATA_DIR" to dataDir.path,
         "DAYMARK_WEB_DIR" to File(dataDir, "no-web").path,
         "DAYMARK_THERAPIST_AUTH" to "1",
+        // Named rather than left to the default, so the startup line below is shown whatever the
+        // default is; DeploymentLogLevelTest is the test that owns the default.
+        "DAYMARK_LOG_LEVEL" to "info",
     ) + more
 
     @Test

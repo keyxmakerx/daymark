@@ -54,12 +54,15 @@ COPY --from=web         /web/dist                             /app/web
 COPY --from=healthcheck /out/healthcheck                      /usr/local/bin/healthcheck
 COPY --from=server --chown=65532:65532 /empty-data            /data
 
+# DAYMARK_LOG_LEVEL is info, the code's own default (#367). warn would hide the startup settings
+# line (address, base path, sync and SMTP on or off), the SMTP-enabled line and "readiness
+# restored", without which a cleared storage outage looks permanent in the log.
 ENV DAYMARK_BIND_ADDR=0.0.0.0 \
     DAYMARK_PORT=8080 \
     DAYMARK_DATA_DIR=/data \
     DAYMARK_WEB_DIR=/app/web \
     DAYMARK_BASE_PATH=/ \
-    DAYMARK_LOG_LEVEL=warn
+    DAYMARK_LOG_LEVEL=info
 
 EXPOSE 8080
 USER 65532:65532
