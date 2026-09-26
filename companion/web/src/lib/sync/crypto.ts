@@ -27,6 +27,19 @@
  *
  * Format 1 is opened and never written: every snapshot stored before #315 is in it, and nothing
  * about it is unsound except that it tells the server exact sizes.
+ *
+ * THE WEB CONSOLE'S LANE (#345; docs/SYNC_PROTOCOL.md, the lane section). What the owner's console
+ * adds to the person's record travels in lineages of its own, each version sealed in exactly the
+ * bytes of a format-2 snapshot — magic, 0x02, nonce, padded body — under the same sync key, and
+ * told apart by its associated data alone:
+ *
+ *   lane version = MAGIC | 0x02 | nonce(24) | XChaCha20Poly1305(pad(plaintext), AAD, nonce, SYNC_KEY)
+ *     AAD = utf8("daymark.lane.v1|" + lineage + "|" + version)
+ *
+ * So a lane version never opens as a snapshot and a snapshot never opens as a lane version, under
+ * the same key, lineage and version: the AEAD refuses before a byte of either is read as the other.
+ * The layout is shared on purpose, so that the associated data is the whole of the separation and a
+ * test can show it is.
  */
 import _sodium from 'libsodium-wrappers-sumo'
 import { pad, paddedLength, unpad, PaddingError } from '../padding'
@@ -129,8 +142,38 @@ export function deriveKeys(passphrase: string, salt: Uint8Array, params: KdfPara
   return { syncKey, manifestSeed }
 }
 
+/** The lane's name in the associated data (#345): never a snapshot's, so neither opens as the other. */
+export const LANE_CONTEXT = 'daymark.lane.v1'
+
 function aad(format: number, lineage: string, version: number | bigint): Uint8Array {
   return s().from_string(`${AAD_CONTEXT[format]}|${lineage}|${version}`)
+}
+
+/** MAGIC | FMT_PADDED | nonce | the AEAD of pad(plaintext) under this associated data. */
+function sealPadded(plaintext: Uint8Array, associated: Uint8Array, syncKey: Uint8Array): Uint8Array {
+  const so = s()
+  const nonce = so.randombytes_buf(NONCE_BYTES)
+  const ct = so.crypto_aead_xchacha20poly1305_ietf_encrypt(pad(plaintext), associated, null, nonce, syncKey)
+  const out = new Uint8Array(HEADER_BYTES + ct.length)
+  out.set(MAGIC, 0)
+  out[MAGIC.length] = FMT_PADDED
+  out.set(nonce, MAGIC.length + 1)
+  out.set(ct, HEADER_BYTES)
+  return out
+}
+
+/** The magic and the format byte of an envelope, checked before anything is decrypted. */
+function envelopeFormat(envelope: Uint8Array): number {
+  if (envelope.length < HEADER_BYTES) throw new Error('envelope too short')
+  for (let i = 0; i < MAGIC.length; i++) if (envelope[i] !== MAGIC[i]) throw new Error('bad magic — not a Daymark snapshot envelope')
+  return envelope[MAGIC.length]!
+}
+
+/** The body of an envelope under this associated data, still padded. Throws if it does not open. */
+function openBody(envelope: Uint8Array, associated: Uint8Array, syncKey: Uint8Array): Uint8Array {
+  const nonce = envelope.subarray(MAGIC.length + 1, HEADER_BYTES)
+  const ct = envelope.subarray(HEADER_BYTES)
+  return s().crypto_aead_xchacha20poly1305_ietf_decrypt(null, ct, associated, nonce, syncKey)
 }
 
 /**
@@ -149,15 +192,7 @@ export function unpaddedSnapshotBlobLength(plaintextLength: number): number {
 
 /** plaintext (e.g. a BackupData JSON, UTF-8) → opaque envelope bytes for the server, padded (format 2). */
 export function encryptSnapshot(plaintext: Uint8Array, syncKey: Uint8Array, lineage: string, version: number | bigint): Uint8Array {
-  const so = s()
-  const nonce = so.randombytes_buf(NONCE_BYTES)
-  const ct = so.crypto_aead_xchacha20poly1305_ietf_encrypt(pad(plaintext), aad(FMT_PADDED, lineage, version), null, nonce, syncKey)
-  const out = new Uint8Array(HEADER_BYTES + ct.length)
-  out.set(MAGIC, 0)
-  out[MAGIC.length] = FMT_PADDED
-  out.set(nonce, MAGIC.length + 1)
-  out.set(ct, HEADER_BYTES)
-  return out
+  return sealPadded(plaintext, aad(FMT_PADDED, lineage, version), syncKey)
 }
 
 /**
@@ -165,19 +200,44 @@ export function encryptSnapshot(plaintext: Uint8Array, syncKey: Uint8Array, line
  * lineage/version, or the format byte was changed (the associated data names the format).
  */
 export function decryptSnapshot(envelope: Uint8Array, syncKey: Uint8Array, lineage: string, version: number | bigint): Uint8Array {
-  const so = s()
-  if (envelope.length < HEADER_BYTES) throw new Error('envelope too short')
-  for (let i = 0; i < MAGIC.length; i++) if (envelope[i] !== MAGIC[i]) throw new Error('bad magic — not a Daymark snapshot envelope')
-  const format = envelope[MAGIC.length]!
+  const format = envelopeFormat(envelope)
   if (format !== FMT_PADDED && format !== FMT_UNPADDED) throw new Error(`unsupported envelope format ${format}`)
-  const nonce = envelope.subarray(MAGIC.length + 1, HEADER_BYTES)
-  const ct = envelope.subarray(HEADER_BYTES)
-  const body = so.crypto_aead_xchacha20poly1305_ietf_decrypt(null, ct, aad(format, lineage, version), nonce, syncKey)
+  const body = openBody(envelope, aad(format, lineage, version), syncKey)
   if (format === FMT_UNPADDED) return body
   try {
     return unpad(body)
   } catch (e) {
     if (e instanceof PaddingError) throw new Error('snapshot opened, but its padding is not in the standard form')
+    throw e
+  }
+}
+
+/** The associated data of one lane version: the lane's own context, its lineage and its version. */
+function laneAad(lineage: string, version: number | bigint): Uint8Array {
+  return s().from_string(`${LANE_CONTEXT}|${lineage}|${version}`)
+}
+
+/**
+ * One version of the web console's lane (a UTF-8 JSON, lane/record.ts) → envelope bytes, padded, in
+ * a format-2 snapshot's layout under the lane's associated data (see the header).
+ */
+export function encryptLaneVersion(plaintext: Uint8Array, syncKey: Uint8Array, lineage: string, version: number | bigint): Uint8Array {
+  return sealPadded(plaintext, laneAad(lineage, version), syncKey)
+}
+
+/**
+ * Envelope bytes → one lane version's plaintext. Throws for anything that is not a lane version of
+ * this lineage and version under this key, a snapshot of the same lineage and version included, and
+ * for padding that is not in the standard form. Only the padded format exists for a lane.
+ */
+export function decryptLaneVersion(envelope: Uint8Array, syncKey: Uint8Array, lineage: string, version: number | bigint): Uint8Array {
+  const format = envelopeFormat(envelope)
+  if (format !== FMT_PADDED) throw new Error(`unsupported lane envelope format ${format}`)
+  const body = openBody(envelope, laneAad(lineage, version), syncKey)
+  try {
+    return unpad(body)
+  } catch (e) {
+    if (e instanceof PaddingError) throw new Error('lane version opened, but its padding is not in the standard form')
     throw e
   }
 }
