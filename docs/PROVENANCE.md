@@ -18,12 +18,14 @@ clinical screeners": you can only publish **Custom**, and Custom says so plainly
 
 | Tier | Badge | Meaning | Example |
 |---|---|---|---|
-| **Validated** | ✓ | A published instrument used faithfully — exact wording, scoring and banding — with a citation and a licence that permits the use. | PHQ-9, GAD-7, WHO-5 in the phone app |
+| **Validated** | the word alone | A published instrument used faithfully — exact wording, scoring and banding — with a citation and a licence that permits the use. | PHQ-9, GAD-7, WHO-5 in the phone app |
 | **Adapted** | ◐ | Built on an evidence-based method but changed (shortened, reworded, recombined). Names the method it draws from. | the phone app's safety plan ([INSTRUMENTS.md](INSTRUMENTS.md)) |
 | **Custom** | ✎ | Self-authored. Not validated, not clinical. Always shows the disclaimer. | every tool in the Companion catalogue today |
 
-The ✓ states where an instrument came from, not that anything is going well: it is drawn in the
-surrounding chrome ink and is never green. Custom is the one tier with a filled, amber badge, because
+Validated carries no mark, on the web or the phone. The marks on the other tiers say how a tool
+departs from a published instrument (◐ part of one, ✎ none); a validated tool departs from nothing,
+and any mark there would read as a verdict, a tick as a pass, which this product never draws
+(`instruments/provenance.ts`, `ui/components/ProvenanceBadge.kt`; #278). Custom is the one tier with a filled, amber badge, because
 it is the one real caveat ([COMPANION_DESIGN_SYSTEM.md](COMPANION_DESIGN_SYSTEM.md) §2.3.4). The phone
 app calls the third tier **Original** and prints the Custom disclaimer beside it in the PDF report.
 

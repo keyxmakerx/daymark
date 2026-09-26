@@ -479,7 +479,8 @@ decisions rather than a reading of the current moment: #162.
   detail, the person's own words, and notes for the conversation. It ends with a hash of the entries
   it covers, as text and as a QR code, so a later change to them could be detected; no tool to check
   it exists yet (#377). It carries no streak, no trend line joining separate check-ins, and no
-  inference about the person. The dialog opens with "A report is a copy. Once handed over, it cannot
+  inference about the person. It carries no tick: a finished project step says "done". Every word is
+  printed in dark ink or the soft ink, at least 5.77:1 on the white page. The dialog opens with "A report is a copy. Once handed over, it cannot
   be taken back." — the report's own fixed copy, not a second wording — then offers a date range (90
   days by default), check-in notes (off by default), charts (on), and the journal for that range,
   all of it or none, off by default. With check-in notes off, side 2 says "Check-in notes were

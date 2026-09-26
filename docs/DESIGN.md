@@ -12,7 +12,8 @@ with the project. The web consoles' sibling system is
 **Light:** paper `#F4EFE6` · sheet/surface `#FCFAF5` · ink `#2A2722` · soft `#6B655B` ·
 faint `#A49C8E` · hairline `#E7DFD1` · accent (ink) `#33302A` · alarm (clay) `#9A5044` on `#F3E0DB`.
 **Dark ("night paper"):** bg `#1B1A17` · surface `#24221D` · ink `#EBE5D8` · soft `#B7AF9E` ·
-faint `#7C7568` · lines `#34312A` · the accent inverts to `#EBE5D8` (text on it `#1B1A17`) · alarm
+faint `#7C7568` · lines `#34312A` · raised `#2C2A24` (menus and dialogs) · the accent inverts to
+`#EBE5D8` (text on it `#1B1A17`) · alarm
 `#CB8473` on `#3A2C28`.
 
 **Mood scale (Awful → Rad):** `#AE5747` · `#C27C46` · `#C6A24E` · `#8FA268` · `#5E8A66`, each with
@@ -45,19 +46,32 @@ consoles' `--clay` and `--clay-wash`, value for value
 `error` and `errorContainer`. No colour-scheme role is ever a mood colour, so recolouring a mood never
 moves the alarm; `ColorSchemeSourceTest` holds the scheme to that and to the web's values. The dark
 wash shares its value with the dark Awful wash and is still a token of its own. With dynamic colour
-on, the system supplies every role, the error roles included (#309).
+on, the system supplies every role, the error roles included.
+
+**Dialogs, menus and pickers sit on the paper.** Both schemes set all seven surface containers,
+which Material would otherwise fill with its own lavender grey. Light: dialogs, menus and sheets are
+the sheet `#FCFAF5`, lifted by their whisper of shadow; Highest (a switch's track, the time
+picker's dial) and Dim are the paper `#F4EFE6`. Dark: a shadow barely shows, so menus and dialogs
+sit on the raised step `#2C2A24`, halfway from the sheet to the lines; Highest and Bright are the
+lines `#34312A`, Low the sheet, Lowest and Dim the paper. `onSurface` and `onSurfaceVariant` clear
+4.5:1 on every one (lowest: 5.04:1 light, 5.95:1 dark), and the alarm on a dialog or menu measures
+5.58:1 light and 4.84:1 dark. `ColorSchemeSourceTest` fails when a scheme leaves one unset or a
+word ink falls under 4.5:1.
 
 **The faint ink never carries words.** Faint (`tertiary`) measures 2.61:1 on the sheet and is for
 decoration only: rules and empty marks. A word that steps back takes the soft ink
-(`onSurfaceVariant`), which clears 4.5:1 on the sheet, the paper and a menu in both themes.
-`FaintInkSourceTest` fails when the faint ink reaches words. Two small labels on the hairline fill, the
-provenance badge and the swipe row's "Keep swiping", measure 4.36:1 in the light theme: not built,
-#408.
+(`onSurfaceVariant`), which clears 4.5:1 on the sheet, the paper, a menu and a dialog in both
+themes. `FaintInkSourceTest` fails when the faint ink reaches words. On the hairline fill the soft ink
+does not clear it (4.36:1 light), so words there take the full ink, 11.24:1 light and 10.34:1 dark:
+the provenance badge and its note, and the swipe row's "Keep swiping" (`HairlineFillSourceTest`). The
+PDF report keeps the same rule with its own palette: every word is ink (14.88:1 on white) or soft
+(5.77:1), and its faint grey (2.72:1) draws only the dot beside each discussion prompt
+(`ReportInkSourceTest`).
 
-**Dynamic colour** is a Settings switch on Android 12 and later. The stored setting defaults to on
-(`data/SettingsRepository.kt`), so a fresh install on those phones takes its colours from the
-wallpaper, although `DaymarkTheme`'s own default and its comment say the paper palette should win.
-Mood colours are unaffected either way.
+**Dynamic colour** is a Settings switch on Android 12 and later, off until a person turns it on
+(`data/SettingsRepository.kt`), so a fresh install shows the paper palette. Only the switch writes
+the setting, so anyone who turned it on keeps it (`DynamicColorSourceTest`). With it on, the
+wallpaper supplies every role, the error roles included; mood colours are unaffected.
 
 ## Night palettes
 
@@ -101,7 +115,8 @@ and the disc is filled with the accent only while Home is the current tab.
 `MoodFaceIcon` (drawn on a Canvas; outlined, or filled when selected), `MoodDot`, `PaperSurface`, `EntryRow`
 and the day-grouped timeline, `ActivityChip`, `EntryPhoto`, `SwipeToDeleteRow`,
 `ConsistencyHeatmap`, `YearInPixelsGrid`, `YearInStarsGrid`, `PoseFigure` and `ProvenanceBadge`.
-The mood picker's tap target is the whole face and label.
+The mood picker's tap target is the whole face and label. Nothing in `ui/components/` draws a
+tick or a green (`TickAndGreenSourceTest`, which also keeps ticks out of the PDF report).
 
 ## Icons and drawings
 

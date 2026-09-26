@@ -294,6 +294,24 @@ All notable changes to this project are documented here. The format is based on
   thin dark outline, so light colours like Meh and Good stay easy to see, and a day's dots run newest
   first, in the same order as the day's own list. A screen reader reads each day as its date and its
   moods, for example "3 September: Good, Meh". (#411, #412)
+- **Daymark shows its own paper colours unless you ask for your wallpaper's.** On Android 12 and
+  later it used to take its colours from your wallpaper unless you turned Dynamic color off. It now
+  starts on its own colours. If you had switched Dynamic color on yourself, it stays on. If your
+  Daymark was in your wallpaper's colours without you choosing it, Settings → Dynamic color brings
+  them back. Mood colours never change either way. (#309)
+- **Dialogs, menus and the date and time pickers are drawn on Daymark's paper,** not on a lavender
+  grey the app never chose. In the dark theme, menus and dialogs sit a shade lighter than the page so
+  they stand out. (#410)
+- **The "Validated" label on a questionnaire has no tick, on the phone or in the browser.** A tick
+  beside a questionnaire reads as "you passed". The label now says just "Validated". In the PDF
+  report, a finished project step says "done" instead of showing a tick, and the web's tool builder
+  says its honesty gate "passes" in words alone. (#278)
+- **Three small labels are easier to read:** the label saying where a questionnaire or exercise comes
+  from, the note under it, and "Keep swiping" behind a row you are swiping away. They are now printed
+  in full ink instead of a pale grey on pale beige. (#408)
+- **The PDF report's small print is darker.** Section labels, table headings, axis labels, captions,
+  notes and the footer were a pale grey that fades on paper and projectors. They now use the report's
+  darker grey, so every word is easy to read in print. (#409)
 - **Your own data in the web console no longer shows an average mood.** The owner console and an
   opened backup still show how many of the last 30 days have an entry. A clinician reading what you
   share still sees the average, labelled "average of what was logged", as in the PDF report.

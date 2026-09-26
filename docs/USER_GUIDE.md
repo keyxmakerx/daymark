@@ -528,8 +528,8 @@ with that mood chosen.
 
 Daymark's "modern paper" look comes in **light** and **dark**, and follows your phone's setting.
 On Android 12 and later, **Settings → Dynamic color** tints the app with colours from your
-wallpaper; it starts switched on. Turn it off for Daymark's own paper colours. Your mood colours
-never change either way.
+wallpaper instead. It starts switched off; if you switched it on before, it stays on. Your mood
+colours never change either way.
 
 ---
 
