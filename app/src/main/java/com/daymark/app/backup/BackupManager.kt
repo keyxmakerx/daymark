@@ -394,7 +394,7 @@ internal fun replacePersonIdMap(people: List<BackupPerson>): Map<Long, Long> =
  *
  * The Companion's six tables are outside it too, for a different reason. Game plans, the owner's
  * progress against them, accepted assignments, and self-check and task results are not in the file,
- * because whether they belong there is not settled (#177); a REPLACE import empties them and
+ * because whether they belong there is not settled (#386); a REPLACE import empties them and
  * restores nothing into them. [importReplace] says why that direction, and not the other.
  */
 @Singleton
@@ -682,7 +682,7 @@ class BackupManager @Inject constructor(
          *
          * NOT RESTORED, because the file carries none of them. That is not a ruling that they never
          * belong in it: whether game plans, assignments and results travel in the backup, and so in
-         * the synced snapshot, is not settled (#177). Until it is, the file format does not change,
+         * the synced snapshot, is not settled (#386). Until it is, the file format does not change,
          * and a REPLACE leaves these tables empty rather than holding a previous life's rows beside
          * a restored one.
          */

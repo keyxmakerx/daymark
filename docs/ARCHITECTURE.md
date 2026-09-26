@@ -63,7 +63,7 @@ through `util/DateUtils.kt` before handing plain values to `stats/`.
 
 ### 3.1 The database
 
-Room, schema **v18**, 20 entities:
+Room, schema **v19**, 26 entities:
 
 - entries: `MoodEntry`, `ActivityEntity`, `EntryActivityCrossRef`, `JournalEntry`;
 - goals: `Goal`, `GoalStep`;
@@ -72,12 +72,15 @@ Room, schema **v18**, 20 entities:
 - the safety plan and life events: `SafetyPlanItem`, `LifeEvent`;
 - people: `Person`, `PersonNote`, `EntryPersonCrossRef`, `PersonGroupShare`;
 - reminders and the reception ledger: `Reminder`, `OfferRecord` ([FEATURES.md](FEATURES.md) §13.2).
+- the Companion: `GamePlan`, `GamePlanItem`, `GamePlanProgress`, `AcceptedAssignment`,
+  `InstrumentResult`, `TaskResult` ([COMPANION_PHONE.md](COMPANION_PHONE.md) §3).
 
-What each version added: v2 journal · v3 goals · v4 renamed a default activity · v5 sleep logs ·
-v6 treatments · v7 trackers · v8 entry photos · v9 reminders · v10 check-in scores · v11 a goal's
+What each version added: v2 journal · v3 goals · v4 renamed a default activity · v5 sleep logs · v6
+treatments · v7 trackers · v8 entry photos · v9 reminders · v10 check-in scores · v11 a goal's
 if-then plan · v12 thought records · v13 the safety plan · v14 the reception ledger · v15 goal kinds
 and project steps (the first foreign key) · v16 life events · v17 when a goal was marked reached ·
-v18 people and communities, and the ledger's hour, weekday and "responded" columns.
+v18 people and communities, and the ledger's hour, weekday and "responded" columns · v19 the
+Companion's game plans, assignments and results.
 
 Rules the code and tests hold:
 
@@ -88,6 +91,10 @@ Rules the code and tests hold:
   old ledger row's hour or weekday from its timestamp, because the zone the person was in then is
   not knowable. `TimedOfferSchemaTest` checks the second.
 - **The ledger has no free-text column**, and no migration may add one.
+- **A clinician's game plan never lands in `treatments`**, and the signed tables are insert-only;
+  `CompanionSchemaTest` checks both.
+- **"Replace all current data" empties the Companion's tables** and restores nothing into them.
+  Whether the backup should carry them is #386.
 - `entry_people` has no foreign key, like `entry_activity`: a restore writes these rows from an
   untrusted file, and one dangling pair must not abort the whole import. `person_notes` cascades from
   `people`, and deletes also clear children by hand, because a raw database need not have foreign
@@ -109,7 +116,9 @@ Rules the code and tests hold:
 Every schema version is exported to `app/schemas/` and committed in the same change that bumps the
 version. Migrations are additive and preserve existing data; destructive fallback is never used. A
 migration's SQL is written in Room's own generated form, because the migration test compares wording
-as well as meaning. The next schema version is **v19**.
+as well as meaning. The next schema version is **v20**. `MigrationSchemaExportTest` compares every
+`CREATE` a migration runs with the `createSql` Room exported for its version, and checks each hop
+creates exactly what its version adds.
 
 Known gap: `1.json` / `2.json` do not exist (export was enabled at v3), so `MIGRATION_1_2` and
 `MIGRATION_2_3` cannot be validated by `MigrationTestHelper`. They are retained for correctness and

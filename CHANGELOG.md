@@ -37,6 +37,14 @@ All notable changes to this project are documented here. The format is based on
   still contains unlock times restores normally; the badges in it are just not brought back.
 
 ### Added
+- **The phone has a place for a clinician's game plans and assignments, kept apart from what you
+  write yourself, and checks them the way the web console does.** Nothing reaches it yet, because
+  the phone does not talk to the Companion. A plan or an assignment is only ever written there after
+  you accept it. Your clinician can only do what you have allowed, only with catalogue self-checks
+  and tasks, and may only ever suggest one of four settings: which self-checks are shown, the
+  reminder time, the reminder cadence and the theme. Never anything about your PIN, the lock,
+  encryption or the network, and a suggested setting always waits for you. "Replace all current
+  data" empties these tables too. (#177)
 - **An entry can say who you were with, and everyone you name gets a page of their own.** There is
   a new **People and communities** screen in More. A community counts: a church, a fandom, a team, a
   support group — anything you would say you are part of. Each name you add sits in Friends, Family,

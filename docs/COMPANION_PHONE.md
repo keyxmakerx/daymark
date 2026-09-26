@@ -16,8 +16,11 @@ Everything the Companion needs lives in a separate, opt-in `sync` product flavou
 - One flavour dimension, `network`, with `foss` (the default) and `sync` (`applicationIdSuffix
   ".sync"`), in `app/build.gradle.kts`.
 - `app/src/sync/AndroidManifest.xml` is the only place in the app that requests `INTERNET`.
-- Network and Companion code lives under `app/src/sync/` only, so Gradle's source sets make it
-  impossible for `foss` to reference it. This is structural, not a convention.
+- Network code, and Companion code that reaches a server, lives under `app/src/sync/` only, so
+  Gradle's source sets make it impossible for `foss` to reference it. This is structural, not a
+  convention. The database is one schema for both flavours, so the Companion's tables are in
+  `src/main`, and so are the checks in `companion/`, which import nothing and can reach nothing
+  (§3).
 - CI dumps the permissions of the built `foss` APK and fails if `INTERNET` appears, and fails if the
   dump is empty, so the check cannot pass by seeing nothing.
 
@@ -87,12 +90,22 @@ accept or decline.
 - **Game plans go in their own tables, never in `treatments`.** The clinician's body is immutable and
   append-only (`game_plans`, `game_plan_items`); the owner's own progress is a separate table keyed by
   `(lineageId, itemRef)` (`game_plan_progress`). Accepted assignments go in `assignments`.
-- **Schema.** The app is at schema v18; these tables arrive in a new version, v19 or later, with a
-  committed schema export and a `MigrationTest` hop, never a destructive fallback.
+- **The checks are built.** `companion/AssignmentRules.kt` ports `assignments/validate.ts`: the type
+  must require the capability claimed, the owner must grant it now, the author must be the clinician
+  the grant is for, and the payload must be in bounds. It imports nothing and runs with
+  `tools/jvm-tests.sh companion`. `AssignmentRulesDriftTest` fails when `types.ts` or `validate.ts`
+  changes what it copies. The phone carries no copy of the Companion's catalogue, so on the phone
+  every self-check, task and bundle is refused as unknown: #389.
+- **Schema v19.** `game_plans` and `game_plan_items` hold an accepted version exactly as signed,
+  keyed by `(lineageId, version)`, with the payload and signature verbatim. `game_plan_progress` is
+  the owner's mark per item, keyed by `(lineageId, itemRef)`. `assignments` holds accepted ones the
+  same way. `instrument_results` and `task_results` keep scores and bands, never an answer. "Replace
+  all current data" empties all six and restores nothing: the backup file carries none of them.
+  Whether it should is #386.
 - **Settings** apply only for the allowlisted keys (`visibleSelfChecks`, `reminderTime`,
   `reminderCadence`, `theme`), never PIN, lock, encryption or network settings.
-- Not built: #177. The owner's console on the web has an assignment inbox, but it does not yet save a
-  decision: #234.
+- Not built: opening and verifying items, the inbox, and anything that writes these tables: #177.
+  The owner's console on the web has an assignment inbox, but it does not yet save a decision: #234.
 
 ## 4. Pairing: the phone as the owner's device
 
@@ -123,7 +136,8 @@ reproducible build (#229); the offline app's listing never carries it (#194). No
 
 1. The `sync` flavour, the crypto port and its host-JVM conformance tests, and CI. **Built.**
 2. Snapshot push and pull: #168.
-3. The schema version with the game-plan, progress and assignment tables: #177.
+3. The schema version with the game-plan, progress, assignment and result tables, and the assignment
+   checks. **Built** (v19).
 4. Inbound assignments and game plans, with the acceptance inbox: #177.
 5. The owner's half of pairing, grants and shares from the phone, and the connections screen: #174.
 6. The anti-rollback watermark (#179), the audit anchor (#182), the heartbeat (#185), signed

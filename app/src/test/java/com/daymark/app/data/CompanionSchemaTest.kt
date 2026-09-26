@@ -31,7 +31,7 @@ import org.junit.Test
  * - **"Replace all current data" empties all six.** `CompanionDao.deleteAll` names every one of
  *   these tables and nothing else, and the replace path calls it.
  * - **The backup file carries none of them, and `BackupManager` reads none of them.** Whether the
- *   file should carry them is not settled (#177); this holds the format still until it is.
+ *   file should carry them is not settled (#386); this holds the format still until it is.
  */
 class CompanionSchemaTest {
 
@@ -380,7 +380,7 @@ class CompanionSchemaTest {
         assertTrue("Replace all leaves the Companion tables standing", replacePath.contains("companionDao.deleteAll()"))
 
         // Exactly one use of the DAO in the whole class, and it is the erase: a backup path reading
-        // these rows is the first step towards exporting them, which is not decided (#177).
+        // these rows is the first step towards exporting them, which is not decided (#386).
         assertEquals(listOf("companionDao.deleteAll()"), Regex("""companionDao\.\w+\([^)]*\)""").findAll(backup).map { it.value }.toList())
 
         // The detector: a read planted into the export is seen.
@@ -393,7 +393,7 @@ class CompanionSchemaTest {
      * The backup file carries no field for these tables.
      *
      * Not a ruling that it never may. Whether game plans, assignments and results travel in the
-     * backup — and so in the synced snapshot — is not settled (#177). This holds the format still
+     * backup — and so in the synced snapshot — is not settled (#386). This holds the format still
      * until it is, so that nobody completes the file in passing.
      */
     @Test
@@ -401,7 +401,7 @@ class CompanionSchemaTest {
         val fields = backupDataFields()
         assertTrue("BackupData's fields were not read: $fields", fields.containsAll(listOf("entries", "people", "personGroupShares")))
         assertEquals(
-            "the backup format gained a Companion field — whether it should is not settled (#177)",
+            "the backup format gained a Companion field — whether it should is not settled (#386)",
             emptyList<String>(),
             fields.filter { looksCompanion(it) },
         )
