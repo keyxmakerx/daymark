@@ -5,12 +5,12 @@
  * a component or crosses from one person's browser to the other's, so the loop can be broken for
  * everyone who tries it while every one of them passes. This drives it the way two people would:
  *
- *   owner      the server is Paired, so the page opens on the owner console without asking. The
- *              Recovery code screen makes the key file (the stand-in for owner-key custody;
- *              COMPANION_ARCHITECTURE.md §1). Open the synthetic backup on the file route, go to
- *              the Owner console with it still open, unlock with the key file, add a clinician
- *              (their inbox token is shown once), connect, mint the invitation and
- *              make a code.
+ *   owner      the server is Paired, so the page opens on the owner console without asking. Open
+ *              the synthetic backup on the file route and go to the Owner console with it still
+ *              open. The console reads the owner's key from the server (#258): this one holds none,
+ *              so the first visit makes it — a passphrase, then the recovery code shown once and two
+ *              of its groups typed back — and the server then holds the locked key. Add a clinician
+ *              (their inbox token is shown once), connect, mint the invitation and make a code.
  *   clinician  open the link; type the code, a name and a reading passphrase; wait.
  *   owner      check for the reply: the clinician's name and two fingerprints. Approve.
  *   clinician  the poll lands; enrol the authenticator (codes computed here, RFC 6238); the two
@@ -19,7 +19,11 @@
  *              Tick self-checks, moods and sleep, leave the journal unticked, seal a share.
  *   clinician  sign in (authenticator, reading passphrase, and the inbox token handed over by
  *              hand); open the share: the ticked types, and no journal. Send an assignment.
- *   owner      the inbox lists it, verified, from the clinician the owner named.
+ *   owner      the inbox lists it, verified, from the clinician the owner named. Lock the console,
+ *              and open it again from the server's key with the recovery code alone: the same
+ *              fingerprint the clinician checked. Then, on the Recovery code screen, the code and the
+ *              token alone store a new passphrase; the old one opens nothing the server hands out,
+ *              and the new one opens the same fingerprint again.
  *
  * WHY THE BACKUP IS OPENED BEFORE THE CONSOLE IS UNLOCKED. The unlocked session, and every
  * clinician added in it, lives in the Owner console component, and choosing another route unmounts
@@ -53,6 +57,13 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseBackup, type BackupData } from '../src/lib/backup'
 import { OWNER_COPY, THERAPIST_COPY } from '../src/lib/pairing/copy'
+import { HOLDS_A_LOCKED_KEY } from '../src/lib/owner/unlockCopy'
+import {
+  HOLDS_NOTHING,
+  NEW_PASSPHRASE_LEDE,
+  PASSPHRASE_CHANGE_IS_NOT_A_REVOCATION,
+  PASSPHRASE_REPLACED,
+} from '../src/lib/components/recovery/copy'
 
 const WEB = fileURLToPath(new URL('..', import.meta.url))
 const SERVER = join(WEB, '..', 'server')
@@ -60,14 +71,15 @@ const JAR = join(SERVER, 'build', 'libs', 'daymark-companion.jar')
 
 // ── what each person types, all made up for this run ─────────────────────────────────────────────
 const OWNER_TOKEN = `e2e-owner-${randomBytes(16).toString('hex')}`
-const KEY_FILE_PASSPHRASE = `e2e key file ${randomBytes(6).toString('hex')}`
+const OWNER_PASSPHRASE = `e2e owner key ${randomBytes(6).toString('hex')}`
+const NEW_OWNER_PASSPHRASE = `e2e owner key after recovery ${randomBytes(6).toString('hex')}`
 const READING_PASSPHRASE = `e2e reading ${randomBytes(6).toString('hex')}`
 const OWNER_NAMES_THEM = 'Dr Example'
 const THEY_NAME_THEMSELVES = 'Sam Rivera'
 const ASSIGNMENT_NOTE = 'Made-up note from the paired-loop test'
 
 /** Every secret this run has seen, scrubbed from anything printed. Grows as the run learns them. */
-const secrets: string[] = [OWNER_TOKEN, KEY_FILE_PASSPHRASE, READING_PASSPHRASE]
+const secrets: string[] = [OWNER_TOKEN, OWNER_PASSPHRASE, NEW_OWNER_PASSPHRASE, READING_PASSPHRASE]
 /**
  * Scrubbed by value first, then by shape, for a failure that lands after a secret reached the screen
  * but before this file read it: anything shaped like a pairing code, and any long unbroken token.
@@ -405,7 +417,6 @@ it('the paired loop: pair, grant, seal a share, read it, and send an assignment 
   expect(parseBackup(JSON.stringify(backup))).toEqual(backup)
   const backupFile = join(scratch, 'synthetic-backup.json')
   writeFileSync(backupFile, JSON.stringify(backup))
-  const keyFile = join(scratch, 'owner-key-file.json')
 
   /*
    * The owner's bearer requests share one token bucket per address: DAYMARK_RATE_LIMIT_RPS, five a
@@ -447,33 +458,6 @@ it('the paired loop: pair, grant, seal a share, read it, and send an assignment 
     await owner.locator('.unlock').waitFor()
   })
 
-  await step('the Recovery code screen makes the owner key file', async () => {
-    await routeCard('Connect to your sync server').click()
-    await owner.getByRole('button', { name: 'Open the recovery code screen' }).click()
-    await owner.getByLabel('Passphrase for this key').fill(KEY_FILE_PASSPHRASE)
-    await owner.getByLabel('The same passphrase again').fill(KEY_FILE_PASSPHRASE)
-    await owner.getByRole('button', { name: 'Generate a recovery code' }).click()
-    // Two Argon2id wraps: a few seconds.
-    await owner.locator('.symbols').first().waitFor({ timeout: 90_000 })
-    const groups = (await owner.locator('.symbols').allTextContents()).map((g) => g.trim())
-    secrets.push(...groups)
-    expect(groups).toHaveLength(6)
-    await owner.getByRole('button', { name: 'I have written it down' }).click()
-    const asked = await owner.locator('.check .box label').allTextContents()
-    expect(asked.length).toBeGreaterThan(0)
-    for (const label of asked) {
-      const n = Number(label.replace(/\D/g, ''))
-      await owner.locator(`#confirm-group-${n}`).fill(groups[n - 1])
-    }
-    await owner.getByRole('button', { name: 'Check what I wrote down' }).click()
-    const [download] = await Promise.all([
-      owner.waitForEvent('download'),
-      owner.getByRole('button', { name: 'Save the wrapped key to a file' }).click(),
-    ])
-    await download.saveAs(keyFile)
-    expect(JSON.parse(readFileSync(keyFile, 'utf8'))).toBeTypeOf('object')
-  })
-
   let ownerJournalCount = NaN
   let ownerMoodDistribution = ''
   await step('the owner opens the synthetic backup on the file route', async () => {
@@ -500,13 +484,54 @@ it('the paired loop: pair, grant, seal a share, read it, and send an assignment 
     await owner.getByRole('button', { name: 'Open another backup' }).waitFor()
   })
 
-  let inboxToken = ''
-  await step('unlock with the key file, add a clinician, enter', async () => {
+  /** The server's answer to GET /v1/keydoc, read the way the console reads it, with the owner token. */
+  const keyDocument = async () => {
+    const res = await fetch(`${BASE}/v1/keydoc`, { headers: { Authorization: `Bearer ${OWNER_TOKEN}` } })
+    return { status: res.status, kind: res.headers.get('X-Key-Document'), version: res.headers.get('X-Key-Document-Version') }
+  }
+
+  let recoveryGroups: string[] = []
+  let ownerFingerprint = ''
+  await step('the console finds no key on the server and makes one: the code is shown once and checked', async () => {
+    // Nothing on the server yet: no key parameters, no locked key.
+    expect(await keyDocument()).toEqual({ status: 404, kind: null, version: null })
     const unlock = owner.locator('.unlock')
-    await unlock.locator('input[type=file]').setInputFiles(keyFile)
-    await unlock.getByLabel('Passphrase', { exact: true }).fill(KEY_FILE_PASSPHRASE)
-    await unlock.getByRole('button', { name: 'Unlock', exact: true }).click()
-    await unlock.getByText('Your owner fingerprint').waitFor({ timeout: 90_000 })
+    // The key file is retired: the door has no file input. The same selector found the backup drop
+    // zone's input two steps ago, so it is not blind.
+    expect(await unlock.locator('input[type=file]').count(), 'the owner console still asks for a key file').toBe(0)
+    await unlock.getByLabel('Owner access token').fill(OWNER_TOKEN)
+    await asAPerson()
+    await unlock.getByRole('button', { name: 'Connect', exact: true }).click()
+    await unlock.getByText(HOLDS_NOTHING).waitFor()
+    await unlock.getByLabel('Passphrase for this key').fill(OWNER_PASSPHRASE)
+    await unlock.getByLabel('The same passphrase again').fill(OWNER_PASSPHRASE)
+    await asAPerson()
+    await unlock.getByRole('button', { name: 'Make my key' }).click()
+    // Two Argon2id wraps, two to check them, and one to open the read-back: several seconds.
+    await unlock.locator('.symbols').first().waitFor({ timeout: 120_000 })
+    recoveryGroups = (await unlock.locator('.symbols').allTextContents()).map((g) => g.trim())
+    secrets.push(...recoveryGroups)
+    expect(recoveryGroups).toHaveLength(6)
+    // The server took the key before the code was shown: the code is for a key the server holds.
+    expect(await keyDocument()).toEqual({ status: 200, kind: 'wrapped', version: '1' })
+    await unlock.getByRole('button', { name: 'I have written it down' }).click()
+    const asked = await unlock.locator('.check .box label').allTextContents()
+    expect(asked.length).toBeGreaterThan(0)
+    for (const label of asked) {
+      const n = Number(label.replace(/\D/g, ''))
+      await unlock.locator(`#confirm-group-${n}`).fill(recoveryGroups[n - 1])
+    }
+    await unlock.getByRole('button', { name: 'Check what I wrote down' }).click()
+    await unlock.getByText('Your owner fingerprint').waitFor({ timeout: 30_000 })
+    ownerFingerprint = squash(await unlock.locator('.fp code').innerText())
+    expect(ownerFingerprint.length).toBeGreaterThan(0)
+    // The key parameters were never published, and now they could not be.
+    expect((await fetch(`${BASE}/v1/keyparams`, { headers: { Authorization: `Bearer ${OWNER_TOKEN}` } })).status).toBe(410)
+  })
+
+  let inboxToken = ''
+  await step('add a clinician, enter', async () => {
+    const unlock = owner.locator('.unlock')
     await unlock.getByLabel('Display name').fill(OWNER_NAMES_THEM)
     await unlock.getByRole('button', { name: 'Add clinician' }).click()
     inboxToken = (await unlock.locator('output.token').innerText()).trim()
@@ -702,6 +727,63 @@ it('the paired loop: pair, grant, seal a share, read it, and send an assignment 
     expect((await card.locator('.badge').innerText()).trim().toLowerCase()).toBe('verified')
     expect((await card.locator('.from').innerText()).trim()).toBe(`from ${OWNER_NAMES_THEM}`)
     expect((await card.locator('.note').innerText()).trim()).toBe(`“${ASSIGNMENT_NOTE}”`)
+  })
+
+  await step('lock, and the recovery code alone opens the server’s key again, to the same fingerprint', async () => {
+    await consoleSection().getByRole('button', { name: 'Lock console' }).click()
+    const unlock = owner.locator('.unlock')
+    await unlock.getByLabel('Owner access token').fill(OWNER_TOKEN)
+    await asAPerson()
+    await unlock.getByRole('button', { name: 'Connect', exact: true }).click()
+    await unlock.getByText(HOLDS_A_LOCKED_KEY).waitFor()
+    await unlock.getByRole('button', { name: 'Use my recovery code instead' }).click()
+    for (const [i, group] of recoveryGroups.entries()) await unlock.locator(`#recovery-group-${i + 1}`).fill(group)
+    await unlock.getByRole('button', { name: 'Unlock', exact: true }).click()
+    await unlock.getByText('Your owner fingerprint').waitFor({ timeout: 90_000 })
+    // The fingerprint the clinician's pinned key was checked against, from the other secret.
+    expect(squash(await unlock.locator('.fp code').innerText())).toBe(ownerFingerprint)
+  })
+
+  await step('the Recovery code screen, with the code and the token alone, stores a new passphrase', async () => {
+    // The screen hangs off the sync card, which an open backup replaces with its dashboard: the
+    // backup this run opened is put down first.
+    await owner.getByRole('button', { name: 'Open another backup' }).click()
+    await routeCard('Connect to your sync server').click()
+    await owner.locator('.sync').getByLabel('Access token', { exact: true }).fill(OWNER_TOKEN)
+    await owner.getByRole('button', { name: 'Open the recovery code screen' }).click()
+    const recovery = owner.locator('section.recovery')
+    await recovery.getByRole('tab', { name: 'Use a code' }).click()
+    for (const [i, group] of recoveryGroups.entries()) await recovery.locator(`#recovery-group-${i + 1}`).fill(group)
+    await asAPerson()
+    await recovery.getByRole('button', { name: 'Open the key' }).click()
+    await recovery.getByText(NEW_PASSPHRASE_LEDE).waitFor({ timeout: 90_000 })
+    await recovery.getByLabel('New passphrase').fill(NEW_OWNER_PASSPHRASE)
+    await recovery.getByLabel('The same passphrase again').fill(NEW_OWNER_PASSPHRASE)
+    await asAPerson()
+    await recovery.getByRole('button', { name: 'Lock the key under this passphrase' }).click()
+    await recovery.getByText(PASSPHRASE_REPLACED).waitFor({ timeout: 90_000 })
+    // What the old passphrase still opens is said where it was changed.
+    await recovery.getByText(PASSPHRASE_CHANGE_IS_NOT_A_REVOCATION).waitFor()
+    // The server took it as the next version of the locked key.
+    expect(await keyDocument()).toEqual({ status: 200, kind: 'wrapped', version: '2' })
+  })
+
+  await step('the old passphrase opens nothing the server hands out, and the new one opens the same fingerprint', async () => {
+    await routeCard('Owner console').click()
+    const unlock = owner.locator('.unlock')
+    await unlock.getByLabel('Owner access token').fill(OWNER_TOKEN)
+    await asAPerson()
+    await unlock.getByRole('button', { name: 'Connect', exact: true }).click()
+    await unlock.getByText(HOLDS_A_LOCKED_KEY).waitFor()
+    await unlock.getByLabel('Passphrase', { exact: true }).fill(OWNER_PASSPHRASE)
+    await unlock.getByRole('button', { name: 'Unlock', exact: true }).click()
+    // owner/unlock.ts's didNotOpen, matched by its opening words: that module pulls libsodium, which
+    // this runner does not resolve, and owner/unlock.test.ts pins the whole sentence.
+    await unlock.getByText(/^That did not open the key this server holds\./).waitFor({ timeout: 90_000 })
+    await unlock.getByLabel('Passphrase', { exact: true }).fill(NEW_OWNER_PASSPHRASE)
+    await unlock.getByRole('button', { name: 'Unlock', exact: true }).click()
+    await unlock.getByText('Your owner fingerprint').waitFor({ timeout: 90_000 })
+    expect(squash(await unlock.locator('.fp code').innerText())).toBe(ownerFingerprint)
   })
 
   expect(pageErrors, 'uncaught errors in either page').toEqual([])
