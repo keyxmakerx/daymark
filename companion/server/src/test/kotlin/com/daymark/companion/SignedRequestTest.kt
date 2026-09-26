@@ -52,6 +52,15 @@ class SignedRequestTest {
             c.createStatement().use { st -> st.executeQuery("SELECT COUNT(*) FROM seen_nonces").use { rs -> rs.next(); rs.getInt(1) } }
         }
 
+    /** When each row kept for [nonce] lapses: none for a nonce no request took. */
+    private fun keptUntil(server: DeviceServer, nonce: String): List<Long> =
+        DriverManager.getConnection("jdbc:sqlite:${File(server.dataDir, "owner-account.db").path}").use { c ->
+            c.prepareStatement("SELECT keep_until FROM seen_nonces WHERE nonce=?").use { ps ->
+                ps.setString(1, nonce)
+                ps.executeQuery().use { rs -> buildList { while (rs.next()) add(rs.getLong(1)) } }
+            }
+        }
+
     @Test
     fun `a registered phone's signed request reaches the owner's routes with no token`() = testApplication {
         val server = DeviceServer()
@@ -281,5 +290,61 @@ class SignedRequestTest {
         assertEquals(HttpStatusCode.OK, server.signedGet(client, phone, "/v1/snapshots").status, "the key still works")
         assertEquals(1, nonceRows(server.dataDir), "the three past their time are gone; the new one is kept")
         old.forEach { assertEquals(unauthorized, client.send(HttpMethod.Get, "/v1/snapshots", it).answer(), "and a replay of one is refused by its time") }
+    }
+
+    @Test
+    fun `a time far outside the window, or a forged signature, leaves no nonce behind`() = testApplication {
+        val server = DeviceServer()
+        server.start(this)
+        val phone = TestPhone()
+        server.pair(client, phone)
+        val stranger = TestPhone() // a key nobody paired
+        val tenYears = 10L * 365 * 24 * 60 * 60
+        val refused = mapOf(
+            "signed by the phone, ten years ahead" to phone.headers("GET", "/v1/snapshots", timeSeconds = server.seconds + tenYears),
+            "signed by the phone, ten years behind" to phone.headers("GET", "/v1/snapshots", timeSeconds = server.seconds - tenYears),
+            "forged, naming the phone's key" to stranger.headers("GET", "/v1/snapshots", timeSeconds = server.seconds) + (DeviceSignature.KEY_HEADER to phone.keyId),
+        )
+        for ((what, headers) in refused) {
+            assertEquals(unauthorized, client.send(HttpMethod.Get, "/v1/snapshots", headers).answer(), what)
+            assertEquals(emptyList(), keptUntil(server, headers.getValue(DeviceSignature.NONCE_HEADER)), "$what: no nonce row")
+        }
+        // Control: the phone's own request, timed now, is taken, and its nonce kept to the end of its window.
+        val good = phone.headers("GET", "/v1/snapshots", timeSeconds = server.seconds)
+        assertEquals(HttpStatusCode.OK, client.send(HttpMethod.Get, "/v1/snapshots", good).status)
+        assertEquals(listOf(server.seconds * 1000 + DeviceSignature.WINDOW_MS), keptUntil(server, good.getValue(DeviceSignature.NONCE_HEADER)))
+    }
+
+    @Test
+    fun `a replay at the very end of its window is refused, and a request timed ahead of the server is kept to the end of its own`() {
+        testApplication {
+            val server = DeviceServer()
+            server.start(this)
+            val phone = TestPhone()
+            server.pair(client, phone)
+            val sentAt = server.now
+            val sent = phone.headers("GET", "/v1/snapshots", timeSeconds = server.seconds)
+            assertEquals(HttpStatusCode.OK, client.send(HttpMethod.Get, "/v1/snapshots", sent).status)
+            server.now = sentAt + DeviceSignature.WINDOW_MS
+            assertEquals(unauthorized, client.send(HttpMethod.Get, "/v1/snapshots", sent).answer(), "at +300 000 ms its nonce is still kept")
+            server.now = sentAt + DeviceSignature.WINDOW_MS + 1
+            assertEquals(unauthorized, client.send(HttpMethod.Get, "/v1/snapshots", sent).answer(), "at +300 001 ms its time is past")
+            // Control: a request made then is taken.
+            assertEquals(HttpStatusCode.OK, server.signedGet(client, phone, "/v1/snapshots").status)
+        }
+        testApplication {
+            // A phone whose clock runs 299 s ahead of the server's.
+            val server = DeviceServer()
+            server.start(this)
+            val phone = TestPhone()
+            server.pair(client, phone)
+            val ahead = server.seconds + 299
+            val sent = phone.headers("GET", "/v1/snapshots", timeSeconds = ahead)
+            assertEquals(HttpStatusCode.OK, client.send(HttpMethod.Get, "/v1/snapshots", sent).status, "within the window")
+            // Its nonce is kept to the end of the request's own window, not the end of one begun when it arrived.
+            server.now = ahead * 1000 + DeviceSignature.WINDOW_MS
+            assertEquals(unauthorized, client.send(HttpMethod.Get, "/v1/snapshots", sent).answer(), "at the end of its own window")
+            assertEquals(HttpStatusCode.OK, server.signedGet(client, phone, "/v1/snapshots").status, "control: a request made then is taken")
+        }
     }
 }

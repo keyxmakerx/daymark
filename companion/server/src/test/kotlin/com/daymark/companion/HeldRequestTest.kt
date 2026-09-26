@@ -165,6 +165,31 @@ class HeldRequestTest {
         }
     }
 
+    @Test
+    fun `a request whose own time is outside the window is refused before its body is read`() {
+        val server = DeviceServer()
+        server.startNetty().use { live ->
+            val phone = TestPhone()
+            live.pair(phone)
+            for (offset in listOf(DeviceSignature.WINDOW_SECONDS + 1, -(DeviceSignature.WINDOW_SECONDS + 1))) {
+                val headers = phone.headers("PUT", target, body, server.seconds + offset)
+                live.open().use { c ->
+                    c.write(LiveServer.head("PUT", target, headers, chunked = false, length = body.size.toLong()))
+                    c.write(body.copyOfRange(0, 4))
+                    assertEquals(RawResponse(401, """{"error":"unauthorized"}"""), c.answerWithin(HELD_MS), "$offset s: answered with its body held back")
+                }
+            }
+            // Control: the same request timed now waits for its body, and is taken once it is whole.
+            live.open().use { c ->
+                c.write(LiveServer.head("PUT", target, phone.headers("PUT", target, body, server.seconds), chunked = false, length = body.size.toLong()))
+                c.write(body.copyOfRange(0, 4))
+                assertNull(c.answerWithin(HELD_MS), "timed now, it waits for its body")
+                c.write(body.copyOfRange(4, body.size))
+                assertEquals(201, c.readResponse().status)
+            }
+        }
+    }
+
     private companion object {
         /** How long a request is held open, part of its body sent, before the test takes it that the server waits for the rest. */
         const val HELD_MS = 1_000L
