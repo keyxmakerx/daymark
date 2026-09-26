@@ -55,7 +55,9 @@
     busy = true
     try {
       const signed = signGrant(draft, session.ownerSign)
-      onGrantChange(structuredClone(draft))
+      // A plain copy for the console. `draft` is $state, so it is a Proxy, and structuredClone
+      // refuses every Proxy (components/stateCopy.test.ts).
+      onGrantChange($state.snapshot(draft))
       if (client) {
         // Append a new version. The therapist reads it; nobody but the owner can forge it.
         const existing = await client.listVersions(therapist.inboxToken, 'grants', 'grant')
