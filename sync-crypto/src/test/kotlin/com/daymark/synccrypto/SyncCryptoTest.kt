@@ -24,12 +24,14 @@ class SyncCryptoTest {
 
     // Small KDF params keep tests fast; production defaults to >=256 MiB / 3 ops
     // (SyncCrypto.KdfParams.DEFAULT), same trade-off crypto.test.ts makes with its `FAST` const.
+    // They are below the floor, so they go through the internal deriveKeysWithoutFloor: the public
+    // deriveKeys refuses them (belowFloorParamsAreRefusedBeforeAnythingIsDerived).
     private val fast = SyncCrypto.KdfParams(memMiB = 8, ops = 2)
 
     @Test
     fun roundTripsASnapshotUnderTheDerivedKey() {
         val salt = crypto.newSalt()
-        val keys = crypto.deriveKeys("correct horse battery staple", salt, fast)
+        val keys = crypto.deriveKeysWithoutFloor("correct horse battery staple", salt, fast)
         val plaintext = """{"version":12,"entries":[{"id":1,"moodLevel":4}]}""".toByteArray(Charsets.UTF_8)
         val blob = crypto.encryptSnapshot(plaintext, keys.syncKey, "devA", 7)
         val back = crypto.decryptSnapshot(blob, keys.syncKey, "devA", 7)
@@ -39,8 +41,8 @@ class SyncCryptoTest {
     @Test
     fun isDeterministicSamePassphraseSaltParamsDeriveTheSameKey() {
         val salt = crypto.newSalt()
-        val a = crypto.deriveKeys("pass", salt, fast)
-        val b = crypto.deriveKeys("pass", salt, fast)
+        val a = crypto.deriveKeysWithoutFloor("pass", salt, fast)
+        val b = crypto.deriveKeysWithoutFloor("pass", salt, fast)
         assertArrayEquals(a.syncKey, b.syncKey)
         assertArrayEquals(a.manifestSeed, b.manifestSeed)
     }
@@ -48,8 +50,8 @@ class SyncCryptoTest {
     @Test
     fun failsToDecryptWithTheWrongPassphrase() {
         val salt = crypto.newSalt()
-        val good = crypto.deriveKeys("right", salt, fast)
-        val bad = crypto.deriveKeys("wrong", salt, fast)
+        val good = crypto.deriveKeysWithoutFloor("right", salt, fast)
+        val bad = crypto.deriveKeysWithoutFloor("wrong", salt, fast)
         val blob = crypto.encryptSnapshot("secret".toByteArray(), good.syncKey, "devA", 0)
         try {
             crypto.decryptSnapshot(blob, bad.syncKey, "devA", 0)
@@ -61,7 +63,7 @@ class SyncCryptoTest {
 
     @Test
     fun detectsTamperingViaAead() {
-        val keys = crypto.deriveKeys("p", crypto.newSalt(), fast)
+        val keys = crypto.deriveKeysWithoutFloor("p", crypto.newSalt(), fast)
         val blob = crypto.encryptSnapshot("hello".toByteArray(), keys.syncKey, "devA", 0)
         blob[blob.size - 1] = (blob[blob.size - 1].toInt() xor 0x01).toByte() // flip a ciphertext bit
         try {
@@ -74,7 +76,7 @@ class SyncCryptoTest {
 
     @Test
     fun bindsLineageAndVersionViaAad_wrongVersionOrLineageFails() {
-        val keys = crypto.deriveKeys("p", crypto.newSalt(), fast)
+        val keys = crypto.deriveKeysWithoutFloor("p", crypto.newSalt(), fast)
         val blob = crypto.encryptSnapshot("hi".toByteArray(), keys.syncKey, "devA", 3)
         assertThrowsSyncCrypto { crypto.decryptSnapshot(blob, keys.syncKey, "devA", 4) }
         assertThrowsSyncCrypto { crypto.decryptSnapshot(blob, keys.syncKey, "devB", 3) }
@@ -82,7 +84,7 @@ class SyncCryptoTest {
 
     @Test
     fun rejectsANonDaymarkEnvelope() {
-        val keys = crypto.deriveKeys("p", crypto.newSalt(), fast)
+        val keys = crypto.deriveKeysWithoutFloor("p", crypto.newSalt(), fast)
         assertThrowsSyncCrypto {
             crypto.decryptSnapshot(byteArrayOf(9, 9, 9, 9, 1, 2, 3), keys.syncKey, "devA", 0)
         }
@@ -101,8 +103,76 @@ class SyncCryptoTest {
     }
 
     @Test
+    fun base64ReadsOnlyThatForm_asTheWebsLibsodiumDecoderDoes() {
+        // What libsodium's URLSAFE_NO_PADDING decoder answered for each of these (#403): refused, every
+        // one, where java.util.Base64's URL decoder takes the padded ones and ignores stray bits.
+        val canonical = "AAECAwQFBgcICQoLDA0ODw"
+        val refused = listOf(
+            "$canonical==", "$canonical=", KeyDocumentVector.strayBits(canonical),
+            canonical.dropLast(2) + "+w", canonical.dropLast(2) + "/w", "AAECA",
+            "AAECAwQFBgcI CQoLDA0ODw", "$canonical\n", canonical.dropLast(1) + "\u00E9",
+        )
+        for (text in refused) {
+            assertNotEquals(canonical, text)
+            try {
+                SyncCrypto.fromBase64(text)
+                fail("accepted what the web refuses: $text")
+            } catch (e: IllegalArgumentException) {
+                assertEquals("not URL-safe base64 without padding", e.message)
+            }
+        }
+        // And what it accepts: both URL-safe symbols, and the empty string.
+        assertArrayEquals(ByteArray(16) { it.toByte() }, SyncCrypto.fromBase64(canonical))
+        assertEquals(16, SyncCrypto.fromBase64(canonical.dropLast(2) + "-w").size)
+        assertEquals(16, SyncCrypto.fromBase64(canonical.dropLast(2) + "_w").size)
+        assertEquals(0, SyncCrypto.fromBase64("").size)
+    }
+
+    @Test
+    fun belowFloorParamsAreRefusedBeforeAnythingIsDerived() {
+        val counting = CountingSodium()
+        val guarded = SyncCrypto(counting)
+        val salt = ByteArray(16)
+        for (params in listOf(fast, SyncCrypto.KdfParams(memMiB = 255, ops = 3), SyncCrypto.KdfParams(memMiB = 256, ops = 2))) {
+            assertFalse(params.meetsFloor)
+            val e = assertThrowsSyncCrypto { guarded.deriveKeys("p", salt, params) }
+            assertTrue(e.message, e.message!!.contains("below the security floor"))
+        }
+        assertEquals("refused before Argon2id ran", 0, counting.argon2idRuns)
+        // The positive control: the same parameters derive through the internal path, so the floor
+        // is what refused them.
+        guarded.deriveKeysWithoutFloor("p", salt, fast)
+        assertEquals(1, counting.argon2idRuns)
+        assertTrue(SyncCrypto.KdfParams.DEFAULT.meetsFloor)
+    }
+
+    @Test
+    fun aSaltOfAnyLengthButSixteenIsRefused() {
+        // lazysodium passes the array to libsodium without checking it, and libsodium reads 16 bytes.
+        crypto.deriveKeysWithoutFloor("p", ByteArray(16), fast)
+        for (length in listOf(0, 15, 17)) {
+            val e = assertThrowsSyncCrypto { crypto.deriveKeysWithoutFloor("p", ByteArray(length), fast) }
+            assertEquals("salt must be 16 bytes", e.message)
+        }
+    }
+
+    @Test
+    fun aSecretIsEncodedAsTheWebsTextEncoderEncodesIt() {
+        // Well-formed text: plain UTF-8, as String.toByteArray gives it.
+        for (text in listOf("p", "caf\u00E9", "\u65E5\u8A18", "\uD83C\uDF3F")) {
+            assertArrayEquals(text.toByteArray(Charsets.UTF_8), SyncCrypto.secretBytes(text))
+        }
+        // An unpaired surrogate is U+FFFD, as TextEncoder writes it (dataKeyVector.test.ts), where
+        // toByteArray writes "?" and would derive a key the web never would.
+        assertEquals("61efbfbd62", hex(SyncCrypto.secretBytes("a\uD800b")))
+        assertEquals("613f62", hex("a\uD800b".toByteArray(Charsets.UTF_8)))
+        assertEquals("efbfbd", hex(SyncCrypto.secretBytes("\uDC00")))
+        assertEquals("efbfbdefbfbd", hex(SyncCrypto.secretBytes("\uDC00\uD800")))
+    }
+
+    @Test
     fun signsAndVerifiesAManifestRejectsTampering() {
-        val keys = crypto.deriveKeys("p", crypto.newSalt(), fast)
+        val keys = crypto.deriveKeysWithoutFloor("p", crypto.newSalt(), fast)
         val manifest = SyncCrypto.Manifest(lineage = "devA", head = 2, entries = listOf(SyncCrypto.ManifestEntry(2, "abc")))
         val signed = crypto.signManifest(manifest, keys.manifestSeed)
         assertEquals(signed.publicKeyB64, crypto.manifestPublicKeyB64(keys.manifestSeed))
@@ -124,7 +194,7 @@ class SyncCryptoTest {
     @Test
     fun crossLanguageConformanceVectorsMatchTheTsReference() {
         val salt = ByteArray(16) { it.toByte() } // 0x00..0x0f
-        val keys = crypto.deriveKeys("conformance-vector", salt, SyncCrypto.KdfParams(memMiB = 8, ops = 2))
+        val keys = crypto.deriveKeysWithoutFloor("conformance-vector", salt, SyncCrypto.KdfParams(memMiB = 8, ops = 2))
         assertEquals("3d0a8d769e09df76fcb676a3e0eb792f3a5f2106c9d81759622eadd73a51fd65", hex(keys.syncKey))
         assertEquals("ae7248a30ab84f021da9eda1a3fc791d5670c51952300ee0a39fdf657b9f6b3e", hex(keys.manifestSeed))
         assertEquals("PQqNdp4J33b8tnaj4Ot5LzpfIQbJ2BdZYi6t1zpR_WU", SyncCrypto.toBase64(keys.syncKey))
@@ -341,7 +411,7 @@ class SyncCryptoTest {
     // ---- helpers ------------------------------------------------------------------------------
 
     private fun vectorKey(): ByteArray {
-        val key = crypto.deriveKeys("conformance-vector", ByteArray(16) { it.toByte() }, fast).syncKey
+        val key = crypto.deriveKeysWithoutFloor("conformance-vector", ByteArray(16) { it.toByte() }, fast).syncKey
         assertEquals(VECTOR_SYNC_KEY, hex(key))
         return key
     }

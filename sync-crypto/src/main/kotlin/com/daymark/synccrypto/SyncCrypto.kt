@@ -6,6 +6,8 @@ import com.goterl.lazysodium.interfaces.KeyDerivation
 import com.goterl.lazysodium.interfaces.PwHash
 import com.goterl.lazysodium.interfaces.Sign
 import com.sun.jna.NativeLong
+import java.nio.CharBuffer
+import java.nio.charset.CodingErrorAction
 import java.util.Base64
 
 /**
@@ -14,9 +16,13 @@ import java.util.Base64
  * `docs/SYNC_PROTOCOL.md` for the normative wire format this implements.
  *
  * Contract (per docs/COMPANION_SECURITY.md §4):
- *   passphrase --Argon2id(salt, mem>=256MiB, ops>=3)--> master(32)
+ *   the key parameters: passphrase --Argon2id(salt, mem>=256MiB, ops>=3)--> master(32)
+ *   the wrapped key:    passphrase or recovery code --Argon2id(the slot's salt, same floor)--> KEK
+ *                       KEK --XChaCha20-Poly1305 open(the slot, AAD "daymark.datakey.v1|" + kind)--> master(32)
  *   master --crypto_kdf(ctx="dmsync01")--+- id 1 -> SYNC_KEY        (XChaCha20-Poly1305)
  *                                         +- id 2 -> MANIFEST_SEED   (Ed25519 signing seed)
+ *                                         (ids 3 and 4 are the owner's pairing identity, which the web
+ *                                          derives in owner/identity.ts and this module does not)
  *   snapshot blob = MAGIC("DMS1") | FMT | nonce(24) | XChaCha20Poly1305(body, AAD, nonce, SYNC_KEY)
  *     FMT 0x02, the only format written:  body = pad(plaintext)   AAD = utf8("daymark.snapshot.v2|" + lineage + "|" + version)
  *     FMT 0x01, still read, never written: body = plaintext        AAD = utf8("daymark.snapshot.v1|" + lineage + "|" + version)
@@ -28,6 +34,13 @@ import java.util.Base64
  * relabelled envelope fails to open instead of opening in the wrong form. Unpadding runs only
  * after the AEAD has authenticated the body, and it is strict. Format 1 is opened and never
  * written: every snapshot stored before #315 is in it.
+ *
+ * The key document (#403): once the owner has a wrapped key, the server serves it instead of the
+ * key parameters (docs/SYNC_PROTOCOL.md §1.2), so [openWithPassphrase] reads either kind and
+ * [openWithRecoveryCode] opens the wrapped key with a recovery code, as
+ * `companion/web/src/lib/recovery/dataKey.ts` does. [KeyDocument] reads the document strictly and
+ * [RecoveryCode] reads the code exactly as the web does. No key is derived below the floor, by any
+ * public path: the floor travels in documents the server hands out.
  *
  * [sodium] is typed as the shared abstract `com.goterl.lazysodium.LazySodium` base class,
  * which both `lazysodium-java` (LazySodiumJava, used by this module's own unit tests — real
@@ -45,10 +58,18 @@ class SyncCrypto(private val sodium: LazySodium) {
 
     class SyncCryptoException(message: String) : Exception(message)
 
+    /** Argon2id parameters. The algorithm is always Argon2id (ALG_ARGON2ID13); a document naming another is refused. */
     class KdfParams(val memMiB: Int, val ops: Int) {
+        /** At or above the floor every key this module derives through a public path meets. */
+        val meetsFloor: Boolean get() = memMiB >= FLOOR_MEM_MIB && ops >= FLOOR_OPS
+
         companion object {
-            /** Meets the security doc's floor (>=256 MiB, >=3 ops). */
-            val DEFAULT = KdfParams(memMiB = 256, ops = 3)
+            /** The security doc's floor (docs/SYNC_PROTOCOL.md §1.2): at least 256 MiB and 3 passes. */
+            const val FLOOR_MEM_MIB = 256
+            const val FLOOR_OPS = 3
+
+            /** Exactly the floor, which is what every writer uses. */
+            val DEFAULT = KdfParams(memMiB = FLOOR_MEM_MIB, ops = FLOOR_OPS)
         }
     }
 
@@ -61,23 +82,182 @@ class SyncCrypto(private val sodium: LazySodium) {
     /** 16-byte random KDF salt (non-secret; published in keyparams). */
     fun newSalt(): ByteArray = sodium.randomBytesBuf(PwHash.SALTBYTES)
 
-    /** passphrase + salt + params -> master -> purpose-separated subkeys. */
+    /**
+     * passphrase + salt + params -> master -> purpose-separated subkeys. Refuses params below the
+     * floor: they arrive in the key parameters the server hands out, and a server that lowered them
+     * would make the master cheap to guess from what it stores.
+     */
     fun deriveKeys(passphrase: String, salt: ByteArray, params: KdfParams = KdfParams.DEFAULT): OwnerKeys {
-        val passwordBytes = passphrase.toByteArray(Charsets.UTF_8)
-        val master = ByteArray(KeyDerivation.MASTER_KEY_BYTES)
-        val memLimit = NativeLong(params.memMiB.toLong() * 1024 * 1024)
-        val ok = sodium.cryptoPwHash(
-            master, master.size, passwordBytes, passwordBytes.size, salt,
-            params.ops.toLong(), memLimit, PwHash.Alg.PWHASH_ALG_ARGON2ID13,
-        )
-        if (!ok) throw SyncCryptoException("Argon2id key derivation failed")
-
-        val syncKey = deriveSubkey(master, SUBKEY_SYNC, AEAD.XCHACHA20POLY1305_IETF_KEYBYTES)
-        val manifestSeed = deriveSubkey(master, SUBKEY_MANIFEST, Sign.SEEDBYTES)
-        return OwnerKeys(syncKey, manifestSeed)
+        if (!params.meetsFloor) throw SyncCryptoException(BELOW_FLOOR)
+        return deriveKeysWithoutFloor(passphrase, salt, params)
     }
 
-    private fun deriveSubkey(master: ByteArray, subkeyId: Long, subkeyLen: Int): ByteArray {
+    /**
+     * [deriveKeys] without the floor, for the web's conformance vectors only: they are derived at
+     * 8 MiB and 2 passes so that both suites stay fast, and the phone must reproduce them exactly.
+     * Internal, so that nothing outside this module derives a key below the floor.
+     */
+    internal fun deriveKeysWithoutFloor(passphrase: String, salt: ByteArray, params: KdfParams): OwnerKeys =
+        ownerKeysThenWipe(argon2id(secretBytes(passphrase), salt, params))
+
+    /**
+     * The owner's key document, of either kind, and their passphrase -> their keys (#403).
+     *
+     * The key parameters give the master by Argon2id, as [deriveKeys] does. The wrapped key gives it
+     * from its first passphrase slot, the one the web opens with a passphrase, and a passphrase that
+     * does not open that slot is [KeyDocumentException.Reason.DID_NOT_OPEN] and nothing more
+     * specific. Over the key parameters a wrong passphrase cannot be told from a right one: it
+     * derives another master, and the snapshot is what then refuses to open.
+     *
+     * The master is wiped before this returns; only the subkeys leave. Throws [SyncCryptoException]
+     * if Argon2id itself fails, as it does when the device cannot spare the memory.
+     */
+    fun openWithPassphrase(document: KeyDocument, passphrase: String): OwnerKeys =
+        ownerKeysThenWipe(masterWithPassphrase(document, passphrase))
+
+    /**
+     * The wrapped key and a recovery code as the person typed it -> their keys (#403).
+     *
+     * The code is read first ([RecoveryCode.parse]), so one mistyped character is a
+     * [RecoveryCodeException] before any key is derived, rather than a failed open seconds later.
+     * Then each recovery slot is tried in document order, as the web tries them, and the first that
+     * opens gives the master. The key parameters have no recovery slot, so they are
+     * [KeyDocumentException.Reason.NO_SLOT_OF_THAT_KIND].
+     */
+    fun openWithRecoveryCode(document: KeyDocument, typedCode: String): OwnerKeys =
+        ownerKeysThenWipe(masterWithRecoveryCode(document, typedCode))
+
+    /** [openWithPassphrase] up to the master, which the caller wipes. Internal, so the tests can pin it. */
+    internal fun masterWithPassphrase(document: KeyDocument, passphrase: String): ByteArray = when (document) {
+        is KeyDocument.KeyParams -> {
+            requireDocumentFloor(document.kdf)
+            argon2id(secretBytes(passphrase), document.salt, document.kdf)
+        }
+        is KeyDocument.WrappedKey -> {
+            val slot = document.slots.firstOrNull { it.kind == KeyDocument.SlotKind.PASSPHRASE }
+                ?: throw KeyDocumentException(KeyDocumentException.Reason.NO_SLOT_OF_THAT_KIND)
+            unwrapSlot(slot, passphrase) ?: throw KeyDocumentException(KeyDocumentException.Reason.DID_NOT_OPEN)
+        }
+    }
+
+    /** [openWithRecoveryCode] up to the master, which the caller wipes. Internal, so the tests can pin it. */
+    internal fun masterWithRecoveryCode(document: KeyDocument, typedCode: String): ByteArray {
+        val code = RecoveryCode.parse(typedCode)
+        val slots = (document as? KeyDocument.WrappedKey)?.slots.orEmpty()
+            .filter { it.kind == KeyDocument.SlotKind.RECOVERY }
+        if (slots.isEmpty()) throw KeyDocumentException(KeyDocumentException.Reason.NO_SLOT_OF_THAT_KIND)
+        for (slot in slots) unwrapSlot(slot, code.canonical)?.let { return it }
+        throw KeyDocumentException(KeyDocumentException.Reason.DID_NOT_OPEN)
+    }
+
+    /** One slot and one secret -> the master, or null when the secret does not open the slot. */
+    private fun unwrapSlot(slot: KeyDocument.WrappedKey.Slot, secret: String): ByteArray? {
+        // The reader checked all of this for every slot; it is checked again where it is used, and a
+        // nonce or ciphertext of another length would be read past its end by libsodium.
+        requireDocumentFloor(slot.kdf)
+        if (slot.nonce.size != KeyDocument.NONCE_BYTES || slot.ciphertext.size != KeyDocument.MASTER_BYTES + KeyDocument.TAG_BYTES) {
+            throw KeyDocumentException(KeyDocumentException.Reason.WRONG_LENGTH)
+        }
+        val kek = argon2id(secretBytes(secret), slot.salt, slot.kdf)
+        try {
+            val aad = dataKeyAad(slot.kind)
+            val master = ByteArray(KeyDocument.MASTER_BYTES)
+            val masterLen = LongArray(1)
+            val ok = sodium.cryptoAeadXChaCha20Poly1305IetfDecrypt(
+                master, masterLen, null, slot.ciphertext, slot.ciphertext.size.toLong(),
+                aad, aad.size.toLong(), slot.nonce, kek,
+            )
+            if (ok && masterLen[0] == master.size.toLong()) return master
+            master.fill(0)
+            return null
+        } finally {
+            kek.fill(0)
+        }
+    }
+
+    /**
+     * One locked copy of [master] under [secret], as the web's `wrapDataKey` makes it: Argon2id over
+     * [salt] at [params], never below the floor, then XChaCha20-Poly1305 under [nonce] with the
+     * slot's associated data. For a recovery slot the secret is the code's 30 canonical symbols.
+     *
+     * The salt and nonce are passed in so that the phone's writer is held to the web's byte for byte
+     * (KeyDocumentVectorTest). Internal, because no phone flow writes a key document yet; the one that
+     * does must draw a fresh salt and nonce for every slot.
+     */
+    internal fun wrapSlot(
+        master: ByteArray,
+        secret: String,
+        kind: KeyDocument.SlotKind,
+        params: KdfParams,
+        salt: ByteArray,
+        nonce: ByteArray,
+    ): KeyDocument.WrappedKey.Slot {
+        if (!params.meetsFloor) throw SyncCryptoException(BELOW_FLOOR)
+        if (master.size != KeyDocument.MASTER_BYTES) throw SyncCryptoException("master key must be ${KeyDocument.MASTER_BYTES} bytes")
+        if (nonce.size != KeyDocument.NONCE_BYTES) throw SyncCryptoException("nonce must be ${KeyDocument.NONCE_BYTES} bytes")
+        val kek = argon2id(secretBytes(secret), salt, params)
+        try {
+            val aad = dataKeyAad(kind)
+            val ciphertext = ByteArray(KeyDocument.MASTER_BYTES + KeyDocument.TAG_BYTES)
+            val ciphertextLen = LongArray(1)
+            val ok = sodium.cryptoAeadXChaCha20Poly1305IetfEncrypt(
+                ciphertext, ciphertextLen, master, master.size.toLong(),
+                aad, aad.size.toLong(), null, nonce, kek,
+            )
+            if (!ok || ciphertextLen[0] != ciphertext.size.toLong()) throw SyncCryptoException("AEAD encryption failed")
+            return KeyDocument.WrappedKey.Slot(kind, params, salt.copyOf(), nonce.copyOf(), ciphertext)
+        } finally {
+            kek.fill(0)
+        }
+    }
+
+    private fun requireDocumentFloor(params: KdfParams) {
+        if (!params.meetsFloor) throw KeyDocumentException(KeyDocumentException.Reason.KDF_BELOW_FLOOR)
+    }
+
+    /**
+     * Argon2id (`crypto_pwhash`, ALG_ARGON2ID13) of [secret] to 32 bytes: the master from the key
+     * parameters, or a slot's KEK. [secret] is wiped here and the caller wipes the result. The salt
+     * length is checked here because lazysodium does not check it and libsodium reads 16 bytes of
+     * whatever it is handed.
+     */
+    private fun argon2id(secret: ByteArray, salt: ByteArray, params: KdfParams): ByteArray {
+        try {
+            if (salt.size != PwHash.SALTBYTES) throw SyncCryptoException("salt must be ${PwHash.SALTBYTES} bytes")
+            val memLimit = try {
+                NativeLong(params.memMiB.toLong() * 1024 * 1024)
+            } catch (_: IllegalArgumentException) {
+                // More bytes than this platform's native long holds: a 32-bit device, at 4 GiB and up.
+                throw SyncCryptoException(ARGON2ID_FAILED)
+            }
+            val out = ByteArray(KeyDerivation.MASTER_KEY_BYTES)
+            val ok = sodium.cryptoPwHash(
+                out, out.size, secret, secret.size, salt,
+                params.ops.toLong(), memLimit, PwHash.Alg.PWHASH_ALG_ARGON2ID13,
+            )
+            if (!ok) {
+                out.fill(0)
+                throw SyncCryptoException(ARGON2ID_FAILED)
+            }
+            return out
+        } finally {
+            secret.fill(0)
+        }
+    }
+
+    /** master -> the subkeys this module uses (ids 1 and 2), and the master wiped either way. */
+    private fun ownerKeysThenWipe(master: ByteArray): OwnerKeys {
+        try {
+            return OwnerKeys(
+                syncKey = deriveSubkey(master, SUBKEY_SYNC, AEAD.XCHACHA20POLY1305_IETF_KEYBYTES),
+                manifestSeed = deriveSubkey(master, SUBKEY_MANIFEST, Sign.SEEDBYTES),
+            )
+        } finally {
+            master.fill(0)
+        }
+    }
+
+    internal fun deriveSubkey(master: ByteArray, subkeyId: Long, subkeyLen: Int): ByteArray {
         val subkey = ByteArray(subkeyLen)
         val rc = sodium.cryptoKdfDeriveFromKey(subkey, subkey.size, subkeyId, KDF_CONTEXT, master)
         if (rc != 0) throw SyncCryptoException("crypto_kdf_derive_from_key failed (id=$subkeyId)")
@@ -216,6 +396,33 @@ class SyncCrypto(private val sodium: LazySodium) {
         private const val SUBKEY_SYNC = 1L
         private const val SUBKEY_MANIFEST = 2L
 
+        private const val BELOW_FLOOR = "KDF parameters are below the security floor; refusing to derive"
+        private const val ARGON2ID_FAILED = "Argon2id key derivation failed"
+
+        /** A wrapped-key slot's associated data: the kind of secret is part of what the AEAD authenticates. */
+        private fun dataKeyAad(kind: KeyDocument.SlotKind): ByteArray =
+            "daymark.datakey.v1|${kind.wire}".toByteArray(Charsets.UTF_8)
+
+        private val U_FFFD_UTF8 = byteArrayOf(0xEF.toByte(), 0xBF.toByte(), 0xBD.toByte())
+
+        /**
+         * A secret's UTF-8 bytes as the web's `TextEncoder` makes them, which is what libsodium's
+         * JavaScript wrapper hashes: an unpaired surrogate becomes U+FFFD (EF BF BD), where
+         * [String.toByteArray] would write "?" and so derive a key the web never would. Well-formed
+         * text encodes the same either way. The encoder's own buffer is wiped; the String cannot be.
+         */
+        internal fun secretBytes(secret: String): ByteArray {
+            val encoder = Charsets.UTF_8.newEncoder()
+                .onMalformedInput(CodingErrorAction.REPLACE)
+                .onUnmappableCharacter(CodingErrorAction.REPLACE)
+                .replaceWith(U_FFFD_UTF8)
+            val buffer = encoder.encode(CharBuffer.wrap(secret))
+            val bytes = ByteArray(buffer.remaining())
+            buffer.get(bytes)
+            if (buffer.hasArray()) buffer.array().fill(0)
+            return bytes
+        }
+
         /** Each format's name in the associated data, so the format byte cannot be changed on its own. */
         private fun aad(format: Byte, lineage: String, version: Long): ByteArray {
             val context = when (format) {
@@ -243,7 +450,28 @@ class SyncCrypto(private val sodium: LazySodium) {
          * conformance vector in SyncCryptoTest / docs/SYNC_PROTOCOL.md §1.2.
          */
         fun toBase64(bytes: ByteArray): String = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
-        fun fromBase64(b64: String): ByteArray = Base64.getUrlDecoder().decode(b64)
+
+        /**
+         * That one form and no other, as the web's libsodium `URLSAFE_NO_PADDING` decoder reads it:
+         * no `=`, no `+` or `/`, no whitespace, no lone final character, and no set bits after the
+         * last byte. [java.util.Base64]'s URL decoder alone takes the padding and ignores the stray
+         * bits. Throws [IllegalArgumentException], without repeating the input.
+         */
+        fun fromBase64(b64: String): ByteArray {
+            for (c in b64) {
+                if (c !in 'A'..'Z' && c !in 'a'..'z' && c !in '0'..'9' && c != '-' && c != '_') {
+                    throw IllegalArgumentException(NOT_BASE64URL)
+                }
+            }
+            if (b64.length % 4 == 1) throw IllegalArgumentException(NOT_BASE64URL)
+            val bytes = Base64.getUrlDecoder().decode(b64)
+            // The only encoding of these bytes is the canonical one: the unused bits of the last
+            // character are zero.
+            if (toBase64(bytes) != b64) throw IllegalArgumentException(NOT_BASE64URL)
+            return bytes
+        }
+
+        private const val NOT_BASE64URL = "not URL-safe base64 without padding"
 
         /** Canonical bytes a manifest is signed over (stable key order, matches JSON.stringify). */
         fun manifestBytes(manifest: Manifest): ByteArray {
