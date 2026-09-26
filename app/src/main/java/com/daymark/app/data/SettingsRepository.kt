@@ -56,8 +56,17 @@ class SettingsRepository @Inject constructor(
         set(value) = prefs.edit().putInt(KEY_AUTO_LOCK_TIMEOUT, value).apply()
 
     // --- Appearance ---
+    /**
+     * Wallpaper colours in place of the paper palette, on Android 12 and later. Off unless the person
+     * turns it on: the paper identity is the point of the app, and the wallpaper brings hues and an
+     * alarm colour the design keeps out (`docs/DESIGN.md`, #309).
+     *
+     * Only an unset preference reads as off. Nothing writes this key but the Settings switch, so a
+     * stored value is always a choice somebody made, and a stored "on" stays on.
+     * `DynamicColorSourceTest` holds both.
+     */
     var dynamicColor: Boolean
-        get() = prefs.getBoolean(KEY_DYNAMIC_COLOR, true)
+        get() = prefs.getBoolean(KEY_DYNAMIC_COLOR, false)
         set(value) = prefs.edit().putBoolean(KEY_DYNAMIC_COLOR, value).apply()
 
     // --- Onboarding ---

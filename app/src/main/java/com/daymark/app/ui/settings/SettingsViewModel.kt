@@ -33,7 +33,7 @@ data class SettingsUiState(
     val hasPin: Boolean = false,
     val biometricEnabled: Boolean = false,
     val autoLockTimeoutMinutes: Int = 0,
-    val dynamicColor: Boolean = true,
+    val dynamicColor: Boolean = false,
     /**
      * Whether the journal file on THIS phone is actually encrypted.
      *
