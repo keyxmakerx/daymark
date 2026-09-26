@@ -145,6 +145,12 @@ object Routes {
      */
     const val DEBUG_TIMING = "debug_timing"
 
+    /**
+     * Settings → Sync with your server (#432). Registered only where `FlavorDoors.serverSync` is not
+     * null, which is the `sync` flavour alone: in the offline build the graph has no such destination.
+     */
+    const val SERVER_SYNC = "server_sync"
+
     /** A single day's entries, keyed by epoch-day. */
     fun day(epochDay: Long) = "day/$epochDay"
     const val DAY_PATTERN = "day/{epochDay}"

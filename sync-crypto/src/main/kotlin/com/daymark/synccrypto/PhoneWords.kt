@@ -82,4 +82,10 @@ object PhoneWords {
 
     /** Argon2id itself failed: on a phone, the memory it needs was not there. */
     const val COULD_NOT_OPEN = "This phone could not open the key just now. Nothing has changed."
+
+    /** The server registered the key, and the phone's keystore would not keep it: the web lists a phone that holds nothing. */
+    const val COULD_NOT_KEEP = "This phone could not keep the pairing. Remove it on the web, then pair again with a new code."
+
+    /** Under the last copy's time: the name the web's sync panel reads this phone's copies by. */
+    fun named(lineage: String): String = "On the server, this phone's copies are named $lineage."
 }

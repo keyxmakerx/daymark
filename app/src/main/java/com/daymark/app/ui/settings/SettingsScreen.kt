@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.daymark.app.BuildConfig
+import com.daymark.app.flavor.FlavorDoors
 import com.daymark.app.util.DateUtils
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -58,6 +59,8 @@ fun SettingsScreen(
     /** Opens the timing debug screen. Only ever called from a debug build — see the "Debug" row. */
     onOpenTimingDebug: () -> Unit,
     onShowMessage: (String) -> Unit,
+    /** Opens Sync with your server. Only the `sync` flavour draws the row that calls it. */
+    onOpenServerSync: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
@@ -291,6 +294,14 @@ fun SettingsScreen(
             supportingContent = { Text("A printable copy to hand to a clinician. Not encrypted.") },
             modifier = Modifier.clickable { showPdfDialog = true },
         )
+
+        // The `sync` flavour's row, through its door (#432). The offline build's door is null, so it
+        // draws no section here and names nothing that could reach a network.
+        FlavorDoors.serverSync?.let { door ->
+            Divider()
+            SectionHeader("Sync")
+            door.SettingsRow(onOpen = onOpenServerSync)
+        }
 
         Divider()
         SectionHeader("Appearance")
