@@ -387,8 +387,7 @@ times and has no page, so offer once. Not built: #156.
   stays off even under an accept-all grant.
 - Nothing reads these switches yet: no export, report or sync path uses them. Not built: #157
   (which also depends on #138).
-- The word is **clinician**: a therapist, a doctor and a psychiatrist are one role to the app. Some
-  screens still say "therapist", such as Settings → Export PDF for therapist: #158.
+- The word is **clinician**: a therapist, a doctor and a psychiatrist are one role to the app.
 - People, notes, *with* links and group defaults travel in backups. A restore never turns sharing on
   for someone already on the phone.
 
@@ -468,17 +467,19 @@ decisions rather than a reading of the current moment: #162.
   what is there, with fresh ids. An older backup still reads. A backup from a newer version of the
   app is refused.
 - **CSV** (Settings → Export as CSV): date, time, mood, activities and note for every entry.
-- **PDF report** (Settings → Export PDF for therapist) has four sides, each with one job
-  ([DECISIONS.md](DECISIONS.md) §D8): the glance, the detail, the person's own words, and notes for
-  the conversation. It ends with a hash of the entries it covers, as text and as a QR code, so a
-  later change to them could be detected; no tool to check it exists yet. It carries no streak, no
-  trend line joining separate check-ins, and no inference about the person. The dialog offers a
-  date range (90 days by default), notes, charts, and the journal for that range, all of it or
-  none, off by default. A screen for choosing journal entries one at a time exists
-  (`ui/export/JournalPickerScreen.kt`), but nothing opens it yet. Not built: a preview before
-  exporting: #198. Not built: mood notes left out until the person switches them on, and the dialog
-  saying that a report is a copy the person hands over, which Daymark cannot take back (#305):
-  #336.
+- **PDF report** (Settings → Export a PDF report, "A printable copy to hand to a clinician. Not
+  encrypted.") has four sides, each with one job ([DECISIONS.md](DECISIONS.md) §D8): the glance, the
+  detail, the person's own words, and notes for the conversation. It ends with a hash of the entries
+  it covers, as text and as a QR code, so a later change to them could be detected; no tool to check
+  it exists yet (#377). It carries no streak, no trend line joining separate check-ins, and no
+  inference about the person. The dialog opens with "A report is a copy. Once handed over, it cannot
+  be taken back." — the report's own fixed copy, not a second wording — then offers a date range (90
+  days by default), check-in notes (off by default), charts (on), and the journal for that range,
+  all of it or none, off by default. With check-in notes off, side 2 says "Check-in notes were
+  switched off for this export." and neither of its tables has a note column; the daily check-ins
+  keep their activity tags under a head of their own. A screen for choosing journal entries one at a
+  time exists (`ui/export/JournalPickerScreen.kt`), but nothing opens it yet. Not built: a preview
+  before exporting: #198.
 - Every export is a plain, unencrypted file, made by the person's own act. Not built: encrypted
   backups and exports: #236.
 

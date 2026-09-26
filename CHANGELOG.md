@@ -202,6 +202,11 @@ All notable changes to this project are documented here. The format is based on
   both jobs.
 
 ### Changed
+- **The PDF report says what it is, and leaves your check-in notes out unless you switch them on.**
+  Settings → *Export a PDF report* (it used to say "for therapist") opens with *A report is a copy.
+  Once handed over, it cannot be taken back.*, and *Include check-in notes* starts off; a report
+  made without notes says so instead of printing a column of dashes. The report no longer claims the
+  app shows streaks. (#158, #304, #336)
 - **Companion — the server logs at `info` as shipped.** The image, the compose file and `.env.example`
   set `DAYMARK_LOG_LEVEL` to `warn`, which hid the three lines that say how the server is set up and
   whether it recovered: the startup settings line, the email-enabled line and "readiness restored",

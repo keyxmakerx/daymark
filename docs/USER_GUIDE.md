@@ -499,11 +499,13 @@ note. Use it for looking at your data; use the JSON backup to restore.
 
 ### Export a PDF report
 
-**Settings → Export PDF for therapist** makes a printable report you can choose to give a
-clinician. Pick a date range (the last 90 days to start with), and whether to include notes, charts
-and your journal pages from that range. Journal pages are left out unless you include them. The
-report ends with a fingerprint of the entries it was made from, which could show if they were
-changed later. It can't show that what you logged was accurate.
+**Settings → Export a PDF report** makes a printable report you can choose to give a clinician. The
+screen starts by saying what that means: *A report is a copy. Once handed over, it cannot be taken
+back.* Pick a date range (the last 90 days to start with), and whether to include your check-in
+notes, charts and your journal pages from that range. Check-in notes and journal pages are left out
+unless you switch them on, and a report made without notes says so. The report ends with a
+fingerprint of the entries it was made from, which could show if they were changed later. It can't
+show that what you logged was accurate.
 
 > **Keep exports safe.** Backups, CSV files and PDF reports are **not encrypted**. Once a file
 > leaves Daymark, the app can't protect it, so keep it somewhere private.
