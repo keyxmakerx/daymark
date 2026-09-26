@@ -118,9 +118,11 @@ charting library, no network.
 
 It has four expandable cards: mood over time with 30-day, 90-day, one-year and all-time ranges;
 activities and mood, labelled as association and not cause, each activity's difference from the
-average drawn as an ink bar either side of a centre line, never in a mood colour (#404); self-check history, one descriptive
-trend per instrument; and a journal reader. Every panel keeps the non-diagnostic framing. A PDF or CSV
-export is not part of it.
+average drawn as an ink bar either side of a centre line, never in a mood colour (#404); self-check
+history, one descriptive trend per instrument drawn in ink, never in a mood colour (#420); and a journal
+reader. Every panel keeps the non-diagnostic framing. Its sentences say "your" only on the person's own
+data; on the clinician's view of a share they speak about the person instead ("relative to their
+overall average", "their own scores") (#421). A PDF or CSV export is not part of it.
 
 Year-in-pixels, brushing, journal search, sleep trends and export are not built: #245.
 

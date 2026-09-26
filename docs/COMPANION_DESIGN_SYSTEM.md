@@ -136,7 +136,8 @@ Enforced tree-wide. `components/invariants.tree.test.ts` group (a) allows seven 
 token — `app.css` and `lib/mood.ts`, which define the ramp, and five surfaces that draw a person's own
 data: `charts/Sparkline.svelte`, `Dashboard.svelte`, `QuestionnaireRunner.svelte`, `ui/BandTag.svelte`
 and `calendar/MoodMark.svelte`. It fails on any other file, and inside those files it fails on a mood
-token used under a state selector (`:hover`, `.active`, `[aria-selected]` and the like).
+token used under a state selector (`:hover`, `.active`, `[aria-selected]` and the like); in
+`Dashboard.svelte` it fails on a mood token anywhere but the mood distribution's marks (#420).
 `ui/invariants.test.ts` group (c) adds that inside `ui/` only `BandTag` names the ramp, that it uses
 all five steps, and that no other primitive names `--mood-4` or `--mood-5` even in a comment.
 
@@ -152,8 +153,9 @@ palette, and every colour out is `#rrggbb` built by arithmetic, so a crafted bac
 only way out is `ownMoodFill`, whose value is set as one custom property, `--mood-fill`, inline on the
 mood mark itself — a leaf, so nothing inherits it — and read only by rules whose subject is
 `.mood-mark`, as its fill or background. The marks that take it are the mood distribution's bars and
-the month calendar's check-in squares (`calendar/MoodMark.svelte`); the association bars, the mood
-line and the self-check trend keep the shipped ramp, because none is one mood beside its word.
+the month calendar's check-in squares (`calendar/MoodMark.svelte`); the mood line keeps the shipped
+ramp, because it is not one mood beside its word; the association bars and the self-check trend are not
+moods at all and are drawn in ink (#404, #420).
 `components/ownMoodColour.tree.test.ts` holds every step.
 
 #### 2.3.2 Invariant 2 — there is deliberately no success colour

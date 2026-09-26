@@ -402,6 +402,18 @@ All notable changes to this project are documented here. The format is based on
   quiet notice that names nobody and counts nothing.
 
 ### Fixed
+- **Companion — opening your key no longer tells you to check your typing when the problem is the
+  key's settings.** If the key on your server asks for settings the console does not accept, it now
+  says: "The key this server holds asks for settings this console does not accept, so it was not
+  opened. Nothing has changed." It no longer asks you to check what you typed and try again. (#418)
+- **Companion — the Self-check history chart is drawn in plain ink.** Its line was drawn in the green
+  used for the best mood, which made self-check results look like a mood or a good sign. It is now
+  ink, on your own view and on what a clinician sees, as the clinician's Record page already draws
+  self-checks. (#420)
+- **Companion — the dashboard no longer says "your" to a clinician about someone else's data.** On a
+  clinician's view of a share, "relative to your overall average" and "your own scores" now read
+  "relative to their overall average" and "their own scores". On your own data the wording is
+  unchanged. (#421)
 - **Companion — the clinician's Record page no longer says a person's own words are never shared.**
   It said a person's journal and check-in notes "stay on their phone and are not in a share at all",
   which is untrue when they tick "Include my own words". It now says the page holds self-check results

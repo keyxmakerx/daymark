@@ -302,6 +302,8 @@ half (§10.4); the owner's panel must not contradict it, nor the honest limits i
 - **A failure says what did not happen**: "Nothing has changed.", "Nothing was sealed or sent."
 - **Never echo a credential back** into a message.
 - **Name what the button does**: *Keep sharing*, *Keep access*, *Not now* — not *Cancel*.
+- **"Your" only to the person whose data it is.** A surface the person and a clinician both see says
+  "their" on the clinician's view.
 
 ### 10.4 The clinician's sign-in: a contract and a digest
 
@@ -358,6 +360,7 @@ screen can."* — and no banner on any console asks a person to verify a digest 
 | Read-back could not be read | Owner, door and Get a code | *"The server accepted your key, but it could not be read back to check just now. …"* The recovery code stays on screen |
 | A missing lock | Owner, door | *"This server holds no recovery code lock for your key, so a recovery code cannot open it. Use your passphrase."*, or the same for a passphrase |
 | Did not open | Owner, door | *"That did not open the key this server holds. Nothing has changed. Check what you typed and try again."* |
+| Settings not accepted | Owner, door | *"The key this server holds asks for settings this console does not accept, so it was not opened. Nothing has changed."* The key's stored settings are outside the range every reader accepts and are refused before anything is derived, so it never says *"Check what you typed"* |
 | Snapshots and no key | `pnpm push`, set-up | *"This server stores snapshots but not what is needed to open them. A new key would not open those snapshots, so none was made, and nothing has been stored."* |
 | Key changed before upload | `pnpm push` | *"The snapshot was not sent. The key this server holds changed while the snapshot was being encrypted, and this passphrase does not open it to the key the snapshot was encrypted under."* |
 | A day with nothing on it | Owner, month calendar | The same plain square with no marks; heard as *"{date}: nothing recorded"*; the panel says *"Nothing recorded."* |
