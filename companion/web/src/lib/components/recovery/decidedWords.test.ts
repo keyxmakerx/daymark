@@ -106,7 +106,7 @@ const CHANGED: [name: string, actual: string, decided: string][] = [
   ['READ_BACK_FAILED', copy.READ_BACK_FAILED,
     'The server accepted your key, but it could not be read back to check just now. Write your recovery code down, then use Read what this server holds to check it.'],
   ['SETUP_FAILED', copy.SETUP_FAILED, 'The key could not be set up. Read what this server holds again to see where things stand.'],
-  ['ONLY_TIME_SHOWN', copy.ONLY_TIME_SHOWN, 'This is the only time it is shown. Write it down before you go on.'],
+  ['ONLY_TIME_SHOWN', copy.ONLY_TIME_SHOWN, 'Once you leave this page, it cannot be shown again. Write it down before you go on.'],
   // owner/unlockCopy.ts
   ['KEY_IS_ON_THE_SERVER', unlockCopy.KEY_IS_ON_THE_SERVER,
     'This console reads your key from your server, where it is kept locked twice: once under your passphrase and once under your recovery code. Either one opens it. The server can open neither lock. The key is opened here, in this tab, and only for this session.'],
@@ -237,6 +237,9 @@ const REPLACED: string[] = [
   'keyparams store failed',
   'the server refused the key parameters and holds no key document',
   'no key parameters on server — nothing has been synced yet',
+  // ONLY_TIME_SHOWN's first wording, which contradicted SHOWING_AGAIN_IS_FINE (the code can be shown
+  // again while the page is open).
+  'This is the only time it is shown. Write it down before you go on.',
 ]
 
 /** Replaced markup, as fragments no decided sentence contains, in folded whitespace. */

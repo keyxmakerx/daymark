@@ -114,7 +114,7 @@ export const SHOWN_ONCE =
  * what to do with it; everything else the screen says about the code comes after the code. Not
  * printed: on paper it would stop being true the moment the page left the printer.
  */
-export const ONLY_TIME_SHOWN = 'This is the only time it is shown. Write it down before you go on.'
+export const ONLY_TIME_SHOWN = 'Once you leave this page, it cannot be shown again. Write it down before you go on.'
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
    3. Getting a code.
