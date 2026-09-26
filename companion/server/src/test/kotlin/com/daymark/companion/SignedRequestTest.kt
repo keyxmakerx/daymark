@@ -1,9 +1,11 @@
 package com.daymark.companion
 
+import com.daymark.companion.auth.BODY_CHUNK_BYTES
 import com.daymark.companion.auth.DeviceSignature
 import com.daymark.companion.auth.PairingCode
 import com.daymark.companion.auth.SIGNED_BODY
 import com.daymark.companion.auth.SignedBody
+import com.daymark.companion.auth.bodyJoined
 import com.daymark.companion.routes.PAIRING_CODE_CREDENTIAL
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
@@ -383,7 +385,40 @@ class SignedRequestTest {
         reads.clear()
         val res = client.send(HttpMethod.Put, target, phone.headers("PUT", target, body, server.seconds), body)
         assertEquals(HttpStatusCode.Created, res.status, res.bodyAsText())
-        assertEquals(listOf(SignedBody(line, kept = true, keptBytes = cap.toInt())), reads.distinct())
+        assertEquals(listOf(SignedBody(line, kept = true, keptBytes = cap.toInt(), keptChunks = cap.toInt() / BODY_CHUNK_BYTES)), reads.distinct())
         assertContentEquals(body, server.signedGet(client, phone, target).bodyAsBytes())
+    }
+
+    @Test
+    fun `a live key's body is kept in the chunks it arrived in, and joined only when a handler reads it`() = testApplication {
+        val cap = 256L * 1024
+        val server = DeviceServer(maxRequestBytes = cap, maxBlobBytes = cap)
+        server.start(this)
+        // What each signed call held as it was answered: the reader's report, and whether its body was one array by then.
+        val held = java.util.Collections.synchronizedList(mutableListOf<Pair<SignedBody, Boolean>>())
+        application {
+            sendPipeline.intercept(ApplicationSendPipeline.Before) { call.attributes.getOrNull(SIGNED_BODY)?.let { held += it to call.bodyJoined } }
+        }
+        val phone = TestPhone()
+        server.pair(client, phone)
+        val stranger = TestPhone() // a key nobody paired
+        val target = "/v1/snapshots/devA/1"
+        val body = ByteArray(cap.toInt() - 5) { (it * 17 + 3).toByte() }
+        assertTrue(body.size % BODY_CHUNK_BYTES != 0, "the last chunk is part-filled")
+        val kept = SignedBody(DeviceSignature.bodyHash(body), kept = true, keptBytes = body.size, keptChunks = (body.size + BODY_CHUNK_BYTES - 1) / BODY_CHUNK_BYTES)
+
+        // Refused once its body is in: signed by a stranger, naming the live key. The body was kept, in
+        // chunks, and no handler asked for it, so nothing joined it after its last byte.
+        held.clear()
+        val forged = stranger.headers("PUT", target, body, server.seconds) + (DeviceSignature.KEY_HEADER to phone.keyId)
+        assertEquals(unauthorized, client.send(HttpMethod.Put, target, forged, body).answer())
+        assertEquals(listOf(kept to false), held.distinct(), "kept in the chunks it arrived in, never joined")
+
+        // Control: the phone's own request is taken. Its handler read the body, which was joined then.
+        held.clear()
+        val res = client.send(HttpMethod.Put, target, phone.headers("PUT", target, body, server.seconds), body)
+        assertEquals(HttpStatusCode.Created, res.status, res.bodyAsText())
+        assertEquals(listOf(kept to true), held.distinct(), "joined when its handler read it")
+        assertContentEquals(body, server.signedGet(client, phone, target).bodyAsBytes(), "the chunks joined are the body as sent")
     }
 }

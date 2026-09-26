@@ -50,9 +50,11 @@ data class OwnerPrincipal(val ownerId: String, val kind: CredentialKind, val cre
  *   forged request costs the same work whatever key it names.
  * - A BODY IS KEPT ONLY FOR A KEY LIVE WHEN THE REQUEST ARRIVES. Every body is read to its end and
  *   hashed as it streams in; the key is looked up on arrival only to decide whether its bytes are kept
- *   for the handler, and nothing anyone can see depends on that. The body of a request naming any other
- *   key is dropped as it is hashed, so a request with no live key behind it holds one chunk of memory
- *   however large its body. A key that becomes live while its body is on the way is refused.
+ *   for the handler, and nothing anyone can see depends on that. A kept body stays in the chunks it
+ *   arrived in until a handler reads it, so the work done after a body's last byte is the same whatever
+ *   key the request names. The body of a request naming any other key is dropped as it is hashed, so a
+ *   request with no live key behind it holds one chunk of memory however large its body. A key that
+ *   becomes live while its body is on the way is refused.
  * - A NONCE IS TAKEN ONLY BY A REQUEST ITS KEY SIGNED, after the signature is checked: a forged request
  *   leaves nothing behind. The time is judged after the body with the same reading of the clock that
  *   decides which nonces have lapsed, so a captured request sent again meets its nonce while it is
@@ -289,24 +291,70 @@ class OwnerAuth(
 }
 
 private val REQUEST_BODY = AttributeKey<ByteArray>("daymark.requestBody")
+private val REQUEST_BODY_CHUNKS = AttributeKey<BodyChunks>("daymark.requestBodyChunks")
 private val REQUEST_BODY_TOO_LARGE = AttributeKey<Unit>("daymark.requestBodyTooLarge")
 private val REQUEST_BODY_DROPPED = AttributeKey<Unit>("daymark.requestBodyDropped")
 
+/** The size of each chunk a signed request's kept body is held in, and of each read of a body. */
+internal const val BODY_CHUNK_BYTES = 8 * 1024
+
+/**
+ * A signed request's body as its check keeps it: chunks of [BODY_CHUNK_BYTES], each made when the one
+ * before it is full, so keeping a body never grows or copies what is already kept, and nothing is done
+ * to it once its last byte is in. [join] makes the one array a handler reads, when it reads it (#186).
+ */
+private class BodyChunks {
+    private val chunks = ArrayList<ByteArray>()
+    private var filled = BODY_CHUNK_BYTES
+    var size = 0
+        private set
+    val count: Int get() = chunks.size
+
+    fun write(bytes: ByteArray, length: Int) {
+        var at = 0
+        while (at < length) {
+            if (filled == BODY_CHUNK_BYTES) {
+                chunks += ByteArray(BODY_CHUNK_BYTES)
+                filled = 0
+            }
+            val n = minOf(length - at, BODY_CHUNK_BYTES - filled)
+            System.arraycopy(bytes, at, chunks.last(), filled, n)
+            filled += n
+            at += n
+        }
+        size += length
+    }
+
+    fun join(): ByteArray {
+        val joined = ByteArray(size)
+        chunks.forEachIndexed { i, chunk ->
+            val at = i * BODY_CHUNK_BYTES
+            System.arraycopy(chunk, 0, joined, at, minOf(BODY_CHUNK_BYTES, size - at))
+        }
+        return joined
+    }
+}
+
 /**
  * What reading a signed request's body left on the call: the body's line in the signed message
- * (base64url of BLAKE2b-256 of its bytes), whether its bytes were kept for the handler, and how many
- * bytes are held.
+ * (base64url of BLAKE2b-256 of its bytes), whether its bytes were kept for the handler, how many bytes
+ * are held, and in how many chunks of [BODY_CHUNK_BYTES].
  */
-internal data class SignedBody(val hash: String, val kept: Boolean, val keptBytes: Int)
+internal data class SignedBody(val hash: String, val kept: Boolean, val keptBytes: Int, val keptChunks: Int = 0)
 
 /** The [SignedBody] a signed request's check read, on the call it read it for. */
 internal val SIGNED_BODY = AttributeKey<SignedBody>("daymark.signedBody")
 
+/** Whether this call holds its body as the one array a handler reads: once a handler has read it, and not before. */
+internal val ApplicationCall.bodyJoined: Boolean get() = attributes.contains(REQUEST_BODY)
+
 /**
  * A signed request's body, read to its end and hashed as it streams in, whatever key the request
- * names; null when it runs over [max]. Its bytes are kept for the handler, as [requestBody] keeps them,
- * only when [keep]. Otherwise each chunk is dropped once it is hashed, so the body costs one chunk of
- * memory however large it is, and no later reader on the call can have it.
+ * names; null when it runs over [max]. Its bytes are kept for the handler only when [keep], in the
+ * chunks they arrived in, and joined only when [requestBody] reads them: a request refused after its
+ * body never reaches a handler, so the work after its last byte is the same whatever key it names.
+ * Otherwise each chunk is dropped once it is hashed, so the body costs one chunk of memory however
+ * large it is, and no later reader on the call can have it.
  */
 internal suspend fun ApplicationCall.readSignedBody(max: Long, keep: Boolean): SignedBody? {
     if (attributes.contains(REQUEST_BODY_TOO_LARGE)) return null
@@ -316,9 +364,9 @@ internal suspend fun ApplicationCall.readSignedBody(max: Long, keep: Boolean): S
         return SignedBody(DeviceSignature.bodyHash(read), kept = true, keptBytes = read.size).also { attributes.put(SIGNED_BODY, it) }
     }
     val digest = Blake2bDigest(256)
-    val kept = if (keep) java.io.ByteArrayOutputStream() else null
+    val kept = if (keep) BodyChunks() else null
     val channel = receiveChannel()
-    val buf = ByteArray(8 * 1024)
+    val buf = ByteArray(BODY_CHUNK_BYTES)
     var total = 0L
     while (true) {
         val n = channel.readAvailable(buf, 0, buf.size)
@@ -329,12 +377,12 @@ internal suspend fun ApplicationCall.readSignedBody(max: Long, keep: Boolean): S
             return null
         }
         digest.update(buf, 0, n)
-        kept?.write(buf, 0, n)
+        kept?.write(buf, n)
     }
     val hash = ByteArray(32).also { digest.doFinal(it, 0) }
-    val bytes = kept?.toByteArray()
-    if (bytes != null) attributes.put(REQUEST_BODY, bytes) else attributes.put(REQUEST_BODY_DROPPED, Unit)
-    return SignedBody(DeviceSignature.b64url(hash), kept = bytes != null, keptBytes = bytes?.size ?: 0).also { attributes.put(SIGNED_BODY, it) }
+    if (kept != null) attributes.put(REQUEST_BODY_CHUNKS, kept) else attributes.put(REQUEST_BODY_DROPPED, Unit)
+    return SignedBody(DeviceSignature.b64url(hash), kept = kept != null, keptBytes = kept?.size ?: 0, keptChunks = kept?.count ?: 0)
+        .also { attributes.put(SIGNED_BODY, it) }
 }
 
 /**
@@ -345,12 +393,17 @@ internal suspend fun ApplicationCall.readSignedBody(max: Long, keep: Boolean): S
  * Streamed, so a body over the cap is refused as soon as it crosses it. What was read of one that
  * crossed is not kept, and every later read of it answers null. Read by suspending, so a body held
  * back on the path holds no thread while it waits: every signed request's body is read before its
- * answer.
+ * answer. A signed request's body, kept in the chunks it arrived in, is joined here and nowhere else.
  */
 suspend fun ApplicationCall.requestBody(max: Long): ByteArray? {
     if (attributes.contains(REQUEST_BODY_TOO_LARGE)) return null
     // A signed request whose body was dropped as it was hashed is refused before any handler runs.
     check(!attributes.contains(REQUEST_BODY_DROPPED)) { "a signed request's body was dropped, and its handler must not run" }
+    attributes.getOrNull(REQUEST_BODY_CHUNKS)?.let { kept ->
+        if (kept.size > max) return null
+        attributes.remove(REQUEST_BODY_CHUNKS)
+        attributes.put(REQUEST_BODY, kept.join())
+    }
     attributes.getOrNull(REQUEST_BODY)?.let { return if (it.size > max) null else it }
     val channel = receiveChannel()
     val buf = ByteArray(8 * 1024)
