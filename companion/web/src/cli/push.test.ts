@@ -19,7 +19,7 @@
  * "NOTHING WAS SENT": a listener on 127.0.0.1 counts every request the writer makes. A snapshot
  * that fits only unpadded is refused with the fixed words, and the listener counts none. ITS
  * POSITIVE CONTROL is the same run at the default limit, whose requests the listener must see: the
- * version list, then the key parameters. The key parameters are asked for only after libsodium has
+ * version list, then the key document (#258). The key document is asked for only after libsodium has
  * initialised (SyncClient.ensureKeys), so that second request is also the proof that the crypto
  * library runs under the command, rather than merely resolving.
  */
@@ -187,8 +187,8 @@ describe('pnpm push refuses a snapshot too large once padded, and sends nothing 
     auth.length = 0
     const run = await push(args([]), env)
     expect(run.status).toBe(1)
-    expect(run.stderr).toContain('push failed: keyparams fetch failed')
-    expect(seen).toEqual(['GET /v1/snapshots/cli-test', 'GET /v1/keyparams'])
+    expect(run.stderr).toContain('push failed: key document fetch failed')
+    expect(seen).toEqual(['GET /v1/snapshots/cli-test', 'GET /v1/keydoc'])
     // The token that reached the server is the one from the environment (#384).
     expect(auth).toEqual([`Bearer ${TOKEN}`, `Bearer ${TOKEN}`])
   }, 120_000)

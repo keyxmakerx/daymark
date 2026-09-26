@@ -43,8 +43,10 @@ function fakeServer() {
       bodyLength: binary ? binary.length : typeof body === 'string' ? body.length : null,
       head: binary ? Array.from(binary.subarray(0, 5)) : null,
     })
-    if (path === '/v1/keyparams' && method === 'GET') {
-      return state.keyparams === null ? new Response(null, { status: 404 }) : new Response(state.keyparams, { status: 200 })
+    if (path === '/v1/keydoc' && method === 'GET') {
+      return state.keyparams === null
+        ? new Response(null, { status: 404 })
+        : new Response(state.keyparams, { status: 200, headers: { 'X-Key-Document': 'keyparams', ETag: '"kp"' } })
     }
     if (path === '/v1/keyparams' && method === 'PUT') {
       state.keyparams = String(body)
@@ -94,7 +96,7 @@ describe('the writer refuses such a snapshot plainly, and never sends it unpadde
     server.state.snapshotStatus = 201
     const meta = await client.pushSnapshot('devA', 0, new Uint8Array(25_690_108), 'passphrase')
     expect(server.calls.map((c) => `${c.method} ${c.path}`)).toEqual([
-      'GET /v1/keyparams',
+      'GET /v1/keydoc',
       'PUT /v1/keyparams',
       'PUT /v1/snapshots/devA/0',
     ])
@@ -108,7 +110,7 @@ describe('the writer refuses such a snapshot plainly, and never sends it unpadde
     server.calls.length = 0
     const refused = await client.pushSnapshot('devA', 1, new Uint8Array(25_690_109), 'passphrase').catch((e: unknown) => e)
     expect(refused).toBeInstanceOf(SnapshotTooLargeError)
-    // Nothing was sent: not the snapshot, not even a request for the key parameters.
+    // Nothing was sent: not the snapshot, not even a request for the key document.
     expect(server.calls).toEqual([])
     const e = refused as SnapshotTooLargeError
     expect(e.message).toBe(
