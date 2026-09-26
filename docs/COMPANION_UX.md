@@ -172,6 +172,36 @@ is not built: #407.
 6. **Print this month** prints the month alone, ink on white whatever the screen's theme, every square
    beside its word; the day panel, the controls and the rest of the page stay off the paper.
 
+### 7.12 Pairing a phone (owner)
+
+1. A section headed **Phones** sits at the foot of the "Connect to your sync server" card, drawn once the
+   card has proved a server address and access token in this visit: by a fetch that opened a snapshot,
+   or by the server answering the phone list with them, since a server nothing has been synced to has no
+   snapshot to prove a token with (#431). After a fetch that opened a snapshot, the section follows the
+   dashboard. It is on every kind of server, because a solo server has no owner console; the console's
+   "Server connection" panel says *"Phones pair from the Connect to your sync server card on the owner's
+   page."* The logic is `lib/phones/ceremony.ts`, so each state and its order is a node test.
+2. **Pair a phone** makes a code, good once and for two minutes, and opens it in place: a QR code of
+   `daymark-pair:v1?server=…&code=…` (SYNC_PROTOCOL.md §2.2), drawn day ink on day paper in every theme
+   and hidden from screen readers, whose text alternative is the address and the code printed beside it;
+   the server address; the code in two groups of five; and *"1:52 left · works once"*, a clock that
+   changes once a second in a fixed-width slot and announces once, at thirty seconds. Nothing on it
+   moves. The QR encoder is `lib/phones/qr.ts`, checked module for module against a reference encoder
+   used only by its tests.
+3. When a phone redeems the code, the code goes, and the six words of the phone's key appear, numbered,
+   with *"Confirm within 1:28. If you do not, the phone is not paired and nothing is stored."*
+   **Pair this phone** confirms exactly the key whose words are shown, by the id worked out from that
+   key; **The words don't match** asks the server nothing and says what did not happen.
+4. The list shows each phone as its six words and its dates, connected first. **Disconnect** confirms
+   in an inline clay panel: *"It is refused from its next sync. Nothing on the phone is erased, and what
+   it already sent stays on this server. To sync again it must pair again."* with **Keep it paired** and
+   **Disconnect this phone**. The person's word is *disconnect* everywhere; *revoke* stays with shares
+   and grants.
+5. Directly above the access token's re-issue, always: *"Re-issuing your access token disconnects every
+   paired phone. Each one must pair again before it can sync."*, or, with a count the proved connection
+   can read, *"…disconnects all 3 paired phones."* and *"…disconnects your 1 paired phone."*
+6. Whether a phone can carry a name kept only in the browser is #424.
+
 ## 9. Consent and sharing (no dark patterns)
 
 The owner decides; the interface makes the safe choice the easy one.
@@ -371,6 +401,14 @@ screen can."* — and no banner on any console asks a person to verify a digest 
 | A save with no answer | Owner, assignment inbox | *"This may not have been saved. Refresh shows whether it was."* Refresh reads the lane and shows it either way |
 | Saved decisions not read | Owner, assignment inbox | *"The decisions saved on this server could not be read, so none are shown. Refresh to try again."*; when only some cannot be opened, *"Some decisions saved on this server could not be opened, so they are not shown."* |
 | A lane named as a snapshot | `pnpm push`, the sync card | *"A lineage whose name begins "lane_" holds what the web console adds, never a snapshot. Nothing was read or sent."* |
+| Not connected | Owner, Phones section | *"Connect to this server above to pair a phone or see the phones already paired."* No button |
+| An http address | Owner, Phones section | *"This server's address begins with http://, so it cannot make a pairing code. Phones pair only over https. Everything else here works as it does."* From the server's refusal to make a code; no button, and the list stays |
+| No phone paired | Owner, Phones section | *"No phone is paired with this server."* in the soft ink, only once the server has read out an empty list; a list not read shows nothing |
+| The words differ | Owner, Phones section | *"This phone was not paired. Nothing was stored. Different words mean the key that reached this server is not the one on the phone. Make a new code when you are ready."* No request is made; the redeemed key lapses unconfirmed |
+| A code lapsed | Owner, Phones section | *"This code lapsed after two minutes. No phone used it."* Only when the server says so |
+| Not confirmed in time | Owner, Phones section | *"The time to confirm ran out. The phone was not paired and nothing was stored. The phone will need a new code."* |
+| Unreachable | Owner, Phones section | *"This server could not be reached. Nothing changed."* with **Try again** and **Back to phones**; it replaces a code on screen, and Try again brings the code back if it still stands |
+| Refused | Owner, Phones section | *"This server refused the request. Nothing changed. Connect again above, then try once more."* Never the server's text |
 
 ## 12. Accessibility, language, motion
 

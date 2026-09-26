@@ -59,6 +59,11 @@ All notable changes to this project are documented here. The format is based on
   or as you type it, with or without dashes, catches a mistyped symbol before sending anything, and
   will not pair with an address that is not https. Nothing on the phone scans a code or talks to the
   server yet; that comes next. (#432)
+- **Companion — pair your phone with your own server from its web page.** Under *Connect to your sync
+  server*, a new **Phones** section makes a two-minute code and a QR code for the phone. Both screens
+  then show the same six words; if they match, one click pairs the phone. Every paired phone is listed
+  by its six words and the date it was paired, and **Disconnect** stops one from syncing without
+  erasing anything on it. Pairing needs the server to have an https address. (#431)
 - **Companion — your accept or decline of a clinician's assignment is kept.** In the owner console's
   Inbox, your answer is now saved, encrypted, on your own Companion server, and it is still there
   after you press Refresh. It is kept in a separate place that only adds and never changes or replaces
