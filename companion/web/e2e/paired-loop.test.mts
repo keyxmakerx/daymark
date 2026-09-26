@@ -403,11 +403,12 @@ it('the paired loop: pair, grant, seal a share, read it, and send an assignment 
 
   /*
    * The owner's bearer requests share one token bucket per address: DAYMARK_RATE_LIMIT_RPS, five a
-   * second by default, full again after a second. A person does not act faster than that and this
-   * test would: the seal, clicked straight after the grant and the Share tab's own reads, found the
-   * bucket empty and came back 429 ("blob store failed"). So before each owner action that goes to
-   * the server the test waits as long as the bucket takes to refill, and the server keeps its
-   * default. A 429 after that is one person-paced action spending more than the allowance alone.
+   * second by default, full again after a second. This test acts faster than that: the seal, clicked
+   * straight after the grant and the Share tab's own reads, found the bucket empty. The relationship
+   * routes answer a rate-limited owner 401, as if the token were wrong, and the console says "blob
+   * store failed" (#382). So before each owner action that goes to the server the test waits as long
+   * as the bucket takes to refill, and the server keeps its default. A refusal after that is one
+   * paced action spending more than the allowance alone. #382 is where this pacing can go.
    */
   const asAPerson = () => owner.waitForTimeout(1_100)
   const routeCard = (label: string) => owner.locator('button.route', { has: owner.locator('.route-label', { hasText: label }) })
