@@ -4,6 +4,7 @@
   import { MOODS, moodWord, ownMoodColours, ownMoodFill } from '../mood'
   import Sparkline from '../charts/Sparkline.svelte'
   import JournalReader from './JournalReader.svelte'
+  import MonthCalendar from './calendar/MonthCalendar.svelte'
 
   /*
    * showAverage: only the clinician's view of a share passes it (#361). A person's own views
@@ -15,7 +16,9 @@
    * owner console — or a share a clinician is reading. A person's own moods are drawn in their own
    * names and colours (#280). A share carries neither, and the clinician's view says
    * `ownData={false}`, so it draws the shipped scale whatever a bundle might one day hold.
-   * ownMoodColour.tree.test.ts holds the clinician's view, and only it, to saying so.
+   * ownMoodColour.tree.test.ts holds the clinician's view, and only it, to saying so. The month
+   * calendar is the person's own too (#335), and is drawn only on their own data: the clinician
+   * has a calendar of their own, which draws no mood's colour.
    */
   let {
     data,
@@ -120,6 +123,18 @@
       </svg>
     </div>
   </details>
+
+  <!-- The person's own month (#335): read-only, in their own words and colours, and printable. -->
+  {#if ownData}
+    <details class="card" open>
+      <summary>
+        <span class="h">Calendar</span>
+      </summary>
+      <div class="body">
+        <MonthCalendar {data} />
+      </div>
+    </details>
+  {/if}
 
   <!-- Activities & mood -->
   <details class="card">

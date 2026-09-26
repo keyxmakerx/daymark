@@ -63,6 +63,7 @@ const read = (path: string) => {
 }
 
 const DASHBOARD = 'src/lib/components/Dashboard.svelte'
+const MOOD_MARK = 'src/lib/components/calendar/MoodMark.svelte'
 const OWNER_CONSOLE = 'src/lib/components/owner/OwnerConsole.svelte'
 const CLINICIAN_VIEW = 'src/lib/components/therapist/SharedDataView.svelte'
 
@@ -321,6 +322,11 @@ describe('the suite has a subject', () => {
     const css = stylesheetOf(DASHBOARD, read(DASHBOARD))
     expect(css).toMatch(/\.dist \.mood-mark\[data-level='1'\] \{ --mood-fill: var\(--mood-1\); \}/)
     expect(css).toMatch(/\.dist \.mood-mark \{ fill: var\(--mood-fill\); \}/)
+    // The month's mood square (#335): one directive, on a span, beside its word.
+    const squares = placedNodes(read(MOOD_MARK)).filter(({ node }) => isElement(node) && moodFillDirectives(node).length > 0)
+    expect(squares.map(({ node }) => node.name)).toEqual(['span'])
+    expect(squares[0]!.siblings.some((s) => isElement(s) && hasClass(s, 'mood-word'))).toBe(true)
+    expect(stylesheetOf(MOOD_MARK, read(MOOD_MARK))).toMatch(/\.mood-mark \{[^}]*background: var\(--mood-fill\);/)
   })
 
   it('the comment blanker keeps offsets and drops only commentary', () => {
@@ -350,6 +356,8 @@ describe('a person’s own colours reach a mood mark’s fill and nothing else',
       [DASHBOARD, (s) => s.replace('.dist .mood-mark { fill: var(--mood-fill); }', '.dist .mood-mark { fill: var(--mood-fill); stroke: var(--mood-fill); }'), /spends --mood-fill on stroke/],
       // A stylesheet giving the property a colour of its own.
       [DASHBOARD, (s) => s.replace("--mood-fill: var(--mood-1);", '--mood-fill: var(--indigo);'), /not a step of the ramp/],
+      // The month's mood word written in the mood's colour.
+      [MOOD_MARK, (s) => s.replace('color: var(--ink-text);', 'color: var(--mood-fill);'), /subject is not a mood mark|spends --mood-fill on color/],
     ]
     for (const [path, replace, expected] of cases) {
       const found = findingsIn(plant(path, replace), path).map((f) => f.what)
@@ -367,6 +375,8 @@ describe('a person’s own colours reach a mood mark’s fill and nothing else',
       [DASHBOARD, (s) => s.replace('<span class="h">Journal</span>', '<span class="h" style="--mood-fill: {ownMoodFill(1, palette)}">Journal</span>'), /style attribute|outside a style:--mood-fill/],
       // A mood mark with its word taken away.
       [DASHBOARD, (s) => s.replace('class="lbl mood-word"', 'class="lbl"'), /no \.mood-word beside it/],
+      // The month's square moved onto its wrapper, where the word would inherit it.
+      [MOOD_MARK, (s) => s.replace('<span class="mood">', '<span class="mood" style:--mood-fill={ownMoodFill(level, palette)}>'), /has children|not carry the plain class/],
       // A call in the script, where it could go anywhere.
       [DASHBOARD, (s) => s.replace('const s = $derived(summarize(data))', 'const first = ownMoodFill(1, palette)\n  const s = $derived(summarize(data))'), /outside a style:--mood-fill directive/],
     ]

@@ -187,6 +187,8 @@ const MOOD_DATA_FILES: Record<string, string> = {
     'the result edge is the band this person’s own answers scored into, beside the band label in words',
   'src/lib/components/ui/BandTag.svelte':
     'the band tag’s bar: the score band, on the ramp, with the band named in text next to it',
+  'src/lib/components/calendar/MoodMark.svelte':
+    'one check-in’s mood on the person’s own month: its square, in their colour for it or the ramp’s, with the mood’s word beside it',
 }
 
 /**
@@ -199,6 +201,7 @@ const POLICING_FILES = [
   'src/lib/components/trustbar.test.ts',
   'src/lib/components/invariants.tree.test.ts',
   'src/lib/components/ownMoodColour.tree.test.ts',
+  'src/lib/components/calendar/monthCalendar.test.ts',
 ]
 
 const SELF = 'src/lib/components/invariants.tree.test.ts'

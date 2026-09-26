@@ -3,8 +3,9 @@
    * CALENDAR — month grid, agenda rail, twelve-week ribbon.
    *
    * This component is a projector. Every date calculation, every bucketing decision and every
-   * accessible-name string lives in lib/therapist/calendar.ts, which imports neither Svelte nor
-   * the DOM and is covered by calendar.test.ts. Nothing here decides anything; it draws.
+   * accessible-name string lives in lib/therapist/calendar.ts and the lib/calendar/core.ts it
+   * shares with the person's own month, which import neither Svelte nor the DOM and are covered by
+   * calendar.test.ts. Nothing here decides anything; it draws.
    *
    * ─────────────────────────────────────────────────────────────────────────
    * WHY `now` IS A PROP AND NOT A CLOCK READ
@@ -78,6 +79,7 @@
     type WeekStart,
   } from '../../therapist/calendar'
   import { Card, Chip, EmptyState, PageHeader, ProvenanceBadge } from '../ui'
+  import CalendarMark from '../calendar/CalendarMark.svelte'
   import NonDiagnosticBanner from './NonDiagnosticBanner.svelte'
 
   let {
@@ -176,7 +178,7 @@
                       <span class="marks" aria-hidden="true">
                         {#if bucket}
                           {#each bucket.kinds as kind (kind)}
-                            <span class="mark" data-shape={KIND_SHAPE[kind]}></span>
+                            <CalendarMark shape={KIND_SHAPE[kind]} />
                           {/each}
                         {/if}
                       </span>
@@ -191,7 +193,7 @@
         <ul class="legend">
           {#each EVENT_KINDS as kind (kind)}
             <li>
-              <span class="mark" data-shape={KIND_SHAPE[kind]} aria-hidden="true"></span>
+              <CalendarMark shape={KIND_SHAPE[kind]} />
               <span class="legend-kind">{KIND_LABEL[kind]}</span>
               <span class="legend-shape">{SHAPE_LABEL[KIND_SHAPE[kind]]}</span>
             </li>
@@ -224,7 +226,7 @@
               {@const measure = event.measure}
               <li class="row">
                 <div class="row-head">
-                  <span class="mark" data-shape={KIND_SHAPE[event.kind]} aria-hidden="true"></span>
+                  <CalendarMark shape={KIND_SHAPE[event.kind]} />
                   <span class="u-label kind">{KIND_LABEL[event.kind]}</span>
                   <span class="u-mono when">{formatClock(event.at)}</span>
                 </div>
@@ -261,7 +263,7 @@
         <li class="week" class:blank={week.empty}>
           <span class="week-marks" aria-hidden="true">
             {#each week.kinds as kind (kind)}
-              <span class="mark" data-shape={KIND_SHAPE[kind]}></span>
+              <CalendarMark shape={KIND_SHAPE[kind]} />
             {/each}
           </span>
           <span class="week-label u-mono" aria-hidden="true">{formatDayShort(week.start)}</span>
@@ -305,57 +307,10 @@
     }
   }
 
-  /* ---- the marks --------------------------------------------------------
-     Four geometries, one ink. `currentColor` is deliberate: a mark takes the colour of whatever
-     it sits in, so out-of-month cells fade with their cell and nothing has to be re-themed. No
-     mark carries a hue of its own, which is what makes a greyscale screenshot of this screen
-     fully readable. */
-  .mark {
-    display: inline-block;
-    flex: none;
-    color: inherit;
-  }
-
-  .mark[data-shape='square'] {
-    width: 7px;
-    height: 7px;
-    background: currentColor;
-  }
-
-  .mark[data-shape='ring'] {
-    width: 8px;
-    height: 8px;
-    border: 1.5px solid currentColor;
-    border-radius: 50%;
-    background: transparent;
-  }
-
-  .mark[data-shape='bar'] {
-    width: 11px;
-    height: 3px;
-    background: currentColor;
-    border-radius: 1px;
-  }
-
-  /* The slash is a rotated stroke inside a box the same size as the ring, so all four marks sit
-     on one baseline grid however they are combined. */
-  .mark[data-shape='slash'] {
-    position: relative;
-    width: 8px;
-    height: 8px;
-  }
-
-  .mark[data-shape='slash']::before {
-    content: '';
-    position: absolute;
-    left: 50%;
-    top: -1px;
-    width: 2px;
-    height: 10px;
-    margin-left: -1px;
-    background: currentColor;
-    transform: rotate(45deg);
-  }
+  /* The marks — four geometries, one ink — are components/calendar/CalendarMark.svelte, shared with
+     the person's own month. Each takes the colour of whatever it sits in, so out-of-month cells
+     fade with their cell, and no mark carries a hue of its own, which is what makes a greyscale
+     screenshot of this screen fully readable. */
 
   /* ---- month grid -------------------------------------------------------- */
 
