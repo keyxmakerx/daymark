@@ -17,8 +17,17 @@ import java.util.Base64
  *   passphrase --Argon2id(salt, mem>=256MiB, ops>=3)--> master(32)
  *   master --crypto_kdf(ctx="dmsync01")--+- id 1 -> SYNC_KEY        (XChaCha20-Poly1305)
  *                                         +- id 2 -> MANIFEST_SEED   (Ed25519 signing seed)
- *   snapshot blob = MAGIC("DMS1") | FMT(1) | nonce(24) | XChaCha20Poly1305(plaintext, AAD, nonce, SYNC_KEY)
- *   AAD = utf8("daymark.snapshot.v1|" + lineage + "|" + version)
+ *   snapshot blob = MAGIC("DMS1") | FMT | nonce(24) | XChaCha20Poly1305(body, AAD, nonce, SYNC_KEY)
+ *     FMT 0x02, the only format written:  body = pad(plaintext)   AAD = utf8("daymark.snapshot.v2|" + lineage + "|" + version)
+ *     FMT 0x01, still read, never written: body = plaintext        AAD = utf8("daymark.snapshot.v1|" + lineage + "|" + version)
+ *
+ * Padded snapshots (#315, #316): a snapshot is padded by [Padding] before it is encrypted, so the
+ * stored size says which size bucket it falls in and not how much was written between two syncs.
+ * The server still sees when each version arrives. The format byte sits outside the ciphertext,
+ * where the server can change it, so each format also names itself in the associated data: a
+ * relabelled envelope fails to open instead of opening in the wrong form. Unpadding runs only
+ * after the AEAD has authenticated the body, and it is strict. Format 1 is opened and never
+ * written: every snapshot stored before #315 is in it.
  *
  * [sodium] is typed as the shared abstract `com.goterl.lazysodium.LazySodium` base class,
  * which both `lazysodium-java` (LazySodiumJava, used by this module's own unit tests — real
@@ -75,51 +84,77 @@ class SyncCrypto(private val sodium: LazySodium) {
         return subkey
     }
 
-    /** plaintext (e.g. a BackupData JSON, UTF-8) -> opaque envelope bytes for the server. */
-    fun encryptSnapshot(plaintext: ByteArray, syncKey: ByteArray, lineage: String, version: Long): ByteArray {
-        val nonce = sodium.randomBytesBuf(AEAD.XCHACHA20POLY1305_IETF_NPUBBYTES)
-        val aad = aad(lineage, version)
-        val cipher = ByteArray(plaintext.size + AEAD.XCHACHA20POLY1305_IETF_ABYTES)
+    /**
+     * plaintext (e.g. a BackupData JSON, UTF-8) -> opaque envelope bytes for the server, padded
+     * (format 2), `snapshotBlobLength(plaintext.size)` bytes long.
+     */
+    fun encryptSnapshot(plaintext: ByteArray, syncKey: ByteArray, lineage: String, version: Long): ByteArray =
+        sealSnapshot(plaintext, syncKey, lineage, version, sodium.randomBytesBuf(NONCE_BYTES))
+
+    /**
+     * [encryptSnapshot] under a nonce the caller supplies, so the writer itself can be held to the
+     * web's conformance vector. Not public: a nonce used twice under one key breaks
+     * XChaCha20-Poly1305, and production draws a fresh one for every snapshot.
+     */
+    internal fun sealSnapshot(plaintext: ByteArray, syncKey: ByteArray, lineage: String, version: Long, nonce: ByteArray): ByteArray {
+        if (nonce.size != NONCE_BYTES) throw SyncCryptoException("nonce must be $NONCE_BYTES bytes")
+        val body = try {
+            Padding.pad(plaintext)
+        } catch (_: Padding.PaddingException) {
+            throw SyncCryptoException("snapshot too large to pad")
+        }
+        val aad = aad(FMT_PADDED, lineage, version)
+        val cipher = ByteArray(body.size + TAG_BYTES)
         val cipherLen = LongArray(1)
         val ok = sodium.cryptoAeadXChaCha20Poly1305IetfEncrypt(
-            cipher, cipherLen, plaintext, plaintext.size.toLong(),
+            cipher, cipherLen, body, body.size.toLong(),
             aad, aad.size.toLong(), null, nonce, syncKey,
         )
         if (!ok) throw SyncCryptoException("AEAD encryption failed")
 
-        val out = ByteArray(MAGIC.size + 1 + nonce.size + cipherLen[0].toInt())
+        val out = ByteArray(HEADER_BYTES + cipherLen[0].toInt())
         var offset = 0
         MAGIC.copyInto(out, offset); offset += MAGIC.size
-        out[offset] = FMT; offset += 1
+        out[offset] = FMT_PADDED; offset += 1
         nonce.copyInto(out, offset); offset += nonce.size
         cipher.copyInto(out, offset, 0, cipherLen[0].toInt())
         return out
     }
 
-    /** Opaque envelope bytes -> plaintext. Throws if tampered, wrong key, or wrong lineage/version. */
+    /**
+     * Opaque envelope bytes -> plaintext, from either format. Throws if tampered, wrong key, wrong
+     * lineage/version, or the format byte was changed (the associated data names the format).
+     */
     fun decryptSnapshot(envelope: ByteArray, syncKey: ByteArray, lineage: String, version: Long): ByteArray {
-        val nb = AEAD.XCHACHA20POLY1305_IETF_NPUBBYTES
-        val headerLen = MAGIC.size + 1 + nb
-        if (envelope.size < headerLen) throw SyncCryptoException("envelope too short")
+        if (envelope.size < HEADER_BYTES) throw SyncCryptoException("envelope too short")
         for (i in MAGIC.indices) {
             if (envelope[i] != MAGIC[i]) throw SyncCryptoException("bad magic — not a Daymark snapshot envelope")
         }
-        if (envelope[MAGIC.size] != FMT) {
-            throw SyncCryptoException("unsupported envelope format ${envelope[MAGIC.size]}")
+        val format = envelope[MAGIC.size]
+        if (format != FMT_PADDED && format != FMT_UNPADDED) {
+            throw SyncCryptoException("unsupported envelope format ${format.toInt() and 0xff}")
         }
-        val nonce = envelope.copyOfRange(MAGIC.size + 1, headerLen)
-        val cipher = envelope.copyOfRange(headerLen, envelope.size)
-        if (cipher.size < AEAD.XCHACHA20POLY1305_IETF_ABYTES) throw SyncCryptoException("envelope too short")
+        val nonce = envelope.copyOfRange(MAGIC.size + 1, HEADER_BYTES)
+        val cipher = envelope.copyOfRange(HEADER_BYTES, envelope.size)
+        if (cipher.size < TAG_BYTES) throw SyncCryptoException("envelope too short")
 
-        val aad = aad(lineage, version)
-        val plaintext = ByteArray(cipher.size - AEAD.XCHACHA20POLY1305_IETF_ABYTES)
-        val plaintextLen = LongArray(1)
+        val aad = aad(format, lineage, version)
+        val opened = ByteArray(cipher.size - TAG_BYTES)
+        val openedLen = LongArray(1)
         val ok = sodium.cryptoAeadXChaCha20Poly1305IetfDecrypt(
-            plaintext, plaintextLen, null, cipher, cipher.size.toLong(),
+            opened, openedLen, null, cipher, cipher.size.toLong(),
             aad, aad.size.toLong(), nonce, syncKey,
         )
         if (!ok) throw SyncCryptoException("decryption failed — tampered, wrong key, or wrong lineage/version")
-        return if (plaintextLen[0].toInt() == plaintext.size) plaintext else plaintext.copyOf(plaintextLen[0].toInt())
+        val body = if (openedLen[0].toInt() == opened.size) opened else opened.copyOf(openedLen[0].toInt())
+        if (format == FMT_UNPADDED) return body
+        // Only an authenticated body reaches here, so a padding refusal is never about tampering:
+        // it means the writer that holds the sync key padded wrongly.
+        return try {
+            Padding.unpad(body)
+        } catch (_: Padding.PaddingException) {
+            throw SyncCryptoException("snapshot opened, but its padding is not in the standard form")
+        }
     }
 
     /** SHA-256 hex over arbitrary bytes (matches the server's X-Content-Hash). */
@@ -162,14 +197,44 @@ class SyncCrypto(private val sodium: LazySodium) {
 
     companion object {
         val MAGIC = byteArrayOf(0x44, 0x4D, 0x53, 0x31) // "DMS1"
-        const val FMT: Byte = 0x01
+
+        /** The unpadded format of every snapshot stored before #315. Opened, never written. */
+        const val FMT_UNPADDED: Byte = 0x01
+
+        /** The padded format (#315): the only one [encryptSnapshot] writes. */
+        const val FMT_PADDED: Byte = 0x02
+
+        // Fixed by the algorithm (crypto_aead_xchacha20poly1305_ietf_NPUBBYTES and _ABYTES).
+        private const val NONCE_BYTES = AEAD.XCHACHA20POLY1305_IETF_NPUBBYTES
+        private const val TAG_BYTES = AEAD.XCHACHA20POLY1305_IETF_ABYTES
+        private val HEADER_BYTES = MAGIC.size + 1 + NONCE_BYTES
+
+        /** The u32 length prefix [Padding] puts in front of the plaintext (its layout). */
+        private const val PAD_PREFIX_BYTES = 4
 
         private val KDF_CONTEXT = "dmsync01".toByteArray(Charsets.UTF_8) // exactly 8 bytes
         private const val SUBKEY_SYNC = 1L
         private const val SUBKEY_MANIFEST = 2L
 
-        fun aad(lineage: String, version: Long): ByteArray =
-            "daymark.snapshot.v1|$lineage|$version".toByteArray(Charsets.UTF_8)
+        /** Each format's name in the associated data, so the format byte cannot be changed on its own. */
+        private fun aad(format: Byte, lineage: String, version: Long): ByteArray {
+            val context = when (format) {
+                FMT_PADDED -> "daymark.snapshot.v2"
+                FMT_UNPADDED -> "daymark.snapshot.v1"
+                else -> throw SyncCryptoException("unsupported envelope format ${format.toInt() and 0xff}")
+            }
+            return "$context|$lineage|$version".toByteArray(Charsets.UTF_8)
+        }
+
+        /**
+         * The size of the blob [encryptSnapshot] writes for a plaintext of [plaintextLength] bytes:
+         * the header, the padded body and the tag. Needs no libsodium, so a writer can check a
+         * snapshot against the server's size limit before it derives a key or sends anything.
+         */
+        fun snapshotBlobLength(plaintextLength: Long): Long {
+            require(plaintextLength >= 0) { "snapshotBlobLength: bad length $plaintextLength" }
+            return HEADER_BYTES + Padding.paddedLength(PAD_PREFIX_BYTES + plaintextLength) + TAG_BYTES
+        }
 
         /**
          * All base64 in the protocol is RFC 4648 §5 URL-safe, NO padding. Deliberately uses
