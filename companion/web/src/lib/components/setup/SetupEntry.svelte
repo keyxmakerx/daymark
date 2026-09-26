@@ -4,9 +4,9 @@
    *
    * WHAT IT REPLACES. Nothing — that is the point. index.html opened straight onto the
    * six-destination menu, and no screen anywhere let a person say what this deployment was for.
-   * The three shapes (docs/COMPANION_ARCHITECTURE.md §2) are not variations of one
-   * product; Practice inverts the arrangement the other two exist to offer. A question that is
-   * never asked gets answered by whichever screen someone happens to click first.
+   * The three shapes (docs/COMPANION_ARCHITECTURE.md §2) are one product in three shapes, not
+   * three sizes of it; Practice inverts the arrangement the other two exist to offer. A question
+   * that is never asked gets answered by whichever screen someone happens to click first.
    *
    * SEEN ONCE, SO IT IS ALLOWED TO EXPLAIN ITSELF. This is the one screen in the product with a
    * licence to spend words, and it is still held to a budget: under seventy of them before the
@@ -38,9 +38,9 @@
     ASK_REASON_NOTE,
     CHOICE_HEADING,
     CHOICE_IS_REVERSIBLE,
-    CONFIG_NOT_PUBLISHED_YET,
     CONFIG_READING,
     LABELS,
+    NO_SHAPE_PUBLISHED,
     SETUP_LEDE,
     SETUP_LIMITS,
     SETUP_TITLE,
@@ -216,12 +216,12 @@
         <details class="why">
           <summary>{LABELS.configurationSays}</summary>
           <!--
-            MARKED PLACEHOLDER. This build's server publishes no setup mode; the read path here is
-            live and waiting for the field. Folded away because an operator who has not set one
-            does not need it, and named in full because one who has, and is still being asked,
-            needs to know where to look.
+            WHY THIS PAGE ASKED: no setup mode reached it, so the answer is this browser's, and the
+            setting that makes it the server's is named. Folded away because a person answering
+            for their own browser does not need it, and named in full because an operator who set
+            it, and is still being asked, needs to know where to look.
           -->
-          <p class="para">{CONFIG_NOT_PUBLISHED_YET}</p>
+          <p class="para">{NO_SHAPE_PUBLISHED}</p>
         </details>
       {/if}
     </Card>

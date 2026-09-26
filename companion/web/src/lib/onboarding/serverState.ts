@@ -31,7 +31,9 @@
  *                   BODY CARRIES NO REASON — Readiness.Result.reason is for the log and the
  *                   response is the literal string {"ok":false}. This module therefore never says
  *                   which failure it is, because the server never said.
- *   GET /v1/config  Application.kt — {"smtpEnabled":bool}. One flag, registered unconditionally.
+ *   GET /v1/config  Application.kt — {"smtpEnabled":bool}, registered in every shape: one flag,
+ *                   and beside it "setupMode" when the operator chose a shape (#330), which the
+ *                   first-run screen reads (lib/setup/shape.ts) and this module does not.
  *
  * Everything else an operator wants is either not published or not publishable here. The gaps are
  * modelled as output (see SYNC_NOT_PROBED) rather than filled in by inference, on the same
@@ -212,7 +214,10 @@ function readOk(body: string): boolean | null {
   return null
 }
 
-/** `{"smtpEnabled":bool}` — the whole of what /v1/config publishes. */
+/**
+ * `smtpEnabled`, the one flag /v1/config publishes. The `setupMode` beside it, when the operator
+ * chose a shape, is not read here.
+ */
 function readSmtp(body: string): boolean | null {
   try {
     const parsed: unknown = JSON.parse(body)

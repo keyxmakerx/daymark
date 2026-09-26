@@ -12,7 +12,9 @@
  *   GET /readyz      Application.kt — 200 {"ok":true} / 503 {"ok":false}. Readiness.kt probes the
  *                    data directory with a 4 KiB write + fsync + delete, cached 5 s. The failure
  *                    body is content-free ON PURPOSE; the reason goes to the server log.
- *   GET /v1/config   Application.kt — {"smtpEnabled":bool}. The one capability flag published.
+ *   GET /v1/config   Application.kt — {"smtpEnabled":bool}, the one capability flag published,
+ *                    and beside it "setupMode" (solo, paired or practice) when the operator chose
+ *                    a shape (#330). This console reads the flag and nothing else there.
  *
  * Reachable only with the owner bearer token AND the relationship inbox token, together:
  *

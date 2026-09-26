@@ -9,10 +9,10 @@ import {
   CHOICE_IS_REVERSIBLE,
   CONFIGURATION_IS_NOT_RE_READ,
   CONFIG_FIELD,
-  CONFIG_NOT_PUBLISHED_YET,
   CONFIG_PATH,
   CONFIG_SETTING,
   LABELS,
+  NO_SHAPE_PUBLISHED,
   PRACTICE_CONSOLE_ELSEWHERE,
   PRACTICE_FORGOTTEN_PASSPHRASE,
   PRACTICE_MISSING,
@@ -152,8 +152,38 @@ describe('the three deployment shapes', () => {
     expect(shapeById('practice').ranking).toMatch(/more work/i)
     expect(shapeById('practice').ranking).toMatch(/no better/i)
     // Paired is ranked by CASE rather than by popularity — it is the right answer for exactly one
-    // situation, and saying "some people want this" would rank nothing.
-    expect(shapeById('paired').ranking).toMatch(/one clinician/i)
+    // situation, and saying "some people want this" would rank nothing. The case is showing some
+    // of your own journal to the clinicians you invite, however many that is (#288).
+    expect(shapeById('paired').ranking).toMatch(/some of your own journal to the clinicians you invite/i)
+  })
+
+  it('the Paired choice counts no clinicians: its label, summary and ranking say "the clinicians you invite" or "each" (#288)', () => {
+    const paired = shapeById('paired')
+    expect(paired.label).toBe('Paired — you, and the clinicians you invite')
+    expect(paired.summary).toBe(
+      'Everything Solo does, plus an invitation you mint for each clinician, whose key you check ' +
+        'and pin before anything is shared.',
+    )
+    expect(paired.ranking).toBe(
+      'Choose this if you are showing some of your own journal to the clinicians you invite.',
+    )
+    // The label says what the masthead's Paired tagline says (App.svelte), in the choice's form.
+    const app = readFileSync(fileURLToPath(new URL('../../App.svelte', import.meta.url)), 'utf8')
+    expect(app).toContain("paired: 'Your journal, and the clinicians you invite'")
+    expect(paired.label.endsWith(', and the clinicians you invite')).toBe(true)
+
+    const ONE_CLINICIAN = /\bone clinician\b/i
+    const RETIRED = [
+      'Paired — you, and one clinician',
+      'Everything Solo does, plus an invitation you mint for one clinician, whose key you check ' +
+        'and pin before anything is shared.',
+      'Choose this if you are showing some of your own journal to one clinician.',
+    ]
+    // Control: every retired line is seen by the detector, so the absence below is not blindness.
+    for (const line of RETIRED) expect(line).toMatch(ONE_CLINICIAN)
+    const every = [paired.label, paired.arrangement, paired.summary, paired.ranking, paired.buildNote]
+    expect(every.filter((line) => ONE_CLINICIAN.test(line))).toEqual([])
+    for (const line of RETIRED) expect(every).not.toContain(line)
   })
 
   it('Paired shows the journal to the clinicians the owner invites, not to one (#288)', () => {
@@ -456,7 +486,8 @@ describe('a configuration-provided mode', () => {
       kind: 'set',
       shape: 'practice',
     })
-    // Absent is the expected state on this build: the field is not published yet.
+    // Absent is a server whose operator chose no shape: it assumed one and published nothing, in
+    // exactly the body it sent before the setting existed (ShapeRoutingTest.kt pins that body).
     expect(readSetupMode('{"smtpEnabled":false}')).toEqual({ kind: 'absent' })
     expect(readSetupMode('{"setupMode":null}')).toEqual({ kind: 'absent' })
     // No trimming, no case folding, no aliases: a configuration value is a contract, and quietly
@@ -486,13 +517,46 @@ describe('a configuration-provided mode', () => {
     expect(CONFIG_PATH).toBe('/v1/config')
   })
 
-  it('marks the not-yet-published field as a placeholder, in plain words', () => {
-    // The read path is live and the server field is not there yet. That is a placeholder, and a
-    // placeholder that does not say it is one is indistinguishable from a bug.
-    expect(CONFIG_NOT_PUBLISHED_YET).toMatch(/^Placeholder/)
-    expect(CONFIG_NOT_PUBLISHED_YET).toContain(CONFIG_FIELD)
-    expect(CONFIG_NOT_PUBLISHED_YET).toContain(CONFIG_PATH)
-    expect(CONFIG_NOT_PUBLISHED_YET).toMatch(/nothing is being guessed/i)
+  it('says why it asked where the server published no shape, and names the setting that would answer instead (#330)', () => {
+    // The server publishes the field now, so the page no longer calls its absence a placeholder.
+    // What is true instead: nothing reached this page, so it asked; the answer stays in this
+    // browser and changes nothing on the server; the setting is what makes it the server's.
+    expect(NO_SHAPE_PUBLISHED).toBe(
+      'This page asked because /v1/config gave it no setupMode. The answer given here stays in ' +
+        'this browser and changes nothing on the server. Whoever runs the server can set ' +
+        'DAYMARK_SETUP_MODE instead: the server then publishes the shape, and a browser that ' +
+        'finds it there does not ask.',
+    )
+    // Built from the same names the rest of the configured copy uses, so they cannot drift.
+    expect(NO_SHAPE_PUBLISHED).toContain(CONFIG_PATH)
+    expect(NO_SHAPE_PUBLISHED).toContain(CONFIG_FIELD)
+    expect(NO_SHAPE_PUBLISHED).toContain(CONFIG_SETTING)
+    // No "every browser": a browser already holding an answer reads nothing until its question is
+    // reopened (CONFIGURATION_IS_NOT_RE_READ), so the sentence claims only the browser that looks.
+    expect(NO_SHAPE_PUBLISHED).not.toMatch(/\bevery browser\b/i)
+    expect('so that every browser gets the same answer').toMatch(/\bevery browser\b/i) // control
+
+    // The retired placeholder, by text and by name. Each detector is shown seeing it first.
+    const RETIRED = /^Placeholder|publishes no setupMode|will stop asking as soon as|Nothing is being guessed/i
+    const retiredText =
+      'Placeholder: this server publishes no setupMode, so this page asked instead. This screen ' +
+      'reads /v1/config for that field while this question is open, and will stop asking as soon as ' +
+      'one is there. Nothing is being guessed in the meantime.'
+    expect(retiredText).toMatch(RETIRED)
+    expect(NO_SHAPE_PUBLISHED).not.toMatch(RETIRED)
+    expect(Object.keys(setup)).toContain('NO_SHAPE_PUBLISHED')
+    expect(Object.keys(setup)).not.toContain('CONFIG_NOT_PUBLISHED_YET')
+  })
+
+  it('removing the setting still means being asked: the how-to-change line is unchanged (#330)', () => {
+    // The server omits setupMode when no mode is chosen (ShapeRoutingTest.kt), so removing the
+    // setting makes the field absent and the page asks. The sentence says exactly that.
+    expect(configuredHowToChange()).toBe(
+      'To be asked again, remove DAYMARK_SETUP_MODE from the server’s environment and restart it. ' +
+        'Nothing in this browser overrides it while it is set.',
+    )
+    expect(readSetupMode('{"smtpEnabled":false}')).toEqual({ kind: 'absent' })
+    expect(resolveSetup({ config: config.absent, session: null, stored: null }).state).toBe('ask')
   })
 })
 
@@ -893,9 +957,20 @@ describe('the first-run screen renders all three choices', () => {
     expect(readingBranch).not.toContain('{#each SHAPES as shape')
   })
 
-  it('marks the not-yet-published configuration field as a placeholder on the screen', () => {
-    expect(entry).toContain('CONFIG_NOT_PUBLISHED_YET')
+  it('says why it asked, in the fold, only when no shape reached it', () => {
+    // The fold opens onto NO_SHAPE_PUBLISHED, and only for `absent` and `unreachable`: the
+    // unrecognised case has a warning of its own, and a configured deployment is never asked.
+    const code = entry.replace(/<!--[\s\S]*?-->/g, ' ')
+    const open = code.indexOf("{#if config.kind === 'absent' || config.kind === 'unreachable'}")
+    expect(open, 'the fold is not guarded on absent or unreachable').toBeGreaterThan(-1)
+    const fold = code.slice(open, code.indexOf('{/if}', open))
+    expect(fold).toContain('<summary>{LABELS.configurationSays}</summary>')
+    expect(fold).toContain('<p class="para">{NO_SHAPE_PUBLISHED}</p>')
     expect(entry).toContain('configuredUnrecognised(config.value)')
+    // The retired name is gone from the screen. Control: the pattern sees it in the old line.
+    const RETIRED = /CONFIG_NOT_PUBLISHED_YET/
+    expect('<p class="para">{CONFIG_NOT_PUBLISHED_YET}</p>').toMatch(RETIRED)
+    expect(entry).not.toMatch(RETIRED)
   })
 })
 

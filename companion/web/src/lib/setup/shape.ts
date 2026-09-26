@@ -13,12 +13,12 @@
  *
  *     what is this machine for?
  *
- * docs/COMPANION_ARCHITECTURE.md §2 names three answers and they are not variations of one
- * product. Solo and Paired are one product with a flag — same trust model, same threat model, one
- * clinician switched on. Practice INVERTS the arrangement the product exists to offer (the same
- * section): the clinic owns the machine and the person is a tenant on it, which is a different
- * posture, not a bigger one. A screen that asks the question once, records the answer, and then
- * gets out of the way is the smallest honest way to hold that distinction.
+ * docs/COMPANION_ARCHITECTURE.md §2 names three answers: one product in three shapes (#288), and
+ * not three sizes of it. Solo and Paired share a trust model and a threat model; Paired adds the
+ * clinicians the person invites. Practice INVERTS the arrangement the product exists to offer (the
+ * same section): the clinic owns the machine and the person is a tenant on it, which is a
+ * different posture, not a bigger one. A screen that asks the question once, records the answer,
+ * and then gets out of the way is the smallest honest way to hold that distinction.
  *
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  * WHAT THE OPENING SENTENCES ARE ALLOWED TO CLAIM, AND WHAT THEY ARE NOT
@@ -160,15 +160,19 @@ export const SHAPES: readonly DeploymentShape[] = [
     primary: 'file',
   },
   {
+    /* A person may invite more than one clinician (#288), so no line here counts them: the label
+       follows the masthead's Paired tagline, and the rest say "each" or "the clinicians you
+       invite". */
     id: 'paired',
-    label: 'Paired — you, and one clinician',
+    label: 'Paired — you, and the clinicians you invite',
     arrangement:
       'You still run the machine and the journal is still yours. The clinicians you invite are ' +
       'shown the slices you pick, and you can withdraw that at any time.',
     summary:
-      'Everything Solo does, plus an invitation you mint for one clinician, whose key you check ' +
+      'Everything Solo does, plus an invitation you mint for each clinician, whose key you check ' +
       'and pin before anything is shared.',
-    ranking: 'Choose this if you are showing some of your own journal to one clinician.',
+    ranking:
+      'Choose this if you are showing some of your own journal to the clinicians you invite.',
     buildState: 'built',
     buildNote:
       'The pairing path is wired: you mint the invitation, they accept it on the clinician ' +
@@ -264,12 +268,12 @@ export const CHOICE_IS_REVERSIBLE =
 /**
  * WHY THE CHOICE IS REMEMBERED IN THIS BROWSER AND NOT ON THE SERVER.
  *
- * The server has a place for this — it is the configuration flag §5 below reads — and putting it
- * there would make the answer follow a person to every browser they open the page in. It is also
- * a decision that would then need an authenticated way to change it, on a page that has no
- * sign-in, from a bundle any visitor can load. The whole of what is stored is one entry naming
- * one of three words, so a shared machine learns that someone here opened Daymark and picked a
- * shape — which the browser's own history already says more loudly.
+ * The server has a place for this — the setting its operator chooses, which /v1/config publishes
+ * and §4 below reads — and writing the answer there would make it follow a person to every browser
+ * they open the page in. It is also a decision that would then need an authenticated way to
+ * change it, on a page that has no sign-in, from a bundle any visitor can load. The whole of what
+ * is stored is one entry naming one of three words, so a shared machine learns that someone here
+ * opened Daymark and picked a shape — which the browser's own history already says more loudly.
  */
 export const WHAT_IS_REMEMBERED =
   'The answer is kept in this browser only — one entry holding one of three words, no name, no ' +
@@ -316,18 +320,25 @@ export function configuredHowToChange(): string {
 }
 
 /**
- * PLACEHOLDER, and marked as one on the page.
+ * WHY THIS PAGE ASKED, for whoever opens the fold to find out whether configuration answers this.
  *
- * The server in this build publishes no setup mode. Adding the field is a one-line change to
- * ServerConfigDto in Application.kt and it was deliberately not made here — another agent owns
- * that file this week, and a merge conflict in the config endpoint is a worse outcome than a
- * screen that reads a field which is not there yet. The read path is written and live: the moment
- * the field exists, this screen stops asking, with no further change on this side.
+ * The server publishes [CONFIG_FIELD] only when its operator chose a shape with [CONFIG_SETTING]
+ * (#330). With none chosen it still assumes a shape, from its older switch, and publishes nothing:
+ * an assumed shape is not the operator's answer, so the page asks. Shown for `absent` and for
+ * `unreachable` alike, so the first sentence says what reached the page rather than claiming the
+ * server answered.
+ *
+ * The rest says where the answer goes and where the lasting one is set. The answer given here
+ * stays in this browser and routes this page only. The setting is what makes the answer the
+ * server's — and it says "a browser that finds it there", not "every browser", because a browser
+ * already holding an answer does not read [CONFIG_PATH] until its question is reopened
+ * ([CONFIGURATION_IS_NOT_RE_READ]).
  */
-export const CONFIG_NOT_PUBLISHED_YET =
-  `Placeholder: this server publishes no ${CONFIG_FIELD}, so this page asked instead. ` +
-  `This screen reads ${CONFIG_PATH} for that field while this question is open, and will stop ` +
-  'asking as soon as one is there. Nothing is being guessed in the meantime.'
+export const NO_SHAPE_PUBLISHED =
+  `This page asked because ${CONFIG_PATH} gave it no ${CONFIG_FIELD}. The answer given here ` +
+  'stays in this browser and changes nothing on the server. Whoever runs the server can set ' +
+  `${CONFIG_SETTING} instead: the server then publishes the shape, and a browser that finds it ` +
+  'there does not ask.'
 
 /**
  * THE LIMIT ON THE PRECEDENCE ABOVE, SAID ON THE PAGE RATHER THAN ONLY IN A COMMENT.
@@ -479,8 +490,8 @@ export const LABELS = {
   changeShape: 'Change what this machine is for',
   configured: 'Set by configuration',
   configuredBadValue: 'Configuration was not understood',
-  /* The folded disclosure on the first-run screen. NOT 'Set by configuration': on this build it
-     opens onto a note saying the server publishes no setup mode, and a summary claiming the
+  /* The folded disclosure on the first-run screen. NOT 'Set by configuration': it is shown only
+     while the page is asking, and opens onto NO_SHAPE_PUBLISHED, so a summary claiming the
      opposite would be the one line on the screen that is untrue. */
   configurationSays: 'Whether configuration answers this',
   /* The two reasons somebody is being asked that are not "you have not been here before". The
@@ -644,7 +655,10 @@ export type ConfigState =
   | { kind: 'reading' }
   /** No answer at all — nothing there, wrong shape, or the request never landed. */
   | { kind: 'unreachable' }
-  /** Answered, and carries no setup mode. The expected state on this build; see the placeholder. */
+  /**
+   * Answered, and carries no setup mode: the operator chose none, so the server assumed one and
+   * published nothing (#330), or the server predates the setting. See [NO_SHAPE_PUBLISHED].
+   */
   | { kind: 'absent' }
   /** Answered with something that is not one of the three. */
   | { kind: 'unrecognised'; value: string }

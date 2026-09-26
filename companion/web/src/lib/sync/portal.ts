@@ -110,7 +110,11 @@ export class PortalClient {
     })
   }
 
-  /** Public, unauthenticated config probe — reveals only whether SMTP invites are available. */
+  /**
+   * Public, unauthenticated config probe. This reads whether SMTP invites are available; the body
+   * also carries the server's shape as `setupMode` when the operator chose one (#330), which the
+   * first-run screen reads instead (lib/setup/configProbe.ts).
+   */
   async getConfig(): Promise<ServerConfig> {
     const res = await this.doFetch(this.base + '/v1/config')
     if (!res.ok) return { smtpEnabled: false }
