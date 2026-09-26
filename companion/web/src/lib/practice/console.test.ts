@@ -10,6 +10,7 @@ import {
   MEMBERSHIP_IS_NOT_READ_ACCESS,
   ADMIN_CANNOT_RESET_A_PASSPHRASE,
   NO_PATIENT_LIST,
+  NO_REAL_PATIENT_DATA_YET,
   PLACEHOLDERS,
   PLACEHOLDER_WORD,
   REMOVAL_DOES_NOT_END_A_RELATIONSHIP,
@@ -29,6 +30,7 @@ import {
 } from './audit'
 import { roleById } from './roles'
 import type { OrgAuditEvent } from './client'
+import { SHAPES, shapeById } from '../setup/shape'
 
 /*
  * ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -91,6 +93,7 @@ function codeOf(file: string): string {
 /** Every fixed sentence this console is obliged to say, as one corpus. */
 const COPY = [
   CONSOLE_LEDE,
+  NO_REAL_PATIENT_DATA_YET,
   CONSOLE_BUILD_STATE,
   MEMBERSHIP_IS_NOT_READ_ACCESS,
   REMOVAL_DOES_NOT_END_A_RELATIONSHIP,
@@ -531,5 +534,79 @@ describe('(e) every screen the console names is mounted', () => {
     expect(CREATE_USES_THE_SERVER_TOKEN).toContain('confers no clinical read')
     expect(codeOf('CreatePracticePanel.svelte')).toContain('CREATE_USES_THE_SERVER_TOKEN')
     expect(codeOf('CreatePracticePanel.svelte')).toContain('createPractice(')
+  })
+})
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   The gate that still stands, on both surfaces that offer a practice (#333).
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+describe('both practice surfaces say no real patient’s data belongs on a practice server yet (#333)', () => {
+  const SENTENCE =
+    'Until this software has had its two outside security reviews, no real patient’s data belongs on a ' +
+    'practice server.'
+  const ENTRY = readFileSync(fileURLToPath(new URL('../components/setup/SetupEntry.svelte', import.meta.url)), 'utf8')
+  /** Markup with comments, script and style gone: what the two checks below read. */
+  const markup = (src: string) =>
+    src.replace(/<!--[\s\S]*?-->/g, '').replace(/<script[\s\S]*?<\/script>/g, '').replace(/<style[\s\S]*?<\/style>/g, '')
+
+  /** The console says it: its own plain paragraph, directly under the lede, above the first-pass note. */
+  const consoleSays = (src: string): boolean => {
+    const m = markup(src)
+    const lede = '<p class="lede">{CONSOLE_LEDE}</p>'
+    const own = '<p class="lede">{NO_REAL_PATIENT_DATA_YET}</p>'
+    const at = m.indexOf(lede)
+    const ownAt = m.indexOf(own)
+    const callout = m.indexOf('<Callout tone="info" title="First pass">')
+    return at >= 0 && ownAt >= 0 && m.slice(at + lede.length, ownAt).trim() === '' && callout > ownAt
+  }
+
+  /** The first-run choice says it: its own line, after the ranking and before the build note. */
+  const choiceSays = (src: string): boolean => {
+    const m = markup(src)
+    const ranking = m.indexOf('<p class="shape-ranking">{shape.ranking}</p>')
+    const hold = m.indexOf('{#if shape.holdNote}<p class="shape-hold">{shape.holdNote}</p>{/if}')
+    const built = m.indexOf('<p class="shape-built">{shape.buildNote}</p>')
+    return ranking >= 0 && hold > ranking && built > hold
+  }
+
+  it('is one sentence, exactly as decided', () => {
+    expect(NO_REAL_PATIENT_DATA_YET).toBe(SENTENCE)
+  })
+
+  it('the practice console says it under its lede, and the first-pass note stays below it', () => {
+    const console_ = componentSource.get('PracticeConsole.svelte')!
+    expect(codeOf('PracticeConsole.svelte')).toContain('NO_REAL_PATIENT_DATA_YET')
+    expect(consoleSays(console_)).toBe(true)
+    // Control: with the paragraph removed, the same check fails.
+    const removed = console_.replace('<p class="lede">{NO_REAL_PATIENT_DATA_YET}</p>', '')
+    expect(removed).not.toBe(console_)
+    expect(consoleSays(removed)).toBe(false)
+  })
+
+  it('the first-run Practice choice says it, and only Practice', () => {
+    expect(shapeById('practice').holdNote).toBe(SENTENCE)
+    expect(SHAPES.filter((s) => s.holdNote !== undefined).map((s) => s.id)).toEqual(['practice'])
+    expect(choiceSays(ENTRY)).toBe(true)
+    // Control: with the line removed, the same check fails.
+    const removed = ENTRY.replace('{#if shape.holdNote}<p class="shape-hold">{shape.holdNote}</p>{/if}', '')
+    expect(removed).not.toBe(ENTRY)
+    expect(choiceSays(removed)).toBe(false)
+  })
+
+  it('is a plain fact on both, never an alarm', () => {
+    // Neither render site sits inside a Callout, and the sentence carries no alarm of its own.
+    const consoleMarkup = markup(componentSource.get('PracticeConsole.svelte')!)
+    const own = consoleMarkup.indexOf('{NO_REAL_PATIENT_DATA_YET}')
+    const before = consoleMarkup.slice(0, own)
+    expect((before.match(/<Callout\b/g) ?? []).length).toBe((before.match(/<\/Callout>/g) ?? []).length)
+    const entryMarkup = markup(ENTRY)
+    const hold = entryMarkup.indexOf('{shape.holdNote}')
+    const upTo = entryMarkup.slice(0, hold)
+    expect((upTo.match(/<Callout\b/g) ?? []).length).toBe((upTo.match(/<\/Callout>/g) ?? []).length)
+    expect(SENTENCE).not.toMatch(/!|\bwarning\b|\bdanger\b|\bmust\b/i)
+    // Control: a Callout left open before the line is counted as one.
+    const wrapped = `<Callout tone="warn">${consoleMarkup.slice(0, own)}`
+    expect((wrapped.match(/<Callout\b/g) ?? []).length).toBeGreaterThan((wrapped.match(/<\/Callout>/g) ?? []).length)
   })
 })

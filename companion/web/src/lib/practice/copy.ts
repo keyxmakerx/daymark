@@ -52,6 +52,20 @@ export const CONSOLE_LEDE =
   'records. Nothing on this surface opens clinical content, and no request it can make would return any.'
 
 /**
+ * THE GATE THAT STILL STANDS, ON THE SCREEN (#333).
+ *
+ * No real patient's data belongs on a practice server until the two outside assessments are done
+ * (#284; docs/DECISIONS.md §D9). That was written only in the documents, and an office setting up
+ * a server reads the screen, not the docs. So it is said here, as its own paragraph directly under
+ * the lede, and on the first-run Practice choice, which reads this same constant
+ * (setup/shape.ts). A plain fact, not an alarm: no callout, no tone. It comes out when #284's
+ * findings are dealt with and #222's conditions are met, and its tests come out with it.
+ */
+export const NO_REAL_PATIENT_DATA_YET =
+  'Until this software has had its two outside security reviews, no real patient’s data belongs ' +
+  'on a practice server.'
+
+/**
  * The build status, said first, because everything below reads differently once you know it.
  *
  * The server side of this is built and tested; the interface is a first pass whose job is to be

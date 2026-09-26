@@ -725,11 +725,15 @@ describe('the copy', () => {
     /*
      * THE SENTENCES ABOUT A CLINIC'S PATIENTS. The Practice choice and its panel describe a clinic,
      * and a clinic has patients: the forgotten-passphrase answer says each of them invites a
-     * clinician again (#313). Those sentences may say "patient" in the third person, and only that
-     * way. Everything else on this screen is read by someone about their own journal, and may not
-     * say it at all. Each exception has to still need itself, so it cannot outlive its sentence.
+     * clinician again (#313), and the Practice choice says no real patient's data belongs on a
+     * practice server yet (#333). Those sentences may say "patient" in the third person, and only
+     * that way. Everything else on this screen is read by someone about their own journal, and may
+     * not say it at all. Each exception has to still need itself, so it cannot outlive its sentence.
      */
-    const ABOUT_A_CLINICS_PATIENTS = new Set(['shape.ts@PRACTICE_FORGOTTEN_PASSPHRASE'])
+    const ABOUT_A_CLINICS_PATIENTS = new Set([
+      'shape.ts@PRACTICE_FORGOTTEN_PASSPHRASE',
+      'shape.ts@SHAPES[2].holdNote',
+    ])
     const ADDRESSES_THE_READER = /(?<![\w-])(your|you are a|you're a|you as a|as a) patients?(?![\w-])/i
     expect(ADDRESSES_THE_READER.test('as a patient, you can')).toBe(true) // the detector detects
     expect(ADDRESSES_THE_READER.test('each patient invites them again')).toBe(false)

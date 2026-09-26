@@ -175,6 +175,11 @@
               -->
               <p class="shape-ranking">{shape.ranking}</p>
               <!--
+                A fact with its own expiry, on its own line: for Practice, that no real patient's
+                data belongs on a practice server yet (#333). Plain ink, no tone — information.
+              -->
+              {#if shape.holdNote}<p class="shape-hold">{shape.holdNote}</p>{/if}
+              <!--
                 And the honesty line: what is actually built for this shape, at the point of
                 choosing it rather than after arriving somewhere empty.
               -->
@@ -387,6 +392,12 @@
   .shape-ranking {
     font-size: 0.9rem;
     font-weight: 600;
+    line-height: 1.55;
+    color: var(--ink-text);
+  }
+
+  .shape-hold {
+    font-size: 0.9rem;
     line-height: 1.55;
     color: var(--ink-text);
   }

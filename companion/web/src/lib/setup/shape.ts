@@ -74,6 +74,7 @@
  * would otherwise have to write the same try/catch.
  */
 import { OWNER_ROUTES, type OwnerRouteId } from '../onboarding/audience'
+import { NO_REAL_PATIENT_DATA_YET } from '../practice/copy'
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
    1. The three shapes.
@@ -131,6 +132,12 @@ export interface DeploymentShape {
    * server for themselves.
    */
   ranking: string
+  /**
+   * A standing fact with its own expiry, said on its own line between the ranking and the build
+   * note, so it can come out on its own day. Only Practice has one: no real patient's data belongs
+   * on a practice server before the outside reviews (#333), in the practice console's own words.
+   */
+  holdNote?: string
   buildState: BuildState
   /** What is and is not built for this shape, said plainly, at the point of choosing it. */
   buildNote: string
@@ -180,6 +187,7 @@ export const SHAPES: readonly DeploymentShape[] = [
     ranking:
       'More work to run, and it makes a personal backup no better. Only pick it if a clinic ' +
       'runs this machine for other people.',
+    holdNote: NO_REAL_PATIENT_DATA_YET,
     buildState: 'separate-page',
     buildNote:
       'Administering a practice happens on its own page in this build, not on this one — the same ' +
