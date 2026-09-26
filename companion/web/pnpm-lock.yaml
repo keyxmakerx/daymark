@@ -30,15 +30,15 @@ importers:
       svelte-check:
         specifier: ^4.1.4
         version: 4.7.1(picomatch@4.0.4)(svelte@5.56.4)(typescript@5.9.3)
-      tsx:
-        specifier: ^4.19.2
-        version: 4.22.4
       typescript:
         specifier: ^5.7.3
         version: 5.9.3
       vite:
         specifier: ^6.0.7
         version: 6.4.3(@types/node@22.20.0)(tsx@4.22.4)
+      vite-node:
+        specifier: 2.1.9
+        version: 2.1.9(@types/node@22.20.0)
       vitest:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.20.0)
@@ -1595,6 +1595,7 @@ snapshots:
       '@esbuild/win32-arm64': 0.28.1
       '@esbuild/win32-ia32': 0.28.1
       '@esbuild/win32-x64': 0.28.1
+    optional: true
 
   esm-env@1.2.2: {}
 
@@ -1754,6 +1755,7 @@ snapshots:
       esbuild: 0.28.1
     optionalDependencies:
       fsevents: 2.3.3
+    optional: true
 
   typescript@5.9.3: {}
 
