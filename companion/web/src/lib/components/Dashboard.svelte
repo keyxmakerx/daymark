@@ -19,6 +19,11 @@
    * ownMoodColour.tree.test.ts holds the clinician's view, and only it, to saying so. The month
    * calendar is the person's own too (#335), and is drawn only on their own data: the clinician
    * has a calendar of their own, which draws no mood's colour.
+   *
+   * "Your" is said only on the person's own data. On the clinician's view it would address the
+   * clinician, as though the average and the scores were theirs, so each sentence that says it
+   * has a second fixed form there that speaks about the person (#421). dashboardVoice.test.ts
+   * reads the markup as each view draws it and holds both forms.
    */
   let {
     data,
@@ -146,7 +151,11 @@
       {#if assoc.length === 0}
         <p class="faint">No tagged activities in this data.</p>
       {:else}
-        <p class="faint">Average mood on days with each activity, relative to your overall average. This shows association, <strong>not causation</strong>.</p>
+        {#if ownData}
+          <p class="faint">Average mood on days with each activity, relative to your overall average. This shows association, <strong>not causation</strong>.</p>
+        {:else}
+          <p class="faint">Average mood on days with each activity, relative to their overall average. This shows association, <strong>not causation</strong>.</p>
+        {/if}
         <ul class="assoc">
           {#each assoc as a (a.activityId)}
             <li>
@@ -172,7 +181,11 @@
         <span class="sum faint">{assessments.length} instrument{assessments.length === 1 ? '' : 's'}</span>
       </summary>
       <div class="body">
-        <p class="faint">Descriptive trends of your own scores over time — not a diagnosis.</p>
+        {#if ownData}
+          <p class="faint">Descriptive trends of your own scores over time — not a diagnosis.</p>
+        {:else}
+          <p class="faint">Descriptive trends of their own scores over time — not a diagnosis.</p>
+        {/if}
         {#each assessments as a (a.key)}
           <div class="assess">
             <div class="ah"><span class="ak">{a.key}</span><span class="ab faint">latest: {a.latestBand}</span></div>
