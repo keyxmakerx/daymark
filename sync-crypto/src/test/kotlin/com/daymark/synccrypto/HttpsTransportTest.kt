@@ -38,6 +38,10 @@ class HttpsTransportTest {
     private fun handle(exchange: HttpExchange) {
         val headers = exchange.requestHeaders.entries.associate { it.key.lowercase() to it.value.toList() }
         arrived += Arrived(exchange.requestMethod, exchange.requestURI.rawPath, headers, exchange.requestBody.readBytes())
+        // Every request of the phone's asks for its connection to be closed after it. Android's client
+        // honours that; the JDK's drops the header as one it restricts, so the answer says it instead,
+        // and no test here sends a request over a connection an earlier one left open.
+        exchange.responseHeaders.add("Connection", "close")
         reply(exchange)
         exchange.close()
     }
