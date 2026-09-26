@@ -1,9 +1,11 @@
 package com.daymark.companion
 
+import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.auth.BODY_CHUNK_BYTES
 import com.daymark.companion.auth.DeviceKeyStore
 import com.daymark.companion.auth.DeviceSignature
 import com.daymark.companion.auth.PairingCode
+import com.daymark.companion.auth.Secrets
 import com.daymark.companion.auth.SIGNED_BODY
 import com.daymark.companion.auth.SignedBody
 import com.daymark.companion.auth.bodyJoined
@@ -287,6 +289,67 @@ class SignedRequestTest {
         assertEquals(unauthorized, withToken.answer(), "a good token does not rescue a bad signature")
         // Control: the token alone is taken.
         assertEquals(HttpStatusCode.OK, client.get("/v1/snapshots") { header(HttpHeaders.Authorization, "Bearer $DEVICE_TEST_TOKEN") }.status)
+    }
+
+    @Test
+    fun `a forged signature on a relationship route is refused, and is not tried as the clinician's session it carries`() = testApplication {
+        val server = DeviceServer(mode = SetupMode.PAIRED)
+        server.start(this)
+        val phone = TestPhone()
+        server.pair(client, phone)
+        val stranger = TestPhone() // a key nobody paired
+        val inbox = "inbox-token-forged-signature-0123456789"
+        val relRef = Secrets.relRefOf(inbox)
+        // A clinician's session for this relationship, with its CSRF token: alone, enough to write an assignment.
+        val session = AuthStore(server.dataDir.path).use { it.createSession("cred-forged", relRef, 900L, 28_800L) }
+        val target = "/v1/rel/$relRef/assignments/lin/0"
+        val body = byteArrayOf(1, 2, 3)
+        suspend fun asTheClinician(signature: Map<String, String>) = client.put(target) {
+            header("X-Rel-Token", inbox)
+            header(HttpHeaders.Cookie, "daymark_session=${session.sessionId}")
+            header("X-CSRF-Token", session.csrfToken)
+            signedWith(signature)
+            setBody(body)
+        }
+        suspend fun lineages() = client.get("/v1/rel/$relRef/assignments") {
+            header("X-Rel-Token", inbox)
+            header(HttpHeaders.Authorization, "Bearer ${server.authToken}")
+        }.bodyAsText()
+
+        // The clinician's request, carrying a signature a stranger made over it, naming the phone's key.
+        val forged = stranger.headers("PUT", target, body, server.seconds, signed = mapOf("X-Rel-Token" to inbox)) - "X-Rel-Token" +
+            (DeviceSignature.KEY_HEADER to phone.keyId)
+        assertEquals(unauthorized, asTheClinician(forged).answer())
+        assertTrue("\"lineages\":[]" in lineages(), "its handler did not run: ${lineages()}")
+
+        // Control: the clinician's session alone writes it, so the refusal above was the signature's.
+        assertEquals(HttpStatusCode.Created, asTheClinician(emptyMap()).status)
+        assertTrue("\"lineages\":[]" !in lineages(), "control: a write shows in the list")
+    }
+
+    @Test
+    fun `a phone revoked after its key is checked and before its handler runs is refused, and nothing is stored`() = testApplication {
+        val server = DeviceServer()
+        server.start(this)
+        val phone = TestPhone()
+        server.pair(client, phone)
+        val body = byteArrayOf(1, 2, 3)
+        // Control: the phone's request is taken, so the refusal below is the revocation's.
+        val first = "/v1/snapshots/devA/1"
+        assertEquals(HttpStatusCode.Created, client.send(HttpMethod.Put, first, phone.headers("PUT", first, body, server.seconds), body).status)
+
+        // The console's Revoke lands after the key was found live, once the body was in, and before the key
+        // is read the last time: here, just after the reading taken as the request's nonce is.
+        val target = "/v1/snapshots/devA/2"
+        val landed = atNonce(server, before = false) {
+            assertEquals(true, server.account.devices.revoke(server.account.devices.ownerId, phone.keyId), "the Revoke")
+        }
+        val res = client.send(HttpMethod.Put, target, phone.headers("PUT", target, body, server.seconds), body)
+        server.aroundClock = null
+        assertTrue(landed.get(), "the Revoke landed as the request's nonce was being taken")
+        assertEquals(unauthorized, res.answer())
+        val stored = client.get("/v1/snapshots/devA") { header(HttpHeaders.Authorization, "Bearer ${server.authToken}") }.bodyAsText()
+        assertEquals(1, Regex("\"version\":").findAll(stored).count(), "nothing more was stored: $stored")
     }
 
     @Test

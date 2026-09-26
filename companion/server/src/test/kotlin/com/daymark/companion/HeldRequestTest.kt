@@ -1,6 +1,8 @@
 package com.daymark.companion
 
 import com.daymark.companion.auth.DeviceSignature
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -79,6 +81,34 @@ class HeldRequestTest {
             }
             val stored = live.owner("GET", "/v1/snapshots/devA")
             assertEquals(200 to """{"lineage":"devA","versions":[]}""", stored.status to stored.body, "nothing was stored")
+        }
+    }
+
+    @Test
+    fun `a phone confirmed while its request's body is on the way is refused, not failed, and nothing is stored`() {
+        val server = DeviceServer()
+        server.startNetty().use { live ->
+            val phone = TestPhone()
+            // The phone has redeemed a code and waits for the console's confirmation: its key is not live.
+            val minted = Json.parseToJsonElement(live.owner("POST", "/v1/devices/pairing").body).jsonObject
+            val redeemed = live.send("POST", "/v1/devices/redeem", mapOf("Content-Type" to "application/json"), phone.redeemBody(minted.string("code")).toByteArray())
+            assertEquals(202, redeemed.status, redeemed.body)
+            val headers = phone.headers("PUT", target, body, server.seconds)
+            live.open().use { c ->
+                c.write(LiveServer.head("PUT", target, headers, chunked = false, length = body.size.toLong()))
+                c.write(body.copyOfRange(0, 4))
+                // The server holds the request open, waiting for the rest of its body.
+                assertNull(c.answerWithin(HELD_MS), "the server waits for the body")
+                val confirmed = live.owner("POST", "/v1/devices/pairing/${minted.string("codeId")}/confirm", """{"keyId":"${phone.keyId}"}""")
+                assertEquals(201, confirmed.status, "the console's confirmation: ${confirmed.body}")
+                c.write(body.copyOfRange(4, body.size))
+                val answer = c.readResponse()
+                assertEquals(unauthorized, answer.status to answer.body)
+            }
+            val stored = live.owner("GET", "/v1/snapshots/devA")
+            assertEquals(200 to """{"lineage":"devA","versions":[]}""", stored.status to stored.body, "nothing was stored")
+            // Control: the phone, now confirmed, has the same request taken.
+            assertEquals(201, live.send("PUT", target, phone.headers("PUT", target, body, server.seconds), body).status)
         }
     }
 
