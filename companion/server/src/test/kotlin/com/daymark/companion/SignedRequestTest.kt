@@ -7,6 +7,7 @@ import com.daymark.companion.auth.PairingCode
 import com.daymark.companion.auth.SIGNED_BODY
 import com.daymark.companion.auth.SignedBody
 import com.daymark.companion.auth.bodyJoined
+import com.daymark.companion.routes.JSON_BODY_MAX_BYTES
 import com.daymark.companion.routes.PAIRING_CODE_CREDENTIAL
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
@@ -480,6 +481,34 @@ class SignedRequestTest {
         assertEquals(HttpStatusCode.Created, res.status, res.bodyAsText())
         assertEquals(listOf(SignedBody(line, kept = true, keptBytes = cap.toInt(), keptChunks = cap.toInt() / BODY_CHUNK_BYTES)), reads.distinct())
         assertContentEquals(body, server.signedGet(client, phone, target).bodyAsBytes())
+    }
+
+    @Test
+    fun `a signed report of an invitation naming a key nobody paired keeps none of its body`() = testApplication {
+        val server = DeviceServer(mode = SetupMode.PAIRED)
+        server.start(this)
+        val reads = java.util.Collections.synchronizedList(mutableListOf<SignedBody>())
+        application {
+            sendPipeline.intercept(ApplicationSendPipeline.Before) { call.attributes.getOrNull(SIGNED_BODY)?.let { reads += it } }
+        }
+        val phone = TestPhone()
+        server.pair(client, phone)
+        val stranger = TestPhone() // a key nobody paired
+        val target = "/v1/invite/no-such-invite/report"
+        // A report's JSON at the bound every route that takes no credential reads under.
+        val body = ("{\"secret\":\"" + "a".repeat(JSON_BODY_MAX_BYTES.toInt() - 13) + "\"}").toByteArray()
+        assertEquals(JSON_BODY_MAX_BYTES.toInt(), body.size)
+        val line = DeviceSignature.bodyHash(body)
+
+        val res = client.send(HttpMethod.Post, target, stranger.headers("POST", target, body, server.seconds), body)
+        assertEquals(unauthorized, res.answer())
+        assertEquals(listOf(SignedBody(line, kept = false, keptBytes = 0)), reads.distinct(), "read to its end and hashed, and none of it kept")
+
+        // Control: the paired phone's report with the same body is kept, and reaches the owner's answer.
+        reads.clear()
+        val own = client.send(HttpMethod.Post, target, phone.headers("POST", target, body, server.seconds), body)
+        assertEquals(HttpStatusCode.Gone to """{"error":"invite unavailable"}""", own.answer())
+        assertEquals(listOf(SignedBody(line, kept = true, keptBytes = body.size, keptChunks = body.size / BODY_CHUNK_BYTES)), reads.distinct())
     }
 
     @Test

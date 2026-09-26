@@ -278,6 +278,11 @@ fun Route.therapistAuthRoutes(
                 call.respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited"))
                 return@post
             }
+            // A request presenting an owner credential is checked before its body is read, as on every
+            // owner route: a signed one naming no live key has its body read to the end, hashed and
+            // dropped by the gate, so it keeps none of it (#186). An anonymous request's body is read
+            // under JSON_BODY_MAX_BYTES, the bound every route that takes no credential reads under.
+            if (presentingOwnerToken && !call.ownerAuthorized(ownerGuard)) return@post
             // An owner reporting from a console button has nothing to put in a body, so an empty
             // one is a valid report rather than a malformed request. Only a non-empty body that is
             // not JSON earns the 400 — a fact about the request, not about any invitation.
@@ -295,7 +300,6 @@ fun Route.therapistAuthRoutes(
             }
 
             if (presentingOwnerToken) {
-                if (!call.ownerAuthorized(ownerGuard)) return@post
                 val result = authStore.reportInviteByOwner(inviteId)
                 if (result.status == AuthStore.ReportStatus.OK) {
                     // Respond FIRST, then audit: the burn has already committed in the store, and a
