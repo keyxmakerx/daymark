@@ -8,7 +8,6 @@ import com.daymark.synccrypto.PendingPairing
 import com.daymark.synccrypto.PhonePairing
 import com.daymark.synccrypto.PhoneSync
 import com.daymark.synccrypto.PhoneWords
-import com.goterl.lazysodium.LazySodium
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -76,11 +75,13 @@ data class ServerSyncUiState(
 @HiltViewModel
 class ServerSyncViewModel @Inject constructor(
     private val store: ServerLinkStore,
-    private val pairing: PhonePairing,
-    private val phoneSync: PhoneSync,
-    private val sodium: LazySodium,
+    private val parts: ServerSyncParts,
     private val backupManager: BackupManager,
 ) : ViewModel() {
+
+    private val pairing: PhonePairing get() = parts.pairing
+    private val phoneSync: PhoneSync get() = parts.phoneSync
+    private val sodium get() = parts.sodium
 
     private val _state = MutableStateFlow(ServerSyncUiState())
     val state: StateFlow<ServerSyncUiState> = _state.asStateFlow()

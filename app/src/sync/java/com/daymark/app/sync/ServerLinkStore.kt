@@ -5,7 +5,6 @@ import com.daymark.app.security.KeystoreAead
 import com.daymark.synccrypto.KeptLink
 import com.daymark.synccrypto.PairedServer
 import com.daymark.synccrypto.PhoneLineage
-import com.goterl.lazysodium.LazySodium
 import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Named
@@ -30,7 +29,7 @@ import javax.inject.Singleton
 @Singleton
 class ServerLinkStore @Inject constructor(
     @Named("secure") private val securePrefs: SharedPreferences,
-    private val sodium: LazySodium,
+    private val parts: ServerSyncParts,
 ) {
     private val keystore = KeystoreAead(ALIAS)
 
@@ -80,7 +79,7 @@ class ServerLinkStore @Inject constructor(
             val kept = String(bytes, Charsets.US_ASCII)
             if (PhoneLineage.isPhoneLineage(kept)) return kept
         }
-        val made = PhoneLineage.create(sodium)
+        val made = PhoneLineage.create(parts.sodium)
         sealToPrefs(LINEAGE, LINEAGE_AAD, made.toByteArray(Charsets.US_ASCII))
         return made
     }

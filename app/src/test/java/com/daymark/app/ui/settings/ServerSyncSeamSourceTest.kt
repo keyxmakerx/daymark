@@ -176,6 +176,49 @@ class ServerSyncSeamSourceTest {
         assertFalse("the foss manifest asks for INTERNET", fossManifest.isFile && fossManifest.readText().contains("android.permission.INTERNET"))
     }
 
+    /**
+     * The types a Hilt signature in [code] names that come from `:sync-crypto` or libsodium: every
+     * `@Inject constructor(…)` parameter list and every `@Provides` function's parameters and result.
+     * Hilt writes Java for each, the app compiles that Java for Java 17, and those two are compiled for
+     * Java 21, which javac 17 cannot read (#432).
+     */
+    private fun java21InHiltSignatures(code: String): List<String> {
+        val imported = Regex("""\bimport\s+((?:com\.daymark\.synccrypto|com\.goterl)\.[\w.]*?)(\w+)\s""")
+            .findAll(code).map { it.groupValues[2] }.toSet()
+        val signatures = ArrayList<String>()
+        for (start in occurrences(code, "@Inject constructor(")) {
+            var depth = 0
+            var index = start + "@Inject constructor".length
+            while (index < code.length) {
+                when (code[index]) {
+                    '(' -> depth++
+                    ')' -> if (--depth == 0) break
+                }
+                index++
+            }
+            signatures += code.substring(start, minOf(index + 1, code.length))
+        }
+        Regex("""@Provides[\s\S]*?fun\s+\w+\s*\(([^{=]*)""").findAll(code).forEach { signatures += it.value }
+        return signatures.flatMap { signature ->
+            val words = Regex("""[\w.]+""").findAll(signature).map { it.value }.toList()
+            words.filter { word -> word in imported || word.startsWith("com.daymark.synccrypto.") || word.startsWith("com.goterl.") }
+        }
+    }
+
+    @Test
+    fun `no Hilt signature in the sync flavour names a type compiled for Java 21`() {
+        val planted = "package x\nimport com.goterl.lazysodium.LazySodium\nimport com.daymark.synccrypto.PhoneSync\n" +
+            "class A @Inject constructor(@Named(\"s\") private val p: Prefs, private val s: LazySodium)\n" +
+            "object M { @Provides fun sync(): PhoneSync = TODO() }\n" +
+            "class B @Inject constructor(private val parts: ServerSyncParts)\n"
+        assertEquals(listOf("LazySodium", "PhoneSync"), java21InHiltSignatures(codeOnly(planted)))
+        val sync = kotlinUnder("sync")
+        assertTrue(sync.any { it.name == "ServerSyncParts.kt" })
+        assertTrue(sync.any { codeOnly(it.readText()).contains("@Inject constructor(") })
+        val found = sync.flatMap { file -> java21InHiltSignatures(codeOnly(file.readText())).map { "${file.name}: $it" } }
+        assertEquals(emptyList<String>(), found)
+    }
+
     @Test
     fun `the sync flavour's screens draw no tick and no colour of their own`() {
         val sync = kotlinUnder("sync")
