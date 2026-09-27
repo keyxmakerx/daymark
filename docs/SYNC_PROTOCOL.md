@@ -292,7 +292,8 @@ arrived, in this order:
   request refused for its signature has not spent its nonce. The nonce store takes it on one reading
   of its own clock, under its lock; that reading judges the end of the window once more and decides
   which nonces have lapsed, so no other request's forgetting can land between a request's time being
-  found good and its nonce being taken;
+  found good and its nonce being taken. A used nonce is kept until a minute after its request's
+  window has closed, so a server clock stepped back by up to a minute does not reopen a replay;
 - the key and its revocation, read again just before the handler runs.
 
 Every refusal is the same `401`, whichever check said no, and it counts toward the address's lockout
