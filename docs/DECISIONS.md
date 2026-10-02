@@ -16,38 +16,49 @@ August 2026. Both documents were retired in the 2026-09-23 consolidation and are
 
 ---
 
-## D1. The scheduling logic is an arbiter, not a recommender
+## D1. A rules engine runs every check-in, and it is never a recommender
 
-**Decision.** One small component owns a single question — *may a feature interrupt the person right
-now?* — and has no second job.
+**Revisited 2026-10-02 (#159 reopened and reversed).** D1 first made the scheduling logic a narrow
+arbiter that answered one question, *may a feature interrupt right now?*, and gated almost nothing.
+The maintainer's decision is that the engine should be dynamic and interactive and should **run all
+of the app's check-ins**: the dailies, the reminders and the notifications. It decides which ones
+happen, when, how often, and which premade line each one uses. The number D1 and the rules below
+stay; what changed is the size of the job.
 
-| | Recommender | **Arbiter** (built) |
-|---|---|---|
-| Question it answers | "What should we say to this person?" | "May I speak right now?" |
-| Context it needs | goals, mood, check-ins, history — everything | the last interruption, the person's declared frequency, its own ledger |
-| Coupling | every feature feeds it | features call it; it knows none of them |
-| Size | unbounded | bounded |
+**Decision.**
+- **Rules and fixed human-written lines, no AI.** Every line the engine can say was written by a
+  person ahead of time, with the person's own numbers slotted in. "Smart" means rules over the
+  person's own data and nothing else.
+- **It is not a therapist and never provides support itself.** It exists to make the app more
+  welcoming and easier to stick with, including for people who forget or lose track of time. Support
+  stays where it already lives: the safety plan, the offline resources, a person's own clinician.
+- **Dynamic by default, settings never required.** The engine works out a sensible rhythm on its own.
+  Every choice it makes also exists as a setting, and nobody has to open them.
+- **The rhythm fits the thing tracked.** Once a day for mood. "Log it when it happens" for things
+  like anger. Several quick check-ins through the day for attention-related tracking. Or a rhythm a
+  therapist sets in the creator.
+- **It may move a check-in by itself, and says so.** When it does, it sends a notification saying
+  what changed and why, with **Put it back**. A move is never silent and never final.
+- **Suggestion logic stays inside each feature.** Features hand the engine a small, opaque
+  description of a check-in (its kind, the rhythm it wants, the lines it may use). They do not push
+  domain state into it, and it does not learn what a mood is. If a rule needs a feature's data, the
+  rule belongs in the feature.
 
-Suggestion logic stays inside each feature, where its context already lives. Features do not push
-context into the arbiter; they ask it a yes-or-no question. The moment a feature needs to hand it
-domain state, that logic belongs in the feature.
+**What stays true from the first D1.** `stats/InterruptionBudget.kt` imports nothing at all, so "it
+knows none of the features" is enforced by the compiler. It keeps a separate budget per `Kind`. Its
+ledger is the `offer_records` table (`data/entity/OfferRecord.kt`): three columns and no fourth, rows
+never updated, so nothing can re-score after the fact how an offer landed. The entry editor still asks
+it whether the support space may take the person over after a save. `Kind.COMPANION` and
+`Kind.ASSIGNMENT` have budgets and are called by nothing yet. Not built: #272.
 
-**What would change this:** a real need for cross-feature reasoning ("don't ask about goals on a day
-they logged a hard mood"). Even then, pass a small opaque priority tag on the request rather than
-teaching the arbiter what a mood is.
-
-**As built.** `stats/InterruptionBudget.kt` imports nothing at all, so "it knows none of them" is
-enforced by the compiler. It keeps a separate budget per `Kind`. Its ledger is the `offer_records`
-table (`data/entity/OfferRecord.kt`): three columns and no fourth, rows never updated, so nothing
-can re-score after the fact how an offer landed.
-
-- **The one production caller** is the entry editor. It asks whether the support space may take the
-  person over after a save, and keeps its own reasons (low mood, gentle support on) to itself.
-- **Reminders are recorded, not rationed.** Every firing writes a ledger line, but the arbiter does
-  not gate reminders. The person chose those times, and there is no reminder-frequency setting for
-  them to turn back up if an inference quietened them (`notifications/ReminderScheduler.kt`).
-- `Kind.COMPANION` and `Kind.ASSIGNMENT` have budgets and are called by nothing yet. Not built:
-  #272.
+**What changes in the code.** Reminders were *recorded, not rationed*: every firing writes a ledger
+line and `notifications/ReminderScheduler.kt` never consults the budget, because an earlier version
+that rationed them collapsed a three-a-day schedule to once a week with no setting to turn it back
+up. Under this decision the engine may move and space reminders, but only under the rules in D1a
+(easing off, an explicit opt-in to repeat, and an announced, reversible move). That is also what
+makes it safe: the old failure was a silent, one-way reduction, and this is neither silent nor
+one-way. The timing rule `stats/TimingGrid.kt` and the twelve openers in `stats/PhrasePool.kt`, which
+nothing called, are no longer dormant. They are the first parts the engine uses.
 
 The invariant's tests, `InterruptionBudgetTest`, are property sweeps over kind, declared frequency,
 ledger, standing stop and clock. Four sweeps, each catching what the others miss:
@@ -56,27 +67,38 @@ ledger, standing stop and clock. Four sweeps, each catching what the others miss
 3. worse reception never turns a no into a yes;
 4. an inference may quieten the app, but only the person may silence it.
 
-Add a fifth rather than relax any of these.
+Add a fifth rather than relax any of these. The engine's own moves get the same treatment: a test
+that no sequence of missed check-ins ever produces a more frequent or louder schedule.
 
-### D1a. It reads its own reception, and infers no clinical state
+### D1a. It reads its own reception, eases off when the person goes quiet, and infers no clinical state
 
-The proposal was to let the arbiter work out whether someone is struggling, annoyed by the app, or
-fine and not in the mood. All three call for **the same action — ask less** — so the arbiter needs
-one variable, how its own offers are received, and not a state classifier.
+The proposal was to let the engine work out whether someone is struggling, annoyed by the app, or
+fine and not in the mood. All three call for **the same action, ask less**, so the engine needs one
+variable, how its own check-ins are received, and not a state classifier.
 
-**What it may know:** its own ledger — offered, accepted, dismissed, snoozed, "not now", "stop asking".
+**What it may know:** its own ledger (offered, accepted, dismissed, snoozed, "not now", "stop
+asking") and what the person set up.
 
-**What it must never do: infer clinical state.**
-1. It would be diagnosis by side effect, with no instrument, no validation and no consent. That is
-   worse than a screen, because it is invisible.
-2. The field cannot do it reliably. Inferring depression from phone behaviour replicates poorly.
-3. Its best-known signal, reduced geographic mobility, uses location, which Daymark bans outright.
+**What it must never do.**
+1. **Infer clinical state.** It would be diagnosis by side effect, with no instrument, no validation
+   and no consent, and worse than a screen because it is invisible. The field cannot do it reliably,
+   and its best-known signal, reduced geographic mobility, uses location, which Daymark bans.
+2. **Label or guess how the person feels.** Lines describe the app and the person's own entries,
+   never a feeling.
+3. **Mention a gap.** No line says how long it has been, or that anything was missed.
+4. **Trigger crisis resources by itself.** The offline, person-editable resources are opened by the
+   person. The engine never opens them and never decides someone needs them.
 
-> **The invariant.** The arbiter's response to falling reception is monotonic and one-directional:
-> it may only ever ask *less*. No signal, in any combination, may make it ask more.
+> **The invariant.** Going quiet never makes the app louder. Missed check-ins make the engine ease
+> off: fewer, further apart, and in the end silent. No signal, in any combination, may make it ask
+> more.
 
-That is the ethical guarantee and the engineering guarantee at once. It is also directly testable.
-Escalation belongs to the person: asking for more is a setting, never an inference.
+**Asking for more is the person's, never an inference.** The one way to get repeat reminders is an
+explicit setting, *"nudge me again if I miss one"*, off until the person turns it on. The engine
+may then repeat a check-in within the limits that setting states, and no further. It may quieten
+itself; only the person may silence it, or turn it up.
+
+That is the ethical guarantee and the engineering guarantee at once, and it is directly testable.
 
 ### D1b. The companion is a real presence, and a client of the arbiter
 
