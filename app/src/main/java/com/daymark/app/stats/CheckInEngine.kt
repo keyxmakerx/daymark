@@ -17,7 +17,7 @@ package com.daymark.app.stats
  * subset of what the person asked for, by construction.
  *
  * It reads one thing about the person: a run of check-ins at the end of the ledger that nobody
- * answered. Each step of that run eases the [Pace] one rung quieter. One answered check-in puts the
+ * answered. Every two of them double the wait ([paceAfter]), with no cap. One answered check-in puts the
  * pace straight back to as set, which is still never more than the person set (§D1a's ceiling).
  * Nothing here knows what a mood, an entry or a reminder is, and nothing here guesses why a check-in
  * went unanswered: struggling, annoyed and busy all get the same answer, ask less.
@@ -31,7 +31,7 @@ package com.daymark.app.stats
  *     saying stop ([Pace.Off] is reachable only through [saidStop] or a STOP row);
  *  4. no run of missed check-ins, simulated day by day, ever posts more in a week than the week
  *     before it (§D1's "a test that no sequence of missed check-ins ever produces a more frequent
- *     schedule").
+ *     schedule"), and the next check-in is always still to come, however far off.
  *
  * ## Saying so
  *
@@ -51,45 +51,55 @@ object CheckInEngine {
      */
     private const val SLACK_MILLIS = 2 * HOUR_MILLIS
 
+    private const val DAY_MILLIS = 24 * HOUR_MILLIS
+
     /**
-     * How much of the person's own schedule is posted, loudest first.
+     * How much of the person's own schedule is posted: at most one check-in per [gapMillis].
      *
-     * [gapMillis] is the least time between two posted check-ins. A longer gap is a quieter rung, and
-     * there is nothing above [AsSet]: a rung louder than the person's own schedule is exactly what
-     * would make this an engagement optimiser, and the ceiling test fails if one is added.
+     * A longer gap is quieter. Nothing is louder than [AsSet], which posts every time the person
+     * set: a pace louder than their own schedule is exactly what would make this an engagement
+     * optimiser, and the ceiling test fails if one appears.
      */
-    enum class Pace(val gapMillis: Long) {
-        /** Every time the person set. */
-        AsSet(0L),
+    data class Pace(val gapMillis: Long) {
+        /** True when this pace asks less than [other]. */
+        fun quieterThan(other: Pace): Boolean = gapMillis > other.gapMillis
 
-        /** At most once a day. */
-        Daily(24 * HOUR_MILLIS - SLACK_MILLIS),
+        /** The gap in whole days, for the notice's wording. Zero for [AsSet]. */
+        val days: Long get() = if (gapMillis == Long.MAX_VALUE) Long.MAX_VALUE else (gapMillis + SLACK_MILLIS) / DAY_MILLIS
 
-        /** At most every other day. */
-        EveryOtherDay(48 * HOUR_MILLIS - SLACK_MILLIS),
+        companion object {
+            /** Every time the person set. */
+            val AsSet = Pace(0L)
 
-        /** At most twice a week. */
-        TwiceAWeek(84 * HOUR_MILLIS - SLACK_MILLIS),
-
-        /** At most once a week. The quietest the engine goes on its own. */
-        Weekly(168 * HOUR_MILLIS - SLACK_MILLIS),
-
-        /** Nothing. Only the person reaches this, by saying stop. */
-        Off(Long.MAX_VALUE),
+            /** Nothing. Only the person reaches this, by saying stop. */
+            val Off = Pace(Long.MAX_VALUE)
+        }
     }
 
     /**
-     * The quietest pace the person's silence alone can reach. Being ignored makes the app quiet,
-     * not absent; switching a check-in off is the person's to do (§D1a).
+     * How many unanswered check-ins in a row each step takes. Two, so one stray miss changes
+     * nothing. A judgement call, recorded as one.
      */
-    val QUIETEST_INFERRED: Pace = Pace.Weekly
+    const val MISSES_PER_STEP = 2
 
     /**
-     * How many unanswered check-ins in a row each rung takes. Two per rung, so one stray miss
-     * changes nothing, and from three a day it takes about two weeks of quiet to reach weekly.
-     * A judgement call, recorded as one.
+     * Steps past this stop doubling, only so the arithmetic cannot overflow. At 2^12 days the gap
+     * is over eleven years: there is no limit anyone will meet, and the gap stays finite, so the
+     * engine never switches anything off on its own (§D1a: only the person may).
      */
-    const val MISSES_PER_RUNG = 2
+    private const val MAX_DOUBLINGS = 12
+
+    /**
+     * The pace after [steps] steps of quiet: as set, then at most once a day, then the gap doubles
+     * with every step (2 days, 4, 8, 16, and on). There is no fixed quietest pace. However long
+     * someone stays quiet, the app keeps getting quieter, because people differ and a floor chosen
+     * in advance would be wrong for most of them.
+     */
+    fun paceAfter(steps: Int): Pace {
+        if (steps <= 0) return Pace.AsSet
+        val doublings = minOf(steps - 1, MAX_DOUBLINGS)
+        return Pace(DAY_MILLIS * (1L shl doublings) - SLACK_MILLIS)
+    }
 
     /**
      * How many check-ins of [kind] at the end of the ledger went unanswered in a row.
@@ -133,8 +143,7 @@ object CheckInEngine {
         if (mine.any { InterruptionBudget.Outcome.fromKey(it.outcome) == InterruptionBudget.Outcome.STOP }) {
             return Pace.Off
         }
-        val rungs = unansweredRun(kind, recent, countFrom) / MISSES_PER_RUNG
-        return Pace.entries[minOf(rungs, QUIETEST_INFERRED.ordinal)]
+        return paceAfter(unansweredRun(kind, recent, countFrom) / MISSES_PER_STEP)
     }
 
     /**
@@ -154,7 +163,7 @@ object CheckInEngine {
     /** A change of pace the person must be told about, with the way back. */
     data class Change(val from: Pace, val to: Pace) {
         /** True when the app now asks less than before. False when it is back toward as set. */
-        val quieter: Boolean get() = to.ordinal > from.ordinal
+        val quieter: Boolean get() = to.quieterThan(from)
     }
 
     /**

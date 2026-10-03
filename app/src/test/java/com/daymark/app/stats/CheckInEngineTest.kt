@@ -46,6 +46,12 @@ class CheckInEngineTest {
     private fun row(n: Int, outcome: String, kind: Kind = Kind.REMINDER) =
         Offer(kind = kind.key, offeredAt = start + n * hour, outcome = outcome)
 
+    /** Every pace the engine can produce, loudest first, and the person's own Off. */
+    private val paces = (0..CheckInEngine.MISSES_PER_STEP * 20).map { CheckInEngine.paceAfter(it) }.distinct() +
+        Pace.Off
+
+    private fun louder(a: Pace, b: Pace) = b.quieterThan(a)
+
     private fun pace(ledger: List<Offer>, saidStop: Boolean = false, countFrom: Long = 0L) =
         CheckInEngine.paceOf(Kind.REMINDER, ledger, saidStop, countFrom)
 
@@ -54,8 +60,9 @@ class CheckInEngineTest {
     @Test
     fun `nothing is ever louder than the schedule the person set`() {
         // The ceiling. AsSet is the loudest rung there is, and it posts exactly what is due.
-        assertEquals(Pace.AsSet, Pace.entries.minByOrNull { it.gapMillis })
+        assertEquals(Pace.AsSet, paces.minByOrNull { it.gapMillis })
         assertEquals(0L, Pace.AsSet.gapMillis)
+        for (n in 0..200) assertTrue(CheckInEngine.paceAfter(n).gapMillis >= 0L)
         for (ledger in ledgers(6)) {
             assertTrue(pace(ledger).gapMillis >= Pace.AsSet.gapMillis)
         }
@@ -87,7 +94,7 @@ class CheckInEngineTest {
             // Appending a miss.
             for (miss in listOf(Outcome.DISMISSED.key, unknownKey)) {
                 val after = pace(ledger + row(ledger.size + 1, miss))
-                assertTrue("$ledger + $miss went from $before to $after", after.ordinal >= before.ordinal)
+                assertFalse("$ledger + $miss went from $before to $after", louder(after, before))
                 compared++
             }
             // Replacing any one row with a worse one.
@@ -96,7 +103,7 @@ class CheckInEngineTest {
                     val changed = ledger.toMutableList().also { it[i] = it[i].copy(outcome = w) }
                     check(changed != ledger)
                     val after = pace(changed)
-                    assertTrue("$ledger, row $i to $w, went from $before to $after", after.ordinal >= before.ordinal)
+                    assertFalse("$ledger, row $i to $w, went from $before to $after", louder(after, before))
                     compared++
                 }
             }
@@ -108,15 +115,15 @@ class CheckInEngineTest {
             val run = (1..n).map { row(it, Outcome.DISMISSED.key) }
             val before = pace(run)
             val after = pace(run + row(n + 1, Outcome.DISMISSED.key))
-            assertTrue("$n misses: $before, then $after", after.ordinal >= before.ordinal)
+            assertFalse("$n misses: $before, then $after", louder(after, before))
         }
     }
 
     @Test
     fun `a quieter pace never posts where a louder one would not`() {
         val due = dueTimes(listOf(8, 12, 17, 22), days = 21)
-        for (louder in Pace.entries) for (quieter in Pace.entries) {
-            if (quieter.ordinal < louder.ordinal) continue
+        for (louder in paces) for (quieter in paces) {
+            if (quieter.gapMillis < louder.gapMillis) continue
             for (last in listOf(0L) + due) for (t in due) {
                 if (CheckInEngine.shouldPost(quieter, last, t)) {
                     assertTrue("$quieter posts at $t after $last but $louder does not",
@@ -132,7 +139,11 @@ class CheckInEngineTest {
     fun `however long the silence, it never switches a check-in off`() {
         for (ledger in ledgers(6)) assertTrue(pace(ledger) != Pace.Off)
         val years = (1..2_000).map { row(it, Outcome.DISMISSED.key) }
-        assertEquals(CheckInEngine.QUIETEST_INFERRED, pace(years))
+        assertTrue(pace(years) != Pace.Off)
+        assertTrue(pace(years).gapMillis < Long.MAX_VALUE)
+        // No fixed quietest pace: a longer silence is always at least as quiet, and past a week.
+        assertTrue(pace(years).quieterThan(pace(years.take(8))))
+        assertTrue(pace(years).days > 7)
         // Positive control: the person's own stop does switch it off, by either route.
         assertEquals(Pace.Off, pace(years, saidStop = true))
         assertEquals(Pace.Off, pace(listOf(row(1, Outcome.STOP.key))))
@@ -142,35 +153,41 @@ class CheckInEngineTest {
     // ---- Rule 4: no run of missed check-ins ever posts more in a week ----
 
     @Test
-    fun `missing every check-in posts fewer each week and never none`() {
+    fun `missing every check-in only ever lengthens the wait, and a next one is always still to come`() {
+        // Measured as the time between posts, not posts per week: once the wait passes a week, a
+        // weekly count is zero, then one, then zero, and says nothing about direction.
         val schedules = listOf(listOf(21), listOf(9, 21), listOf(9, 13, 21), listOf(7, 10, 13, 16, 19, 22))
         for (hours in schedules) {
-            val weekly = simulateSilence(hours, weeks = 8)
-            for (w in 1 until weekly.size) {
-                assertTrue("$hours: week $w posted ${weekly[w]} after ${weekly[w - 1]}", weekly[w] <= weekly[w - 1])
+            val posts = simulateSilence(hours, days = 400)
+            val eased = posts.zipWithNext().filter { (prev, _) -> prev.second != Pace.AsSet }
+            val waits = eased.map { (prev, next) -> next.first - prev.first }
+            for (i in 1 until waits.size) {
+                assertTrue("$hours: wait ${i + 1} was ${waits[i] / hour}h after ${waits[i - 1] / hour}h", waits[i] >= waits[i - 1])
             }
-            assertTrue("$hours: week 1 posted more than was set", weekly[0] <= hours.size * 7)
-            // Quiet, not absent: still at least one a week.
-            assertTrue("$hours: $weekly", weekly.all { it >= 1 })
-            // Positive control: the silence really did ease it off, or this test proves nothing.
-            assertTrue("$hours: $weekly", weekly.last() < weekly.first())
+            // Never more than the person set: every post is at one of their times (dueTimes), and
+            // the first week posts no more than they asked for.
+            assertTrue(posts.count { it.first < start + 7 * day } <= hours.size * 7)
+            // Quiet, not absent: the pace after all that silence is still finite.
+            assertTrue(pace(posts.map { Offer(Kind.REMINDER.key, it.first, Outcome.DISMISSED.key) }).gapMillis < Long.MAX_VALUE)
+            // Positive control: the silence really did stretch the wait, past a week.
+            assertTrue("$hours: $waits", waits.size >= 3 && waits.last() > 7 * day && waits.last() > waits.first())
         }
     }
 
-    /** Posts per week when every posted check-in goes unanswered. */
-    private fun simulateSilence(hours: List<Int>, weeks: Int): List<Int> {
+    /** When each check-in was posted, and the pace it was posted at, when every one goes unanswered. */
+    private fun simulateSilence(hours: List<Int>, days: Int): List<Pair<Long, Pace>> {
         val ledger = mutableListOf<Offer>()
         var last = 0L
-        val counts = IntArray(weeks)
-        for (t in dueTimes(hours, days = weeks * 7)) {
+        val posts = mutableListOf<Pair<Long, Pace>>()
+        for (t in dueTimes(hours, days)) {
             val p = pace(ledger)
             if (CheckInEngine.shouldPost(p, last, t)) {
-                counts[((t - start) / (7 * day)).toInt()]++
+                posts += t to p
                 ledger += Offer(Kind.REMINDER.key, t, Outcome.DISMISSED.key)
                 last = t
             }
         }
-        return counts.toList()
+        return posts
     }
 
     // ---- Put it back, kinds, clocks, and saying so ----
@@ -178,7 +195,7 @@ class CheckInEngineTest {
     @Test
     fun `put it back ignores everything before it and returns to as set`() {
         val quiet = (1..20).map { row(it, Outcome.DISMISSED.key) }
-        assertEquals(CheckInEngine.QUIETEST_INFERRED, pace(quiet))
+        assertTrue(pace(quiet).quieterThan(Pace.AsSet))
         assertEquals(Pace.AsSet, pace(quiet, countFrom = start + 21 * hour))
     }
 
@@ -201,12 +218,12 @@ class CheckInEngineTest {
         val others = (1..20).map { row(it, Outcome.DISMISSED.key, Kind.SUPPORT) }
         assertEquals(Pace.AsSet, pace(others))
         // Positive control: the same rows as reminders do.
-        assertEquals(CheckInEngine.QUIETEST_INFERRED, pace(others.map { it.copy(kind = Kind.REMINDER.key) }))
+        assertEquals(CheckInEngine.paceAfter(10), pace(others.map { it.copy(kind = Kind.REMINDER.key) }))
     }
 
     @Test
     fun `a clock set back cannot lock someone out of their own schedule`() {
-        for (p in Pace.entries) {
+        for (p in paces) {
             if (p == Pace.Off) continue
             assertTrue(CheckInEngine.shouldPost(p, lastPostedAt = start + 30 * day, dueAt = start))
         }
@@ -214,13 +231,13 @@ class CheckInEngineTest {
 
     @Test
     fun `every change of pace is reported, both ways, except the person's own stop`() {
-        for (a in Pace.entries) for (b in Pace.entries) {
+        for (a in paces) for (b in paces) {
             val change = CheckInEngine.changeBetween(a, b)
             when {
                 a == b || b == Pace.Off -> assertNull("$a to $b", change)
                 else -> {
                     assertNotNull("$a to $b", change)
-                    assertEquals(b.ordinal > a.ordinal, change!!.quieter)
+                    assertEquals(b.gapMillis > a.gapMillis, change!!.quieter)
                 }
             }
         }
@@ -229,6 +246,11 @@ class CheckInEngineTest {
     /** The times a schedule is due over [days], in order: the alarm side, which never changes. */
     private fun dueTimes(hours: List<Int>, days: Int): List<Long> =
         (0 until days).flatMap { d -> hours.sorted().map { h -> start + d * day + h * hour } }
+
+    @Test
+    fun `the wait doubles with every step, from once a day`() {
+        assertEquals(listOf(0L, 1L, 2L, 4L, 8L, 16L, 32L), (0..6).map { CheckInEngine.paceAfter(it).days })
+    }
 
     @Test
     fun `the ledger sweep covers every outcome`() {
