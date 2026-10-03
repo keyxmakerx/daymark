@@ -12,6 +12,10 @@ act it was; a bigger white star is a life event the person marked. The signed-of
 
 This is the single reference for the Sky. Code cites its section numbers.
 
+A redesign of the Sky is approved and not built: #449, with its rules in `docs/DECISIONS.md` §D11 and
+its look in `docs/prototypes/sky-phone.html`. Until it ships, this document describes the sky the app
+draws.
+
 ---
 
 ## 0. What is built, and where

@@ -1,0 +1,1403 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--
+  The approved redesign of the sky, as a phone screen (not built: #449; rules in DECISIONS.md §D11).
+  Every person, place, date and memory in it is made up. It opens in any browser; on a wide window it
+  sits in a phone frame. Adding #sky=N to the address shows another made-up person's sky.
+  Fonts come from Google Fonts when online and fall back to system fonts when not.
+-->
+<title>Your Sky on a Phone</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Roboto:wght@400;500&display=swap">
+<style>
+/* A phone screen of the sky. On a wide window it sits in a phone frame with a short note beside it;
+   on a phone it simply is the screen. Everything inside is laid out against the screen, not the window. */
+:root {
+  color-scheme: dark;
+  --void: #03050D;
+  --page: #07090F;
+  --ink: #E8E6F0;
+  --soft: #A3A8BD;
+  --faint: #6E7390;
+  --panel: #0B1024F0;
+  --sheet: #0C1126;
+  --rule: #232A42;
+  --lit: #C9D6FF;
+  --serif: "Fraunces", Georgia, "Times New Roman", serif;
+  --sans: Roboto, "Segoe UI", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--page); color: var(--ink); font-family: var(--sans); font-size: 14px; line-height: 1.45; overflow: hidden; }
+button { font: inherit; color: inherit; }
+.stage { height: 100%; height: 100dvh; display: flex; align-items: center; justify-content: center; gap: 56px; padding: 24px; }
+.about { max-width: 300px; }
+.about h1 { font-family: var(--serif); font-weight: 600; font-size: 30px; line-height: 1.1; margin: 0 0 10px; }
+.about p { margin: 0 0 10px; color: var(--soft); font-size: 14px; }
+.about p b { color: var(--ink); font-weight: 500; }
+.phone { position: relative; height: min(844px, calc(100vh - 48px)); aspect-ratio: 390 / 844; border-radius: 52px; padding: 11px; background: #12141C;
+  box-shadow: 0 0 0 1px #2A2E3C, 0 0 0 2px #05060A, 0 30px 80px #000A; flex: none; }
+.screen { position: relative; width: 100%; height: 100%; border-radius: 42px; overflow: hidden; background: var(--void); isolation: isolate; }
+
+#sky { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+#sky.drag { cursor: grabbing; }
+.lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+.ring { position: absolute; z-index: 1; border: 1px solid #E8E6F0B3; border-radius: 50%; pointer-events: none; transform: translate(-50%, -50%); }
+.ui { position: absolute; z-index: 3; }
+
+/* the phone's own status line (frame only) */
+.status { top: 0; left: 0; right: 0; height: 34px; display: flex; align-items: center; justify-content: space-between; padding: 6px 30px 0; font-size: 13px; font-weight: 500; pointer-events: none; }
+.status .dots { display: flex; gap: 6px; align-items: center; }
+.status .dots i { display: block; width: 16px; height: 9px; border: 1.4px solid var(--ink); border-radius: 3px; opacity: .85; }
+.status .dots b { display: block; width: 14px; height: 9px; background: linear-gradient(90deg, var(--ink) 0 70%, transparent 70%); clip-path: polygon(0 100%, 100% 0, 100% 100%); opacity: .85; }
+
+/* top app bar */
+.top { top: calc(var(--st, 34px) + env(safe-area-inset-top, 0px)); left: 0; right: 0; display: flex; align-items: center; gap: 4px; padding: 4px 8px 10px;
+  background: linear-gradient(#03050DE0, #03050D90 60%, transparent); }
+@media (max-width: 760px), (max-height: 560px) { .top { --st: 0px; } }
+.top h1 { font-family: var(--serif); font-weight: 600; font-size: 22px; line-height: 1.1; margin: 0; }
+.top p { margin: 1px 0 0; color: var(--soft); font-size: 12px; }
+.top .t { flex: 1; min-width: 0; padding-left: 4px; }
+.icon { width: 44px; height: 44px; display: grid; place-items: center; background: none; border: 0; border-radius: 50%; cursor: pointer; color: var(--ink); flex: none; }
+.icon:hover { background: #FFFFFF10; }
+.icon svg { width: 22px; height: 22px; }
+.zoom { top: calc(var(--st, 34px) + env(safe-area-inset-top, 0px) + 62px); right: 14px; font-size: 11px; color: var(--soft); background: #0B102499; border: 1px solid var(--rule);
+  border-radius: 999px; padding: 2px 9px; font-variant-numeric: tabular-nums; pointer-events: none; }
+@media (max-width: 760px), (max-height: 560px) { .zoom { --st: 0px; } }
+
+/* bottom bar: the four things you can do from the sky */
+.bar { left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(4, 1fr); padding: 8px 6px calc(env(safe-area-inset-bottom, 0px) + 14px);
+  background: linear-gradient(transparent, #03050DD9 30%, #03050D); }
+.bar button { display: grid; justify-items: center; gap: 4px; background: none; border: 0; cursor: pointer; padding: 6px 2px; border-radius: 16px; color: var(--soft); font-size: 12px; font-weight: 500; }
+.bar button span.pill { display: grid; place-items: center; width: 56px; height: 30px; border-radius: 999px; transition: background .15s; }
+.bar button svg { width: 22px; height: 22px; }
+.bar button[aria-expanded="true"] { color: var(--ink); }
+.bar button[aria-expanded="true"] span.pill { background: #C9D6FF26; }
+.bar button:hover { color: var(--ink); }
+.bar button:focus-visible, .icon:focus-visible, .sheet button:focus-visible { outline: 2px solid var(--lit); outline-offset: 2px; }
+
+/* the card for whatever you tapped: a small sheet above the bar */
+.card { left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom, 0px) + 84px); background: var(--panel); border: 1px solid var(--rule); border-radius: 20px;
+  padding: 12px 16px 14px; backdrop-filter: blur(8px); }
+.card .d { font-family: var(--serif); font-size: 18px; font-weight: 500; padding-right: 30px; }
+.card .k { color: var(--soft); font-size: 13px; }
+.card .x { position: absolute; top: 4px; right: 4px; width: 40px; height: 40px; }
+
+/* sheets: Constellations, Explore, Key */
+.scrim { inset: 0; background: #0006; }
+.replica { inset: 0; z-index: 6; background: #020309; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; border-radius: inherit; overflow: hidden; }
+.replica canvas { width: 100%; flex: 1; min-height: 0; }
+.replica .rt { position: absolute; left: 0; right: 0; top: calc(env(safe-area-inset-top, 0px) + 54px); text-align: center; pointer-events: none; }
+.replica .rt b { display: block; font-family: var(--serif); font-weight: 500; font-size: 22px; }
+.replica .rt span { color: var(--soft); font-size: 13px; }
+.replica .back { position: absolute; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 34px); text-align: center; color: var(--soft); font-size: 13px; pointer-events: none; }
+.sheet { left: 0; right: 0; bottom: 0; max-height: 72%; display: flex; flex-direction: column; background: var(--sheet); border-top: 1px solid var(--rule);
+  border-radius: 26px 26px 0 0; padding: 8px 0 calc(env(safe-area-inset-bottom, 0px) + 84px); box-shadow: 0 -20px 50px #0009; }
+.sheet .grab { width: 36px; height: 4px; border-radius: 4px; background: #3A4060; margin: 2px auto 6px; }
+.sheet header { display: flex; align-items: center; justify-content: space-between; padding: 0 8px 4px 20px; }
+.sheet h2 { font-family: var(--serif); font-weight: 600; font-size: 20px; margin: 0; }
+.sheet .body { overflow: auto; padding: 0 12px; }
+.sheet .note { color: var(--soft); font-size: 12px; margin: 10px 8px 4px; }
+.clist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.clist button { width: 100%; display: grid; grid-template-columns: 84px 1fr; gap: 14px; align-items: center; text-align: left; background: none; border: 1px solid transparent; border-radius: 16px; padding: 8px; cursor: pointer; }
+.clist button:hover { border-color: var(--rule); background: #FFFFFF06; }
+.clist canvas { width: 84px; height: 58px; border-radius: 12px; background: #050816; border: 1px solid #1A2038; }
+.clist .n { font-family: var(--serif); font-size: 17px; }
+.clist .m { color: var(--soft); font-size: 12px; line-height: 1.35; }
+.draw { margin: 8px 8px 2px; width: calc(100% - 16px); padding: 11px; border-radius: 999px; border: 1px solid #3A4466; background: none; cursor: pointer; font-weight: 500; }
+.chips { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 2px 8px; }
+.chips button { text-align: left; padding: 10px 12px; border-radius: 14px; background: #FFFFFF08; border: 1px solid var(--rule); cursor: pointer; font-size: 13px; }
+.chips button:hover { border-color: #3A4466; }
+.chips h3 { grid-column: 1 / -1; margin: 10px 4px 0; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--soft); font-weight: 500; }
+.keylist { list-style: none; margin: 0; padding: 0 8px; display: grid; gap: 10px; }
+.keylist li { display: grid; grid-template-columns: 96px 1fr; gap: 10px; font-size: 13px; color: var(--soft); }
+.keylist b { color: var(--ink); font-weight: 500; }
+.drawbar { left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); background: var(--panel); border: 1px solid #3A4466; border-radius: 20px; padding: 12px 14px; backdrop-filter: blur(8px); }
+.drawbar p { margin: 0 0 10px; font-weight: 500; text-align: center; }
+.row { display: flex; gap: 8px; }
+.row button { flex: 1; }
+.ghostbtn, .solidbtn { padding: 10px 12px; border-radius: 999px; border: 1px solid #3A4466; background: none; cursor: pointer; font-weight: 500; }
+.solidbtn { background: var(--lit); color: #0A0F22; border-color: var(--lit); }
+.ghostbtn:disabled, .solidbtn:disabled { opacity: .4; cursor: default; }
+.namer { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); z-index: 4; }
+.namer input { width: 100%; font: inherit; font-size: 16px; color: var(--ink); background: #FFFFFF0A; border: 1px solid #3A4466; border-radius: 14px; padding: 12px 14px; margin: 4px 0 12px; }
+.namer input:focus { outline: 2px solid var(--lit); outline-offset: 1px; }
+.textbtn { margin-top: 8px; padding: 0; background: none; border: 0; color: var(--lit); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; font-size: 13px; }
+body.drawing .bar, body.drawing .card { display: none; }
+@media (max-width: 760px), (max-height: 560px) {
+  .stage { padding: 0; gap: 0; }
+  .about { display: none; }
+  .phone { height: 100%; height: 100dvh; width: 100%; aspect-ratio: auto; border-radius: 0; padding: 0; background: none; box-shadow: none; }
+  .screen { border-radius: 0; }
+  .status { display: none; }
+}</style>
+
+<main class="stage">
+  <section class="about" aria-label="About this page">
+    <h1>Someone else's sky</h1>
+    <p>Every sky grows from one person's own data and a seed of its own: the course of the river, the shapes it makes, and every colour in it. No two come out alike.</p>
+    <p>To see that, open <b>Explore</b> and tap <b>Someone else's sky</b>.</p>
+    <p>Every star is one of their memories. Drag to move, scroll or pinch to zoom, tap anything.</p>
+    <p>To make a constellation, tap <b>Constellations</b> on the bar at the bottom, then <b>Draw a new constellation</b>, tap the stars you want joined, and name it.</p>
+  </section>
+
+  <div class="phone" id="phone">
+    <div class="screen" id="screen">
+      <canvas id="sky" aria-label="An example sky where every star is one logged memory. Pinch or scroll to zoom, drag to move, tap a star to see its day."></canvas>
+      <canvas id="lines" class="lines" aria-hidden="true"></canvas>
+      <div class="ring" id="ring" hidden></div>
+
+      <div class="ui status" aria-hidden="true"><span>9:41</span><span class="dots"><b></b><i></i></span></div>
+      <header class="ui top">
+        <button class="icon" type="button" aria-label="Back" tabindex="-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <div class="t"><h1>Your sky</h1></div>
+        <button class="icon" type="button" id="motion" aria-pressed="true" aria-label="Pause motion"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="6" width="3.2" height="12" rx="1"/><rect x="13.8" y="6" width="3.2" height="12" rx="1"/></svg></button>
+      </header>
+      <p class="ui zoom">×<span id="zr">1</span></p>
+
+      <div class="ui card" id="card" hidden></div>
+
+      <div class="ui replica" id="replica" role="dialog" aria-label="A constellation as you drew it" hidden><canvas id="repCv"></canvas><div class="rt"><b id="repName"></b><span id="repDate"></span></div><div class="back">Tap anywhere to go back to your sky</div></div>
+      <div class="ui scrim" id="scrim" hidden></div>
+      <section class="ui sheet" id="sheet-cons" aria-label="Your constellations" hidden>
+        <div class="grab"></div>
+        <header><h2>Your constellations</h2><button class="icon" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+        <div class="body"><button class="draw" type="button" id="drawNew">Draw a new constellation</button><ul class="clist" id="clist"></ul>
+          <p class="note">Tap your own stars one after another, then give it a name. Over the years its stars drift apart and it falls out of the sky, but See it as you drew it always shows it as it was.</p></div>
+      </section>
+      <section class="ui sheet namer" id="sheet-name" aria-label="Name your constellation" hidden>
+        <div class="grab"></div>
+        <form id="nameForm"><header><h2>Name it</h2></header>
+          <div class="body"><input id="consName" maxlength="28" autocomplete="off" placeholder="A name for these stars" aria-label="Constellation name">
+            <div class="row"><button type="button" class="ghostbtn" id="nameCancel">Back</button><button type="submit" class="solidbtn">Save</button></div></div></form>
+      </section>
+      <div class="ui drawbar" id="drawbar" hidden>
+        <p id="drawMsg">Tap a star to start</p>
+        <div class="row"><button type="button" class="ghostbtn" id="dCancel">Cancel</button><button type="button" class="ghostbtn" id="dUndo">Undo</button><button type="button" class="solidbtn" id="dDone">Name it</button></div>
+      </div>
+      <section class="ui sheet" id="sheet-explore" aria-label="Explore" hidden>
+        <div class="grab"></div>
+        <header><h2>Explore</h2><button class="icon" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+        <div class="body"><div class="chips">
+          <h3>Shapes your habits made</h3>
+          <button type="button" data-go="all">Whole sky</button>
+          <button type="button" data-go="band">A band</button>
+          <button type="button" data-go="clusters">Small clusters</button>
+          <button type="button" data-go="wp">Whirlpool</button>
+          <button type="button" data-go="pulsar">Pulsar</button>
+          <button type="button" data-go="bin">Binary stars</button>
+          <button type="button" data-go="bridge" id="bridgeChip">Bridge</button>
+          <h3>Trackers you show</h3>
+          <button type="button" data-go="trk0">Tracker</button>
+          <button type="button" data-go="trk1">Tracker</button>
+          <button type="button" data-go="trk2">Tracker</button>
+          <h3>Events and moments</h3>
+          <button type="button" data-go="giant">A giant star</button>
+          <button type="button" data-go="one">One memory up close</button>
+          <button type="button" data-go="sn">Supernova</button>
+          <button type="button" data-go="comet">Comet</button>
+          <button type="button" data-go="meteor">Meteor shower</button>
+          <button type="button" data-go="pn">Planetary nebula</button>
+          <button type="button" data-go="pl">Ringed planet</button>
+          <button type="button" data-go="fav">Favourites</button>
+          <h3>Clouds and shadows</h3>
+          <button type="button" data-go="neb">Nebula</button>
+          <button type="button" data-go="dn">Dark nebula</button>
+          <button type="button" data-go="dm">Dark matter</button>
+          <button type="button" data-go="bh">Black hole</button>
+          <button type="button" data-go="wh">White hole</button>
+          <h3>This showcase</h3>
+          <button type="button" id="another">Someone else's sky</button>
+          <button type="button" id="shuffle">New colours</button>
+          <button type="button" id="replay">Replay opening</button>
+        </div></div>
+      </section>
+      <section class="ui sheet" id="sheet-key" aria-label="How things form" hidden>
+        <div class="grab"></div>
+        <header><h2>How things form</h2><button class="icon" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+        <div class="body"><ul class="keylist">
+    <li><b>Colour</b><span>Colour is age. New memories are blue; older ones turn white, gold, then red, and drift outward. Red only means old, never bad.</span></li>
+    <li><b>Bands</b><span>Long stretches with something on most days. Memories line up along them and gather into knots. Rare: most skies have one or two.</span></li>
+    <li><b>Clusters</b><span>On-and-off weeks. Each run of days gathers into its own cluster: oval, spiral or open.</span></li>
+    <li><b>Supernova</b><span>A life event you marked as hard. It marks that day and nothing more; what came after stays where it is.</span></li>
+    <li><b>Nebula</b><span>Weeks with a lot of writing. Every sky gets its own colours; try New colours.</span></li>
+    <li><b>Giant stars</b><span>Life events. Zoom right in and they burn like a sun.</span></li>
+    <li><b>Streams</b><span>A longer run of days, drawn out into a thin trail like a comet.</span></li>
+    <li><b>Constellations</b><span>You draw them between your own stars and name them. Over the years their stars drift apart and they fall out of the sky; each one is kept as a photo of the day you drew it.</span></li>
+    <li><b>Binary stars</b><span>Two memories about the same person, slowly turning around each other.</span></li>
+    <li><b>Comet</b><span>Something that comes back every year, like a birthday. It passes through on that day.</span></li>
+    <li><b>Meteor shower</b><span>On the anniversary of a day you starred, a few streaks fall from its star.</span></li>
+    <li><b>Pulsar</b><span>A habit you set a time for. It pulses on that beat.</span></li>
+    <li><b>Dark nebula</b><span>A cloud of cold dust, part of this sky's own scenery. It holds no memories.</span></li>
+    <li><b>Planetary nebula</b><span>A habit you chose to end. It finishes as a glowing ring, not a gap.</span></li>
+    <li><b>Whirlpool</b><span>A weekly habit kept for years. Its memories turn slowly around each other; each turn is about a year.</span></li>
+    <li><b>Dark matter</b><span>Memories you tucked away to find again later. They don't shine, but the light behind them bends.</span></li>
+    <li><b>Black hole</b><span>Forms when you put memories away, draws them in, then closes and is gone. Nothing marks where they were. Hidden, not deleted: bring them back from the list.</span></li>
+    <li><b>Trackers</b><span>Trackers you choose to show. Each log is one star, gathered away from the river into a globular cluster, a belt or a ring of its own, so how often you log never shapes the rest of your sky.</span></li>
+    <li><b>Ringed planet</b><span>A place you keep going back to. Memories logged there ride around it as moons.</span></li>
+    <li><b>Favourites</b><span>Memories you starred carry a soft ring.</span></li>
+    <li><b>Bridge</b><span>Two runs of days close together, joined by the days that carried one into the next.</span></li>
+    <li><b>White hole</b><span>Forms when you bring memories back. It sends each one home, then fades.</span></li>
+  </ul></div>
+      </section>
+
+      <nav class="ui bar" aria-label="Sky">
+        <button type="button" data-sheet="cons" aria-expanded="false"><span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 17l5-6 4 3 5-8"/><circle cx="5" cy="17" r="1.8" fill="currentColor"/><circle cx="10" cy="11" r="1.8" fill="currentColor"/><circle cx="14" cy="14" r="1.8" fill="currentColor"/><circle cx="19" cy="6" r="1.8" fill="currentColor"/></svg></span>Constellations</button>
+        <button type="button" data-sheet="explore" aria-expanded="false"><span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></span>Explore</button>
+        <button type="button" id="todayBtn"><span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg></span>Today</button>
+        <button type="button" data-sheet="key" aria-expanded="false"><span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5"/><circle cx="12" cy="7.8" r=".6" fill="currentColor"/></svg></span>Key</button>
+      </nav>
+    </div>
+  </div>
+</main>
+
+<script>
+(() => {
+"use strict";
+// ---------- whose sky: everything below grows from one person's data and one seed of their own ----------
+// In the app the seed belongs to the person's install, so no two skies share a path, a pattern or a palette.
+// Here "Someone else's sky" swaps in a new seed, and with it a whole different made-up person.
+const SKY = (() => { const m = /sky=(\d+)/.exec(location.hash); return m ? +m[1] : 77410529; })();
+let seed = SKY;
+const rnd = () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const gauss = () => { let u = 0; while (u === 0) u = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(6.2831853 * rnd()); };
+const choose = a => a[Math.floor(rnd() * a.length)];
+const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const DAY = 864e5, END = Date.UTC(2026, 9, 2);
+const SPAN = Math.round(365 * (3 + 3 * rnd())), START = END - SPAN * DAY, ND = SPAN + 1;
+const dayOf = s => { const [y, m, d] = s.split("-").map(Number); return Math.round((Date.UTC(y, m - 1, d) - START) / DAY); };
+const fmt = d => new Date(START + d * DAY).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+const fmtS = d => new Date(START + d * DAY).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+const fmtDM = d => new Date(START + d * DAY).toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" });
+
+// the person: how their tracking went, what happened to them, what they named things
+const PERIODS = [];
+{ const LEN = { daily: [140, 420], onoff: [90, 260], quiet: [50, 170] }; let d = 0, last = "";
+  while (d < ND) { let m; do { const r = rnd(); m = r < .22 ? "daily" : r < .74 ? "onoff" : "quiet"; } while (m === last);
+    const [a, b] = LEN[m], len = Math.round(a + rnd() * (b - a)); PERIODS.push({ from: d, to: Math.min(ND - 1, d + len - 1), mode: m }); d += len; last = m; }
+  const lp = PERIODS[PERIODS.length - 1]; if (lp.mode === "quiet") lp.mode = PERIODS.length > 1 && PERIODS[PERIODS.length - 2].mode === "daily" ? "onoff" : "daily";
+  for (const need of ["daily", "onoff"]) if (!PERIODS.some(p => p.mode === need)) { const q = PERIODS.filter(p => p !== lp).sort((x, y) => (y.to - y.from) - (x.to - x.from))[0] || lp; q.mode = need; }
+  // a long band is rare: at most two in a sky, so it stays something special rather than one a year
+  PERIODS.filter(p => p.mode === "daily").sort((x, y) => (y.to - y.from) - (x.to - x.from)).slice(2).forEach(p => { p.mode = "onoff"; }); }
+const WRITE = [];
+for (let i = 0; i < 3; i++) for (let k = 0; k < 60; k++) { const len = 50 + Math.floor(rnd() * 110), a = Math.floor(rnd() * Math.max(1, ND - len));
+  if (WRITE.every(w => a > w.b + 50 || a + len < w.a - 50)) { WRITE.push({ a, b: a + len, type: i }); break; } }
+WRITE.sort((x, y) => x.a - y.a);
+const SN_DAY = Math.round(ND * (.3 + .5 * rnd()));
+const LIFE_POOL = ["Moved house", "Started a new job", "Finished the course", "Adopted a dog", "Brought the cat home", "Sister's wedding", "Brother's wedding", "First solo trip",
+  "Passed the driving test", "Started evening classes", "Ran a 10k", "Moved in together", "New niece", "New nephew", "Learned to swim", "Climbed a mountain", "First pottery class",
+  "Started college", "Graduated", "Planted the garden", "Bought a bike", "Played my first gig", "Finished the quilt", "Visited the old village", "Joined a choir", "Got the allotment",
+  "Painted the flat", "Built a bookshelf", "Saw the northern lights", "Learned to bake bread", "First week at the new place", "Finished the long walk", "Started volunteering", "Went back to the coast"];
+const LIFE = [];
+{ const n = 8 + Math.floor(rnd() * 5), labels = shuffle(LIFE_POOL).slice(0, n);
+  for (const label of labels) for (let k = 0; k < 50; k++) { const day = 10 + Math.floor(rnd() * (ND - 20));
+    if (Math.abs(day - SN_DAY) > 20 && LIFE.every(l => Math.abs(l.day - day) > 30)) { LIFE.push({ day, label }); break; } }
+  LIFE.sort((a, b) => a.day - b.day); }
+const PEOPLE = shuffle(["Ellis", "Dad", "Noor", "Aunt Jo", "Kit", "Sam", "Mum", "Priya", "Grandad", "Rosa", "Theo", "Mia", "Uncle Ade", "Jun"]).slice(0, 5);
+const DAILY_HABIT = choose(["Morning stretch", "Evening walk", "Watering the plants", "Reading before bed", "Morning pages", "Feeding the birds", "Ten minutes of piano"]);
+const WEEKLY_HABIT = choose(["Saturday swim", "Sunday call with Gran", "Friday football", "Choir on Tuesdays", "The Saturday market", "Thursday pottery", "Sunday dinner with family"]);
+const ENDED_HABIT = choose(["Night-time reading log", "Morning journaling", "Learning Spanish", "A daily sketch", "Cold showers", "Counting steps"]);
+const COMET_OF = choose(["Mum's birthday", "Dad's birthday", "Gran's birthday", "Our anniversary", "Best friend's birthday", "Brother's birthday", "Sister's birthday"]);
+const COMET_DAY = Math.floor(rnd() * 365), COMET_DATE = new Date(Date.UTC(2025, 0, 1) + COMET_DAY * DAY).toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" });
+const PLACE = choose(["The beach", "Grandma's house", "The allotment", "The climbing wall", "The library", "The bench by the river", "The café on the corner", "The hill behind the house"]);
+const CONS_NAMES = shuffle(["Home", "The trip", "Summer", "The climb", "First steps", "Little one", "Our song", "The kitchen", "Saturdays", "The long walk", "Lantern", "The garden"]);
+const KINDS = [["Check-in", .9, 30], ["Mood", .9, 22], ["Journal entry", .9, 9], ["Thought record", .9, 5], ["Habit done", .9, 20], ["Project step", .9, 7], ["Gratitude note", .9, 5], ["Breathing exercise", .9, 4]]
+  .map(([k, l, w]) => [k, l, w * (.5 + rnd())]);
+const pickKind = write => { const w = KINDS.map((k, i) => k[2] * (write && i === 2 ? 5 : 1)); let r = rnd() * w.reduce((a, b) => a + b); for (let i = 0; i < w.length; i++) { r -= w[i]; if (r < 0) return i; } return 0; };
+// how this person's shapes tend to look: wide or narrow bands, knotty or smooth, which kinds of cluster
+const STYLE = { bandW: .65 + .7 * rnd(), knots: .3 + .4 * rnd(), knotSize: .7 + .8 * rnd(), wild: .08 + .1 * rnd(), clusterW: [rnd() + .2, rnd() * 1.5 + .2, rnd() + .2], spread: .8 + .6 * rnd(), streamAt: 6 + Math.floor(rnd() * 6) };
+
+const entries = []; let runId = -1, runLeft = 0, gapLeft = 0;
+for (const p of PERIODS) for (let d = p.from; d <= p.to; d++) {
+  const write = WRITE.some(w => d >= w.a && d <= w.b);
+  let n = 0, run = -1;
+  if (p.mode === "daily") n = 7 + Math.floor(rnd() * 8);
+  else if (p.mode === "onoff") {
+    if (runLeft > 0) { runLeft--; n = 4 + Math.floor(rnd() * 7); run = runId; }
+    else if (gapLeft > 0) { gapLeft--; n = rnd() < .1 ? 1 : 0; }
+    else { runId++; runLeft = 2 + Math.floor(rnd() * 15); gapLeft = 4 + Math.floor(rnd() * 14); n = 4 + Math.floor(rnd() * 7); run = runId; }
+  } else n = rnd() < .2 ? 1 + (rnd() < .3 ? 1 : 0) : 0;
+  if (d === ND - 1 && n === 0) n = 1; // there is always a memory from today, for the opening to fly to
+  for (let k = 0; k < n; k++) entries.push({ day: d, kind: pickKind(write), mode: p.mode, run, period: p, runLeft });
+}
+const N = entries.length;
+
+// ---------- the river of time: its course is this person's own ----------
+const WX = 6, WY = 13; // a tall world, for a tall screen
+const PATH_STYLE = choose(["spiral", "serpentine", "rows", "wander", "wander", "loops", "zigzag"]);
+const CP = (() => {
+  const mx = WX - .9, my = WY - .9, j = () => gauss() * .35, flipX = rnd() < .5 ? -1 : 1, flipY = rnd() < .5 ? -1 : 1, P = [];
+  if (PATH_STYLE === "spiral") { // a squared spiral, winding in
+    let x0 = -mx, x1 = mx, y0 = -my, y1 = my; const g = 2.2 + rnd() * .9;
+    while (x1 - x0 > 1.6 && y1 - y0 > 1.6) {
+      for (const [ax, ay, bx, by] of [[x0, y0, x0, y1], [x0, y1, x1, y1], [x1, y1, x1, y0 + g], [x1, y0 + g, x0 + g, y0 + g]]) {
+        const L = Math.hypot(bx - ax, by - ay), n = Math.max(1, Math.round(L / 3.2)); for (let i = 0; i < n; i++) P.push([ax + (bx - ax) * i / n + j(), ay + (by - ay) * i / n + j()]); }
+      x0 += g; x1 -= g; y0 += g; y1 -= g; }
+  } else if (PATH_STYLE === "serpentine") { // up and down the screen in columns
+    const k = 3 + Math.floor(rnd() * 2);
+    for (let c = 0; c < k; c++) { const x = -mx + 2 * mx * c / (k - 1), down = c % 2 === 0;
+      for (let i = 0; i <= 5; i++) { const t = i / 5; P.push([x + j() * 1.4, (down ? -my + 2 * my * t : my - 2 * my * t) + j()]); } }
+  } else if (PATH_STYLE === "rows") { // side to side, row after row, down the screen
+    const k = 6 + Math.floor(rnd() * 3);
+    for (let r = 0; r < k; r++) { const y = -my + 2 * my * r / (k - 1), right = r % 2 === 0;
+      for (let i = 0; i <= 2; i++) { const t = i / 2; P.push([(right ? -mx + 2 * mx * t : mx - 2 * mx * t) + j(), y + j() * 1.5]); } }
+  } else if (PATH_STYLE === "loops") { // a looping line, like handwriting, down the screen
+    const k = 4 + Math.floor(rnd() * 3), a = 2 * my / (2 * Math.PI * k), rx = mx * (.55 + rnd() * .3), ry = a * (1.8 + rnd() * .8), dr = mx * .3 * rnd(), ph = rnd() * 6.28;
+    for (let th = 0; th <= 2 * Math.PI * k + 1e-6; th += Math.PI / 4) P.push([Math.max(-mx, Math.min(mx, dr * Math.sin(th / k + ph) + rx * Math.cos(th) + j() * .4)), Math.max(-my, Math.min(my, -my + a * th - ry * Math.sin(th) + j() * .4))]);
+  } else if (PATH_STYLE === "zigzag") { // corner to corner, back and forth down the screen
+    const k = 4 + Math.floor(rnd() * 3);
+    for (let r = 0; r <= k; r++) { const x = (r % 2 ? mx : -mx) * (.75 + rnd() * .25), y = -my + 2 * my * r / k;
+      if (r) { const [px, py] = P[P.length - 1]; for (const t of [.33, .67]) P.push([px + (x - px) * t + j(), py + (y - py) * t + j()]); }
+      P.push([x, y]); }
+  } else { // a wandering river that keeps away from where it has already been
+    let x = (rnd() * 2 - 1) * mx, y = -my, h = Math.PI / 2 + gauss() * .4, L = 0; P.push([x, y]);
+    while (L < 104 && P.length < 90) {
+      let best = null, bs = -1e9;
+      for (let k = 0; k < 14; k++) { const hh = h + gauss() * .7, nx = x + Math.cos(hh) * 2.6, ny = y + Math.sin(hh) * 2.6;
+        let sc = -Math.max(0, Math.abs(nx) - mx) * 6 - Math.max(0, Math.abs(ny) - my) * 6;
+        for (let i = 0; i < P.length - 2; i++) { const dd = Math.hypot(P[i][0] - nx, P[i][1] - ny); if (dd < 2.6) sc -= (2.6 - dd) * 3; }
+        sc += rnd() * .3; if (sc > bs) { bs = sc; best = [nx, ny, hh]; } }
+      L += Math.hypot(best[0] - x, best[1] - y); [x, y, h] = best; P.push([Math.max(-mx, Math.min(mx, x)), Math.max(-my, Math.min(my, y))]); }
+  }
+  return P.map(([x, y]) => [x * flipX, y * flipY]);
+})();
+const cr = (a, b, c, d, t) => .5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (-a + 3 * b - 3 * c + d) * t * t * t);
+const poly = [];
+for (let i = 0; i < CP.length - 1; i++) {
+  const a = CP[Math.max(0, i - 1)], b = CP[i], c = CP[i + 1], d = CP[Math.min(CP.length - 1, i + 2)];
+  for (let k = 0; k < 40; k++) { const t = k / 40; poly.push([cr(a[0], b[0], c[0], d[0], t), cr(a[1], b[1], c[1], d[1], t)]); }
+}
+poly.push(CP[CP.length - 1]);
+const cum = [0]; for (let i = 1; i < poly.length; i++) cum.push(cum[i - 1] + Math.hypot(poly[i][0] - poly[i - 1][0], poly[i][1] - poly[i - 1][1]));
+const LEN = cum[cum.length - 1];
+const pathAt = s => {
+  const L = Math.min(Math.max(s, 0), 1) * LEN; let lo = 0, hi = cum.length - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (cum[m] < L) lo = m; else hi = m; }
+  const f = (L - cum[lo]) / Math.max(1e-9, cum[hi] - cum[lo]), a = poly[lo], b = poly[hi];
+  let tx = b[0] - a[0], ty = b[1] - a[1]; const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
+  return { x: a[0] + (b[0] - a[0]) * f, y: a[1] + (b[1] - a[1]) * f, tx, ty, nx: -ty, ny: tx };
+};
+const sOfDay = d => { let i = entries.findIndex(e => e.day >= d); if (i < 0) i = N - 1; return i / (N - 1); };
+// wide paths get more room either side; a long river gets a slimmer band
+const BANDK = Math.min(1.25, Math.max(.7, 104 / LEN));
+
+// colour by age: blue when new, then white, gold, amber, red. That meaning is the same in every sky.
+const RAMP = [[0, [157, 184, 255]], [.4, [205, 220, 255]], [1.3, [255, 246, 234]], [2.6, [255, 222, 168]], [4, [255, 180, 118]], [5.5, [255, 128, 96]], [7, [240, 96, 84]]];
+const lin = v => Math.pow(v / 255, 2.2);
+const ageCol = a => { let i = 0; while (i < RAMP.length - 2 && a > RAMP[i + 1][0]) i++; const [a0, c0] = RAMP[i], [a1, c1] = RAMP[i + 1], f = Math.min(1, Math.max(0, (a - a0) / (a1 - a0))); return c0.map((v, k) => lin(v + (c1[k] - v) * f)); };
+
+const stars = []; // {cx, cy, ox, oy, om, R, col, lum, flag, day, kind, info}
+const clamp = (x, y) => { const f = (v, m) => v > m ? 2 * m - v : v < -m ? -2 * m - v : v; return [f(x, WX - .2), f(y, WY - .2)]; };
+// big things are placed so they don't sit on top of each other
+const placed = [];
+const place = (s0, s1, off, R) => { let best = null, bd = -1e9;
+  for (let i = 0; i < 80; i++) { const s = s0 + rnd() * (s1 - s0), p = pathAt(s), side = rnd() < .5 ? -1 : 1, o = off * (.8 + .5 * rnd());
+    const x = Math.max(-WX + R * .7 + .2, Math.min(WX - R * .7 - .2, p.x + p.nx * o * side)), y = Math.max(-WY + R + .8, Math.min(WY - R - .8, p.y + p.ny * o * side));
+    const d = placed.reduce((m, q) => Math.min(m, Math.hypot(q.x - x, q.y - y) - q.R - R), 99); if (d > bd) { bd = d; best = { x, y, R, s }; } if (d > .5) break; }
+  placed.push(best); return best; };
+const SN = (() => { const s = sOfDay(SN_DAY), q = place(s, s, 1.15, .75 * 1.5); return { x: q.x, y: q.y, R: .62 + .26 * rnd() }; })();
+const clusters = new Map();
+let knotC = null, knotLeft = 0;
+entries.forEach((e, i) => {
+  const age = (ND - 1 - e.day) / 365, s = i / (N - 1), p = pathAt(s);
+  let cx, cy, ox = 0, oy = 0, om = 0, info = "";
+  if (e.mode === "daily") {
+    const sig = .2 * STYLE.bandW * BANDK * (1 + .25 * age) * (.65 + .7 * (.5 + .5 * Math.sin(s * 140 + Math.sin(s * 37) * 2)));
+    info = "Part of a band, " + fmtS(e.period.from) + " to " + fmtS(e.period.to);
+    if (knotLeft <= 0) { knotLeft = 10 + Math.floor(rnd() * rnd() * 90); const v = gauss() * sig * .9; knotC = [p.x + p.nx * v, p.y + p.ny * v, (.025 + .05 * rnd() + .02 * age) * STYLE.knotSize]; }
+    knotLeft--;
+    const roll = rnd();
+    if (roll < STYLE.knots) { cx = knotC[0] + gauss() * knotC[2]; cy = knotC[1] + gauss() * knotC[2]; }
+    else if (roll < 1 - STYLE.wild) { const v = gauss() * sig, u = gauss() * .12; cx = p.x + p.nx * v + p.tx * u; cy = p.y + p.ny * v + p.ty * u; }
+    else { const v = gauss() * (1.1 + .25 * age) * BANDK * (rnd() < .3 ? 1.8 : 1), u = gauss() * .5; cx = p.x + p.nx * v + p.tx * u; cy = p.y + p.ny * v + p.ty * u; }
+    const dr = .05 * age; cx += gauss() * dr; cy += gauss() * dr;
+    if (rnd() < .05) { cx += gauss() * (1.1 + .3 * age) * BANDK; cy += gauss() * (1.1 + .3 * age) * BANDK; }
+  } else if (e.run >= 0) {
+    let c = clusters.get(e.run);
+    if (!c) {
+      const side = rnd() < .5 ? -1 : 1, off = side * (.7 + rnd() * 2.4) * BANDK * STYLE.spread, along = gauss() * .8, w = STYLE.clusterW, wt = rnd() * (w[0] + w[1] + w[2]);
+      c = { x: p.x + p.nx * off + p.tx * along + gauss() * .08 * age, y: p.y + p.ny * off + p.ty * along + gauss() * .08 * age, list: [],
+        type: e.runLeft >= STYLE.streamAt ? "stream" : wt < w[0] ? "ell" : wt < w[0] + w[1] ? "spiral" : "open", bend: (rnd() < .5 ? -1 : 1) * (.15 + .3 * rnd()), rot: rnd() * 6.28, ax: .45 + rnd() * .55, om: (.05 + .08 * rnd()) * (rnd() < .5 ? -1 : 1), arm: rnd() * 6.28, arms: 2 + (rnd() < .3 ? 1 : 0), twist: 3.2 + rnd() * 2.4, from: e.day, to: e.day, run: e.run };
+      [c.x, c.y] = clamp(c.x, c.y); clusters.set(e.run, c);
+    }
+    c.to = e.day; c.list.push(stars.length); cx = c.x; cy = c.y; om = c.type === "open" ? c.om * .2 : c.om; e.cl = c;
+  } else {
+    const sp = (e.mode === "quiet" ? .8 : 1.4) * BANDK;
+    cx = p.x + gauss() * sp; cy = p.y + gauss() * sp;
+    const dr = .05 * age; cx += gauss() * dr; cy += gauss() * dr;
+    info = "";
+  }
+  if (!e.cl) [cx, cy] = clamp(cx, cy);
+  const mag = Math.pow(rnd(), 4), tint = .92 + rnd() * .16; let c0 = ageCol(age + gauss() * .15);
+  if (e.born) c0 = c0.map((v, k) => v * .25 + [lin(225), lin(232), lin(255)][k] * .75);
+  stars.push({ cx, cy, ox, oy, om, R: .0011 + .0013 * rnd() * rnd() + .0008 * mag, col: [c0[0] * tint, c0[1], c0[2] / tint], lum: KINDS[e.kind][1] * (.55 + 1.3 * mag),
+    flag: age * 365 < 14 ? 2 : 0, day: e.day, kind: KINDS[e.kind][0], info, cl: e.cl });
+});
+// cluster shapes: each run of days becomes its own little cluster
+for (const c of clusters.values()) {
+  const n = c.list.length, rc = .05 + .022 * Math.sqrt(n), cr_ = Math.cos(c.rot), sr = Math.sin(c.rot);
+  c.r = rc;
+  c.list.forEach((si, j) => {
+    let x, y;
+    const s = stars[si];
+    if (c.type === "stream") {
+      const L = .3 + .0075 * n, Wd = .02 + .0005 * n, u = Math.min(1, Math.max(0, j / Math.max(1, n - 1) + gauss() * .03));
+      const taper = Math.pow(Math.sin(Math.PI * (.04 + .92 * u)), .55) * (.3 + 1.1 * (1 - u));
+      x = (u - .5) * L; y = gauss() * Wd * taper + c.bend * L * (u - .5) * (u - .5);
+      s.om = .004 * Math.sign(c.om); s.lum *= .75 + .7 * u;
+      s.info = "Part of a stream: " + n + " memories, " + fmtS(c.from) + " to " + fmtS(c.to);
+    }
+    else if (c.type === "spiral" && j % 4) { const t = rnd(), arm = (j % c.arms) * 2 * Math.PI / c.arms + c.arm, a = arm + t * c.twist + gauss() * .22, rr = rc * (.15 + t * .95); x = Math.cos(a) * rr; y = Math.sin(a) * rr * c.ax; }
+    else if (c.type === "open") { x = gauss() * rc * .7; y = gauss() * rc * .7; }
+    else { const k = rnd() < .5 ? .18 : .5; x = gauss() * rc * k; y = gauss() * rc * k * c.ax; }
+    s.ox = x * cr_ - y * sr; s.oy = x * sr + y * cr_;
+    if (c.type !== "stream") s.info = "Part of a cluster: " + n + " memories, " + fmtS(c.from) + " to " + fmtS(c.to);
+  });
+}
+// bridges: two clusters close together from the same stretch, joined by a thin trail of the days in between
+const bridges = [];
+{ const cl = [...clusters.values()].filter(c => c.type !== "stream" && c.list.length > 8);
+  for (let i = 0; i < cl.length - 1 && bridges.length < 2; i++) { const a = cl[i], b = cl[i + 1], d = Math.hypot(a.x - b.x, a.y - b.y);
+    if (d < .5 || d > 2.4 || rnd() < .35) continue;
+    const mx = (a.x + b.x) / 2 - (b.y - a.y) * (.25 * gauss()), my = (a.y + b.y) / 2 + (b.x - a.x) * (.25 * gauss()), n = 26 + Math.floor(rnd() * 30);
+    for (let k = 0; k < n; k++) { const t = rnd(), u = 1 - t, x = u * u * a.x + 2 * u * t * mx + t * t * b.x, y = u * u * a.y + 2 * u * t * my + t * t * b.y, day = Math.round(a.to + (b.from - a.to) * t), c0 = ageCol((ND - 1 - day) / 365);
+      stars.push({ cx: x + gauss() * .03, cy: y + gauss() * .03, ox: 0, oy: 0, om: 0, R: .001 + .0006 * rnd(), col: c0, lum: .7 + .5 * rnd(), flag: 0, day, kind: "Habit done",
+        info: "Part of a bridge between two clusters: the days that carried one run into the next, " + fmtS(a.to) + " to " + fmtS(b.from) }); }
+    bridges.push({ a, b, x: mx, y: my }); } }
+// life events: the giants
+const giants = [];
+LIFE.forEach(l => {
+  const p = pathAt(sOfDay(l.day)), v = gauss() * .25, age = (ND - 1 - l.day) / 365, c0 = ageCol(age);
+  const s = { cx: p.x + p.nx * v, cy: p.y + p.ny * v, ox: 0, oy: 0, om: 0, R: .0065 + .004 * rnd(), col: c0, lum: 3.4, flag: 1, day: l.day, kind: "Life event", info: "“" + l.label + "”" };
+  giants.push(s); stars.push(s);
+});
+// the supernova's own star: what is left at its heart, pulsing slowly
+const snStar = { cx: SN.x, cy: SN.y, ox: 0, oy: 0, om: 0, R: .0028, col: ageCol((ND - 1 - SN_DAY) / 365).map(v => v * .8 + .2 * lin(200)), lum: 2.6, flag: 3, day: SN_DAY, kind: "Life event, marked hard", info: "It marks that day and nothing more. You can unmark it as hard, or put it away like any memory." };
+stars.push(snStar);
+// favourites: memories the person starred. A soft ring, nothing more.
+{ const pool = stars.filter(s => s.flag === 0 && s.lum > .9); for (let i = 0; i < 6 + Math.floor(rnd() * 7); i++) { const s = choose(pool); if (s.fav) continue; s.fav = true; s.flag = 5; s.info = "A favourite. " + s.info; } }
+// nebulas sit where the writing was
+const nebs = WRITE.map(w => {
+  const list = stars.filter(s => s.day >= w.a && s.day <= w.b && s.flag === 0);
+  let x = 0, y = 0; if (list.length) { list.forEach(s => { x += s.cx + s.ox; y += s.cy + s.oy; }); x /= list.length; y /= list.length; } else { const p = pathAt(sOfDay((w.a + w.b) / 2)); x = p.x; y = p.y; }
+  return { x, y, R: 1.2 + .6 * rnd(), type: w.type, a: w.a, b: Math.min(w.b, ND - 1), journals: list.filter(s => s.kind === "Journal entry").length };
+});
+// the black hole forms right beside the memories that were put away, and draws them in
+const BH = (() => { const q = place(.15, .85, .55, .55); return { x: q.x, y: q.y, R: .07 + .03 * rnd(), tilt: (rnd() - .5) * .9, squash: 3.4 + rnd() * 2 }; })();
+// binary stars: two memories tied to the same person, turning around each other
+const binaries = [];
+{ const pool = stars.filter(s => s.flag === 0 && !s.cl && s.day > ND - 420 && s.day < ND - 20 && s.lum > .9);
+  for (let i = 0; i < 24 && pool.length; i++) {
+    const a = pool[Math.floor(rnd() * pool.length)], b = pool.find(o => o !== a && o.day === a.day && !o.pair); if (!b || a.pair) continue;
+    const sep = .005 + .006 * rnd(), ph = rnd() * 6.283, who = PEOPLE[i % PEOPLE.length];
+    for (const [k, o] of [[1, a], [-1, b]]) { o.pair = true; o.ox = Math.cos(ph) * sep * .5 * k; o.oy = Math.sin(ph) * sep * .5 * k; o.om = 1.2 + rnd() * .8; o.info = "One of a pair. Both mention " + who + "."; }
+    b.cx = a.cx; b.cy = a.cy; binaries.push(a);
+  } }
+// a pulsar: a habit kept on a steady rhythm
+const pulsar = stars.find(s => s.flag === 0 && !s.cl && !s.pair && s.day > ND - 200 && s.lum > 1) || stars.find(s => s.flag === 0 && !s.cl);
+const pulsarDays = 90 + Math.floor(rnd() * 200);
+pulsar.flag = 4; pulsar.kind = "Pulsar"; pulsar.info = "“" + DAILY_HABIT + "”, a habit you set a time for. It pulses on that beat."; pulsar.R = .0016;
+// meteor shower: a year ago today
+const annDist = s => { const d = (ND - 1 - s.day) % 365; return Math.min(d, 365 - d); };
+const radiant = stars.filter(s => s.fav && ND - 1 - s.day > 300).sort((a, b) => annDist(a) - annDist(b))[0] || giants[0];
+radiant.info = (radiant.fav ? "A favourite. " : "") + "A day you chose. On its anniversary, a meteor shower falls from it.";
+// planetary nebula: a habit you chose to end
+const PN_DAY = Math.floor(ND * (.2 + .6 * rnd()));
+const PN = (() => { const s = sOfDay(PN_DAY), q = place(Math.max(0, s - .05), Math.min(1, s + .05), .95, .35); return { x: q.x, y: q.y, R: .17 + .08 * rnd() }; })();
+const pnStar = { cx: PN.x, cy: PN.y, ox: 0, oy: 0, om: 0, R: .0012, col: [.75, .82, 1], lum: 1.8, flag: 0, day: PN_DAY, kind: "Habit ended", info: "“" + ENDED_HABIT + "”, which you chose to end. It finishes as a glowing ring, not a gap." };
+stars.push(pnStar);
+// dark nebula: scenery, a cloud of cold dust that holds no memories
+const DN = (() => { const q = place(.05, .7, .2, .9); return { x: q.x, y: q.y, R: .5 + .35 * rnd() }; })();
+// comet: something that comes back every year, on its own orbit
+const CO = { rx: WX * (.6 + .3 * rnd()), ry: WY * (.6 + .3 * rnd()), ph: rnd() * 6.283, dir: rnd() < .5 ? 1 : -1 };
+const cometAt = t => { const th = CO.dir * t * 6.2832 / 2400 + CO.ph, x = CO.rx * Math.cos(th), y = CO.ry * Math.sin(th), lr = Math.hypot(x, y) || 1, vx = -CO.rx * Math.sin(th) * CO.dir, vy = CO.ry * Math.cos(th) * CO.dir, lv = Math.hypot(vx, vy) || 1;
+  const dx = -vx / lv * .85 + x / lr * .15, dy = -vy / lv * .85 + y / lr * .15, l = Math.hypot(dx, dy) || 1; return { x, y, dx: dx / l, dy: dy / l }; };
+// whirlpool: a weekly habit kept for years turns into a slowly spinning spiral of its own memories
+const WP_FROM = Math.max(0, ND - 1 - Math.floor(365 * (1.5 + rnd() * 1.5)));
+const WP = (() => { const q = place(.3, .95, 1.7, .6); return { x: q.x, y: q.y, R: .4 + .2 * rnd(), arms: 2 + Math.floor(rnd() * 3), wind: 1.4 + rnd() * 1.4, sq: .6 + .35 * rnd(), spin: (rnd() < .5 ? -1 : 1) * (.16 + .1 * rnd()) }; })();
+const wpStars = [];
+for (let d = WP_FROM, j = 0; d < ND; d += 7, j++) {
+  const age = (ND - 1 - d) / 365, t = 1 - (ND - 1 - d) / Math.max(1, ND - 1 - WP_FROM), arm = j % WP.arms, rr = WP.R * (.06 + .94 * Math.pow(t, .85)), a = arm * 2 * Math.PI / WP.arms + Math.log(1 + rr / (WP.R * .05)) * WP.wind + gauss() * .12;
+  const k = rr * (.06 + gauss() * .05), c0 = ageCol(age);
+  const st = { cx: WP.x, cy: WP.y, ox: Math.cos(a) * rr + gauss() * k * .4, oy: Math.sin(a) * rr * WP.sq + gauss() * k * .4, om: WP.spin, R: .0012 + .0008 * rnd(), col: c0, lum: .9 + .6 * rnd(), flag: 0, day: d, kind: "Habit done", info: "“" + WEEKLY_HABIT + "”, every week since " + fmtS(WP_FROM) + ". Each turn of the spiral is about a year." };
+  stars.push(st); wpStars.push(st);
+  for (let e = 0; e < 3; e++) { const b2 = rnd() * 6.283, r2 = rr * (.3 + rnd()); stars.push({ ...st, ox: st.ox * .9 + Math.cos(b2) * r2 * .12, oy: st.oy * .9 + Math.sin(b2) * r2 * .12, lum: .5 + .4 * rnd(), R: .001, info: "Part of the whirlpool around “" + WEEKLY_HABIT + "”." }); }
+}
+// dark matter: memories tucked away to find again later. They don't shine, but they bend the light behind them.
+const DM = (() => { const q = place(0, 1, 1.3, .5); return { x: q.x, y: q.y, R: .38 + .15 * rnd(), count: 20 + Math.floor(rnd() * 60) }; })();
+// ringed planet: a place you keep going back to. The memories logged there ride around it as moons.
+const PL = (() => { const q = place(.1, .9, 1.4, .45); return { x: q.x, y: q.y, R: .06 + .03 * rnd(), tilt: (rnd() - .5) * 1.1, open: .22 + .14 * rnd() }; })();
+const moonPos = s => { const a = s.ma + T * s.mw, ct = Math.cos(PL.tilt), st = Math.sin(PL.tilt), rx = Math.cos(a) * s.mr, ry = Math.sin(a) * s.mr * PL.open;
+  const x = ct * rx - st * ry, y = st * rx + ct * ry; return [PL.x + x * PL.R, PL.y + y * PL.R, ry < 0 && Math.hypot(x, y) < 1.02]; };
+const moons = [];
+{ const n = 14 + Math.floor(rnd() * 26);
+  for (let i = 0; i < n; i++) { const day = Math.floor(rnd() * ND), mr = 2.7 + 3.6 * Math.pow(rnd(), .8);
+    const s = { cx: PL.x, cy: PL.y, ox: 0, oy: 0, om: 0, R: .0011 + .0006 * rnd(), col: ageCol((ND - 1 - day) / 365), lum: 1 + .5 * rnd(), flag: 0, day, kind: "Logged at a place", info: "Logged at “" + PLACE + "”.", ma: rnd() * 6.283, mr, mw: .9 / Math.pow(mr, 1.5), dyn: moonPos };
+    stars.push(s); moons.push(s); } }
+// white hole: where memories you put away come back out
+const WH = (() => { const q = place(.4, 1, .9, .55); return { x: q.x, y: q.y, R: .06 }; })();
+// it only exists while memories are coming back: it forms, sends each one home to where it used to be, then fades.
+// (the showcase replays that every 45 seconds)
+let whT0 = 0;
+const whTime = () => ((T - whT0) % 45 + 45) % 45;
+const whOn = () => { const t = whTime(); return smoothstep(0, 3, t) * (1 - smoothstep(22, 32, t)); };
+const whPos = s => { const t = whTime(), p = smoothstep(3 + s.whI * 2, 15 + s.whI * 2, t), e = 1 - (1 - p) * (1 - p), a = s.wa + (1 - e) * 3.2, r = s.wr * e; return [WH.x + Math.cos(a) * r, WH.y + Math.sin(a) * r, p < .02]; };
+const whStars = [0, 1, 2, 3].map(i => { const wa = i * 1.7 + rnd(), wr = .22 + .3 * rnd(), day = Math.floor(ND * (.3 + .6 * rnd()));
+  const st = { cx: WH.x + Math.cos(wa) * wr, cy: WH.y + Math.sin(wa) * wr, ox: 0, oy: 0, om: 0, wa, wr, whI: i, R: .0016, col: [.9, .92, 1], lum: 1.6, flag: 0, day, kind: "Brought back", info: "Put away for a while, then brought back. The white hole is sending it home to where it was.", dyn: whPos };
+  stars.push(st); return st; });
+// Put away: a black hole forms beside the memories, draws them in, then closes and is gone. Nothing is left to show
+// where they were; they come back from the list. (The showcase plays it as the sky opens; Explore > Black hole again.)
+let bhT0 = 0;
+const bhTime = () => T - bhT0;
+const bhOn = () => { const t = bhTime(); return smoothstep(0, 3, t) * (1 - smoothstep(19, 25, t)); };
+const putAway = stars.filter(s => s.flag === 0 && !s.cl && !s.pair && !s.dyn && !s.om && s !== radiant && s !== pnStar && Math.hypot(s.cx + s.ox - BH.x, s.cy + s.oy - BH.y) < .5).slice(0, 8 + Math.floor(rnd() * 6));
+const awayP = s => smoothstep(2.5 + s.awayI * 1.1, 9.5 + s.awayI * 1.1, bhTime());
+const awayPos = s => { const p = awayP(s), e = Math.pow(p, 1.3), r = s.r0 * (1 - e) + BH.R * 1.9 * e, a = s.a0 + e * 4.5;
+  const ux = r * Math.cos(a), uy = r * Math.sin(a), dy = uy / BH.squash, c = Math.cos(BH.tilt), n = Math.sin(BH.tilt);
+  const vx = ux * (1 - e) + (c * ux - n * dy) * e, vy = uy * (1 - e) + (n * ux + c * dy) * e;
+  return [BH.x + vx, BH.y - vy, p >= 1]; };
+putAway.forEach((s, i) => { const hx = s.cx + s.ox, hy = s.cy + s.oy; s.away = true; s.awayI = i; s.r0 = Math.hypot(hx - BH.x, hy - BH.y); s.a0 = Math.atan2(-(hy - BH.y), hx - BH.x);
+  s.dyn = awayPos; s.dk = q => 1.3 * smoothstep(0, 1.2, bhTime()) * (1 - smoothstep(.75, 1, awayP(q))); });
+// Trackers the person chose to show. Each log is one star, gathered into an object of its own beside the river and never
+// on it: tracker logs are not part of the rhythm a stretch is read from (§2.2), so how often someone logs never shapes the
+// rest of the sky. Three looks, a globular cluster, an asteroid belt and a ring, chosen per tracker from the seed. They use
+// a random stream of their own so that adding them moved nothing else in an approved sky.
+let tseed = SKY ^ 0x5bd1e995;
+const trnd = () => { tseed |= 0; tseed = tseed + 0x6D2B79F5 | 0; let t = Math.imul(tseed ^ tseed >>> 15, 1 | tseed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const tgauss = () => { let u = 0; while (u === 0) u = trnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(6.2831853 * trnd()); };
+const placeT = (s0, s1, off, R) => { let best = null, bd = -1e9;
+  for (let i = 0; i < 120; i++) { const s = Math.max(0, Math.min(1, s0 + trnd() * (s1 - s0))), p = pathAt(s), side = trnd() < .5 ? -1 : 1, o = off * (.8 + .6 * trnd());
+    const x = Math.max(-WX + R + .2, Math.min(WX - R - .2, p.x + p.nx * o * side)), y = Math.max(-WY + R + .8, Math.min(WY - R - .8, p.y + p.ny * o * side));
+    const d = placed.reduce((m, q) => Math.min(m, Math.hypot(q.x - x, q.y - y) - q.R - R), 99); if (d > bd) { bd = d; best = { x, y, R, s }; } if (d > .45) break; }
+  placed.push(best); return best; };
+const TRK_LOOK = { globular: "Globular cluster", belt: "Asteroid belt", ring: "Ring" };
+const TRK_NAMES = ["Glasses of water", "Time outside", "Medication", "Cups of coffee", "Stretch breaks", "Walks with the dog", "Practising scales", "Screen-free hour"];
+const trkLooks = ["globular", "belt", "ring"]; for (let i = 2; i > 0; i--) { const j = Math.floor(trnd() * (i + 1)); [trkLooks[i], trkLooks[j]] = [trkLooks[j], trkLooks[i]]; }
+const trackers = [];
+const beltPos = s => { const t = s.trk, a = s.ba + T * s.bw, ct = Math.cos(t.tilt), sn = Math.sin(t.tilt), rx = Math.cos(a) * s.br, ry = Math.sin(a) * s.br * t.open + s.bz;
+  return [t.x + ct * rx - sn * ry, t.y + sn * rx + ct * ry, false]; };
+trkLooks.forEach(look => {
+  const name = TRK_NAMES.splice(Math.floor(trnd() * TRK_NAMES.length), 1)[0];
+  const from = Math.max(0, ND - 1 - Math.floor(365 * (.6 + trnd() * 2.2))), perDay = .5 + trnd() * 2.3;
+  let days = []; for (let d = from; d < ND; d++) { const n = Math.floor(perDay * (.3 + 1.4 * trnd()) + trnd() * .5); for (let j = 0; j < n; j++) days.push(d); }
+  if (days.length > 900) { const k = days.length / 900; days = Array.from({ length: 900 }, (_, i) => days[Math.floor(i * k)]); }
+  if (days.length < 12) days = Array.from({ length: 12 }, (_, i) => from + Math.floor(i * (ND - 1 - from) / 11));
+  const R = look === "globular" ? .24 + .1 * trnd() : look === "belt" ? .27 + .08 * trnd() : .26 + .08 * trnd();
+  // The object's total light stays about the same however often the tracker is logged: more logs, each one fainter.
+  const dim = Math.min(1, Math.pow(200 / days.length, .8));
+  const q = placeT(sOfDay(from) - .04, sOfDay(from) + .08, 1.55, R * 1.25);
+  const t = { name, look, x: q.x, y: q.y, R, from, n: days.length, tilt: (trnd() - .5) * 1.2, open: look === "belt" ? .22 + .3 * trnd() : .72 + .26 * trnd(), stars: [] };
+  const info = look === "globular" ? "“" + name + "”, a tracker you show in your sky. Each star in this cluster is one time you logged it."
+    : look === "belt" ? "“" + name + "”, a tracker you show in your sky. Each grain in the belt is one time you logged it; the first sits at the centre."
+    : "“" + name + "”, a tracker you show in your sky. Each star in the ring is one time you logged it; the first ones sit at the centre.";
+  const spin = trnd() < .5 ? -1 : 1, core = Math.max(3, Math.round(days.length * .04));
+  days.forEach((d, i) => {
+    const age = (ND - 1 - d) / 365, st = { cx: t.x, cy: t.y, ox: 0, oy: 0, om: 0, R: .0008 + .0006 * trnd(), col: ageCol(age), lum: (.5 + .35 * trnd()) * dim, flag: 0, day: d, kind: "Tracker logged", info, trk: t };
+    if (look === "globular") { const a = t.R * .26, r = Math.min(t.R * 1.5, a / Math.sqrt(Math.pow(Math.max(1e-4, trnd()), -2 / 3) - 1)), th = trnd() * 6.2832;
+      st.ox = Math.cos(th) * r; st.oy = Math.sin(th) * r; st.om = .012 * spin; }
+    else if (look === "belt") { if (i === 0) { st.R = .0018; st.lum = 1.5; }
+      else { st.ba = i * 2.39996 + tgauss() * .04; st.br = t.R * (.74 + .42 * Math.pow(trnd(), 1.4) + .04 * tgauss()); st.bz = tgauss() * t.R * .012; st.bw = .06 * spin * Math.pow(t.R / st.br, 1.5); st.dyn = beltPos; st.R *= .8; } }
+    else { if (i < core) { const r = t.R * .07 * Math.abs(tgauss()), th = trnd() * 6.2832; st.ox = Math.cos(th) * r; st.oy = Math.sin(th) * r; st.lum *= 1.3; }
+      else { const r = t.R * (1 + .1 * tgauss() + .05 * Math.sin(i * 2.39996 * 3)), th = i * 2.39996 + tgauss() * .03, ct = Math.cos(t.tilt), sn = Math.sin(t.tilt), rx = Math.cos(th) * r, ry = Math.sin(th) * r * t.open;
+        st.ox = ct * rx - sn * ry; st.oy = sn * rx + ct * ry; } }
+    stars.push(st); t.stars.push(st); });
+  trackers.push(t); });
+const beltGrains = stars.filter(s => s.trk && s.dyn);
+const dynStars = [...putAway, ...whStars, ...moons];
+
+// ---------- the look: every colour in this sky is this person's own ----------
+// One palette per sky, built from a colour scheme (close hues, opposites, or three or four spread apart),
+// and every object takes its colours from it. Greens are never used, anywhere in the app.
+let lookSeed = (SKY * 2654435761) >>> 0;
+const lrnd = () => { lookSeed |= 0; lookSeed = lookSeed + 0x6D2B79F5 | 0; let t = Math.imul(lookSeed ^ lookSeed >>> 15, 1 | lookSeed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const hsl = (h, s_, l) => { const k = n => (n + h / 30) % 12, a = s_ * Math.min(l, 1 - l), f = n => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)); return [f(0), f(8), f(4)].map(v => Math.pow(v, 2.2)); };
+// no greens anywhere, olive and teal included: hues 45 to 195 are skipped
+const okHue = h => { h = ((h % 360) + 360) % 360; return h >= 45 && h <= 195 ? h + 150 : h; };
+const makeLook = () => {
+  const h0 = lrnd() * 360, scheme = Math.floor(lrnd() * 4), offs = [[0, 25, 50], [0, 180, 25], [0, 120, 240], [0, 150, 210]][scheme];
+  const hue = i => okHue(h0 + offs[i % 3] + (lrnd() - .5) * 30);
+  const neb = [0, 1, 2].map(i => [hsl(hue(i), .55 + .35 * lrnd(), .48 + .14 * lrnd()), hsl(hue(i + 1), .5 + .4 * lrnd(), .5 + .14 * lrnd()), hsl(hue(i + 2), .45 + .4 * lrnd(), .55 + .15 * lrnd())]);
+  const shape = [0, 1, 2].map(() => [1.6 + 1.6 * lrnd(), .6 + .9 * lrnd(), 6 + 7 * lrnd(), lrnd() * 6.283]);
+  const bgH = okHue(205 + lrnd() * 130 + (lrnd() < .18 ? 160 : 0)), bgS = .45 + .35 * lrnd();
+  const warm = okHue(lrnd() < .75 ? -20 + lrnd() * 60 : 300 + lrnd() * 40);
+  return {
+    bg: [hsl(bgH, bgS, .03), hsl(bgH, bgS, .065), hsl(bgH + 10, bgS * .9, .11), hsl(hue(1), .4, .3)],
+    neb, shape,
+    sn: [hsl(hue(1), .6, .6), hsl(warm, .85, .6), hsl(warm + 30, .85, .72)],
+    pn: [hsl(hue(2), .55, .68), hsl(hue(0), .7, .62)],
+    comet: [hsl(okHue(205 + lrnd() * 60), .7, .72), hsl(okHue(20 + lrnd() * 25), .7, .75)],
+    disk: [hsl(warm + 15, .5, .9).map(v => v * 3.2), hsl(warm, .9, .5).map(v => v * 1.6)],
+    wh: hsl(hue(0), .35, .9), dm: hsl(hue(2), .6, .35).map(v => v * .25),
+    planet: [hsl(okHue(h0 + 15 + lrnd() * 40), .45 + .3 * lrnd(), .55), hsl(okHue(h0 - 20 - lrnd() * 40), .4 + .3 * lrnd(), .35)],
+  };
+};
+let LOOK = makeLook();
+
+// ---------- WebGL ----------
+const cv = document.getElementById("sky");
+const gl = cv.getContext("webgl2", { antialias: false, alpha: false, powerPreference: "high-performance", preserveDrawingBuffer: false });
+if (!gl) { document.querySelector(".top p").textContent = "This page needs WebGL 2, which this browser has turned off."; return; }
+const hasF = !!gl.getExtension("EXT_color_buffer_float");
+const H = `#version 300 es
+precision highp float;
+vec3 lin(vec3 c){ return pow(c, vec3(2.2)); }
+float h12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+vec2 g2(vec2 p){ float a = h12(p) * 6.2831853; return vec2(cos(a), sin(a)); }
+float gn(vec2 p){ vec2 i = floor(p), f = fract(p), u = f * f * f * (f * (f * 6. - 15.) + 10.);
+  float a = dot(g2(i), f), b = dot(g2(i + vec2(1, 0)), f - vec2(1, 0)), c = dot(g2(i + vec2(0, 1)), f - vec2(0, 1)), d = dot(g2(i + vec2(1, 1)), f - vec2(1, 1));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y) * .7 + .5; }
+float fbm(vec2 p, float o){ float a = .5, s = 0., n = 0.; mat2 R = mat2(.8, .6, -.6, .8);
+  for (int i = 0; i < 10; i++){ float w = clamp(o - float(i), 0., 1.); if (w <= 0.) break; s += a * w * gn(p); n += a * w; p = R * p * 2.03 + 17.1; a *= .5; } return s / n; }
+`;
+const VQ = `#version 300 es
+layout(location=0) in vec2 aQ; void main(){ gl_Position = vec4(aQ, 0, 1); }`;
+
+// Deep space: no stars here at all, only colour, nebulas and the supernova's shell.
+const BG = H + `
+uniform vec4 uCam; uniform float uScale, uT, uTe, uOct, uNebFade, uSNFade, uShow; uniform vec2 uRes; uniform vec4 uNeb[3]; uniform vec4 uSN, uComet, uPN, uDN, uBirth, uWH, uWP, uDMk; uniform float uCometK; uniform vec3 uNebA[3], uNebB[3], uNebC[3]; uniform vec4 uNebS[3];
+uniform vec3 uBg0, uBg1, uBg2, uBgA, uSNs, uSNa, uSNb, uPNa, uPNb, uCmI, uCmD, uWHc;
+out vec4 o;
+void main(){
+  vec2 pd = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
+  vec2 w = uCam.xy + (uCam.zw + (pd - uRes * .5) / uScale);
+  vec3 c0 = uBg0, c1 = uBg1, c2 = uBg2;
+  float b1 = fbm(w * .07 + vec2(3.1, 1.7), 4.), b2 = fbm(w * .16 + vec2(9.2, 4.4) + vec2(uT * .002, 0.), 4.);
+  vec3 c = mix(c0, c1, smoothstep(.3, .6, b1)); c = mix(c, c2, smoothstep(.55, .82, b1) * .75);
+  c += uBgA * .22 * smoothstep(.58, .86, b2);
+  float edge = max(abs(w.x) / 6., abs(w.y) / 13.); c = mix(c, c0 * .7, smoothstep(.95, 1.35, edge));
+  for (int i = 0; i < 3; i++){
+    vec4 N = uNeb[i]; vec2 d = (w - N.xy) / N.z; float dl = length(d); if (dl > 1.7) continue;
+    vec4 S = uNebS[i]; float nc = cos(S.w), ns = sin(S.w); vec2 q = mat2(nc, ns, -ns, nc) * d * S.x + float(i) * 7.3;
+    vec2 wp = vec2(fbm(q + vec2(uT * .018, 0.), 3.), fbm(q + 5.2 - vec2(0., uT * .014), 3.));
+    float fall = exp(-dl * dl * 1.9);
+    float n = fbm(q + wp * S.y, uOct);
+    float dens = smoothstep(.42, .8, n) * fall;
+    float fil = pow(1. - abs(fbm(q * 2.1 + wp * 1.3 * S.y + 3.3, uOct) * 2. - 1.), S.z) * fall;
+    float dark = smoothstep(.56, .74, fbm(q * 1.6 + 9.1 + wp, uOct)) * fall;
+    float ct = fbm(q * .7 + 2., 3.);
+    vec3 col = mix(mix(uNebA[i], uNebB[i], smoothstep(.3, .5, ct)), uNebC[i], smoothstep(.52, .72, ct));
+    c += col * (dens * .16 + fil * .3) * uNebFade * .765 * uShow;
+    c *= 1. - .65 * dark * uNebFade * uShow;
+  }
+  vec2 d = (w - uSN.xy) / uSN.z; float dl = length(d);
+  if (dl < 2.2){
+    vec3 before = c;
+    vec2 dir = d / max(dl, 1e-4);
+    float breathe = .025 * sin(uT * .25);
+    float edgeR = 1. + breathe + .22 * (fbm(dir * 2.2 + 3., 3.) - .5);
+    float shell = exp(-pow((dl - edgeR) / .06, 2.));
+    float flow = uT * .03;
+    float f = pow(1. - abs(fbm(d * 4.5 - dir * flow + 1.7, uOct) * 2. - 1.), 9.);
+    float g = pow(1. - abs(fbm(d * 9. - dir * flow * 1.6 + 8.2, uOct) * 2. - 1.), 12.);
+    float knots = smoothstep(.62, .8, fbm(d * 6. + 4.4 + vec2(uT * .01, 0.), 4.));
+    float inner = smoothstep(edgeR, edgeR * .25, dl);
+    vec3 teal = uSNs, red = uSNa, gold = uSNb, hot = lin(vec3(.86, .9, 1.));
+    c += teal * shell * (.25 + 1.4 * f + 1.2 * knots) * .7;
+    c += mix(red, gold, g) * (f * .8 + g * .7) * inner * smoothstep(.0, .4, dl);
+    c += teal * .05 * inner;
+    // the blast wave still running outward, faint
+    float wave = exp(-pow((dl - 1.55 - .04 * sin(uT * .2)) / .035, 2.)) * (.4 + .6 * fbm(dir * 3. + 9., 3.));
+    c += lin(vec3(.55, .62, 1.)) * wave * .05;
+    // a hot heart
+    c += hot * exp(-dl * dl * 30.) * (.25 + .05 * sin(uT * .9));
+    // where new stars are being born: soft pink-white pockets inside the cloud
+    float born = smoothstep(.55, .78, fbm(d * 3.2 + 21.7, 4.)) * inner * smoothstep(.15, .45, dl);
+    c += mix(lin(vec3(1., .55, .7)), hot, .5) * born * .14;
+    c = before + (c - before) * uSNFade * uShow;
+  }
+  // dark nebula: memories behind it are dimmed, by choice, not hidden
+  { vec2 d = (w - uDN.xy) / uDN.z; float a = atan(d.y, d.x);
+    float r = length(d) / (1. + .25 * sin(3. * a + 1.) + .15 * sin(5. * a + 2.)) + .18 * (fbm(d * 4. + 2., 4.) - .5);
+    float m = smoothstep(1., .55, r);
+    c *= 1. - .75 * m * uShow;
+    c += lin(vec3(.95, .6, .45)) * .035 * m * (1. - m) * 4. * uShow * uNebFade; }
+  // planetary nebula: a glowing ring where a habit was ended by choice
+  { vec2 d = (w - uPN.xy) / uPN.z; d.x *= 1.15; float r = length(d);
+    if (r < 1.6){ float n = fbm(d * 3. + 5., 4.);
+      float f = pow(1. - abs(fbm(d * 7. + 1.3, 5.) * 2. - 1.), 6.); float ring = exp(-pow((r - .82 - .1 * (n - .5)) / .09, 2.)), inner = smoothstep(.8, 0., r), edge = exp(-pow((r - .97) / .03, 2.));
+      c += (uPNa * inner * .09 * (.6 + .8 * f) + uPNb * ring * .26 * (.45 + 1.1 * f) + lin(vec3(1., .78, .6)) * edge * .08) * uPN.w * uShow; } }
+  // comet: a nucleus, a soft coma, a straight blue ion tail and a curved warm dust tail, streaming out behind it as it moves
+  { vec2 rel = w - uComet.xy, dir = uComet.zw; float al = dot(rel, dir), pp = dot(rel, vec2(-dir.y, dir.x));
+    float r2 = dot(rel, rel);
+    float ppw = pp;
+    float ion = al > 0. ? exp(-ppw * ppw / pow(.012 + .045 * al, 2.)) * exp(-al / 1.1) * (.55 + .9 * pow(gn(vec2(al * 5. - uT * 1.2, ppw * 45.)), 2.)) : 0.;
+    float pp2 = pp + .2 * al * al;
+    float dust = al > 0. ? exp(-pp2 * pp2 / pow(.025 + .13 * al, 2.)) * exp(-al / .75) : 0.;
+    vec3 k = uCmI * ion * .4 + uCmD * dust * .25 + mix(uCmI, vec3(1.), .4) * exp(-r2 / .006) * (.3 + .06 * sin(uT * 2.3)) + vec3(1.) * exp(-r2 / .00012) * 1.2;
+    c += k * uCometK * uShow; }
+  // a star being born: a cloud spins in and collapses, a core warms, it ignites, and a ring of light runs out
+  if (uBirth.z > 0. && uBirth.z < 1.){
+    vec2 d = (w - uBirth.xy) / uBirth.w; float r = length(d), p = uBirth.z;
+    float rad = mix(1., .16, smoothstep(0., .8, p));
+    float a = atan(d.y, d.x) + p * 4. + 1.1 / (r + .2) * p;
+    vec2 q = vec2(cos(a), sin(a)) * r * 3.;
+    float n = fbm(q + 3., 5.);
+    float cloud = smoothstep(.35, .8, n) * exp(-pow(r / rad, 2.) * 1.4) * (1. - smoothstep(.8, .95, p)) * smoothstep(0., .12, p);
+    c += mix(lin(vec3(.85, .45, .58)), lin(vec3(.55, .65, 1.)), smoothstep(.1, .8, p)) * cloud * (.12 + .45 * p);
+    c += vec3(1., .88, .76) * exp(-r * r / (rad * rad * .04)) * smoothstep(.25, .8, p) * (1. - smoothstep(.82, .9, p)) * .9;
+    c += vec3(1.) * exp(-r * r * 5.) * exp(-pow((p - .815) / .02, 2.)) * 1.4;
+    c += lin(vec3(.72, .8, 1.)) * exp(-pow((r - (p - .8) * 5.) / .07, 2.)) * step(.8, p) * (1. - p) * 1.6;
+  }
+  // white hole: light and memories pour out, turning slowly
+  { vec2 d = (w - uWH.xy) / uWH.z; float r = length(d);
+    if (r < 30.){ float a = atan(d.y, d.x) + .35 * log(r + .1); vec2 cs = vec2(cos(a), sin(a));
+      float st = pow(gn(cs * 6. + vec2(log(r + 1.) * 3. - uT * .45, 0.)), 3.);
+      vec3 col = uWHc * (exp(-r * r * 2.) * 2.2 + exp(-r * .5) * .14 + st * exp(-r * .28) * .55) + lin(vec3(1., .82, .9)) * exp(-pow((r - 2.2) / .5, 2.)) * .04;
+      c += col * (1. - smoothstep(9., 28., r)) * uWH.w * uShow; } }
+  o = vec4(c, 1.);
+}`;
+
+// Every star is a memory. Small when far away, and when you get close each one becomes a real sun.
+const SV = `#version 300 es
+precision highp float;
+layout(location=0) in vec2 aQ; layout(location=1) in vec4 aP; layout(location=2) in vec4 aO; layout(location=3) in vec4 aC; layout(location=4) in vec4 aE;
+uniform vec4 uCam; uniform float uScale, uDpr, uTe, uT, uMode, uGlowPx, uZoom, uReveal, uBirthP; uniform vec2 uRes; uniform vec4 uDN;
+out vec2 vD; flat out float vR, vRes, vSeed, vFlag, vExt; flat out vec3 vCol;
+void main(){
+  vec2 rel = (aP.xy - uCam.xy) + (aP.zw - uCam.zw);
+  float a = aO.z * uTe, ca = cos(a), sa = sin(a);
+  rel += vec2(ca * aO.x - sa * aO.y, sa * aO.x + ca * aO.y);
+  vec2 sp = rel * uScale;
+  vec2 wa = aP.xy + aP.zw + vec2(ca * aO.x - sa * aO.y, sa * aO.x + ca * aO.y);
+  vec2 dd = (wa - uDN.xy) / uDN.z; float dan = atan(dd.y, dd.x);
+  float dim = 1. - .72 * smoothstep(1., .55, length(dd) / (1. + .25 * sin(3. * dan + 1.) + .15 * sin(5. * dan + 2.)));
+  float flag = aE.y, giant = step(.5, flag) * step(flag, 1.5);
+  float rPx = aO.w * uScale;
+  float minPx = (giant > .5 ? 2.7 : flag > 3.5 ? 1.7 : flag > 2.5 ? 1.9 : .8 + .22 * min(aC.w, 2.5)) * uDpr;
+  float r = max(rPx, minPx * pow(max(uZoom, 1.), .3));
+  float res = smoothstep(5., 26., rPx / uDpr);
+  float env = smoothstep(.55, .95, .5 + .5 * sin(uT * (.04 + .06 * aE.z) + aE.x * 3.1)) * (.6 + .4 * smoothstep(.6, 2., aC.w));
+  float flick = .2 * sin(uT * (3.1 + 4. * aE.z) + aE.x) + .12 * sin(uT * (5.7 + 3. * aE.z) + aE.x * 1.7) + .08 * sin(uT * (9.3 + 5. * aE.z) + aE.x * 2.3);
+  float tw = 1. + (1. - res) * env * flick;
+  if (flag > 1.5 && flag < 2.5) tw *= 1. + .3 * (.5 + .5 * sin(uT * .7 + aE.x));
+  if (flag > 2.5 && flag < 3.5) tw *= .8 + .45 * pow(.5 + .5 * sin(uT * 1.2), 6.);
+  if (flag > 3.5 && flag < 4.5) tw = .25 + 1.8 * pow(.5 + .5 * sin(uT * 5.65), 12.);
+  float since = aE.w > 1.5 ? (uBirthP < .8 ? -1. : (uBirthP - .8) * .3) : uReveal - aE.w;
+  if (since < 0.) { gl_Position = vec4(2., 2., 2., 1.); return; }
+  tw *= clamp(since / .03, 0., 1.) * (1. + 2.2 * exp(-since * 35.));
+  float ext = uMode < .5 ? r * (1. + .9 * res + .5 * giant * res) + 1.6 * uDpr : uGlowPx * (1. + 1.4 * giant);
+  if (flag > 4.5 && uMode < .5) ext = max(ext, max(r * 2.4, 4.5 * uDpr) * 1.3 + 3. * uDpr);
+  vec2 hr = uRes * .5;
+  if (any(greaterThan(abs(sp) - ext, hr))) { gl_Position = vec4(2., 2., 2., 1.); return; }
+  gl_Position = vec4((sp + aQ * ext) / hr * vec2(1., -1.), 0., 1.);
+  vD = aQ * ext; vR = r; vRes = res; vSeed = aE.z; vFlag = flag; vExt = ext;
+  vCol = aC.rgb * aC.w * tw * dim;
+}`;
+const SF = H + `
+in vec2 vD; flat in float vR, vRes, vSeed, vFlag, vExt; flat in vec3 vCol;
+uniform float uT, uMode, uGlowW, uDpr, uDirect; out vec4 o;
+void main(){
+  float d = length(vD);
+  if (uMode > .5){ float g = exp(-d * d / (vExt * vExt) * 4.5); o = vec4(vCol * g * uGlowW, 1.); return; }
+  float q = d / vR, aa = 1.1 / vR, giant = step(.5, vFlag) * step(vFlag, 1.5);
+  float disc = 1. - smoothstep(1. - aa, 1. + aa, q);
+  float pk = max(vCol.r, max(vCol.g, vCol.b)); vec3 hue = vCol / max(pk, 1e-4);
+  vec3 c = vec3(0);
+  if (q < 1. + aa){
+    float z = sqrt(max(0., 1. - q * q));
+    float limb = 1. - .56 * (1. - z) - .22 * (1. - z) * (1. - z);
+    float gran = 1.;
+    if (vRes > 0.){
+      vec2 u = vD / vR; float lat = asin(clamp(u.y, -1., 1.)); float lon = atan(u.x, max(z, 1e-3)) + uT * .01 * (.4 + vSeed);
+      vec2 ll = vec2(lon * 1.2, lat);
+      float k = 24. + vSeed * 12.;
+      float g1 = gn(ll * k + vSeed * 40.), g2 = gn(ll * k * 2.4 + 7. + vec2(uT * .006, 0.)), g3 = gn(ll * 2.6 + vSeed * 9.);
+      float cells = smoothstep(.3, .75, g1 * .7 + g2 * .3);
+      gran = mix(.72, 1.18, cells) * (.9 + .2 * g3);
+      gran *= 1. - .7 * giant * smoothstep(.8, .86, gn(ll * 3.2 + vSeed * 13.));
+      gran = mix(1., gran, vRes);
+    }
+    vec3 surf = mix(hue, vec3(1.), .28 * z * vRes + .3 * (1. - vRes)) * mix(pk * 1.6, .85 + .3 * min(pk, 2.), vRes);
+    surf *= mix(vec3(1.), mix(vec3(1., .55, .35), vec3(1.), z), .45 * vRes);
+    c += surf * limb * gran * disc;
+  }
+  float outPx = max(d - vR, 0.);
+  float rim = exp(-outPx * 1.5 / uDpr) * (1. - disc) * .3;
+  vec2 dir = vD / max(d, 1e-3);
+  float streams = .55 + .9 * gn(dir * 3. + vSeed * 20. + vec2(0., uT * .03));
+  float cor = exp(-max(q - 1., 0.) * mix(14., 7., giant)) * vRes * (1. - disc) * .1 * streams;
+  c += hue * mix(pk, .6 + .3 * min(pk, 2.), vRes) * (rim + cor);
+  if (vFlag > 4.5){ float rr = d - max(vR * 2.4, 4.5 * uDpr); c += mix(hue, vec3(1.), .55) * min(pk, 1.5) * exp(-rr * rr / (uDpr * uDpr * .8)) * .24 * (.85 + .15 * sin(uT * .6 + vSeed * 6.)); }
+  c *= 1. - smoothstep(vExt * .82, vExt, d);
+  if (uDirect > .5) c = pow(1. - exp(-c * 1.05), vec3(1. / 2.2));
+  o = vec4(c, 1.);
+}`;
+
+// Finish: lens the light around the black hole, draw its disk, then tone-map, dither.
+const FIN = H + `
+uniform sampler2D uScene, uGlow; uniform vec2 uRes; uniform vec4 uBH, uDM; uniform float uT, uTe, uBHFade; uniform vec3 uDkH, uDkW, uDMc, uPLA, uPLB; uniform vec2 uBHk, uPLk; uniform vec4 uPLs; uniform float uPLshow;
+out vec4 o;
+// a faint inner ring, a broad bright one, a dark gap, then an outer ring with a thin gap of its own
+float ringA(float rr){
+  float a = .22 * smoothstep(1.25, 1.32, rr) * (1. - smoothstep(1.47, 1.52, rr))
+    + .82 * smoothstep(1.5, 1.57, rr) * (1. - smoothstep(1.92, 1.97, rr))
+    + .6 * smoothstep(2.05, 2.1, rr) * (1. - smoothstep(2.41, 2.47, rr)) * (1. - .85 * exp(-pow((rr - 2.33) / .012, 2.)));
+  return a * (.78 + .22 * gn(vec2(rr * 46., .5))); }
+void main(){
+  vec2 p = gl_FragCoord.xy, sp = p; vec3 add = vec3(0); float sh = 1., front = 0.;
+  vec3 disk = vec3(0);
+  if (uBH.w > .5){
+    vec2 v = p - uBH.xy; float r = length(v), Rs = uBH.z, Re = Rs * 2.5;
+    float defl = Re * Re / max(r, Rs * .6) * smoothstep(Re * 14., Re * 5., r);
+    sp = p - v / max(r, 1e-3) * defl;
+    sh = smoothstep(.97, 1.03, r / Rs);
+    float rr0 = r / Rs, ha = atan(v.y, v.x);
+    vec3 hot = uDkH, warm = uDkW;
+    float a3 = ha + uT * .35;
+    float halo = smoothstep(1.03, 1.12, rr0) * (1. - smoothstep(1.18, 1.8, rr0));
+    float hs = gn(vec2(rr0 * 9., 1.) + vec2(cos(a3), sin(a3)) * 2.6);
+    add += mix(hot, warm, smoothstep(1.1, 1.7, rr0)) * halo * (.3 + .9 * hs * hs) * (1. - .55 * cos(ha)) * .45;
+    add += mix(uDkH / 3.2, vec3(1.), .5) * 1.6 * exp(-pow((rr0 - 1.035) / .016, 2.));
+    float ct = cos(-uBHk.x), st = sin(-uBHk.x); vec2 vr = vec2(ct * v.x - st * v.y, st * v.x + ct * v.y);
+    vec2 dk = vec2(vr.x, vr.y * uBHk.y) / Rs; float rr = length(dk), a = atan(dk.y, dk.x);
+    float m = smoothstep(1.45, 1.85, rr) * (1. - smoothstep(3.2, 4.8, rr));
+    float a2 = a + uT * 1.1 / (rr * sqrt(rr));
+    vec2 cs = vec2(cos(a2), sin(a2));
+    float s1 = gn(vec2(rr * 7., 0.) + cs * 2.2), s2 = gn(vec2(rr * 16., 3.) + cs * 4.6);
+    disk = mix(hot, warm * 1.4, smoothstep(1.7, 4.2, rr)) * m * (.35 + 1.1 * s1 * s2) * (1. - .65 * cos(a)) * .6;
+    front = vr.y < 0. ? 1. : 0.;
+  }
+  if (uDM.w > .5){ vec2 v2 = sp - uDM.xy; float r = length(v2), R = uDM.z;
+    sp -= v2 / max(r, 1.) * R * .34 * (r / R) * exp(-r * r / (R * R)) * (1. + .3 * sin(uT * .7 + r / R * 5.)); }
+  vec2 uv = clamp(sp / uRes, vec2(.0005), vec2(.9995));
+  vec3 c = (texture(uScene, uv).rgb + texture(uGlow, uv).rgb) * sh + add * uBHFade;
+  c += disk * uBHFade * (front > .5 ? 1. : sh);
+  // ringed planet: a place you keep going back to. A solid body that hides what is behind it, lit from one side,
+  // its rings passing behind it and then in front, with the planet's shadow falling across the far side of the rings.
+  if (uPLs.w > .5){
+    vec2 d = (vec2(p.x, uRes.y - p.y) - uPLs.xy) / uPLs.z; float r = length(d);
+    if (r < 3.){
+      float pc_ = cos(uPLk.x), ps_ = sin(uPLk.x), op = uPLk.y, cE = sqrt(max(0., 1. - op * op));
+      vec2 rd = vec2(pc_ * d.x + ps_ * d.y, -ps_ * d.x + pc_ * d.y);
+      float rr = length(vec2(rd.x, rd.y / op)), aa = 1.2 / uPLs.z;
+      vec3 L = normalize(vec3(-.55, -.6, .58)), Lr = vec3(pc_ * L.x + ps_ * L.y, -ps_ * L.x + pc_ * L.y, L.z), nr = vec3(0., cE, -op);
+      float disc = 1. - smoothstep(1. - aa, 1. + aa, r), z = sqrt(max(0., 1. - r * r));
+      vec3 n = normalize(vec3(d, max(z, .001)));
+      float bands = fbm(vec2(rd.y * 6. + .5 * fbm(d * 2.5 + 7., 3.), 1.3), 4.), fine = fbm(vec2(rd.y * 22. + 2. * bands, 4.1), 3.);
+      vec3 body = mix(uPLB, uPLA, smoothstep(.3, .72, bands)) * (.85 + .3 * fine);
+      body = mix(vec3(dot(body, vec3(.3, .55, .15))) * 1.1, body, .6);
+      // the rings throw their shadow across the body: follow the sunlight from this point back to the ring plane
+      vec3 B = vec3(rd, z); float den = dot(Lr, nr), tq = -dot(B, nr) / (abs(den) > 1e-4 ? den : 1e-4);
+      vec3 hq = B + Lr * tq; float rshade = tq > 0. ? ringA(length(vec2(hq.x, dot(hq, vec3(0., op, cE))))) * .8 : 0.;
+      body *= (.025 + 1.3 * max(0., dot(n, L)) * (1. - rshade)) * (.6 + .4 * z) * 1.35;
+      // and the planet's shadow falls on whichever part of the rings lies behind it from the sun
+      vec3 Q = vec3(rd.x, rd.y, rd.y / op * cE); float bq = dot(Q, Lr), cq = dot(Q, Q) - 1.;
+      float shadow = step(bq, 0.) * smoothstep(-.02, .03, bq * bq - cq), rings = ringA(rr);
+      vec3 ringC = mix(uPLA, vec3(1.), .55) * .55 * (.8 + .4 * gn(vec2(rr * 8., 2.))) * (1. - .9 * shadow);
+      float behind = rd.y < 0. ? 1. : 0.;
+      vec3 pc = c;
+      pc = mix(pc, ringC, rings * behind);
+      pc = mix(pc, body, disc);
+      pc += mix(uPLA, vec3(1.), .45) * exp(-pow((r - 1.) * uPLs.z / 2.2, 2.)) * smoothstep(-.3, .7, dot(d / max(r, 1e-3), normalize(L.xy))) * .22;
+      pc = mix(pc, ringC, rings * (1. - behind));
+      c = mix(c, pc, uPLshow);
+    }
+  }
+  if (uDM.w > .5){ float q = length(gl_FragCoord.xy - uDM.xy) / uDM.z;
+    float ring = exp(-pow((q - .62 - .04 * sin(uT * .5)) * 11., 2.));
+    c = c * (1. - .22 * exp(-q * q * 2.5)) + uDMc * ring * (.6 + .4 * sin(uT * .8 + q * 9.)); }
+  c = 1. - exp(-c * 1.05);
+  c = pow(c, vec3(1. / 2.2));
+  c += (h12(p + fract(uT) * 91.) - h12(p.yx + 17.3 - fract(uT) * 53.)) / 255.;
+  o = vec4(c, 1.);
+}`;
+
+const sh = (t, s) => { const x = gl.createShader(t); gl.shaderSource(x, s); gl.compileShader(x); if (!gl.getShaderParameter(x, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(x)); return x; };
+const prog = (v, f) => { const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, v)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, f)); gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p)); const u = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) { const nm = gl.getActiveUniform(p, i).name.replace(/\[0\]$/, ""); u[nm] = gl.getUniformLocation(p, nm); } return { p, u }; };
+const P_BG = prog(VQ, BG), P_ST = prog(SV, SF), P_FIN = prog(VQ, FIN);
+
+const quad = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+const vaoQ = gl.createVertexArray(); gl.bindVertexArray(vaoQ); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+const NS = stars.length, inst = new Float32Array(NS * 16);
+const split = v => { const h = Math.fround(v); return [h, v - h]; };
+stars.forEach((s, i) => {
+  const [xh, xl] = split(s.cx), [yh, yl] = split(s.cy), o = i * 16;
+  inst.set([xh, yh, xl, yl, s.ox, s.oy, s.om, s.R, s.col[0], s.col[1], s.col[2], s.disk || s.dyn ? 0 : s.lum, rnd() * 6.283, s.flag, rnd(), s.flag === 1 || s.flag === 3 ? .003 + .02 * rnd() : rnd()], o);
+});
+const vaoS = gl.createVertexArray(); gl.bindVertexArray(vaoS);
+gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+const ib = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, ib); gl.bufferData(gl.ARRAY_BUFFER, inst, gl.STATIC_DRAW);
+for (let k = 0; k < 4; k++) { gl.enableVertexAttribArray(1 + k); gl.vertexAttribPointer(1 + k, 4, gl.FLOAT, false, 64, k * 16); gl.vertexAttribDivisor(1 + k, 1); }
+gl.bindVertexArray(null);
+const dinst = new Float32Array(dynStars.length * 16), dSeed = dynStars.map(() => [rnd() * 6.283, rnd()]);
+const vaoD = gl.createVertexArray(); gl.bindVertexArray(vaoD);
+gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+const db = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, db); gl.bufferData(gl.ARRAY_BUFFER, dinst.byteLength, gl.DYNAMIC_DRAW);
+for (let k = 0; k < 4; k++) { gl.enableVertexAttribArray(1 + k); gl.vertexAttribPointer(1 + k, 4, gl.FLOAT, false, 64, k * 16); gl.vertexAttribDivisor(1 + k, 1); }
+gl.bindVertexArray(null);
+// A belt's grains orbit, so they are rewritten every frame like the moons, but they are drawn with the other stars, in
+// linear light before tone-mapping: hundreds of grains drawn directly on top would add up to a solid white bar.
+const binst = new Float32Array(Math.max(1, beltGrains.length) * 16), bSeed = beltGrains.map(() => [trnd() * 6.283, trnd()]);
+const vaoB = gl.createVertexArray(); gl.bindVertexArray(vaoB);
+gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+const bb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bb); gl.bufferData(gl.ARRAY_BUFFER, binst.byteLength, gl.DYNAMIC_DRAW);
+for (let k = 0; k < 4; k++) { gl.enableVertexAttribArray(1 + k); gl.vertexAttribPointer(1 + k, 4, gl.FLOAT, false, 64, k * 16); gl.vertexAttribDivisor(1 + k, 1); }
+gl.bindVertexArray(null);
+
+let W = 0, Hh = 0, dpr = 1, rs = 1, fitS = 1, scene = null, glow = null;
+const mkTarget = (w, h) => {
+  const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, hasF ? gl.RGBA16F : gl.RGBA8, w, h, 0, gl.RGBA, hasF ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+  return { t, f, w, h };
+};
+const drop = x => { if (x) { gl.deleteTexture(x.t); gl.deleteFramebuffer(x.f); } };
+const resize = () => {
+  const oldFit = fitS; W = cv.clientWidth || 390; Hh = cv.clientHeight || 844; dpr = Math.min(devicePixelRatio || 1, 2) * rs;
+  cv.width = Math.max(1, Math.round(W * dpr)); cv.height = Math.max(1, Math.round(Hh * dpr));
+  drop(scene); drop(glow); scene = mkTarget(cv.width, cv.height); glow = mkTarget(Math.ceil(cv.width / 2), Math.ceil(cv.height / 2));
+  fitS = Math.min(W / (2 * WX), Hh / (2 * WY)) * .98; if (cam.s === oldFit || cam.s < fitS * .7) cam.s = fitS;
+};
+
+// ---------- camera ----------
+const cam = { x: 0, y: 0, s: 1 };
+resize(); addEventListener("resize", resize); if (window.ResizeObserver) new ResizeObserver(() => resize()).observe(cv);
+const MAXZ = 6000;
+const clampCam = () => { cam.s = Math.min(Math.max(cam.s, fitS * .7), fitS * MAXZ); cam.x = Math.min(Math.max(cam.x, -WX), WX); cam.y = Math.min(Math.max(cam.y, -WY), WY); };
+let motion = true;
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let fly = null;
+const flyTo = (t, instant) => {
+  if (instant || reduce) { Object.assign(cam, t); clampCam(); fly = null; return; }
+  const ls0 = Math.log(cam.s), ls1 = Math.log(t.s), dist = Math.hypot(t.x - cam.x, t.y - cam.y);
+  const bump = Math.max(0, Math.log(Math.max(1e-6, dist * Math.min(cam.s, t.s) / (W * .6))));
+  fly = { x0: cam.x, y0: cam.y, x1: t.x, y1: t.y, ls0, ls1, bump: Math.min(bump, Math.max(0, Math.max(ls0, ls1) - Math.log(fitS))), t0: performance.now(), dur: 1800 + 260 * Math.min(6, Math.abs(ls1 - ls0) + bump) };
+};
+const zoomAt = (px, py, f) => {
+  const wx = cam.x + (px - W / 2) / cam.s, wy = cam.y + (py - Hh / 2) / cam.s;
+  cam.s *= f; clampCam(); cam.x = wx - (px - W / 2) / cam.s; cam.y = wy - (py - Hh / 2) / cam.s; clampCam();
+};
+let te = 0;
+let T = 0;
+const starPos = s => { if (s.dyn) return s.dyn(s); const a = s.om * te, c = Math.cos(a), n = Math.sin(a); return [s.cx + c * s.ox - n * s.oy, s.cy + n * s.ox + c * s.oy]; };
+const toScreen = (x, y) => [(x - cam.x) * cam.s + W / 2, (y - cam.y) * cam.s + Hh / 2];
+
+// ---------- picking and the card ----------
+const card = document.getElementById("card"), ring = document.getElementById("ring");
+const closeBtn = `<button class="icon x" type="button" aria-label="Close" data-card-close><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg></button>`;
+const esc = t => String(t).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
+card.addEventListener("click", e => { if (e.target.closest("[data-card-close]")) show(null);
+  if (e.target.closest("[data-replica]") && sel && sel.cons) openReplica(sel.cons);
+  if (e.target.closest("[data-bring]")) { show({ wh: true }); flyTo(GO.wh()); }
+  if (e.target.closest("[data-remove]") && sel && sel.cons) { const i = CONS.indexOf(sel.cons); if (i >= 0) CONS.splice(i, 1); saveMine(); show(null); } });
+let sel = null;
+const show = (s) => { showInner(s); if (s && !card.hidden) card.insertAdjacentHTML("afterbegin", closeBtn); };
+const showInner = (s) => {
+  sel = s;
+  if (!s) { card.hidden = true; ring.hidden = true; return; }
+  card.hidden = false;
+  if (s.meteor) { card.innerHTML = `<div class="d">Shooting star</div><div class="k">A meteor shower for the anniversary of ${fmt(radiant.day)}, a day you chose. Every streak flies out from that day's star.</div>`; return; }
+  if (s.wh) { card.innerHTML = `<div class="d">White hole</div><div class="k">Forms when you bring put-away memories back. It sends each one home to where it was, then fades away.</div>`; return; }
+  if (s.dm) { card.innerHTML = `<div class="d">Dark matter</div><div class="k">${DM.count} memories you tucked away to find again later. They don't shine, but you can see them bend the light around them.</div>`; return; }
+  if (s.comet) { card.innerHTML = `<div class="d">Comet: ${COMET_OF}</div><div class="k">Something that comes back every year. In the app it would pass through around ${COMET_DATE}.</div>`; return; }
+  if (s.pn) { card.innerHTML = `<div class="d">Planetary nebula</div><div class="k">“${ENDED_HABIT}”, a habit you chose to end on ${fmtS(PN_DAY)}. Its last memory sits in the middle.</div>`; return; }
+  if (s.dn) { card.innerHTML = `<div class="d">Dark nebula</div><div class="k">A cloud of cold dust, part of this sky's own scenery. It holds no memories.</div>`; return; }
+  if (s.neb) { card.innerHTML = `<div class="d">Nebula</div><div class="k">Weeks with a lot of writing: ${s.neb.journals} journal entries, ${fmtS(s.neb.a)} to ${fmtS(s.neb.b)}</div>`; return; }
+  if (s.sn) { card.innerHTML = `<div class="d">Supernova, ${fmt(SN_DAY)}</div><div class="k">A life event you marked as hard. It marks that day and nothing more: what came after stays where it is.</div>`; return; }
+  if (s.trk && !s.day) { card.innerHTML = `<div class="d">${TRK_LOOK[s.trk.look]}: “${esc(s.trk.name)}”</div><div class="k">A tracker you show in your sky, since ${fmtS(s.trk.from)}. Each time you log it is one star here, gathered beside the river and never on it, so how often you log never shapes the rest of your sky.</div>`; return; }
+  if (s.pl) { card.innerHTML = `<div class="d">Ringed planet: ${PLACE}</div><div class="k">A place you keep going back to. ${moons.length} memories logged there ride around it as moons. Tap one to see its day.</div>`; return; }
+  if (s.cons) { const c = s.cons, days = c.pts.map(q => q.day), lo = Math.min(...days), hi = Math.max(...days);
+    card.innerHTML = `<div class="d">${esc(c.name)}</div><div class="k">Drawn ${fmtS(c.made)}. ${c.pts.length} memories, ${fmtS(lo)} to ${fmtS(hi)}.</div><button class="textbtn" type="button" data-replica>See it as you drew it</button>${c.mine ? `<button class="textbtn" type="button" data-remove>Remove this constellation</button>` : ""}`; return; }
+  if (s === "bh") { card.innerHTML = `<div class="d">Black hole</div><div class="k">It formed when memories were put away. It draws them in, then closes and is gone, and nothing is left to show where they were. Hidden, not deleted: they come back from the list.</div>`; return; }
+  if (s.away) { card.innerHTML = `<div class="d">Put away</div><button class="textbtn" type="button" data-bring>Bring back</button>`; return; }
+  card.innerHTML = `<div class="d">${fmt(s.day)}</div><div class="k">${s.kind}${s.flag === 1 ? " " + s.info : ""}</div>${s.flag === 1 ? "" : `<div class="k">${s.info}</div>`}`;
+};
+const pick = (px, py) => {
+  let best = null, bd = 1e9;
+  for (const s of stars) {
+    if (s.dyn && s.dyn(s)[2]) continue;
+    const [x, y] = toScreen(...starPos(s)); const r = Math.max(s.R * cam.s, s.flag === 1 ? 2.7 : 1), dd = Math.hypot(x - px, y - py) - r;
+    if (dd < bd) { bd = dd; best = s; }
+  }
+  { const [rx, ry] = toScreen(...starPos(radiant));
+    for (const m of meteors) { const { hx, hy } = meteorPos(m, rx, ry), tl_ = Math.max(80, m.v * .07), sx = hx - m.ux * tl_, sy = hy - m.uy * tl_, L = Math.hypot(hx - sx, hy - sy) || 1, t_ = Math.max(0, Math.min(1, ((px - sx) * (hx - sx) + (py - sy) * (hy - sy)) / (L * L)));
+      if (Math.hypot(px - (sx + (hx - sx) * t_), py - (sy + (hy - sy) * t_)) < 24) return { meteor: true }; } }
+  { const cm = cometAt(te), wx = cam.x + (px - W / 2) / cam.s, wy = cam.y + (py - Hh / 2) / cam.s, rx_ = wx - cm.x, ry_ = wy - cm.y;
+    const al = rx_ * cm.dx + ry_ * cm.dy, pp = -rx_ * cm.dy + ry_ * cm.dx, [hx, hy] = toScreen(cm.x, cm.y);
+    if (Math.hypot(px - hx, py - hy) < 34) return { comet: true }; if (bd > 6 && al > 0 && al < 1.2 && Math.abs(pp) < .03 + .12 * al) return { comet: true }; }
+  { const [x, y] = toScreen(PL.x, PL.y); if (PL.R * cam.s < 12 && Math.hypot(px - x, py - y) < 16) return { pl: true }; }
+  if (bd < 18) return best;
+  { const [x, y] = toScreen(PN.x, PN.y); if (Math.hypot(px - x, py - y) < Math.max(14, PN.R * cam.s)) return { pn: true }; }
+  { const [x, y] = toScreen(WH.x, WH.y); if (whOn() > .2 && Math.hypot(px - x, py - y) < Math.max(16, WH.R * cam.s * 1.5)) return { wh: true }; }
+  { const [x, y] = toScreen(DM.x, DM.y); if (Math.hypot(px - x, py - y) < DM.R * cam.s * .7 && cam.s / fitS < 12) return { dm: true }; }
+  if (cam.s / fitS < 3) { const [x, y] = toScreen(DN.x, DN.y); if (Math.hypot(px - x, py - y) < DN.R * cam.s * .8) return { dn: true }; }
+  { const [x, y] = toScreen(PL.x, PL.y); if (Math.hypot(px - x, py - y) < PL.R * cam.s * 1.1) return { pl: true }; }
+  const [bx, by] = toScreen(BH.x, BH.y); if (bhOn() > .2 && Math.hypot(px - bx, py - by) < Math.max(14, BH.R * cam.s * 1.15)) return "bh";
+  if (cam.s / fitS < 2.5) {
+    const [sx, sy] = toScreen(SN.x, SN.y); if (Math.hypot(px - sx, py - sy) < SN.R * cam.s * 1.1) return { sn: true };
+    for (const n of nebs) { const [nx, ny] = toScreen(n.x, n.y); if (Math.hypot(px - nx, py - ny) < n.R * cam.s * .75) return { neb: n }; }
+  }
+  return null;
+};
+
+// ---------- input: drag, wheel, pinch, tap (all in screen-local pixels) ----------
+const loc = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+const pts = new Map(); let moved = 0, lastTap = 0, pinch0 = null;
+cv.addEventListener("pointerdown", e => { if (skipOpening()) { skipped = true; return; } cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); moved = 0; fly = null; cv.classList.add("drag");
+  if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch0 = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), s: cam.s }; } });
+cv.addEventListener("pointermove", e => {
+  if (!pts.has(e.pointerId)) return; const p = pts.get(e.pointerId), dx = e.clientX - p[0], dy = e.clientY - p[1];
+  pts.set(e.pointerId, [e.clientX, e.clientY]); moved += Math.abs(dx) + Math.abs(dy);
+  if (pts.size === 1) { cam.x -= dx / cam.s; cam.y -= dy / cam.s; clampCam(); }
+  else if (pts.size === 2 && pinch0) { const [a, b] = [...pts.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+    { const r = cv.getBoundingClientRect(); zoomAt((a[0] + b[0]) / 2 - r.left, (a[1] + b[1]) / 2 - r.top, (pinch0.s * d / pinch0.d) / cam.s); } cam.x -= dx / cam.s / 2; cam.y -= dy / cam.s / 2; }
+});
+let skipped = false;
+const up = e => {
+  if (skipped) { skipped = false; return; }
+  if (!pts.has(e.pointerId)) return; pts.delete(e.pointerId); if (pts.size < 2) pinch0 = null; if (pts.size === 0) cv.classList.remove("drag");
+  if (moved < 6 && pts.size === 0) {
+    if (drawing) { const s = pickStar(...loc(e)); if (s && s !== drawing.pts[drawing.pts.length - 1]) { drawing.pts.push(s); setDrawMsg(); } return; }
+    const now = performance.now();
+    if (now - lastTap < 320) { zoomAtSmooth(...loc(e), 3); lastTap = 0; return; }
+    lastTap = now; const s = pick(...loc(e));
+    if (s && (s.neb || s.sn)) { show(s); flyTo(s.sn ? GO.sn() : { x: s.neb.x, y: s.neb.y, s: Math.min(W, Hh) * .5 / (s.neb.R * 1.2) }); }
+    else if (s && s.dn) { show(s); flyTo(GO.dn()); }
+    else if (s) show(s); else { show(null); zoomAtSmooth(...loc(e), 2.5); }
+  }
+};
+cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
+cv.addEventListener("wheel", e => { e.preventDefault(); fly = null; zoomAt(...loc(e), Math.exp(-e.deltaY * (e.deltaMode === 1 ? .05 : .0016))); }, { passive: false });
+const zoomAtSmooth = (px, py, f) => { const wx = cam.x + (px - W / 2) / cam.s, wy = cam.y + (py - Hh / 2) / cam.s, s = Math.min(cam.s * f, fitS * MAXZ);
+  flyTo({ x: cam.x + (wx - cam.x) * (1 - cam.s / s), y: cam.y + (wy - cam.y) * (1 - cam.s / s), s }); };
+addEventListener("keydown", e => { if (e.key === "Escape") openSheet(null); if (e.target.closest && e.target.closest("button,summary")) return;
+  if (e.key === "+" || e.key === "=") zoomAt(W / 2, Hh / 2, 1.4); if (e.key === "-") zoomAt(W / 2, Hh / 2, 1 / 1.4); if (e.key === "Escape") show(null); });
+
+// ---------- the tour ----------
+const DAILY_P = PERIODS.filter(p => p.mode === "daily").sort((a, b) => (b.to - b.from) - (a.to - a.from))[0] || PERIODS[0];
+const bigCluster = [...clusters.values()].sort((a, b) => b.list.length - a.list.length)[0] || { x: 0, y: 0, r: .3 };
+const oneStar = stars.find(s => s.flag === 0 && !s.trk && s.day > ND - 240 && !s.cl && !s.dyn && !s.disk && s.lum > 1 && s.lum < 1.4) || stars[N - 50];
+const giant = giants[Math.min(3, giants.length - 1)];
+const favStar = stars.find(s => s.fav), bridgeStar = stars.find(s => s.info && s.info.startsWith("Part of a bridge"));
+const todayStar = stars.filter(s => s.day === ND - 1 && !s.trk && !s.cl && !s.disk && !s.dyn).sort((a, b) => b.lum - a.lum)[0] || stars[N - 1];
+const GO = {
+  all: () => ({ x: 0, y: 0, s: fitS }),
+  band: () => { const pr = DAILY_P, p = pathAt(sOfDay(Math.round(pr.from * .4 + pr.to * .6))); return { x: p.x, y: p.y, s: fitS * 3.2 }; },
+  clusters: () => ({ x: bigCluster.x, y: bigCluster.y, s: Math.min(W, Hh) * .5 / (bigCluster.r * 9) }),
+  sn: () => ({ x: SN.x, y: SN.y, s: Math.min(W, Hh) * .42 / (SN.R * 1.6) }),
+  neb: () => { const n = nebs[Math.min(1, nebs.length - 1)]; return { x: n.x, y: n.y, s: Math.min(W, Hh) * .5 / (n.R * 1.2) }; },
+  bh: () => { bhT0 = T; return { x: BH.x, y: BH.y, s: Math.min(W, Hh) * .5 / .62 }; },
+  giant: () => ({ x: giant.cx, y: giant.cy, s: Math.min(W, Hh) * .3 / giant.R }),
+  bin: () => { const [x, y] = starPos(binaries[0]); return { x, y, s: Math.min(W, Hh) * .12 / .008 }; },
+  comet: () => { const c = cometAt(te); return { x: c.x + c.dx * .4, y: c.y + c.dy * .4, s: Math.min(W, Hh) * .45 / 1.1 }; },
+  meteor: () => { meteorNext = T + .2; const [x, y] = starPos(radiant); return { x, y, s: fitS * 6 }; },
+  pulsar: () => { const [x, y] = starPos(pulsar); return { x, y, s: fitS * 60 }; },
+  dn: () => ({ x: DN.x, y: DN.y, s: Math.min(W, Hh) * .5 / (DN.R * 1.3) }),
+  pn: () => ({ x: PN.x, y: PN.y, s: Math.min(W, Hh) * .4 / (PN.R * 1.2) }),
+  wp: () => ({ x: WP.x, y: WP.y, s: Math.min(W, Hh) * .45 / WP.R }),
+  dm: () => ({ x: DM.x, y: DM.y, s: Math.min(W, Hh) * .45 / DM.R }),
+  wh: () => { whT0 = T; return { x: WH.x, y: WH.y, s: Math.min(W, Hh) * .4 / .55 }; },
+  cons: (c = CONS[0]) => { const P = c.pts.map(starPos), xs = P.map(p => p[0]), ys = P.map(p => p[1]), w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys);
+    return { x: (Math.max(...xs) + Math.min(...xs)) / 2, y: (Math.max(...ys) + Math.min(...ys)) / 2, s: Math.min(W * .45 / Math.max(w, .05), Hh * .45 / Math.max(h, .05)) }; },
+  pl: () => ({ x: PL.x, y: PL.y, s: Math.min(W, Hh) * .42 / (PL.R * 7) }),
+  ...Object.fromEntries([0, 1, 2].map(i => ["trk" + i, () => ({ x: trackers[i].x, y: trackers[i].y, s: Math.min(W, Hh) * .44 / (trackers[i].R * 1.45) })])),
+  fav: () => { const [x, y] = starPos(favStar); return { x, y, s: fitS * 30 }; },
+  bridge: () => { const b = bridges[0], d = Math.hypot(b.a.x - b.b.x, b.a.y - b.b.y); return { x: b.x, y: b.y, s: Math.min(W, Hh) * .5 / Math.max(.4, d) }; },
+  today: () => ({ x: starPos(todayStar)[0], y: starPos(todayStar)[1], s: fitS * 40 }),
+  one: () => ({ x: oneStar.cx, y: oneStar.cy, s: Math.min(W, Hh) * .26 / oneStar.R }),
+};
+{ const miss = { bridge: !bridges.length || !bridgeStar, fav: !favStar, bin: !binaries.length };
+  document.querySelectorAll("[data-go]").forEach(b => { if (miss[b.dataset.go]) b.hidden = true; });
+  document.querySelectorAll("[data-key]").forEach(b => { if (miss[b.dataset.key]) b.hidden = true; }); }
+document.querySelectorAll('[data-go^="trk"]').forEach(b => { b.textContent = TRK_LOOK[trackers[+b.dataset.go.slice(3)].look]; });
+document.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => {
+  const k = b.dataset.go; openSheet(null); flyTo(GO[k]());
+  if (k.startsWith("trk")) { show({ trk: trackers[+k.slice(3)] }); return; }
+  show(k === "pl" ? { pl: true } : k === "fav" ? favStar : k === "bridge" ? bridgeStar : k === "giant" ? giant : k === "one" ? oneStar : k === "bh" ? "bh" : k === "sn" ? snStar : k === "bin" ? binaries[0] : k === "pulsar" ? pulsar : k === "meteor" ? radiant : k === "comet" ? { comet: true } : k === "dn" ? { dn: true } : k === "pn" ? { pn: true } : k === "wp" ? wpStars[wpStars.length - 1] : k === "dm" ? { dm: true } : k === "wh" ? { wh: true } : null);
+}));
+const consOn = true;
+document.getElementById("replay").addEventListener("click", () => { openSheet(null); replay(); });
+document.getElementById("shuffle").addEventListener("click", () => { LOOK = makeLook(); });
+document.getElementById("another").addEventListener("click", () => { location.hash = "sky=" + (1 + Math.floor(Math.random() * 2e9)); location.reload(); });
+const mb = document.getElementById("motion");
+const PAUSE = mb.innerHTML, PLAY = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10.5-6.5z"/></svg>`;
+mb.addEventListener("click", () => { motion = !motion; mb.innerHTML = motion ? PAUSE : PLAY; mb.setAttribute("aria-label", motion ? "Pause motion" : "Play motion"); mb.setAttribute("aria-pressed", String(motion)); });
+
+
+// ---------- frame loop ----------
+// The opening's pace. Stars arrive at a rate that is one continuous curve, never a switch from slow
+// to fast: a faint trickle for the first two and a half seconds, a burst that builds over about
+// three and a half more, then a settle of about two as the last ones arrive. Tabulated once.
+const INTRO_S = 8.4, revealAt = (() => {
+  const N = 600, TS = 2.6, c = new Float32Array(N + 1);
+  const ss = (a, b, x) => { const u = Math.min(1, Math.max(0, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
+  const trickle = t => ss(0, 1.2, t) * (1 - ss(INTRO_S - 1.5, INTRO_S, t));
+  const burst = t => { const x = (t - TS) / (INTRO_S - TS); return x > 0 && x < 1 ? Math.pow(x, 1.8) * (1 - x) : 0; };
+  let sa = 0, sb = 0; for (let i = 0; i < N; i++) { const t = (i + .5) / N * INTRO_S; sa += trickle(t); sb += burst(t); }
+  for (let i = 0; i < N; i++) { const t = (i + .5) / N * INTRO_S; c[i + 1] = c[i] + .05 * trickle(t) / sa + .95 * burst(t) / sb; }
+  return t => { const f = Math.min(1, Math.max(0, t / INTRO_S)) * N, i = Math.floor(f); return i >= N ? 1 : c[i] + (c[i + 1] - c[i]) * (f - i); };
+})();
+const zr = document.getElementById("zr");
+const seenKey = "daymark-sky-born-" + todayStar.day;
+let seen = false; try { seen = localStorage.getItem(seenKey) === "1"; } catch (e) {}
+let last = performance.now(), ema = 16, lastAdapt = 0, reveal = reduce ? 1 : 0, intro = reduce ? null : { t0: performance.now(), birth: !seen }, birth = null, birthP = 1;
+const todayIdx = stars.indexOf(todayStar);
+const setTodayWaiting = w => { gl.bindBuffer(gl.ARRAY_BUFFER, ib); gl.bufferSubData(gl.ARRAY_BUFFER, (todayIdx * 16 + 15) * 4, new Float32Array([w ? 2 : .5])); };
+if (intro && intro.birth) { setTodayWaiting(true); birthP = 0; }
+// Any tap skips the opening, and a birth still to come, straight to today: nobody should have to wait for it.
+const skipOpening = () => {
+  if (!intro && !birth && birthP >= 1) return false;
+  intro = null; reveal = 1; fly = null; birth = null; birthP = 1; setTodayWaiting(false);
+  try { localStorage.setItem(seenKey, "1"); } catch (e) {}
+  const g = GO.today(); cam.x = g.x; cam.y = g.y; cam.s = g.s; clampCam(); show(todayStar); return true;
+};
+const replay = () => { flyTo(GO.all(), true); show(null); reveal = 0; intro = { t0: performance.now(), birth: true }; birth = null; birthP = 0; setTodayWaiting(true); };
+const frame = now => {
+  const dt = Math.min(.1, (now - last) / 1000); last = now; ema = ema * .93 + dt * 1000 * .07;
+  if (now - lastAdapt > 1500) {
+    if (ema > 30 && rs > .55) { rs *= .85; resize(); lastAdapt = now; }
+    else if (ema < 15 && rs < 1) { rs = Math.min(1, rs * 1.12); resize(); lastAdapt = now; }
+  }
+  if (fly) {
+    let u = Math.min(1, (now - fly.t0) / fly.dur); const e = u < .5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+    const ls = fly.ls0 + (fly.ls1 - fly.ls0) * e - fly.bump * Math.sin(Math.PI * e);
+    const s = Math.exp(ls), w0 = 1 / Math.exp(fly.ls0), w1 = 1 / Math.exp(fly.ls1), wc = 1 / s;
+    const k = Math.abs(w1 - w0) > 1e-12 ? (fly.bump > 0 ? e : Math.min(1, Math.max(0, (wc - w0) / (w1 - w0)))) : e;
+    cam.x = fly.x0 + (fly.x1 - fly.x0) * k; cam.y = fly.y0 + (fly.y1 - fly.y0) * k; cam.s = s;
+    if (u >= 1) { cam.x = fly.x1; cam.y = fly.y1; cam.s = Math.exp(fly.ls1); fly = null; }
+  }
+  const zRel = cam.s / fitS;
+  if (birth && now >= birth.t0) {
+    birthP = Math.min(1, (now - birth.t0) / 6000);
+    if (birthP >= 1) { birth = null; try { localStorage.setItem(seenKey, "1"); } catch (e) {} show(todayStar); card.querySelector(".d").insertAdjacentHTML("beforebegin", `<div class="k">Born just now</div>`); }
+  }
+  if (intro) {
+    const t = intro.hold ?? (now - intro.t0) / 1000;
+    reveal = revealAt(t);
+    if (t > INTRO_S + .3 && !intro.flown) { intro.flown = true; flyTo(GO.today());
+      if (intro.birth) birth = { t0: now + (fly ? fly.dur : 0) + 300 }; else show(todayStar); }
+    if (t > INTRO_S + .5) intro = null;
+  }
+  if (motion) { T += dt; te += dt * Math.min(1, 1.6 / zRel); }
+  zr.textContent = zRel < 10 ? zRel.toFixed(1) : Math.round(zRel).toLocaleString("en-GB");
+  const S = cam.s * dpr, cw = cv.width, ch = cv.height;
+  const [cxh, cxl] = split(cam.x), [cyh, cyl] = split(cam.y);
+  // 1. space
+  gl.bindFramebuffer(gl.FRAMEBUFFER, scene.f); gl.viewport(0, 0, cw, ch); gl.disable(gl.BLEND);
+  gl.useProgram(P_BG.p); const ub = P_BG.u;
+  gl.uniform4f(ub.uCam, cxh, cyh, cxl, cyl); gl.uniform1f(ub.uScale, S); gl.uniform2f(ub.uRes, cw, ch); gl.uniform1f(ub.uT, T); gl.uniform1f(ub.uTe, te);
+  gl.uniform1f(ub.uShow, smoothstep(.2, 1, reveal)); gl.uniform1f(ub.uSNFade, .49 * (1 - .82 * smoothstep(.08, .4, SN.R * cam.s / Math.min(W, Hh)))); gl.uniform1f(ub.uNebFade, 1 - .9 * smoothstep(1.2, 7, zRel)); gl.uniform1f(ub.uOct, Math.min(9, Math.max(4, 4 + Math.log2(zRel) * 1.1)));
+  gl.uniform4fv(ub.uNeb, [0, 1, 2].flatMap(i => nebs[i] ? [nebs[i].x, nebs[i].y, nebs[i].R, nebs[i].type] : [999, 999, 1, 0])); gl.uniform4f(ub.uSN, SN.x, SN.y, SN.R, 1);
+  const cm = cometAt(te); gl.uniform4f(ub.uComet, cm.x, cm.y, cm.dx, cm.dy); gl.uniform1f(ub.uCometK, 1 - .7 * smoothstep(5, 40, zRel));
+  gl.uniform4f(ub.uBirth, starPos(todayStar)[0], starPos(todayStar)[1], birth && now >= birth.t0 ? Math.max(.0001, birthP) : 0, todayStar.R * 30);
+  gl.uniform4f(ub.uWH, WH.x, WH.y, WH.R, whOn() * (1 - .7 * smoothstep(.12, .6, WH.R * 8 * cam.s / Math.min(W, Hh))));
+  gl.uniform3fv(ub.uNebA, LOOK.neb.flatMap(p => p[0])); gl.uniform3fv(ub.uNebB, LOOK.neb.flatMap(p => p[1])); gl.uniform3fv(ub.uNebC, LOOK.neb.flatMap(p => p[2])); gl.uniform4fv(ub.uNebS, LOOK.shape.flat());
+  gl.uniform3fv(ub.uBg0, LOOK.bg[0]); gl.uniform3fv(ub.uBg1, LOOK.bg[1]); gl.uniform3fv(ub.uBg2, LOOK.bg[2]); gl.uniform3fv(ub.uBgA, LOOK.bg[3]);
+  gl.uniform3fv(ub.uSNs, LOOK.sn[0]); gl.uniform3fv(ub.uSNa, LOOK.sn[1]); gl.uniform3fv(ub.uSNb, LOOK.sn[2]); gl.uniform3fv(ub.uPNa, LOOK.pn[0]); gl.uniform3fv(ub.uPNb, LOOK.pn[1]);
+  gl.uniform3fv(ub.uCmI, LOOK.comet[0]); gl.uniform3fv(ub.uCmD, LOOK.comet[1]); gl.uniform3fv(ub.uWHc, LOOK.wh);
+  gl.uniform4f(ub.uPN, PN.x, PN.y, PN.R, 1 - .8 * smoothstep(.15, .7, PN.R * cam.s / Math.min(W, Hh))); gl.uniform4f(ub.uDN, DN.x, DN.y, DN.R, 0);
+  gl.bindVertexArray(vaoQ); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  // 2. the memories
+  gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+  gl.useProgram(P_ST.p); const us = P_ST.u;
+  const setS = (scale, w, h, mode, gpx, gw, d) => { gl.uniform4f(us.uCam, cxh, cyh, cxl, cyl); gl.uniform1f(us.uScale, scale); gl.uniform2f(us.uRes, w, h); gl.uniform1f(us.uDpr, d);
+    gl.uniform1f(us.uTe, te); gl.uniform1f(us.uT, T); gl.uniform1f(us.uMode, mode); gl.uniform1f(us.uGlowPx, gpx); gl.uniform1f(us.uGlowW, gw); gl.uniform1f(us.uZoom, zRel); gl.uniform1f(us.uDirect, 0); gl.uniform1f(us.uReveal, reveal); gl.uniform4f(us.uDN, DN.x, DN.y, DN.R, 0); gl.uniform1f(us.uBirthP, birthP); };
+  setS(S, cw, ch, 0, 0, 0, dpr);
+  gl.bindVertexArray(vaoS); gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, NS);
+  if (beltGrains.length) { beltGrains.forEach((s, i) => { const [wx, wy] = beltPos(s), [xh, xl] = split(wx), [yh, yl] = split(wy);
+      binst.set([xh, yh, xl, yl, 0, 0, 0, s.R, s.col[0], s.col[1], s.col[2], s.lum, bSeed[i][0], 0, bSeed[i][1], bSeed[i][1]], i * 16); });
+    gl.bindBuffer(gl.ARRAY_BUFFER, bb); gl.bufferSubData(gl.ARRAY_BUFFER, 0, binst);
+    gl.bindVertexArray(vaoB); gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, beltGrains.length); }
+  // 3. their combined light, which fades as single stars come apart
+  const gw = .04 * smoothstep(.3, 1, reveal) * (1 - smoothstep(1.3, 3.5, zRel));
+  gl.bindFramebuffer(gl.FRAMEBUFFER, glow.f); gl.viewport(0, 0, glow.w, glow.h); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  if (gw > 0) { setS(S / 2, glow.w, glow.h, 1, 7 * dpr / 2, gw, dpr / 2); gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, NS);
+    if (beltGrains.length) { gl.bindVertexArray(vaoB); gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, beltGrains.length); } }
+  // 4. finish
+  gl.disable(gl.BLEND); gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.useProgram(P_FIN.p); const uf = P_FIN.u;
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, scene.t); gl.uniform1i(uf.uScene, 0);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, glow.t); gl.uniform1i(uf.uGlow, 1);
+  const bk = bhOn(), [bx, by] = toScreen(BH.x, BH.y), Rs = BH.R * cam.s * Math.max(.02, bk), on = bk > .005 && bx > -Rs * 40 && bx < W + Rs * 40 && by > -Rs * 40 && by < Hh + Rs * 40;
+  gl.uniform4f(uf.uBH, bx * dpr, ch - by * dpr, Rs * dpr, on ? 1 : 0); gl.uniform3fv(uf.uDkH, LOOK.disk[0]); gl.uniform3fv(uf.uDkW, LOOK.disk[1]); gl.uniform3fv(uf.uDMc, LOOK.dm); gl.uniform2f(uf.uBHk, BH.tilt, BH.squash); { const [px, py] = toScreen(PL.x, PL.y), Rp = PL.R * cam.s; gl.uniform4f(uf.uPLs, px * dpr, py * dpr, Rp * dpr, Rp > .3 && px > -Rp * 3 && px < W + Rp * 3 && py > -Rp * 3 && py < Hh + Rp * 3 ? 1 : 0); gl.uniform2f(uf.uPLk, PL.tilt, PL.open); gl.uniform3fv(uf.uPLA, LOOK.planet[0]); gl.uniform3fv(uf.uPLB, LOOK.planet[1]); gl.uniform1f(uf.uPLshow, smoothstep(.2, 1, reveal)); } { const [dx, dy] = toScreen(DM.x, DM.y), Rp = DM.R * cam.s; gl.uniform4f(uf.uDM, dx * dpr, ch - dy * dpr, Rp * dpr, dx > -Rp * 2 && dx < W + Rp * 2 && dy > -Rp * 2 && dy < Hh + Rp * 2 ? 1 : 0); }
+  gl.uniform1f(uf.uBHFade, (1 - .55 * smoothstep(70, 420, Rs)) * smoothstep(.2, 1, reveal) * bk); gl.uniform2f(uf.uRes, cw, ch); gl.uniform1f(uf.uT, T); gl.uniform1f(uf.uTe, te);
+  gl.bindVertexArray(vaoQ); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  // memories on the move (being drawn into the black hole, sent home by the white hole, moons), on top of the lensing
+  {
+    dynStars.forEach((s, i) => { let wx, wy, hid, k = 1.3;
+      [wx, wy, hid] = s.dyn(s); k = s.dk ? s.dk(s) : 1;
+      const [xh, xl] = split(wx), [yh, yl] = split(wy);
+      dinst.set([xh, yh, xl, yl, 0, 0, 0, s.R, s.col[0], s.col[1], s.col[2], hid ? 0 : s.lum * k * smoothstep(.3, 1, reveal), dSeed[i][0], 0, dSeed[i][1], 0], i * 16); });
+    gl.bindBuffer(gl.ARRAY_BUFFER, db); gl.bufferSubData(gl.ARRAY_BUFFER, 0, dinst);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); gl.useProgram(P_ST.p); setS(S, cw, ch, 0, 0, 0, dpr); gl.uniform1f(us.uDirect, 1);
+    gl.bindVertexArray(vaoD); gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, dynStars.length); gl.disable(gl.BLEND);
+  }
+  drawLines();
+  // selection ring
+  if (sel && sel.away && sel.dyn(sel)[2]) show(null);
+  if (sel && sel !== "bh" && !(sel.trk && !sel.day) && !sel.neb && !sel.sn && !sel.comet && !sel.pn && !sel.dn && !sel.meteor && !sel.wh && !sel.dm && !sel.cons && !sel.pl) { const [x, y] = toScreen(...starPos(sel)), r = Math.max(sel.R * cam.s, 3) * 2 + 10; ring.hidden = false; ring.style.left = x + "px"; ring.style.top = y + "px"; ring.style.width = ring.style.height = r + "px"; }
+  else ring.hidden = true;
+  requestAnimationFrame(frame);
+};
+// Two example constellations the person drew. One has lost a star that was put away; its outline is kept.
+// a constellation is a handful of bright stars close together, joined nearest to nearest
+const near = (g, k, r) => {
+  const [gx, gy] = starPos(g);
+  const pool = stars.filter(s => s !== g && s.flag === 0 && !s.trk && !s.disk && !s.dyn && s.lum > 1.15 && Math.hypot(starPos(s)[0] - gx, starPos(s)[1] - gy) < r);
+  const out = [g], used = new Set([g]);
+  while (out.length < k && pool.length) {
+    const [lx_, ly_] = starPos(out[out.length - 1]); let best = null, bd = 1e9;
+    for (const s of pool) { if (used.has(s)) continue; const [x, y] = starPos(s), d = Math.hypot(x - lx_, y - ly_); if (d > .08 && d < bd) { bd = d; best = s; } }
+    if (!best) break; used.add(best); out.push(best);
+  }
+  return out;
+};
+const CONS = [];
+shuffle(giants).slice(0, Math.min(4, giants.length)).forEach((g, i) => { const pts = near(g, 4 + Math.floor(rnd() * 3), 1.1); if (pts.length < 3) return;
+  CONS.push({ name: CONS_NAMES[i], made: Math.min(ND - 1, g.day + 20 + Math.floor(rnd() * 200)), pts, ghost: CONS.length === 1 ? 2 : undefined }); });
+// the ones you draw are kept on this device
+const consKey = "daymark-sky-cons-" + SKY;
+const saveMine = () => { try { localStorage.setItem(consKey, JSON.stringify(CONS.filter(c => c.mine).map(c => ({ name: c.name, made: c.made, idx: c.pts.map(q => stars.indexOf(q)) })))); } catch (e) {} };
+try { JSON.parse(localStorage.getItem(consKey) || "[]").forEach(c => { const pts = (c.idx || []).map(i => stars[i]).filter(Boolean); if (pts.length > 1) CONS.push({ name: String(c.name).slice(0, 28), made: +c.made || ND - 1, pts, mine: true }); }); } catch (e) {}
+CONS.forEach(c => { if (c.ghost != null && c.pts[c.ghost]) { const [x, y] = starPos(c.pts[c.ghost]); c.ghostAt = [x + .025, y - .018]; } });
+// The photo: where its stars were on the day it was drawn. Live lines are measured against these lengths and fade as the
+// stars drift apart, so over the years every constellation falls out of the sky; the photo keeps it as it was.
+const consAt = c => c.at || (c.at = c.pts.map((q, i) => i === c.ghost ? c.ghostAt : starPos(q)));
+const lc = document.getElementById("lines"), lx = lc.getContext("2d");
+// "See it as you drew it": a photo of the day it was drawn. The constellation, and around it, fainter and in shadow, the stars
+// that were near it then, in the colours they had then. Nothing else from the sky is in it, nothing in it opens, and a tap
+// anywhere goes back. It is the only way back in time anywhere in the sky.
+const repEl = document.getElementById("replica"), repCv = document.getElementById("repCv");
+const srgb = c => c.map(v => Math.round(255 * Math.pow(Math.min(1, Math.max(0, v)), 1 / 2.2)));
+const openReplica = c => {
+  show(null); repEl.hidden = false; document.getElementById("repName").textContent = c.name; document.getElementById("repDate").textContent = "As you drew it, " + fmt(c.made);
+  const r = repCv.getBoundingClientRect(), d = window.devicePixelRatio || 1, w = Math.round(r.width * d), h = Math.round(r.height * d); repCv.width = w; repCv.height = h;
+  const g = repCv.getContext("2d"); g.setTransform(d, 0, 0, d, 0, 0); g.clearRect(0, 0, r.width, r.height);
+  const P = consAt(c), xs = P.map(q => q[0]), ys = P.map(q => q[1]), cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const span = Math.max(Math.max(...xs) - Math.min(...xs), (Math.max(...ys) - Math.min(...ys)) * r.width / r.height, .05), sc = r.width * .5 / span;
+  const toR = (x, y) => [r.width / 2 + (x - cx) * sc, r.height * .5 + (y - cy) * sc], reach = Math.hypot(r.width, r.height) * .5;
+  const colThen = s => srgb(ageCol(Math.max(0, c.made - s.day) / 365));
+  // the stars around it that already existed that day, in shadow: fainter toward the edges, gone at the corners
+  for (const s of stars) { if (s.dyn || s.day > c.made || c.pts.includes(s)) continue; const [x, y] = toR(...starPos(s)); if (x < -4 || y < -4 || x > r.width + 4 || y > r.height + 4) continue;
+    const f = Math.max(0, 1 - Math.hypot(x - r.width / 2, y - r.height / 2) / reach), al = .62 * Math.pow(f, 1.3) * Math.min(1, .35 + .65 * s.lum); if (al < .03) continue;
+    const [R_, G_, B_] = colThen(s); g.fillStyle = `rgba(${R_},${G_},${B_},${al})`; g.beginPath(); g.arc(x, y, s.flag === 1 ? 2.2 : 1.35, 0, 6.2832); g.fill(); }
+  const Q = P.map(q => toR(...q));
+  g.lineWidth = 1.2; g.strokeStyle = "rgba(201,214,255,.55)"; g.beginPath(); Q.forEach((q, i) => i ? g.lineTo(...q) : g.moveTo(...q)); g.stroke();
+  Q.forEach((q, i) => { const s = c.pts[i], [R_, G_, B_] = colThen(s), rr = s.flag === 1 ? 4.2 : 2.8;
+    const gr = g.createRadialGradient(q[0], q[1], 0, q[0], q[1], rr * 4); gr.addColorStop(0, `rgba(${R_},${G_},${B_},.55)`); gr.addColorStop(1, `rgba(${R_},${G_},${B_},0)`);
+    g.fillStyle = gr; g.beginPath(); g.arc(q[0], q[1], rr * 4, 0, 6.2832); g.fill(); g.fillStyle = "#FBF8FF"; g.beginPath(); g.arc(q[0], q[1], rr * .7, 0, 6.2832); g.fill(); });
+};
+repEl.addEventListener("click", () => { repEl.hidden = true; });
+// sheets: one open at a time, over a dim scrim; the bar stays visible so its buttons toggle them
+const clist = document.getElementById("clist"), scrim = document.getElementById("scrim");
+const sheets = { cons: document.getElementById("sheet-cons"), explore: document.getElementById("sheet-explore"), key: document.getElementById("sheet-key") };
+const barBtns = [...document.querySelectorAll("[data-sheet]")];
+const openSheet = k => {
+  for (const [n, el] of Object.entries(sheets)) el.hidden = n !== k;
+  scrim.hidden = !k; barBtns.forEach(b => b.setAttribute("aria-expanded", String(b.dataset.sheet === k)));
+  if (k) { show(null); if (k === "cons") buildConsList(); }
+};
+barBtns.forEach(b => b.addEventListener("click", () => openSheet(b.getAttribute("aria-expanded") === "true" ? null : b.dataset.sheet)));
+scrim.addEventListener("click", () => { openSheet(null); nameSheet.hidden = true; });
+document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => openSheet(null)));
+document.getElementById("todayBtn").addEventListener("click", () => { openSheet(null); flyTo(GO.today()); show(todayStar); });
+const drawbar = document.getElementById("drawbar"), drawMsg = document.getElementById("drawMsg"), dUndo = document.getElementById("dUndo"), dDone = document.getElementById("dDone");
+const nameSheet = document.getElementById("sheet-name"), nameIn = document.getElementById("consName");
+let drawing = null;
+const setDrawMsg = () => { const n = drawing.pts.length; drawMsg.textContent = n === 0 ? "Tap a star to start" : n === 1 ? "1 star. Tap the next one" : n + " stars joined"; dDone.disabled = n < 2; dUndo.disabled = n === 0; };
+const startDraw = () => { openSheet(null); show(null); drawing = { pts: [] }; document.body.classList.add("drawing"); drawbar.hidden = false; setDrawMsg(); if (cam.s / fitS < 6) flyTo(GO.today()); };
+const endDraw = () => { drawing = null; drawbar.hidden = true; nameSheet.hidden = true; scrim.hidden = true; document.body.classList.remove("drawing"); };
+document.getElementById("drawNew").addEventListener("click", startDraw);
+dUndo.addEventListener("click", () => { drawing.pts.pop(); setDrawMsg(); });
+document.getElementById("dCancel").addEventListener("click", endDraw);
+dDone.addEventListener("click", () => { nameSheet.hidden = false; scrim.hidden = false; nameIn.value = ""; setTimeout(() => nameIn.focus(), 50); });
+document.getElementById("nameCancel").addEventListener("click", () => { nameSheet.hidden = true; scrim.hidden = true; });
+document.getElementById("nameForm").addEventListener("submit", e => { e.preventDefault(); if (!drawing) return;
+  const c = { name: nameIn.value.trim().slice(0, 28) || "Untitled", made: ND - 1, pts: drawing.pts.slice(), mine: true };
+  CONS.push(c); saveMine(); endDraw(); flyTo(GO.cons(c)); show({ cons: c }); });
+// in drawing mode a tap only ever picks a star
+const pickStar = (px, py) => { let best = null, bd = 24;
+  for (const s of stars) { if (s.disk || s.dyn) continue; const [x, y] = toScreen(...starPos(s)); if (x < -30 || y < -30 || x > W + 30 || y > Hh + 30) continue; const d = Math.hypot(x - px, y - py); if (d < bd) { bd = d; best = s; } }
+  return best; };
+// the list of constellations you've drawn, each with a small drawing of its shape
+const buildConsList = () => {
+  clist.innerHTML = "";
+  CONS.forEach(c => {
+    const li = document.createElement("li"), b = document.createElement("button"), cv_ = document.createElement("canvas");
+    b.type = "button"; cv_.width = 168; cv_.height = 116; b.append(cv_);
+    const t = document.createElement("div"); t.innerHTML = `<div class="n">${esc(c.name)}</div><div class="m">Drawn ${fmtS(c.made)} · ${c.pts.length} stars</div>`; b.append(t);
+    const P = consAt(c), xs = P.map(q => q[0]), ys = P.map(q => q[1]);
+    const x0 = Math.min(...xs), y0 = Math.min(...ys), sc = Math.min(132 / Math.max(Math.max(...xs) - x0, .01), 80 / Math.max(Math.max(...ys) - y0, .01));
+    const ox = (168 - (Math.max(...xs) - x0) * sc) / 2, oy = (116 - (Math.max(...ys) - y0) * sc) / 2, Q = P.map(q => [ox + (q[0] - x0) * sc, oy + (q[1] - y0) * sc]);
+    const g = cv_.getContext("2d"); g.lineWidth = 1.8;
+    for (let i = 0; i < Q.length - 1; i++) { g.strokeStyle = "rgba(201,214,255,.7)"; g.beginPath(); g.moveTo(...Q[i]); g.lineTo(...Q[i + 1]); g.stroke(); }
+    Q.forEach((q, i) => { g.fillStyle = "#F4F1FF"; g.beginPath(); g.arc(q[0], q[1], c.pts[i].flag === 1 ? 4.4 : 2.8, 0, 6.2832); g.fill(); });
+    b.addEventListener("click", () => { openSheet(null); flyTo(GO.cons(c)); show({ cons: c }); });
+    li.append(b); clist.append(li);
+  });
+};
+let meteorNext = 3, showerUntil = 0, meteorAt = 0, meteors = [];
+// A real shooting star is a grain burning up high in the air: a thin, fast, straight line that is over in well under a
+// second. In a shower they all seem to fly out from one point, the radiant (here, the anniversary star), and they start
+// some way from it, never at it. Positions are screen-space because that is where they happen, in the air, not in the sky.
+const meteorPos = (m, rx, ry) => { const u = Math.min(1, Math.max(0, (T - m.t0) / m.dur)), d = m.d0 + m.v * m.dur * u;
+  return { u, sx: rx + m.ux * m.d0, sy: ry + m.uy * m.d0, hx: rx + m.ux * d, hy: ry + m.uy * d }; };
+const drawMeteors = () => {
+  const [rx, ry] = toScreen(...starPos(radiant)), zr_ = cam.s / fitS, M = Math.min(W, Hh);
+  if (T >= meteorNext) { showerUntil = T + 20; meteorNext = T + 32; meteorAt = T; }
+  if (T < showerUntil && T >= meteorAt) {
+    meteorAt = T + .5 + rnd() * 2.5; const a_ = rnd() * 6.2832, big = rnd() < .15;
+    meteors.push({ t0: T, ux: Math.cos(a_), uy: Math.sin(a_), d0: M * (.06 + .4 * rnd()), v: M * (.9 + .9 * rnd()), dur: big ? .6 + .3 * rnd() : .18 + .35 * rnd(), b: big ? 1 : .6 + .4 * rnd(), big, tint: rnd() });
+  }
+  meteors = meteors.filter(m => T - m.t0 < m.dur + (m.big ? 2.5 : .3));
+  if (zr_ > 40 || rx < -M || ry < -M || rx > W + M || ry > Hh + M) return;
+  lx.save(); lx.globalCompositeOperation = "lighter"; lx.lineCap = "round";
+  for (const m of meteors) {
+    const { u, hx, hy } = meteorPos(m, rx, ry), live = T - m.t0 <= m.dur;
+    // brightens as it digs into the air, peaks late, and is gone at once; big ones flare at the end
+    const b = live ? m.b * Math.pow(Math.sin(Math.PI * Math.min(1, .15 + u * .8)), 1.4) * (m.big ? 1 + 1.6 * smoothstep(.75, .95, u) : 1) : 0;
+    const col = m.tint < .6 ? "235,240,255" : m.tint < .85 ? "255,236,214" : "214,226,255";
+    if (m.big) { // the glowing train a bright one leaves, fading over a couple of seconds
+      const after = live ? Math.min(1, u * 2) : Math.max(0, 1 - (T - m.t0 - m.dur) / 2.5), s0 = m.d0 + m.v * m.dur * Math.max(0, u - .7);
+      lx.strokeStyle = `rgba(${col},${.07 * after})`; lx.lineWidth = 2.2; lx.beginPath(); lx.moveTo(rx + m.ux * s0, ry + m.uy * s0); lx.lineTo(hx, hy); lx.stroke(); }
+    if (!live) continue;
+    const tl = Math.min(m.v * .07, m.v * m.dur * u), tx = hx - m.ux * tl, ty = hy - m.uy * tl;
+    const g = lx.createLinearGradient(tx, ty, hx, hy); g.addColorStop(0, `rgba(${col},0)`); g.addColorStop(.7, `rgba(${col},${.35 * b})`); g.addColorStop(1, `rgba(255,255,255,${Math.min(1, .95 * b)})`);
+    lx.strokeStyle = g; lx.lineWidth = m.big ? 1.7 : 1.25; lx.beginPath(); lx.moveTo(tx, ty); lx.lineTo(hx, hy); lx.stroke();
+    if (m.big) { lx.fillStyle = `rgba(255,255,255,${Math.min(1, .5 * b)})`; lx.beginPath(); lx.arc(hx, hy, 1.4 + .8 * b, 0, 6.2832); lx.fill(); }
+  }
+  lx.restore();
+};
+const drawLines = () => {
+  const w = Math.round(W * dpr), h = Math.round(Hh * dpr); if (lc.width !== w || lc.height !== h) { lc.width = w; lc.height = h; }
+  lx.setTransform(dpr, 0, 0, dpr, 0, 0); lx.clearRect(0, 0, W, Hh);
+  if (reveal >= 1) drawMeteors();
+  if (drawing) { // the constellation you're drawing, joined as you go
+    const P = drawing.pts.map(q => toScreen(...starPos(q)));
+    lx.lineWidth = 1.5; lx.strokeStyle = "rgba(232,236,255,.8)"; lx.beginPath(); P.forEach((p, i) => i ? lx.lineTo(...p) : lx.moveTo(...p)); lx.stroke();
+    lx.lineWidth = 1.2; lx.strokeStyle = "rgba(232,236,255,.9)"; P.forEach(p => { lx.beginPath(); lx.arc(p[0], p[1], 8, 0, 6.2832); lx.stroke(); }); }
+  const a = consOn ? smoothstep(.85, 1, reveal) * (1 - smoothstep(30, 120, cam.s / fitS)) : 0; if (a <= 0) return;
+  lx.lineWidth = 1; lx.font = "500 13px Roboto, 'Segoe UI', system-ui, sans-serif"; const boxes = [];
+  for (const c of CONS) {
+    const at = consAt(c), P = c.pts.map((s, i) => i === c.ghost ? { away: true } : { w: starPos(s), p: toScreen(...starPos(s)), r: Math.max(s.R * cam.s, s.flag === 1 ? 3 : 1.2) });
+    let shown = 0;
+    for (let i = 0; i < P.length - 1; i++) {
+      const A = P[i], B = P[i + 1]; if (A.away || B.away) continue;
+      const k = 1 - smoothstep(1.25, 1.6, Math.hypot(B.w[0] - A.w[0], B.w[1] - A.w[1]) / Math.max(1e-6, Math.hypot(at[i + 1][0] - at[i][0], at[i + 1][1] - at[i][1]))); if (k <= 0) continue;
+      const dx = B.p[0] - A.p[0], dy = B.p[1] - A.p[1], L = Math.hypot(dx, dy); if (L < 1) continue;
+      const ga = A.r + 5, gb = B.r + 5; if (L < ga + gb) continue;
+      lx.strokeStyle = `rgba(201,214,255,${.38 * a * k})`; shown++;
+      lx.beginPath(); lx.moveTo(A.p[0] + dx / L * ga, A.p[1] + dy / L * ga); lx.lineTo(B.p[0] - dx / L * gb, B.p[1] - dy / L * gb); lx.stroke();
+    }
+    if (!shown) continue;
+    const vis = P.filter(q => !q.away), top = vis.reduce((m, q) => q.p[1] < m.p[1] ? q : m, vis[0]);
+    // labels stay on the screen and never cover each other
+    const sub = "", tw = lx.measureText(c.name).width;
+    const lxp = Math.max(8, Math.min(top.p[0] + 10, W - tw - 8)), lyp = top.p[1] - 10; if (lyp < 110 || lyp > Hh - 110) continue;
+    const bh = sub ? 34 : 18; if (boxes.some(b => lxp < b[0] + b[2] + 6 && b[0] < lxp + tw + 6 && lyp - 14 < b[1] + b[3] && b[1] < lyp - 14 + bh)) continue; boxes.push([lxp, lyp - 14, tw, bh]);
+    lx.fillStyle = `rgba(232,230,240,${.75 * a})`; lx.fillText(c.name, lxp, lyp);
+    if (sub) { lx.fillStyle = `rgba(163,168,189,${.7 * a})`; lx.fillText(sub, lxp, lyp + 16); }
+  }
+};
+function smoothstep(a, b, x) { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
+requestAnimationFrame(frame);
+window.__sky = { onScreen: n => { const out = []; for (const s of stars) { if (s.disk || s.dyn) continue; const [x, y] = toScreen(...starPos(s)); if (x > 40 && y > 140 && x < W - 40 && y < Hh - 160 && out.every(o => Math.hypot(o[0] - x, o[1] - y) > 60)) out.push([x, y]); if (out.length >= n) break; } return out; }, info: () => ({ path: PATH_STYLE, N, span: SPAN, periods: PERIODS.map(p => p.mode[0] + (p.to - p.from)).join(" "), clusters: clusters.size, bridges: bridges.length, nebs: nebs.length, scheme: LOOK.scheme }), WH, whAt: t => { whT0 = T - t; }, BH, bhAt: t => { bhT0 = T - t; }, get nAway() { return putAway.length; }, awayScreen: () => putAway.map(q => { const [x, y, h] = q.dyn(q); return [...toScreen(x, y), h]; }), skipOpening: () => skipOpening(), meteorNow: () => { meteorNext = T; }, get nMet() { return meteors.length; }, flyTo, GO, cam, show, replay, introAt: t => { if (intro) intro.hold = t; }, get reveal() { return reveal; }, get birthP() { return birthP; }, cometHead: () => { const c = cometAt(te); return toScreen(c.x, c.y); }, get birthOn() { return !!birth; }, giant, oneStar, snStar, get fitS() { return fitS; } };
+})();
+</script>

@@ -466,7 +466,9 @@ times and has no page, so offer once. Not built: #156.
 Each feature keeps its own reason to speak. One gate (`stats/InterruptionBudget.kt`) answers only
 "may I, now?", from the person's declared frequency and the gate's own history with them. It knows
 nothing about moods, goals or people, and it may only ever ask less
-([DECISIONS.md](DECISIONS.md) §D1, §D1a). Today its one caller is the support offer (§7.2).
+([DECISIONS.md](DECISIONS.md) §D1, §D1a). Today its one caller is the support offer (§7.2). Not
+built: the wider engine of §D1, which runs every check-in (the dailies, reminders and notifications)
+from fixed, human-written lines; #159.
 
 ### 13.2 The reception ledger
 
