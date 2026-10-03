@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 21,
-    "identityHash": "c7ca3831a059676cccc6f3e9e612f004",
+    "identityHash": "7a4b80500be3adf426cdbd3bbf457357",
     "entities": [
       {
         "tableName": "mood_entries",
@@ -1486,7 +1486,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c7ca3831a059676cccc6f3e9e612f004')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '7a4b80500be3adf426cdbd3bbf457357')"
     ]
   }
 }
