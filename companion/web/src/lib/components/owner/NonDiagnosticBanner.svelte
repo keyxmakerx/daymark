@@ -5,8 +5,8 @@
 <aside class="banner" aria-label="Non-diagnostic notice">
   <p>
     <strong>Non-diagnostic.</strong> Self-checks are self-tracking tools, not medical
-    assessments. Scores and bands are descriptive, not clinical thresholds. Anything a therapist
-    assigns or shares here is guidance from your real clinician — never a diagnosis.
+    assessments. Scores and bands are descriptive, not clinical thresholds. Anything a clinician
+    assigns or shares here is guidance from them — never a diagnosis.
   </p>
 </aside>
 

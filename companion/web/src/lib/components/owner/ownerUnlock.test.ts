@@ -51,10 +51,88 @@ describe('(a) nothing here can invent an identity', () => {
   })
 
   it('gets its identity from the owner key and from nowhere else', () => {
-    expect(code).toContain('unlockOwnerIdentity')
-    // One assignment to ownerIdentity that is not the initial null, and it is the unlock's result.
-    const assignments = code.match(/ownerIdentity\s*=\s*[^\n]+/g) ?? []
-    expect(assignments.filter((a) => !a.includes('$state'))).toEqual(['ownerIdentity = out.identity'])
+    // Two ways in, both through the owner's own key as the server holds it (#258): an unlock of the
+    // locked key, and a set-up whose read-back was opened. One place sets the session's identity,
+    // and it is handed only what those two produced.
+    expect(code).toContain('unlockFromBlob(held.wrapped, secret, secretMode)')
+    // The set-up is the shared form's (recovery/KeySetup.svelte, asserted in keySetup.test.ts); what
+    // it hands back is the only other source.
+    expect(code).toMatch(/<KeySetup[^>]*onstored=\{keyStored\}/)
+    const assignments = (code.match(/ownerIdentity\s*=\s*[^\n]+/g) ?? []).filter((a) => !a.includes('$state'))
+    expect(assignments).toEqual(['ownerIdentity = identity'])
+    expect(code.match(/\bopened\([^)]*\)/g)).toEqual(['opened(setUpIdentity)', 'opened(identity: Identity)', 'opened(out.identity)'])
+    // A set-up's identity comes from its read-back, or — when that could not be read — from opening,
+    // with the code on screen, the document a later read found the server holding.
+    expect(code.match(/setUpIdentity = [^\n]+/g)).toEqual([
+      'setUpIdentity = stored.identity',
+      'setUpIdentity = null',
+      'setUpIdentity = back.identity',
+      'setUpIdentity = null',
+    ])
+    expect(code).toContain("unlockFromBlob(out.wrapped, newCode.canonical, 'recovery')")
+  })
+
+  it('keeps a code whose lock the server took on screen when the read-back could not be read (#258)', () => {
+    // READ_BACK_FAILED under the code, and the one way to check it directly under the words; the
+    // statement that the key is stored only when it is known, in its place.
+    expect(code).toMatch(
+      /<CodeSheet display=\{newCode\.display\} \/>\s*\{#if unreadSent\}\s*<Callout tone="warn"><p class="para">\{READ_BACK_FAILED\}<\/p><\/Callout>\s*<button type="button" onclick=\{checkReadBack\}[^\n]*\s*\{:else\}\s*<p class="hint">\{KEY_STORED_WITH_THIS_CODE\}<\/p>\s*\{\/if\}/,
+    )
+    // The check never takes the code away unless the server answered with something else.
+    const check = code.slice(code.indexOf('async function checkReadBack()'), code.indexOf('function keyMoved('))
+    expect(check).toContain("if (out.kind === 'unread') return")
+    expect(check.indexOf('newCode = null')).toBeGreaterThan(check.indexOf("out.kind === 'held'"))
+  })
+
+  it('opens nothing after the write-down when the read-back is still unread, and asks for a read', () => {
+    const body = code.slice(code.indexOf('async function codeWrittenDown()'), code.indexOf('function opened('))
+    const unreadBranch = body.slice(0, body.indexOf('return'))
+    expect(unreadBranch).toContain('if (!setUpIdentity)')
+    expect(unreadBranch).toContain('keyLost(READ_BACK_FAILED)')
+    expect(unreadBranch).not.toContain('opened(')
+    // And the read button sits directly under the message whenever the message asks for one, which
+    // is taken from the message itself (decidedWords.test.ts holds the rule on every screen).
+    expect(code).toContain('const asksForARead = $derived(READS_AGAIN.has(error))')
+    expect(code).toMatch(
+      /<Callout tone=\{errorTone\}><p class="para">\{error\}<\/p><\/Callout>\s*\{#if asksForARead\}\s*<button type="button" class="again" onclick=\{connect\}/,
+    )
+  })
+
+  it('has no file input, and nothing that reads a file: the key file is retired, with no fallback (#258)', () => {
+    // The door opens the server's copy of the key and nothing else. The detector is shown catching
+    // the input this screen used to have, planted back into a copy of this source, before the
+    // absence is asserted over what ships.
+    const FILE_INPUT = /<input[^>]*type=["']?file\b|\.files\??\.\[0\]|\bFileReader\b|\bfile\.text\(\)|\bkeyFileText\b/
+    const planted = code.replace(
+      '<legend>Your server</legend>',
+      '<legend>Your server</legend><input type="file" accept="application/json,.json" onchange={chooseFile} />',
+    )
+    expect(planted).not.toBe(code)
+    expect(FILE_INPUT.test(planted)).toBe(true)
+    expect(FILE_INPUT.test(code)).toBe(false)
+    // Nor a word about one.
+    expect(/key file/i.test(code)).toBe(false)
+    for (const [key, value] of Object.entries(unlockCopy)) {
+      if (typeof value === 'string') expect(/key file|\bfile\b/i.test(value), key).toBe(false)
+    }
+  })
+
+  it('opens the console from a set-up only once the new code is confirmed written down', () => {
+    // The identity a set-up derived waits behind the write-down check, as the code does on the
+    // Recovery code screen: the one caller that hands it on is the check's confirmation.
+    expect(code).toContain('onconfirmed={codeWrittenDown}')
+    const body = code.slice(code.indexOf('function codeWrittenDown()'), code.indexOf('function opened('))
+    expect(body).toContain('newCode = null')
+    expect(body).toContain('opened(setUpIdentity)')
+  })
+
+  it('puts the new code on screen before anything that could fail', () => {
+    // The server already holds the lock the code opens; a code that never reached the screen would
+    // be a recovery slot nobody holds. So the handler awaits nothing before showing it.
+    const body = code.slice(code.indexOf('function keyStored('), code.indexOf('function keyUnread('))
+    expect(body).toContain('newCode = stored.recoveryCode')
+    expect(body).not.toMatch(/\bawait\b/)
+    expect(/\bawait\b/.test('await initAssignmentCrypto()\n    newCode = stored.recoveryCode')).toBe(true)
   })
 })
 
@@ -93,10 +171,12 @@ describe('(b) the passphrase and the code do not leave the tab', () => {
   })
 
   it('never puts a secret in a message', () => {
-    // The refusals come from UNLOCK_FAULT_TEXT by key; there is no template for an input to arrive
-    // in. A planted interpolation shows the detector is not blind.
-    expect(/error = [^\n]*\$\{[^\n]*(passphrase|groups|secret)/.test(code)).toBe(false)
-    expect(/error = [^\n]*\$\{[^\n]*(passphrase|groups|secret)/.test('error = `Wrong: ${passphrase}`')).toBe(true)
+    // The refusals come from UNLOCK_FAULT_TEXT, SETUP_FAULT_TEXT and fixed constants; there is no
+    // template for an input to arrive in. A planted interpolation shows the detector is not blind.
+    const ECHO = /(error|notice) = [^\n]*\$\{[^\n]*(passphrase|repeated|groups|secret|token)/
+    expect(ECHO.test(code)).toBe(false)
+    expect(ECHO.test('error = `Wrong: ${passphrase}`')).toBe(true)
+    expect(ECHO.test('notice = `Refused: ${token}`')).toBe(true)
   })
 })
 
@@ -106,8 +186,11 @@ describe('(b) the passphrase and the code do not leave the tab', () => {
 
 describe('(c) a mistyped code is refused before any derivation', () => {
   it('runs firstGroupProblem before it imports the unlock module', () => {
-    const check = code.indexOf('firstGroupProblem(groups)')
-    const derive = code.indexOf("await import('../../owner/unlock')")
+    // Inside the unlock itself: the read-back check imports the same module for a code that came
+    // from this screen, not from a person's typing.
+    const unlock = code.slice(code.indexOf('async function unlock()'))
+    const check = unlock.indexOf('firstGroupProblem(groups)')
+    const derive = unlock.indexOf("await import('../../owner/unlock')")
     expect(check).toBeGreaterThan(-1)
     expect(derive).toBeGreaterThan(-1)
     expect(check).toBeLessThan(derive)
@@ -125,10 +208,22 @@ describe('(c) a mistyped code is refused before any derivation', () => {
    ═══════════════════════════════════════════════════════════════════════════════════════════ */
 
 describe('(d) the words', () => {
-  it('renders the lede, the nothing-is-kept sentence and the file description', () => {
-    for (const name of ['UNLOCK_LEDE', 'NOTHING_IS_KEPT', 'KEY_FILE_HINT', 'NO_KEY_FILE_YET']) {
+  it('renders the lede, the nothing-is-kept sentence, where the key is, and what the server holds', () => {
+    for (const name of ['UNLOCK_LEDE', 'NOTHING_IS_KEPT', 'KEY_IS_ON_THE_SERVER', 'HOLDS_A_LOCKED_KEY', 'KEY_STORED_WITH_THIS_CODE']) {
       expect(code, name).toContain(`{${name}}`)
     }
+    // A server holding nothing, or key parameters only, gets the shared set-up form and its words.
+    expect(code).toContain('<KeySetup')
+    // And the notice after the server's state moved is the set-up's own sentence.
+    expect(code).toContain('notice = KEY_CHANGED_ON_SERVER')
+  })
+
+  it('shows the new code once, where the set-up left it, and checks it was written down', () => {
+    // The Recovery code screen's two components, so the code looks and is checked the same here.
+    expect(code).toContain('<CodeSheet display={newCode.display} />')
+    expect(code).toContain('<WriteDownCheck')
+    expect(code.indexOf('<CodeSheet')).toBeLessThan(code.indexOf('<WriteDownCheck'))
+    expect(code.match(/<CodeSheet/g)).toHaveLength(1)
   })
 
   it('says the fingerprint is now stable, beside the fingerprint', () => {
@@ -138,13 +233,6 @@ describe('(d) the words', () => {
     expect(fp).toBeGreaterThan(-1)
     expect(stable).toBeGreaterThan(fp)
     expect(stable - fp).toBeLessThan(400)
-  })
-
-  it('tells someone with no key file what making one would cost them', () => {
-    // Absence is not a failure, so this is plain text rather than an error — but it must say that a
-    // new key is a new identity, because that is the defect this screen was rebuilt to remove.
-    expect(unlockCopy.NO_KEY_FILE_YET).toContain('new identity')
-    expect(unlockCopy.NO_KEY_FILE_YET).toMatch(/will not match/)
   })
 
   it('offers the recovery code without promising it does what the recovery screen does', () => {
@@ -157,11 +245,11 @@ describe('(d) the words', () => {
       { name: 'a success register', pattern: /\b(success|succeeded|great|welcome back|congratulat|all set)/i, planted: 'Success — welcome back!' },
       { name: 'a tick or a badge', pattern: /✓|✔|&check;/, planted: '✓ Unlocked' },
     ]
+    const sentences = Object.entries(unlockCopy).filter((e): e is [string, string] => typeof e[1] === 'string')
+    expect(sentences.length).toBeGreaterThan(15)
     for (const { name, pattern, planted } of FORBIDDEN) {
       expect(pattern.test(planted), name).toBe(true)
-      for (const [key, value] of Object.entries(unlockCopy)) {
-        if (typeof value === 'string') expect(pattern.test(value), `${key}: ${name}`).toBe(false)
-      }
+      for (const [key, value] of sentences) expect(pattern.test(value), `${key}: ${name}`).toBe(false)
     }
   })
 
@@ -191,11 +279,12 @@ describe('(e) the inbox token', () => {
       .toBe(true)
     expect(TYPED.test(code)).toBe(false)
     // And no other password field crept in to take its place — the form asks for a name and two
-    // public keys, none of which is a secret.
-    const passwordInputs = (code.match(/<input[^>]*type="password"[^>]*>/g) ?? []).filter(
-      (tag) => !tag.includes('passphrase'),
-    )
+    // public keys, none of which is a secret. The password fields on this screen are the owner's
+    // own: the passphrase, its repetition, and the access token the key is read with.
+    const OWN = /bind:value=\{(passphrase|repeated|token)\}/
+    const passwordInputs = (code.match(/<input[^>]*type="password"[^>]*>/g) ?? []).filter((tag) => !OWN.test(tag))
     expect(passwordInputs).toEqual([])
+    expect(OWN.test('<input type="password" bind:value={tInboxToken} />')).toBe(false)
   })
 
   it('gets the token from the minting module and from nowhere else', () => {

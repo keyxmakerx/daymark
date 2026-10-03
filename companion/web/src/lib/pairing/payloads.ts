@@ -1,6 +1,5 @@
 /*
- * What travels inside the pairing envelope (plan §3.7.3, "the derived key encrypts the rest of
- * the negotiation"), pinned down to bytes.
+ * What travels inside the pairing envelope (COMPANION_PAIRING.md §13.4), pinned down to bytes.
  *
  * TWO MESSAGES, ONE EACH WAY, AND THE CODE IS THE AUTHORITY FOR BOTH.
  *

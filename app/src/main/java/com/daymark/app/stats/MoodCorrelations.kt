@@ -17,8 +17,8 @@ object MoodCorrelations {
      * that signature accepted a person, and `Signals`, `PeriodReview` and the four-side report all
      * inherited it. Nothing passed one. Nothing was going to, today.
      *
-     * But `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2 does not say "we will not correlate people
-     * with mood", it says people can never reach a rule that reads mood, *enforced by shape*. The
+     * But `docs/FEATURES.md` §11.2 does not stop at "we will not correlate people with mood": it
+     * says people can never reach a rule that reads mood, *enforced by shape*. The
      * distance between those two is the distance between a convention and a guarantee, and this
      * repository has already been bitten once by the first being mistaken for the second (see the
      * field's signature in `sky/SkyField.kt`, written for exactly this reason).

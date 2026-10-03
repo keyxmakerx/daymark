@@ -144,9 +144,9 @@ class AuditChainVerificationTest {
          * retraction in docs/COMPANION_SECURITY.md §9 (R12), and every user-facing surface of
          * this check is required to say so next to any result it renders. What catches a
          * truncation is the head hash compared against an anchor OUTSIDE the server — a person's
-         * note, or the phone anchor planned in docs/PLAN_2026-08-COMPANION-NEXT.md 3.9.7. If this
-         * test ever fails, verifyChain has started claiming to detect something it structurally
-         * cannot, which would be the check lying in the flattering direction.
+         * note, or the phone's own copy of the head (not built: #182). If this test ever fails,
+         * verifyChain has started claiming to detect something it structurally cannot, which
+         * would be the check lying in the flattering direction.
          */
         val dir = tmpDir()
         val store = AuditStore(dir, retentionSeconds = 0)

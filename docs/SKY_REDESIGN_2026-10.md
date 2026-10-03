@@ -7,9 +7,9 @@
 > it: every sky grown from its own seed, drawable constellations, the ringed planet, favourites and
 > bridges.
 >
-> Where this document disagrees with `docs/SKY.md` or with §1 of
-> `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md`, this one governs. §9 lists exactly what it keeps from them
-> and what it reverses. §10 records the maintainer's answers to the questions the approved prototype
+> Where this document disagrees with `docs/SKY.md`, or with the September plan for the sky (since
+> folded into that document and GitHub issues), this one governs. §9 lists exactly what it keeps and
+> what it reverses. §10 records the maintainer's answers to the questions the approved prototype
 > raised, given later on 2026-10-03, and the few that are still open. The prototype was updated to
 > match those answers.
 

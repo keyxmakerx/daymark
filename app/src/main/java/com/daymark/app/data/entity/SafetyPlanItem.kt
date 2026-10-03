@@ -32,7 +32,7 @@ data class SafetyPlanItem(
  * This is **not** the Stanley-Brown Safety Planning Intervention form, which is © Stanley & Brown
  * and requires written permission to program into an electronic record. These are our own titles
  * and prompts, informed by the general *method* of safety planning — which is why the tool is
- * labelled **Adapted**, never Validated. See `docs/SAFETY_PLAN_FEATURE_PLAN.md`.
+ * labelled **Adapted**, never Validated. See `docs/FEATURES.md` §8.
  *
  * There is deliberately **no means-restriction section**. Stanley-Brown includes making the
  * environment safe; we omit it, independently required by `PROVENANCE.md` rule 4 (no self-harm

@@ -3,10 +3,11 @@ package com.daymark.app.stats
 /**
  * How often the app may *interrupt* after a hard day.
  *
- * [SUPPORT_FEATURE_PLAN.md] has always said the support space is "triggered by a low-mood log
- * (offer, never force)". For a while the code forced: every save at Awful or Bad popped the editor
- * and navigated away, gated only by a single on/off. So the real choice was "every single time" or
- * "never" — and "never" also removed the brief pause that made it worth having at all.
+ * `docs/FEATURES.md` §7.2, rule 4: *"Offer, never force: a small action the person reaches for,
+ * never a takeover they did not choose."* For a while the code forced: every save at Awful or Bad
+ * popped the editor and navigated away, gated only by a single on/off. So the real choice was
+ * "every single time" or "never" — and "never" also removed the brief pause that made it worth
+ * having at all.
  *
  * Two different things are separated here, because they carry very different costs:
  *

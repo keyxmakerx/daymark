@@ -29,10 +29,9 @@ vi.mock('../recovery/dataKey', async (importOriginal) => {
   }
 })
 
-import { unlockOwnerIdentity, unlockFromBlob, UNLOCK_FAULT_TEXT } from './unlock'
+import { unlockFromBlob, UNLOCK_FAULT_TEXT } from './unlock'
 import { ownerIdentityFromMaster } from './identity'
 import { createRecoverableDataKey } from '../recovery/dataKey'
-import { encodeWrappedKeyFile, STAND_IN_MARKER } from '../components/recovery/session'
 import { initCrypto } from '../sync/crypto'
 import type { RecoverableDataKey } from '../recovery/dataKey'
 import type { RecoveryCode } from '../recovery/recoveryCode'
@@ -44,7 +43,6 @@ const b64 = (u: Uint8Array) => Buffer.from(u).toString('base64')
 let blob: RecoverableDataKey
 let code: RecoveryCode
 let expectedSignPub: string
-let fileText: string
 
 beforeAll(async () => {
   await initCrypto()
@@ -53,16 +51,15 @@ beforeAll(async () => {
   blob = made.blob
   code = made.recoveryCode
   expectedSignPub = b64(ownerIdentityFromMaster(made.dataKey).ed25519.publicKey)
-  fileText = encodeWrappedKeyFile(made.blob)
 }, 60_000)
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
    (a) Both secrets reach the same identity.
    ═══════════════════════════════════════════════════════════════════════════════════════════ */
 
-describe('(a) the file plus either secret opens the console', () => {
+describe('(a) the server’s locked key plus either secret opens the console', () => {
   it('opens with the passphrase', async () => {
-    const out = await unlockOwnerIdentity(fileText, PASSPHRASE, 'passphrase')
+    const out = await unlockFromBlob(blob, PASSPHRASE, 'passphrase')
     expect(out.ok).toBe(true)
     if (out.ok) expect(b64(out.identity.ed25519.publicKey)).toBe(expectedSignPub)
   }, 30_000)
@@ -70,18 +67,17 @@ describe('(a) the file plus either secret opens the console', () => {
   it('opens with the recovery code, to the same identity', async () => {
     // The path someone uses on a machine that has never seen their passphrase. A different identity
     // here would show their clinician a stranger at exactly that moment.
-    const out = await unlockOwnerIdentity(fileText, code.canonical, 'recovery')
+    const out = await unlockFromBlob(blob, code.canonical, 'recovery')
     expect(out.ok).toBe(true)
     if (out.ok) expect(b64(out.identity.ed25519.publicKey)).toBe(expectedSignPub)
   }, 30_000)
 
   it('accepts a recovery code the way a person types it, spacing and case included', async () => {
     const typed = ` ${code.canonical.toLowerCase().replace(/-/g, ' ')} `
-    const out = await unlockOwnerIdentity(fileText, typed, 'recovery')
+    const out = await unlockFromBlob(blob, typed, 'recovery')
     expect(out.ok).toBe(true)
   }, 30_000)
 })
-
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
    (b) The master is wiped, after it has been used and never before.
    ═══════════════════════════════════════════════════════════════════════════════════════════ */
@@ -126,33 +122,22 @@ describe('(b) what is left behind', () => {
    ═══════════════════════════════════════════════════════════════════════════════════════════ */
 
 describe('(c) what it says when it does not open', () => {
-  it('refuses an empty file and an empty secret separately', async () => {
-    expect(await unlockOwnerIdentity('   ', PASSPHRASE, 'passphrase')).toEqual({ ok: false, fault: 'noFile' })
-    expect(await unlockOwnerIdentity(fileText, '  ', 'passphrase')).toEqual({ ok: false, fault: 'noSecret' })
-  })
-
-  it('carries through the file faults the recovery screens already name', async () => {
-    expect(await unlockOwnerIdentity('not json at all', PASSPHRASE, 'passphrase')).toEqual({
-      ok: false,
-      fault: 'notJson',
-    })
-    expect(await unlockOwnerIdentity('{"some":"json"}', PASSPHRASE, 'passphrase')).toEqual({
-      ok: false,
-      fault: 'notThisFile',
-    })
-    expect(
-      await unlockOwnerIdentity(JSON.stringify({ standIn: STAND_IN_MARKER, wrapped: { v: 1, slots: [] } }), PASSPHRASE, 'passphrase'),
-    ).toEqual({ ok: false, fault: 'noSlots' })
+  it('refuses an empty secret before any derivation', async () => {
+    expect(await unlockFromBlob(blob, '  ', 'passphrase')).toEqual({ ok: false, fault: 'noSecret' })
+    expect(await unlockFromBlob(blob, '', 'recovery')).toEqual({ ok: false, fault: 'noSecret' })
   })
 
   it('refuses a mistyped recovery code before spending any Argon2id on it', async () => {
-    // Flip one symbol so the check symbol no longer agrees. This must come back positioned and
-    // instantly; reporting it as "did not open" would cost three seconds to say something less
-    // useful, and would send someone to look for the wrong problem.
+    // Change one symbol so the check symbol no longer agrees. The replacement is derived from the
+    // symbol it replaces, so the change is never a no-op (CLAUDE.md §5). This must come back
+    // positioned and instantly; reporting it as "did not open" would cost three seconds to say
+    // something less useful, and would send someone to look for the wrong problem.
     const symbols = code.canonical.split('')
     symbols[2] = symbols[2] === 'K' ? 'M' : 'K'
+    const mistyped = symbols.join('')
+    expect(mistyped).not.toBe(code.canonical)
     const started = performance.now()
-    const out = await unlockOwnerIdentity(fileText, symbols.join(''), 'recovery')
+    const out = await unlockFromBlob(blob, mistyped, 'recovery')
     const elapsed = performance.now() - started
 
     expect(out).toMatchObject({ ok: false, fault: 'checksum' })
@@ -162,19 +147,68 @@ describe('(c) what it says when it does not open', () => {
   })
 
   it('names a consequence when the secret is simply wrong, and does not guess which input was', async () => {
-    const out = await unlockOwnerIdentity(fileText, 'not the passphrase', 'passphrase')
+    const out = await unlockFromBlob(blob, 'not the passphrase', 'passphrase')
     expect(out).toEqual({ ok: false, fault: 'didNotOpen' })
-    // The wrong file, the wrong passphrase, and an edited file are one outcome here, not three.
-    expect(UNLOCK_FAULT_TEXT.didNotOpen).toContain('the file you chose')
+    // The wrong passphrase and a key edited on the server are one outcome here, not two: the
+    // sentence names the key it did not open and points at the one input, and guesses at neither.
+    expect(UNLOCK_FAULT_TEXT.didNotOpen).toContain('did not open the key this server holds')
     expect(UNLOCK_FAULT_TEXT.didNotOpen).toContain('what you typed')
+    expect(UNLOCK_FAULT_TEXT.didNotOpen).not.toMatch(/wrong|incorrect/i)
   }, 30_000)
 
-  it('says so when the file carries no copy opened that way', async () => {
+  it('refuses a key whose settings are outside the accepted range in its own words, never as a typing problem (#418)', async () => {
+    const SETTINGS_NOT_ACCEPTED =
+      'The key this server holds asks for settings this console does not accept, so it was not opened. Nothing has changed.'
+    expect(UNLOCK_FAULT_TEXT.settingsNotAccepted).toBe(SETTINGS_NOT_ACCEPTED)
+    // The sentence must not point at the typing. The detector is shown seeing didNotOpen do exactly that.
+    const POINTS_AT_TYPING = /what you typed|try again/i
+    expect(POINTS_AT_TYPING.test(UNLOCK_FAULT_TEXT.didNotOpen)).toBe(true)
+    expect(POINTS_AT_TYPING.test(SETTINGS_NOT_ACCEPTED)).toBe(false)
+
+    // One lock moved outside the range, on each side of it, in memory and in passes. The secrets
+    // offered are the RIGHT ones — the key as made opens with both, section (a) — so the settings
+    // are the only thing refused here, and a sentence about the typing would be false.
+    const outside: [what: string, kind: 'passphrase' | 'recovery', kdf: Partial<typeof FAST>][] = [
+      ['the passphrase lock at 513 MiB', 'passphrase', { memMiB: 513 }],
+      ['the passphrase lock at 128 MiB', 'passphrase', { memMiB: 128 }],
+      ['the recovery code lock at 9 passes', 'recovery', { ops: 9 }],
+      ['the recovery code lock at 2 passes', 'recovery', { ops: 2 }],
+    ]
+    for (const [what, kind, kdf] of outside) {
+      const moved: RecoverableDataKey = {
+        v: 1,
+        slots: blob.slots.map((s) => (s.kind === kind ? { ...s, kdf: { ...s.kdf, ...kdf } } : s)),
+      }
+      // The move is real: that lock's settings are no longer the ones it was made with.
+      expect(moved.slots.find((s) => s.kind === kind)!.kdf, what).not.toEqual(blob.slots.find((s) => s.kind === kind)!.kdf)
+      for (const [secret, offered] of [[PASSPHRASE, 'passphrase'], [code.canonical, 'recovery']] as const) {
+        const out = await unlockFromBlob(moved, secret, offered)
+        expect(out, `${what}, offered the ${offered}`).toEqual({ ok: false, fault: 'settingsNotAccepted' })
+        if (!out.ok) expect(UNLOCK_FAULT_TEXT[out.fault], what).not.toBe(UNLOCK_FAULT_TEXT.didNotOpen)
+      }
+    }
+  })
+
+  it('says which lock the server’s key does not have, by the secret that was offered, and names the other', async () => {
     const passphraseOnly: RecoverableDataKey = { v: 1, slots: blob.slots.filter((s) => s.kind === 'passphrase') }
-    expect(await unlockFromBlob(passphraseOnly, code.canonical, 'recovery')).toEqual({
-      ok: false,
-      fault: 'noSlotOfThatKind',
-    })
+    const recoveryOnly: RecoverableDataKey = { v: 1, slots: blob.slots.filter((s) => s.kind === 'recovery') }
+    expect(await unlockFromBlob(passphraseOnly, code.canonical, 'recovery')).toEqual({ ok: false, fault: 'noRecoveryLock' })
+    expect(await unlockFromBlob(recoveryOnly, 'any passphrase at all', 'passphrase')).toEqual({ ok: false, fault: 'noPassphraseLock' })
+    // Each sentence sends the person to the secret that is left.
+    expect(UNLOCK_FAULT_TEXT.noRecoveryLock).toMatch(/Use your passphrase\.$/)
+    expect(UNLOCK_FAULT_TEXT.noPassphraseLock).toMatch(/Use your recovery code\.$/)
+    expect('noSlotOfThatKind' in UNLOCK_FAULT_TEXT).toBe(false)
+  })
+
+  it('has no file to be handed any more, and no words for one', () => {
+    // The key file is retired (#258): the console opens the server's copy. Neither the entry point
+    // that read a file nor a fault about one is left.
+    const source = readFileSync(fileURLToPath(new URL('./unlock.ts', import.meta.url)), 'utf8')
+    const code_ = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(?<!:)\/\/[^\n]*/g, '')
+    const FILE = /\bunlockOwnerIdentity\b|\bfileText\b|decodeWrappedKeyFile|\bnoFile\b|\bnotJson\b/
+    expect(FILE.test('export async function unlockOwnerIdentity(fileText: string')).toBe(true)
+    expect(FILE.test(code_)).toBe(false)
+    expect(Object.values(UNLOCK_FAULT_TEXT).filter((t) => /\bfile\b/i.test(t))).toEqual([])
   })
 })
 
@@ -208,7 +242,12 @@ describe('(d) the fault sentences', () => {
   it('none of them echoes what was typed', () => {
     // A fault sentence is composed without the input, so there is no template for one to arrive in.
     const source = readFileSync(fileURLToPath(new URL('./unlock.ts', import.meta.url)), 'utf8')
-    const table = source.slice(source.indexOf('UNLOCK_FAULT_TEXT'), source.indexOf('file text + one secret'))
+    const start = source.indexOf('export const UNLOCK_FAULT_TEXT')
+    const end = source.indexOf("The server's locked key + one secret")
+    expect(start).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(start)
+    const table = source.slice(start, end)
+    expect(table).toContain('didNotOpen:')
     expect(table).not.toMatch(/\$\{/)
   })
 })

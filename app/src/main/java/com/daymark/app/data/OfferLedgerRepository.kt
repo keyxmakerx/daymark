@@ -33,11 +33,11 @@ import javax.inject.Singleton
  * about the app's own asking: which feature asked, when, when in the week, whether anything came
  * back, and what became of it. Nothing here counts consecutive runs, computes rates, or produces
  * anything a report or a clinician could read as a signal about how someone is doing
- * (`docs/DECISIONS_2026-08.md` §D1a, §D6). A quiet ledger means the app was quiet.
+ * (`docs/DECISIONS.md` §D1a, §D6). A quiet ledger means the app was quiet.
  *
- * **None of it is ever shared.** `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §4: *the reception ledger
- * and the timing grid are never shared with a clinician — when someone answers the app is the app's
- * business with them, and it stays on the phone.* There is no export path to close, and that is not
+ * **None of it is ever shared.** `docs/FEATURES.md` §13.2: *the reception ledger and the timing
+ * grid are never shared with a clinician. When someone answers is the app's business with them, and
+ * it stays on the phone.* There is no export path to close, and that is not
  * an accident: `BackupManager` deliberately carries no `offer_records` table, so a backup, a CSV or
  * a PDF report has nowhere to put one. [timedOffers] is read by a debug screen and by placement,
  * and by nothing that leaves the device.

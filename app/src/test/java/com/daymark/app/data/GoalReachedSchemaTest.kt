@@ -31,7 +31,7 @@ import org.junit.Test
  *    new one and throws on first access — only for people who already had data, which is why it
  *    survives every fresh-install test.
  * 3. **`archived` read as "reached".** The one this column exists to prevent. Archiving is giving up
- *    on a goal or setting it aside (`docs/DECISIONS_2026-08.md` §D5); wiring it to `reachedAt` would
+ *    on a goal or setting it aside (`docs/DECISIONS.md` §D5); wiring it to `reachedAt` would
  *    draw a "goal reached" star for the act of letting go. It cannot be caught by running anything,
  *    because the wrong version works — so it is asserted as an absence, with a detector for each.
  */

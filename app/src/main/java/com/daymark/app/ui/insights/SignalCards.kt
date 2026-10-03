@@ -73,7 +73,7 @@ fun SignalCards(
             Text(
                 header,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.tertiary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         window.forEach { signal ->
@@ -207,7 +207,7 @@ fun SuggestionControlMenu(
             Icon(
                 Icons.Filled.MoreVert,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.tertiary,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
@@ -234,7 +234,7 @@ fun SuggestionControlMenu(
                 text = "Turned-off suggestions never nag. You can turn any of them back on under " +
                     "Settings → Suggestions.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.tertiary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.widthIn(max = 260.dp).padding(horizontal = 16.dp, vertical = 10.dp),
             )
         }

@@ -5,6 +5,7 @@
   import Dashboard from './lib/components/Dashboard.svelte'
   import TrustBar from './lib/components/TrustBar.svelte'
   import SyncPanel from './lib/components/SyncPanel.svelte'
+  import PhonesSection from './lib/components/phones/PhonesSection.svelte'
   import Assessments from './lib/components/Assessments.svelte'
   import OwnerConsole from './lib/components/owner/OwnerConsole.svelte'
   import Orientation from './lib/components/onboarding/Orientation.svelte'
@@ -18,6 +19,7 @@
     decidedShape,
     defaultSetupStorage,
     forgetShape,
+    publishedShape,
     readStoredChoice,
     rememberShape,
     resolveSetup,
@@ -28,6 +30,8 @@
     type StoredChoice,
   } from './lib/setup/shape'
   import { startConfigurationRead } from './lib/setup/configProbe'
+  import { offersRoute } from './lib/onboarding/audience'
+  import type { OwnerConnection } from './lib/owner/recoveryEmail'
   import { trustPostureFor } from './lib/trust/posture'
   import type { InstrumentDefinition } from './lib/instruments/types'
 
@@ -57,7 +61,7 @@
    * FIRST RUN: WHICH OF THE THREE DEPLOYMENT SHAPES THIS MACHINE IS.
    * ═══════════════════════════════════════════════════════════════════════════════════════════
    *
-   * docs/PLAN_2026-08-COMPANION-NEXT.md §3.11 names three, and they are not sizes of one product:
+   * docs/COMPANION_ARCHITECTURE.md §2 names three, and they are not sizes of one product:
    * Solo and Paired put the journal on its owner's own hardware, while Practice inverts that and
    * makes the person a tenant on their clinic's machine. Nothing in this app used to ask, so the
    * answer was whatever screen somebody clicked first.
@@ -86,6 +90,35 @@
   let forgetRefused = $state(false)
 
   const decision = $derived(resolveSetup({ config, session: sessionShape, stored }))
+
+  /*
+   * WHAT THE SERVER SERVES, AS FAR AS THIS PAGE CAN TELL (#330). A shape the server published
+   * decides which pages it serves, so the orientation and the practice panel link only those
+   * (lib/setup/pages.ts). Null whenever nothing was published or nothing was read — including every
+   * load where this browser's own answer meant no request was made — and null keeps every link.
+   * The person's own answer is never used here: it routes this page and changes nothing on the
+   * server.
+   */
+  const published = $derived(publishedShape(config))
+
+  /*
+   * Whether the owner console is offered: by the same rule as its route card, so no other surface
+   * on this page names a console the page has withheld. Where the published shape is solo the card
+   * is withheld, and the "Recover access" card sends nobody to it.
+   */
+  const ownerConsoleOffered = $derived(offersRoute('owner', published))
+
+  /*
+   * THE ACCESS TOKEN A SYNC FETCH PROVED, FOR THIS VISIT ONLY.
+   *
+   * The sync card kept its server address and token in its own state, gone the moment another
+   * card opened. It now hands them up here once the server has accepted them (a fetch succeeded, or
+   * the server answered the phone list with them), and the "Recover access" card reuses them to
+   * register the recovery email on a solo server (#330) instead of asking for the token a second
+   * time, as the Phones section does to pair a phone (#431). Held in memory for the life of this
+   * page, as the records that fetch opened are; never written to storage, and gone on reload.
+   */
+  let syncConnection = $state<OwnerConnection | null>(null)
 
   /*
    * ═══════════════════════════════════════════════════════════════════════════════════════════
@@ -190,15 +223,15 @@
    * "Offline report viewer" was a constant, and it stayed up over a Paired page whose trust strip,
    * one element below, said "This tab sends data to your server." Both were on screen at once.
    * The tagline is a few words about what this page is FOR on this machine, so it has to change
-   * when the answer does: Solo is the offline viewer; Paired is the journal and the one clinician
-   * it is shown to; Practice reuses the placeholder panel's own title, because that is the same
-   * sentence and one spelling of it is enough. Undecided — the question still open, or a recovery
-   * link that skipped it — keeps the viewer's wording, which is what the page is until told
-   * otherwise.
+   * when the answer does: Solo is your journal on a bigger screen; Paired is the journal and the
+   * clinicians it is shown to, plural because a person may invite more than one; Practice reuses
+   * the placeholder panel's own title, because that is the same sentence and one spelling of it is
+   * enough. Undecided — the question still open, or a recovery link that skipped it — keeps the
+   * Solo wording, which is what the page is until told otherwise.
    */
   const TAGLINE: Record<ShapeId, string> = {
-    solo: 'Offline report viewer',
-    paired: 'Your journal, and one clinician you invited',
+    solo: 'Your journal, on a bigger screen',
+    paired: 'Your journal, and the clinicians you invite',
     practice: SHAPE_LABELS.practiceTitle,
   }
   const tagline = $derived(TAGLINE[decidedShape(decision) ?? 'solo'])
@@ -289,7 +322,15 @@
         complaint ("there's like 10 different buttons.. why") with one more thing on top.
       -->
       <SetupEntry {decision} {config} onchoose={chooseShape} {storageRefused} />
-    {:else if !data}
+    {:else}
+      <!--
+        SET UP: the navigation stays, loaded backup or not. This used to be `{:else if !data}`, with
+        a dashboard-only branch after it, so opening a backup unmounted the routes and the owner
+        console with them: a backup loaded and the owner console on screen could never both be
+        true, and the share builder, which seals only the records it is given, could never seal.
+        Now the dashboard is what the file and sync routes show once a backup is open, and the
+        owner console is handed the same records.
+      -->
       <section class="intro">
         <!--
           ALREADY SET UP: the strip states the answer and gets out of the way. Everything below it
@@ -337,18 +378,35 @@
         <Orientation
           selected={source === 'practice' ? undefined : source}
           onchoose={(id) => (source = id)}
+          {published}
         >
           {#snippet surface()}
-            {#if source === 'file'}
+            {#if (source === 'file' || source === 'sync') && data}
+              <section class="loaded">
+                <p class="muted filemeta">
+                  <strong>{fileName}</strong> · backup v{data.version} · exported {formatDate(data.exportedAt)}
+                </p>
+                <Dashboard {data} />
+                <!--
+                  A fetch that opened a snapshot replaces the sync card with the dashboard, and the
+                  Phones section at the card's foot with it (#431). It follows the dashboard here
+                  instead, with the connection that fetch proved, so a phone can still be paired or
+                  disconnected after the snapshot is open.
+                -->
+                {#if source === 'sync' && syncConnection}
+                  <div class="card phones-card"><PhonesSection connection={syncConnection} /></div>
+                {/if}
+              </section>
+            {:else if source === 'file'}
               <Dropzone onload={load} onerror={(m) => (error = m)} />
             {:else if source === 'sync'}
-              <SyncPanel onload={loadData} />
+              <SyncPanel onload={loadData} onconnected={(c) => (syncConnection = c)} connection={syncConnection} />
             {:else if source === 'assess'}
               <Assessments />
             {:else if source === 'build'}
               <ToolBuilder onPublish={publishTool} />
             {:else if source === 'recover'}
-              <RecoverAccess />
+              <RecoverAccess {ownerConsoleOffered} connection={syncConnection} onopen={(id) => (source = id)} />
             {:else if source === 'practice'}
               <!--
                 The marked placeholder standing where the practice console will be. It is reached
@@ -356,9 +414,11 @@
                 see the header note in PracticePlaceholder.svelte for why an empty roster was the
                 wrong answer.
               -->
-              <PracticePlaceholder />
+              <PracticePlaceholder {published} />
             {:else}
-              <OwnerConsole data={null} />
+              <!-- The records the person opened on the file or sync tab, so the share builder has
+                   something to seal. Handed null, it could never seal anything. -->
+              <OwnerConsole {data} />
             {/if}
 
             {#if error}
@@ -367,7 +427,7 @@
             <!-- 'practice' joins the exclusions: that panel is about a clinic's machine, and the
                  note below is instructions for dropping your own backup file on the two tabs that
                  take one. It stays with the drop zone, because "above" has to stay true. -->
-            {#if source !== 'assess' && source !== 'build' && source !== 'owner' && source !== 'recover' && source !== 'practice'}
+            {#if !data && source !== 'assess' && source !== 'build' && source !== 'owner' && source !== 'recover' && source !== 'practice'}
               <p class="faint note">
                 Non-diagnostic: Daymark is a self-tracking and journaling tool. Nothing here
                 is a medical assessment. Export a backup from the app via
@@ -378,22 +438,16 @@
           {/snippet}
         </Orientation>
       </section>
-    {:else}
-      <section class="loaded">
-        <p class="muted filemeta">
-          <strong>{fileName}</strong> · backup v{data.version} · exported {formatDate(data.exportedAt)}
-        </p>
-
-        <Dashboard {data} />
-      </section>
     {/if}
   </main>
 
+  <!--
+    The footer makes the page's one claim about where data goes, in the same words as the page
+    description and the orientation: scoped to entries, because the page also sends invitations,
+    pairing messages, grants and account identifiers (#273).
+  -->
   <footer class="foot faint">
-    <p>
-      Daymark Companion · Phase-0 viewer · GPL-3.0 · runs entirely on your device.
-      <span class="status">design-stage scaffold</span>
-    </p>
+    <p>Daymark Companion · GPL-3.0 · Your entries leave this browser only when you sync or share them.</p>
   </footer>
 </div>
 
@@ -413,11 +467,11 @@
      awful day" — interface state wearing a person's data. */
   .error { color: var(--clay); background: var(--clay-wash); border: 1px solid var(--clay); border-radius: var(--radius-sm); padding: var(--space-3) var(--space-4); margin: 0; }
   .filemeta { margin: 0; }
+  .phones-card { max-width: 34rem; margin-top: var(--space-5); }
   /* The `.tabs` rules that lived here went with the six flat buttons Orientation replaced. The
      reasoning they carried — that a selected surface is STRUCTURE, so it takes the structural
      accent rather than content ink, and that aria-pressed carries the selection so a fill is
      never the only signal — moved with the markup and is restated in Orientation.svelte. */
   .foot { border-top: 1px solid var(--hairline); padding-top: var(--space-4); font-size: 0.85rem; }
-  .status { font-style: italic; }
   code { font-family: var(--font-mono); background: var(--paper-bg); padding: 0 0.25rem; border-radius: 4px; }
 </style>

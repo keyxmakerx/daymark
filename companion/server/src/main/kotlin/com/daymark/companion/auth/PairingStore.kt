@@ -1,12 +1,13 @@
 package com.daymark.companion.auth
 
+import com.daymark.companion.storage.Schema
+import com.daymark.companion.storage.SchemaChange
 import java.nio.file.Files
 import java.nio.file.Path
 import java.sql.Connection
-import java.sql.DriverManager
 
 /**
- * Store-and-forward relay state for the CPace pairing exchange (plan §3.7.3).
+ * Store-and-forward relay state for the CPace pairing exchange (COMPANION_PAIRING.md §4).
  *
  * The exchange this carries is one round trip that never happens in real time: the owner posts
  * their opening message, the therapist fetches it and posts the reply whenever they open the
@@ -16,7 +17,8 @@ import java.sql.DriverManager
  *  - THE BLOBS ARE OPAQUE. `msg_a`, `msg_b`, `env_to_owner` and `env_to_therapist` are stored and
  *    returned byte-for-byte, never parsed, never validated beyond a size cap. The server cannot
  *    participate in the exchange — it does not have the pairing code, and the code never reaches
- *    it in any form (§3.7.4) — so there is nothing it could legitimately do with the contents.
+ *    it in any form (COMPANION_PAIRING.md §5) — so there is nothing it could legitimately do with
+ *    the contents.
  *    A relay that started reading its parcels would learn nothing and become a thing worth
  *    compromising. One envelope goes each way: the therapist's offer (their public keys, a name,
  *    the enrol ticket they chose) travels with the reply, and the owner's own public keys travel
@@ -55,44 +57,8 @@ class PairingStore(
 
     init {
         Files.createDirectories(root)
-        Class.forName("org.sqlite.JDBC")
-        conn = DriverManager.getConnection("jdbc:sqlite:${root.resolve("pairing.db")}")
-        conn.createStatement().use { st ->
-            st.execute("PRAGMA journal_mode=WAL")
-            st.execute("PRAGMA synchronous=NORMAL")
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS pairing_exchanges (
-                    exchange_id  TEXT    PRIMARY KEY,
-                    invite_id    TEXT    NOT NULL,
-                    rel_ref      TEXT    NOT NULL,
-                    sid          TEXT    NOT NULL,
-                    msg_a        TEXT    NOT NULL,
-                    msg_b        TEXT,
-                    state        TEXT    NOT NULL,
-                    created_at   INTEGER NOT NULL,
-                    responded_at INTEGER,
-                    expiry       INTEGER NOT NULL,
-                    env_to_owner TEXT,
-                    env_to_therapist TEXT
-                )
-                """.trimIndent(),
-            )
-            // Databases created before these columns existed will not gain them from CREATE TABLE
-            // IF NOT EXISTS. SQLite has no ADD COLUMN IF NOT EXISTS and errors on a duplicate
-            // column, so the failure is swallowed deliberately: this is the additive-column idiom
-            // (see AuthStore), not a swallowed bug. A reply stored before env_to_owner existed
-            // reads back with no envelope, and the owner's client treats that as a reply without an
-            // offer; an approval stored before env_to_therapist existed reads back the same way,
-            // and the clinician's client treats it as an approval that proved no owner keys.
-            runCatching {
-                st.execute("ALTER TABLE pairing_exchanges ADD COLUMN env_to_owner TEXT")
-            }
-            runCatching {
-                st.execute("ALTER TABLE pairing_exchanges ADD COLUMN env_to_therapist TEXT")
-            }
-            st.execute("CREATE INDEX IF NOT EXISTS idx_pairing_invite ON pairing_exchanges(invite_id, created_at)")
-        }
+        conn = SCHEMA.open(root)
+        conn.createStatement().use { st -> st.execute("PRAGMA synchronous=NORMAL") }
     }
 
     enum class State { OPEN, RESPONDED, CLOSED, CANCELLED, SUPERSEDED }
@@ -258,7 +224,7 @@ class PairingStore(
         if (updated == 1) TransitionStatus.OK else TransitionStatus.GONE
     }
 
-    /** Owner cancels; OPEN or RESPONDED → CANCELLED. The 4.0a owner Cancel. */
+    /** Owner cancels; OPEN or RESPONDED → CANCELLED (COMPANION_PAIRING.md §8). */
     fun cancel(exchangeId: String, relRef: String): TransitionStatus =
         transition(exchangeId, relRef, from = listOf(State.OPEN, State.RESPONDED), to = State.CANCELLED)
 
@@ -311,6 +277,46 @@ class PairingStore(
     }
 
     companion object {
+        /**
+         * pairing.db, version by version (#193). [Schema] says what a version is, and how a database
+         * written by an earlier release is brought to [Schema.current] before it is served.
+         */
+        internal val SCHEMA = Schema(
+            "pairing.db",
+            listOf(
+                // Version 1: the structure as it stood when versions began to be kept.
+                listOf(
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS pairing_exchanges (
+                            exchange_id  TEXT    PRIMARY KEY,
+                            invite_id    TEXT    NOT NULL,
+                            rel_ref      TEXT    NOT NULL,
+                            sid          TEXT    NOT NULL,
+                            msg_a        TEXT    NOT NULL,
+                            msg_b        TEXT,
+                            state        TEXT    NOT NULL,
+                            created_at   INTEGER NOT NULL,
+                            responded_at INTEGER,
+                            expiry       INTEGER NOT NULL,
+                            env_to_owner TEXT,
+                            env_to_therapist TEXT
+                        )
+                        """.trimIndent(),
+                    ),
+                    // A database from before these columns existed has a pairing_exchanges table
+                    // without them, which CREATE TABLE IF NOT EXISTS leaves alone; they are added. A
+                    // reply stored before env_to_owner existed reads back with no envelope, and the
+                    // owner's client treats that as a reply without an offer; an approval stored before
+                    // env_to_therapist existed reads back the same way, and the clinician's client
+                    // treats it as an approval that proved no owner keys.
+                    SchemaChange.Column("pairing_exchanges", "env_to_owner", "TEXT"),
+                    SchemaChange.Column("pairing_exchanges", "env_to_therapist", "TEXT"),
+                    SchemaChange.Index("CREATE INDEX IF NOT EXISTS idx_pairing_invite ON pairing_exchanges(invite_id, created_at)"),
+                ),
+            ),
+        )
+
         /**
          * Eight, not eighty: an honest ceremony uses one exchange, a mistyped code a second,
          * a bad phone line maybe a third. The cap bounds what an owner token can grow the

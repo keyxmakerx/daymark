@@ -10,6 +10,7 @@ import {
   MEMBERSHIP_IS_NOT_READ_ACCESS,
   ADMIN_CANNOT_RESET_A_PASSPHRASE,
   NO_PATIENT_LIST,
+  NO_REAL_PATIENT_DATA_YET,
   PLACEHOLDERS,
   PLACEHOLDER_WORD,
   REMOVAL_DOES_NOT_END_A_RELATIONSHIP,
@@ -28,7 +29,17 @@ import {
   orgAuditSubjectLabel,
 } from './audit'
 import { roleById } from './roles'
-import type { OrgAuditEvent } from './client'
+import {
+  ACT_NOT_DONE,
+  ACT_NOT_KNOWN,
+  ROSTER_NOT_READ,
+  nothingChanged,
+  refusalHeading,
+  type OrgAuditEvent,
+  type PracticeFailure,
+  type RosterAct,
+} from './client'
+import { SHAPES, shapeById } from '../setup/shape'
 
 /*
  * ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -91,6 +102,7 @@ function codeOf(file: string): string {
 /** Every fixed sentence this console is obliged to say, as one corpus. */
 const COPY = [
   CONSOLE_LEDE,
+  NO_REAL_PATIENT_DATA_YET,
   CONSOLE_BUILD_STATE,
   MEMBERSHIP_IS_NOT_READ_ACCESS,
   REMOVAL_DOES_NOT_END_A_RELATIONSHIP,
@@ -154,7 +166,7 @@ describe('(a) the console never implies that membership is access', () => {
 
   it('renders the removal sentence at the removal, not in a manual', () => {
     expect(codeOf('RosterPanel.svelte')).toContain('REMOVAL_ENDS_A_MEMBERSHIP')
-    expect(codeOf('RosterPanel.svelte')).toContain('Confirm removal')
+    expect(codeOf('RosterPanel.svelte')).toContain('Remove from practice')
   })
 
   it('corrects the fired-clinician assumption at the same click (issue #91)', () => {
@@ -531,5 +543,177 @@ describe('(e) every screen the console names is mounted', () => {
     expect(CREATE_USES_THE_SERVER_TOKEN).toContain('confers no clinical read')
     expect(codeOf('CreatePracticePanel.svelte')).toContain('CREATE_USES_THE_SERVER_TOKEN')
     expect(codeOf('CreatePracticePanel.svelte')).toContain('createPractice(')
+  })
+})
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   The gate that still stands, on both surfaces that offer a practice (#333).
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+describe('both practice surfaces say no real patient’s data belongs on a practice server yet (#333)', () => {
+  const SENTENCE =
+    'Until this software has had its two outside security reviews, no real patient’s data belongs on a ' +
+    'practice server.'
+  const ENTRY = readFileSync(fileURLToPath(new URL('../components/setup/SetupEntry.svelte', import.meta.url)), 'utf8')
+  /** Markup with comments, script and style gone: what the two checks below read. */
+  const markup = (src: string) =>
+    src.replace(/<!--[\s\S]*?-->/g, '').replace(/<script[\s\S]*?<\/script>/g, '').replace(/<style[\s\S]*?<\/style>/g, '')
+
+  /** The console says it: its own plain paragraph, directly under the lede, above the first-pass note. */
+  const consoleSays = (src: string): boolean => {
+    const m = markup(src)
+    const lede = '<p class="lede">{CONSOLE_LEDE}</p>'
+    const own = '<p class="lede">{NO_REAL_PATIENT_DATA_YET}</p>'
+    const at = m.indexOf(lede)
+    const ownAt = m.indexOf(own)
+    const callout = m.indexOf('<Callout tone="info" title="First pass">')
+    return at >= 0 && ownAt >= 0 && m.slice(at + lede.length, ownAt).trim() === '' && callout > ownAt
+  }
+
+  /** The first-run choice says it: its own line, after the ranking and before the build note. */
+  const choiceSays = (src: string): boolean => {
+    const m = markup(src)
+    const ranking = m.indexOf('<p class="shape-ranking">{shape.ranking}</p>')
+    const hold = m.indexOf('{#if shape.holdNote}<p class="shape-hold">{shape.holdNote}</p>{/if}')
+    const built = m.indexOf('<p class="shape-built">{shape.buildNote}</p>')
+    return ranking >= 0 && hold > ranking && built > hold
+  }
+
+  it('is one sentence, exactly as decided', () => {
+    expect(NO_REAL_PATIENT_DATA_YET).toBe(SENTENCE)
+  })
+
+  it('the practice console says it under its lede, and the first-pass note stays below it', () => {
+    const console_ = componentSource.get('PracticeConsole.svelte')!
+    expect(codeOf('PracticeConsole.svelte')).toContain('NO_REAL_PATIENT_DATA_YET')
+    expect(consoleSays(console_)).toBe(true)
+    // Control: with the paragraph removed, the same check fails.
+    const removed = console_.replace('<p class="lede">{NO_REAL_PATIENT_DATA_YET}</p>', '')
+    expect(removed).not.toBe(console_)
+    expect(consoleSays(removed)).toBe(false)
+  })
+
+  it('the first-run Practice choice says it, and only Practice', () => {
+    expect(shapeById('practice').holdNote).toBe(SENTENCE)
+    expect(SHAPES.filter((s) => s.holdNote !== undefined).map((s) => s.id)).toEqual(['practice'])
+    expect(choiceSays(ENTRY)).toBe(true)
+    // Control: with the line removed, the same check fails.
+    const removed = ENTRY.replace('{#if shape.holdNote}<p class="shape-hold">{shape.holdNote}</p>{/if}', '')
+    expect(removed).not.toBe(ENTRY)
+    expect(choiceSays(removed)).toBe(false)
+  })
+
+  it('is a plain fact on both, never an alarm', () => {
+    // Neither render site sits inside a Callout, and the sentence carries no alarm of its own.
+    const consoleMarkup = markup(componentSource.get('PracticeConsole.svelte')!)
+    const own = consoleMarkup.indexOf('{NO_REAL_PATIENT_DATA_YET}')
+    const before = consoleMarkup.slice(0, own)
+    expect((before.match(/<Callout\b/g) ?? []).length).toBe((before.match(/<\/Callout>/g) ?? []).length)
+    const entryMarkup = markup(ENTRY)
+    const hold = entryMarkup.indexOf('{shape.holdNote}')
+    const upTo = entryMarkup.slice(0, hold)
+    expect((upTo.match(/<Callout\b/g) ?? []).length).toBe((upTo.match(/<\/Callout>/g) ?? []).length)
+    expect(SENTENCE).not.toMatch(/!|\bwarning\b|\bdanger\b|\bmust\b/i)
+    // Control: a Callout left open before the line is counted as one.
+    const wrapped = `<Callout tone="warn">${consoleMarkup.slice(0, own)}`
+    expect((wrapped.match(/<Callout\b/g) ?? []).length).toBeGreaterThan((wrapped.match(/<\/Callout>/g) ?? []).length)
+  })
+})
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   (f) The roster's removal confirm, and what a failed act is headed with (#401).
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+describe('(f) the roster spends clay on removal, and heads each failure with its outcome (#401)', () => {
+  /** The tone of the Callout that holds a given rendered expression, or null where none holds it. */
+  function toneAround(src: string, expression: string): string | null {
+    const code = src.replace(/<!--[\s\S]*?-->/g, '')
+    const at = code.indexOf(expression)
+    if (at < 0) return null
+    const open = code.lastIndexOf('<Callout', at)
+    if (open < 0 || code.lastIndexOf('</Callout>', at) > open) return null
+    return /^<Callout\b[^>]*?\btone="(\w+)"/.exec(code.slice(open))?.[1] ?? null
+  }
+
+  const ROSTER = componentSource.get('RosterPanel.svelte')!
+
+  it('draws the removal confirm in clay, the alarm hue for a destructive act, and not in amber', () => {
+    expect(toneAround(ROSTER, '{REMOVAL_ENDS_A_MEMBERSHIP}')).toBe('critical')
+    // Control: the same reading sees amber when amber is put back, and sees no Callout at all
+    // around a sentence that is outside one.
+    const amber = ROSTER.replace('<Callout tone="critical" title="Removing', '<Callout tone="warn" title="Removing')
+    expect(amber).not.toBe(ROSTER)
+    expect(toneAround(amber, '{REMOVAL_ENDS_A_MEMBERSHIP}')).toBe('warn')
+    expect(toneAround(ROSTER, '{MEMBERSHIP_IS_NOT_READ_ACCESS}')).toBeNull()
+  })
+
+  it('heads a failure with the outcome of the act that failed, never with one line for all', () => {
+    const code = codeOf('RosterPanel.svelte')
+    expect(code).toContain('title={refusalHeading(failedAct, failure)}')
+    // The one heading every failure used to share, which named two causes and no outcome.
+    const OLD = 'The server refused, or could not be reached'
+    expect(`<Callout tone="critical" title="${OLD}">`).toContain(OLD)
+    expect(code).not.toContain(OLD)
+  })
+
+  it('each write names its own act when it fails', () => {
+    const code = codeOf('RosterPanel.svelte')
+    const body = (fn: string) => {
+      const at = code.indexOf(`async function ${fn}(`)
+      const next = code.indexOf('async function ', at + 1)
+      return code.slice(at, next < 0 ? undefined : next)
+    }
+    expect(body('applyRole')).toContain("writeFailed('role', result.failure)")
+    expect(body('remove')).toContain("writeFailed('removal', result.failure)")
+    expect(body('acceptOwnSeat')).toContain("writeFailed('seat', result.failure)")
+    // Control: the slicing finds a function's own body and not its neighbour's.
+    expect(body('remove')).not.toContain("writeFailed('role'")
+  })
+
+  it('keeps a write’s failure on screen while the roster is read again beneath it', () => {
+    // A re-read that cleared the failure would leave a row that may have changed with nothing on
+    // screen saying why — which is what reading through read() did, since read() starts clean.
+    const code = codeOf('RosterPanel.svelte')
+    const at = code.indexOf('async function writeFailed(')
+    const writeFailed = code.slice(at, code.indexOf('\n  }\n', at))
+    expect(writeFailed).toContain('client.roster(orgId)')
+    expect(writeFailed).not.toMatch(/failure = null|await read\(\)/)
+    // Control: the detector sees the clearing re-read when it is put back.
+    expect(`${writeFailed}\n    await read()`).toMatch(/failure = null|await read\(\)/)
+    // And the sentence saying the roster was read again is shown only when it was.
+    expect(code).toContain('{#if rereadAfterFailure}')
+  })
+
+  it('says what did not happen, or that it is not known, for every act and every failure', () => {
+    const known: PracticeFailure = { kind: 'conflict', serverSaid: '' }
+    const lost: PracticeFailure = { kind: 'no-answer', detail: '' }
+    expect(nothingChanged(known)).toBe(true)
+    expect(nothingChanged(lost)).toBe(false)
+    const acts: RosterAct[] = ['role', 'removal', 'seat']
+    expect(acts.map((a) => refusalHeading(a, known))).toEqual([
+      'The role was not changed',
+      'The member was not removed',
+      'Your own seat was not accepted',
+    ])
+    expect(acts.map((a) => refusalHeading(a, lost))).toEqual([
+      'Whether the role was changed is not known from here',
+      'Whether the member was removed is not known from here',
+      'Whether your own seat was accepted is not known from here',
+    ])
+    // A read changes nothing, so it has one heading whatever the answer.
+    expect(refusalHeading('read', known)).toBe('The roster was not read')
+    expect(refusalHeading('read', lost)).toBe('The roster was not read')
+    // One heading per outcome: no two acts or outcomes share one.
+    const all = [ROSTER_NOT_READ, ...Object.values(ACT_NOT_DONE), ...Object.values(ACT_NOT_KNOWN)]
+    expect(new Set(all).size).toBe(all.length)
+  })
+
+  it('names no cause in any heading', () => {
+    // A heading says what happened to the act. Why the server answered as it did is not known
+    // here, and a guessed cause sends somebody after the wrong problem (COMPANION_UX.md §10.3).
+    const CAUSE = /\bbecause\b|\brefused\b|\bcould not be reached\b|\bdown\b|\boffline\b|\bwrong\b|\battack/i
+    expect(CAUSE.test('The server refused, or could not be reached')).toBe(true)
+    const all = [ROSTER_NOT_READ, ...Object.values(ACT_NOT_DONE), ...Object.values(ACT_NOT_KNOWN)]
+    expect(all.filter((h) => CAUSE.test(h))).toEqual([])
   })
 })

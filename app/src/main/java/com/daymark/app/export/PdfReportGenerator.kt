@@ -21,7 +21,7 @@ import kotlin.math.roundToInt
  * Renders a [ReportData] into a clinician-facing PDF using the platform [PdfDocument] + [Canvas]
  * (no third-party PDF dependency; text stays selectable/vector).
  *
- * **Four sides, one job each** (see `docs/PLAN_2026-08-NEXT.md` §1). The reconciliation of "fill the
+ * **Four sides, one job each** (see `docs/DECISIONS.md` §D8). The reconciliation of "fill the
  * page" with the alert-fatigue evidence is that the finding is about elements *competing in the same
  * glance*, not about page count. So the flag keeps its own zone at the top of side 1 and never shares
  * it; everything below and after may be dense, because a reader on side 2 has chosen to go looking.
@@ -104,7 +104,7 @@ class PdfReportGenerator @Inject constructor() {
         val sides = if (journalSide) 4 else 3
 
         ctx.sideOneGlance(data, options, sides)
-        ctx.sideTwoDetail(data, sides)
+        ctx.sideTwoDetail(data, options, sides)
         if (journalSide) ctx.sideThreeInTheirWords(data, sides)
         ctx.sideFourForTheConversation(data, options, sides)
 
@@ -117,6 +117,9 @@ class PdfReportGenerator @Inject constructor() {
 // Palette. Paper ink, deliberately monochrome apart from the mood ramp.
 // ---------------------------------------------------------------------------------------------
 
+// Every word is INK or SOFT: on the white page INK measures 14.88:1 and SOFT 5.77:1, over the 4.5:1
+// small text needs. FAINT, 2.72:1, is for marks only, never a word, as on screen (docs/DESIGN.md,
+// "The faint ink never carries words", #409). `ReportInkSourceTest` holds the report to both.
 private const val INK = 0xFF2A2722.toInt()
 private const val SOFT = 0xFF6B655B.toInt()
 private const val FAINT = 0xFFA49C8E.toInt()
@@ -144,7 +147,19 @@ private fun fmt1(v: Double) = String.format("%.1f", v)
 // audit caveats are not reworded, reflowed or "improved". Restyle the container, never the prose.
 // ---------------------------------------------------------------------------------------------
 
-private object Copy {
+/**
+ * Internal rather than private for one sentence: the export dialog prints [WHAT_A_REPORT_IS] from
+ * here, so the person is told what a report is in the report's own words, not in a second copy of
+ * them. Everything else in this object is printed by this file alone.
+ */
+internal object Copy {
+
+    /**
+     * What a report is, said on the export dialog before the person chooses anything about it. One
+     * sentence for every place a report is made (#336), so it lives with the report's fixed copy and
+     * the dialog reads it from here. It is not printed on the report itself.
+     */
+    const val WHAT_A_REPORT_IS = "A report is a copy. Once handed over, it cannot be taken back."
 
     const val FOOTER = "Daymark · self-reported data, not a clinical assessment"
 
@@ -179,10 +194,25 @@ private object Copy {
     const val NO_ENTRIES = "No entries in this range."
     const val NO_RESULTS = "No results in this range."
 
+    /**
+     * Beside a project step that is done, where a step not done has a plain point. A word and never a
+     * tick: a tick marks success, and the report lists what was done without grading it (`CLAUDE.md`
+     * §4, #278).
+     */
+    const val STEP_DONE = "done"
+
+    /** Printed under side 2's tables when check-in notes are on, to say what a note is. */
     const val NOTE_FIELD =
         "“Their note” is the one-line note attached to a check-in — a field that has always existed, " +
             "that they fill in knowing it is part of the check-in. It is not an excerpt lifted out of " +
             "their journal; the journal is side 3 and is a separate decision."
+
+    /**
+     * Printed in [NOTE_FIELD]'s place when check-in notes are off, which is the default (#336). Said
+     * in the form [PROMPTS_OFF] uses, so a choice the person made reads as a choice and never as a
+     * gap in what they logged.
+     */
+    const val NOTES_OFF = "Check-in notes were switched off for this export."
 
     const val COVERAGE_FIXED =
         "The gaps are gaps — nothing is interpolated, and no figure on side 1 is adjusted for them."
@@ -266,12 +296,17 @@ private object Copy {
             "cut-off — their bands are splits chosen for this app, and mean only what this person's " +
             "own history makes them mean."
 
+    /**
+     * What the document does not hold, printed on side 4. Every item on it is true whatever the
+     * person switched on or off.
+     *
+     * Streaks are not on the list: the app keeps none, so there is nothing to leave out, and a line
+     * saying the report carries none would itself be the mention the report never makes (#304).
+     */
     const val NOT_IN_REPORT =
         "Not in this report, and not obtainable from it. Location — the app collects none. Anything " +
             "written inside an exercise — those fields are excluded from sharing by construction, " +
-            "not by preference. Any journal entry not on side 3. Streak counts — this report " +
-            "carries none, since a streak reports adherence to the app rather than anything about " +
-            "the person. The app still shows them on the person's own screens."
+            "not by preference. Any journal entry not on side 3."
 
     /** The authenticity wording. Unchanged from the previous report; only its position moved. */
     const val AUTHENTICITY =
@@ -542,7 +577,7 @@ private class PageCtx(
         canvas.drawText(
             "SIDE ${s.index} OF ${s.of} · ${s.job.uppercase()} · ${Copy.CONTINUED}",
             margin, y + ReportLayout.CONTINUATION_BASELINE,
-            paint(7.5f, FAINT, bold = true).apply { letterSpacing = 0.1f },
+            paint(7.5f, SOFT, bold = true).apply { letterSpacing = 0.1f },
         )
         y += ReportLayout.CONTINUATION_RULE_LEAD
         canvas.drawLine(margin, y, pageW - margin, y, hairline)
@@ -565,7 +600,7 @@ private class PageCtx(
     }
 
     private fun drawFooter() {
-        val p = paint(7.5f, FAINT)
+        val p = paint(7.5f, SOFT)
         val ruleY = ReportLayout.footerRuleY(pageH)
         canvas.drawLine(margin, ruleY, pageW - margin, ruleY, hairline)
         val baseline = pageH - ReportLayout.FOOTER_TEXT_RISE
@@ -581,7 +616,7 @@ private class PageCtx(
 
     private fun sectionLabel(text: String) {
         ensure(ReportLayout.SECTION_LABEL_RESERVE)
-        canvas.drawText(text.uppercase(), margin, y + 8f, paint(8f, FAINT, bold = true).apply { letterSpacing = 0.08f })
+        canvas.drawText(text.uppercase(), margin, y + 8f, paint(8f, SOFT, bold = true).apply { letterSpacing = 0.08f })
         y += ReportLayout.SECTION_LABEL_H
     }
 
@@ -639,11 +674,11 @@ private class PageCtx(
         canvas.drawText(
             "SIDE $index OF $of · ${job.uppercase()}",
             margin, y + ReportLayout.HEADER_EYEBROW_BASELINE,
-            paint(7.5f, FAINT, bold = true).apply { letterSpacing = 0.1f },
+            paint(7.5f, SOFT, bold = true).apply { letterSpacing = 0.1f },
         )
         y += ReportLayout.HEADER_EYEBROW_ADVANCE
         canvas.drawText(title, margin, y + ReportLayout.HEADER_TITLE_BASELINE, paint(17f, INK, bold = true))
-        val mp = paint(8f, FAINT)
+        val mp = paint(8f, SOFT)
         meta.forEachIndexed { i, line ->
             canvas.drawText(
                 line,
@@ -671,11 +706,28 @@ private class PageCtx(
      * be left stranded over nothing at the foot of a page.
      */
     private fun tableHead(vararg cols: Pair<Float, String>) {
-        val hp = paint(7f, FAINT, bold = true).apply { letterSpacing = 0.06f }
+        val hp = paint(7f, SOFT, bold = true).apply { letterSpacing = 0.06f }
         cols.forEach { (x, label) -> canvas.drawText(label, x, y + 7f, hp) }
         y += 11f
         canvas.drawLine(margin, y, pageW - margin, y, hairline)
         y += 6f
+    }
+
+    /**
+     * The head of side 2's note column, or no column at all. With check-in notes off neither table
+     * has one (#336): a column of dashes would draw the person's own choice as a gap on every row.
+     */
+    private fun noteHead(notes: Boolean, x: Float): Array<Pair<Float, String>> =
+        if (notes) arrayOf(x to "THEIR NOTE") else emptyArray()
+
+    /**
+     * A row's lines in the note column: the note, or a dash for a check-in that has none. With notes
+     * off there is no column, so there are no lines, and nothing stands in for a note.
+     */
+    private fun noteText(notes: Boolean, note: String, p: Paint, width: Float): List<String> = when {
+        !notes -> emptyList()
+        note.isNotBlank() -> wrap(note, p, width)
+        else -> listOf("—")
     }
 
     /** Every instrument in this report, daily mood first, then each scored self-check. */
@@ -732,13 +784,13 @@ private class PageCtx(
             val dir = if (flag.below) "below" else "above"
             noteBox(
                 listOf(
-                    paint(8f, FAINT, bold = true) to Copy.FLAG_LABEL.uppercase(),
+                    paint(8f, SOFT, bold = true) to Copy.FLAG_LABEL.uppercase(),
                     paint(10f, INK, bold = true) to
                         "${flag.instrument} has moved $dir this person's own usual range.",
                     paint(8.5f, SOFT) to
                         "${flag.outside} of the last ${flag.window} results sit $dir the usual " +
                         "range for this period — the band drawn on the plot below.",
-                    paint(8f, FAINT) to Copy.FLAG_CAVEAT,
+                    paint(8f, SOFT) to Copy.FLAG_CAVEAT,
                 ),
             )
             return
@@ -746,9 +798,9 @@ private class PageCtx(
         val thin = instruments.all { it.band == null }
         noteBox(
             listOf(
-                paint(8f, FAINT, bold = true) to Copy.NO_FLAG_LABEL.uppercase(),
+                paint(8f, SOFT, bold = true) to Copy.NO_FLAG_LABEL.uppercase(),
                 paint(9.5f, INK) to (if (thin) Copy.NO_FLAG_THIN else Copy.NO_FLAG_BODY),
-                paint(8f, FAINT) to Copy.NO_FLAG_CAVEAT,
+                paint(8f, SOFT) to Copy.NO_FLAG_CAVEAT,
             ),
         )
     }
@@ -775,7 +827,7 @@ private class PageCtx(
 
         val np = paint(10f, INK, bold = true)
         canvas.drawText(inst.title, margin, y + 8f, np)
-        val tp = paint(7.5f, FAINT)
+        val tp = paint(7.5f, SOFT)
         canvas.drawText(inst.tier.label, margin + np.measureText(inst.title) + 8f, y + 8f, tp)
         val meta = "${inst.points.size} entries · ${inst.scaleLabel}"
         canvas.drawText(meta, pageW - margin - tp.measureText(meta), y + 8f, tp)
@@ -801,12 +853,12 @@ private class PageCtx(
             val half = maxOf((yFor(lo) - yFor(hi)) / 2f, 1f)
             val bandPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = BAND }
             canvas.drawRect(left, mid - half, right, mid + half, bandPaint)
-            val bl = paint(6.5f, FAINT)
+            val bl = paint(6.5f, SOFT)
             canvas.drawText(Copy.USUAL_RANGE, right - bl.measureText(Copy.USUAL_RANGE) - 2f, mid - half - 2.5f, bl)
         }
 
         // Gridlines, labelled with whatever the instrument calls those points on its scale.
-        val al = paint(6.5f, FAINT)
+        val al = paint(6.5f, SOFT)
         inst.axisLabels.forEach { (value, label) ->
             val gy = yFor(value)
             canvas.drawLine(left, gy, right, gy, hairline)
@@ -814,7 +866,7 @@ private class PageCtx(
         }
 
         if (inst.points.isEmpty()) {
-            canvas.drawText(Copy.NO_RESULTS, left + 6f, top + plotH / 2f, paint(8f, FAINT))
+            canvas.drawText(Copy.NO_RESULTS, left + 6f, top + plotH / 2f, paint(8f, SOFT))
         } else {
             val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = INK }
             val lastDay = (rangeDays - 1).coerceAtLeast(1)
@@ -828,7 +880,7 @@ private class PageCtx(
         }
 
         y = top + plotH + ReportLayout.PLOT_AXIS_GAP
-        val ax = paint(6.5f, FAINT)
+        val ax = paint(6.5f, SOFT)
         canvas.drawText(rangeStart.format(DAY_MONTH).uppercase(), left, y + 6f, ax)
         val endLabel = rangeEnd.format(DAY_MONTH).uppercase()
         canvas.drawText(endLabel, right - ax.measureText(endLabel), y + 6f, ax)
@@ -845,7 +897,7 @@ private class PageCtx(
                 canvas.drawRect(left + i * cw + 0.6f, y, left + (i + 1) * cw - 0.6f, y + densityH, cell)
             }
             y += densityH + ReportLayout.DENSITY_GAP
-            val dl = paint(6.5f, FAINT)
+            val dl = paint(6.5f, SOFT)
             canvas.drawText(Copy.DENSITY_LEFT, left, y + 5f, dl)
             canvas.drawText(Copy.DENSITY_RIGHT, right - dl.measureText(Copy.DENSITY_RIGHT), y + 5f, dl)
             y += ReportLayout.DENSITY_LABEL_H
@@ -881,7 +933,7 @@ private class PageCtx(
         cells.forEachIndexed { i, (label, value) ->
             val x = margin + i * cw
             canvas.drawText(value, x, y + 16f, paint(18f, INK, bold = true))
-            canvas.drawText(label.uppercase(), x, y + 30f, paint(6.5f, FAINT))
+            canvas.drawText(label.uppercase(), x, y + 30f, paint(6.5f, SOFT))
         }
         y += 42f
         distribution(data)
@@ -909,7 +961,7 @@ private class PageCtx(
 
     // ---- side 2 · the detail ----
 
-    fun sideTwoDetail(data: ReportData, of: Int) {
+    fun sideTwoDetail(data: ReportData, options: PdfExportOptions, of: Int) {
         sideHeader(
             index = 2,
             of = of,
@@ -923,14 +975,19 @@ private class PageCtx(
             },
         )
 
-        if (data.instrumentSeries.isNotEmpty()) resultsTable(data)
-        entriesTable(data)
-        noteBox(listOf(paint(8f, SOFT) to Copy.NOTE_FIELD))
+        // Check-in notes are the person's own words and print only when they switched them on
+        // (#336). Off, neither table has a note column, and the box that would explain what a note
+        // is says that they were switched off instead.
+        val notes = options.includeNotes
+        if (data.instrumentSeries.isNotEmpty()) resultsTable(data, notes)
+        entriesTable(data, notes)
+        val noteSentence = if (notes) Copy.NOTE_FIELD else Copy.NOTES_OFF
+        noteBox(listOf(paint(8f, SOFT) to noteSentence))
 
         suggestions(data)
         projects(data)
         if (data.assignmentOutcomes.isEmpty() && data.projects.isEmpty()) {
-            noteBox(listOf(paint(8f, FAINT) to Copy.NOT_RECORDED_YET))
+            noteBox(listOf(paint(8f, SOFT) to Copy.NOT_RECORDED_YET))
         }
 
         if (data.activityStats.isNotEmpty()) activityTable(data)
@@ -939,7 +996,7 @@ private class PageCtx(
     }
 
     /** Every self-check result behind the plots, newest first. */
-    private fun resultsTable(data: ReportData) {
+    private fun resultsTable(data: ReportData, notes: Boolean) {
         val rows = data.instrumentSeries
             .flatMap { s -> s.points.map { s to it } }
             .sortedByDescending { it.second.date }
@@ -954,7 +1011,7 @@ private class PageCtx(
         val head = {
             tableHead(
                 colDate to "DATE", colTool to "TOOL", colScore to "SCORE",
-                colBand to "BAND", colNote to "THEIR NOTE",
+                colBand to "BAND", *noteHead(notes, colNote),
             )
         }
         ensure(ReportLayout.TABLE_START_RESERVE)
@@ -963,7 +1020,7 @@ private class PageCtx(
         val body = paint(8.5f, INK)
         val soft = paint(8f, SOFT)
         rows.forEach { (series, point) ->
-            val noteLines = if (point.note.isNotBlank()) wrap(point.note, body, noteW) else listOf("—")
+            val noteLines = noteText(notes, point.note, body, noteW)
             val rowH = (noteLines.size * 11f + 7f).coerceAtLeast(17f)
             if (ensure(rowH)) head()
             canvas.drawText(point.date.format(DAY_MONTH), colDate, y + 8f, body)
@@ -982,7 +1039,7 @@ private class PageCtx(
     }
 
     /** Every daily check-in, newest first — a clinician scanning recent state reads that way. */
-    private fun entriesTable(data: ReportData) {
+    private fun entriesTable(data: ReportData, notes: Boolean) {
         sectionLabel("Daily check-ins (${data.entries.size})")
         val colDate = margin
         val colTime = margin + 82f
@@ -990,10 +1047,19 @@ private class PageCtx(
         val colBand = margin + 168f
         val colNote = margin + 236f
         val noteW = pageW - margin - colNote
+        // The fifth column holds a check-in's note with its activity tags under it. With notes off
+        // it holds the tags alone, so it is headed for them, and a range with no tags has no fifth
+        // column at all. The tags print either way: switching notes off leaves out notes only.
+        val tagsHead: Array<Pair<Float, String>> =
+            if (!notes && data.entries.any { it.activityNames.isNotEmpty() }) {
+                arrayOf(colNote to "ACTIVITY TAGS")
+            } else {
+                emptyArray()
+            }
         val head = {
             tableHead(
                 colDate to "DATE", colTime to "TIME", colScore to "SCORE",
-                colBand to "BAND", colNote to "THEIR NOTE",
+                colBand to "BAND", *noteHead(notes, colNote), *tagsHead,
             )
         }
 
@@ -1001,7 +1067,7 @@ private class PageCtx(
         head()
 
         if (data.entries.isEmpty()) {
-            canvas.drawText(Copy.NO_ENTRIES, margin, y + 8f, paint(8.5f, FAINT))
+            canvas.drawText(Copy.NO_ENTRIES, margin, y + 8f, paint(8.5f, SOFT))
             y += 18f
             return
         }
@@ -1009,7 +1075,7 @@ private class PageCtx(
         val body = paint(8.5f, INK)
         val soft = paint(8f, SOFT)
         data.entries.sortedByDescending { it.dateTime }.forEach { e ->
-            val noteLines = if (e.note.isNotBlank()) wrap(e.note, body, noteW) else listOf("—")
+            val noteLines = noteText(notes, e.note, body, noteW)
             val actLines: List<String> = if (e.activityNames.isNotEmpty()) {
                 wrap(e.activityNames.joinToString(" · "), soft, noteW)
             } else {
@@ -1030,8 +1096,11 @@ private class PageCtx(
                 canvas.drawText(ln, colNote, ny + 8f, body)
                 ny += 11f
             }
+            // Under a note the tags sit a point higher. With notes off they are the column's first
+            // line, so they share the row's baseline.
+            val tagDrop = if (noteLines.isEmpty()) 8f else 7f
             actLines.forEach { ln ->
-                canvas.drawText(ln, colNote, ny + 7f, soft)
+                canvas.drawText(ln, colNote, ny + tagDrop, soft)
                 ny += 10f
             }
 
@@ -1100,6 +1169,8 @@ private class PageCtx(
         val title = paint(9.5f, INK, bold = true)
         val soft = paint(8f, SOFT)
         val step = paint(8.5f, INK)
+        // Every step's title starts clear of the word a done step carries, so the titles line up.
+        val stepTitleX = margin + 8f + soft.measureText(Copy.STEP_DONE) + 6f
         data.projects.forEach { p ->
             ensure(ReportLayout.PROJECT_HEAD_RESERVE)
             canvas.drawText(p.title, margin, y + 8f, title)
@@ -1113,8 +1184,8 @@ private class PageCtx(
             }
             p.steps.forEach { s ->
                 ensure(ReportLayout.PROJECT_STEP_H)
-                canvas.drawText(if (s.done) "✓" else "·", margin + 8f, y + 8f, soft)
-                canvas.drawText(s.title, margin + 22f, y + 8f, step)
+                canvas.drawText(if (s.done) Copy.STEP_DONE else "·", margin + 8f, y + 8f, soft)
+                canvas.drawText(s.title, stepTitleX, y + 8f, step)
                 y += ReportLayout.PROJECT_STEP_H
             }
             // Guarded: the last step can finish flush against the content limit, and an
@@ -1210,7 +1281,7 @@ private class PageCtx(
         noteBox(listOf(paint(8.5f, SOFT) to optIn))
 
         val titleP = paint(10f, INK, bold = true)
-        val metaP = paint(7.5f, FAINT)
+        val metaP = paint(7.5f, SOFT)
         val bodyP = paint(9f, INK)
         data.journal.sortedByDescending { it.dateTime }.forEach { j ->
             ensure(ReportLayout.JOURNAL_ENTRY_RESERVE)
@@ -1242,7 +1313,7 @@ private class PageCtx(
             } else {
                 "The other $withheld entries are not here and are not summarised."
             }
-            noteBox(listOf(paint(8f, FAINT) to "$lead ${Copy.JOURNAL_ABSENT_TAIL}"))
+            noteBox(listOf(paint(8f, SOFT) to "$lead ${Copy.JOURNAL_ABSENT_TAIL}"))
         }
     }
 
@@ -1264,7 +1335,7 @@ private class PageCtx(
 
         discussionPrompts(data, options)
         provenance(data, options)
-        noteBox(listOf(paint(8f, FAINT) to Copy.NOT_IN_REPORT))
+        noteBox(listOf(paint(8f, SOFT) to Copy.NOT_IN_REPORT))
         verification(data)
     }
 
@@ -1293,7 +1364,7 @@ private class PageCtx(
                 y += 5f
             }
         }
-        noteBox(listOf(paint(8f, FAINT) to Copy.PROMPTS_CAVEAT))
+        noteBox(listOf(paint(8f, SOFT) to Copy.PROMPTS_CAVEAT))
     }
 
     /** What every tool in this report is, tool by tool, before anyone acts on a number from it. */
@@ -1384,7 +1455,7 @@ private class PageCtx(
         noteBox(
             listOf(
                 paint(8f, SOFT) to (if (allCustom) Copy.PROVENANCE_ALL_CUSTOM else Copy.PROVENANCE_MIXED),
-                paint(8f, FAINT) to Copy.CUSTOM_DISCLAIMER,
+                paint(8f, SOFT) to Copy.CUSTOM_DISCLAIMER,
             ),
         )
     }
@@ -1396,7 +1467,7 @@ private class PageCtx(
      */
     private fun verification(data: ReportData) {
         val qrSize = 90f
-        val textP = paint(8f, FAINT)
+        val textP = paint(8f, SOFT)
         val hashP = paint(7.5f, SOFT)
         val textLeft = margin + qrSize + 14f
         val textW = pageW - margin - textLeft

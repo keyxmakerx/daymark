@@ -5,15 +5,16 @@ import com.goterl.lazysodium.interfaces.Hash
 import com.goterl.lazysodium.interfaces.Ristretto255
 
 /**
- * Daymark Companion — CPace, the balanced PAKE for pairing (plan §3.7). Kotlin mirror of
- * `companion/web/src/lib/pairing/cpace.ts`; that file's header carries the design rationale.
+ * Daymark Companion — CPace, the balanced PAKE for pairing (`docs/COMPANION_PAIRING.md` §3). Kotlin
+ * mirror of `companion/web/src/lib/pairing/cpace.ts`; that file's header carries the design
+ * rationale.
  *
  * CPACE-RISTRETTO255-SHA512, implemented directly against draft-irtf-cfrg-cpace and pinned
  * byte-for-byte to the CFRG working group's published test vectors in CpaceCryptoTest. The
  * TypeScript side is pinned to the same vectors, so the two implementations agree with each
  * other transitively — neither side is the reference for the other, the standard is the
- * reference for both. That agreement is gate 0.2 of the plan: a JVM party (the phone,
- * eventually) and a browser party derive the same key from the same short human code.
+ * reference for both. That agreement is what `docs/COMPANION_PAIRING.md` §3 rests on: a JVM party
+ * (the phone, eventually) and a browser party derive the same key from the same short human code.
  *
  * Like the TS side, this needed lazysodium's Ristretto255 binding, which exists on the JVM
  * only from lazysodium-java 5.2.0 (the 5.1.0 artifact had none — the finding that reopened
@@ -22,7 +23,7 @@ import com.goterl.lazysodium.interfaces.Ristretto255
  * WRONG CODE ≠ ERROR: a mismatched code yields two different ISKs and no signal here. The
  * mismatch surfaces as an AEAD failure at the next layer, where a human decides what it means
  * — a wrong code is indistinguishable from an attacker's guess BY CONSTRUCTION, which is why
- * it must never burn an invite by itself (plan §3.9.1).
+ * it must never burn an invite by itself (`docs/COMPANION_PAIRING.md` §6, §7).
  *
  * [sodium] is typed as the shared abstract [LazySodium] for the same reason SyncCrypto's is:
  * host tests run LazySodiumJava, the phone runs LazySodiumAndroid, and this class cannot tell.
@@ -104,8 +105,8 @@ class CpaceCrypto(private val sodium: LazySodium) {
     /**
      * ISK = SHA-512( lv_cat(DSI_ISK, sid, K) || transcript_ir ), transcript_ir being
      * MSGa || MSGb — the initiator/responder ordering. Our flow always has distinguishable
-     * roles (the owner initiates, plan §3.10), so the parallel-execution ("oc") transcript
-     * variant is deliberately not implemented.
+     * roles (the owner initiates, `docs/COMPANION_PAIRING.md` §3), so the parallel-execution ("oc")
+     * transcript variant is deliberately not implemented.
      */
     private fun deriveIsk(sid: ByteArray, k: ByteArray, msgA: ByteArray, msgB: ByteArray): ByteArray =
         sha512(lvCat(DSI_ISK, sid, k) + msgA + msgB)

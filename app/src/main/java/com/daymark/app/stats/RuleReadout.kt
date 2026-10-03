@@ -3,13 +3,12 @@ package com.daymark.app.stats
 /**
  * The timing layer, described to itself — what a debug screen shows, as plain data.
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §5 asks for a debug-only screen carrying, per feature:
- * the rule, what it reads, its current values, whether it would fire now and if not why, the offers
- * made and how they were answered, how much the gate is holding back, the timing grid, and the
- * phrase pool. This file is all of that as data, so the screen never reaches into [InterruptionBudget]
- * or [TimingGrid] internals and the description cannot drift from the behaviour: every number here
- * is produced by calling the real functions with the real arguments, never by restating their rules
- * in a string.
+ * `docs/FEATURES.md` §13.4 describes a debug-only screen carrying, per feature: the rule, what it
+ * reads, its current values, whether it would fire now and if not why, the offers made and how they
+ * were answered, how much the gate is holding back, the timing grid, and the phrase pool. This file
+ * is all of that as data, so the screen never reaches into [InterruptionBudget] or [TimingGrid]
+ * internals and the description cannot drift from the behaviour: every number here is produced by
+ * calling the real functions with the real arguments, never by restating their rules in a string.
  *
  * ## What it is, and what it must never become
  *
@@ -23,7 +22,7 @@ package com.daymark.app.stats
  * It follows that [Hold] is a **closed list of five fixed sentences**, not a free string. A "why
  * not" the engine could compose is a "why not" that could one day say something about the person.
  *
- * `docs/DECISIONS_2026-08.md` §D2 — the gate has no user-facing name and no persona. What is named
+ * `docs/DECISIONS.md` §D2 — the gate has no user-facing name and no persona. What is named
  * here are the *features*, which already have names; the thing underneath them is "the rule".
  *
  * Pure and Android-free like the rest of `stats/`: no clock, no persistence. The caller supplies
@@ -169,8 +168,9 @@ object RuleReadout {
     }
 
     /**
-     * How much quieter the rule is being than the person asked for — the §5 line "how much the gate
-     * is holding back", which is the number that says whether reception is doing anything at all.
+     * How much quieter the rule is being than the person asked for — the `docs/FEATURES.md` §13.4
+     * line "how much the gate is holding back", which is the number that says whether reception is
+     * doing anything at all.
      */
     fun heldBackLabel(declaredGapMillis: Long, effectiveGapMillis: Long): String = when {
         declaredGapMillis >= InterruptionBudget.NEVER_GAP_MILLIS -> "Nothing — you set it to never"

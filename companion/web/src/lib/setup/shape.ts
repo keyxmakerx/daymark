@@ -13,12 +13,12 @@
  *
  *     what is this machine for?
  *
- * docs/PLAN_2026-08-COMPANION-NEXT.md §3.11 names three answers and they are not variations of
- * one product. Solo and Paired are one product with a flag — same trust model, same threat model,
- * one clinician switched on. Practice INVERTS the arrangement the product exists to offer (§3.11.3):
- * the clinic owns the machine and the person is a tenant on it, which is a different posture, not
- * a bigger one. A screen that asks the question once, records the answer, and then gets out of the
- * way is the smallest honest way to hold that distinction.
+ * docs/COMPANION_ARCHITECTURE.md §2 names three answers: one product in three shapes (#288), and
+ * not three sizes of it. Solo and Paired share a trust model and a threat model; Paired adds the
+ * clinicians the person invites. Practice INVERTS the arrangement the product exists to offer (the
+ * same section): the clinic owns the machine and the person is a tenant on it, which is a
+ * different posture, not a bigger one. A screen that asks the question once, records the answer,
+ * and then gets out of the way is the smallest honest way to hold that distinction.
  *
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  * WHAT THE OPENING SENTENCES ARE ALLOWED TO CLAIM, AND WHAT THEY ARE NOT
@@ -32,9 +32,9 @@
  * Two claims are deliberately NOT made, and both are the kind of claim a setup screen reaches for
  * without noticing:
  *
- *   NOT "your journal is safe here". §3.11.1 is blunt about what this actually is — one disk, and
- *   nothing backing it up. Calling a single unreplicated copy safe is the sentence someone would
- *   remember on the day the disk dies.
+ *   NOT "your journal is safe here". COMPANION_ARCHITECTURE.md §1 is blunt about what this
+ *   actually is — one disk, and nothing backing it up. Calling a single unreplicated copy safe is
+ *   the sentence someone would remember on the day the disk dies.
  *
  *   NOT "you can get it back if you lose your phone". The recovery property is real (the key
  *   derives from the passphrase alone, nothing is bound to the handset — SyncCrypto.kt) and it is
@@ -74,6 +74,7 @@
  * would otherwise have to write the same try/catch.
  */
 import { OWNER_ROUTES, type OwnerRouteId } from '../onboarding/audience'
+import { NO_REAL_PATIENT_DATA_YET } from '../practice/copy'
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
    1. The three shapes.
@@ -117,7 +118,10 @@ export interface DeploymentShape {
   id: ShapeId
   /** Names the shape and, in the same breath, who is on it. A bare "Solo" answers nothing. */
   label: string
-  /** Who owns the machine and whose data is on it — §3.11.2's table, in one line. */
+  /**
+   * Who owns the machine and whose data is on it — COMPANION_ARCHITECTURE.md §2's table, in one
+   * line.
+   */
   arrangement: string
   /** What choosing it gets you, in one sentence. */
   summary: string
@@ -128,6 +132,12 @@ export interface DeploymentShape {
    * server for themselves.
    */
   ranking: string
+  /**
+   * A standing fact with its own expiry, said on its own line between the ranking and the build
+   * note, so it can come out on its own day. Only Practice has one: no real patient's data belongs
+   * on a practice server before the outside reviews (#333), in the practice console's own words.
+   */
+  holdNote?: string
   buildState: BuildState
   /** What is and is not built for this shape, said plainly, at the point of choosing it. */
   buildNote: string
@@ -150,19 +160,22 @@ export const SHAPES: readonly DeploymentShape[] = [
     primary: 'file',
   },
   {
+    /* A person may invite more than one clinician (#288), so no line here says "one clinician":
+       the label follows the masthead's Paired tagline, and the summary and ranking say "a
+       clinician", which counts nobody. */
     id: 'paired',
-    label: 'Paired — you, and one clinician',
+    label: 'Paired — you and the clinicians you invite',
     arrangement:
-      'You still run the machine and the journal is still yours. One clinician you invite is ' +
+      'You still run the machine and the journal is still yours. The clinicians you invite are ' +
       'shown the slices you pick, and you can withdraw that at any time.',
     summary:
-      'Everything Solo does, plus an invitation you mint for one clinician, whose key you check ' +
-      'and pin before anything is shared.',
-    ranking: 'Choose this if you are showing some of your own journal to one clinician.',
+      'Everything Solo does, plus sharing chosen parts of your journal with a clinician, once you ' +
+      'have checked their key together.',
+    ranking: 'Choose this if a clinician will read some of your journal.',
     buildState: 'built',
     buildNote:
-      'The pairing path is wired: you mint the invitation, they accept it on the therapist page, ' +
-      'and you confirm their key fingerprint and pin it before any share goes out.',
+      'The pairing path is wired: you mint the invitation, they accept it on the clinician ' +
+      'console, and you confirm their key fingerprint and pin it before any share goes out.',
     primary: 'owner',
   },
   {
@@ -177,6 +190,7 @@ export const SHAPES: readonly DeploymentShape[] = [
     ranking:
       'More work to run, and it makes a personal backup no better. Only pick it if a clinic ' +
       'runs this machine for other people.',
+    holdNote: NO_REAL_PATIENT_DATA_YET,
     buildState: 'separate-page',
     buildNote:
       'Administering a practice happens on its own page in this build, not on this one — the same ' +
@@ -228,10 +242,11 @@ export const SETUP_LEDE =
  * The two facts that are not allowed to be softened, stated as facts rather than as warnings —
  * a callout here would read as an alarm about something that is simply how it works.
  *
- * "One copy, on one disk" is §3.11.1's other half. "Nobody can open it without the passphrase"
- * is the same sentence from the other side, and is the reason this machine can be run by someone
- * who does not trust whoever hosts it. Neither is reassurance and neither is a promise: the first
- * says what would be lost with the disk, the second says who cannot help you if the passphrase is.
+ * "One copy, on one disk" is the other half of COMPANION_ARCHITECTURE.md §1. "Nobody can open it
+ * without the passphrase" is the same sentence from the other side, and is the reason this machine
+ * can be run by someone who does not trust whoever hosts it. Neither is reassurance and neither is
+ * a promise: the first says what would be lost with the disk, the second says who cannot help you
+ * if the passphrase is.
  */
 export const SETUP_LIMITS =
   'One copy on one disk here, and nothing copies it elsewhere. Lose the disk and it is gone. ' +
@@ -252,12 +267,12 @@ export const CHOICE_IS_REVERSIBLE =
 /**
  * WHY THE CHOICE IS REMEMBERED IN THIS BROWSER AND NOT ON THE SERVER.
  *
- * The server has a place for this — it is the configuration flag §5 below reads — and putting it
- * there would make the answer follow a person to every browser they open the page in. It is also
- * a decision that would then need an authenticated way to change it, on a page that has no
- * sign-in, from a bundle any visitor can load. The whole of what is stored is one entry naming
- * one of three words, so a shared machine learns that someone here opened Daymark and picked a
- * shape — which the browser's own history already says more loudly.
+ * The server has a place for this — the setting its operator chooses, which /v1/config publishes
+ * and §4 below reads — and writing the answer there would make it follow a person to every browser
+ * they open the page in. It is also a decision that would then need an authenticated way to
+ * change it, on a page that has no sign-in, from a bundle any visitor can load. The whole of what
+ * is stored is one entry naming one of three words, so a shared machine learns that someone here
+ * opened Daymark and picked a shape — which the browser's own history already says more loudly.
  */
 export const WHAT_IS_REMEMBERED =
   'The answer is kept in this browser only — one entry holding one of three words, no name, no ' +
@@ -304,18 +319,23 @@ export function configuredHowToChange(): string {
 }
 
 /**
- * PLACEHOLDER, and marked as one on the page.
+ * WHY THIS PAGE ASKS, for whoever opens the fold to find out whether configuration answers this.
  *
- * The server in this build publishes no setup mode. Adding the field is a one-line change to
- * ServerConfigDto in Application.kt and it was deliberately not made here — another agent owns
- * that file this week, and a merge conflict in the config endpoint is a worse outcome than a
- * screen that reads a field which is not there yet. The read path is written and live: the moment
- * the field exists, this screen stops asking, with no further change on this side.
+ * The server publishes [CONFIG_FIELD] only when its operator chose a shape with [CONFIG_SETTING]
+ * (#330). With none chosen it still assumes a shape, from its older switch, and publishes nothing:
+ * an assumed shape is not the operator's answer, so the page asks. The fold is shown for `absent`
+ * and for `unreachable` alike, and its first sentence gives the reason `absent` means.
+ *
+ * The rest says how the answer becomes the server's: set once, where the server starts. It says
+ * "a browser that has not already answered", not "every browser", because a browser already
+ * holding an answer does not read [CONFIG_PATH] until its question is reopened
+ * ([CONFIGURATION_IS_NOT_RE_READ]).
  */
-export const CONFIG_NOT_PUBLISHED_YET =
-  `Placeholder: this server publishes no ${CONFIG_FIELD}, so this page asked instead. ` +
-  `This screen reads ${CONFIG_PATH} for that field while this question is open, and will stop ` +
-  'asking as soon as one is there. Nothing is being guessed in the meantime.'
+export const NO_SHAPE_PUBLISHED =
+  'This page asks because the server has not been told its shape. Whoever runs the server can ' +
+  `tell it once, by starting it with ${CONFIG_SETTING} set to the shape it should have — solo, ` +
+  'paired or practice. After that the server publishes the shape and a browser that has not ' +
+  'already answered will not ask.'
 
 /**
  * THE LIMIT ON THE PRECEDENCE ABOVE, SAID ON THE PAGE RATHER THAN ONLY IN A COMMENT.
@@ -446,15 +466,19 @@ export const PRACTICE_ROLE_NOTE =
   'authoritative here.'
 
 /**
- * The unanswered question from §3.11.3, on the screen rather than in a plan document. It is the
- * gate on Practice being responsible to build at all, and someone standing one up should meet it
- * before they have staff depending on the answer.
+ * Who can reset a forgotten passphrase, and the answer COMPANION_PAIRING.md §12 records (#100):
+ * nobody. On the screen rather than in a document, because it is the gate on Practice being
+ * responsible to build at all, and someone standing one up should meet it — and the cost of a lost
+ * passphrase, which they should plan for — before they have staff depending on the answer. Stated
+ * as settled (#313), in the same facts as the clinician's own passphrase screen
+ * (therapist/inviteAccept.ts) and the practice console (practice/copy.ts).
  */
-export const PRACTICE_OPEN_QUESTION =
-  'One question is still open, and it is the one that decides whether a practice server can be ' +
-  'run honestly: who can reset a forgotten passphrase? Today nobody can, which is what keeps the ' +
-  'server unable to read anything. Every convenient answer to it means the practice can read the ' +
-  'journals, and that has to be decided in the open rather than discovered later.'
+export const PRACTICE_FORGOTTEN_PASSPHRASE =
+  'Nobody can reset a forgotten passphrase: not the person who invited a clinician, not a practice ' +
+  'administrator, and not whoever runs this server. It never reaches the server, which is what ' +
+  'keeps the server unable to read anything. Any way of resetting it would mean the practice can ' +
+  'read the journals. A clinician who loses theirs keeps their seat and loses what was shared with ' +
+  'them; each patient invites them again.'
 
 /** Every heading, button and label the screen renders. Here so the copy tests reach all of it. */
 export const LABELS = {
@@ -463,8 +487,8 @@ export const LABELS = {
   changeShape: 'Change what this machine is for',
   configured: 'Set by configuration',
   configuredBadValue: 'Configuration was not understood',
-  /* The folded disclosure on the first-run screen. NOT 'Set by configuration': on this build it
-     opens onto a note saying the server publishes no setup mode, and a summary claiming the
+  /* The folded disclosure on the first-run screen. NOT 'Set by configuration': it is shown only
+     while the page is asking, and opens onto NO_SHAPE_PUBLISHED, so a summary claiming the
      opposite would be the one line on the screen that is untrue. */
   configurationSays: 'Whether configuration answers this',
   /* The two reasons somebody is being asked that are not "you have not been here before". The
@@ -486,8 +510,11 @@ export const LABELS = {
   practiceWhatExists: 'What exists on the server',
   practiceWhatIsMissing: 'What this panel is',
   practiceWhereItHappens: 'Where a practice is administered',
-  practiceOpenQuestion: 'The question this shape has not answered',
-  /** The anchor out to the fourth page. Sibling-scoped, so it resolves under any base path. */
+  practiceForgottenPassphrase: 'A forgotten passphrase',
+  /**
+   * The anchor out to the fourth page. Sibling-scoped, so it resolves under any base path. Linked
+   * only when a published shape serves that page, or none was published (lib/setup/pages.ts).
+   */
   practiceConsoleHref: './practice.html',
   openPractice: 'Open the practice console',
   /** Brings the panel back after a returning person has navigated away from it. */
@@ -628,7 +655,10 @@ export type ConfigState =
   | { kind: 'reading' }
   /** No answer at all — nothing there, wrong shape, or the request never landed. */
   | { kind: 'unreachable' }
-  /** Answered, and carries no setup mode. The expected state on this build; see the placeholder. */
+  /**
+   * Answered, and carries no setup mode: the operator chose none, so the server assumed one and
+   * published nothing (#330), or the server predates the setting. See [NO_SHAPE_PUBLISHED].
+   */
   | { kind: 'absent' }
   /** Answered with something that is not one of the three. */
   | { kind: 'unrecognised'; value: string }
@@ -661,6 +691,18 @@ export function readSetupMode(body: string | null): ConfigState {
   if (typeof value !== 'string') return { kind: 'unrecognised', value: String(value) }
   if (!isShapeId(value)) return { kind: 'unrecognised', value }
   return { kind: 'set', shape: value }
+}
+
+/**
+ * The shape the server published, or null when this page has read none.
+ *
+ * Only `set` counts. `absent` and `unreachable` carried no shape; `unrecognised` carried a word
+ * this build does not know, which says nothing about which pages the server serves; and `reading`
+ * is also the state of every load that made no request because this browser already held an
+ * answer. What a published shape lets the owner's page link is lib/setup/pages.ts.
+ */
+export function publishedShape(config: ConfigState): ShapeId | null {
+  return config.kind === 'set' ? config.shape : null
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════

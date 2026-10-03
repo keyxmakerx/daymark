@@ -28,17 +28,15 @@ import org.junit.Test
  * [theRestOfVersionEighteen] names the remainder exactly, so the pair is still a closed account of
  * what v18 does. [TimedOfferSchemaTest] makes the mirror-image claim.
  *
- * **The v18 schema JSON is deliberately absent from this branch.** It has to be Room's own export,
- * `identityHash` included, and there is no Android SDK on the machine this was written on. CI's
- * drift check regenerates it and prints it in full; it is committed from there. A hand-written one
- * is precisely the failure that step was rebuilt to catch, so this test asserts the migration
- * against the entities and makes no claim about the JSON.
+ * **The v18 schema JSON is Room's own export** (`18.json`), `identityHash` included, never a
+ * hand-written one: a hand-written one is precisely the failure CI's drift check was rebuilt to
+ * catch. This test asserts the migration against the entities and makes no claim about the JSON.
  *
  * ## The third part is the one worth reading
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2: *"**Never in any rule that reads mood.**
- * Correlations, patterns and the cards they produce cannot receive a person or a community, groups
- * included, enforced by signature the way the Sky's field is kept blind to data."*
+ * `docs/FEATURES.md` §11.2: *"**Never in any rule that reads mood.** Correlations, patterns and the
+ * cards they produce cannot receive a person or a community, groups included. This is enforced by
+ * shape, not by convention."*
  *
  * The part of that this layer can hold is that **no query in `data/` returns a person and a mood
  * together**. `entry_people` is read through `EntryPersonDao`, every method of which returns ids or
@@ -46,9 +44,9 @@ import org.junit.Test
  * [thePeopleLayerNeverNamesMood] asserts that as an absence, with a planted positive control on
  * each side so it cannot pass by being blind.
  *
- * What this test does **not** prove is the other half: `MoodCorrelations.factorDeltas` takes
- * `List<Long>`, so a person id still fits through its signature. That fix belongs in `stats/`, and
- * `PeopleRepository`'s header says exactly what it is.
+ * What this test does **not** prove is the other half, which `stats/` holds:
+ * `MoodCorrelations.factorDeltas` takes a `FactorId` that only an activity or a tracker can make,
+ * so a person id does not fit through its signature.
  */
 class PeopleSchemaTest {
 

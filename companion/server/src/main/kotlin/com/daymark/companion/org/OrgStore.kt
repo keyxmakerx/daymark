@@ -1,10 +1,11 @@
 package com.daymark.companion.org
 
 import com.daymark.companion.auth.Secrets
+import com.daymark.companion.storage.Schema
+import com.daymark.companion.storage.SchemaChange
 import java.nio.file.Files
 import java.nio.file.Path
 import java.sql.Connection
-import java.sql.DriverManager
 
 /** A practice. Structure and metadata only — the server is multi-tenant and blind. */
 data class Org(val orgId: String, val name: String, val createdAt: Long)
@@ -140,46 +141,14 @@ class OrgStore(
 
     init {
         Files.createDirectories(root)
-        Class.forName("org.sqlite.JDBC")
-        conn = DriverManager.getConnection("jdbc:sqlite:${root.resolve("org.db")}")
+        conn = SCHEMA.open(root)
         conn.createStatement().use { st ->
-            st.execute("PRAGMA journal_mode=WAL")
             st.execute("PRAGMA synchronous=NORMAL")
             // SQLite disables foreign keys by default, per connection, silently. Without this line
-            // the REFERENCES clause below is documentation rather than a constraint and a
+            // the REFERENCES clause in [SCHEMA] is documentation rather than a constraint and a
             // membership row can name a practice that was never created. It is set here, at open,
             // because there is no other place it can be set that every statement inherits.
             st.execute("PRAGMA foreign_keys=ON")
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS orgs (
-                    org_id     TEXT    NOT NULL PRIMARY KEY,
-                    name       TEXT    NOT NULL,
-                    created_at INTEGER NOT NULL
-                )
-                """.trimIndent(),
-            )
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS org_members (
-                    member_ref TEXT    NOT NULL PRIMARY KEY,
-                    org_id     TEXT    NOT NULL REFERENCES orgs(org_id),
-                    member_id  TEXT    NOT NULL,
-                    role       TEXT    NOT NULL,
-                    added_at   INTEGER NOT NULL,
-                    added_by   TEXT    NOT NULL,
-                    -- 0 until the person themselves accepts the seat. DEFAULT 0 rather than
-                    -- DEFAULT 1 so that the fail-closed value is the one a forgotten column,
-                    -- a hand-written INSERT or a future migration lands on. See Membership.accepted.
-                    accepted   INTEGER NOT NULL DEFAULT 0,
-                    UNIQUE (org_id, member_id)
-                )
-                """.trimIndent(),
-            )
-            // The roster read is the only query in this file that is not a point lookup, and it is
-            // always by practice. Indexing it keeps that the cheap path, which matters because the
-            // cheap path is the one people keep using instead of inventing a wider one.
-            st.execute("CREATE INDEX IF NOT EXISTS idx_org_members_org ON org_members(org_id)")
         }
     }
 
@@ -431,6 +400,49 @@ class OrgStore(
     override fun close() = synchronized(lock) { conn.close() }
 
     companion object {
+        /**
+         * org.db, version by version (#193). [Schema] says what a version is, and how a database
+         * written by an earlier release is brought to [Schema.current] before it is served.
+         */
+        internal val SCHEMA = Schema(
+            "org.db",
+            listOf(
+                // Version 1: the structure as it stood when versions began to be kept.
+                listOf(
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS orgs (
+                            org_id     TEXT    NOT NULL PRIMARY KEY,
+                            name       TEXT    NOT NULL,
+                            created_at INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    ),
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS org_members (
+                            member_ref TEXT    NOT NULL PRIMARY KEY,
+                            org_id     TEXT    NOT NULL REFERENCES orgs(org_id),
+                            member_id  TEXT    NOT NULL,
+                            role       TEXT    NOT NULL,
+                            added_at   INTEGER NOT NULL,
+                            added_by   TEXT    NOT NULL,
+                            -- 0 until the person themselves accepts the seat. DEFAULT 0 rather than
+                            -- DEFAULT 1 so that the fail-closed value is the one a forgotten column,
+                            -- a hand-written INSERT or a future migration lands on. See Membership.accepted.
+                            accepted   INTEGER NOT NULL DEFAULT 0,
+                            UNIQUE (org_id, member_id)
+                        )
+                        """.trimIndent(),
+                    ),
+                    // The roster read is the only query in this file that is not a point lookup, and it
+                    // is always by practice. Indexing it keeps that the cheap path, which matters because
+                    // the cheap path is the one people keep using instead of inventing a wider one.
+                    SchemaChange.Index("CREATE INDEX IF NOT EXISTS idx_org_members_org ON org_members(org_id)"),
+                ),
+            ),
+        )
+
         /**
          * The same strict charset every other path-ish identifier in this server takes.
          *

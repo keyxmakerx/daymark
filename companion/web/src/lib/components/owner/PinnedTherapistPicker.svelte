@@ -14,11 +14,11 @@
 
 {#if therapists.length === 0}
   <p class="none faint">
-    No pinned therapists. Pin a therapist (verify their fingerprint out-of-band) before you
-    can grant capabilities or share data — the console refuses to seal to an unpinned key.
+    No pinned clinicians. Pin a clinician — check their fingerprint words with them out of band —
+    before you grant capabilities or share data. The console refuses to seal to an unpinned key.
   </p>
 {:else}
-  <div class="picker" role="group" aria-label="Select a pinned therapist">
+  <div class="picker" role="group" aria-label="Select a pinned clinician">
     {#each therapists as t (t.id)}
       <button
         type="button"

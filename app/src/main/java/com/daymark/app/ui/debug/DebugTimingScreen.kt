@@ -51,9 +51,9 @@ import com.daymark.app.ui.theme.Spacing
 /**
  * **"Why it asks" — the timing layer, shown to itself. Debug builds only.**
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §5: per feature, the rule, what it reads, its current
- * values, whether it would fire now and if not why, the offers made and how they were answered, how
- * much the gate is holding back, plus the hour × weekday grid and the phrase pool.
+ * `docs/FEATURES.md` §13.4: per feature, the rule, what it reads, its current values, whether it
+ * would fire now and if not why, the offers made and how they were answered, how much the gate is
+ * holding back, plus the hour × weekday grid and the phrase pool.
  *
  * ## Three gates, and why there are three
  *
@@ -73,13 +73,13 @@ import com.daymark.app.ui.theme.Spacing
  *
  * It follows that an unanswered hour is drawn as **an hour with no answer in it, and nothing else**.
  * Asleep, at work, out of battery and having a terrible week are indistinguishable to the engine on
- * purpose (`docs/DECISIONS_2026-08.md` §D1a), so they are indistinguishable here: no red, no
+ * purpose (`docs/DECISIONS.md` §D1a), so they are indistinguishable here: no red, no
  * warning, no empty-state sentence suggesting the person ought to have been there. A gap in
  * someone's data is never drawn as a failure.
  *
- * Nothing on this screen leaves the phone. §4 is explicit that the reception ledger and the timing
- * grid are never shared with a clinician, and the footer says so where a person reading it will see
- * it.
+ * Nothing on this screen leaves the phone. `docs/FEATURES.md` §13.2 is explicit that the reception
+ * ledger and the timing grid are never shared with a clinician, and the footer says so where a
+ * person reading it will see it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -125,7 +125,7 @@ fun DebugTimingScreen(
                 text = "Read at " + clockLabel(state.hour) + " on " + weekdayName(state.weekday) +
                     " · " + state.zoneId,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.tertiary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = ScreenPadding),
             )
 
@@ -148,7 +148,7 @@ fun DebugTimingScreen(
                     "with you — the ledger and the grid are never shared with a clinician, and " +
                     "nothing here goes into a backup, an export or a report.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.tertiary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = ScreenPadding, vertical = Spacing.xl),
             )
         }
@@ -162,10 +162,10 @@ private fun FeatureCard(row: DebugFeature) {
         Text(feature.name, style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(Spacing.xs))
 
-        // "Whether it would fire right now and if not why" (§5). The second line is always one of
-        // RuleReadout.Hold's five, never a sentence composed here: a "why not" this screen could
-        // assemble is one that could one day be about the person, which is why that list is closed
-        // and why nothing in this file adds a sixth reason to it.
+        // "Whether it would speak now and, if not, why" (`docs/FEATURES.md` §13.4). The second
+        // line is always one of RuleReadout.Hold's five, never a sentence composed here: a "why
+        // not" this screen could assemble is one that could one day be about the person, which is
+        // why that list is closed and why nothing in this file adds a sixth reason to it.
         Text(
             text = if (feature.wouldAskNow) "It would ask now" else "It would not ask now",
             style = MaterialTheme.typography.bodyMedium,
@@ -193,7 +193,7 @@ private fun FeatureCard(row: DebugFeature) {
                 text = "There is no setting for this one, so “your setting” above is the " +
                     "starting point the app uses until you choose.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.tertiary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
@@ -339,7 +339,7 @@ private fun GridLegend() {
                 "and never records a reason, because it has none: asleep, busy and a hard week " +
                 "look the same from here.",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.tertiary,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -472,7 +472,7 @@ private fun HourRuler() {
                         text = twoDigits(hour),
                         style = MaterialTheme.typography.labelSmall,
                         fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.tertiary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }

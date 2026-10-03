@@ -1,9 +1,10 @@
 <script lang="ts">
   /*
-   * Track T2 (email Option A): register/change/remove the owner's notification email and choose
-   * which events it wants. Requires a connected owner-authenticated PortalClient. The server
-   * no-ops the whole feature unless SMTP is configured on top of this, but registration itself
-   * works regardless (matches /v1/owner/notifications' gate: sync token configured).
+   * The owner's email (COMPANION_SECURITY.md §6, "Owner notifications and server-access
+   * recovery"): register/change/remove the owner's notification email and choose which events it
+   * wants. Requires a connected owner-authenticated PortalClient. The server no-ops the whole
+   * feature unless SMTP is configured on top of this, but registration itself works regardless
+   * (matches /v1/owner/notifications' gate: sync token configured).
    */
   import type { PortalClient } from '../../sync/portal'
   import { Card, Callout } from '../ui'
@@ -11,9 +12,9 @@
   let { client }: { client: PortalClient | null } = $props()
 
   const EVENTS: { key: string; label: string }[] = [
-    { key: 'THERAPIST_ENROLLED', label: 'A therapist finishes enrolling' },
-    { key: 'NEW_ASSIGNMENT', label: 'A therapist assigns something new' },
-    { key: 'NEW_GAMEPLAN', label: 'A therapist publishes a new game plan' },
+    { key: 'THERAPIST_ENROLLED', label: 'A clinician finishes enrolling' },
+    { key: 'NEW_ASSIGNMENT', label: 'A clinician assigns something new' },
+    { key: 'NEW_GAMEPLAN', label: 'A clinician publishes a new game plan' },
   ]
 
   let email = $state('')

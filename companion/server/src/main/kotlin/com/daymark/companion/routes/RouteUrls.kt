@@ -5,17 +5,16 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.plugins.origin
 
 /**
- * Resolve an absolute base URL for building a link to include in outbound email, for an
- * AUTHENTICATED caller (the invite mint route, therapist-enrolled/review notifications). Prefers
- * the configured [publicBaseUrl] (`DAYMARK_PUBLIC_BASE_URL` / `DAYMARK_WEBAUTHN_ORIGINS`);
- * otherwise falls back to the request's own scheme/`Host` as a best effort.
+ * The absolute base of a link handed to an AUTHENTICATED caller: the invite mint route and the
+ * therapist-enrolled / review notifications. In a running server this is always the configured
+ * [publicBaseUrl] (`DAYMARK_PUBLIC_BASE_URL`, else the first `DAYMARK_WEBAUTHN_ORIGINS` entry):
+ * `Config.fromEnv` refuses to start the clinician portal or outbound email without one (#180).
  *
- * This fallback is only acceptable because every caller of this function requires the caller to
- * already hold a valid owner bearer token or therapist session — an attacker who can spoof `Host`
- * here would need that credential already. The UNAUTHENTICATED access-token recovery flow
- * (`RecoveryRoutes.kt`) deliberately does NOT use this helper for exactly that reason: trusting a
- * client-controllable header to build a link mailed out by an anonymous request would let an
- * attacker point a real recovery token at a domain they control. See COMPANION_SECURITY.md.
+ * The request's scheme and `Host` are read only when [publicBaseUrl] is null here, and only a
+ * `Config` built by hand gets here with none — the tests build theirs that way. A deployment never
+ * does: a visitor controls `Host`, and an invitation link carries its secret. The UNAUTHENTICATED
+ * access-token recovery flow (`RecoveryRoutes.kt`) does not use this helper at all; with no
+ * configured address it sends nothing. See COMPANION_SECURITY.md §5.5.
  */
 internal fun resolveBaseUrl(call: ApplicationCall, publicBaseUrl: String?): String {
     return publicBaseUrl?.trimEnd('/') ?: run {

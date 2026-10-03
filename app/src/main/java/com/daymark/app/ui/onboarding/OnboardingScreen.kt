@@ -194,7 +194,7 @@ private fun Welcome() {
         Text(
             "Everything stays on your device — no accounts, no cloud, no tracking.",
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.tertiary,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

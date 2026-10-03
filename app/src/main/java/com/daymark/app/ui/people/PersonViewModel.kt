@@ -25,8 +25,8 @@ import javax.inject.Inject
  * There is no mood level here, and there is nothing this type could be given one by. `PersonScreen`
  * draws a dated line and the person's own words; tapping it opens the entry, where the whole record
  * is shown in its own context. A column of faces under somebody's name would be a
- * mood-with-person statistic drawn for the eye to read, which the plan's *Not doing* list rules
- * out by name, so this type makes one impossible to assemble here.
+ * mood-with-person statistic drawn for the eye to read, which `docs/FEATURES.md` §11.2 rules out
+ * by name, so this type makes one impossible to assemble here.
  */
 data class PersonEntryLine(
     val entryId: Long,
@@ -48,9 +48,10 @@ data class PersonUiState(
     /**
      * When the most recent note was written, or `null` when there are none.
      *
-     * §2 allows the page to state *last note: June* as a fact when it is opened, and allows
-     * **nothing** to be said when there are none. A `null` here draws no sentence at all — it must
-     * never become "nothing since March", which is the forbidden prompt wearing a date.
+     * `docs/FEATURES.md` §11.3 allows the page to state *last note: June* as a fact when it is
+     * opened, and allows **nothing** to be said when there are none. A `null` here draws no
+     * sentence at all — it must never become "nothing since March", which is the forbidden prompt
+     * wearing a date.
      */
     val lastNoteAt: Long? get() = notes.firstOrNull()?.dateTime
 }
@@ -61,11 +62,11 @@ data class PersonUiState(
  *
  * ## Why `EntryRepository` is here, and what it is allowed to be asked
  *
- * §2 says the page shows *"the entries that name them"*, so something has to join the two. The
- * data layer chose where: `PeopleRepository.observeEntryIds` returns **ids**, and its header says
- * *"a caller that needs to draw the list asks `EntryRepository` for those ids and does the join
- * itself, in a view model, for a list it is about to render."* This is that view model and that is
- * the whole of what it does with them.
+ * `docs/FEATURES.md` §11.1 says the page shows *"the entries that name them"*, so something has to
+ * join the two. The data layer chose where: `PeopleRepository.observeEntryIds` returns **ids**, and
+ * its header says *"a caller that needs to draw the list asks `EntryRepository` for those ids and
+ * does the join itself, in a view model, for a list it is about to render."* This is that view
+ * model and that is the whole of what it does with them.
  *
  * The join is one filter and one map into [PersonEntryLine], which cannot carry a mood. Nothing
  * groups, counts, averages, ranks or orders by anything but time, and no person id and no group

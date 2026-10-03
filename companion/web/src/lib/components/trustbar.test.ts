@@ -124,3 +124,143 @@ describe('trust strip — honesty gate', () => {
     expect(app, 'App.svelte fetches directly again').not.toMatch(/(?<![\w.])fetch\s*\(/)
   })
 })
+
+/**
+ * One posture's sentence as it reads: the markup between its `{#if}`/`{:else if}` and the next
+ * branch, tags removed without a space (so `<strong>…</strong> This` reads as it renders) and
+ * whitespace collapsed. Takes the source as an argument so a planted copy runs through it too.
+ */
+function branchProse(code: string, open: string, close: string): string {
+  const from = code.indexOf(open)
+  const to = code.indexOf(close, from + open.length)
+  if (from < 0 || to < 0) return ''
+  return code
+    .slice(from + open.length, to)
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+describe('the local posture asks for nothing a person cannot do (#252)', () => {
+  const OPEN = "{#if surface === 'local'}"
+  const CLOSE = "{:else if surface === 'setup'}"
+  const NOW =
+    'Meant to run offline. This tab works on what is already in this browser and sends nothing — ' +
+    'but a page cannot prove that about itself, and nothing yet lets you check this build against a ' +
+    'published value.'
+  /*
+   * Retired: a check against a value no release publishes, before unlocking a backup no local tab
+   * can open. The drop zone reads plain JSON, and "your backup" was wrong on the other three local
+   * surfaces (self-checks, the tool builder, the practice panel).
+   */
+  const RETIRED = [
+    'This tab reads your backup in the browser',
+    "Verify this build's integrity before you unlock an encrypted backup.",
+  ]
+
+  it('says the one thing that is true today, whole', () => {
+    expect(branchProse(trustBarCode, OPEN, CLOSE)).toBe(NOW)
+  })
+
+  it('no longer asks for a check, or names an encrypted backup', () => {
+    const local = branchProse(trustBarCode, OPEN, CLOSE)
+    expect(local.length).toBeGreaterThan(100) // the branch was really found
+    for (const sentence of RETIRED) expect(local).not.toContain(sentence)
+    expect(local).not.toMatch(/\bverify\b|\bunlock\b|encrypted backup/i)
+    // Control: the retired sentences, planted back into the real branch, are seen by the same
+    // extraction and the same patterns.
+    const planted = trustBarCode.replace(
+      'and nothing yet lets you',
+      "and nothing yet lets you. This tab reads your backup in the browser. Verify this build's integrity before you unlock an encrypted backup.",
+    )
+    expect(planted).not.toBe(trustBarCode)
+    const seen = branchProse(planted, OPEN, CLOSE)
+    for (const sentence of RETIRED) expect(seen).toContain(sentence)
+    expect(seen).toMatch(/\bverify\b|\bunlock\b|encrypted backup/i)
+  })
+})
+
+/*
+ * THE OWNER PAGE SAYS ONE TRUE THING ABOUT WHERE DATA GOES (#273).
+ *
+ * The owner console seals shares and uploads them, and the same page sends invitations, pairing
+ * messages, grants and account identifiers. So the account strip may not say entries never leave,
+ * and the footer, the page description and the no-script line may not say nothing is sent. The
+ * strip says what crosses; the footer and the description make one claim, scoped to entries, in
+ * one wording.
+ */
+describe('the owner page says one true thing about where data goes (#273)', () => {
+  const INDEX = read('../../../index.html')
+  const CLAIM = 'Your entries leave this browser only when you sync or share them.'
+  const ACCOUNT =
+    'This tab sends data to your server. Account actions send identifiers, and recovery sends the ' +
+    "email address you type. A share you seal leaves this browser too, as ciphertext sealed to one " +
+    "clinician's pinned key: the server can see that it exists and how big it is, not what is in " +
+    'it. Your passphrase stays in this browser.'
+
+  /** The footer's paragraph as it reads. Takes the source so a planted copy runs through it too. */
+  const footerOf = (src: string) => branchProse(src, '<footer class="foot faint">', '</footer>')
+  const metaOf = (html: string) => /<meta name="description" content="([^"]*)"/.exec(html)?.[1] ?? ''
+  const noscriptOf = (html: string) =>
+    branchProse(html.replace(/<!--[\s\S]*?-->/g, ''), '<noscript>', '</noscript>')
+
+  it('the account strip says a sealed share leaves, and what the server can still see', () => {
+    const account = branchProse(trustBarCode, '{:else}', '{/if}')
+    expect(account).toBe(ACCOUNT)
+  })
+
+  it('the account strip no longer says entries never leave', () => {
+    const RETIRED = 'Your passphrase and your entries are not involved and never leave this browser.'
+    const account = branchProse(trustBarCode, '{:else}', '{/if}')
+    expect(account).not.toContain(RETIRED)
+    expect(account).not.toMatch(/never leaves?\b/i)
+    // Control: the retired sentence planted back into the strip is seen by both checks.
+    const planted = trustBarCode.replace('Your passphrase stays in this browser.', RETIRED)
+    expect(planted).not.toBe(trustBarCode)
+    expect(branchProse(planted, '{:else}', '{/if}')).toContain(RETIRED)
+    expect(branchProse(planted, '{:else}', '{/if}')).toMatch(/never leaves?\b/i)
+  })
+
+  it('the footer makes the one claim, and nothing about a phase or a scaffold', () => {
+    expect(footerOf(app)).toBe(`Daymark Companion · GPL-3.0 · ${CLAIM}`)
+    const RETIRED = /Phase-0|scaffold|runs entirely on your device/i
+    expect(footerOf(app)).not.toMatch(RETIRED)
+    // Control: the footer this replaced is seen by the same extraction and pattern.
+    const planted = app.replace(
+      `<p>Daymark Companion · GPL-3.0 · ${CLAIM}</p>`,
+      '<p>Daymark Companion · Phase-0 viewer · GPL-3.0 · runs entirely on your device. <span class="status">design-stage scaffold</span></p>',
+    )
+    expect(planted).not.toBe(app)
+    expect(footerOf(planted)).toMatch(RETIRED)
+  })
+
+  it('the page description makes the same claim, and the no-script line sends nothing', () => {
+    expect(metaOf(INDEX)).toBe(`Read, sync and share your Daymark journal on your own server. ${CLAIM}`)
+    expect(noscriptOf(INDEX)).toBe(
+      'The Daymark Companion owner console needs JavaScript to open your backup in the browser. ' +
+        'Without it this page does nothing and sends nothing.',
+    )
+    const RETIRED = /never leaves this device|No data is ever sent anywhere|all processing happens locally/i
+    expect(metaOf(INDEX)).not.toMatch(RETIRED)
+    expect(noscriptOf(INDEX)).not.toMatch(RETIRED)
+    // Control: the retired description and no-script line are seen by the same readers.
+    const planted = INDEX.replace(metaOf(INDEX), 'Offline, on-device viewer for a Daymark backup. Your file never leaves this device.')
+      .replace('Without it this page does nothing and sends nothing.', 'No data is ever sent anywhere — all processing happens locally on this device.')
+    expect(metaOf(planted)).toMatch(RETIRED)
+    expect(noscriptOf(planted)).toMatch(RETIRED)
+  })
+
+  it('the tagline names what the page is for, in every shape', () => {
+    const tagline = (shape: string) => new RegExp(`\\b${shape}: '([^']*)'`).exec(app)?.[1] ?? null
+    expect(tagline('solo')).toBe('Your journal, on a bigger screen')
+    expect(tagline('paired')).toBe('Your journal, and the clinicians you invite')
+    expect(app).toContain('practice: SHAPE_LABELS.practiceTitle,')
+    // The retired taglines: an "offline viewer" over a page that syncs, and one clinician (#288).
+    const RETIRED = /Offline report viewer|one clinician you invited/
+    expect(codeOnly(app)).not.toMatch(RETIRED)
+    const planted = app.replace("solo: 'Your journal, on a bigger screen'", "solo: 'Offline report viewer'")
+    expect(planted).not.toBe(app)
+    expect(codeOnly(planted)).toMatch(RETIRED)
+  })
+})

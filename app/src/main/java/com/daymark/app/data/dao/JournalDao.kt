@@ -22,7 +22,7 @@ interface JournalDao {
      * This is the narrowest query in the app and the one with the most riding on it.
      * `docs/SKY.md` §4.1: *the Sky never renders journal prose — it shows that you wrote, not what
      * you wrote.* The reason is the one behind the ban on note excerpts in the companion
-     * (`docs/DECISIONS_2026-08.md` §D6) — what is protected is a place to write without an audience
+     * (`docs/DECISIONS.md` §D6) — what is protected is a place to write without an audience
      * — and it is stronger here, because the Sky is a surface people show to other people and
      * screenshot. A shoulder-surfer must learn that something was written on a date and nothing
      * else.

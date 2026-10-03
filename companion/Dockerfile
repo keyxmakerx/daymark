@@ -7,7 +7,8 @@
 #   4. runtime     — distroless java21-debian13:nonroot, digest-pinned
 #
 # Every FROM is pinned by INDEX (multi-arch) digest. Pinning a per-arch manifest digest
-# breaks arm64 builds. Re-resolve digests per §9.1 before each release.
+# breaks arm64 builds. Re-resolve digests before each release (docs/COMPANION_DEPLOYMENT.md
+# §7, "Base images").
 
 # ---- 1. Web bundle ----------------------------------------------------------
 FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS web
@@ -28,7 +29,7 @@ COPY server/ ./
 # Use ./gradlew, NOT the image's `gradle`. CI runs gradle/actions/wrapper-validation
 # against server/gradlew; invoking the image's Gradle meant the validated wrapper never
 # touched the shipped artifact and the two builds could silently diverge in version.
-# Requires distributionSha256Sum in gradle-wrapper.properties (§4.3).
+# Requires distributionSha256Sum in gradle-wrapper.properties; not built: #244.
 RUN chmod +x ./gradlew && ./gradlew --no-daemon shadowJar
 # Distroless has no shell, so /data cannot be created with `RUN mkdir && chown`.
 # Create it here; Docker copies ownership from the image on FIRST mount of an empty volume.
@@ -53,12 +54,15 @@ COPY --from=web         /web/dist                             /app/web
 COPY --from=healthcheck /out/healthcheck                      /usr/local/bin/healthcheck
 COPY --from=server --chown=65532:65532 /empty-data            /data
 
+# DAYMARK_LOG_LEVEL is info, the code's own default (#367). warn would hide the startup settings
+# line (address, base path, sync and SMTP on or off), the SMTP-enabled line and "readiness
+# restored", without which a cleared storage outage looks permanent in the log.
 ENV DAYMARK_BIND_ADDR=0.0.0.0 \
     DAYMARK_PORT=8080 \
     DAYMARK_DATA_DIR=/data \
     DAYMARK_WEB_DIR=/app/web \
     DAYMARK_BASE_PATH=/ \
-    DAYMARK_LOG_LEVEL=warn
+    DAYMARK_LOG_LEVEL=info
 
 EXPOSE 8080
 USER 65532:65532

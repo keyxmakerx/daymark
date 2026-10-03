@@ -4,7 +4,7 @@ package com.daymark.app.stats
  * The permission gate, generalised — one budget per calling feature.
  *
  * [SupportOffer] is the prototype and keeps its own setting and its own wording; this is the same
- * rule with the two additions `docs/DECISIONS_2026-08.md` §D1/§D1a describe, and nothing else:
+ * rule with the two additions `docs/DECISIONS.md` §D1/§D1a describe, and nothing else:
  *
  *  - a **kind** ([Kind]), so the companion, reminders, assignments and the support space each spend
  *    a separate budget and one talkative feature cannot use up another's;

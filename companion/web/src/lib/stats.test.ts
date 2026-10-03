@@ -110,41 +110,48 @@ describe('days with an entry in the last 30', () => {
 })
 
 /*
- * The two places this number is rendered, asserted over the component source. There is no DOM in
- * these tests, so the check is structural: the old strings are gone, the new caption is present,
- * and each site is guarded so that a zero renders nothing at all.
+ * The place this number is rendered, asserted over the component source. There is no DOM in these
+ * tests, so the check is structural: the old strings are gone, the new caption is present, and the
+ * site is guarded so that a zero renders nothing at all. The Dashboard is the one place: it is
+ * what the owner console, the backup viewer and the clinician's view of a share all mount.
  */
 const src = (p: string) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8')
 
-describe('the overview and dashboard say "of the last 30 days", and say nothing at zero', () => {
-  const overview = src('./components/Overview.svelte')
+describe('the dashboard says "of the last 30 days", and says nothing at zero', () => {
   const dashboard = src('./components/Dashboard.svelte')
 
-  it('the sources were read', () => {
+  it('the source was read', () => {
     // Guards every assertion below: an unread file would make them all pass.
-    expect(overview).toContain('<script lang="ts">')
     expect(dashboard).toContain('<script lang="ts">')
   })
 
-  it('neither renders a streak any more', () => {
+  it('renders no streak', () => {
     // Rendered prose only: a comment explaining what was removed must not stand in for the rule.
     const prose = (s: string) => s.replace(/<!--[\s\S]*?-->/g, '').replace(/<script[\s\S]*?<\/script>/g, '')
-    expect(prose(overview)).not.toMatch(/streak/i)
     expect(prose(dashboard)).not.toMatch(/streak/i)
-    // The stripper must actually strip, or the two assertions above read an empty string.
-    expect(prose(overview)).toContain('of the last')
+    // The stripper must actually strip, or the assertion above reads an empty string.
+    expect(prose(dashboard)).toContain('of the last')
     expect(prose('<!-- streak --><p>kept</p>')).toBe('<p>kept</p>')
   })
 
-  it('both read the same field and the same window constant', () => {
-    expect(overview).toContain('s.daysWithEntryLast30')
+  it('reads the summary field and the window constant', () => {
     expect(dashboard).toContain('s.daysWithEntryLast30')
-    expect(overview).toContain('WINDOW_DAYS')
     expect(dashboard).toContain('WINDOW_DAYS')
   })
 
-  it('both guard on the count being above zero before drawing anything', () => {
-    expect(overview).toContain('{#if s.daysWithEntryLast30 > 0}')
-    expect(dashboard).toContain('s.daysWithEntryLast30 > 0')
+  it('draws the count only behind a guard that it is above zero', () => {
+    // The caption is produced inside the guarded branch and nowhere else, so a zero draws nothing.
+    const code = (s: string) =>
+      s.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(?<!:)\/\/[^\n]*/g, '')
+    const GUARDED = /s\.daysWithEntryLast30 > 0 \? `\$\{s\.daysWithEntryLast30\} of the last \$\{WINDOW_DAYS\} days` : ''/
+    const onlyGuarded = (s: string) => GUARDED.test(code(s)) && code(s).split('of the last').length === 2
+    expect(onlyGuarded(dashboard)).toBe(true)
+    // Control: a caption drawn outside the guard fails the same check.
+    const unguarded = dashboard.replace(
+      '<span class="sum faint">',
+      '<span class="sum faint">{s.daysWithEntryLast30} of the last {WINDOW_DAYS} days',
+    )
+    expect(unguarded).not.toBe(dashboard)
+    expect(onlyGuarded(unguarded)).toBe(false)
   })
 })

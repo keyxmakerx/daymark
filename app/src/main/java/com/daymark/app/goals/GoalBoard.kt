@@ -18,7 +18,7 @@ package com.daymark.app.goals
  * sentence, not a field the app compares the clock against.
  *
  * **No rate, percentage or fraction.** [Progress] carries two integers and renders as *"3 of 7 steps
- * done"*. `docs/DECISIONS_2026-08.md` §D6 rules out "velocity, burndown, percentage rings, or count
+ * done"*. `docs/DECISIONS.md` §D6 rules out "velocity, burndown, percentage rings, or count
  * badges on pending columns", and a percentage is the shape that most easily turns into a target.
  * Note which half that leaves out: `done` and `total` are stated, "4 still to do" is not, because a
  * count of undone things is the one number on this screen that reads as an accusation.

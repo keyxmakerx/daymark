@@ -1,8 +1,8 @@
 package com.daymark.companion.routes
 
+import com.daymark.companion.auth.requestBody
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
-import io.ktor.server.request.receiveStream
 import io.ktor.server.response.respond
 import kotlinx.serialization.json.Json
 
@@ -28,24 +28,14 @@ val bodyJson: Json = Json { explicitNulls = false; ignoreUnknownKeys = true }
  * Reads the body with a hard cap, responding 413 and returning null if it is exceeded.
  *
  * Streams rather than buffering, so an oversized body is rejected as soon as it crosses the limit
- * instead of after the whole thing has been accepted.
+ * instead of after the whole thing has been accepted. Read once per call ([requestBody]): a signed
+ * request's check has already read it to hash it, and this hands back the same bytes.
  */
 suspend fun ApplicationCall.readBodyCapped(max: Long = JSON_BODY_MAX_BYTES): ByteArray? {
-    val stream = receiveStream()
-    val buf = ByteArray(8 * 1024)
-    val out = java.io.ByteArrayOutputStream()
-    var total = 0L
-    while (true) {
-        val n = stream.read(buf)
-        if (n < 0) break
-        total += n
-        if (total > max) {
-            respond(HttpStatusCode.PayloadTooLarge, ErrorDto("request body too large"))
-            return null
-        }
-        out.write(buf, 0, n)
+    return requestBody(max) ?: run {
+        respond(HttpStatusCode.PayloadTooLarge, ErrorDto("request body too large"))
+        null
     }
-    return out.toByteArray()
 }
 
 /**

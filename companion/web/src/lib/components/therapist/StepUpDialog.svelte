@@ -8,9 +8,12 @@
    *
    * KEYBOARD. The dialog opens over the page but focus used to stay on the trigger behind the
    * scrim, so a keyboard or screen-reader user tabbed through the obscured page instead of the
-   * confirm. Focus now moves to Cancel on open — the non-destructive choice, never the publish —
-   * and Escape cancels. Both are part of "a fresh, explicit confirm": a ceremony you cannot reach
+   * confirm. Focus now moves to "Not now" on open — the way out, never the publish — and Escape
+   * does the same. Both are part of "a fresh, explicit confirm": a ceremony you cannot reach
    * without a mouse is not a ceremony.
+   *
+   * THE WAY OUT SAYS WHAT IT DOES. "Not now", never "Cancel" (COMPANION_UX.md §10.3): it closes the
+   * question with nothing signed or sent. dialogWayOut.test.ts pins it (#400).
    */
   let {
     open = false,
@@ -24,10 +27,10 @@
     oncancel: () => void
   } = $props()
 
-  let cancelEl = $state<HTMLButtonElement | null>(null)
+  let notNowEl = $state<HTMLButtonElement | null>(null)
 
   $effect(() => {
-    if (open) cancelEl?.focus()
+    if (open) notNowEl?.focus()
   })
 
   function onkeydown(e: KeyboardEvent) {
@@ -49,7 +52,7 @@
         now. Your keys are used in memory only.
       </p>
       <div class="row">
-        <button class="ghost" bind:this={cancelEl} onclick={oncancel}>Cancel</button>
+        <button class="ghost" bind:this={notNowEl} onclick={oncancel}>Not now</button>
         <button class="primary" onclick={onconfirm}>Sign &amp; publish</button>
       </div>
     </div>

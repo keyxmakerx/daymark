@@ -18,23 +18,27 @@
    * a printout, a visually hidden "Warning:" prefix for screen readers, and the words — which
    * were always the point. The <aside> stays so the region keeps its accessible name.
    *
-   * The copy below is fixed and quoted verbatim in the security notes. Restyle the container;
-   * never the sentences.
+   * The copy below is fixed, and components/invariants.tree.test.ts asserts it verbatim. Restyle
+   * the container; never the sentences.
    */
   import { Callout } from '../ui'
 </script>
 
 <aside aria-label="Assurance notice">
   <Callout tone="warn">
-  <!-- The five lines below are byte-for-byte the fixed copy, indentation included. They are NOT
+  <!-- The lines below are byte-for-byte the fixed copy, indentation included. They are NOT
        re-indented to match their new nesting: keeping the bytes identical is what makes "did
-       anyone touch the wording?" a trivial diff for the next reviewer. -->
+       anyone touch the wording?" a trivial diff for the next reviewer.
+
+       It ends at the idle wipe (#320). It used to ask the clinician to verify the released image
+       digest, which no release publishes (#241) and which a changed page could print correctly
+       anyway, and to call a hardware passkey the stronger path, when an unlocked key still passes
+       through the page either way. #205 adds what a passkey does protect against. -->
   <p>
     <strong>Lower-assurance path (TOTP).</strong> Your reading key is unwrapped in this browser under
     a passphrase. Because the page is served by the server it talks to, a tampered page could capture
     your passphrase or keys — this is a convenience path, not a zero-knowledge guarantee. Keys are held
-    in memory only and wiped when you log out or go idle. Verify the released image digest; a hardware
-    passkey (WebAuthn) is the stronger path when available.
+    in memory only and wiped when you log out or go idle.
   </p>
   </Callout>
 </aside>

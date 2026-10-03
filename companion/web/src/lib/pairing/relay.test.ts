@@ -1,5 +1,6 @@
 /*
- * The §3.7.4 test: the pairing code must not appear in any request the server can observe.
+ * The COMPANION_PAIRING.md §5 test: the pairing code must not appear in any request the server can
+ * observe.
  *
  * A full pairing — owner opens, therapist answers, owner collects — is driven through a
  * RECORDING transport that also plays the server's part (the same state machine
@@ -635,9 +636,12 @@ describe('the offer and the approval', () => {
 
     // A byte turned in the ciphertext, and bytes that are not base64url at all: the same null.
     const mine = sealOwnerKeys(therapist.isk, opened.sidB64, OWNER_KEYS)
-    expect(
-      ownerKeysFromEnvelope(stored, mine.slice(0, -3) + (mine.endsWith('A') ? 'B' : 'A') + mine.slice(-2)),
-    ).toBeNull()
+    // The replacement is chosen from the character it replaces (CLAUDE.md §5): choosing it from
+    // another one left this a no-op about one run in 64, and a valid envelope then failed the test.
+    const at = mine.length - 3
+    const turned = mine.slice(0, at) + (mine[at] === 'A' ? 'B' : 'A') + mine.slice(at + 1)
+    expect(turned).not.toBe(mine)
+    expect(ownerKeysFromEnvelope(stored, turned)).toBeNull()
     expect(ownerKeysFromEnvelope(stored, '!!not-base64!!')).toBeNull()
 
     // The therapist's OWN envelope, reflected back at them: sealed under the same ISK but in the
@@ -652,9 +656,13 @@ describe('the offer and the approval', () => {
       doFetch,
     )
     const therapist = await therapistAnswerPairing({ inviteId: INVITE_ID, secret: INVITE_SECRET, makeOffer: async () => OFFER, code: CODE }, doFetch)
-    // One byte of ciphertext turned: the AEAD refuses, and the key is untouched.
+    // One byte of ciphertext turned: the AEAD refuses, and the key is untouched. The replacement is
+    // chosen from the character it replaces (CLAUDE.md §5); choosing it from the last character
+    // left this a no-op about one run in 64, and a valid envelope then failed the test.
     const sealed = exchange.envB64!
-    exchange.envB64 = sealed.slice(0, -3) + (sealed.endsWith('A') ? 'B' : 'A') + sealed.slice(-2)
+    const at = sealed.length - 3
+    exchange.envB64 = sealed.slice(0, at) + (sealed[at] === 'A' ? 'B' : 'A') + sealed.slice(at + 1)
+    expect(exchange.envB64).not.toBe(sealed)
     const tampered = await ownerCollectPairing({ relRef: REL_REF, bearerToken: BEARER, pairing: opened }, doFetch)
     expect(tampered.state === 'complete' && tampered.offer).toBeNull()
     expect(tampered.state === 'complete' && hex(tampered.isk)).toBe(hex(therapist.isk))
@@ -764,7 +772,7 @@ describe('the offer and the approval', () => {
   })
 })
 
-describe('§3.7.4 — the code never reaches the wire, and each sealed thing reaches it once', () => {
+describe('the code never reaches the wire, and each sealed thing reaches it once', () => {
   it('a full pairing, from both codes, leaves no trace of either in any request', async () => {
     const { doFetch, recorded, responses, exchange } = relayServer()
     const opened = await ownerOpenPairing(

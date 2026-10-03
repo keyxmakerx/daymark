@@ -6,6 +6,7 @@ import {
   ADMIN_NOT_LINKED,
   AUDIENCES,
   COMPACT_SUMMARY,
+  COMPACT_SUMMARY_WITHOUT_CLINICIAN_PAGE,
   GROUP_HEADING,
   LABELS,
   PROBES_ARE_PUBLIC,
@@ -23,7 +24,9 @@ import {
   WHAT_IS_STORED,
   WHAT_THIS_PAGE_IS,
   WHY_SO_FEW_CHECKS,
+  compactSummary,
   forgetDismissal,
+  offersRoute,
   orientationEndpoints,
   orientationView,
   rankOwnerRoutes,
@@ -32,6 +35,8 @@ import {
   rememberDismissal,
   routeNoteFor,
   showsReachWhenCompact,
+  shownAudiences,
+  shownRoutes,
   type OrientationStorage,
   type OwnerRoute,
   type OwnerRouteId,
@@ -39,6 +44,7 @@ import {
   type RouteGroup,
 } from './audience'
 import { ENDPOINTS, readProbe, type ProbeId, type ProbeReading, type ProbeResponse } from '../admin/health'
+import { SHAPE_IDS, type ShapeId } from '../setup/shape'
 
 /*
  * ═══════════════════════════════════════════════════════════════════════════════════════════
@@ -169,6 +175,128 @@ describe('the three audiences', () => {
 })
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
+   1a. Which audiences the screen shows (#330).
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+describe('the audiences shown, by published shape', () => {
+  const ids = (adminLink: boolean, published: ShapeId | null) =>
+    shownAudiences({ adminLink, published }).map((a) => a.id)
+
+  it('marks the one card whose page a shape can refuse', () => {
+    // The clinician's card opens the clinician console; the owner's has no link and the server
+    // console is served in every shape (lib/setup/pages.test.ts checks that against the server).
+    expect(AUDIENCES.map((a) => [a.id, a.page])).toEqual([
+      ['owner', null],
+      ['clinician', 'clinician'],
+      ['operator', null],
+    ])
+    for (const a of AUDIENCES) if (a.page !== null) expect(a.href, a.id).not.toBeNull()
+  })
+
+  it('shows the clinician’s card with nothing published, because the page cannot tell', () => {
+    expect(ids(false, null)).toEqual(['owner', 'clinician'])
+    expect(ids(true, null)).toEqual(['owner', 'clinician', 'operator'])
+    // The default is the same: nothing published, no admin link.
+    expect(shownAudiences().map((a) => a.id)).toEqual(['owner', 'clinician'])
+  })
+
+  it('withholds the clinician’s card, whole, where the published shape is solo', () => {
+    // Control: the card is in the catalogue and is shown for every other answer, so its absence
+    // below is the solo shape's doing rather than a card that never shows.
+    expect(ids(false, null)).toContain('clinician')
+    expect(ids(false, 'paired')).toContain('clinician')
+    expect(ids(false, 'solo')).toEqual(['owner'])
+    expect(ids(true, 'solo')).toEqual(['owner', 'operator'])
+  })
+
+  it('shows it where the published shape serves the clinician console', () => {
+    for (const shape of ['paired', 'practice'] as const) {
+      expect(ids(false, shape), shape).toEqual(['owner', 'clinician'])
+      expect(ids(true, shape), shape).toEqual(['owner', 'clinician', 'operator'])
+    }
+  })
+
+  it('still withholds the operator’s card unless the deployment links it, in every shape', () => {
+    for (const shape of [null, ...SHAPE_IDS]) {
+      expect(ids(false, shape), String(shape)).not.toContain('operator')
+      expect(ids(true, shape), String(shape)).toContain('operator') // control: the flag shows it
+    }
+  })
+
+  it('keeps catalogue order and the owner’s card first, whatever it withholds', () => {
+    for (const shape of [null, ...SHAPE_IDS]) {
+      for (const adminLink of [false, true]) {
+        const shown = ids(adminLink, shape)
+        expect(shown[0]).toBe('owner')
+        expect(shown).toEqual(AUDIENCES.map((a) => a.id).filter((id) => shown.includes(id)))
+      }
+    }
+  })
+})
+
+describe('the compact line, by published shape', () => {
+  it('names the clinician’s portal wherever the card is shown', () => {
+    for (const shape of [null, 'paired', 'practice'] as const) {
+      expect(compactSummary(shape), String(shape)).toBe(COMPACT_SUMMARY)
+    }
+    expect(compactSummary()).toBe(COMPACT_SUMMARY)
+  })
+
+  it('drops the portal clause, and only that, where the published shape is solo', () => {
+    expect(compactSummary('solo')).toBe(COMPACT_SUMMARY_WITHOUT_CLINICIAN_PAGE)
+    expect(COMPACT_SUMMARY_WITHOUT_CLINICIAN_PAGE).toBe(
+      'Your own data is on this page. Whoever runs the server has a separate console.',
+    )
+    // Word for word the line it replaces, less one clause.
+    expect(
+      COMPACT_SUMMARY.replace('A clinician you invited has a separate portal; whoever', 'Whoever'),
+    ).toBe(COMPACT_SUMMARY_WITHOUT_CLINICIAN_PAGE)
+    // Control: the detector sees the clause in the full line before it is asserted absent.
+    const PORTAL = /\bportal\b|\bclinician\b/i
+    expect(COMPACT_SUMMARY).toMatch(PORTAL)
+    expect(compactSummary('solo')).not.toMatch(PORTAL)
+  })
+
+  it('follows the same rule as the card, so the line never names a card that is not there', () => {
+    for (const shape of [null, ...SHAPE_IDS]) {
+      const card = shownAudiences({ published: shape }).some((a) => a.id === 'clinician')
+      expect(/\bportal\b/.test(compactSummary(shape)), String(shape)).toBe(card)
+    }
+  })
+})
+
+describe('Orientation.svelte renders the shown audiences and nothing else', () => {
+  const source = readFileSync(
+    fileURLToPath(new URL('../components/onboarding/Orientation.svelte', import.meta.url)),
+    'utf8',
+  )
+  /** What ships: markup and script with the commentary removed. */
+  const code = source
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(?<!:)\/\/[^\n]*/g, ' ')
+
+  it('derives one list from the published shape and the admin flag', () => {
+    expect(code).toContain('const audiences = $derived(shownAudiences({ adminLink, published }))')
+    expect(code).toMatch(/published = null,/)
+  })
+
+  it('walks that list in both views, and the catalogue in neither', () => {
+    expect(code).toContain('{#each audiences as audience (audience.id)}')
+    expect(code).toContain('{#each audiences.filter((a) => a.href !== null) as audience (audience.id)}')
+    expect(code).toContain('{compactSummary(published)}')
+    // The views as they were — the catalogue walked directly, the operator filtered in markup,
+    // the fixed line — are all seen by the detector, and none of them is left.
+    const BYPASS = /\{#each AUDIENCES\b|audience\.id !== 'operator'|\{COMPACT_SUMMARY\}/
+    const asItWas =
+      "{#each AUDIENCES as audience (audience.id)}{#if audience.id !== 'operator' || adminLink}" +
+      '<li>…</li>{/if}{/each}<p class="compact">{COMPACT_SUMMARY}</p>'
+    expect(asItWas).toMatch(BYPASS)
+    expect(code).not.toMatch(BYPASS)
+  })
+})
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
    2. The owner's six entry points.
    ═══════════════════════════════════════════════════════════════════════════════════════════ */
 
@@ -293,6 +421,81 @@ describe('rankOwnerRoutes', () => {
     rankOwnerRoutes()
     rankOwnerRoutes(OWNER_ROUTES)
     expect(OWNER_ROUTES.map((r) => r.id)).toEqual(before)
+  })
+})
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   2a. Which entry points the screen offers (#330).
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+describe('the entry points offered, by published shape', () => {
+  const ALL = OWNER_ROUTES.map((r) => r.id)
+  const ids = (published: ShapeId | null) => shownRoutes(published).map((r) => r.id)
+
+  it('marks the one entry point a shape can switch off: the owner console, with the clinician’s page', () => {
+    expect(OWNER_ROUTES.map((r) => [r.id, r.servedWith])).toEqual([
+      ['file', null],
+      ['sync', null],
+      ['assess', null],
+      ['owner', 'clinician'],
+      ['recover', null],
+      ['build', null],
+    ])
+  })
+
+  it('offers every entry point where nothing was published, because the page cannot tell', () => {
+    expect(ids(null)).toEqual(ALL)
+    expect(shownRoutes().map((r) => r.id)).toEqual(ALL)
+    expect(offersRoute('owner', null)).toBe(true)
+  })
+
+  it('hides the owner console’s card where the published shape is solo, and only that card', () => {
+    // The planted-ungated control: the same catalogue with the rule taken off shows the card on a
+    // solo server. So the card is really there to hide, and its absence below is the rule.
+    const ungated = OWNER_ROUTES.map((r) => ({ ...r, servedWith: null }))
+    expect(shownRoutes('solo', ungated).map((r) => r.id)).toContain('owner')
+    expect(ids('solo')).not.toContain('owner')
+    expect(ids('solo')).toEqual(ALL.filter((id) => id !== 'owner'))
+    expect(offersRoute('owner', 'solo')).toBe(false)
+  })
+
+  it('offers it where the published shape is paired or practice', () => {
+    for (const shape of ['paired', 'practice'] as const) {
+      expect(ids(shape), shape).toEqual(ALL)
+      expect(offersRoute('owner', shape), shape).toBe(true)
+    }
+  })
+
+  it('withholds nothing else in any shape', () => {
+    for (const shape of [null, ...SHAPE_IDS]) {
+      for (const id of ALL.filter((id) => id !== 'owner')) {
+        expect(offersRoute(id, shape), `${String(shape)}: ${id}`).toBe(true)
+      }
+    }
+  })
+
+  it('still ranks what is left into both groups, with the owner console in neither on solo', () => {
+    const ranked = rankOwnerRoutes(shownRoutes('solo'))
+    expect(ranked.map((g) => g.group)).toEqual([...GROUP_ORDER])
+    expect(ranked.find((g) => g.group === 'occasional')!.routes.map((r) => r.id)).toEqual(['recover', 'build'])
+    expect(ranked.flatMap((g) => g.routes.map((r) => r.id))).not.toContain('owner')
+    // Control: the same ranking with nothing published has it, first among the occasional ones.
+    expect(rankOwnerRoutes(shownRoutes(null)).find((g) => g.group === 'occasional')!.routes[0]!.id).toBe('owner')
+  })
+
+  it('Orientation.svelte ranks only the entry points offered', () => {
+    const code = readFileSync(
+      fileURLToPath(new URL('../components/onboarding/Orientation.svelte', import.meta.url)),
+      'utf8',
+    )
+      .replace(/<!--[\s\S]*?-->/g, ' ')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    expect(code).toContain('const groups = $derived(rankOwnerRoutes(shownRoutes(published)))')
+    expect(code).toContain('{#each groups as group (group.group)}')
+    // The ranking as it was, over the whole catalogue, is seen by the detector and is gone.
+    const WHOLE_CATALOGUE = /rankOwnerRoutes\(\s*\)|rankOwnerRoutes\(OWNER_ROUTES\)/
+    expect('const groups = rankOwnerRoutes()').toMatch(WHOLE_CATALOGUE)
+    expect(code).not.toMatch(WHOLE_CATALOGUE)
   })
 })
 
@@ -804,7 +1007,22 @@ describe('the copy', () => {
     expect(ORIENTATION_LEDE).toContain('three different pages')
     // "State what runs where" — and it must stay true of a build that writes a dismissal note.
     expect(WHAT_THIS_PAGE_IS).toContain('runs in your browser')
-    expect(WHAT_THIS_PAGE_IS).toContain('never uploaded')
+    // Scoped to entries (#273): the page also sends invitations, grants and identifiers, so an
+    // absolute about everything was false. The same words as the footer and the page description.
+    expect(WHAT_THIS_PAGE_IS).toContain('Your entries leave this browser only when you sync or share them')
+    expect(WHAT_THIS_PAGE_IS).toContain('A backup you open is read in this browser and gone when you close the tab.')
+    const RETIRED = /never uploaded|Nothing is sent anywhere unless you ask for it/
+    expect(WHAT_THIS_PAGE_IS).not.toMatch(RETIRED)
+    // Control: the retired wording planted back into the real paragraph is seen.
+    expect(
+      WHAT_THIS_PAGE_IS.replace('read in this browser and gone', 'read here, never uploaded, and gone'),
+    ).toMatch(RETIRED)
+    // The file route's own line: the file is not uploaded, but entries read from it can be shared,
+    // so "never" was an absolute this page cannot keep.
+    const file = OWNER_ROUTES.find((r) => r.id === 'file')!.blurb
+    expect(file).toBe('A file you exported from the app, read in this browser.')
+    expect(file).not.toMatch(RETIRED)
+    expect('A file you exported from the app. Read here, never uploaded.').toMatch(RETIRED) // the retired line
     expect(WHAT_THIS_PAGE_IS).toContain('orientation')
     // The refusal, on the page rather than only in a comment.
     expect(WHY_SO_FEW_CHECKS).toContain('no configuration checklist')

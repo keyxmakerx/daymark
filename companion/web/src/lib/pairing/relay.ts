@@ -1,6 +1,6 @@
 /*
- * The CPace exchange, carried through the Companion as opaque parcels (plan §3.7.3), and the
- * approval that turns a matched code into an enrolment.
+ * The CPace exchange, carried through the Companion as opaque parcels (COMPANION_PAIRING.md §4),
+ * and the approval that turns a matched code into an enrolment.
  *
  * Four touches, none simultaneous — this is store-and-forward, not a phone call:
  *
@@ -18,14 +18,15 @@
  * different keys derived from the same ISK (envelope.ts's direction labels), so neither can be
  * replayed as the other, and the server relays both without a key for either.
  *
- * THE CODE NEVER LEAVES THE DEVICE IT WAS TYPED ON. That is §3.7.4's hard invariant — a server
- * holding the code could run the exchange itself and sit in the middle — and in this module it
- * is structural, not behavioral: the code goes into cpaceStart/cpaceRespond as the PRS and
- * nothing else reads it; every request body is built from the OUTPUTS of those calls, which are
- * uniform group elements the code cannot be recovered from, or from ciphertext under the key
- * they produce. relay.test.ts drives a whole pairing through a recording transport and then
- * greps every request — URL, headers, body — for the code in every encoding it could wear; that
- * test is the §3.7.4 deliverable and removing this property fails it.
+ * THE CODE NEVER LEAVES THE DEVICE IT WAS TYPED ON. That is the hard invariant of
+ * COMPANION_PAIRING.md §5 — a server holding the code could run the exchange itself and sit in the
+ * middle — and in this module it is structural, not behavioral: the code goes into
+ * cpaceStart/cpaceRespond as the PRS and nothing else reads it; every request body is built from
+ * the OUTPUTS of those calls, which are uniform group elements the code cannot be recovered from,
+ * or from ciphertext under the key they produce. relay.test.ts drives a whole pairing through a
+ * recording transport and then greps every request — URL, headers, body — for the code in every
+ * encoding it could wear; that test is the proof §5 there rests on, and removing this property
+ * fails it.
  *
  * THE CODE IS CANONICAL BEFORE IT IS BYTES. Two people typing "the same code" produce the same
  * key only if both sides feed the PAKE the same bytes, and a trailing space, a lower-case letter
@@ -37,11 +38,11 @@
  * the code at all: cpaceFinish needs only the scalar, which is what lets the owner's persisted
  * half of a run (ownerRunStore.ts) omit the code by construction.
  *
- * WRONG CODE ≠ ERROR, here as everywhere in the §3.7 design: mismatched codes produce two
- * different keys and no signal on the wire. The mismatch surfaces here, once, in the only place
- * it can: the therapist's sealed offer fails to open on the owner's side and comes back as
- * `offer: null` — one bit, no diagnosis — and a person decides what that means (the burn rule:
- * only a human report kills an invite).
+ * WRONG CODE ≠ ERROR, here as everywhere in the pairing design (COMPANION_PAIRING.md §6):
+ * mismatched codes produce two different keys and no signal on the wire. The mismatch surfaces
+ * here, once, in the only place it can: the therapist's sealed offer fails to open on the owner's
+ * side and comes back as `offer: null` — one bit, no diagnosis — and a person decides what that
+ * means (the burn rule: only a human report kills an invite).
  *
  * WHAT THE OFFER IS, AND WHY IT IS ENOUGH. The therapist seals, under the key only a right code
  * derives, their two public keys, a name, and an enrol ticket THEY chose (payloads.ts). If the
@@ -165,7 +166,7 @@ const baseOf = (baseUrl: string | undefined): string => (baseUrl ?? '').replace(
  * prefixed (the draft's lv_cat) rather than joined, so no separator can ever be mistaken for
  * structure. Version-tagged so a future change to any part of the construction changes the CI
  * and cleanly refuses to key against the old one, instead of half-agreeing. The owner's half on
- * the phone (plan 4.0b) must build these exact bytes.
+ * the phone (COMPANION_PAIRING.md §14; not built: #174) must build these exact bytes.
  */
 export function channelIdentifier(relRef: string, inviteId: string): Uint8Array {
   return lvCat(utf8('daymark/cpace/v2'), utf8(relRef), utf8(inviteId))
@@ -197,9 +198,9 @@ export interface OwnerPairingState {
    * The CPace scalar + MSGa. Secret, and the ONLY copy of the owner's half of the run — the
    * server holds nothing that can finish it. This module keeps it in memory and never
    * serializes it; a caller that has to survive a reload, or the store-and-forward gap of
-   * §3.7.3 (the owner finishes "next time they open the app"), must keep it itself, on the
-   * device, under its own protection (ownerRunStore.ts does, in sessionStorage). Losing it makes
-   * the run unfinishable by anyone, and the remedy is a fresh run, which spends one of the
+   * COMPANION_PAIRING.md §3 (the owner finishes "the next time they look"), must keep it itself,
+   * on the device, under its own protection (ownerRunStore.ts does, in sessionStorage). Losing it
+   * makes the run unfinishable by anyone, and the remedy is a fresh run, which spends one of the
    * invite's exchanges.
    */
   start: CpaceStartResult

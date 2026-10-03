@@ -20,7 +20,10 @@
   import { sasWords } from '../../share/pairing'
   import { PortalClient } from '../../sync/portal'
   import type { OwnerEndpoint } from '../../owner/therapistKeys'
+  import type { OwnerConnection } from '../../owner/recoveryEmail'
   import type { Grant } from '../../assignments/types'
+  import type { OwnerLane } from '../../lane/lane'
+  import { CONSOLE_POINTER } from '../../phones/copy'
 
   let { data }: { data: BackupData | null } = $props()
 
@@ -60,18 +63,35 @@
    */
   let endpoint = $state<OwnerEndpoint | null>(null)
   let connectStatus = $state('')
+  /**
+   * The owner's lane on the same server, with the same address and token, and the sync key the
+   * session was opened with (#345): where the inbox keeps an accept or a decline, and reads them
+   * back. What the phone has taken in is read from the snapshot this console has open, if any.
+   */
+  let lane = $state.raw<OwnerLane | null>(null)
 
   const selected = $derived(session?.pinned.find((t) => t.id === selectedId) ?? null)
 
-  function unlock(s: OwnerSession) {
+  /*
+   * The door read the owner's key from the server with this address and token, so the server has
+   * already accepted them: the console connects with them rather than asking for the token again
+   * (#258). The connection panel below still takes another, for a person who wants one.
+   */
+  function unlock(s: OwnerSession, connection: OwnerConnection) {
     session = s
     selectedId = s.pinned[0]?.id ?? null
+    serverUrl = connection.serverUrl
+    token = connection.token
+    void connect()
   }
 
   function lock() {
+    // The sync key the lane is read and written with goes with the session (#345).
+    session?.lane.syncKey.fill(0)
     session = null
     client = null
     endpoint = null
+    lane = null
     selectedId = null
   }
 
@@ -80,6 +100,8 @@
     if (!token) { connectStatus = 'Enter your owner access token.'; return }
     const c = new PortalClient(serverUrl, token)
     const e: OwnerEndpoint = { baseUrl: serverUrl, token }
+    // A lane that cannot be loaded is none: the inbox then says nothing can be saved (#345).
+    lane = session ? await laneOn(serverUrl, token, session).catch(() => null) : null
     try {
       const cfg = await c.getConfig()
       smtpEnabled = cfg.smtpEnabled
@@ -93,12 +115,26 @@
     }
   }
 
+  /** The owner's lane over the sync API, loaded when the console connects. */
+  async function laneOn(url: string, tok: string, s: OwnerSession): Promise<OwnerLane> {
+    const [{ SyncClient }, { ownerLane }, { takenInIds }] = await Promise.all([
+      import('../../sync/client'),
+      import('../../lane/lane'),
+      import('../../lane/record'),
+    ])
+    return ownerLane(new SyncClient(url, tok), s.lane, { takenIn: () => takenInIds(data) })
+  }
+
   /*
    * A pending clinician's keys arrived — confirmed against the read-aloud check, never merely
    * fetched. The entry is REBUILT rather than mutated: its id is the signing-key fingerprint and
    * its grant is bound to that id, so a pending entry (whose id was a placeholder) cannot keep
    * either. Name, inbox token and pinnedAt survive; the SAS words are computed now that there are
    * finally two identities to compute them over.
+   *
+   * A clinician who re-paired with new keys keeps what was granted, re-bound to the new id. The
+   * grant names the key it is for: the clinician's portal refuses one that names another key, and
+   * the inbox refuses an assignment whose author is not the key the grant names.
    */
   function keysArrived(record: { signPub: Uint8Array; boxPub: Uint8Array }) {
     if (!session || !selectedId) return
@@ -116,7 +152,7 @@
       id,
       signPub,
       boxPub,
-      grant: cur.keysPending ? emptyGrant(id) : cur.grant,
+      grant: cur.keysPending ? emptyGrant(id) : { ...cur.grant, therapistFingerprint: id },
       fingerprintWords: words,
       keysPending: false,
     }
@@ -155,6 +191,8 @@
         <label><span>Owner access token</span><input type="password" bind:value={token} autocomplete="off" /></label>
         <button onclick={connect}>Connect</button>
         {#if connectStatus}<span class="cstatus">{connectStatus}</span>{/if}
+        <!-- Phones pair on every kind of server, so from the sync card, not from here (#431). -->
+        <p class="cpointer">{CONSOLE_POINTER}</p>
       </div>
     </details>
 
@@ -199,7 +237,7 @@
       {:else if sub === 'grants'}
         <GrantManager {session} therapist={selected} {client} {onGrantChange} />
       {:else if sub === 'inbox'}
-        <AssignmentInbox {session} {client} />
+        <AssignmentInbox {session} {client} {lane} />
       {:else if sub === 'published-keys'}
         <TherapistKeyIntake therapist={selected} {endpoint} onkeys={keysArrived} />
       {:else if sub === 'share'}
@@ -272,6 +310,7 @@
   .conn-body em { color: var(--text-subtle); font-style: normal; }
   input { font: inherit; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-bg); color: var(--ink-text); }
   .cstatus { font-size: 0.8rem; color: var(--ink-soft); }
+  .cpointer { margin: 0; font-size: 0.85rem; color: var(--ink-soft); }
   .who { padding-bottom: var(--space-2); }
   .empty { margin: 0; }
   .repair { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); border-top: 1px solid var(--hairline); padding-top: var(--space-3); }

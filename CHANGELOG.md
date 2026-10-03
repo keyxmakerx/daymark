@@ -37,6 +37,98 @@ All notable changes to this project are documented here. The format is based on
   still contains unlock times restores normally; the badges in it are just not brought back.
 
 ### Added
+- **Companion — the server can pair a phone, and a paired phone signs what it sends instead of
+  carrying your access token.** This is the server's half; the owner console's pairing screen and the
+  phone's side come next (#431, #432). The console asks the server for a code that lasts two
+  minutes; the phone answers with a key of its own and proof that it holds it; both screens then show
+  the same words, and only your confirmation on the console lets the phone in. From then on, every
+  request the phone sends is signed and can be used only once, within five minutes, so a copy taken off
+  the network is worthless and cannot be pointed at anything else. A paired phone can do what your
+  access token can, except pair or disconnect phones, set up a practice, or change how you recover:
+  your notification address and your locked key. Disconnecting a phone takes effect on its very next
+  request, and re-issuing your access token disconnects every phone. Phones pair only over an https
+  address; [COMPANION_DEPLOYMENT.md](docs/COMPANION_DEPLOYMENT.md) §3.4 says how to give a server that
+  is reachable only at home a certificate the phone will trust. The server also keeps a log of its own
+  for you: each phone paired or disconnected, and each lockout, at most one a minute. The first start of
+  this release copies `owner-account.db` into `_pre-migrate/` and adds the phone tables to it.
+  (#186, #189)
+- **The phone can now prove to your Companion that a request is its own, without a password, and it
+  refuses to pair over anything but https.** It makes a key of its own for your server, never taken
+  from your passphrase, signs what it will send with that key, and shows six words for you to compare
+  with the ones on the owner's page before you confirm it. It reads the pairing code from the QR code
+  or as you type it, with or without dashes, catches a mistyped symbol before sending anything, and
+  will not pair with an address that is not https. Nothing on the phone scans a code or talks to the
+  server yet; that comes next. (#432)
+- **Daymark Sync can pair with your own Companion server and send it an encrypted copy of your
+  journal.** **Settings → Sync with your server** takes the address and pairing code the owner's page
+  shows, typed or pasted, and shows six words to compare while you confirm on the page. Your sync
+  passphrase opens your key, and **Send a copy now** sends your journal, locked on the phone first, as
+  the next copy on your server; the screen says when the server last took one. The pairing and key are
+  kept locked with a key that never leaves the phone. A refused request is never tried again, so a
+  disconnected phone says so once and asks to be paired again. Daymark itself is unchanged and still
+  has no internet permission. Scanning the QR code with the camera comes next. (#432)
+- **Companion — pair your phone with your own server from its web page.** Under *Connect to your sync
+  server*, a new **Phones** section makes a two-minute code and a QR code for the phone. Both screens
+  then show the same six words; if they match, one click pairs the phone. Every paired phone is listed
+  by its six words and the date it was paired, and **Disconnect** stops one from syncing without
+  erasing anything on it. Pairing needs the server to have an https address. (#431)
+- **Companion — your accept or decline of a clinician's assignment is kept.** In the owner console's
+  Inbox, your answer is now saved, encrypted, on your own Companion server, and it is still there
+  after you press Refresh. It is kept in a separate place that only adds and never changes or replaces
+  your journal. Your phone will add it to your journal once phone sync exists. A snooze is not saved,
+  nor is declining an item that could not be checked. If an answer cannot be saved, the item stays
+  undecided and says so. (#234, #345)
+- **Companion — a month calendar of your own entries.** When you open a backup in the browser, on the
+  backup page or in the owner console's Review tab, the dashboard now has a **Calendar** card showing
+  one month at a time. Every day is the same plain square with its date. Each check-in is a small
+  square in its mood's colour with the mood's word beside it, in the order you made them (up to six on
+  a day; the day's list has them all). A journal entry is a small ring, a sleep log a short bar and a
+  self-check a diagonal slash. A day with nothing on it is left plain — nothing greyed out, crossed or
+  counted — and a screen reader hears "nothing recorded". Choose a day to see its records in words
+  beside the calendar: what kind, what time, the mood's word for a check-in, and a self-check's name
+  and band (never its total). **Previous month**, **Today** and **Next month** move between months.
+  **Print this month** prints just the month, dark ink on white even if your screen is in dark mode,
+  every square keeping its word. There is no average, no best or worst day and no count anywhere on
+  it. It only reads your backup and changes nothing, and it is not shown to a clinician, who has a
+  calendar of their own. (#335)
+- **Companion — an upgrade can no longer leave the server's databases half-changed.** Each of the
+  server's databases now records which version of its layout it holds. When a new release needs to
+  change one, the server first saves a complete copy of it in a `_pre-migrate` folder on the data
+  volume, then makes the whole change at once. If anything goes wrong, the database is left exactly
+  as it was and the server does not start; it writes one line saying which database and which
+  versions, as it does for a setting it will not run with. A server rolled back to a release older
+  than one that changed a database also refuses to start rather than misread it; putting the saved
+  copy back is the way to go back. The copies keep everything the database held, sign-in secrets
+  included, and nothing deletes them yet (#405), so protect the folder like the rest of the volume
+  and delete a copy once the new release has proved itself. On the first start of this release, a
+  database already in the current layout is only marked with its version, and nothing is copied.
+  (#193)
+- **The phone can now unlock your key the way the web does, from either kind of key document the
+  server keeps.** It opens it with your passphrase or with your recovery code, typed with or without
+  dashes and spaces, and refuses anything weaker than the agreed strength before it starts. Nothing
+  on the phone fetches the document yet; that comes with phone sync. (#403)
+- **Companion — the server can now keep the locked copy of your key that a recovery code opens.**
+  A recovery code only helps on another device if that device can reach the locked copy of your
+  key. Until now there was nowhere to put it, so the Recovery code screen saved a key file instead.
+  The server can now keep that copy: your key, locked once under your passphrase and once under
+  your recovery code. The server cannot open it. It gives the copy only to someone with your
+  access token, because whoever holds it can try guesses at your passphrase on their own computer.
+  Each change, such as a new passphrase or a new recovery code, is kept as a new version. Old
+  versions are never changed or deleted, and only the newest is ever given out. Only one device can
+  ever create it: if two try at once, or if the settings changed since a device last looked, the
+  server refuses and the device must look again. Once a locked copy exists, the server stops giving
+  out the settings that turn your passphrase straight into your key, so a passphrase you change
+  stops opening anything this server gives out. It still opens copies that anyone kept, including
+  backups of the server. Nothing in the consoles uses the locked copy yet, so for now the recovery
+  code still needs its key file. (#258)
+- **The phone has a place for a clinician's game plans and assignments, kept apart from what you
+  write yourself, and checks them the way the web console does.** Nothing reaches it yet, because
+  the phone does not talk to the Companion. A plan or an assignment is only ever written there after
+  you accept it. Your clinician can only do what you have allowed, only with catalogue self-checks
+  and tasks, and may only ever suggest one of four settings: which self-checks are shown, the
+  reminder time, the reminder cadence and the theme. Never anything about your PIN, the lock,
+  encryption or the network, and a suggested setting always waits for you. "Replace all current
+  data" empties these tables too. (#177)
 - **An entry can say who you were with, and everyone you name gets a page of their own.** There is
   a new **People and communities** screen in More. A community counts: a church, a fandom, a team, a
   support group — anything you would say you are part of. Each name you add sits in Friends, Family,
@@ -150,9 +242,9 @@ All notable changes to this project are documented here. The format is based on
   and what you can do — take back what is still published to them, or invite them again. And the
   access log for that connection carries a line.
 
-  **No email is sent, and that is deliberate but not settled.** An email saying a therapy connection
-  has ended could land in an inbox somebody else reads. Whether to offer one is a decision about
-  your users' safety and is left open rather than guessed at.
+  **No email is sent.** An email saying a therapy connection has ended could land in an inbox
+  somebody else reads. #216 has since decided an opt-in email, off by default, that never says what
+  happened; it is not built yet (#329).
 
 - **Companion — the practice console now says what removing somebody does, and what it does not.**
   Removing a member ends their standing in the practice. It does not end any patient's relationship
@@ -202,6 +294,120 @@ All notable changes to this project are documented here. The format is based on
   both jobs.
 
 ### Changed
+- **Opening your key now has a limit on the work it takes, as well as a minimum.** Before the owner
+  console, the clinician console or the phone turn your passphrase or recovery code into a key, they
+  check the settings stored with it. They already refused settings weaker than the agreed strength;
+  they now also refuse settings that ask for more than 512 MiB of memory or 8 passes, before
+  starting, and say so in one fixed sentence. Every key Daymark makes uses 256 MiB and 3 passes, so
+  nothing you already have changes. On the phone this waits for phone sync, like the rest of its key
+  handling.
+- **Companion — a recovery code now works from any device, and the owner console no longer needs a
+  key file.** The owner console opens your key from your own server: you give it the server's address
+  and your access token, then your passphrase or, instead, your recovery code. The first time, on a
+  server with no key yet, it makes one and shows your recovery code once — "Once you leave this page,
+  it cannot be shown again. Write it down before you go on." — then asks you to type two of its groups
+  back. If you already sync with a passphrase, adding a recovery code keeps the key you have: your
+  passphrase is first tried on your newest snapshot, so a mistyped one stores nothing, and nothing
+  already stored is encrypted again. If the server takes your key but cannot be read back to check it,
+  your recovery code is still shown, with a button to check it. On the Recovery code screen, "Use a
+  code" opens your key with the recovery code alone and lets you choose a new passphrase; this server
+  then hands out only the lock made with the new passphrase, but a backup of the server taken before
+  still holds the old lock, which the old passphrase still opens. Key files saved by earlier versions
+  are no longer used; a clinician paired while the console was opened with one has to be invited
+  again. The sync card and `pnpm push` read the key the same way, and `pnpm push` now sends nothing if
+  the server's key changed while a snapshot was being encrypted, or if the server stores snapshots but
+  no key. Replacing a recovery code is not built yet (#407). (#258)
+- **The month calendar in Insights shows each entry as its own dot, and no longer paints a day with
+  an average.** Each day used to be filled with a colour mixed from the average of that day's moods,
+  so a day with one bad moment and one good one came out in a colour you never chose, and the date on
+  it was hard to read. Now every day is the same plain square with its date in dark ink, easy to read
+  in light and dark mode, and under the date there is a small dot for each entry, in that mood's own
+  colour (your own colours if you have changed them), newest first. A day with nothing
+  logged looks like any other day, just without dots. A busy day shows at most six dots, always
+  including every mood you logged that day, and tapping the day shows every entry. A screen reader
+  reads each day as its date and its moods in order, for example "3 September: Good, Meh", or
+  "nothing recorded". (#397)
+- **Insights → Week and the week on Home show each entry as its own dot, and no longer colour a day
+  by its average mood.** A day with one bad moment and one good one used to come out in a colour you
+  never chose. Now each day shows a small dot for each entry in that mood's own colour (your own
+  colours if you've changed them), like the month: up to six a day in Insights and up to three on
+  Home, always including every mood you logged that day where there's room. Every mood dot now has a
+  thin dark outline, so light colours like Meh and Good stay easy to see, and a day's dots run newest
+  first, in the same order as the day's own list. A screen reader reads each day as its date and its
+  moods, for example "3 September: Good, Meh". (#411, #412)
+- **Daymark shows its own paper colours unless you ask for your wallpaper's.** On Android 12 and
+  later it used to take its colours from your wallpaper unless you turned Dynamic color off. It now
+  starts on its own colours. If you had switched Dynamic color on yourself, it stays on. If your
+  Daymark was in your wallpaper's colours without you choosing it, Settings → Dynamic color brings
+  them back. Mood colours never change either way. (#309)
+- **Dialogs, menus and the date and time pickers are drawn on Daymark's paper,** not on a lavender
+  grey the app never chose. In the dark theme, menus and dialogs sit a shade lighter than the page so
+  they stand out. (#410)
+- **The "Validated" label on a questionnaire has no tick, on the phone or in the browser.** A tick
+  beside a questionnaire reads as "you passed". The label now says just "Validated". In the PDF
+  report, a finished project step says "done" instead of showing a tick, and the web's tool builder
+  says its honesty gate "passes" in words alone. (#278)
+- **Three small labels are easier to read:** the label saying where a questionnaire or exercise comes
+  from, the note under it, and "Keep swiping" behind a row you are swiping away. They are now printed
+  in full ink instead of a pale grey on pale beige. (#408)
+- **The PDF report's small print is darker.** Section labels, table headings, axis labels, captions,
+  notes and the footer were a pale grey that fades on paper and projectors. They now use the report's
+  darker grey, so every word is easy to read in print. (#409)
+- **Your own data in the web console no longer shows an average mood.** The owner console and an
+  opened backup still show how many of the last 30 days have an entry. A clinician reading what you
+  share still sees the average, labelled "average of what was logged", as in the PDF report.
+  (#203, #361)
+- **Companion — a solo server's owner page has no owner console, and its "Recover access" card sets
+  the recovery email.** The console's clinician and sharing routes are off on a solo server, so its
+  card is hidden there. Its Notifications tab was the only place to register the email a recovery
+  link is sent to, so on a solo server the "Recover access" card now holds that setting, in two
+  parts, "Before you need it" and "If you have lost your access token", using the access token the
+  sync card proved on that page. On paired and practice servers the card points to the console's
+  Notifications tab. (#330)
+- **Companion — the owner's page follows the server's shape.** Where the server publishes its shape
+  (`DAYMARK_SETUP_MODE`), the owner's page links only the consoles that shape serves: on a solo
+  server it shows no card or link for the clinician console, and the practice console is linked only
+  on a practice server. Where it publishes none, the page cannot tell and keeps every link. The
+  first-run screen says the server has not been told its shape, and how whoever runs it can set one.
+  The Paired choice no longer says "one clinician": a person may invite more than one (#288). (#330)
+- **Companion — the words match what the software does.** The consoles say "clinician", and each
+  page is a console named for who uses it (#158). The owner page says a sealed share leaves the
+  browser, and makes one claim about entries: they leave only when you sync or share them (#273,
+  #252). The share builder says a share is access, and your own words go only when you include them
+  (#337). The clinician's sign-in says what the lock drops and what extensions and screenshots can
+  still keep, the page drops its keys within 8 hours on every server, and it says when it locked
+  (#262). The card after accepting an invitation describes the real sign-in (#312). Nothing promises
+  a cutoff for past data or asks anyone to verify a digest nobody publishes (#320). The practice
+  screens state that nobody can reset a passphrase (#313), promise no complete log and say what
+  removing a member does (#317), and say no real patient's data belongs there before the outside
+  reviews (#333).
+- **The PDF report says what it is, and leaves your check-in notes out unless you switch them on.**
+  Settings → *Export a PDF report* (it used to say "for therapist") opens with *A report is a copy.
+  Once handed over, it cannot be taken back.*, and *Include check-in notes* starts off; a report
+  made without notes says so instead of printing a column of dashes. The report no longer claims the
+  app shows streaks. (#158, #304, #336)
+- **Companion — the server logs at `info` as shipped.** The image, the compose file and `.env.example`
+  set `DAYMARK_LOG_LEVEL` to `warn`, which hid the three lines that say how the server is set up and
+  whether it recovered: the startup settings line, the email-enabled line and "readiness restored",
+  without which a cleared storage outage looks permanent in the log. All three now say `info`, the
+  code's own default. There is no per-request logging, so this is a handful of lines per start. (#367)
+- **A share lasts 14 days unless you choose otherwise, and never more than 90.** The share builder
+  used to start at 30 days and allow a year. Beside the number you now read the date the share ends:
+  *Ends on {date}. The server then deletes its copy. Anything read before then has already been
+  seen.* (#228, #339)
+- **The assignment inbox no longer fails as a whole when one item has ended.** The server keeps what
+  a clinician sends for 90 days. An item it no longer keeps now shows as one line, *Sent by {name}
+  on {date}. The server keeps items for 90 days.*, and everything else still loads. (#339)
+- **Planning moved to GitHub, and the documents describe only what exists.** Work to do, bugs and
+  open decisions had been spread across plans, session logs, dated audits and to-do comments, and
+  several of those had gone stale in ways that told a reader something false. They are now GitHub
+  issues, organised under a [roadmap](https://github.com/keyxmakerx/daymark/issues/132); a choice
+  only the maintainer can make carries the `needs-decision` label. Twenty-seven retired documents
+  were deleted (git history and the issues keep their text), their reference content was merged into
+  the documents that remain, and [docs/DECISIONS.md](docs/DECISIONS.md) replaces the dated decision
+  log. Code comments cite issues and reference documents rather than plans, and a test now fails if
+  code, configuration or an agent instruction names a document that does not exist. Where each kind
+  of information lives is set out in [CONTRIBUTING.md](CONTRIBUTING.md).
 - **Pinching the sky now magnifies the place you are pinching, and there is a way back out.** A
   pinch used to scale the field about its own corner, so whatever you had your fingers on slid away
   from between them — and this surface has no labels and no landmarks, so what you were looking at
@@ -263,6 +469,89 @@ All notable changes to this project are documented here. The format is based on
   quiet notice that names nobody and counts nothing.
 
 ### Fixed
+- **Companion — the sync card and `pnpm push` keep working if your server's key gains a new kind of
+  lock.** They refused the whole key when it held a lock of a kind they did not know, such as a future
+  passkey lock, while the owner console and the phone skipped it. They now skip it too, and still
+  refuse a key whose settings, on any lock, are outside what they accept. (#419)
+- **Companion — opening your key no longer tells you to check your typing when the problem is the
+  key's settings.** If the key on your server asks for settings the console does not accept, it now
+  says: "The key this server holds asks for settings this console does not accept, so it was not
+  opened. Nothing has changed." It no longer asks you to check what you typed and try again. (#418)
+- **Companion — the Self-check history chart is drawn in plain ink.** Its line was drawn in the green
+  used for the best mood, which made self-check results look like a mood or a good sign. It is now
+  ink, on your own view and on what a clinician sees, as the clinician's Record page already draws
+  self-checks. (#420)
+- **Companion — the dashboard no longer says "your" to a clinician about someone else's data.** On a
+  clinician's view of a share, "relative to your overall average" and "your own scores" now read
+  "relative to their overall average" and "their own scores". On your own data the wording is
+  unchanged. (#421)
+- **Companion — the clinician's Record page no longer says a person's own words are never shared.**
+  It said a person's journal and check-in notes "stay on their phone and are not in a share at all",
+  which is untrue when they tick "Include my own words". It now says the page holds self-check results
+  only, answers to individual questions are never in a share, and a person's journal and notes reach
+  the clinician only if they chose to include them, shown under Shared data and in the Calendar. (#399)
+- **Companion — buttons say what they do instead of "Cancel".** The clinician's publish dialog offers
+  "Not now". The practice console's removal confirm offers "Keep their seat" and "Remove from
+  practice", and its role editor "Keep their role" and "Change role". (#400)
+- **Companion — removing someone from a practice is shown as the serious step it is, and a failed
+  change says what did not happen.** The removal confirm now uses the one alarm colour instead of the
+  amber used for warnings. When changing a role, removing someone or accepting your own seat fails,
+  the heading says what did not happen, such as "The member was not removed". If the server's answer
+  was lost, it says it is not known whether it happened, and that message no longer disappears when
+  the list reloads. (#401)
+- **Companion — the Activities & mood chart no longer colours activities as good or bad.** Bars were
+  green above the average and orange below, in mood colours. They are now plain ink; the side of the
+  line and the number beside each bar still show the difference, on your own view and on what a
+  clinician sees. (#404)
+- **Companion — the clinician's calendar shows a night's sleep at the times it was logged.** A sleep
+  log showed a clock time taken from its date that nobody recorded (for example 02:00 in Central
+  Europe). It now shows bedtime and wake time, as the person's own month does. (#416)
+- **Companion — the recovery code prints in dark ink on white, even from dark mode.** "Print this
+  page" on the Recovery code screen switches the page to the light theme for the print and back
+  afterwards, as "Print this month" does. (#417)
+- **Companion — your own mood names and colours now show in the browser.** If you renamed or
+  recoloured your moods on the phone, the web still showed the app's original ones. On your own data,
+  the mood chart and the new calendar now use your names and colours; any mood you left as it was
+  keeps its usual name and colour. A clinician reading what you share still sees the usual ones,
+  because a share does not carry yours. Your colours are only ever used for the small mark that stands
+  for a mood, always with its word beside it — never for buttons, warnings or anything else on the
+  page. (#280)
+- **Warnings and Delete buttons have a colour of their own.** The phone drew Delete, the lock
+  screen's "Incorrect PIN" and the safety plan's crisis button in the same red as an Awful mood, so
+  the colour of someone's worst day doubled as a warning. They now use a separate clay red, the same
+  one the web console uses, and recolouring your moods never changes it. (#395)
+- **Small grey labels are easier to read.** TODAY, HOW ARE YOU, RIGHT NOW?, the card labels on
+  Insights and Stats, section headings, and the times on your entries were printed in a pale grey
+  that was hard to read, especially outdoors. They now use the darker grey the rest of the app uses
+  for secondary text, in light and dark mode. (#396)
+- **If the person you share with has ended their access, the owner console notices before it does
+  anything.** It now asks before it records their keys or seals the share, so "Nothing was sealed or
+  sent" is exactly true. (#275)
+- **The owner console's access log describes every event in words.** Revoking a share shows as
+  "Revoked sharing" instead of a code, and approving or taking back a pairing, and sending or reading
+  keys, have plain lines too. (#277)
+- **The example nginx and Traefik proxy setups now meet the rules they sit beside.** nginx refuses
+  host names it does not serve and forwards its own configured name, not the visitor's; Traefik
+  trusts no visitor's forwarded headers, and its steps now actually apply its labels and join the
+  network the compose file creates. (#209)
+- **Companion — a share can be sealed from the owner console.** Since its first version the owner
+  console was handed nothing of the backup the person had opened, and once a backup was open the
+  page replaced the navigation with the dashboard, so the console could not even be reached. "Seal &
+  publish share" stayed disabled in every state a person could get to. The navigation now stays on
+  screen whatever is open, and the console receives the same records the dashboard shows.
+- **Companion — a clinician can be granted access from the browser.** "Sign & publish grant" failed
+  in every browser before anything reached the server: it copied the grant with a function that
+  cannot copy the page's live state, and the tests, which draw no page, never saw it. It now
+  publishes, and a test checks that no component copies state that way.
+- **Companion — the command-line writer starts, and keeps the token off the command line.** `pnpm
+  push` stopped before doing anything, so no snapshot could be uploaded from a laptop (#373). It now
+  runs, and a test runs the command itself. It reads the server's access token from
+  `DAYMARK_AUTH_TOKEN`, as it already read the passphrase from the environment, and refuses a
+  `--token` argument, which other users of the same machine could read (#384).
+- **Companion — a browser test walks the whole Paired loop.** Two browsers and a real server: first
+  run, the recovery code, pairing by spoken code, the grant, a share, the clinician reading it, an
+  assignment and the owner's inbox. It found both fixes above. `pnpm e2e:paired`; not part of `pnpm
+  test`.
 - **Restoring a backup no longer empties the journal when it fails part-way.** "Replace all
   current data" deleted thirteen tables and then wrote the backup back, and the two halves were not
   tied together. If anything threw between them — an older file whose activity links name something
@@ -697,6 +986,92 @@ All notable changes to this project are documented here. The format is based on
   browser, which is now part of how this repository verifies itself.
 
 ### Security
+- **Companion — each server serves only what its shape needs.** A new setting, `DAYMARK_SETUP_MODE`,
+  says what a server is for: `solo`, `paired` or `practice`. A solo server serves sync and the
+  owner's page and nothing clinical: every clinician, pairing and practice route answers 503, as
+  they all did with `DAYMARK_THERAPIST_AUTH` off, and the clinician and practice pages answer 403
+  however their address is written. A paired server adds invitations, pairing, clinician sign-in,
+  relationships and the clinician's page; a practice server adds the practice routes and page. The
+  health probes and the server console are served in every shape, and each shape opens only its own
+  files on the volume. `/v1/config` publishes a chosen shape as `setupMode`. A server with no mode
+  set keeps doing what its `DAYMARK_THERAPIST_AUTH` switch did — with it on, everything — except
+  that one with the switch off no longer serves the clinician and practice pages, which could do
+  nothing there; either way it says in its log which shape it assumed and how to choose. A value
+  other than the three, or a mode the switch contradicts, stops the server at start with one line
+  naming the settings. Two clinician routes that answered differently with the switch off now answer
+  503 like the rest. The example environment chooses `solo`, and compose passes
+  `DAYMARK_THERAPIST_AUTH` only when `.env` sets it. On a practice server the one server token is
+  still the owner's credential for every relationship on it: never hand it to the people who share
+  with the office (#331). (#330)
+- **Companion — the server will not start the clinician portal or email without its public
+  address.** Invitation and notification links fell back to whatever address the visitor's request
+  named when `DAYMARK_PUBLIC_BASE_URL` was unset, and an invitation link carries its secret. With the
+  clinician portal (`DAYMARK_THERAPIST_AUTH`) or outbound email (`DAYMARK_SMTP_HOST`) on, the server
+  now refuses to start without the address, or with one that is not an absolute `http` or `https`
+  address, and says so in one log line that names the setting and gives an example; it exits with
+  status 78. The shipped compose file always sets the address from `DAYMARK_DOMAIN`, so a standard
+  install is unaffected, and a server that only syncs needs none. (#180)
+- **Companion — the plain-http testing switch is refused on a server reached over https.**
+  `DAYMARK_COOKIE_INSECURE` lets the clinician session cookie travel over plain `http`, for local
+  testing. Left on where the public address is `https`, it was one step from session cookies crossing
+  the network in the clear, and nothing said so. The server now refuses to start with it there,
+  naming both settings. (#181)
+- **A share's signature now covers everything in it, so nobody holding a share can change what it
+  says.** The key that opens a share is sealed to the clinician with a sealed box, which anyone who
+  knows the clinician's public key can make, and the owner's signature covered only the share's
+  label: its id, version, recipient, expiry and owner. Whoever held one share, the server that
+  stores it included, could keep the signed label and put different contents under it, and the
+  clinician's portal would have shown those contents as the owner's. The signature now covers the
+  label, the encrypted contents and the sealed key together, and the portal checks it before it
+  opens anything. **Shares made before this change no longer open.** The clinician sees *This share
+  was sealed in an older format whose contents cannot be checked, so it stays closed. Ask for a
+  fresh one.* The version a share is signed as is now the version it is published as, and the portal
+  refuses one that says otherwise. Shares are also padded before they are encrypted, so the server
+  learns only a rounded size: up to 1 MiB, the next power of two and never less than 4 KiB; above
+  that, never more than about 12% larger. Snapshots, game plans and assignments follow (#315).
+- **A clinician can no longer use up the space the owner needs.** Everything in a relationship, the
+  owner's grants and shares and the clinician's assignments and game plans, drew on one storage
+  allowance, so a clinician who wrote enough could leave the owner unable to publish anything,
+  including a grant that takes a permission away from that clinician. Each direction now has its own
+  allowance: what the clinician writes may use a quarter of `DAYMARK_REL_QUOTA_BYTES` (64 MiB of the
+  default 256 MiB), and what the owner writes the rest. The total is unchanged.
+- **A clinician's portal trusts only the grant written for them, and the owner's inbox only an
+  assignment filed under the label it was signed with.** The owner signs every clinician's grant
+  with the same key, so the signature said who wrote a grant but not whom it was for, and a server
+  could have shown one clinician the permissions granted to another. The portal now checks the name
+  inside as well. Nothing depended on that screen, because the owner's console checks every
+  assignment against its own copy of the grant, but a clinician should never be shown permissions
+  they do not have. The owner's inbox now refuses an assignment the server files under a different
+  lineage or version from the one signed inside it, so an old assignment cannot be shown again as a
+  new one. A clinician who re-pairs with new keys keeps what was granted, re-bound to the new key;
+  before, every assignment they sent after re-pairing was refused.
+- **What you share with a clinician no longer outlives its end.** A share is served until the end
+  you chose and never more than 90 days after you publish it (it was a year), and publishing a new
+  share ends the ones before it, so narrowing a share really narrows it. Assignments and game plans
+  end 90 days after they arrive. Within the hour after anything ends, the server deletes its stored
+  copy and keeps only a record that it existed. Before, an expired share was only refused, and its
+  bytes stayed on the disk for good. Only what the server still holds counts against a
+  relationship's storage now. The limit of 50 versions per item now ends the oldest the same way,
+  instead of deleting the record and sometimes leaving the file behind with nothing pointing at it
+  (#374). Items already stored follow the same rule from the first start after upgrading; nothing
+  had been publicly released, so no one's chosen end date is cut short. (#228, #332, #338)
+- **Backups, game plans and assignments are padded before they are encrypted, as shares already
+  are.** The server stores each one at a size rounded up to a standard bucket (at least 4 KiB, then
+  powers of two up to 1 MiB, then never more than about 12% larger), so it can no longer tell from
+  sizes how much you wrote between two backups, or how long a plan or a task was. Padding hides how
+  much, never when: the server still sees when each one arrives, and the clinician's sign-in page
+  now says so in those words. Everything already stored unpadded still opens. The command-line
+  backup writer checks the padded size before it sends anything and says plainly when a backup is
+  too large once padded; a server that accepts larger blobs is matched with `--max-blob-bytes`. The
+  phone's sync code, not yet switched on (#168), makes and opens the same padded backups byte for
+  byte and still opens unpadded ones. (#315, #316)
+- **A copy of a share sealed before one the clinician has already opened stays closed.** A server
+  restored from a backup, or anything able to change what a server stores, could have handed the
+  clinician an older share as the current one. The clinician's browser now remembers when the newest
+  share it opened was sealed (the owner's own time, signed into the share) and refuses an older
+  copy: *This copy was sealed before one you have already opened, so it stays closed. Ask for a
+  fresh one.* It cannot catch the first share a browser opens, or a server that changes the page
+  itself.
 - **The phone's actual cryptography moves from 2019 to 2024.** The C library doing the encrypting
   on the phone was libsodium 1.0.18, bundled inside a wrapper whose version number said nothing
   about it; 1.0.20 brings five years of hardening (AEAD MAC memory fences, optimizer blockers,
@@ -778,7 +1153,7 @@ All notable changes to this project are documented here. The format is based on
   already run (Cosmos Cloud, Caddy, Traefik, nginx, a tunnel) to terminate TLS in front of. Bundling
   one meant shipping ACME, a certificate volume, a `:80`/`:443` binding and a privileged-port
   workaround for an audience that already has a proxy. What your proxy must do is now written down
-  as a nine-point contract in `docs/COMPANION_DEPLOYMENT_HARDENING.md` §3, and worked configs for
+  as a nine-point contract in `docs/COMPANION_DEPLOYMENT.md` §3.1, and worked configs for
   Caddy / nginx / Traefik moved to `docs/alternatives/` where their status as untested references is
   stated rather than implied.
   - `docker-compose.no-egress.yml` is the stronger opt-in topology for a **containerised** proxy: no

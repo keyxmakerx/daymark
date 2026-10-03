@@ -1,7 +1,7 @@
 /*
  * THE APP-AUTHORED COMPANION DIALOGUE — every line written in advance, by a person, here.
  *
- * This is the conversation from DECISIONS_2026-08.md §D1b, as data in the ./dialogue format.
+ * This is the conversation from DECISIONS.md §D1b, as data in the ./dialogue format.
  * Nothing in it is generated, templated or filled in at runtime: what you read below is exactly
  * what someone is shown. That is the point of the design — a dialogue of fixed choices has no
  * "typed something real into a box that cannot answer" failure mode, and it can be read, argued
@@ -342,11 +342,11 @@ const offer: DialogueNode = {
   lines: [
     {
       when: OFFER_LADDER[0],
-      text: "There's the hard-moment exercise your therapist set up. About four minutes, nothing scored, and nothing you write in it leaves the phone.",
+      text: "There's the hard-moment exercise your clinician set up. About four minutes, nothing scored, and nothing you write in it leaves the phone.",
     },
     {
       when: OFFER_LADDER[1],
-      text: "There's the writing exercise your therapist set up, about what matters to you. Five minutes or so, nothing scored, nothing shared.",
+      text: "There's the writing exercise your clinician set up, about what matters to you. Five minutes or so, nothing scored, nothing shared.",
     },
     {
       when: OFFER_LADDER[2],

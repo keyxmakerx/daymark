@@ -395,8 +395,9 @@ class LazySodiumParityTest {
     fun `the ristretto255 surface exists on both sides`() {
         // The exact hole this test exists because of: lazysodium-java 5.1.0 shipped ZERO
         // Ristretto255 entries while lazysodium-android 5.1.0 shipped the full surface, and a
-        // comment claiming same-version parity kept everyone from looking. CPace (plan §3.7)
-        // needs this surface on both the host-test side and the phone side.
+        // comment claiming same-version parity kept everyone from looking. CPace
+        // (docs/COMPANION_PAIRING.md §3) needs this surface on both the host-test side and the
+        // phone side.
         val ristretto = "$GOTERL/interfaces/Ristretto255"
         for ((label, classes) in mapOf("java" to javaClasses, "android" to androidClasses)) {
             val cls = classes[ristretto]

@@ -1,12 +1,24 @@
 name: Bug report
 description: Report something that isn't working
 labels: ["bug"]
+type: Bug
 body:
   - type: textarea
     id: what-happened
     attributes:
       label: What happened?
       description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: part
+    attributes:
+      label: Which part of Daymark?
+      options:
+        - The Android app
+        - The Companion server
+        - The Companion web consoles (owner, therapist or admin)
+        - Not sure
     validations:
       required: true
   - type: textarea
@@ -23,7 +35,7 @@ body:
     id: version
     attributes:
       label: App version
-      placeholder: "e.g. 0.1.0 (see More ▸ About)"
+      placeholder: "e.g. 0.1.0 (see More ▸ About), or the Companion image tag"
   - type: input
     id: device
     attributes:

@@ -43,7 +43,8 @@ const SCREEN_MARKUP = markupOf(SCREEN)
 
 describe('the portal composes the sign-in contract around the one auth path', () => {
   it('renders LoginGate inside SignInScreen rather than beside or instead of it', () => {
-    expect(PORTAL).toContain('<SignInScreen>')
+    // `{locked}` tells the screen the automatic lock fired, so it can say so (#262).
+    expect(PORTAL).toContain('<SignInScreen {locked}>')
     expect(PORTAL).toContain('{#snippet credentials()}')
     const snippet = PORTAL.slice(PORTAL.indexOf('{#snippet credentials()}'))
     expect(snippet.slice(0, snippet.indexOf('{/snippet}'))).toContain('<LoginGate')
@@ -94,6 +95,26 @@ describe('one bundle, opened deliberately, cleared with the session', () => {
     expect(tabHandlers.length).toBeGreaterThan(3) // the tabs really are wired this way
     for (const h of tabHandlers) expect(h).not.toContain('fetch')
     expect(PORTAL).not.toContain('fetchShare')
+  })
+})
+
+describe('the grant the portal trusts is the one written for this clinician', () => {
+  it('checks the grant against the signing key this portal holds', () => {
+    expect(codeOnly(PORTAL)).toContain('verifyGrantBlob(current.bytes, c.pinnedOwnerSignPub, c.therapistFp)')
+  })
+
+  it('does not report another clinician\'s grant as a failed signature', () => {
+    // Both refusals show nothing, but they send the clinician to different places: a failed
+    // signature is not theirs to fix, and a grant for another key is the owner's to re-publish.
+    expect(codeOnly(PORTAL)).toContain('e instanceof GrantAddressError')
+  })
+})
+
+describe('an older copy of a share is refused in words of its own', () => {
+  it('names it apart from a failed signature, in the same voice as the other closed shares', () => {
+    const code = codeOnly(SHARED_VIEW)
+    expect(code).toContain('e instanceof ShareOlderError')
+    expect(code).toContain('This copy was sealed before one you have already opened, so it stays closed. Ask for a fresh one.')
   })
 })
 
@@ -207,7 +228,11 @@ describe('the sign-in screen sits where the other surfaces sit', () => {
     const block = SCREEN_MARKUP.slice(brand, title)
     expect(block).toContain('<span class="mark" aria-hidden="true"></span>')
     expect(block).toContain('Daymark Companion')
-    expect(block).toContain('<p class="muted tagline">Therapist portal</p>')
+    // The page is named for who uses it, with the same noun as the other three (#158, #310).
+    expect(block).toContain('<p class="muted tagline">Clinician console</p>')
+    expect(block).not.toContain('Therapist portal')
+    // Control: the retired name planted back into the real masthead is seen.
+    expect(block.replace('Clinician console', 'Therapist portal')).toContain('Therapist portal')
     // The pattern is the owner viewer's, read from its source rather than retyped.
     expect(OWNER_APP).toContain('<div class="brand">')
     expect(OWNER_APP).toContain('<span class="mark" aria-hidden="true"></span>')

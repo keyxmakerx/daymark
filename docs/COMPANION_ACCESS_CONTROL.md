@@ -1,14 +1,12 @@
 # Daymark Companion — Access Control (Clinical Layer)
 
-> ## ⚠️ STATUS: DESIGN — DIRECTION LOCKED, LARGELY NOT YET IMPLEMENTED
->
-> This is the **clinical layer** that turns the single‑therapist Companion into a
-> multi‑client, multi‑role platform ([PRODUCT_DIRECTION.md](./PRODUCT_DIRECTION.md)).
-> It **builds on** the shipped crypto, capability grants, pairing, and audit log
-> (see [COMPANION_SECURITY.md](./COMPANION_SECURITY.md),
-> [COMPANION_ASSIGNMENTS.md](./COMPANION_ASSIGNMENTS.md)) and **extends** their
-> two‑role model to orgs and multiple roles. The org model, multi‑role RBAC,
-> behavioral guard, org‑consent, and break‑glass are **net‑new** (Phase 3+).
+The **clinical layer**: how practices, roles and patient consent fit around the Companion's
+per-relationship crypto, grants, pairing and audit log
+([COMPANION_SECURITY.md](./COMPANION_SECURITY.md),
+[COMPANION_ASSIGNMENTS.md](./COMPANION_ASSIGNMENTS.md)). The direction is settled; much of it is not
+built. Each section opens with one status line saying which parts exist. The practice code is tested
+against this document (`practice/threePlane.test.ts`), and the consoles name its sections, so its
+headings and the role table are not reworded casually.
 
 ---
 
@@ -32,6 +30,9 @@
 
 ## The three planes
 
+**Status:** built, as the rule the practice code is held to — no practice action lives in the data
+plane (`org/OrgRole.kt`, `practice/threePlane.test.ts`).
+
 The system separates into three planes, and **who touches which plane is the
 whole design**:
 
@@ -51,8 +52,13 @@ whole design**:
 
 ## Orgs / practices (the tenant)
 
-Today the system is per‑pairing: one owner ↔ one pinned therapist, roles
-`OWNER`/`THERAPIST` only. The clinical layer adds an **editable org**:
+**Status:** built: a practice with members, roles and its own audit chain (`routes/OrgRoutes.kt`,
+the practice console). Removing a member ends their membership and live sessions, not any patient's
+relationship ([COMPANION_THERAPIST.md](./COMPANION_THERAPIST.md) §9a). Not built: membership changes
+issuing or revoking grants (#289, #297); choosing a practice from a list (#298).
+
+Each relationship pairs one owner with one clinician, whatever practice the clinician belongs to. The
+clinical layer adds an **editable org**:
 
 - An **Org (Practice)** is the tenant. It has **members** (with roles) and an
   **Org Admin** who manages *its* membership and roles — **scoped to that
@@ -72,6 +78,10 @@ grant) are deliberately separate — see the three‑plane rule.
 
 ## Role catalog
 
+**Status:** built as a server-enforced catalog of actions (`org/OrgRole.kt`), mirrored in the consoles
+(`practice/roles.ts`); the patient and the platform sysadmin are not practice roles. Not built: a
+scheduling surface for the front desk (#299).
+
 Roles gate **actions** (server‑enforced). Read capability is *separate* and comes
 only from a patient grant. "Can read clinical content?" below means *is normally
 granted a key*, not *is technically permitted to hold one by role*.
@@ -81,13 +91,26 @@ granted a key*, not *is technically permitted to hold one by role*.
 | **Patient / owner** | their own keys, grants, consent, audit view | Their own data — root of trust |
 | **Psychologist / clinician** | assignments, notes, plans for granted clients | Yes — for clients who granted them |
 | **Psychiatrist** | same as clinician; may publish Validated/Adapted tools | Yes — for granted clients |
-| **Therapist assistant** | supports a clinician's work | Narrowed — only what's granted |
+| **Clinical assistant** | supports a clinician's work | Narrowed — only what's granted |
 | **Front desk** | scheduling, invites, membership logistics | **No** — scheduling metadata only, no notes |
 | **Supervisor** | oversees a team of clinicians | **Only via explicit, consented grant** (clinical supervision), never by title |
 | **Org admin** | practice membership, roles, revocation, audit review | **No** — control/monitoring only |
 | **Platform sysadmin** | runs the server/infra | **No — by design.** Ciphertext + ops metadata only |
 
+In an office's own words (#288): the receptionist is the **Front desk**, the office administrator is
+the **Org admin**, and a doctor is a **Psychologist / clinician** or a **Psychiatrist**. A doctor
+who assesses someone and refers them on does so in an *assessing* care relationship, not in a role
+of its own ([Cross‑provider sharing & referrals](#cross-provider-sharing--referrals)).
+
+On a server that runs one practice, one person may hold the platform sysadmin role and the org admin
+role, as two separate roles (#208). That is not the god admin: neither role carries a key, and
+content still needs a patient's grant. Not built: #314 and #322, which give an administrator an
+account of their own.
+
 ## Consent model
+
+**Status:** built: per-person consent — the owner invites and pairs each clinician and chooses what to
+share with them. Not built: org-consent (#289).
 
 - **Patient is always the root of consent.** Roles decide who *may request*
   access; the patient's grant is what *authorizes* it.
@@ -104,6 +127,8 @@ granted a key*, not *is technically permitted to hold one by role*.
 
 ## Cross‑provider sharing & referrals
 
+**Status:** not built (#291). Today each clinician needs their own invitation from the patient.
+
 A therapist sharing with a psychiatrist (and vice versa) works, with one rule:
 **read access always flows from the patient's consent, never from one clinician
 handing another their key.**
@@ -114,22 +139,33 @@ handing another their key.**
 - **Read** — the second provider can decrypt only once they hold a **grant**: the
   patient (or the care‑team org‑consent) put them on the team. Then a specific
   assessment/summary/note can be shared to them.
-- **Bidirectional and audited** — the same both ways, and every open is recorded
-  in the patient‑readable audit log.
+- **Bidirectional and audited** — the same both ways, and opens are recorded by
+  the server in the patient‑readable log, which shows tampering, never what was
+  left out (#217).
+- **Made by people, never by software** — a doctor who assesses someone and
+  recommends a therapist does so in an **assessing** care relationship, which
+  ends by itself once the person has accepted or declined, unless they keep that
+  doctor on. The assessing clinician chooses whom to recommend and the person
+  decides; the Companion never suggests, ranks, filters or matches clinicians,
+  and has nothing to match on (#288).
 
 Referrals are free; **reading requires a grant.** This keeps the patient the root
 of consent while supporting real care‑team collaboration.
 
 ## Revocation
 
-Two things must both be possible:
+**Status:** built: the server-side cutoff (a withdrawn share, or a re-signed `granted:false` grant; the
+server answers 410 from then on), the clinician's own exit, and removing a practice member. Not built:
+the cryptographic cutoff (#297), the kill switch (#295), and the owner ending a clinician's sign-in
+(#210).
+
+Three things must all be possible:
 
 1. **Server‑side cutoff (immediate).** The token/grant instantly stops being
-   served — already shipped as a re‑signed `granted:false` grant, *future‑only*.
-2. **Cryptographic cutoff (durable) — net‑new.** Rotate the client's data key and
+   served — a re‑signed `granted:false` grant, *future‑only*.
+2. **Cryptographic cutoff (durable).** Rotate the client's data key and
    re‑wrap it for whoever's still authorized, so a revoked party's old key can't
-   read *new* data. This is the piece the current design explicitly does **not**
-   have yet (see [COMPANION_THERAPIST.md](./COMPANION_THERAPIST.md) §9).
+   read *new* data (see [COMPANION_THERAPIST.md](./COMPANION_THERAPIST.md) §9).
 3. **Kill switch.** An org admin (or the behavioral guard) can freeze an account
    or an entire clinician's access at once.
 
@@ -137,6 +173,10 @@ Two things must both be possible:
 > clinician already decrypted. Say this in‑product.
 
 ## Key recovery
+
+**Status:** built: server-access recovery, and a recovery code that locks the web archive's key in the
+browser, with the server keeping the locks so the recovery code opens it from another device
+(`lib/recovery/`, #258). Not built: replacing a recovery code (#407) and split recovery (#261). On the phone, the journal key's PIN and recovery-code wraps are #109.
 
 E2E's hardest UX problem: a lost passphrase currently means lost data, and the
 design deliberately has **no key escrow** (no backdoor). We keep no‑escrow and
@@ -154,7 +194,9 @@ restores *server access*, never the encryption key.
 
 ## Behavioral guard (IDS)
 
-Net‑new, and compatible with zero‑knowledge because it watches **behavior, not
+**Status:** not built (#293).
+
+Compatible with zero‑knowledge because it watches **behavior, not
 content**:
 
 - **Signals:** a token pulling hundreds of clients, a new geography, impossible
@@ -167,28 +209,40 @@ content**:
 
 ## HIPAA‑readiness checklist
 
+**Status:** a map, not a certification. Neither assessment in the gate below has happened (#284).
+
 Software is **HIPAA‑ready**; a *deployment + an organization* is what's
 *compliant*. This maps our safeguards to the Security Rule so a practice *can* be
 compliant when they run it right.
 
 - **Access control** — unique user IDs (roles), automatic logoff (session idle
   expiry, shipped), encryption/decryption (E2E, shipped).
-- **Audit controls** — the hash‑chained, metadata‑only audit log (shipped);
-  extend to org‑level review.
-- **Integrity** — signed manifests/grants (shipped); notes append‑only/amendable
-  ([CLINICAL_NOTES.md](./CLINICAL_NOTES.md)).
-- **Person/entity authentication** — finish **WebAuthn** (today a 501 stub); MFA
-  everywhere; step‑up for sensitive actions.
+- **Audit controls** — the hash‑chained, metadata‑only audit log (shipped), per
+  relationship and, separately, per practice for the org admin's review (shipped).
+- **Integrity** — signed grants (shipped); signed snapshot manifests (not built: #138);
+  clinician notes append‑only/amendable (not built: #300).
+- **Person/entity authentication** — a six‑digit code at sign‑in (shipped);
+  passkey sign‑in for every account, with codes kept as the fallback (#205; not
+  built: #326); a fresh code, checked by the server, before a member is added or a
+  role changed (shipped).
 - **Transmission security** — TLS at the proxy + E2E payloads (shipped).
 - **Administrative/physical** — *out of software's hands*: risk assessments,
   written policies, workforce training, **BAAs** (only if we ever host),
-  breach‑notification procedures. Document what the practice must own.
+  breach‑notification procedures. Document what the practice must own (#284).
 
 > **The gate:** an external HIPAA Security‑Rule assessment **and** an independent
-> crypto/RBAC audit **before any real patient** — see
-> [PRODUCT_DIRECTION.md](./PRODUCT_DIRECTION.md#the-compliance-gate-non-negotiable).
+> crypto/RBAC audit **before any real patient** (#284). Practice use with real
+> patients also needs a clinician client the office's server cannot change
+> (#319), and no patient typing their passphrase into a page the office serves
+> (#174, #321), as decided in #222.
 
 ## The annoyance budget
+
+**Status:** the rule is encoded in the practice capability model (`practice/capabilities.ts`,
+`frictionRank`) and tested. A server-checked step-up is built for adding members and changing roles:
+a fresh, unspent six-digit code (`routes/OrgRoutes.kt`). Opening a share and publishing need the
+session only, by decision (#205). Not built: a passkey as step-up (#326), and step-up for admitting
+someone to a care team (#289).
 
 Least privilege **will** be annoying. There is no version of this that isn't, and pretending
 otherwise is how security designs get quietly gutted the first time someone important is
@@ -203,10 +257,10 @@ to the practice" has mispriced both — and users will route around the expensiv
 |---|---|---|
 | Read content you already hold a grant for | **None** — session auth only | The grant *was* the decision; charging again teaches people to hate the system |
 | Author a note / game plan | None beyond session | Routine clinical work, auditable, reversible |
-| Grant, extend, or widen a share | **Step-up (MFA)** | Creates new read capability — the actual risk |
+| Grant, extend, or widen a share | **Step-up (MFA)** when a clinician admits someone to a care team (#289); for the owner, their signature on the grant is the decision | Creates new read capability — the actual risk |
 | Add/remove a practice member, change roles | **Step-up (MFA)** | Changes who *can* be granted |
 | Revoke / kill switch | **Deliberately cheap** | Never make the safe direction expensive |
-| Break-glass / emergency access | **Maximum** — justification + loud, immediate notification | Should feel like breaking glass |
+| Break-glass / emergency access | **Maximum** — justification + loud, immediate notification | Should feel like breaking glass. It never opens content, a key or anyone's credentials to an administrator (#288) |
 
 Corollaries that follow from the same principle:
 
@@ -214,14 +268,15 @@ Corollaries that follow from the same principle:
   off must always be easier than granting, widening, and turning on. Asymmetry is the point.
 - **Step up, don't hard-lock.** Already the behavioral guard's rule; it generalises. A hard lockout
   can cut off a clinician mid-session with a client in crisis, which is its own harm.
-- **Charge per decision, not per action.** Re-authorising the same standing decision repeatedly is
-  the enterprise-software version of the nag regression documented in
-  [SUPPORT_FEATURE_PLAN.md](./SUPPORT_FEATURE_PLAN.md) — repetition erodes the effect and trains
-  people to click through. If a prompt is answered the same way every time, it is not a control.
+- **Charge per decision, not per action.** Re-authorising the same standing decision repeatedly
+  erodes the effect and trains people to click through. If a prompt is answered the same way every
+  time, it is not a control.
 - **The patient's own friction is capped hardest.** A person in a bad moment must never be locked out
   of *their own* data by a security measure meant to constrain someone else.
 
 ## Clinician turnover: what a handover actually is
+
+**Status:** not built — no `care_relationships` table and no screen (#291).
 
 The org is **one practice**, so the motion that matters is not multi-tenancy — it is people moving:
 a GP referring out, a psychiatrist and a psychotherapist co-treating, someone covering a leave, and
@@ -229,15 +284,18 @@ a clinician **departing** with clients who must not be stranded.
 
 **A referral and a transfer are the same control-plane object at two points in its life, and
 neither moves a key.** One `care_relationships` table (patient, member, `care_role` of
-primary/co-treating/covering/supervising, status, `ended_reason`). A referral *proposes* a
-relationship; a transfer *ends* one and proposes another. Because none of it mints read capability,
-reassignment stays cheap — session auth and an audit entry, no step-up. That cheapness is the payoff
-for keeping roles and keys independent in the first place.
+primary/co-treating/covering/supervising/assessing, status, `ended_reason`). A referral *proposes* a
+relationship, and a person always makes it, never software (#288); a transfer *ends* one and
+proposes another. Because none of it mints read capability, reassignment stays cheap — session auth
+and an audit entry, no step-up. That cheapness is the payoff for keeping roles and keys independent
+in the first place.
 
-Two hard edges:
+Three hard edges:
 
 - **`covering` must auto-expire.** Without a hard end date, covering a two-week leave quietly
   becomes permanent access.
+- **`assessing` ends by itself too**, once the person has accepted or declined the referral, unless
+  they choose to keep that doctor on, for example as co-treating (#288).
 - **A transfer must never route through break-glass.** A planned departure is not an emergency, and
   that is the one door this design must not let it open.
 
@@ -282,17 +340,17 @@ Recurring questions, and where they were already settled:
 | "Other specialists — psychiatrists, assistants, supervisors?" | All in the catalog. A **supervisor reads only via explicit consented grant, never by title** | [Role catalog](#role-catalog) |
 | "A group system that can be changed?" | **Orgs/practices** are the editable tenant; membership changes issue/revoke grants automatically; **org-consent** lets a client consent to "my care team at Practice X" and prune it any time | [Orgs](#orgs--practices-the-tenant), [Consent](#consent-model) |
 | "Least privilege without a god admin?" | The **three-plane rule** — admins live in control + monitoring, **never** the data plane | [Three planes](#the-three-planes) |
-| "Can a specialist see the safety plan?" | Not today (no `INTERNET` in the default build). If ever: an owner-created, curated, revocable share like anything else — never automatic | [SAFETY_PLAN_FEATURE_PLAN.md](./SAFETY_PLAN_FEATURE_PLAN.md) |
+| "Can a specialist see the safety plan?" | Not today (no `INTERNET` in the default build). If ever: an owner-created, curated, revocable share like anything else — never automatic | This table |
 
-**Still genuinely open:** groups *finer than* an org — a specific care team, a therapy group cohort,
-or a client-defined circle that isn't a practice. Org-consent covers "my care team at Practice X";
-it does not yet model a group whose membership the *client* curates, or one spanning two practices.
+**Groups smaller than a practice** (decided in #301): the one group smaller than a practice is a
+person's own care team (#289). There is no group of patients, and none spanning two practices. A
+person's circle is their own list of connections (#174).
 
 **Settled, and recorded elsewhere so it isn't reopened:** location/presence sharing is
 **permanently excluded on principle**; timed/video/puzzle test items are **not built on the phone**;
-tool descriptors are **bundled in the app**, never remotely delivered. All three are in
-[COMPANION_SCOPE.md § Explicitly Out of Scope](./COMPANION_SCOPE.md#explicitly-out-of-scope) with
-their reasoning, because a bare exclusion gets argued back in and a reasoned one doesn't.
+tool descriptors are **bundled in the app**, never remotely delivered. The reasoning for all three is
+in [COMPANION_ARCHITECTURE.md](./COMPANION_ARCHITECTURE.md), because a bare exclusion gets argued back
+in and a reasoned one doesn't.
 
 ## Honest limits
 
@@ -303,5 +361,7 @@ their reasoning, because a bare exclusion gets argued back in and a reasoned one
 - **Revocation can't un‑read** already‑decrypted content.
 - **The browser portal is not zero‑knowledge against a hostile server** that
   serves malicious JS — an inherent web‑crypto limit, documented in
-  [COMPANION_SECURITY.md](./COMPANION_SECURITY.md).
+  [COMPANION_SECURITY.md](./COMPANION_SECURITY.md). Practice use with real
+  patients therefore needs a clinician client the server cannot change (#222;
+  not built: #319).
 - **"Compliant" is the org's, not the software's.** We provide safeguards.

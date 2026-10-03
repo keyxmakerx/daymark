@@ -29,7 +29,7 @@ package com.daymark.app.export
  *
  * ### Sides are logical, pages are physical
  *
- * A *side* is a section with one job (`docs/PLAN_2026-08-NEXT.md` §1), not a sheet face. A side may
+ * A *side* is a section with one job (`docs/DECISIONS.md` §D8), not a sheet face. A side may
  * span several physical pages, so the renderer marks continuation pages and pays [CONTINUATION_H]
  * off the top of each one. [paginate] is the pure model of that flow: give it the blocks a side
  * wants to emit and it returns where the breaks fall and how many physical pages the side takes,

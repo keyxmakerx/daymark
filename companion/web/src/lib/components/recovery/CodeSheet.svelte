@@ -35,13 +35,18 @@
    *   IT WRAPS, AND IT SCROLLS ITS OWN BOX. On a narrow screen the six groups wrap into rows
    *   rather than shrinking, because a code shrunk to fit a phone is a code transcribed wrong.
    *
+   *   ONE LINE ABOVE IT. On screen exactly one line sits directly above the groups, ONLY_TIME_SHOWN,
+   *   and the flows that draw this sheet put nothing of their own between their heading and it: the
+   *   first words read beside the code say what to do with it, and everything else about the code
+   *   comes after the code (#258). The line is not printed, because on paper it would be false.
+   *
    * ─── WHAT THIS COMPONENT DOES NOT DO ──────────────────────────────────────────────────────────
    *
    * It does not decide when the code is visible, does not generate it, does not save it and does
    * not know what happens next. It is handed a code and draws it. The single-use property lives in
    * the flow that owns the state, which is the only place it can live.
    */
-  import { IF_BOTH_ARE_LOST, PRINT_SHEET_CAVEAT, SHOWN_ONCE, WHAT_THIS_OPENS } from './copy'
+  import { CODE_CAN_ACT_AS_YOU, IF_BOTH_ARE_LOST, ONLY_TIME_SHOWN, SHOWN_ONCE, WHAT_THIS_OPENS } from './copy'
 
   let { display }: { display: string } = $props()
 
@@ -59,6 +64,8 @@
     be the only thing anybody sees in five years' time, cut out of a page whose context is gone.
   -->
   <p class="printed-only">{WHAT_THIS_OPENS}</p>
+  <!-- On screen, the one line directly above the code; on paper, nothing. -->
+  <p class="screen-only">{ONLY_TIME_SHOWN}</p>
 
   <div class="groups u-scroll-x">
     {#each groups as group, i}
@@ -76,9 +83,12 @@
   </div>
 
   <p class="cost">{IF_BOTH_ARE_LOST}</p>
+  <!--
+    On screen and on paper alike: the code opens the master, and the owner's signing identity is
+    derived from it, so whoever holds the paper holds more than the data (#258).
+  -->
+  <p class="reach">{CODE_CAN_ACT_AS_YOU}</p>
   <p class="once">{SHOWN_ONCE}</p>
-  <!-- Screen-hidden, printed. See PRINT_SHEET_CAVEAT: the paper outlives the build. -->
-  <p class="printed-only">{PRINT_SHEET_CAVEAT}</p>
 </div>
 
 <style>
@@ -126,6 +136,16 @@
     color: var(--ink-text);
   }
 
+  /* What the code can do besides open the data: in ink, because it is a reason to keep the paper
+     safe rather than a footnote to it. */
+  .reach {
+    margin: var(--space-2) 0 0;
+    max-width: 44rem;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--ink-text);
+  }
+
   .once {
     margin: var(--space-2) 0 0;
     max-width: 44rem;
@@ -134,9 +154,18 @@
     color: var(--ink-soft);
   }
 
-  /* Not drawn on screen, drawn on paper. Both sentences are context the printed sheet loses. */
+  /* Not drawn on screen, drawn on paper: the heading is context the printed sheet loses. */
   .printed-only {
     display: none;
+  }
+
+  /* In ink and at body size: it is the instruction the code is shown for, not a footnote to it. */
+  .screen-only {
+    margin: 0 0 var(--space-3);
+    max-width: 44rem;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--ink-text);
   }
 
   @media print {
@@ -146,6 +175,10 @@
       print-color-adjust: exact;
     }
 
+    .screen-only {
+      display: none;
+    }
+
     .printed-only {
       display: block;
       margin: 0 0 var(--space-3);
@@ -153,10 +186,6 @@
       font-size: 0.85rem;
       line-height: 1.5;
       color: var(--ink-text);
-    }
-
-    .printed-only ~ .printed-only {
-      margin: var(--space-3) 0 0;
     }
 
     /* Nothing on a printed sheet should be dimmed: a photocopy or a fading inkjet takes the light

@@ -16,7 +16,7 @@
 #     cannot read it and the server exits on startup.
 #
 # TWO THINGS YOUR PROXY MUST DO. Neither is optional. The full nine-point contract is
-# §3 of docs/COMPANION_DEPLOYMENT_HARDENING.md; these two are the ones that bite first.
+# §3.1 of docs/COMPANION_DEPLOYMENT.md; these two are the ones that bite first.
 #
 #   1. Set DAYMARK_TRUSTED_PROXIES to the proxy's source address AS THE APP SEES IT.
 #      Leave it unset and every per-client control — sync auth lockout, TOTP lockout,
@@ -90,7 +90,7 @@ services:
       back:
         ipv4_address: 10.89.0.3
 
-    user: "65532:65532"          # distroless nonroot. WAS 10001 — see §4.4 migration.
+    user: "65532:65532"          # distroless nonroot. WAS 10001 — see COMPANION_DEPLOYMENT.md §7.
 
     environment:
       DAYMARK_BIND_ADDR: "0.0.0.0"        # all interfaces INSIDE the container only
@@ -98,7 +98,10 @@ services:
       DAYMARK_DATA_DIR:  "/data"
       DAYMARK_WEB_DIR:   "/app/web"
       DAYMARK_BASE_PATH: "/"
-      DAYMARK_LOG_LEVEL: "warn"
+      # info, the code's own default (#367). warn would hide the startup settings line
+      # (address, base path, sync and SMTP on or off), the SMTP-enabled line and "readiness
+      # restored", without which a cleared storage outage looks permanent in the log.
+      DAYMARK_LOG_LEVEL: "info"
       TZ:                "UTC"
 
       # THE most important line in this file, and it is EMPTY BY DEFAULT ON PURPOSE:
@@ -111,27 +114,29 @@ services:
       DAYMARK_TRUSTED_PROXIES: "${DAYMARK_TRUSTED_PROXIES:-}"
 
       # The real external origin, as clients type it. Not a LAN alias: this is the
-      # WebAuthn RP-ID and the base URL for invite links in outbound email. Without it,
-      # RouteUrls.resolveBaseUrl() falls back to the client-supplied Host header and
-      # emails an attacker-controlled invite link. See §6 item 6.
+      # WebAuthn RP-ID and the base of every link the server hands out — invitations,
+      # notifications, recovery. With DAYMARK_THERAPIST_AUTH on or SMTP set, the server
+      # refuses to start without a usable absolute http(s) address here, rather than take
+      # a link's host from a visitor's Host header (#180). See docs/COMPANION_DEPLOYMENT.md
+      # §3.1, requirement 5.
       DAYMARK_PUBLIC_BASE_URL:  "${DAYMARK_PUBLIC_SCHEME:-https}://${DAYMARK_DOMAIN:?set in .env, e.g. daymark.example.com}"
       DAYMARK_WEBAUTHN_RP_ID:   "${DAYMARK_DOMAIN:?set in .env, e.g. daymark.example.com}"
       DAYMARK_WEBAUTHN_ORIGINS: "${DAYMARK_PUBLIC_SCHEME:-https}://${DAYMARK_DOMAIN:?set in .env, e.g. daymark.example.com}"
 
-      # The therapist portal and the practice console. OFF unless this says 1, and off is
-      # the right default — a Solo deployment has no clinician and no practice, so the
-      # whole relationship surface is dead code it should not be running.
-      #
-      # It was absent from this file entirely until the shapes it gates had interfaces, and
-      # the failure mode was miserable rather than obvious: every /v1 relationship route
-      # answers 503 "therapist portal not configured", so an operator who invited a
-      # clinician got a working-looking console, a real invite link, and a portal that
-      # refused at the last step with a message about configuration they never set.
-      # Fail-closed is correct; failing closed on a setting nobody knew existed is not.
-      #
-      # Set it to 1 for Paired (one clinician) or Practice (a clinic runs this machine).
-      # Leave it 0 for Solo. Changing it needs a restart; nothing is migrated either way.
-      DAYMARK_THERAPIST_AUTH: "${DAYMARK_THERAPIST_AUTH:-0}"
+      # The shape of this machine, set in .env (#330): solo, paired or practice. Each
+      # switches on only what it needs — solo: sync and the owner's page; paired: those,
+      # plus invitations, pairing, clinician sign-in, relationships and the clinician's
+      # page; practice: those, plus the practice routes and page. A route that is off
+      # answers 503 "therapist portal not configured"; a page that is off answers 403.
+      # Any other value stops the server at start with one line naming this setting.
+      # Unset, the server assumes practice with DAYMARK_THERAPIST_AUTH on and solo with it
+      # off, and says which in its log. Changing it needs a restart; no data moves between shapes.
+      DAYMARK_SETUP_MODE: "${DAYMARK_SETUP_MODE:-}"
+
+      # The switch DAYMARK_SETUP_MODE replaces. Empty unless .env sets it, so a mode set
+      # on its own starts; set beside a mode, it must agree with it (on for paired and
+      # practice, off for solo) or the server refuses to start and names both settings.
+      DAYMARK_THERAPIST_AUTH: "${DAYMARK_THERAPIST_AUTH:-}"
 
       DAYMARK_AUTH_TOKEN_FILE: "/run/secrets/companion_auth_token"
 
@@ -210,8 +215,8 @@ networks:
       # network, because published ports do NOT work on Docker `internal:` networks
       # (moby/moby#36174, still open).
       #
-      # Enabling outbound SMTP means turning this back on; see §2.1 of
-      # docs/COMPANION_DEPLOYMENT_HARDENING.md.
+      # Enabling outbound SMTP means turning this back on; see §8 of
+      # docs/COMPANION_DEPLOYMENT.md.
       com.docker.network.bridge.enable_ip_masquerade: "false"
     ipam:
       config:

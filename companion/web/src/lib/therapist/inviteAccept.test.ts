@@ -183,12 +183,13 @@ beforeAll(async () => {
 /**
  * What `beginAcceptance` used to be, over the ceremony that replaced it.
  *
- * The redeem route is gone (plan §3.7, 2026-09-04), so the first half of the ceremony is now
- * `answerPairing` — the same generate, wrap, prove and store steps in the same order — followed by
- * `enrolAfterApproval` once the owner has approved. Everything this file tests about those steps is
- * still true and still worth testing, so the cases below drive them through this, which wires the
- * pairing ports to the SAME harness they always used. The relay itself is stubbed: what a fetch and
- * a respond do on the wire is pairing/relay.test.ts's subject, not this file's.
+ * The redeem route is gone (COMPANION_PAIRING.md §4, "No enrolment without approval"), so the
+ * first half of the ceremony is now `answerPairing` — the same generate, wrap, prove and store
+ * steps in the same order — followed by `enrolAfterApproval` once the owner has approved.
+ * Everything this file tests about those steps is still true and still worth testing, so the cases
+ * below drive them through this, which wires the pairing ports to the SAME harness they always
+ * used. The relay itself is stubbed: what a fetch and a respond do on the wire is
+ * pairing/relay.test.ts's subject, not this file's.
  */
 async function acceptViaPairing(
   ports: AcceptancePorts,
@@ -618,7 +619,14 @@ describe('the fingerprint is read out, not compared on screen', () => {
     expect(all).toContain('encryption key')
     expect(all).toContain('signing key')
     expect(KEY_CHECK_COPY.both).toMatch(/both/i)
-    expect(KEY_CHECK_COPY.both).toMatch(/half a record/i)
+    // A key pair is half a record without its other key — said of the clinician's record, not of
+    // the clinician (#158).
+    const now = 'a clinician’s record, it is half of one.'
+    const retired = 'a therapist, it is half a record.'
+    expect(KEY_CHECK_COPY.both).toContain(`is not ${now}`)
+    expect(KEY_CHECK_COPY.both).not.toContain(retired)
+    // Control: the retired clause planted back into the real sentence is seen.
+    expect(KEY_CHECK_COPY.both.replace(now, retired)).toContain(retired)
   })
 })
 

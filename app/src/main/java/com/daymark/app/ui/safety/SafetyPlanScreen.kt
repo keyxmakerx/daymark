@@ -61,7 +61,7 @@ import com.daymark.app.ui.theme.HairlineWidth
  * - **It does not dial.** Like the rest of the app, the crisis row hands off to the crisis screen;
  *   Daymark is not a crisis service and never places a call on someone's behalf.
  * - **It is never surfaced by Signals.** Nothing infers from mood data that someone "needs" their
- *   safety plan — that is covert labelling, and it is ruled out in `SUPPORT_FEATURE_PLAN.md`.
+ *   safety plan — that is covert labelling, and it is ruled out in `docs/FEATURES.md` §7.3.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

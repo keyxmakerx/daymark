@@ -29,7 +29,12 @@ invent work. Do not go looking for something to improve. An empty queue is a cor
 ## Carry it out
 
 Read the issue completely, including the "Watch out" section — it exists because someone already
-knew where this goes wrong.
+knew where this goes wrong. Its "Where this came from" links are permanent links to the text it was
+taken from; read them when the issue is not enough.
+
+An issue labelled `needs-decision` or `needs-a-person` cannot be finished by this loop. If one carries
+`claude-ready`, do not guess: comment that it is waiting on a decision or on a person, drop the label,
+and hand off.
 
 Work on a branch named `claude/issue-<number>-<short-slug>`. Create it from the current `main`:
 

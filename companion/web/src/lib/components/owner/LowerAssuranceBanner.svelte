@@ -8,7 +8,7 @@
    * SUBSTRATE: ui/Callout, tone 'warn'. This one IS a genuine warning — a degraded assurance
    * path, which is exactly what amber is reserved for — so unlike the non-diagnostic framing it
    * earns a severity hue. Callout passes the copy through as children untouched; the wording is
-   * fixed and quoted in COMPANION_SECURITY.md.
+   * fixed, and components/invariants.tree.test.ts asserts it verbatim.
    *
    * It previously drew --mood-3-wash with a --mood-3 dot, i.e. caution borrowed from the middle
    * of a person's mood ramp. The ramp is DATA only (app.css, invariant 1) and this is interface
@@ -18,6 +18,11 @@
    * severity no longer rests on hue alone. The dot was decorative and aria-hidden.
    *
    * The <aside> stays so the banner keeps its named landmark for landmark navigation.
+   *
+   * NO REQUEST TO VERIFY A DIGEST (#320). Nothing a person can do at the keyboard answers a changed
+   * page, and no release publishes a digest to compare with (#241); the clinician's banner and the
+   * sync panel dropped the same instruction. "Trusted" went with it: it is an assurance word, and
+   * handling the secrets is what the phone does.
    */
   import { Callout } from '../ui'
 </script>
@@ -28,8 +33,7 @@
     <strong>Lower-assurance path.</strong> The owner console holds your private keys in this
     browser to open sealed items and sign grants. This is a convenience path — the page is served
     by the server it talks to, so a tampered page could misbehave. Keys stay in memory and are
-    dropped when you lock. Verify the released image digest; your phone remains the trusted,
-    secret-handling path.
+    dropped when you lock. Your phone remains the path that handles your secrets.
     </p>
   </Callout>
 </aside>

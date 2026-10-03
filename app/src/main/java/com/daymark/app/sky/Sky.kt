@@ -8,16 +8,15 @@ package com.daymark.app.sky
  * `goals/GoalBoard.kt` and `data/ImageStrip.kt` already keep. No Room types, no `LocalDate`, no
  * clock, no `Context`. [SkyRecord] is a plain mirror of whatever row produced it — exactly as
  * `InterruptionBudget.Offer` mirrors an `offer_records` row — so the data layer maps onto this and
- * the dependency runs one way. `docs/SKY.md` is the older design and
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1 revises it; this file is the part of it that has been
- * built, and it is built here rather than in the Compose layer because every rule below is one a
- * unit test has to be able to execute.
+ * the dependency runs one way. `docs/SKY.md` is the design; this file is the part of it that has
+ * been built, and it is built here rather than in the Compose layer because every rule below is one
+ * a unit test has to be able to execute.
  *
  * ## There is no timeline, and that is the point
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1.0 **reverses `docs/SKY.md` §3.1**. There are no month
- * rows and no axis of any kind. A star is scattered across one open field, and *when* it is from is
- * carried entirely by its colour and its brightness — [SkyAge]'s redshift and fade.
+ * There are no month rows and no axis of any kind (`docs/SKY.md` §3.1). A star is scattered across
+ * one open field, and *when* it is from is carried entirely by its colour and its brightness —
+ * [SkyAge]'s redshift and fade.
  *
  * That became possible only once colour carried time, and it is worth doing for one reason: a row
  * per month draws a hard month as a visibly empty band, which is the exact reading this whole
@@ -83,7 +82,7 @@ package com.daymark.app.sky
  * Nothing here is derived, detected, scored or inferred. Every star is an act the person performed,
  * which is the single sentence that makes the surface defensible. There is no aggregate, no total,
  * no percentage, no coverage figure, no streak, no superlative and no ranking of any period against
- * any other — `docs/DECISIONS_2026-08.md` §D6 rules streaks out product-wide, and on a permanent
+ * any other — `docs/DECISIONS.md` §D6 rules streaks out product-wide, and on a permanent
  * artefact a broken streak is a scar with a date on it. The one count that exists is
  * [SkyListItem.MonthHeading.itemCount], and it exists because a screen-reader user cannot navigate a
  * list without list semantics; see [list].
@@ -362,7 +361,7 @@ object Sky {
  * inferred or synthesised — if a star is there, the person did the thing. That is what lets the
  * surface exist at all, and it is why there is no kind for a notification sent, an offer made, an
  * app open, a suggestion declined, a missed reminder or a practice skipped. There is no negative
- * star. The reception ledger `docs/DECISIONS_2026-08.md` §D1a describes is the decision engine's
+ * star. The reception ledger `docs/DECISIONS.md` §D1a describes is the decision engine's
  * private business and never appears here.
  *
  * [introduction] is the whole of the Sky's onboarding: the first time a kind appears, one line
@@ -524,8 +523,8 @@ class SkyLayout(
         /**
          * Exactly one star.
          *
-         * This is the whole of the onboarding: the person's first mark, with a hairline leader to a
-         * short line naming what it is. No walkthrough, no carousel, no coach marks, no "3 of 5". A
+         * This is the whole of the onboarding: the person's first mark, and one short line naming
+         * what it is. No walkthrough, no carousel, no coach marks, no "3 of 5". A
          * sky with one star says what the app is for better than any onboarding copy could.
          */
         FIRST_LIGHT,

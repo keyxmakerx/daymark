@@ -3,7 +3,6 @@ package com.daymark.companion.storage
 import java.nio.file.Files
 import java.nio.file.Path
 import java.sql.Connection
-import java.sql.DriverManager
 
 /**
  * Who performed the logged action.
@@ -94,14 +93,16 @@ enum class AuditAction(val wire: String) {
     /**
      * A holder of the invite link answered the newest open exchange. Same contract as
      * [PAIRING_OPENED]: a receipt that a reply was relayed, never a statement about who replied
-     * or whether their code was right — the server cannot know either, by design (§3.7.4). If
-     * the codes did not match, the owner's side simply fails to open what follows and the owner
-     * decides what that means; that decision is [INVITE_REPORTED] when it is hostile.
+     * or whether their code was right — the server cannot know either, by design
+     * (COMPANION_PAIRING.md §5). If the codes did not match, the owner's side simply fails to open
+     * what follows and the owner decides what that means; that decision is [INVITE_REPORTED] when
+     * it is hostile.
      */
     PAIRING_RESPONDED("pairing.responded"),
 
-    /** The owner cancelled a pairing exchange — the 4.0a Cancel, recorded because withdrawal of
-     *  an in-flight ceremony is exactly the kind of event a person wants to find again later. */
+    /** The owner cancelled a pairing exchange — the owner's Cancel (COMPANION_PAIRING.md §8),
+     *  recorded because withdrawal of an in-flight ceremony is exactly the kind of event a person
+     *  wants to find again later. */
     PAIRING_CANCELLED("pairing.cancelled"),
 
     /**
@@ -214,6 +215,25 @@ enum class AuditAction(val wire: String) {
     OWNER_KEY_FETCHED("owner_key.fetched"),
 
     /**
+     * The owner console confirmed a phone's key, and it can now sign requests as the owner (#189).
+     *
+     * Written to the owner's own log (`owner-audit.db`), once, when the confirmation writes the key's
+     * row; a second press of Confirm writes nothing. Like every key line here it is a receipt: the
+     * server holds the key it was handed and vouches for nothing about it. What decided that it was
+     * the right phone's is the person comparing the words on the two screens. Its objectRef is the
+     * key's id, the fingerprint the device list shows.
+     */
+    DEVICE_REGISTERED("device.registered"),
+
+    /**
+     * A phone's key was revoked, and every request it signs is refused from the next one on (#186).
+     *
+     * Written once per key, when its revocation row is written, with `by` saying how: `owner` for the
+     * console's Revoke, `reissue` for a re-issued token, which revokes every device of the owner.
+     */
+    DEVICE_REVOKED("device.revoked"),
+
+    /**
      * A practice was created and its first admin was seated.
      *
      * The genesis entry of a practice's chain, and the only one the operator's provisioning
@@ -307,10 +327,10 @@ data class AuditEvent(
  *    An [oldestSeq] above 1 is the ordinary consequence of retention pruning, not a finding.
  *  - [headHash] is the newest entry's hash exactly as stored. This is the value the whole check
  *    exists to surface: a chain head is only evidence if it is anchored somewhere this server
- *    cannot reach (the finding in docs/PLAN_2026-08-COMPANION-NEXT.md 3.9.7), and the first such
- *    anchor is a person writing it down. It is reported even when the chain is broken, because
- *    "what the server serves today" is itself worth recording in that case — as evidence, not as
- *    a baseline.
+ *    cannot reach (docs/COMPANION_ARCHITECTURE.md §6, "It writes the audit log about itself"),
+ *    and the first such anchor is a person writing it down. It is reported even when the chain
+ *    is broken, because "what the server serves today" is itself worth recording in that case —
+ *    as evidence, not as a baseline.
  *  - [firstBreakSeq] is the sequence number of the first entry that contradicts the chain it
  *    sits in, or null when every recomputable entry agreed with what is stored. Null is NOT a
  *    verdict of completeness — see [AuditStore.verifyChain] for what this deliberately cannot
@@ -373,27 +393,8 @@ class AuditStore(
 
     init {
         Files.createDirectories(root)
-        Class.forName("org.sqlite.JDBC")
-        conn = DriverManager.getConnection("jdbc:sqlite:${root.resolve(dbName)}")
-        conn.createStatement().use { st ->
-            st.execute("PRAGMA journal_mode=WAL")
-            st.execute("PRAGMA synchronous=NORMAL")
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS audit_events (
-                    rel_ref    TEXT    NOT NULL,
-                    seq        INTEGER NOT NULL,
-                    ts         INTEGER NOT NULL,
-                    actor      TEXT    NOT NULL,
-                    action     TEXT    NOT NULL,
-                    object_ref TEXT,
-                    meta       TEXT,
-                    entry_hash TEXT    NOT NULL,
-                    PRIMARY KEY (rel_ref, seq)
-                )
-                """.trimIndent(),
-            )
-        }
+        conn = schema(dbName).open(root)
+        conn.createStatement().use { st -> st.execute("PRAGMA synchronous=NORMAL") }
     }
 
     /** Append one entry, chained off this relationship's latest entry. Insert-only. */
@@ -520,7 +521,7 @@ class AuditStore(
      * report IS good against is the honest-but-damaged cases — a bad disk, a botched restore, a
      * hand-edited row — and what survives even a lying server is not this verdict but the head
      * hash, once it is anchored somewhere the server cannot reach (a person's note today; the
-     * phone anchor of docs/PLAN_2026-08-COMPANION-NEXT.md 3.9.7 eventually).
+     * phone's own copy eventually — not built: #182).
      */
     fun verifyChain(relRef: String): ChainVerification = synchronized(lock) {
         requireName(relRef)
@@ -611,6 +612,35 @@ class AuditStore(
     companion object {
         const val DEFAULT_RETENTION_SECONDS = 90L * 24 * 3600
         const val MAX_PAGE_SIZE = 200
+
+        /**
+         * What each version of an audit database adds (#193), the same for `audit.db` and
+         * `org-audit.db`. Every change a version can make is additive ([SchemaChange]), so no
+         * version rewrites, re-orders or re-hashes a row of the chain.
+         */
+        internal val VERSIONS: List<List<SchemaChange>> = listOf(
+            // Version 1: the structure as it stood when versions began to be kept.
+            listOf(
+                SchemaChange.Table(
+                    """
+                    CREATE TABLE IF NOT EXISTS audit_events (
+                        rel_ref    TEXT    NOT NULL,
+                        seq        INTEGER NOT NULL,
+                        ts         INTEGER NOT NULL,
+                        actor      TEXT    NOT NULL,
+                        action     TEXT    NOT NULL,
+                        object_ref TEXT,
+                        meta       TEXT,
+                        entry_hash TEXT    NOT NULL,
+                        PRIMARY KEY (rel_ref, seq)
+                    )
+                    """.trimIndent(),
+                ),
+            ),
+        )
+
+        /** The audit database in [dbName], version by version. */
+        internal fun schema(dbName: String): Schema = Schema(dbName, VERSIONS)
 
         /** Fixed genesis hash (64 hex zeros) chained ahead of the first entry for a relationship. */
         private const val GENESIS_HASH = "0000000000000000000000000000000000000000000000000000000000000000"

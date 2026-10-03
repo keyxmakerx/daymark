@@ -117,7 +117,8 @@ export interface InstrumentResult {
   instrumentVersion: string
   takenAt: number // epoch millis
   scales: ScaleResult[]
-  // Raw item answers stay local by default and are never part of a share (design §6).
+  // Raw item answers stay local by default and are never part of a share (COMPANION_FEATURES.md
+  // §0, rule 6).
   answers: Record<string, unknown>
 }
 

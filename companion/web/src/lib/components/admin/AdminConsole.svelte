@@ -646,8 +646,9 @@
     flex: none;
   }
 
-  /* The serif is spent on the wordmark only (COMPANION_WEB_DESIGN.md); the page title keeps
-     the display face through PageHeader, which is the content voice naming its subject. */
+  /* The wordmark takes the serif (COMPANION_DESIGN_SYSTEM.md §2.2, "Where the serif goes"); the
+     page title keeps the display face through PageHeader, which is the content voice naming its
+     subject. */
   .wordmark {
     margin: 0;
     font-family: var(--font-display);

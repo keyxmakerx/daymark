@@ -9,13 +9,13 @@ import {
   CHOICE_IS_REVERSIBLE,
   CONFIGURATION_IS_NOT_RE_READ,
   CONFIG_FIELD,
-  CONFIG_NOT_PUBLISHED_YET,
   CONFIG_PATH,
   CONFIG_SETTING,
   LABELS,
+  NO_SHAPE_PUBLISHED,
   PRACTICE_CONSOLE_ELSEWHERE,
+  PRACTICE_FORGOTTEN_PASSPHRASE,
   PRACTICE_MISSING,
-  PRACTICE_OPEN_QUESTION,
   PRACTICE_ROLE_NOTE,
   PRACTICE_SERVER_HAS,
   SETUP_CHOICE_VERSION,
@@ -34,6 +34,7 @@ import {
   isShapeId,
   opensOnStatement,
   primaryLabel,
+  publishedShape,
   readSetupMode,
   readStoredChoice,
   rememberShape,
@@ -152,8 +153,64 @@ describe('the three deployment shapes', () => {
     expect(shapeById('practice').ranking).toMatch(/more work/i)
     expect(shapeById('practice').ranking).toMatch(/no better/i)
     // Paired is ranked by CASE rather than by popularity — it is the right answer for exactly one
-    // situation, and saying "some people want this" would rank nothing.
-    expect(shapeById('paired').ranking).toMatch(/one clinician/i)
+    // situation, and saying "some people want this" would rank nothing. The case is showing some
+    // of your own journal to the clinicians you invite, however many that is (#288).
+    expect(shapeById('paired').ranking).toMatch(/a clinician will read some of your journal/i)
+  })
+
+  it('the Paired choice counts no clinicians: its label, summary and ranking as the copy pass settled them (#288)', () => {
+    const paired = shapeById('paired')
+    expect(paired.label).toBe('Paired — you and the clinicians you invite')
+    expect(paired.summary).toBe(
+      'Everything Solo does, plus sharing chosen parts of your journal with a clinician, once you ' +
+        'have checked their key together.',
+    )
+    expect(paired.ranking).toBe('Choose this if a clinician will read some of your journal.')
+    // The label says what the masthead's Paired tagline says (App.svelte), in the choice's form.
+    const app = readFileSync(fileURLToPath(new URL('../../App.svelte', import.meta.url)), 'utf8')
+    expect(app).toContain("paired: 'Your journal, and the clinicians you invite'")
+    expect(paired.label.endsWith(' and the clinicians you invite')).toBe(true)
+
+    const every = [paired.label, paired.arrangement, paired.summary, paired.ranking, paired.buildNote]
+    expect(every.every((line) => line.length > 20)).toBe(true) // five real lines, none empty
+
+    // The first retired set counted one clinician. Control: each is seen by the detector.
+    const ONE_CLINICIAN = /\bone clinician\b/i
+    const COUNTED_ONE = [
+      'Paired — you, and one clinician',
+      'Everything Solo does, plus an invitation you mint for one clinician, whose key you check ' +
+        'and pin before anything is shared.',
+      'Choose this if you are showing some of your own journal to one clinician.',
+    ]
+    for (const line of COUNTED_ONE) expect(line).toMatch(ONE_CLINICIAN)
+    expect(every.filter((line) => ONE_CLINICIAN.test(line))).toEqual([])
+
+    // The second retired set, replaced by the copy pass. Control: each is seen by the detector.
+    const FIRST_REWRITE = /^Paired — you, and |an invitation you mint for each clinician|showing some of your own journal to/
+    const REWRITTEN = [
+      'Paired — you, and the clinicians you invite',
+      'Everything Solo does, plus an invitation you mint for each clinician, whose key you check ' +
+        'and pin before anything is shared.',
+      'Choose this if you are showing some of your own journal to the clinicians you invite.',
+    ]
+    for (const line of REWRITTEN) expect(line).toMatch(FIRST_REWRITE)
+    expect(every.filter((line) => FIRST_REWRITE.test(line))).toEqual([])
+
+    for (const line of [...COUNTED_ONE, ...REWRITTEN]) expect(every).not.toContain(line)
+  })
+
+  it('Paired shows the journal to the clinicians the owner invites, not to one (#288)', () => {
+    const arrangement = shapeById('paired').arrangement
+    expect(arrangement).toBe(
+      'You still run the machine and the journal is still yours. The clinicians you invite are ' +
+        'shown the slices you pick, and you can withdraw that at any time.',
+    )
+    const RETIRED = 'One clinician you invite is shown the slices you pick'
+    expect(arrangement).not.toContain(RETIRED)
+    // Control: the retired sentence planted back into the real arrangement is seen.
+    expect(arrangement.replace('The clinicians you invite are shown', 'One clinician you invite is shown')).toContain(
+      RETIRED,
+    )
   })
 
   it('states which shapes are built and which is a placeholder, as data rather than as prose', () => {
@@ -442,7 +499,8 @@ describe('a configuration-provided mode', () => {
       kind: 'set',
       shape: 'practice',
     })
-    // Absent is the expected state on this build: the field is not published yet.
+    // Absent is a server whose operator chose no shape: it assumed one and published nothing, in
+    // exactly the body it sent before the setting existed (ShapeRoutingTest.kt pins that body).
     expect(readSetupMode('{"smtpEnabled":false}')).toEqual({ kind: 'absent' })
     expect(readSetupMode('{"setupMode":null}')).toEqual({ kind: 'absent' })
     // No trimming, no case folding, no aliases: a configuration value is a contract, and quietly
@@ -472,13 +530,68 @@ describe('a configuration-provided mode', () => {
     expect(CONFIG_PATH).toBe('/v1/config')
   })
 
-  it('marks the not-yet-published field as a placeholder, in plain words', () => {
-    // The read path is live and the server field is not there yet. That is a placeholder, and a
-    // placeholder that does not say it is one is indistinguishable from a bug.
-    expect(CONFIG_NOT_PUBLISHED_YET).toMatch(/^Placeholder/)
-    expect(CONFIG_NOT_PUBLISHED_YET).toContain(CONFIG_FIELD)
-    expect(CONFIG_NOT_PUBLISHED_YET).toContain(CONFIG_PATH)
-    expect(CONFIG_NOT_PUBLISHED_YET).toMatch(/nothing is being guessed/i)
+  it('says why it asks where the server published no shape, and names the setting that would answer instead (#330)', () => {
+    // The server publishes the field now, so the page no longer calls its absence a placeholder.
+    // What is true instead: the server was not told its shape, so the page asks; the operator can
+    // tell it once, with the setting; a browser that has not answered then is not asked.
+    expect(NO_SHAPE_PUBLISHED).toBe(
+      'This page asks because the server has not been told its shape. Whoever runs the server can ' +
+        'tell it once, by starting it with DAYMARK_SETUP_MODE set to the shape it should have — ' +
+        'solo, paired or practice. After that the server publishes the shape and a browser that has ' +
+        'not already answered will not ask.',
+    )
+    // Built from the same setting name the configured copy uses, so the two cannot drift, and it
+    // names every shape the setting takes.
+    expect(NO_SHAPE_PUBLISHED).toContain(CONFIG_SETTING)
+    expect(configuredHowToChange()).toContain(CONFIG_SETTING)
+    for (const id of SHAPE_IDS) expect(NO_SHAPE_PUBLISHED, id).toMatch(new RegExp(`\\b${id}\\b`))
+    // No "every browser": a browser already holding an answer reads nothing until its question is
+    // reopened (CONFIGURATION_IS_NOT_RE_READ), so the sentence claims only the browser that looks.
+    expect(NO_SHAPE_PUBLISHED).not.toMatch(/\bevery browser\b/i)
+    expect('so that every browser gets the same answer').toMatch(/\bevery browser\b/i) // control
+
+    // The retired placeholder, by text and by name. Each detector is shown seeing it first.
+    const RETIRED = /^Placeholder|publishes no setupMode|will stop asking as soon as|Nothing is being guessed/i
+    const retiredText =
+      'Placeholder: this server publishes no setupMode, so this page asked instead. This screen ' +
+      'reads /v1/config for that field while this question is open, and will stop asking as soon as ' +
+      'one is there. Nothing is being guessed in the meantime.'
+    expect(retiredText).toMatch(RETIRED)
+    expect(NO_SHAPE_PUBLISHED).not.toMatch(RETIRED)
+    expect(Object.keys(setup)).toContain('NO_SHAPE_PUBLISHED')
+    expect(Object.keys(setup)).not.toContain('CONFIG_NOT_PUBLISHED_YET')
+
+    // And the first rewrite, which the copy pass replaced. Control: the detector sees it.
+    const FIRST_REWRITE = /gave it no setupMode|The answer given here stays|a browser that finds it there/
+    const firstRewrite =
+      'This page asked because /v1/config gave it no setupMode. The answer given here stays in ' +
+      'this browser and changes nothing on the server. Whoever runs the server can set ' +
+      'DAYMARK_SETUP_MODE instead: the server then publishes the shape, and a browser that finds ' +
+      'it there does not ask.'
+    expect(firstRewrite).toMatch(FIRST_REWRITE)
+    expect(NO_SHAPE_PUBLISHED).not.toMatch(FIRST_REWRITE)
+  })
+
+  it('removing the setting still means being asked: the how-to-change line is unchanged (#330)', () => {
+    // The server omits setupMode when no mode is chosen (ShapeRoutingTest.kt), so removing the
+    // setting makes the field absent and the page asks. The sentence says exactly that.
+    expect(configuredHowToChange()).toBe(
+      'To be asked again, remove DAYMARK_SETUP_MODE from the server’s environment and restart it. ' +
+        'Nothing in this browser overrides it while it is set.',
+    )
+    expect(readSetupMode('{"smtpEnabled":false}')).toEqual({ kind: 'absent' })
+    expect(resolveSetup({ config: config.absent, session: null, stored: null }).state).toBe('ask')
+  })
+
+  it('counts only a published shape as published', () => {
+    // Positive control first: a set configuration yields its shape, for every shape.
+    for (const id of SHAPE_IDS) expect(publishedShape(config.set(id)), id).toBe(id)
+    // Everything else is "this page does not know" — including `reading`, which is also the state
+    // of every load that asked nothing because this browser already had an answer, and an
+    // unrecognised word, which says nothing about which pages the server serves.
+    for (const c of [config.reading, config.unreachable, config.absent, config.unrecognised('SOLO')]) {
+      expect(publishedShape(c), c.kind).toBeNull()
+    }
   })
 })
 
@@ -539,9 +652,35 @@ describe('the practice panel, which is not the practice console', () => {
     // read a single note" true rather than marketing.
     expect(PRACTICE_ROLE_NOTE).toMatch(/never carries a key/i)
     expect(PRACTICE_ROLE_NOTE).toContain('COMPANION_ACCESS_CONTROL.md')
-    // And the open question that gates the whole shape (§3.11.3).
-    expect(PRACTICE_OPEN_QUESTION).toMatch(/forgotten passphrase/i)
-    expect(PRACTICE_OPEN_QUESTION).toMatch(/read the\s+journals/is)
+    // And the passphrase-reset answer that gates the whole shape (COMPANION_PAIRING.md §12).
+    expect(PRACTICE_FORGOTTEN_PASSPHRASE).toMatch(/forgotten passphrase/i)
+    expect(PRACTICE_FORGOTTEN_PASSPHRASE).toMatch(/read the\s+journals/is)
+  })
+
+  it('states the passphrase answer #100 settled, rather than calling it open (#313)', () => {
+    expect(PRACTICE_FORGOTTEN_PASSPHRASE).toBe(
+      'Nobody can reset a forgotten passphrase: not the person who invited a clinician, not a ' +
+        'practice administrator, and not whoever runs this server. It never reaches the server, ' +
+        'which is what keeps the server unable to read anything. Any way of resetting it would mean ' +
+        'the practice can read the journals. A clinician who loses theirs keeps their seat and loses ' +
+        'what was shared with them; each patient invites them again.',
+    )
+    expect(LABELS.practiceForgottenPassphrase).toBe('A forgotten passphrase')
+    // Nothing on the panel calls it a question any more: not the text, not its heading.
+    const RETIRED = /still open|has not answered|decided in the open|who can reset/i
+    expect(PRACTICE_FORGOTTEN_PASSPHRASE).not.toMatch(RETIRED)
+    expect(Object.values(LABELS).join(' ')).not.toMatch(RETIRED)
+    expect(Object.keys(setup)).not.toContain('PRACTICE_OPEN_QUESTION')
+    // Control: the retired text and heading are seen by the same pattern.
+    expect('One question is still open … who can reset a forgotten passphrase?').toMatch(RETIRED)
+    expect('The question this shape has not answered').toMatch(RETIRED)
+    // And the panel renders the answer under its heading, with no trace of the old names.
+    const panel = readFileSync(
+      fileURLToPath(new URL('../components/setup/PracticePlaceholder.svelte', import.meta.url)),
+      'utf8',
+    )
+    expect(panel).toContain('<h3>{LABELS.practiceForgottenPassphrase}</h3>\n    <p class="para">{PRACTICE_FORGOTTEN_PASSPHRASE}</p>')
+    expect(panel).not.toMatch(/PRACTICE_OPEN_QUESTION|practiceOpenQuestion/)
   })
 })
 
@@ -682,15 +821,40 @@ describe('the copy', () => {
     expect(PATIENT.test('a diagnosis of anything')).toBe(true)
     expect(PATIENT.test('one clinician you invite')).toBe(false)
 
-    const offenders = CORPUS.filter((c) => PATIENT.test(c.text)).map((c) => `${c.path}: ${c.text}`)
+    /*
+     * THE SENTENCES ABOUT A CLINIC'S PATIENTS. The Practice choice and its panel describe a clinic,
+     * and a clinic has patients: the forgotten-passphrase answer says each of them invites a
+     * clinician again (#313), and the Practice choice says no real patient's data belongs on a
+     * practice server yet (#333). Those sentences may say "patient" in the third person, and only
+     * that way. Everything else on this screen is read by someone about their own journal, and may
+     * not say it at all. Each exception has to still need itself, so it cannot outlive its sentence.
+     */
+    const ABOUT_A_CLINICS_PATIENTS = new Set([
+      'shape.ts@PRACTICE_FORGOTTEN_PASSPHRASE',
+      'shape.ts@SHAPES[2].holdNote',
+    ])
+    const ADDRESSES_THE_READER = /(?<![\w-])(your|you are a|you're a|you as a|as a) patients?(?![\w-])/i
+    expect(ADDRESSES_THE_READER.test('as a patient, you can')).toBe(true) // the detector detects
+    expect(ADDRESSES_THE_READER.test('each patient invites them again')).toBe(false)
+    for (const path of ABOUT_A_CLINICS_PATIENTS) {
+      const entry = CORPUS.find((c) => c.path === path)
+      expect(entry, `${path} is not in the corpus`).toBeDefined()
+      expect(PATIENT.test(entry!.text), `${path} no longer needs its exception`).toBe(true)
+      expect(ADDRESSES_THE_READER.test(entry!.text), `${path} addresses the reader as a patient`).toBe(false)
+    }
+
+    const offenders = CORPUS.filter((c) => !ABOUT_A_CLINICS_PATIENTS.has(c.path) && PATIENT.test(c.text)).map(
+      (c) => `${c.path}: ${c.text}`,
+    )
     expect(offenders).toEqual([])
   })
 
   it('never promises the copy is safe, or that it survives a lost phone', () => {
     // THE TWO CLAIMS THIS SCREEN IS FORBIDDEN TO MAKE. There is one disk here and nothing backing
-    // it up (§3.11.1), so "your journal is safe" is the sentence somebody would remember on the
-    // day the disk died — and the recovery property, which is real, holds only while this machine
-    // still has the copy. Both are promises, and neither is this screen's to make.
+    // it up (COMPANION_ARCHITECTURE.md §1), so "your journal is safe" is the sentence somebody
+    // would remember on the day the disk died — and the recovery property, which is real, holds
+    // only while this machine still has the copy. Both are promises, and neither is this screen's
+    // to make.
     const OVERPROMISE =
       /(?<![\w-])(safe|safely|kept safe|backed up|never lose|can'?t lose|cannot lose|always be able|guarantee[ds]?|peace of mind)(?![\w-])/i
     expect(OVERPROMISE.test('your journal is safe here')).toBe(true)
@@ -828,9 +992,20 @@ describe('the first-run screen renders all three choices', () => {
     expect(readingBranch).not.toContain('{#each SHAPES as shape')
   })
 
-  it('marks the not-yet-published configuration field as a placeholder on the screen', () => {
-    expect(entry).toContain('CONFIG_NOT_PUBLISHED_YET')
+  it('says why it asked, in the fold, only when no shape reached it', () => {
+    // The fold opens onto NO_SHAPE_PUBLISHED, and only for `absent` and `unreachable`: the
+    // unrecognised case has a warning of its own, and a configured deployment is never asked.
+    const code = entry.replace(/<!--[\s\S]*?-->/g, ' ')
+    const open = code.indexOf("{#if config.kind === 'absent' || config.kind === 'unreachable'}")
+    expect(open, 'the fold is not guarded on absent or unreachable').toBeGreaterThan(-1)
+    const fold = code.slice(open, code.indexOf('{/if}', open))
+    expect(fold).toContain('<summary>{LABELS.configurationSays}</summary>')
+    expect(fold).toContain('<p class="para">{NO_SHAPE_PUBLISHED}</p>')
     expect(entry).toContain('configuredUnrecognised(config.value)')
+    // The retired name is gone from the screen. Control: the pattern sees it in the old line.
+    const RETIRED = /CONFIG_NOT_PUBLISHED_YET/
+    expect('<p class="para">{CONFIG_NOT_PUBLISHED_YET}</p>').toMatch(RETIRED)
+    expect(entry).not.toMatch(RETIRED)
   })
 })
 
@@ -895,10 +1070,27 @@ describe('the practice placeholder panel', () => {
     expect(panel).not.toMatch(/\$state|\$derived/)
   })
 
+  it('links the practice console only where the published shape serves it, or none was published (#330)', () => {
+    // The anchor is the whole body of one guard, and the guard is the shared rule over the
+    // published shape (lib/setup/pages.ts, where each shape's answer is a node test).
+    const code = panel.replace(/<!--[\s\S]*?-->/g, ' ')
+    const GUARDED =
+      /\{#if linksTo\('practice', published\)\}\s*<p class="para">\s*<a class="go" href=\{LABELS\.practiceConsoleHref\}>\{LABELS\.openPractice\}<\/a>\s*<\/p>\s*\{\/if\}/
+    expect(code).toMatch(GUARDED)
+    // Exactly one anchor on the panel, so there is no unguarded second way out.
+    expect(code.match(/<a\b/g)).toHaveLength(1)
+    // The prop the guard reads is the panel's own, defaulting to "nothing was published".
+    expect(code).toMatch(/published = null,/)
+    // Control: the panel as it was, with the anchor unguarded, fails the same pattern.
+    const asItWas =
+      '<p class="para">\n      <a class="go" href={LABELS.practiceConsoleHref}>{LABELS.openPractice}</a>\n    </p>'
+    expect(asItWas).not.toMatch(GUARDED)
+  })
+
   it('is the only place App.svelte routes the practice surface', () => {
     // So the swap, when the practice console lands, is one import and one element.
     const app = readFileSync(fileURLToPath(new URL('../../App.svelte', import.meta.url)), 'utf8')
-    expect(app).toContain('<PracticePlaceholder />')
+    expect(app).toContain('<PracticePlaceholder {published} />')
     expect(app).toContain("{:else if source === 'practice'}")
     // And the practice surface is deliberately NOT one of the owner's six routes.
     expect(OWNER_ROUTES.map((r) => r.id)).not.toContain('practice')
@@ -944,5 +1136,22 @@ describe('App.svelte gates on the decision rather than on a flag of its own', ()
     expect(app, 'App.svelte fetches directly again').not.toMatch(/(?<![\w.])fetch\s*\(/)
     // The cost of that scope is stated on the page rather than only in a comment.
     expect(strip).toContain('CONFIGURATION_IS_NOT_RE_READ')
+  })
+
+  it('gates links on what the server published, never on the browser’s own answer (#330)', () => {
+    // The person's answer routes this page and changes nothing on the server, so it says nothing
+    // about which pages the server serves. Only configuration's answer does.
+    const code = app.replace(/<!--[\s\S]*?-->/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+    expect(code).toContain('const published = $derived(publishedShape(config))')
+    // Both places that link a page a shape can refuse are handed it. The tag matcher is
+    // mustache-aware, because `onchoose={(id) => …}` carries a `>` of its own.
+    const orientationTag = code.match(/<Orientation\b(?:[^>{]|\{[^{}]*\})*>/)?.[0] ?? ''
+    expect(orientationTag).toContain('onchoose=') // the whole tag was read, past the arrow
+    expect(orientationTag).toContain('{published}')
+    expect(code).toContain('<PracticePlaceholder {published} />')
+    // Control: a derivation from the decision, which folds in the local answer, is caught.
+    const FROM_THE_ANSWER = /published = \$derived\([^)]*(decision|sessionShape|stored)/
+    expect('const published = $derived(decidedShape(decision))').toMatch(FROM_THE_ANSWER)
+    expect(code).not.toMatch(FROM_THE_ANSWER)
   })
 })

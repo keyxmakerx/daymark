@@ -49,10 +49,10 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.daymark.app.BuildConfig
 import com.daymark.app.R
+import com.daymark.app.flavor.FlavorDoors
 import com.daymark.app.ui.debug.DebugTimingScreen
 import com.daymark.app.ui.activities.ActivitiesScreen
 import com.daymark.app.ui.activities.ActivityLibraryScreen
-import com.daymark.app.ui.calendar.CalendarScreen
 import com.daymark.app.ui.calendar.DayDetailScreen
 import com.daymark.app.ui.calendar.YearPixelsScreen
 import com.daymark.app.ui.goals.GoalEditorScreen
@@ -508,8 +508,16 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
                         if (BuildConfig.DEBUG) { navController.navigate(Routes.DEBUG_TIMING) }
                     },
                     onShowMessage = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+                    onOpenServerSync = { navController.navigate(Routes.SERVER_SYNC) },
                     modifier = Modifier.padding(padding),
                 )
+            }
+            // The sync screen, only where the flavour opens its door: the offline build has none, so
+            // its graph has no such route and nothing can navigate to one (#432).
+            FlavorDoors.serverSync?.let { door ->
+                composable(Routes.SERVER_SYNC, enterTransition = zEnter, popExitTransition = zPopExit) {
+                    door.Screen(onBack = { navController.popBackStack() })
+                }
             }
             // The timing debug screen exists only in a debug build. This `if` means the release
             // graph has no such destination at all, so the route cannot be reached by a deep link

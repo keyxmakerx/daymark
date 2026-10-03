@@ -87,7 +87,7 @@ const SETTING_LABELS: Record<string, string> = {
 const CAPABILITY_COPY: Record<Capability, { title: string; desc: string }> = {
   'read.share': {
     title: 'View shared data',
-    desc: 'Read the curated data you choose to share (scores and bands only — never raw entries).',
+    desc: 'Read what you choose to share, until the date you set or until you stop it. Self-checks go as scores and bands only.',
   },
   'assign.questionnaire': {
     title: 'Assign self-checks',

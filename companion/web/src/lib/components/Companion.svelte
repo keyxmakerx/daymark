@@ -8,7 +8,7 @@
    * anything that lived in here could only be source-asserted. Keeping the conversation out of the
    * component is what makes it testable at all.
    *
-   * THE FOUR RULES IT EXISTS TO KEEP (docs/DECISIONS_2026-08.md §D1b), none of which is mine —
+   * THE FOUR RULES IT EXISTS TO KEEP (docs/DECISIONS.md §D1b), none of which is mine —
    * they are the maintainer's own design, written down so nobody "improves" them later:
    *
    *  1. FIXED CHOICES, NO TEXT INPUT. There is deliberately no <input> and no <textarea> here. A

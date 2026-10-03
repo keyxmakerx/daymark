@@ -13,6 +13,11 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import {
+  SHARE_DAYS_DEFAULT,
+  SHARE_DAYS_MAX,
+  SHARE_DAYS_OUT_OF_RANGE,
+  shareDays,
+  shareEndsLine,
   ENDED_LABEL,
   KEEP_SHARING,
   REVOKE_ACTION,
@@ -27,6 +32,7 @@ import {
   sharingStateFrom,
 } from './sharing'
 import { REVOKE_CAVEAT } from '../pairing/copy'
+import { emptySelection } from '../assignments/share'
 
 const meta = (version: number, createdAt: number) => ({ version, size: 10, contentHash: 'h', createdAt })
 
@@ -261,11 +267,210 @@ describe('(d) the ended state', () => {
     // that answered "they left" on a timeout would stop somebody sharing with a therapist who is
     // still there. The strip falls back to the live state; the seal falls through to the server.
     expect(stripSource).toContain('endedAt = null')
+    // The seal's half is sealShare's, held by behaviour in sealShare.test.ts: a check that throws
+    // lets the share go on. The builder goes through it and says the refusal it returns.
     const builder = readFileSync(
       fileURLToPath(new URL('../components/owner/ShareBuilder.svelte', import.meta.url)),
       'utf8',
     )
-    expect(builder).toContain('.catch(() => null)')
+    expect(builder).toContain('await sealShare({')
     expect(builder).toContain('shareRefusedBecauseEnded')
+  })
+})
+
+describe('the builder signs a share with the version it publishes it as', () => {
+  // The portal refuses a share whose signed version differs from the one it is served under, so a
+  // builder that signed one number and published another would fail closed on every share after
+  // the first, and no test that calls buildShare directly would notice. sealShare looks the number
+  // up before anything is sealed and hands the same one to every step (sealShare.test.ts); what is
+  // checked here is that the builder's steps use the number they are handed.
+  const builder = readFileSync(
+    fileURLToPath(new URL('../components/owner/ShareBuilder.svelte', import.meta.url)),
+    'utf8',
+  )
+  const codeOnly = (src: string) =>
+    src.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(?<!:)\/\/[^\n]*/g, '')
+
+  /** The builder sets no `version` of its own: the one it is handed is bundled, signed and published. */
+  function signsWhatItPublishes(src: string): boolean {
+    const code = codeOnly(src)
+    const assignments = code.match(/\bversion\s*=(?!=)/g) ?? []
+    return (
+      assignments.length === 0 &&
+      /build: \(version\) => \{\s*const meta: ShareBundleMeta = \{[^}]*\bversion,/.test(code) &&
+      /seal: \(bundle, version, pins\) => \{\s*const shareMeta: ShareMeta = \{[^}]*\bversion,/.test(code) &&
+      code.includes("putBlob(therapist.inboxToken, 'shares', lineage, version,")
+    )
+  }
+
+  it('holds for the builder as written', () => {
+    expect(signsWhatItPublishes(builder)).toBe(true)
+  })
+
+  it('fails when the builder publishes, signs or bundles a number of its own (positive control)', () => {
+    const published = builder.replace("'shares', lineage, version,", "'shares', lineage, version + 1,")
+    expect(published).not.toBe(builder)
+    expect(signsWhatItPublishes(published)).toBe(false)
+    const moved = builder.replace('const shareMeta: ShareMeta = {', 'version = 0\n          const shareMeta: ShareMeta = {')
+    expect(moved).not.toBe(builder)
+    expect(signsWhatItPublishes(moved)).toBe(false)
+    const bundled = builder.replace('const meta: ShareBundleMeta = { shareId, version,', 'const meta: ShareBundleMeta = { shareId, version: 0,')
+    expect(bundled).not.toBe(builder)
+    expect(signsWhatItPublishes(bundled)).toBe(false)
+  })
+})
+
+describe('how long a share lasts (#228, #339)', () => {
+  const builder = readFileSync(
+    fileURLToPath(new URL('../components/owner/ShareBuilder.svelte', import.meta.url)),
+    'utf8',
+  )
+
+  it('starts at 14 days and never offers more than 90, the ceiling the server clamps to (#332)', () => {
+    expect(SHARE_DAYS_DEFAULT).toBe(14)
+    expect(SHARE_DAYS_MAX).toBe(90)
+  })
+
+  it('the builder takes both numbers from here rather than writing its own', () => {
+    expect(builder).toContain('$state<number | null>(SHARE_DAYS_DEFAULT)')
+    expect(builder).toContain('max={SHARE_DAYS_MAX}')
+    expect(builder).toContain('const expiry = createdAt + days * DAY_MS')
+    // A literal would drift from the server's ceiling without either test noticing.
+    expect(builder).not.toMatch(/max=(?:"\s*\d+\s*"|\{\s*\d+\s*\})/)
+    expect(builder).not.toMatch(/\$state(<[^>]*>)?\(\d+\)/)
+  })
+
+  it('those two absence checks can fail (positive control)', () => {
+    expect('<input max="365" />').toMatch(/max=(?:"\s*\d+\s*"|\{\s*\d+\s*\})/)
+    expect('<input max={365} />').toMatch(/max=(?:"\s*\d+\s*"|\{\s*\d+\s*\})/)
+    expect('let expiryDays = $state(30)').toMatch(/\$state(<[^>]*>)?\(\d+\)/)
+    expect('let expiryDays = $state<number | null>(30)').toMatch(/\$state(<[^>]*>)?\(\d+\)/)
+  })
+
+  it('shows the end date from a clock that ticks, so a page left open overnight stays right', () => {
+    expect(builder).toContain('new Date(now + days * DAY_MS)')
+    expect(builder).toMatch(/\$effect\(\(\) => \{\s*const id = setInterval\(\(\) => \(now = Date\.now\(\)\), 60_000\)\s*return \(\) => clearInterval\(id\)/)
+  })
+
+  it('refuses a length the server would not honour before anything is sealed', () => {
+    const refusal = builder.indexOf('if (days === null)')
+    expect(refusal).toBeGreaterThan(-1)
+    expect(refusal).toBeLessThan(builder.indexOf('buildShare('))
+    expect(builder).toContain('`${SHARE_DAYS_OUT_OF_RANGE} Nothing was sealed or sent.`')
+  })
+
+  it('accepts whole days from 1 to 90, and nothing else', () => {
+    expect(shareDays(1)).toBe(1)
+    expect(shareDays(14)).toBe(14)
+    expect(shareDays(90)).toBe(90)
+    expect(shareDays('30')).toBe(30)
+    for (const bad of [0, 91, 365, -1, 14.5, Number.NaN, '', null, undefined, 'abc']) {
+      expect(shareDays(bad)).toBeNull()
+    }
+  })
+
+  it('says the date, then what the server does on it, and never borrows the revoke sentence', () => {
+    const line = shareEndsLine('9 October 2026')
+    expect(line).toBe('Ends on 9 October 2026. The server then deletes its copy. Anything read before then has already been seen.')
+    expect(line).not.toMatch(/un-send|revok/i)
+    expect(SHARE_DAYS_OUT_OF_RANGE).toBe('Choose from 1 to 90 whole days.')
+  })
+})
+
+/*
+ * THE BUILDER SAYS WHAT A SHARE IS (#337, decided in #305).
+ *
+ * A report is a copy the person hands over; a share is access that ends on the date they set or
+ * when they stop it. The builder opens with the share's sentence, states the floor — self-checks
+ * as scores and bands, their own words only if they switch them on, whole — and uses the end-date
+ * line beside the days field rather than a second one. The revoke caveat stays at the revoke click.
+ */
+describe('the share builder says what a share is', () => {
+  const builder = readFileSync(
+    fileURLToPath(new URL('../components/owner/ShareBuilder.svelte', import.meta.url)),
+    'utf8',
+  )
+  /** The hint as it reads: the paragraph's text, whitespace collapsed. Takes the source for plants. */
+  const hintOf = (src: string) => {
+    const m = src.replace(/<!--[\s\S]*?-->/g, '')
+    const open = m.indexOf('<p class="hint">')
+    return open < 0 ? '' : m.slice(open + '<p class="hint">'.length, m.indexOf('</p>', open)).replace(/\s+/g, ' ').trim()
+  }
+  const SHARE_IS_ACCESS =
+    'A share is access. {therapist.displayName} can read what you choose here until the date you set, or until you stop it.'
+
+  it('opens with the share’s own sentence, then the floor, whole', () => {
+    expect(hintOf(builder)).toBe(
+      `${SHARE_IS_ACCESS} Self-checks are reduced to scores and bands only — never raw answers. Your own words go ` +
+        "only if you switch them on below, whole, never trimmed. The share is sealed to {therapist.displayName}'s " +
+        'pinned key and signed by you.',
+    )
+    expect(hintOf(builder).startsWith(SHARE_IS_ACCESS)).toBe(true)
+    // Control: a hint that does not open with the sentence fails the same check.
+    const planted = builder.replace('A share is access. ', 'Curate exactly what to share. ')
+    expect(planted).not.toBe(builder)
+    expect(hintOf(planted).startsWith(SHARE_IS_ACCESS)).toBe(false)
+  })
+
+  it('names no copy, curation or report, and does not repeat the revoke caveat or the end-date line', () => {
+    const RETIRED = /\bcurat|\bcopy\b|\breport\b|un-send|already been seen/i
+    expect(hintOf(builder)).not.toMatch(RETIRED)
+    // Control: the retired opening is seen by the same pattern.
+    expect(hintOf(builder.replace('A share is access. ', 'Curate exactly what to share. '))).toMatch(RETIRED)
+    // The end-date sentence is the one beside the field, used once, not a second copy.
+    expect((builder.match(/shareEndsLine\(/g) ?? []).length).toBe(1)
+  })
+
+  it('asks to include the person’s own words, unchecked unless they turn it on', () => {
+    const markup = builder.replace(/<!--[\s\S]*?-->/g, '')
+    expect(markup).toContain('Include my own words (mood notes and journal text)')
+    expect(markup).toContain('checked={sel.includeOwnWords}')
+    expect(emptySelection().includeOwnWords).toBe(false)
+    // The old control, whose sense was inverted and which nudged with "(recommended)", is gone.
+    const RETIRED = /Strip free-text notes|\(recommended\)|stripNotes/
+    expect(markup).not.toMatch(RETIRED)
+    expect(`${markup}<label>Strip free-text notes (recommended)</label>`).toMatch(RETIRED) // control
+  })
+})
+
+describe('the owner console is given the records the person opened', () => {
+  const app = readFileSync(fileURLToPath(new URL('../../App.svelte', import.meta.url)), 'utf8')
+  // The share builder seals nothing without records (`disabled={busy || !data}`). Handed null, as
+  // it was from the first version, the Paired tab could pair and grant but never share.
+  const handedNothing = /<OwnerConsole\s+data=\{null\}/
+
+  /**
+   * Whether a loaded backup and the owner console can be on screen together. Passing the records
+   * is not enough: the page used to show its navigation, and the owner console inside it, only
+   * `{:else if !data}`, and a dashboard-only branch once a backup was open, so the two were never
+   * both true and the seal button stayed disabled in every state a person could reach. Both now
+   * render inside the navigation, which stays whether or not a backup is open.
+   */
+  function canBothBeOnScreen(page: string): boolean {
+    const src = page.replace(/<!--[\s\S]*?-->/g, '') // what ships, not what the comments say
+    const start = src.indexOf('<Orientation')
+    const end = src.indexOf('</Orientation>')
+    if (start === -1 || end === -1) return false
+    const nav = src.slice(start, end)
+    return nav.includes('<OwnerConsole {data} />') && nav.includes('<Dashboard {data} />') && !/\{:else if !data\}/.test(src)
+  }
+
+  it('passes the backup opened on the file or sync tab through to it', () => {
+    expect(app).toContain('<OwnerConsole {data} />')
+    expect(app).not.toMatch(handedNothing)
+  })
+
+  it('keeps the navigation, and the owner console with it, on screen once a backup is open', () => {
+    expect(canBothBeOnScreen(app)).toBe(true)
+  })
+
+  it('both checks can fail: the page as it was fails them (positive control)', () => {
+    expect('<OwnerConsole data={null} />').toMatch(handedNothing)
+    const asItWas = [
+      '{#if setupGateOpen}<SetupEntry />',
+      '{:else if !data}<Orientation>{#if source === \'file\'}<Dropzone />{:else}<OwnerConsole {data} />{/if}</Orientation>',
+      '{:else}<Dashboard {data} />{/if}',
+    ].join('\n')
+    expect(canBothBeOnScreen(asItWas)).toBe(false)
   })
 })

@@ -1,7 +1,6 @@
 package com.daymark.companion.routes
 
-import com.daymark.companion.clientAddress
-import com.daymark.companion.auth.AuthGuard
+import com.daymark.companion.auth.OwnerAuth
 import com.daymark.companion.auth.Secrets
 import com.daymark.companion.storage.AuditEvent
 import com.daymark.companion.storage.AuditStore
@@ -28,7 +27,7 @@ data class AuditEventDto(
 @Serializable
 data class AuditLogPage(val events: List<AuditEventDto>, val nextCursor: Long? = null)
 
-private fun AuditEvent.toDto() = AuditEventDto(seq, ts, actor, action, objectRef, meta, entryHash)
+internal fun AuditEvent.toDto() = AuditEventDto(seq, ts, actor, action, objectRef, meta, entryHash)
 
 /**
  * Owner-ONLY read path for the audit log (COMPANION_SECURITY.md §9). Therapists cannot read or
@@ -37,7 +36,7 @@ private fun AuditEvent.toDto() = AuditEventDto(seq, ts, actor, action, objectRef
  * as the /v1/rel/{relRef}/{channel} API: the caller must both hold the relationship's inbox
  * token (X-Rel-Token, hashed to relRef) AND present the owner bearer token.
  */
-fun Route.auditRoutes(store: AuditStore, ownerGuard: AuthGuard) {
+fun Route.auditRoutes(store: AuditStore, ownerGuard: OwnerAuth) {
     route("/v1/rel/{relRef}/audit") {
         get {
             val pathRelRef = call.parameters["relRef"]
@@ -59,14 +58,5 @@ fun Route.auditRoutes(store: AuditStore, ownerGuard: AuthGuard) {
     }
 }
 
-/** Owner-token gate, matching TherapistAuthRoutes.ownerAuthorized exactly. */
-private suspend fun ApplicationCall.ownerAuditAuthorized(guard: AuthGuard): Boolean {
-    val sourceId = clientAddress()
-    val presented = request.headers[HttpHeaders.Authorization]?.removePrefix("Bearer ")?.trim()
-    return when (guard.authorize(sourceId, presented)) {
-        AuthGuard.Result.OK -> true
-        AuthGuard.Result.RATE_LIMITED -> { respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited")); false }
-        AuthGuard.Result.LOCKED -> { respond(HttpStatusCode.TooManyRequests, ErrorDto("temporarily locked")); false }
-        AuthGuard.Result.BAD_TOKEN -> { respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized")); false }
-    }
-}
+/** The owner gate, the same one every owner route calls ([ownerAuthorized]). */
+private suspend fun ApplicationCall.ownerAuditAuthorized(guard: OwnerAuth): Boolean = ownerAuthorized(guard)

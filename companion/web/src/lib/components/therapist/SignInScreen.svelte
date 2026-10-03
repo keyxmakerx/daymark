@@ -1,6 +1,6 @@
 <script lang="ts">
   /*
-   * SIGN-IN — the two-column contract, and the deployment's digest as a control.
+   * SIGN-IN — the two-column contract, and the digest the deployment reports about itself.
    *
    * WHAT THIS FILE IS ALLOWED TO DECIDE. Arrangement, and nothing else. Every sentence on this
    * screen is a premade constant in lib/therapist/signIn.ts, every rule about whether the
@@ -39,11 +39,12 @@
    * page's own subject in the outline that heading-navigation users rely on — the same reason
    * the NavRail's brand block is not a heading.
    *
-   * WHY THE DIGEST SITS ABOVE THE FIELDS AND NOT UNDER THEM. "Promoted from footnote to
-   * control" (COMPANION_WEB_REDESIGN_PLAN.md, Phase 3 item 4) is a claim about placement as much
-   * as about markup: which image is serving this page is something to read BEFORE typing a
-   * passphrase into it, so it is the first thing in the credential column, at the same weight as
-   * everything else there, with its value legible in mono and copyable in one click.
+   * WHY THE DIGEST SITS ABOVE THE FIELDS AND NOT UNDER THEM. It is the page's own report of what
+   * it is running (COMPANION_UX.md §10.4) — information for whoever runs the server, never a
+   * control, because a changed page can print the right value (#222, #320). Which image says it is
+   * serving this page is still something to read BEFORE typing a passphrase into it, so it is the
+   * first thing in the credential column, at the same weight as everything else there, with its
+   * value legible in mono and copyable in one click.
    *
    * WHY NOTHING HERE SAYS WHETHER THE DIGEST IS RIGHT. There is no expected value on this
    * screen, no comparison and no verdict. The comparison would be performed by the same page
@@ -74,6 +75,7 @@
 
   let {
     imageDigest = null,
+    locked = false,
     credentials,
   }: {
     /**
@@ -82,6 +84,11 @@
      * than hides. It is a claim by this page about itself and is never treated as more.
      */
     imageDigest?: string | null
+    /**
+     * True only after the automatic lock ended a session in this tab (#262), never after the
+     * person's own Log out. Held by the caller in component state, so it never outlives the tab.
+     */
+    locked?: boolean
     /**
      * The credential entry. Supplied by the caller — in this product that is LoginGate, which
      * owns the only authentication path there is. Required: a sign-in screen with no way to
@@ -138,7 +145,7 @@
       <span class="mark" aria-hidden="true"></span>
       <div>
         <p class="wordmark">Daymark Companion</p>
-        <p class="muted tagline">Therapist portal</p>
+        <p class="muted tagline">Clinician console</p>
       </div>
     </div>
   </header>
@@ -243,6 +250,11 @@
       {/if}
 
       <Card title={SCREEN_COPY.credentialTitle}>
+        {#if locked}
+          <!-- What the lock did, once, directly above the fields. Plain text in the ink voice: it
+               is not a warning, not an error and not a confirmation, so no Callout carries it. -->
+          <p class="locked-notice" role="status">{SCREEN_COPY.lockedNotice}</p>
+        {/if}
         {@render credentials()}
       </Card>
     </div>
@@ -269,6 +281,9 @@
   .mark { width: 1.5rem; height: 1.5rem; border-radius: 0.375rem; background: linear-gradient(135deg, var(--indigo), var(--indigo-deep)); box-shadow: var(--elevation); flex: none; }
   .wordmark { margin: 0; font-family: var(--font-display); font-weight: 560; font-size: 1.1rem; line-height: 1.2; color: var(--ink-text); }
   .tagline { margin: 0; font-size: 0.9rem; }
+
+  /* The after-lock line: ordinary ink, one step down in size, and nothing that reads as a state. */
+  .locked-notice { margin: 0 0 var(--space-4); color: var(--ink-text); font-size: 0.9rem; line-height: 1.55; }
 
   /* The build marker beside the title: chrome talking about itself, subordinate to everything
      else in the header. The whole digest lives in the control below. */

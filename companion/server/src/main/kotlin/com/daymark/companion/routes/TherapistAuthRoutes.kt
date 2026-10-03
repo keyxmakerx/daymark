@@ -3,8 +3,8 @@ package com.daymark.companion.routes
 import com.daymark.companion.auth.AttemptBudget
 import com.daymark.companion.auth.AttemptLimiter
 import com.daymark.companion.clientAddress
-import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.auth.AuthStore
+import com.daymark.companion.auth.OwnerAuth
 import com.daymark.companion.auth.PersistentAttemptLimiter
 import com.daymark.companion.auth.Secrets
 import com.daymark.companion.auth.Totp
@@ -130,12 +130,13 @@ internal const val REPORT_WINDOW_MS = 60_000L
  * documented WebAuthn scaffold stubs. Owner-facing routes (mint invite) are gated on the owner
  * bearer token; therapist-facing routes use capped-backoff rate limiting.
  *
- * @param publicBaseUrl absolute base for building the invite link (e.g. https://host/base). If
- *   null, the link is built from the request's own scheme/host as a best effort.
+ * @param publicBaseUrl absolute base for building the invite link (e.g. https://host/base). Never
+ *   null in a running server, which refuses to start the portal without it (#180); see
+ *   [resolveBaseUrl] for what a hand-built test configuration gets instead.
  */
 fun Route.therapistAuthRoutes(
     authStore: AuthStore,
-    ownerGuard: AuthGuard,
+    ownerGuard: OwnerAuth,
     mailer: Mailer,
     inviteTtlSeconds: Long,
     sessionIdleSeconds: Long,
@@ -171,15 +172,15 @@ fun Route.therapistAuthRoutes(
     // Per-SOURCE budget for the credential-free PAIRING touches — the relay's fetch and respond —
     // and the one budget in this file that is DURABLE.
     //
-    // Two reasons, and the first is the one that made this a blocker rather than a nicety. §3.7's
-    // pairing rests on a password-authenticated exchange whose entire security argument is "one
-    // online guess per attempt, and no offline attack"; that argument is worth exactly as much as
-    // the thing counting attempts, and an in-process map is cleared by any restart and duplicated
-    // by any second instance. A limiter an attacker can reset by waiting for a deploy is not a
-    // limiter. Second, and smaller: the per-invite backoff in AuthStore has always been durable,
-    // so leaving the per-source half in memory would have made half of one control survive a
-    // restart and the other half not — the confusing kind of partial guarantee that reads as
-    // protection in a review and is not.
+    // Two reasons, and the first is the one that made this a blocker rather than a nicety. The
+    // pairing (COMPANION_PAIRING.md §2 and §7) rests on a password-authenticated exchange whose
+    // entire security argument is one online guess per attempt, and no offline attack; that
+    // argument is worth exactly as much as the thing counting attempts, and an in-process map is
+    // cleared by any restart and duplicated by any second instance. A limiter an attacker can
+    // reset by waiting for a deploy is not a limiter. Second, and smaller: the per-invite backoff
+    // in AuthStore has always been durable, so leaving the per-source half in memory would have
+    // made half of one control survive a restart and the other half not — the confusing kind of
+    // partial guarantee that reads as protection in a review and is not.
     //
     // Fetch and respond share ONE scope deliberately. They verify the same invite secret, so
     // separate budgets would let an attacker alternate routes and spend twice the attempts on it.
@@ -211,7 +212,8 @@ fun Route.therapistAuthRoutes(
         }
 
         /*
-         * THE REDEEM ROUTE IS GONE, and its absence is the point (plan §3.7, 2026-09-04).
+         * THE REDEEM ROUTE IS GONE, and its absence is the point (COMPANION_PAIRING.md §4, "No
+         * enrolment without approval").
          *
          * It took the invitation secret — which the emailed link carries — and answered with an
          * enrolment ticket. So whoever read that email could enrol as the therapist, and the short
@@ -269,12 +271,18 @@ fun Route.therapistAuthRoutes(
             // Which caller this is has to be decided before anything is spent: the owner path is
             // already metered by AuthGuard's own bucket, and making the owner share the anonymous
             // guard would let an attacker on the same address spend the owner's ability to kill an
-            // invite — handing the attacker the outcome this route exists to prevent.
-            val presentingOwnerToken = call.request.headers[HttpHeaders.Authorization] != null
+            // invite — handing the attacker the outcome this route exists to prevent. The owner's
+            // credential is the token or a device's signature (#186).
+            val presentingOwnerToken = ownerGuard.presentsCredential(call)
             if (!presentingOwnerToken && !reportFloodGuard.allow(call.clientAddress())) {
                 call.respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited"))
                 return@post
             }
+            // A request presenting an owner credential is checked before its body is read, as on every
+            // owner route: a signed one naming no live key has its body read to the end, hashed and
+            // dropped by the gate, so it keeps none of it (#186). An anonymous request's body is read
+            // under JSON_BODY_MAX_BYTES, the bound every route that takes no credential reads under.
+            if (presentingOwnerToken && !call.ownerAuthorized(ownerGuard)) return@post
             // An owner reporting from a console button has nothing to put in a body, so an empty
             // one is a valid report rather than a malformed request. Only a non-empty body that is
             // not JSON earns the 400 — a fact about the request, not about any invitation.
@@ -292,7 +300,6 @@ fun Route.therapistAuthRoutes(
             }
 
             if (presentingOwnerToken) {
-                if (!call.ownerAuthorized(ownerGuard)) return@post
                 val result = authStore.reportInviteByOwner(inviteId)
                 if (result.status == AuthStore.ReportStatus.OK) {
                     // Respond FIRST, then audit: the burn has already committed in the store, and a
@@ -524,25 +531,6 @@ fun Route.therapistAuthRoutes(
         post("/webauthn/assert/finish", webauthnStub)
         // Also answer GET for the scaffold so a probe sees the documented 501 either way.
         get("/webauthn/register/begin", webauthnStub)
-    }
-}
-
-/**
- * Owner-token gate for the mint route. Non-enumerating errors, source-keyed lockout.
- *
- * `internal` rather than private because the therapist public-key read (TherapistKeyRoutes.kt) is
- * specified as being gated "exactly as POST /v1/invite is", and the only way to keep that promise
- * literally true is to call the same function rather than write a third copy of it that can drift.
- * Nothing about the gate changed in making it visible.
- */
-internal suspend fun ApplicationCall.ownerAuthorized(guard: AuthGuard): Boolean {
-    val sourceId = clientAddress()
-    val presented = request.headers[HttpHeaders.Authorization]?.removePrefix("Bearer ")?.trim()
-    return when (guard.authorize(sourceId, presented)) {
-        AuthGuard.Result.OK -> true
-        AuthGuard.Result.RATE_LIMITED -> { respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited")); false }
-        AuthGuard.Result.LOCKED -> { respond(HttpStatusCode.TooManyRequests, ErrorDto("temporarily locked")); false }
-        AuthGuard.Result.BAD_TOKEN -> { respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized")); false }
     }
 }
 

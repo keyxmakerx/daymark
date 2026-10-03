@@ -19,8 +19,8 @@ import kotlinx.coroutines.flow.Flow
  * ## The query that is missing on purpose
  *
  * There is no `lastNoteBefore`, no `daysSinceLastNote` and no "people with no note since" query.
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2: **"Never: 'you haven't written about X in a while.'
- * A gap is never a prompt."** A page may state *last note: June* when the person opens it, which is
+ * `docs/FEATURES.md` §11.3: **"Never: 'you haven't written about X in a while.' A gap is never a
+ * prompt."** A page may state *last note: June* when the person opens it, which is
  * [observeForPerson] read newest-first and the first row's date — a fact on a screen somebody
  * chose to look at. A query shaped as *who has gone quiet* is the prompt itself, one refactor from
  * being spoken, so it does not exist.

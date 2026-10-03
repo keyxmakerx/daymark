@@ -42,9 +42,9 @@ export const ALREADY_YOURS =
  * Already there, and it is NOT the key this console derived.
  *
  * The serious one. It means the relationship is pinned to a key the owner cannot produce — the
- * shape of someone who published, then lost their key file and made a new one. Nothing here can
- * repair it, so the copy says what is true and what the way out actually is, rather than offering
- * a button that would answer 409 again.
+ * shape of a relationship paired under a key this console can no longer open, such as one of the
+ * stand-in key files retired by #258. Nothing here can repair it, so the copy says what is true and
+ * what the way out actually is, rather than offering a button that would answer 409 again.
  */
 export const DIFFERENT_KEY_PUBLISHED =
   'A different key is already published for this connection, and it cannot be replaced. Anything ' +

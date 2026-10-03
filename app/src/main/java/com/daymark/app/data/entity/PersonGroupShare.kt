@@ -7,10 +7,10 @@ import androidx.room.PrimaryKey
  * One group's sharing default: *are the people filed under `friends` shared with a clinician
  * unless I said otherwise?*
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2: *"Sharing is one screen listing every person and
- * community, with a default per group (all off) and overrides per item, off even under an
- * accept-all grant."* This entity is the "default per group" half; [Person.sharedOverride] is the
- * "overrides per item" half, and it wins.
+ * `docs/FEATURES.md` §11.4: *"One screen lists every person and community, with a default per
+ * group (all off) and an override per person"*, and sharing stays off even under an accept-all
+ * grant. This entity is the "default per group" half; [Person.sharedOverride] is the "override per
+ * person" half, and it wins.
  *
  * ## Absent means off, which is why there is no row until somebody switches one on
  *

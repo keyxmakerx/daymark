@@ -10,8 +10,8 @@ import org.junit.Test
 /**
  * The grouping the picker and the lists sort by — the only thing a group does.
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2: *"Groups for sorting the picker **only**: friends,
- * family, partners, communities, other."*
+ * `docs/FEATURES.md` §11.1: *"Groups (friends, family, partners, communities, other) sort the
+ * picker and the list, and do nothing else."*
  *
  * `PersonGroups.kt` has no Compose in it precisely so this can be an ordinary unit test: the
  * ordering, the omission of empty groups and the fallback for a key this build does not know are
@@ -23,7 +23,7 @@ class PersonGroupsTest {
         Person(id = id, name = name, groupKey = key)
 
     @Test
-    fun `the order is the order the plan gives`() {
+    fun `the order is friends, family, partners, communities, other`() {
         assertEquals(
             listOf("friends", "family", "partners", "communities", "other"),
             PersonGroupOrder.map { it.key },

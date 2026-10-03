@@ -1,10 +1,10 @@
 /*
  * The ui/ primitives, as one import.
  *
- * WHY A BARREL AT ALL. Phase 2 migrates 31 components off their hand-rolled <style> blocks and
- * onto these primitives. Every one of those files would otherwise carry five or six relative
- * paths that all say the same thing, and every future move of this directory would be a
- * 31-file diff. One entry point means a screen writes `import { Card, PageHeader, StatusPill }
+ * WHY A BARREL AT ALL. Most of the consoles' components use these primitives instead of
+ * hand-rolled <style> blocks. Every one of those files would otherwise carry five or six relative
+ * paths that all say the same thing, and every future move of this directory would touch all of
+ * them. One entry point means a screen writes `import { Card, PageHeader, StatusPill }
  * from '$ui'`-shaped lines and stops caring where the files live.
  *
  * WHY THE TYPES COME THROUGH HERE TOO. A Svelte 5 instance script cannot export types, so the

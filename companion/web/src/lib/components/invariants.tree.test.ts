@@ -95,14 +95,18 @@ function styleOf(path: string): string | null {
  * sentence, exactly as it renders), whitespace collapsed so the assertions are indifferent to
  * how the markup happens to wrap.
  */
-function proseOf(path: string): string {
-  return (source.get(path) ?? '')
+function proseOfText(text: string): string {
+  return text
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<script[\s\S]*?<\/script>/g, '')
     .replace(/<style[\s\S]*?<\/style>/g, '')
     .replace(/<[^>]*>/g, '')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+function proseOf(path: string): string {
+  return proseOfText(source.get(path) ?? '')
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -158,6 +162,10 @@ const GREEN_WORDS =
 const HEX = /#[0-9a-fA-F]{3,8}\b/
 const COLOUR_FN = /(?<![\w-])(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\s*\(/i
 
+/** A tick in any spelling a source file could draw one with: the glyphs, their HTML entities, and
+ * a JavaScript escape. The provenance badge's ◐ and ✎ are not ticks. */
+const TICK = /[✓✔☑✅🗸🗹]|&check;|&#0*10003;|&#0*10004;|&#x0*271[34];|\\u(?:2713|2714|2611|2705)/i
+
 /* ═══════════════════════════════════════════════════════════════════════════
    The two allowlists.
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -177,14 +185,25 @@ const MOOD_DATA_FILES: Record<string, string> = {
     'the 5-level mood scale itself (Awful..Rad), mapping a reported level to its token',
   'src/lib/charts/Sparkline.svelte':
     "the plotted line IS the person's daily mood average, on the ramp's own 1..5 scale",
-  'src/lib/components/Overview.svelte':
-    'mood-distribution bars: one bar per level, counting that person’s own entries',
   'src/lib/components/Dashboard.svelte':
-    'mood distribution, activity-association deltas and the self-check trend line — all charts of a person’s own series',
+    'the mood distribution, in the person’s own colours where they chose them — a chart of a person’s own moods, and nothing else on the page; the activity-association bars and the self-check trend line are ink, not mood (#404, #420)',
   'src/lib/components/QuestionnaireRunner.svelte':
     'the result edge is the band this person’s own answers scored into, beside the band label in words',
   'src/lib/components/ui/BandTag.svelte':
     'the band tag’s bar: the score band, on the ramp, with the band named in text next to it',
+  'src/lib/components/calendar/MoodMark.svelte':
+    'one check-in’s mood on the person’s own month: its square, in their colour for it or the ramp’s, with the mood’s word beside it',
+}
+
+/**
+ * Where inside an allowlisted file the ramp may be named, for a file whose allowance is narrower
+ * than the file: the selectors of the marks its entry above names, and no others. The Dashboard
+ * draws cards that are not about a mood beside the one that is, and a rule for one of them could
+ * name the ramp under the file's permission, as the activity bars (#404) and the self-check line
+ * (#420) both once did.
+ */
+const MOOD_DATA_SELECTORS: Record<string, RegExp> = {
+  'src/lib/components/Dashboard.svelte': /^\.dist \.mood-mark(?:\[data-level='[1-5]'\])?$/,
 }
 
 /**
@@ -196,6 +215,9 @@ const POLICING_FILES = [
   'src/lib/components/ui/invariants.test.ts',
   'src/lib/components/trustbar.test.ts',
   'src/lib/components/invariants.tree.test.ts',
+  'src/lib/components/ownMoodColour.tree.test.ts',
+  'src/lib/components/calendar/monthCalendar.test.ts',
+  'src/lib/components/dashboardActivities.test.ts',
 ]
 
 const SELF = 'src/lib/components/invariants.tree.test.ts'
@@ -261,7 +283,7 @@ describe('(a) the mood ramp is a person’s data, and only the data surfaces may
     expect(band).not.toBeNull()
     for (const n of [1, 2, 3, 4, 5]) expect(band!).toContain(`var(--mood-${n})`)
 
-    for (const chart of ['src/lib/components/Overview.svelte', 'src/lib/components/Dashboard.svelte']) {
+    for (const chart of ['src/lib/components/Dashboard.svelte']) {
       const style = styleOf(chart)
       expect(style, `${chart} has no style block`).not.toBeNull()
       for (const n of [1, 2, 3, 4, 5]) expect(style!, chart).toContain(`var(--mood-${n})`)
@@ -309,6 +331,33 @@ describe('(a) the mood ramp is a person’s data, and only the data surfaces may
     expect(moodRules).toBeGreaterThanOrEqual(15)
     expect(offenders).toEqual([])
   })
+
+  it('and where an allowance is narrower than its file, the ramp stays on the marks it names (#404, #420)', () => {
+    /** Every selector in a style block whose rule names a mood token, and which the allowance does not name. */
+    const outside = (allowed: RegExp, style: string) =>
+      [...style.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+        .filter((m) => /--mood-/.test(m[2]!))
+        .flatMap((m) => m[1]!.split(',').map((s) => s.trim().replace(/\s+/g, ' ')))
+        .filter((selector) => !allowed.test(selector))
+
+    for (const [path, allowed] of Object.entries(MOOD_DATA_SELECTORS)) {
+      expect(Object.keys(MOOD_DATA_FILES), `${path} narrows an allowance it does not have`).toContain(path)
+      const style = styleOf(path)
+      expect(style, `${path} has no style block`).not.toBeNull()
+      // Non-vacuity: the rules the allowance names are there, all five steps and the fill.
+      const named = [...style!.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => /--mood-/.test(m[2]!))
+      expect(named.length, path).toBeGreaterThanOrEqual(6)
+      expect(outside(allowed, style!), path).toEqual([])
+    }
+
+    // Positive control: the self-check line and an activity bar, planted back on the ramp, are seen,
+    // and so is one hiding in a selector list beside an allowed mark.
+    const dashboard = 'src/lib/components/Dashboard.svelte'
+    const planted =
+      styleOf(dashboard)! +
+      '\n.trend .line { stroke: var(--mood-5); }\n.delta .pos { fill: var(--mood-5); }\n.dist .mood-mark, .ah { color: var(--mood-fill); }\n'
+    expect(outside(MOOD_DATA_SELECTORS[dashboard]!, planted)).toEqual(['.trend .line', '.delta .pos', '.ah'])
+  })
 })
 
 describe('(b) there is no success token and no green anywhere in the system', () => {
@@ -327,6 +376,25 @@ describe('(b) there is no success token and no green anywhere in the system', ()
     expect(GREEN_WORDS.test('background: var(--clay);')).toBe(false)
     expect(NAMED_COLOUR.test('color: white;')).toBe(true)
     expect(NAMED_COLOUR.test('white-space: nowrap;')).toBe(false)
+    // The tick detector, on every spelling a file could draw one with, and not on the marks the
+    // provenance badge keeps.
+    for (const tick of ["'✓ passes'", '✔', '☑', '✅', '&check;', '&#10003;', '&#x2714;', "'\\u2713'"]) {
+      expect(TICK.test(tick), tick).toBe(true)
+    }
+    for (const mark of ['◐', '✎', 'passes', '— 2 to fix']) expect(TICK.test(mark), mark).toBe(false)
+  })
+
+  it('no file draws a tick (#278)', () => {
+    // A tick is the product saying "checked, fine, stop reading", which it never says, whatever
+    // colour it is drawn in (CLAUDE.md §4). Run over code, not commentary, so a comment may name
+    // the rule; the planted pair proves the stripper keeps a tick in code and drops one in a comment.
+    expect(TICK.test(codeOnly("const gate = '✓ passes'"))).toBe(true)
+    expect(TICK.test(codeOnly('// a ✓ once stood here'))).toBe(false)
+    const subjects = paths.filter((p) => !p.endsWith('.test.ts'))
+    expect(subjects.length).toBeGreaterThan(60)
+    expect(subjects).toContain('src/lib/instruments/provenance.ts')
+    expect(subjects).toContain('src/lib/components/ToolBuilder.svelte')
+    expect(subjects.filter((p) => TICK.test(code.get(p)!))).toEqual([])
   })
 
   it('no file declares or references a token whose name claims health', () => {
@@ -495,7 +563,7 @@ const FIXED_COPY: { path: string; label: string; sentences: string[] }[] = [
     path: 'src/lib/components/owner/NonDiagnosticBanner.svelte',
     label: 'non-diagnostic banner (owner)',
     sentences: [
-      'Non-diagnostic. Self-checks are self-tracking tools, not medical assessments. Scores and bands are descriptive, not clinical thresholds. Anything a therapist assigns or shares here is guidance from your real clinician — never a diagnosis.',
+      'Non-diagnostic. Self-checks are self-tracking tools, not medical assessments. Scores and bands are descriptive, not clinical thresholds. Anything a clinician assigns or shares here is guidance from them — never a diagnosis.',
     ],
   },
   {
@@ -538,21 +606,21 @@ const FIXED_COPY: { path: string; label: string; sentences: string[] }[] = [
     path: 'src/lib/components/SyncPanel.svelte',
     label: 'lower-assurance banner (sync)',
     sentences: [
-      'Lower-assurance path. Decrypting in the browser is convenient but the page is served by the server it talks to; a malicious server could tamper with it. Your phone (the future Sync flavor) is the trusted, secret-handling path. Use a passphrase you are comfortable entering here, and verify the released image digest.',
+      'Lower-assurance path. Decrypting in the browser is convenient but the page is served by the server it talks to; a malicious server could tamper with it. Your phone (the future Sync flavor) is the trusted, secret-handling path. Use a passphrase you are comfortable entering here.',
     ],
   },
   {
     path: 'src/lib/components/owner/LowerAssuranceBanner.svelte',
     label: 'lower-assurance banner (owner console)',
     sentences: [
-      'Lower-assurance path. The owner console holds your private keys in this browser to open sealed items and sign grants. This is a convenience path — the page is served by the server it talks to, so a tampered page could misbehave. Keys stay in memory and are dropped when you lock. Verify the released image digest; your phone remains the trusted, secret-handling path.',
+      'Lower-assurance path. The owner console holds your private keys in this browser to open sealed items and sign grants. This is a convenience path — the page is served by the server it talks to, so a tampered page could misbehave. Keys stay in memory and are dropped when you lock. Your phone remains the path that handles your secrets.',
     ],
   },
   {
     path: 'src/lib/components/therapist/LowerAssuranceBanner.svelte',
-    label: 'lower-assurance banner (therapist portal, TOTP)',
+    label: 'lower-assurance banner (clinician console, TOTP)',
     sentences: [
-      'Lower-assurance path (TOTP). Your reading key is unwrapped in this browser under a passphrase. Because the page is served by the server it talks to, a tampered page could capture your passphrase or keys — this is a convenience path, not a zero-knowledge guarantee. Keys are held in memory only and wiped when you log out or go idle. Verify the released image digest; a hardware passkey (WebAuthn) is the stronger path when available.',
+      'Lower-assurance path (TOTP). Your reading key is unwrapped in this browser under a passphrase. Because the page is served by the server it talks to, a tampered page could capture your passphrase or keys — this is a convenience path, not a zero-knowledge guarantee. Keys are held in memory only and wiped when you log out or go idle.',
     ],
   },
   {
@@ -572,7 +640,7 @@ const FIXED_COPY: { path: string; label: string; sentences: string[] }[] = [
   {
     path: 'src/lib/components/therapist/SharedDataView.svelte',
     label: 'scores-and-bands-only framing (shared data)',
-    sentences: ['Curated view: scores and bands only.'],
+    sentences: ['Self-checks: scores and bands only.'],
   },
 ]
 
@@ -627,13 +695,115 @@ describe('(e) the fixed honesty copy is intact', () => {
     expect(prov!).toContain("custom: 'Custom'")
   })
 
-  it('the curated-share rule survives where it is enforced, not only where it is shown', () => {
-    // "Scores and bands only, never raw entries" is a property of the share pipeline, not a
-    // sentence in a banner. Asserted at the capability description the owner consents to.
-    const describe_ = source.get('src/lib/assignments/describe.ts')
+  it('the share rule survives where it is consented to, not only where it is shown', () => {
+    // "Scores and bands only" is a property of the share pipeline, not a sentence in a banner.
+    // Asserted at the capability description the owner consents to, which also says what a share
+    // is: access until the date set or until it is stopped (#305, #337).
+    const describe_ = code.get('src/lib/assignments/describe.ts')
     expect(describe_, 'describe.ts is missing').toBeDefined()
     expect(describe_!).toContain(
-      'Read the curated data you choose to share (scores and bands only — never raw entries).',
+      "'Read what you choose to share, until the date you set or until you stop it. Self-checks go as scores and bands only.'",
     )
+    // Retired: "curated" (software picking, which the floor forbids) and "never raw entries" (a
+    // default, not a limit, once the owner may send their own words).
+    const RETIRED = 'Read the curated data you choose to share (scores and bands only — never raw entries).'
+    expect(describe_!).not.toContain(RETIRED)
+    // Control: planted back into the real module, the retired description is seen.
+    expect(`${describe_}\nconst planted = '${RETIRED}'`).toContain(RETIRED)
   })
+})
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   (f) Retired copy stays retired.
+
+   The other half of (e). When a fixed sentence is reworded on purpose, its replacement is pinned
+   above and the sentence it replaced is listed here, in the file that used to render it, so the
+   old wording cannot come back beside the new one — or instead of it, by a revert nobody meant.
+   Each entry names the issue that retired it. The absence check is proven first against a copy
+   of the retired sentence planted into that same file, run through the same extractor: a check
+   that could not see it there would pass on every file forever.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const RETIRED_COPY: { path: string; issue: string; sentences: string[] }[] = [
+  {
+    path: 'src/lib/components/owner/NonDiagnosticBanner.svelte',
+    issue: '#158',
+    sentences: [
+      'Anything a therapist assigns or shares here is guidance from your real clinician — never a diagnosis.',
+    ],
+  },
+  {
+    // An instruction nobody can carry out (no release publishes a digest, #241, and a changed page
+    // can print the right one), and a passkey called stronger against a changed page, which it is
+    // not: an unlocked key still passes through the page.
+    path: 'src/lib/components/therapist/LowerAssuranceBanner.svelte',
+    issue: '#320',
+    sentences: ['Verify the released image digest; a hardware passkey (WebAuthn) is the stronger path when available.'],
+  },
+  {
+    path: 'src/lib/components/owner/LowerAssuranceBanner.svelte',
+    issue: '#320',
+    sentences: ['Verify the released image digest; your phone remains the trusted, secret-handling path.'],
+  },
+  {
+    path: 'src/lib/components/SyncPanel.svelte',
+    issue: '#320',
+    sentences: ['Use a passphrase you are comfortable entering here, and verify the released image digest.'],
+  },
+  {
+    // Pairing again protects only what is sealed afterwards; nothing reaches what was already read.
+    path: 'src/lib/components/owner/GrantManager.svelte',
+    issue: '#320',
+    sentences: ['A true cutoff for past data is a re-key, which is a separate step.'],
+  },
+  {
+    // "Curate" is software picking, which the floor forbids; the toggle's sense is inverted so the
+    // safe choice is the default without being nudged at.
+    path: 'src/lib/components/owner/ShareBuilder.svelte',
+    issue: '#337',
+    sentences: [
+      'Curate exactly what to share.',
+      'Strip free-text notes (recommended)',
+      "The bundle is sealed to {therapist.displayName}'s pinned key and signed by you.",
+    ],
+  },
+  {
+    // False whenever the owner sent their own words; scoped to self-checks it is true in every state.
+    path: 'src/lib/components/therapist/SharedDataView.svelte',
+    issue: '#337',
+    sentences: ['Curated view: scores and bands only.', 'Open the curated data this person chose to share with you.'],
+  },
+]
+
+describe('(f) retired copy stays retired', () => {
+  it('no screen asks anyone to verify the released image digest (#320)', () => {
+    const ASKS = /verify (?:the|this) (?:released )?(?:image )?digest|verify this build/i
+    const offenders = components.filter((p) => ASKS.test(proseOf(p)))
+    expect(components.length).toBeGreaterThan(60)
+    expect(offenders).toEqual([])
+    // Control: the retired sentence, planted into a real component, is seen.
+    const planted = `${source.get('src/lib/components/SyncPanel.svelte')}\n<p>Verify the released image digest.</p>\n`
+    expect(ASKS.test(proseOfText(planted))).toBe(true)
+  })
+
+  it('every entry names a real file, and the check sees a planted copy of each retired sentence', () => {
+    expect(RETIRED_COPY.length).toBeGreaterThan(0)
+    for (const { path, sentences } of RETIRED_COPY) {
+      expect(paths, `${path} is missing`).toContain(path)
+      expect(sentences.length, path).toBeGreaterThan(0)
+      // Planted after the style block, where the extractor must still find it as prose.
+      const planted = `${source.get(path)}\n<p>\n  ${sentences.join('\n  ')}\n</p>\n`
+      for (const sentence of sentences) {
+        expect(proseOfText(planted), `${path}: a planted copy was not seen`).toContain(sentence)
+      }
+    }
+  })
+
+  for (const { path, issue, sentences } of RETIRED_COPY) {
+    it(`${path} no longer says what ${issue} retired`, () => {
+      const prose = proseOf(path)
+      expect(prose.length, `${path} rendered no prose`).toBeGreaterThan(20)
+      for (const sentence of sentences) expect(prose, `${path}: retired copy is back`).not.toContain(sentence)
+    })
+  }
 })

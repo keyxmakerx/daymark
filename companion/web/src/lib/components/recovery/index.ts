@@ -1,7 +1,7 @@
 /*
  * The recovery-code surface, as one import.
  *
- * WHY A BARREL FOR ONE SCREEN. The same reason ui/index.ts has one: the panel is composed of six
+ * WHY A BARREL FOR ONE SCREEN. The same reason ui/index.ts has one: the panel is composed of several
  * files that only make sense together, and a caller wiring it into a page has no business knowing
  * that the write-down check is a separate component from the sheet it hides. One entry point means
  * the internal arrangement can change without touching whatever mounted it.
@@ -23,6 +23,7 @@ export { default as GroupEntry } from './GroupEntry.svelte'
 export { default as WriteDownCheck } from './WriteDownCheck.svelte'
 export { default as NewCodeFlow } from './NewCodeFlow.svelte'
 export { default as UseCodeFlow } from './UseCodeFlow.svelte'
+export { default as KeySetup } from './KeySetup.svelte'
 export { default as Placeholder } from './Placeholder.svelte'
 
 /* ---- The logic behind it -------------------------------------------------- */
@@ -51,15 +52,4 @@ export {
 } from './confirmation'
 export type { ConfirmationResult } from './confirmation'
 
-export {
-  FILE_NOTE,
-  STAND_IN_MARKER,
-  WRAPPED_KEY_FILE_FAULT_TEXT,
-  decodeWrappedKeyFile,
-  encodeWrappedKeyFile,
-  heldWrappedKey,
-  holdWrappedKey,
-  releaseWrappedKey,
-  slotSummary,
-} from './session'
-export type { WrappedKeyFile, WrappedKeyFileFault, WrappedKeyFileRead } from './session'
+export { slotSummary } from './session'

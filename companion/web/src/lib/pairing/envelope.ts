@@ -1,5 +1,5 @@
 /*
- * The negotiation envelope — what the CPace key is FOR (plan §3.7.3, step 5).
+ * The negotiation envelope — what the CPace key is FOR (COMPANION_PAIRING.md §4 and §13.3).
  *
  * After the relay carries the two CPace messages, each side holds a 64-byte ISK — equal on both
  * ends iff both people typed the same code. Everything the pairing still has to move (the
@@ -13,7 +13,7 @@
  * to open. That refusal is a QUESTION handed to a person ("the code didn't match — try again,
  * or stop and tell them"), never an automatic verdict: openEnvelope returns null and the
  * caller decides, because a typo and an attacker are indistinguishable here and only a human
- * report may kill an invitation (§3.9.1).
+ * report may kill an invitation (COMPANION_PAIRING.md §7).
  *
  * KEY SCHEDULE. Two directional keys, derived by keyed BLAKE2b — the 64-byte ISK is the MAC
  * key (crypto_generichash accepts up to 64 key bytes, so the ISK is used whole rather than

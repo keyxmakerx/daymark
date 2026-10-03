@@ -256,7 +256,7 @@
           <div class="email">
             <label>
               <span>Send the link by email <em>(the code is never emailed)</em></span>
-              <input type="email" bind:value={email} placeholder="therapist@example.com" autocomplete="off" />
+              <input type="email" bind:value={email} placeholder="clinician@example.com" autocomplete="off" />
             </label>
             <button onclick={sendEmail} disabled={busy || !email}>Send</button>
           </div>

@@ -111,10 +111,10 @@ class OrgModelTest {
         /*
          * Issue #100, written into the code rather than left to be inherited by accident.
          *
-         * The question the plan held the Practice shape on was: who can reset a forgotten
-         * passphrase in a clinic? The answer is NOBODY -- not the clinician, not the practice
-         * admin, not whoever runs the server. A forgotten passphrase means that clinician's keys
-         * are gone and every relationship is re-paired with a fresh invitation from the patient.
+         * Who can reset a forgotten passphrase in a clinic? NOBODY (COMPANION_PAIRING.md §12) --
+         * not the clinician, not the practice admin, not whoever runs the server. A forgotten
+         * passphrase means that clinician's keys are gone and every relationship is re-paired
+         * with a fresh invitation from the patient.
          *
          * The reason is the product's reason to exist. An escrow that lets a practice admin recover
          * a clinician's keys is an escrow that lets the practice read its patients' journals, and

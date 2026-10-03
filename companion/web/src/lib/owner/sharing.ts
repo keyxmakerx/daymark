@@ -154,3 +154,33 @@ export function copiesNotRemoved(n: number): string {
     `Whoever runs the server can remove ${n === 1 ? 'it' : 'them'}.`
   )
 }
+
+/* ── How long a share lasts (#228, #339) ─────────────────────────────────────────────────── */
+
+/**
+ * A new share ends after 14 days unless the owner chooses otherwise, and never after more than 90
+ * (#228). The server clamps every share at the same 90 days (#332). An owner shown a later end date
+ * than the server honours has been told something untrue, so the two numbers change together.
+ */
+export const SHARE_DAYS_DEFAULT = 14
+export const SHARE_DAYS_MAX = 90
+
+/** The days field as a whole number of days the server honours, or null when it holds anything else. */
+export function shareDays(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const n = typeof value === 'number' ? value : Number(value)
+  return Number.isInteger(n) && n >= 1 && n <= SHARE_DAYS_MAX ? n : null
+}
+
+/**
+ * The line beside the days field: the date, and what happens on it. A date rather than a count of
+ * days left, so it never reads as a countdown. It does not borrow the words of the sentence at the
+ * revoke click, which stays the only place that sentence appears.
+ */
+export function shareEndsLine(date: string): string {
+  return `Ends on ${date}. The server then deletes its copy. Anything read before then has already been seen.`
+}
+
+/** Said in place of the date while the field holds something other than 1 to 90 whole days. */
+export const SHARE_DAYS_OUT_OF_RANGE = `Choose from 1 to ${SHARE_DAYS_MAX} whole days.`
+

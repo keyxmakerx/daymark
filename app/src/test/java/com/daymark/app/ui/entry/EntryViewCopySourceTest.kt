@@ -14,8 +14,9 @@ import org.junit.Test
 /**
  * The entry page shows a day and says nothing about it.
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §3: *"Descriptive only: the person's own mood word,
- * activities, with, note, photo. No commentary of any kind. Never 'you seem'."* `CLAUDE.md` §0 is
+ * `docs/FEATURES.md` §1.3: *"The page is descriptive only: the person's own mood word, their
+ * activities, who they were with, their note and their photo. There is no commentary of any kind:
+ * no "you seem", no comparison with another day, no count, no encouragement."* `CLAUDE.md` §0 is
  * the same rule for the whole product: *generated text aimed at someone in distress is the hazard
  * the whole architecture exists to avoid*.
  *
@@ -114,9 +115,9 @@ class EntryViewCopySourceTest {
     fun `the page never tells anybody how they felt or seemed`() {
         val phrase = firstPhraseIn(literals, COMMENTARY)
         assertNull(
-            "the entry page says \"$phrase\". §3: descriptive only, never \"you seem\". The word " +
-                "for the mood is the person's own label read back; anything the app concluded " +
-                "from it is the thing this product exists not to do.",
+            "the entry page says \"$phrase\". FEATURES.md §1.3: descriptive only, never " +
+                "\"you seem\". The word for the mood is the person's own label read back; " +
+                "anything the app concluded from it is the thing this product exists not to do.",
             phrase,
         )
     }
@@ -194,7 +195,7 @@ class EntryViewCopySourceTest {
             literals.any { it == "With" },
         )
         assertTrue(
-            "the mark-this-day action is gone. PLAN_2026-09 §3 puts it here so the Sky's " +
+            "the mark-this-day action is gone. FEATURES.md §1.3 puts it here so the Sky's " +
                 "landmarks are easy to place from the day they are about.",
             literals.any { it == "Mark this day" },
         )

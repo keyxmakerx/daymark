@@ -1,19 +1,20 @@
 /*
- * Daymark Companion — CPace, the balanced PAKE for pairing (plan §3.7).
+ * Daymark Companion — CPace, the balanced PAKE for pairing (COMPANION_PAIRING.md §3).
  *
  * CPACE-RISTRETTO255-SHA512, implemented directly against draft-irtf-cfrg-cpace (the CFRG
  * document, not a library's reading of it) and pinned byte-for-byte to the working group's own
  * published test vectors in cpace.test.ts. The Kotlin mirror in
  * sync-crypto/src/main/kotlin/com/daymark/synccrypto/CpaceCrypto.kt MUST stay byte-identical;
  * both sides prove it against the same vectors, which is what makes a JVM party and a browser
- * party arrive at the same key (gate 0.2 of the plan).
+ * party arrive at the same key (COMPANION_PAIRING.md §3).
  *
  * What a PAKE buys here, in one sentence: two people who share a short human code (the PRS)
  * derive a strong key through a relay that never learns the code, and an attacker in the middle
- * gets exactly one online guess per protocol run — no offline dictionary, which is why six
- * human-typable characters are enough where they would be absurd as a password (plan §3.7.2).
+ * gets exactly one online guess per protocol run — no offline dictionary, which is why eight
+ * human-typable characters are enough where they would be absurd as a password
+ * (COMPANION_PAIRING.md §2 and §3).
  *
- * The flow is one round trip and survives store-and-forward relaying (plan §3.7.3):
+ * The flow is one round trip and survives store-and-forward relaying (COMPANION_PAIRING.md §3):
  *
  *   party A: start()   → MSGa ── relay ──▶ party B: respond(MSGa) → MSGb, ISK
  *   party A: finish(MSGb) → ISK             (same ISK, or garbage if the codes differed)
@@ -185,8 +186,9 @@ function requireSid(sid: Uint8Array): void {
 /**
  * ISK = SHA-512( lv_cat(DSI_ISK, sid, K) || transcript_ir ), with
  * transcript_ir = lv_cat(Ya, ADa) || lv_cat(Yb, ADb) — the initiator/responder ordering.
- * Our flow always has distinguishable roles (the owner initiates, plan §3.10), so the
- * parallel-execution ("oc") transcript variant is deliberately not implemented.
+ * Our flow always has distinguishable roles (the owner initiates: COMPANION_PAIRING.md §1, "Who
+ * starts a pairing"), so the parallel-execution ("oc") transcript variant is deliberately not
+ * implemented.
  */
 function deriveIsk(sid: Uint8Array, k: Uint8Array, msgA: Uint8Array, msgB: Uint8Array): Uint8Array {
   return s().crypto_hash_sha512(concat(lvCat(DSI_ISK, sid, k), msgA, msgB))

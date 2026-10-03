@@ -4,9 +4,9 @@
    *
    * ─── WHY THIS EXISTS RATHER THAN AN OMISSION ───────────────────────────────────────────────
    *
-   * Recovery is specified in full and implemented in part: the crypto is finished, the storage
-   * between the crypto and a server does not exist at all. Anything unimplemented has three
-   * possible renderings and two of them are worse than useless:
+   * Recovery is specified in full and implemented in part: the key is kept on the server and a code
+   * opens it (#258), and replacing a code, the phone and a split are not built. Anything
+   * unimplemented has three possible renderings and two of them are worse than useless:
    *
    *   OMITTED — indistinguishable from a feature that was cut, or from one the reader failed to
    *   find. Somebody deciding whether this product does what they need cannot tell "not built"
