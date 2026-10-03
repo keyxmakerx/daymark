@@ -265,9 +265,10 @@ events: they appear, do their work, and are gone.
 2. **Drawn in.** It draws those memories in. A memory being drawn in travels in a slow spiral and
    still shines, fading as it reaches the disk.
 3. **Then it closes and is gone.** Once everything is inside, the black hole shrinks to nothing and
-   disappears. Nothing in the sky marks where the memories were: no hole, no gap, no dashed point
-   (constellations aside, §7.3, because the person drew those lines themselves). Someone looking over
-   the person's shoulder sees an ordinary sky.
+   disappears. Nothing in the sky marks where the memories were: no hole, no gap, no dashed point,
+   and a constellation's lines to one are simply not drawn (§7.3). Someone looking over the person's
+   shoulder sees an ordinary sky. Only a constellation's photo, opened on purpose, still shows the
+   point as it was on the day it was drawn (§7.6).
 4. **What a card says.** Tapping a memory while it is being drawn in shows only "Put away" and
    **Bring back**: never its date, its kind or its words. Tapping the black hole says what it is.
 5. **Where they are kept.** Put-away memories are hidden, not deleted. The sky's text list has them
@@ -451,14 +452,21 @@ still apply and are still unmeasured.
 name, the date it was drawn and how many stars it has. Tapping a row flies there and opens its card.
 The card has **Remove this constellation**.
 
-### 7.3 The snapshot
+### 7.3 Falling out of the sky, and the photo
 
-A constellation keeps its outline **as it was when it was drawn**. Over the years its stars drift
-apart, which is what makes an old one memorable, and the outline stays.
+The maintainer, 2026-10-03: the way back to a constellation is *"a historical photo, not a real time
+thing. Eventually all stars fall out over years."*
 
-- **A star put away or tucked away** (§4) keeps its point, drawn as a dashed ring, with the card
-  line "One star has since been put away. The outline is kept as it was when you drew it."
-- **A memory deleted** takes its point out of the outline, because deletion leaves no trace
+- **In the live sky** a constellation's lines join its stars where they are now. Stars drift apart
+  as they age, and a line fades away once its two stars have drifted well apart from where they were
+  on the day it was drawn (in the prototype, from a quarter further apart to fading out entirely at
+  sixty per cent). Over the years every constellation falls out of the live sky. Nothing marks its
+  going, and its name goes with its last line.
+- **A star put away or tucked away** (§4) drops out of the live drawing straight away: the lines that
+  touched it are not drawn, and nothing marks where it was (§4.1). The card says nothing about it.
+- **The photo keeps it as drawn, forever** (§7.6). The drawing in the list is that photo too: every
+  point as it was, put-away ones included, drawn like the others.
+- **A memory deleted** is gone from the live sky and from the photo, because deletion leaves no trace
   (`docs/SKY.md` §2.1). Proposed: a constellation left with fewer than two stars is removed, without
   comment.
 
@@ -477,24 +485,27 @@ reported or sent (`docs/SKY.md` §6.4). The prototype keeps them in the browser,
 ### 7.6 Going back to one as you drew it
 
 From the maintainer's answers on 2026-10-03: there is no way to see the whole sky as it was on an
-earlier date, *"only constellations allowed that"*, and a constellation should be *"a way you can go
-back and see a replica of the constellation and to a lesser and shadowed portion the stars around
-it."*
+earlier date, *"only constellations allowed that"*. A constellation should be *"a way you can go back
+and see a replica of the constellation and to a lesser and shadowed portion the stars around it"*,
+and the viewer *"should have the constellation itself, maybe the surrounding stars but that's it. But
+yes it'd be a historical photo not a real time thing."*
 
 - A constellation's card has **See it as you drew it**.
-- That opens a replica: the constellation's stars exactly where they were on the day it was drawn,
-  with the lines joining them, and around it, fainter and in shadow, the stars that were near it
-  then, in the colours they had then.
-- It is a view, not a place to work: nothing can be tapped open or changed in it, and one tap takes
-  the person back to the sky as it is now.
-- A memory put away or tucked away since shows in the replica as the dashed ring. A memory deleted
-  since is not in the replica at all (`docs/SKY.md` §2.1).
+- That opens a photo of the day it was drawn: the constellation's stars exactly where they were, with
+  the lines joining them, its name and the date above. Around it, fainter and in shadow toward the
+  edges, are the stars that were near it then, in the colours they had then. A star that did not
+  exist yet on that day is not in it.
+- **Nothing else from the sky is in it**: no nebula, gas, black hole, planet, tracker object, label
+  or other constellation.
+- A memory put away or tucked away since is in the photo as an ordinary point, as it was. A memory
+  deleted since is not in it at all (`docs/SKY.md` §2.1).
+- It is a view, not a place to work: nothing in it opens or changes, and a tap anywhere goes back to
+  the sky as it is now.
 - This is the only way back in time anywhere in the sky.
 
 To build it, the app keeps, for each constellation, its stars' positions on the day it was drawn and
 the date itself; the shadowed stars around it are worked out again from the river as it stood on that
 date, so nothing else needs storing.
-
 ---
 
 ## 8. The opening
@@ -546,7 +557,7 @@ star, twinkle ships behind the motion switch.
 | September plan §1.0: placement is random; time is not the sky's geography | The river: time runs along it, measured in memories. | 2026-10-03 |
 | `docs/SKY.md` §3.1: constellations rejected | The person draws their own. The software still never groups stars. | 2026-10-03 |
 | `docs/SKY.md` §2.2: a life event has no valence | The person may mark one as hard. Never asked, never suggested, never inferred. | 2026-10-03 |
-| `docs/SKY.md` §2.1: no ghost of any kind | A memory put away keeps a dashed point in a constellation. A deleted one still leaves nothing. | 2026-10-03 |
+| `docs/SKY.md` §2.1: no ghost of any kind | A memory put away keeps its point in a constellation's photo (§7.6), and nowhere in the live sky. A deleted one leaves nothing anywhere. | 2026-10-03 |
 | `docs/SKY.md` P5: a star never moves | Appending never moves a star; a back-dated memory shifts later ones one place (§2.3). | follows from the river |
 
 ### 9.3 What in the code this replaces
@@ -616,6 +627,10 @@ opening (§8); and the Key stays, leading with "red only means old" (§3.6).
 
 **Tracker logs** are in the sky, by the maintainer's decision the same day, as three new objects kept
 beside the river (§3.7).
+
+**Constellations**, answered that evening: the way back is a historical photo with the constellation
+and the stars around it and nothing else, and every constellation eventually falls out of the live
+sky as its stars drift apart (§7.3, §7.6).
 
 Two more follow from standing rules rather than a new answer, and the prototype now follows both:
 a card never describes the stretch a memory sits in (it used to say "from a quieter stretch"), and

@@ -88,6 +88,12 @@ button { font: inherit; color: inherit; }
 
 /* sheets: Constellations, Explore, Key */
 .scrim { inset: 0; background: #0006; }
+.replica { inset: 0; z-index: 6; background: #020309; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; border-radius: inherit; overflow: hidden; }
+.replica canvas { width: 100%; flex: 1; min-height: 0; }
+.replica .rt { position: absolute; left: 0; right: 0; top: calc(env(safe-area-inset-top, 0px) + 54px); text-align: center; pointer-events: none; }
+.replica .rt b { display: block; font-family: var(--serif); font-weight: 500; font-size: 22px; }
+.replica .rt span { color: var(--soft); font-size: 13px; }
+.replica .back { position: absolute; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 34px); text-align: center; color: var(--soft); font-size: 13px; pointer-events: none; }
 .sheet { left: 0; right: 0; bottom: 0; max-height: 72%; display: flex; flex-direction: column; background: var(--sheet); border-top: 1px solid var(--rule);
   border-radius: 26px 26px 0 0; padding: 8px 0 calc(env(safe-area-inset-bottom, 0px) + 84px); box-shadow: 0 -20px 50px #0009; }
 .sheet .grab { width: 36px; height: 4px; border-radius: 4px; background: #3A4060; margin: 2px auto 6px; }
@@ -154,12 +160,13 @@ body.drawing .bar, body.drawing .card { display: none; }
 
       <div class="ui card" id="card" hidden></div>
 
+      <div class="ui replica" id="replica" role="dialog" aria-label="A constellation as you drew it" hidden><canvas id="repCv"></canvas><div class="rt"><b id="repName"></b><span id="repDate"></span></div><div class="back">Tap anywhere to go back to your sky</div></div>
       <div class="ui scrim" id="scrim" hidden></div>
       <section class="ui sheet" id="sheet-cons" aria-label="Your constellations" hidden>
         <div class="grab"></div>
         <header><h2>Your constellations</h2><button class="icon" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
         <div class="body"><button class="draw" type="button" id="drawNew">Draw a new constellation</button><ul class="clist" id="clist"></ul>
-          <p class="note">Tap your own stars one after another, then give it a name. If a star in it is put away later, the outline stays as you drew it.</p></div>
+          <p class="note">Tap your own stars one after another, then give it a name. Over the years its stars drift apart and it falls out of the sky, but See it as you drew it always shows it as it was.</p></div>
       </section>
       <section class="ui sheet namer" id="sheet-name" aria-label="Name your constellation" hidden>
         <div class="grab"></div>
@@ -219,7 +226,7 @@ body.drawing .bar, body.drawing .card { display: none; }
     <li><b>Nebula</b><span>Weeks with a lot of writing. Every sky gets its own colours; try New colours.</span></li>
     <li><b>Giant stars</b><span>Life events. Zoom right in and they burn like a sun.</span></li>
     <li><b>Streams</b><span>A longer run of days, drawn out into a thin trail like a comet.</span></li>
-    <li><b>Constellations</b><span>You draw them between your own stars and name them. If a star in one is put away, its outline stays, kept as a snapshot.</span></li>
+    <li><b>Constellations</b><span>You draw them between your own stars and name them. Over the years their stars drift apart and they fall out of the sky; each one is kept as a photo of the day you drew it.</span></li>
     <li><b>Binary stars</b><span>Two memories about the same person, slowly turning around each other.</span></li>
     <li><b>Comet</b><span>Something that comes back every year, like a birthday. It passes through on that day.</span></li>
     <li><b>Meteor shower</b><span>On the anniversary of a day you starred, a few streaks fall from its star.</span></li>
@@ -977,6 +984,7 @@ const card = document.getElementById("card"), ring = document.getElementById("ri
 const closeBtn = `<button class="icon x" type="button" aria-label="Close" data-card-close><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg></button>`;
 const esc = t => String(t).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
 card.addEventListener("click", e => { if (e.target.closest("[data-card-close]")) show(null);
+  if (e.target.closest("[data-replica]") && sel && sel.cons) openReplica(sel.cons);
   if (e.target.closest("[data-bring]")) { show({ wh: true }); flyTo(GO.wh()); }
   if (e.target.closest("[data-remove]") && sel && sel.cons) { const i = CONS.indexOf(sel.cons); if (i >= 0) CONS.splice(i, 1); saveMine(); show(null); } });
 let sel = null;
@@ -996,7 +1004,7 @@ const showInner = (s) => {
   if (s.trk && !s.day) { card.innerHTML = `<div class="d">${TRK_LOOK[s.trk.look]}: “${esc(s.trk.name)}”</div><div class="k">A tracker you show in your sky, since ${fmtS(s.trk.from)}. Each time you log it is one star here, gathered beside the river and never on it, so how often you log never shapes the rest of your sky.</div>`; return; }
   if (s.pl) { card.innerHTML = `<div class="d">Ringed planet: ${PLACE}</div><div class="k">A place you keep going back to. ${moons.length} memories logged there ride around it as moons. Tap one to see its day.</div>`; return; }
   if (s.cons) { const c = s.cons, days = c.pts.map(q => q.day), lo = Math.min(...days), hi = Math.max(...days);
-    card.innerHTML = `<div class="d">${esc(c.name)}</div><div class="k">Drawn ${fmtS(c.made)}. ${c.pts.length} memories, ${fmtS(lo)} to ${fmtS(hi)}.</div>${c.ghost != null ? `<div class="k">One star has since been put away. The outline is kept as it was when you drew it.</div>` : ""}${c.mine ? `<button class="textbtn" type="button" data-remove>Remove this constellation</button>` : ""}`; return; }
+    card.innerHTML = `<div class="d">${esc(c.name)}</div><div class="k">Drawn ${fmtS(c.made)}. ${c.pts.length} memories, ${fmtS(lo)} to ${fmtS(hi)}.</div><button class="textbtn" type="button" data-replica>See it as you drew it</button>${c.mine ? `<button class="textbtn" type="button" data-remove>Remove this constellation</button>` : ""}`; return; }
   if (s === "bh") { card.innerHTML = `<div class="d">Black hole</div><div class="k">It formed when memories were put away. It draws them in, then closes and is gone, and nothing is left to show where they were. Hidden, not deleted: they come back from the list.</div>`; return; }
   if (s.away) { card.innerHTML = `<div class="d">Put away</div><button class="textbtn" type="button" data-bring>Bring back</button>`; return; }
   card.innerHTML = `<div class="d">${fmt(s.day)}</div><div class="k">${s.kind}${s.flag === 1 ? " " + s.info : ""}</div>${s.flag === 1 ? "" : `<div class="k">${s.info}</div>`}`;
@@ -1249,7 +1257,34 @@ const consKey = "daymark-sky-cons-" + SKY;
 const saveMine = () => { try { localStorage.setItem(consKey, JSON.stringify(CONS.filter(c => c.mine).map(c => ({ name: c.name, made: c.made, idx: c.pts.map(q => stars.indexOf(q)) })))); } catch (e) {} };
 try { JSON.parse(localStorage.getItem(consKey) || "[]").forEach(c => { const pts = (c.idx || []).map(i => stars[i]).filter(Boolean); if (pts.length > 1) CONS.push({ name: String(c.name).slice(0, 28), made: +c.made || ND - 1, pts, mine: true }); }); } catch (e) {}
 CONS.forEach(c => { if (c.ghost != null && c.pts[c.ghost]) { const [x, y] = starPos(c.pts[c.ghost]); c.ghostAt = [x + .025, y - .018]; } });
+// The photo: where its stars were on the day it was drawn. Live lines are measured against these lengths and fade as the
+// stars drift apart, so over the years every constellation falls out of the sky; the photo keeps it as it was.
+const consAt = c => c.at || (c.at = c.pts.map((q, i) => i === c.ghost ? c.ghostAt : starPos(q)));
 const lc = document.getElementById("lines"), lx = lc.getContext("2d");
+// "See it as you drew it": a photo of the day it was drawn. The constellation, and around it, fainter and in shadow, the stars
+// that were near it then, in the colours they had then. Nothing else from the sky is in it, nothing in it opens, and a tap
+// anywhere goes back. It is the only way back in time anywhere in the sky.
+const repEl = document.getElementById("replica"), repCv = document.getElementById("repCv");
+const srgb = c => c.map(v => Math.round(255 * Math.pow(Math.min(1, Math.max(0, v)), 1 / 2.2)));
+const openReplica = c => {
+  show(null); repEl.hidden = false; document.getElementById("repName").textContent = c.name; document.getElementById("repDate").textContent = "As you drew it, " + fmt(c.made);
+  const r = repCv.getBoundingClientRect(), d = window.devicePixelRatio || 1, w = Math.round(r.width * d), h = Math.round(r.height * d); repCv.width = w; repCv.height = h;
+  const g = repCv.getContext("2d"); g.setTransform(d, 0, 0, d, 0, 0); g.clearRect(0, 0, r.width, r.height);
+  const P = consAt(c), xs = P.map(q => q[0]), ys = P.map(q => q[1]), cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const span = Math.max(Math.max(...xs) - Math.min(...xs), (Math.max(...ys) - Math.min(...ys)) * r.width / r.height, .05), sc = r.width * .5 / span;
+  const toR = (x, y) => [r.width / 2 + (x - cx) * sc, r.height * .5 + (y - cy) * sc], reach = Math.hypot(r.width, r.height) * .5;
+  const colThen = s => srgb(ageCol(Math.max(0, c.made - s.day) / 365));
+  // the stars around it that already existed that day, in shadow: fainter toward the edges, gone at the corners
+  for (const s of stars) { if (s.dyn || s.day > c.made || c.pts.includes(s)) continue; const [x, y] = toR(...starPos(s)); if (x < -4 || y < -4 || x > r.width + 4 || y > r.height + 4) continue;
+    const f = Math.max(0, 1 - Math.hypot(x - r.width / 2, y - r.height / 2) / reach), al = .62 * Math.pow(f, 1.3) * Math.min(1, .35 + .65 * s.lum); if (al < .03) continue;
+    const [R_, G_, B_] = colThen(s); g.fillStyle = `rgba(${R_},${G_},${B_},${al})`; g.beginPath(); g.arc(x, y, s.flag === 1 ? 2.2 : 1.35, 0, 6.2832); g.fill(); }
+  const Q = P.map(q => toR(...q));
+  g.lineWidth = 1.2; g.strokeStyle = "rgba(201,214,255,.55)"; g.beginPath(); Q.forEach((q, i) => i ? g.lineTo(...q) : g.moveTo(...q)); g.stroke();
+  Q.forEach((q, i) => { const s = c.pts[i], [R_, G_, B_] = colThen(s), rr = s.flag === 1 ? 4.2 : 2.8;
+    const gr = g.createRadialGradient(q[0], q[1], 0, q[0], q[1], rr * 4); gr.addColorStop(0, `rgba(${R_},${G_},${B_},.55)`); gr.addColorStop(1, `rgba(${R_},${G_},${B_},0)`);
+    g.fillStyle = gr; g.beginPath(); g.arc(q[0], q[1], rr * 4, 0, 6.2832); g.fill(); g.fillStyle = "#FBF8FF"; g.beginPath(); g.arc(q[0], q[1], rr * .7, 0, 6.2832); g.fill(); });
+};
+repEl.addEventListener("click", () => { repEl.hidden = true; });
 // sheets: one open at a time, over a dim scrim; the bar stays visible so its buttons toggle them
 const clist = document.getElementById("clist"), scrim = document.getElementById("scrim");
 const sheets = { cons: document.getElementById("sheet-cons"), explore: document.getElementById("sheet-explore"), key: document.getElementById("sheet-key") };
@@ -1287,13 +1322,13 @@ const buildConsList = () => {
   CONS.forEach(c => {
     const li = document.createElement("li"), b = document.createElement("button"), cv_ = document.createElement("canvas");
     b.type = "button"; cv_.width = 168; cv_.height = 116; b.append(cv_);
-    const t = document.createElement("div"); t.innerHTML = `<div class="n">${esc(c.name)}</div><div class="m">Drawn ${fmtS(c.made)} · ${c.pts.length} stars${c.ghost != null ? "<br>One put away, outline kept" : ""}</div>`; b.append(t);
-    const P = c.pts.map((q, i) => i === c.ghost ? c.ghostAt : starPos(q)), xs = P.map(q => q[0]), ys = P.map(q => q[1]);
+    const t = document.createElement("div"); t.innerHTML = `<div class="n">${esc(c.name)}</div><div class="m">Drawn ${fmtS(c.made)} · ${c.pts.length} stars</div>`; b.append(t);
+    const P = consAt(c), xs = P.map(q => q[0]), ys = P.map(q => q[1]);
     const x0 = Math.min(...xs), y0 = Math.min(...ys), sc = Math.min(132 / Math.max(Math.max(...xs) - x0, .01), 80 / Math.max(Math.max(...ys) - y0, .01));
     const ox = (168 - (Math.max(...xs) - x0) * sc) / 2, oy = (116 - (Math.max(...ys) - y0) * sc) / 2, Q = P.map(q => [ox + (q[0] - x0) * sc, oy + (q[1] - y0) * sc]);
     const g = cv_.getContext("2d"); g.lineWidth = 1.8;
-    for (let i = 0; i < Q.length - 1; i++) { const gh = i === c.ghost || i + 1 === c.ghost; g.setLineDash(gh ? [4, 6] : []); g.strokeStyle = gh ? "rgba(201,214,255,.35)" : "rgba(201,214,255,.7)"; g.beginPath(); g.moveTo(...Q[i]); g.lineTo(...Q[i + 1]); g.stroke(); }
-    g.setLineDash([]); Q.forEach((q, i) => { if (i === c.ghost) { g.setLineDash([3, 3]); g.strokeStyle = "rgba(201,214,255,.5)"; g.beginPath(); g.arc(q[0], q[1], 5.5, 0, 6.2832); g.stroke(); g.setLineDash([]); } else { g.fillStyle = "#F4F1FF"; g.beginPath(); g.arc(q[0], q[1], c.pts[i].flag === 1 ? 4.4 : 2.8, 0, 6.2832); g.fill(); } });
+    for (let i = 0; i < Q.length - 1; i++) { g.strokeStyle = "rgba(201,214,255,.7)"; g.beginPath(); g.moveTo(...Q[i]); g.lineTo(...Q[i + 1]); g.stroke(); }
+    Q.forEach((q, i) => { g.fillStyle = "#F4F1FF"; g.beginPath(); g.arc(q[0], q[1], c.pts[i].flag === 1 ? 4.4 : 2.8, 0, 6.2832); g.fill(); });
     b.addEventListener("click", () => { openSheet(null); flyTo(GO.cons(c)); show({ cons: c }); });
     li.append(b); clist.append(li);
   });
@@ -1341,18 +1376,20 @@ const drawLines = () => {
   const a = consOn ? smoothstep(.85, 1, reveal) * (1 - smoothstep(30, 120, cam.s / fitS)) : 0; if (a <= 0) return;
   lx.lineWidth = 1; lx.font = "500 13px Roboto, 'Segoe UI', system-ui, sans-serif"; const boxes = [];
   for (const c of CONS) {
-    const P = c.pts.map((s, i) => i === c.ghost ? { p: toScreen(...c.ghostAt), g: true } : { p: toScreen(...starPos(s)), r: Math.max(s.R * cam.s, s.flag === 1 ? 3 : 1.2) });
+    const at = consAt(c), P = c.pts.map((s, i) => i === c.ghost ? { away: true } : { w: starPos(s), p: toScreen(...starPos(s)), r: Math.max(s.R * cam.s, s.flag === 1 ? 3 : 1.2) });
+    let shown = 0;
     for (let i = 0; i < P.length - 1; i++) {
-      const A = P[i], B = P[i + 1], dx = B.p[0] - A.p[0], dy = B.p[1] - A.p[1], L = Math.hypot(dx, dy); if (L < 1) continue;
-      const ga = (A.r || 5) + 5, gb = (B.r || 5) + 5; if (L < ga + gb) continue;
-      lx.setLineDash(A.g || B.g ? [3, 5] : []); lx.strokeStyle = `rgba(201,214,255,${(A.g || B.g ? .22 : .38) * a})`;
+      const A = P[i], B = P[i + 1]; if (A.away || B.away) continue;
+      const k = 1 - smoothstep(1.25, 1.6, Math.hypot(B.w[0] - A.w[0], B.w[1] - A.w[1]) / Math.max(1e-6, Math.hypot(at[i + 1][0] - at[i][0], at[i + 1][1] - at[i][1]))); if (k <= 0) continue;
+      const dx = B.p[0] - A.p[0], dy = B.p[1] - A.p[1], L = Math.hypot(dx, dy); if (L < 1) continue;
+      const ga = A.r + 5, gb = B.r + 5; if (L < ga + gb) continue;
+      lx.strokeStyle = `rgba(201,214,255,${.38 * a * k})`; shown++;
       lx.beginPath(); lx.moveTo(A.p[0] + dx / L * ga, A.p[1] + dy / L * ga); lx.lineTo(B.p[0] - dx / L * gb, B.p[1] - dy / L * gb); lx.stroke();
     }
-    P.filter(q => q.g).forEach(q => { lx.setLineDash([2, 3]); lx.strokeStyle = `rgba(201,214,255,${.3 * a})`; lx.beginPath(); lx.arc(q.p[0], q.p[1], 5, 0, 6.2832); lx.stroke(); });
-    lx.setLineDash([]);
-    const top = P.reduce((m, q) => q.p[1] < m.p[1] ? q : m, P[0]);
-    // labels stay on the screen; the note about a put-away star only shows once you're close enough to read it
-    const sub = c.ghost != null && cam.s / fitS > 4 ? "One star put away, outline kept" : "", tw = Math.max(lx.measureText(c.name).width, sub ? lx.measureText(sub).width : 0);
+    if (!shown) continue;
+    const vis = P.filter(q => !q.away), top = vis.reduce((m, q) => q.p[1] < m.p[1] ? q : m, vis[0]);
+    // labels stay on the screen and never cover each other
+    const sub = "", tw = lx.measureText(c.name).width;
     const lxp = Math.max(8, Math.min(top.p[0] + 10, W - tw - 8)), lyp = top.p[1] - 10; if (lyp < 110 || lyp > Hh - 110) continue;
     const bh = sub ? 34 : 18; if (boxes.some(b => lxp < b[0] + b[2] + 6 && b[0] < lxp + tw + 6 && lyp - 14 < b[1] + b[3] && b[1] < lyp - 14 + bh)) continue; boxes.push([lxp, lyp - 14, tw, bh]);
     lx.fillStyle = `rgba(232,230,240,${.75 * a})`; lx.fillText(c.name, lxp, lyp);
