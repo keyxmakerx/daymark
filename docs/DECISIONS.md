@@ -341,6 +341,46 @@ Settled with it (2026-09-26, on #186 and #189):
 - **Pairing needs an https address**, and the phone enforces it. There is no setting to turn this off,
   because the phone cannot see a server setting and a switch set once for setup stays on for good.
 
+## D11. Every star in the sky is a memory, and nothing in it is a reward or a verdict
+
+The maintainer approved a redesign of the Sky on 2026-10-03. Not built: #449, which holds the design.
+`docs/prototypes/sky-phone.html` shows it. Until it ships, `docs/SKY.md` describes the sky the app
+draws; where the two disagree, this decision governs the build.
+
+**Decision.**
+- **Every star is one memory.** There are no decorative stars; the space behind them is colour, gas
+  and shadow. This reverses `docs/SKY.md` M1. A sparse stretch still never reads as a void, because
+  time runs along a river measured in memories, not days.
+- **Shape follows how the record was kept, and no shape is a reward.** Steady months can form a band,
+  rarely, and at most two in a sky; on-and-off weeks gather into clusters. No card says "in a row".
+- **A life event can be marked as hard, by the person only.** It is never asked, suggested or
+  inferred. The star becomes a supernova that marks that day and nothing more; "hard" can be
+  unmarked, and the opening never flies to it. This reverses `docs/SKY.md` §2.2.
+- **Putting memories away is a passing event.** A black hole forms beside them, takes them in, closes
+  and is gone; nothing marks where they were. Bringing them back opens a white hole. Memories tucked
+  away to find again later become dark matter (#450).
+- **Constellations are the person's own.** They draw and name them; the software still never groups
+  stars (`docs/SKY.md` §3.1, reversed for drawing only). As their stars drift apart over the years,
+  every constellation falls out of the live sky. Each is kept as a photo of the day it was drawn,
+  which is the only way the sky goes back in time. A memory put away keeps its point only in that
+  photo; a deleted one leaves nothing anywhere.
+- **No two skies are alike.** A seed of the person's own shapes the river, the patterns, where
+  everything sits and every colour. Colours can be changed for 30 days from first opening the sky,
+  then settle. "Reset my sky" regrows it without touching memories or constellations. A backup
+  carries the seed, the colours and that date.
+- **Trackers appear only if the person chooses.** Each tracker has a "Show in my sky" switch. A shown
+  tracker is an object of its own beside the river, never on it, and more logs make it denser, never
+  brighter.
+- **The Key stays, and leads with "red only means old".** It lists only what is in that person's
+  sky.
+- **Any tap skips the opening.** With reduced motion, the sky opens still, on today.
+- **Never**: a moon or land; anything framed as depression or as memories being eaten; a meteor
+  shower on a day the person did not choose; a pulsar for a habit without a set time; device location
+  for a place.
+
+**Why.** It is the maintainer's design. The safety review of 2026-10-03 added the parts about
+rewards, the supernova, the black hole closing, skipping the opening and the Key's first line.
+
 ---
 
 ## Decisions recorded in closed issues

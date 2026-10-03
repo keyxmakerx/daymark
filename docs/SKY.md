@@ -1,11 +1,5 @@
 # The Sky
 
-> **Revised 2026-10-03.** The approved redesign is `docs/SKY_REDESIGN_2026-10.md`, and where it
-> disagrees with this document, it governs. It keeps §1's rule that a hard stretch is never a void,
-> and §4.1, §6, §7 and §8 as they stand. It reverses the decorative field (M1), random placement
-> (§3.1), the rejection of constellations (§3.1) and the rule that a life event has no valence (§2.2).
-> Its §9 has the exact list. Nothing of it is built yet.
-
 "Your sky" draws the person's own acts, of six kinds (§2), as stars in one night sky. It is reached
 from the More hub and sits behind the app lock like every other screen. It is a *place* rather than
 a chart: stable (a star never moves), inhabited (there is always more sky than data), and navigable
@@ -17,6 +11,10 @@ act it was; a bigger white star is a life event the person marked. The signed-of
 `docs/prototypes/your-sky.html`, which opens in any browser.
 
 This is the single reference for the Sky. Code cites its section numbers.
+
+A redesign of the Sky is approved and not built: #449, with its rules in `docs/DECISIONS.md` §D11 and
+its look in `docs/prototypes/sky-phone.html`. Until it ships, this document describes the sky the app
+draws.
 
 ---
 
