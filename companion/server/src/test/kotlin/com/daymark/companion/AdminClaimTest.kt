@@ -318,16 +318,90 @@ class AdminClaimTest {
             assertEquals(HttpStatusCode.Unauthorized, unknown.status)
             now += 30_000
             assertEquals(unknown.bodyAsText(), client.signIn("Sam", wrongTotp()).bodyAsText())
-            // The replay, the wrong code and one more make three in a row, which pauses this name;
-            // the right code waits it out.
-            client.signIn("Sam", wrongTotp())
-            assertEquals(HttpStatusCode.TooManyRequests, client.signIn("Sam", wrongTotp()).status)
-            assertEquals(HttpStatusCode.TooManyRequests, client.signIn("Sam", totp()).status)
+            // The replay, the wrong code and one more make three in a row, which pauses this name.
+            // A paused name answers exactly as an unknown one, so pausing tells a stranger nothing.
+            val arming = client.signIn("Sam", wrongTotp())
+            assertEquals(HttpStatusCode.Unauthorized, arming.status)
+            assertEquals(unknown.bodyAsText(), arming.bodyAsText())
+            val paused = client.signIn("Sam", totp())
+            assertEquals(HttpStatusCode.Unauthorized, paused.status, "the right code waits the pause out")
+            assertEquals(unknown.bodyAsText(), paused.bodyAsText())
             now += 300_000
             assertEquals(HttpStatusCode.OK, client.signIn("Sam", totp()).status)
         }
         // One lockout row, on arming; the probe that bounced off it wrote none.
         assertEquals(1, s.audit.list(SERVER_AUDIT_REF, limit = 50).count { it.action == "lockout" })
+    }
+
+    @Test
+    fun `claim and sign-in attempts are metered per address, and a wrong code still locks nobody out`() {
+        val s = server()
+        testApplication {
+            start(s)
+            val code = printedCodes().single()
+            val wrong = code.replaceFirstChar { if (it == 'A') 'B' else 'A' }
+            assertNotEquals(code, wrong)
+            repeat(10) { assertEquals(HttpStatusCode.Unauthorized, client.claim(wrong).status, "attempt ${it + 1} is answered") }
+            assertEquals(HttpStatusCode.TooManyRequests, client.claim(wrong).status, "the eleventh waits")
+            assertEquals(HttpStatusCode.TooManyRequests, client.claim(code).status, "even with the right code, from here, for now")
+            // The budget refills; the code itself was never touched by the wrong ones.
+            Thread.sleep(6_500)
+            assertEquals(HttpStatusCode.OK, client.claim(code).status)
+
+            now += 30_000
+            repeat(10) { client.signIn("Nobody", totp()) }
+            assertEquals(HttpStatusCode.TooManyRequests, client.signIn("Nobody", totp()).status)
+        }
+    }
+
+    @Test
+    fun `a state-changing request needs this session's own anti-CSRF token, not just any`() {
+        val s = server()
+        testApplication {
+            start(s)
+            val claimed = client.claim(printedCodes().single())
+            val cookie = cookieOf(claimed)
+            val csrf = csrfOf(claimed, claimed.bodyAsText())
+            val forged = csrf.replaceFirstChar { if (it == 'A') 'B' else 'A' }
+            assertNotEquals(csrf, forged)
+            val refused = client.post("/v1/admin/session/logout") {
+                header(HttpHeaders.Cookie, cookie)
+                header("X-CSRF-Token", forged)
+            }
+            assertEquals(HttpStatusCode.Unauthorized, refused.status)
+            // Control: the session survived the forged attempt, and its own token works.
+            assertEquals(HttpStatusCode.OK, client.get("/v1/admin/overview") { header(HttpHeaders.Cookie, cookie) }.status)
+            assertEquals(
+                HttpStatusCode.NoContent,
+                client.post("/v1/admin/session/logout") {
+                    header(HttpHeaders.Cookie, cookie)
+                    header("X-CSRF-Token", csrf)
+                }.status,
+            )
+        }
+    }
+
+    @Test
+    fun `a session ends after its idle time and at its absolute expiry`() {
+        val s = server()
+        testApplication {
+            start(s)
+            val idle = cookieOf(client.claim(printedCodes().single()))
+            now += 899_000
+            assertEquals(HttpStatusCode.OK, client.get("/v1/admin/overview") { header(HttpHeaders.Cookie, idle) }.status, "control: in time")
+            now += 901_000
+            assertEquals(HttpStatusCode.Unauthorized, client.get("/v1/admin/overview") { header(HttpHeaders.Cookie, idle) }.status)
+
+            now += 30_000
+            val busy = cookieOf(client.signIn("Sam", totp()))
+            // Used every ten minutes, it still ends eight hours after sign-in.
+            repeat(47) {
+                now += 600_000
+                assertEquals(HttpStatusCode.OK, client.get("/v1/admin/overview") { header(HttpHeaders.Cookie, busy) }.status)
+            }
+            now += 600_000
+            assertEquals(HttpStatusCode.Unauthorized, client.get("/v1/admin/overview") { header(HttpHeaders.Cookie, busy) }.status)
+        }
     }
 
     // ---- When every administrator is lost ------------------------------------------------------

@@ -146,8 +146,9 @@ export const CLAIM_REFUSAL: Record<number, string> = {
 }
 
 export const SIGN_IN_REFUSAL: Record<number, string> = {
-  401: 'That name and code do not match.',
-  429: 'Sign-in is paused for a few minutes. Wait, then try again with fresh digits.',
+  /* One sentence for every refusal the server will not tell apart (AdminRoutes.kt NO_MATCH). */
+  401: 'That name and code do not match. After several wrong codes a name is paused for a few minutes, so wait before trying again.',
+  429: 'Too many attempts from here. Wait a minute and try again.',
 }
 
 export const UNREACHABLE = 'The server did not answer. Check that it is running and reachable from here.'

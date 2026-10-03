@@ -203,7 +203,7 @@
             <input
               class="input mono"
               type="password"
-              autocomplete="off"
+              autocomplete="one-time-code"
               spellcheck="false"
               placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX"
               bind:value={setupCode}

@@ -150,16 +150,18 @@ fun Route.adminRoutes(
         }
         val req = call.receiveCappedJson<AdminSignInRequest>() ?: return@post
         val admin = adminStore.byName(req.name.trim())
+        val now = adminStore.nowMs()
         if (admin == null) {
-            // The same answer as a wrong code, so a name cannot be tested for.
-            call.respond(HttpStatusCode.Unauthorized, ErrorDto("that name and code do not match"))
+            // The same work and the same answer as a wrong code, so a name cannot be tested for.
+            Totp.verifyStep(UNKNOWN_NAME_SEED, req.code.trim(), now / 1000)
+            call.respond(HttpStatusCode.Unauthorized, ErrorDto(NO_MATCH))
             return@post
         }
-        val now = adminStore.nowMs()
         if (admin.lockedUntil > now) {
-            // No audit row: the lockout was recorded once, when it was armed, and a probe bouncing off
-            // it writes nothing (the same rule as the clinician's sign-in).
-            call.respond(HttpStatusCode.TooManyRequests, ErrorDto("sign-in is paused for this name for a few minutes"))
+            // The same answer again: a paused name that answered differently would tell a stranger
+            // the name exists. No audit row: the lockout was recorded once, when it was armed, and a
+            // probe bouncing off it writes nothing (the same rule as the clinician's sign-in).
+            call.respond(HttpStatusCode.Unauthorized, ErrorDto(NO_MATCH))
             return@post
         }
         val seed = decodeSeed(admin.secretB64)
@@ -170,10 +172,8 @@ fun Route.adminRoutes(
                 auditSafely {
                     adminAudit.append(SERVER_AUDIT_REF, AuditActor.PLATFORM, AuditAction.LOCKOUT, meta = auditMeta(auditSourceIp, call, "adminId" to admin.adminId))
                 }
-                call.respond(HttpStatusCode.TooManyRequests, ErrorDto("sign-in is paused for this name for a few minutes"))
-            } else {
-                call.respond(HttpStatusCode.Unauthorized, ErrorDto("that name and code do not match"))
             }
+            call.respond(HttpStatusCode.Unauthorized, ErrorDto(NO_MATCH))
             return@post
         }
         adminStore.recordSuccess(admin.adminId)
@@ -258,6 +258,16 @@ private fun clearCookie(call: ApplicationCall, cookieSecure: Boolean) {
         ),
     )
 }
+
+/**
+ * Every refused sign-in says this, whatever the cause: an unknown name, a wrong or replayed code, or
+ * a name paused after repeated wrong codes. Telling those apart would let a stranger learn which
+ * names exist; the cost is that a paused administrator is told only that waiting helps.
+ */
+private const val NO_MATCH = "that name and code do not match; after several wrong codes a name is paused for a few minutes"
+
+/** Verified against when the name is unknown, so that path does the same work as a known one. */
+private val UNKNOWN_NAME_SEED = ByteArray(20)
 
 private val NAME = Regex("""[\p{L}\p{N} ._-]{1,64}""")
 
