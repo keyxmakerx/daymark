@@ -80,6 +80,9 @@ object InterruptionBudget {
 
         /** The support space offering itself after a hard day — see [SupportOffer]. */
         SUPPORT("support"),
+
+        /** A tracker's own check-in, at a rhythm the person switched on for that tracker. */
+        TRACKER("tracker"),
         ;
 
         companion object {
@@ -214,7 +217,7 @@ object InterruptionBudget {
      * The starting frequency for a kind, before the person has said otherwise.
      *
      * These are **judgement calls, not evidence** — the same honesty [SupportOfferFrequency]'s own
-     * default is recorded with. [Kind.REMINDER] starts at [SupportOfferFrequency.EveryTime] because
+     * default is recorded with. [Kind.REMINDER] and [Kind.TRACKER] start at [SupportOfferFrequency.EveryTime] because
      * the person already chose those times themselves and the engine has no business second-guessing
      * a schedule; reception can still quiet it, which is the only direction anything here moves.
      */
@@ -223,6 +226,7 @@ object InterruptionBudget {
         Kind.REMINDER -> SupportOfferFrequency.EveryTime
         Kind.ASSIGNMENT -> SupportOfferFrequency.OncePerDay
         Kind.SUPPORT -> SupportOfferFrequency.DEFAULT
+        Kind.TRACKER -> SupportOfferFrequency.EveryTime
     }
 
     /** When this kind last asked, or 0 if it never has. Rows of other kinds are ignored. */

@@ -85,7 +85,8 @@ ANNOT=$(find_jar org.jetbrains/annotations "annotations-13.0.jar")
 # `codeOnly` and JUnit only; `ServerSyncSeamSourceTest` imports `repoFile`, `codeOnly`, `java.io.File`
 # and JUnit only, and reads the `foss` and `sync` source sets as text.
 TESTS="com.daymark.app.data.PeopleSchemaTest com.daymark.app.data.TimedOfferSchemaTest
-com.daymark.app.data.CompanionSchemaTest com.daymark.app.data.MigrationSchemaExportTest
+com.daymark.app.data.CompanionSchemaTest com.daymark.app.data.TrackerRhythmSchemaTest
+com.daymark.app.data.MigrationSchemaExportTest
 com.daymark.app.export.ReportCopySourceTest com.daymark.app.ui.settings.ReportExportSourceTest
 com.daymark.app.ui.theme.ColorSchemeSourceTest com.daymark.app.ui.FaintInkSourceTest
 com.daymark.app.ui.insights.MonthGridSourceTest com.daymark.app.ui.WeekDaysSourceTest
@@ -97,6 +98,7 @@ com.daymark.app.ui.settings.ServerSyncSeamSourceTest"
 SOURCES="$REPO/app/src/test/java/com/daymark/app/data/PeopleSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/TimedOfferSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/CompanionSchemaTest.kt
+$REPO/app/src/test/java/com/daymark/app/data/TrackerRhythmSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/MigrationSchemaExportTest.kt
 $REPO/app/src/test/java/com/daymark/app/export/ReportCopySourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/settings/ReportExportSourceTest.kt

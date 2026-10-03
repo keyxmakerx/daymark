@@ -121,6 +121,7 @@ class OfferLedgerRepository @Inject constructor(
         offeredAtMillis: Long,
         responded: Boolean? = null,
         zone: ZoneId = ZoneId.systemDefault(),
+        subject: Long = OfferRecord.NO_SUBJECT,
     ): Long =
         dao.insert(
             OfferRecord(
@@ -130,6 +131,7 @@ class OfferLedgerRepository @Inject constructor(
                 offeredHour = hourIn(offeredAtMillis, zone),
                 offeredWeekday = weekdayIn(offeredAtMillis, zone),
                 responded = responded,
+                subject = subject,
             ),
         )
 
@@ -225,6 +227,22 @@ class OfferLedgerRepository @Inject constructor(
                 outcome = record.outcome,
             )
         }
+
+    /**
+     * As [checkInRows], for the asks of [kind] about one [subject] only: one tracker's check-ins,
+     * never another's.
+     */
+    suspend fun checkInRows(kind: OfferKind, subject: Long): List<InterruptionBudget.Offer> =
+        dao.recentForSubject(kind.key, subject, CHECK_IN_WINDOW).map { record ->
+            InterruptionBudget.Offer(
+                kind = budgetKind(kind).key,
+                offeredAt = record.offeredAt,
+                outcome = record.outcome,
+            )
+        }
+
+    /** When [kind] last asked about [subject], or 0 if it never has. */
+    suspend fun lastOfferedAt(kind: OfferKind, subject: Long): Long = dao.lastOfferedAtFor(kind.key, subject)
 
     /**
      * This kind's rows as **placement's** own input type — the second mapping this class exists for,
@@ -348,7 +366,10 @@ class OfferLedgerRepository @Inject constructor(
         // lets a quiet stretch lengthen the wait without limit, so its newest rows can be months
         // old; deleting them would read as a shorter run of unanswered check-ins, which is the
         // app asking more because it forgot.
-        val kept = OfferKind.entries.flatMap { dao.recentForKind(it.key, CHECK_IN_WINDOW) }.map { it.id }
+        // Per subject too, so one busy tracker cannot push another's rows out.
+        val kept = OfferKind.entries.flatMap { kind ->
+            dao.subjectsOf(kind.key).flatMap { dao.recentForSubject(kind.key, it, CHECK_IN_WINDOW) }
+        }.map { it.id }
         dao.deleteOlderThanExcept(cutoff, kept)
         for (kind in closedBefore) {
             if (!saidStop(kind)) {
@@ -400,6 +421,7 @@ class OfferLedgerRepository @Inject constructor(
         OfferKind.REMINDER -> InterruptionBudget.Kind.REMINDER
         OfferKind.ASSIGNMENT -> InterruptionBudget.Kind.ASSIGNMENT
         OfferKind.SUPPORT -> InterruptionBudget.Kind.SUPPORT
+        OfferKind.TRACKER -> InterruptionBudget.Kind.TRACKER
     }
 
     companion object {

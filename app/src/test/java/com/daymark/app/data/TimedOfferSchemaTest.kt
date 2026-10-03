@@ -151,7 +151,8 @@ class TimedOfferSchemaTest {
         assertTrue("OfferRecord.UNRECORDED was not declared", declared != null)
         val sentinel = declared!!.groupValues[1]
 
-        val annotations = Regex("""@ColumnInfo\(defaultValue = "(-?\d+)"\)""").findAll(entity)
+        // The slot columns' defaults only: the entity has other columns with defaults of their own.
+        val annotations = Regex("""@ColumnInfo\(defaultValue = "(-?\d+)"\) val offered\w+""").findAll(entity)
             .map { it.groupValues[1] }
             .toList()
         assertEquals("both slot columns need a @ColumnInfo default", 2, annotations.size)

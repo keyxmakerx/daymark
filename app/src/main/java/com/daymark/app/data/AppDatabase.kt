@@ -45,7 +45,7 @@ import com.daymark.app.data.entity.Treatment
         com.daymark.app.data.entity.InstrumentResult::class,
         com.daymark.app.data.entity.TaskResult::class,
     ],
-    version = 19,
+    version = 20,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -681,6 +681,35 @@ abstract class AppDatabase : RoomDatabase() {
                         "`metric` TEXT NOT NULL, " +
                         "`value` REAL NOT NULL)",
                 )
+            }
+        }
+
+        /**
+         * v20: each tracker's check-in rhythm, and which one thing a ledger row was about.
+         *
+         * ## Every tracker keeps asking nothing
+         *
+         * Trackers had no check-ins before this version, and the new columns' defaults say exactly
+         * that: rhythm "when it happens", which asks nothing, and the quick-log notification off.
+         * Only the person switches asking on (§D1a); a migration is not the person. The times are
+         * placeholders a rhythm that asks nothing never reads.
+         *
+         * ## The ledger's subject
+         *
+         * Every existing row was about no one thing, which is what 0 says. Nothing is back-filled.
+         *
+         * Each `DEFAULT` here is spelled the same as its entity's `@ColumnInfo(defaultValue = …)`,
+         * which Room compares.
+         */
+        val MIGRATION_19_20 = object : Migration(19, 20) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `trackers` ADD COLUMN `rhythm` TEXT NOT NULL DEFAULT 'when'")
+                db.execSQL("ALTER TABLE `trackers` ADD COLUMN `onceAtMinute` INTEGER NOT NULL DEFAULT 1200")
+                db.execSQL("ALTER TABLE `trackers` ADD COLUMN `fewCount` INTEGER NOT NULL DEFAULT 3")
+                db.execSQL("ALTER TABLE `trackers` ADD COLUMN `windowStart` INTEGER NOT NULL DEFAULT 540")
+                db.execSQL("ALTER TABLE `trackers` ADD COLUMN `windowEnd` INTEGER NOT NULL DEFAULT 1260")
+                db.execSQL("ALTER TABLE `trackers` ADD COLUMN `quickLog` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `offer_records` ADD COLUMN `subject` INTEGER NOT NULL DEFAULT 0")
             }
         }
 

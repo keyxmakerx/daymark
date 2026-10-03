@@ -27,6 +27,7 @@ import com.daymark.app.data.entity.SafetyPlanItem
 import com.daymark.app.data.entity.SleepLog
 import com.daymark.app.data.entity.Tracker
 import com.daymark.app.data.entity.TrackerLog
+import com.daymark.app.stats.TrackerRhythm
 import com.daymark.app.data.entity.Treatment
 import com.daymark.app.model.Mood
 import com.daymark.app.util.DateUtils
@@ -134,6 +135,19 @@ data class BackupTreatment(val id: Long, val kind: String, val startedAt: Long, 
 data class BackupTracker(
     val id: Long, val name: String, val type: String, val minValue: Int, val maxValue: Int,
     val unit: String, val sortOrder: Int, val archived: Boolean,
+    // Absent from a backup made before trackers could ask, which reads as asking nothing.
+    val rhythm: String = TrackerRhythm.Rhythm.DEFAULT.key,
+    val onceAtMinute: Int = 1200,
+    val fewCount: Int = 3,
+    val windowStart: Int = 540,
+    val windowEnd: Int = 1260,
+    val quickLog: Boolean = false,
+)
+
+/** The stored tracker, under [id]: the backup's own for a replace, 0 for a merge. */
+fun BackupTracker.toTracker(id: Long) = Tracker(
+    id, name, type, minValue, maxValue, unit, sortOrder, archived,
+    rhythm, onceAtMinute, fewCount, windowStart, windowEnd, quickLog,
 )
 
 @Serializable
@@ -470,7 +484,10 @@ class BackupManager @Inject constructor(
             },
             treatments = treatmentDao.getAll().map { BackupTreatment(it.id, it.kind, it.startedAt, it.note) },
             trackers = trackerDao.getAll().map {
-                BackupTracker(it.id, it.name, it.type, it.minValue, it.maxValue, it.unit, it.sortOrder, it.archived)
+                BackupTracker(
+                    it.id, it.name, it.type, it.minValue, it.maxValue, it.unit, it.sortOrder, it.archived,
+                    it.rhythm, it.onceAtMinute, it.fewCount, it.windowStart, it.windowEnd, it.quickLog,
+                )
             },
             trackerLogs = trackerLogDao.getAll().map { BackupTrackerLog(it.id, it.trackerId, it.dateTime, it.value, it.note) },
             reminders = reminderDao.getAll().map { BackupReminder(it.id, it.hour, it.minute, it.enabled, it.label) },
@@ -603,7 +620,7 @@ class BackupManager @Inject constructor(
         trackerDao.deleteAll()
         trackerLogDao.deleteAll()
         data.trackers.forEach {
-            trackerDao.insert(Tracker(it.id, it.name, it.type, it.minValue, it.maxValue, it.unit, it.sortOrder, it.archived))
+            trackerDao.insert(it.toTracker(it.id))
         }
         data.trackerLogs.forEach { trackerLogDao.insert(TrackerLog(it.id, it.trackerId, it.dateTime, it.value, it.note)) }
         reminderDao.deleteAll()
@@ -780,7 +797,7 @@ class BackupManager @Inject constructor(
 
         val trackerIdMap = HashMap<Long, Long>()
         data.trackers.forEach { t ->
-            val newId = trackerDao.insert(Tracker(0, t.name, t.type, t.minValue, t.maxValue, t.unit, t.sortOrder, t.archived))
+            val newId = trackerDao.insert(t.toTracker(0))
             trackerIdMap[t.id] = newId
         }
         data.trackerLogs.forEach { l ->

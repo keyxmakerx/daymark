@@ -104,6 +104,13 @@ data class OfferRecord(
      * that keeps this column from becoming a reading of a person (`docs/DECISIONS.md` §D1a).
      */
     val responded: Boolean? = null,
+    /**
+     * Which one thing of its [kind] the ask was about, or [NO_SUBJECT]. A tracker's check-in
+     * carries the tracker's id, so one tracker's unanswered check-ins never quiet another and one
+     * answer never brings another back. Every row written before this column existed was about no
+     * one thing, which is exactly what the default says.
+     */
+    @ColumnInfo(defaultValue = "0") val subject: Long = NO_SUBJECT,
 ) {
     companion object {
         /**
@@ -119,6 +126,9 @@ data class OfferRecord(
          * `TimedOfferSchemaTest` asserts all four spellings agree, so the duplication cannot drift.
          */
         const val UNRECORDED: Int = -1
+
+        /** [subject] for a kind whose asks are not about any one thing. */
+        const val NO_SUBJECT: Long = 0L
     }
 }
 
@@ -139,6 +149,12 @@ enum class OfferKind(val key: String) {
 
     /** The support space offering itself after a hard day — see `stats/SupportOffer.kt`. */
     SUPPORT("support"),
+
+    /**
+     * A tracker's check-in. Its rows carry the tracker's id as [OfferRecord.subject], so each
+     * tracker eases off on its own answers and no other's.
+     */
+    TRACKER("tracker"),
     ;
 
     companion object {
