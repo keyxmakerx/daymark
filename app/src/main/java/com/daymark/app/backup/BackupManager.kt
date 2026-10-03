@@ -459,6 +459,25 @@ class BackupManager @Inject constructor(
 
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
 
+    /** What a backup holds, read without importing it: when it was made, and its mood entries and journal pages. */
+    data class Contents(val exportedAt: Long, val entries: Int, val journalPages: Int)
+
+    /** What [jsonText] holds, or why it cannot be taken in. Reads nothing from, and writes nothing to, the database. */
+    sealed interface Reading {
+        data class Readable(val contents: Contents) : Reading
+        data object FromNewerApp : Reading
+        data object Unreadable : Reading
+    }
+
+    fun read(jsonText: String): Reading {
+        val data = runCatching { json.decodeFromString<BackupData>(jsonText) }.getOrNull() ?: return Reading.Unreadable
+        if (data.version > CURRENT_VERSION) return Reading.FromNewerApp
+        return Reading.Readable(Contents(data.exportedAt, data.entries.size, data.journal.size))
+    }
+
+    /** How many mood entries and journal pages this phone holds now: counts only, no row is read. */
+    suspend fun countsHere(): Pair<Int, Int> = entryDao.count() to journalDao.count()
+
     suspend fun exportToJson(nowMillis: Long): String {
         val allEntries = entryDao.getAllEntries()
         // Embed each referenced photo's bytes as base64 so the backup stays a single portable file.

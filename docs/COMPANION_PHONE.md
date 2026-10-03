@@ -120,7 +120,16 @@ What the phone does, against the server as built:
 - Expects `403` on managing phones, making a practice, the notification settings and writing the key
   documents: those belong to the console.
 
-Sending a copy is built (#432). Not built: pull, #168; the camera scanner, #432.
+Sending a copy is built (#432). So is getting the newest copy back (#168): the phone reads the key
+document as a send does, lists the lineages, keeps only phones' (never a `lane_`), reads the versions of
+at most 16 of them, and fetches the one the server lists as most recently stored, opening it with that
+lineage and version as its associated data. Nothing changes on the phone until the person chooses: the
+screen shows the date written inside the copy and its counts of mood entries and journal pages, this
+phone's counts beside them, and three buttons side by side: replace this phone's journal with the copy
+(one transaction, so a failure changes nothing), add the copy's entries beside this phone's, or keep
+this phone as it is. The choice rests on the server's listing, so a server can offer an older copy as
+the newest; the date inside the copy is how the person would see it, and refusing it is #179. Choosing
+automatically is #344. Not built: the camera scanner, #432.
 
 Sync is single-writer, last-snapshot-wins, for good (#200): the phone is the only device that writes
 the journal's encrypted copy, the schema has no per-row ids or timestamps, and rows are never
@@ -181,7 +190,7 @@ COMPANION_PAIRING.md §14.
 It also gains a screen listing its connections: who, since when, their key fingerprints, what they
 can see in plain words, and Revoke. Not built: #174. The phone as the anchor for the audit chain's
 head: #182. A heartbeat between phone and server: #185. Signing requests and pairing are built on both sides
-(§2); the camera scanner is #432, and pull is #168.
+(§2), and so are sending and getting a copy back; the camera scanner is #432.
 
 ## 5. What CI checks
 
@@ -198,7 +207,7 @@ reproducible build (#229); the offline app's listing never carries it (#194). No
 ## 6. The steps, in order
 
 1. The `sync` flavour, the crypto port and its host-JVM conformance tests, and CI. **Built.**
-2. Snapshot push, signed: **Built** (#432). Pull: #168.
+2. Snapshot push and pull, signed: **Built** (#432, #168). Choosing automatically: #344.
 3. The schema version with the game-plan, progress, assignment and result tables, and the assignment
    checks. **Built** (v19).
 4. Inbound assignments and game plans, with the acceptance inbox: #177.

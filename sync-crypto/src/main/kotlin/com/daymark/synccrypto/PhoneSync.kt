@@ -4,8 +4,8 @@ import com.goterl.lazysodium.LazySodium
 import java.io.IOException
 
 /**
- * The paired phone's two errands with its server (#432): opening the owner's sync key with the
- * passphrase, and sending an encrypted copy of the journal. Every request is signed
+ * The paired phone's errands with its server: opening the owner's sync key with the passphrase,
+ * sending an encrypted copy of the journal (#432), and fetching the newest copy back (#168). Every request is signed
  * ([SignedRequests]); none carries the owner's token.
  *
  * WHAT A STOP ASKS OF THE PHONE ([Then]). A refused signature (401) means the server no longer takes
@@ -55,6 +55,17 @@ class PhoneSync(
         class Sent internal constructor(val version: Long, val atMillis: Long) : Sending
 
         class Stopped internal constructor(val words: String, val then: Then) : Sending
+    }
+
+    /** What fetching the newest copy came to. */
+    sealed interface Fetching {
+        /**
+         * [plaintext] is the journal's backup, opened from [version] of [lineage]. Nothing on the phone
+         * has changed: the caller shows what the copy holds and asks before it replaces or adds anything.
+         */
+        class Fetched internal constructor(val lineage: String, val version: Long, val plaintext: ByteArray) : Fetching
+
+        class Stopped internal constructor(val words: String, val then: Then) : Fetching
     }
 
     /**
@@ -170,6 +181,95 @@ class PhoneSync(
         return Sending.Stopped(PhoneWords.NOT_SENT, Then.TRY_AGAIN)
     }
 
+    /**
+     * Fetches the newest copy any phone sent and opens it under [syncKey] (#168). In order:
+     *
+     * 1. The key document is read again, exactly as [send] reads it: a copy is opened only under the key
+     *    the server's document still opens to.
+     * 2. The lineages are listed (`GET /v1/snapshots`), and only phones' are kept ([PhoneLineage]), never
+     *    a web console's lane. For each, at most [MAX_LINEAGES], its versions are read.
+     * 3. The version the server lists as most recently stored, across them all, is fetched and opened
+     *    with that lineage and version as its associated data. One that does not open is refused.
+     *
+     * WHAT THIS DOES NOT ESTABLISH. The choice of copy rests on the server's own listing. A server can
+     * offer no copy it was not given under this key, since nothing else opens, but it can offer an older
+     * one as the newest; refusing that needs a signed manifest and a watermark kept on the device (#179).
+     * So the caller shows the date written inside the copy, which the server cannot change, and the
+     * person decides. Nothing is fetched twice and nothing loops. Blocks the caller.
+     */
+    fun fetch(server: PairedServer, syncKey: ByteArray, keyDocumentTag: String): Fetching {
+        val requests = SignedRequests(server, transport, clock)
+        try {
+            val document = requests.get(KEY_DOCUMENT)
+            when (document.status) {
+                200 -> if (document.header(ETAG) != keyDocumentTag) return Fetching.Stopped(PhoneWords.KEY_CHANGED_FETCH, Then.UNLOCK_AGAIN)
+                404 -> return Fetching.Stopped(PhoneWords.KEY_CHANGED_FETCH, Then.UNLOCK_AGAIN)
+                else -> return fetchRefusal(document.status) ?: Fetching.Stopped(PhoneWords.NOT_FETCHED, Then.TRY_AGAIN)
+            }
+
+            val listing = requests.get(LINEAGES)
+            if (listing.status != 200) return fetchRefusal(listing.status) ?: Fetching.Stopped(PhoneWords.NOT_FETCHED, Then.TRY_AGAIN)
+            val names = (Answers.jsonObject(listing.body)?.get("lineages") as? List<*>)
+                ?: return Fetching.Stopped(PhoneWords.NOT_FETCHED, Then.TRY_AGAIN)
+            val phones = names.filterIsInstance<String>().filter(PhoneLineage::isPhoneLineage).distinct().sorted().take(MAX_LINEAGES)
+
+            var best: Stored? = null
+            for (lineage in phones) {
+                val versions = requests.get(VERSIONS + lineage)
+                val listed = when (versions.status) {
+                    200 -> newestStored(versions.body, lineage) ?: return Fetching.Stopped(PhoneWords.NOT_FETCHED, Then.TRY_AGAIN)
+                    404 -> continue
+                    else -> return fetchRefusal(versions.status) ?: Fetching.Stopped(PhoneWords.NOT_FETCHED, Then.TRY_AGAIN)
+                }
+                val newest = listed.stored ?: continue
+                if (best == null || newest.createdAt > best.createdAt) best = newest
+            }
+            val chosen = best ?: return Fetching.Stopped(PhoneWords.NO_COPY, Then.TRY_AGAIN)
+
+            val blob = requests.get("$VERSIONS${chosen.lineage}/${chosen.version}")
+            if (blob.status != 200) return fetchRefusal(blob.status) ?: Fetching.Stopped(PhoneWords.NOT_FETCHED, Then.TRY_AGAIN)
+            val plaintext = try {
+                crypto.decryptSnapshot(blob.body, syncKey, chosen.lineage, chosen.version)
+            } catch (_: SyncCrypto.SyncCryptoException) {
+                return Fetching.Stopped(PhoneWords.COPY_DID_NOT_OPEN, Then.TRY_AGAIN)
+            }
+            return Fetching.Fetched(chosen.lineage, chosen.version, plaintext)
+        } catch (_: IOException) {
+            return Fetching.Stopped(PhoneWords.UNREACHABLE_FETCH, Then.TRY_AGAIN)
+        }
+    }
+
+    /** One stored version, as the server lists it. */
+    private class Stored(val lineage: String, val version: Long, val createdAt: Long)
+
+    /** A lineage's listing, read: its newest version, or null for a lineage with none. */
+    private class Listed(val stored: Stored?)
+
+    /**
+     * The newest version in a lineage's listing (the highest version number, with the time the server
+     * says it stored it), or null for an answer that is not that list for [lineage].
+     */
+    private fun newestStored(body: ByteArray, lineage: String): Listed? {
+        val fields = Answers.jsonObject(body) ?: return null
+        if (fields["lineage"] != lineage) return null
+        val versions = fields["versions"] as? List<*> ?: return null
+        var newest: Stored? = null
+        for (entry in versions) {
+            val map = entry as? Map<*, *> ?: return null
+            val version = Answers.wholeNumber(map["version"]) ?: return null
+            val createdAt = Answers.wholeNumber(map["createdAt"]) ?: return null
+            if (newest == null || version > newest.version) newest = Stored(lineage, version, createdAt)
+        }
+        return Listed(newest)
+    }
+
+    private fun fetchRefusal(status: Int): Fetching.Stopped? = when (status) {
+        401 -> Fetching.Stopped(PhoneWords.DISCONNECTED, Then.PAIR_AGAIN)
+        429 -> Fetching.Stopped(PhoneWords.PAUSED, Then.TRY_AGAIN)
+        in 500..599 -> Fetching.Stopped(PhoneWords.UNREACHABLE_FETCH, Then.TRY_AGAIN)
+        else -> null
+    }
+
     /** A 401, a 429 or a 5xx as a stop; null for any other status, which the caller reads itself. */
     private fun refusal(status: Int): Sending.Stopped? = when (status) {
         401 -> Sending.Stopped(PhoneWords.DISCONNECTED, Then.PAIR_AGAIN)
@@ -197,6 +297,10 @@ class PhoneSync(
     companion object {
         const val KEY_DOCUMENT = "/v1/keydoc"
         const val VERSIONS = "/v1/snapshots/"
+        const val LINEAGES = "/v1/snapshots"
+
+        /** The most phone lineages a fetch reads the versions of: one per phone the owner has paired, and then some. */
+        const val MAX_LINEAGES = 16
 
         /** The server's default `DAYMARK_MAX_BLOB_BYTES`, which a sealed copy must not pass. */
         const val MAX_BLOB_BYTES = 26_214_400L

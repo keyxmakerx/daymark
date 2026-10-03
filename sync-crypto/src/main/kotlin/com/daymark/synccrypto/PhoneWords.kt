@@ -86,6 +86,60 @@ object PhoneWords {
     /** The server registered the key, and the phone's keystore would not keep it: the web lists a phone that holds nothing. */
     const val COULD_NOT_KEEP = "This phone could not keep the pairing. Remove it on the web, then pair again with a new code."
 
+    // Fetching a copy back (#168). Every one ends by saying the phone's own journal is as it was.
+
+    /** No copy came back, or no answer the phone could read. */
+    const val NOT_FETCHED = "No copy came back from your server. Nothing on this phone has changed."
+
+    /** No answer came, while fetching. */
+    const val UNREACHABLE_FETCH = "The server could not be reached. Nothing on this phone has changed."
+
+    /** The server holds no copy any phone sent. */
+    const val NO_COPY = "Your server holds no copy from a phone yet. Nothing on this phone has changed."
+
+    /** The copy came back and did not open under this phone's key: not one this key sealed. */
+    const val COPY_DID_NOT_OPEN =
+        "The copy on your server did not open with this phone's key, so it was not used. Nothing on this phone has changed."
+
+    /** The key document changed since the phone opened it, found while fetching. */
+    const val KEY_CHANGED_FETCH =
+        "The key on your server has changed since this phone opened it. Enter your passphrase again. Nothing on this phone has changed."
+
+    // Choosing what to do with a fetched copy (#168). Nothing is replaced or added until the person
+    // presses one of the two; keeping this phone as it is is always offered beside them.
+
+    /** What the copy holds, from the copy itself: [savedOn] is the date written inside it, which the server cannot change. */
+    fun copyHolds(savedOn: String, entries: Int, pages: Int): String =
+        "The newest copy on your server was saved on $savedOn. It has ${count(entries, "mood entry", "mood entries")} " +
+            "and ${count(pages, "journal page", "journal pages")}."
+
+    /** What this phone holds now, beside it. */
+    fun phoneHolds(entries: Int, pages: Int): String =
+        "This phone has ${count(entries, "mood entry", "mood entries")} and ${count(pages, "journal page", "journal pages")}."
+
+    /** Under the choice: what each button does, said before it is pressed. */
+    const val REPLACE_EXPLAINED =
+        "Replacing removes what is on this phone and puts the copy in its place. Your server keeps its earlier copies."
+
+    const val ADD_EXPLAINED =
+        "Adding puts the copy's entries beside this phone's. An entry that is in both will then appear twice."
+
+    const val REPLACED = "This phone now holds the copy from your server."
+
+    const val ADDED = "The copy's entries were added beside this phone's."
+
+    /** A replace that failed rolls back whole: the deletes go with the inserts. */
+    const val NOT_REPLACED = "The copy could not be put on this phone. Nothing on this phone has changed."
+
+    /** An add is not one transaction, so a failure part-way may have added some. */
+    const val NOT_ALL_ADDED = "Not all of the copy's entries could be added. Some of them may have been."
+
+    /** The copy opened, and its backup is from a newer app than this one. */
+    const val COPY_FROM_NEWER_APP =
+        "The copy on your server was made by a newer version of Daymark. Update the app, then try again. Nothing on this phone has changed."
+
+    private fun count(n: Int, one: String, many: String): String = if (n == 1) "1 $one" else "$n $many"
+
     /** Under the last copy's time: the name the web's sync panel reads this phone's copies by. */
     fun named(lineage: String): String = "On the server, this phone's copies are named $lineage."
 }
