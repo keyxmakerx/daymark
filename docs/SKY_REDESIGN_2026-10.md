@@ -111,6 +111,21 @@ memories before it, so the property becomes:
 `docs/SKY.md` P5 ("position identical after inserting 1,000 unrelated records") is therefore
 replaced by: *position identical after appending 1,000 newer records*.
 
+### 2.4 Arriving with a history
+
+Someone who already has entries when this sky ships gets all of them at once, built by the same
+rules as everyone else's. It asks them nothing: the river and every habit shape (§3.2) are worked out
+from dates alone, so a year of entries simply arrives as a year of sky.
+
+- **Life events they already placed** become giant stars straight away.
+- **Everything else that is marked** (a hard event, a favourite, a named star, a place, a pulsar, a
+  constellation) is absent until they mark it, because none of those marks existed before. The sky
+  never guesses one, and never asks them to go back and mark their history.
+- **Their stars move once**, from the old scattered sky into the river. It is the only time a whole
+  sky rearranges, and the first opening of the new sky is where it happens.
+- **Their seed is drawn then** (§5.4), and **their colour window starts then**: 30 days from the day
+  they first open the new sky, not from their first memory, which may be years old.
+
 ---
 
 ## 3. Everything in the sky
@@ -182,6 +197,16 @@ values slotted in, like every other word in the product.
 - Counts appear only as plain description of an object the person is looking at ("14 memories, 3 to
   19 May"), never as a headline or a comparison (`docs/SKY.md` §6.3).
 - Journal prose never appears (`docs/SKY.md` §4.1).
+
+### 3.6 The Key
+
+The Key stays: the maintainer leaned yes on 2026-10-03, and it is recommended. In a mental-health
+app an unexplained dark shape beside someone's memories can read as a judgement about them. The Key
+says in fixed words what each object is and what made it, so nobody has to guess.
+
+- It lists **only what is in this person's sky**. The prototype lists every object; the app should
+  not, so it never reads as a checklist of things they have not got.
+- It never opens by itself and is never shown as a lesson before the sky.
 
 ---
 
@@ -293,7 +318,8 @@ from the maintainer's answer on 2026-10-03:
 - **Then the colours settle, and the person is told so at the start.** Proposed wording: *"You can
   change these colours until 2 November. After that they stay, as part of your sky."* The date is
   the end of the window.
-- **The window: 30 days from the first memory**, chosen by the maintainer on 2026-10-03. A month is
+- **The window: 30 days from the first memory** (or, for someone who already has entries when the
+  sky ships, from the day they first open it, §2.4), chosen by the maintainer on 2026-10-03. A month is
   long enough to live with the colours through good and bad light and a few different moods, and
   short enough that the sky has settled before there is much history in it.
 - **Reset my sky**, always available, behind a confirmation that says what it does: it grows the sky
