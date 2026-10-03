@@ -49,7 +49,7 @@ export interface Registered {
   pairedAt: number
 }
 
-export type FaultKind = 'unreachable' | 'refused' | 'http' | 'gone'
+export type FaultKind = 'unreachable' | 'refused' | 'http' | 'gone' | 'unsupported'
 
 /** Why a call did not give what it asks for. Carries a kind and nothing the server said. */
 export class PhonesFault extends Error {
@@ -129,7 +129,8 @@ export function devicesApi(serverUrl: string, token: string, doFetch: FetchLike 
   return {
     async listDevices() {
       const res = await send('GET', '/v1/devices')
-      if (res.status !== 200) throw faultOf(res.status)
+      // The list is the first thing read, so a server with no phone routes is told apart here.
+      if (res.status !== 200) throw faultOf(res.status, 'unsupported')
       const body = await json(res)
       const rows = isRecord(body) && Array.isArray(body.devices) ? body.devices.map(asDevice) : null
       if (!rows || rows.some((r) => r === null)) throw new PhonesFault('unreachable')

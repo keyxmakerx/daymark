@@ -349,4 +349,6 @@
   .ended { color: var(--ink-text); }
 
   button.indigo { background: var(--indigo); color: var(--on-accent); border-color: var(--indigo); }
+  /* Nothing in this section moves, hover included (#434): the global button transition stops here. */
+  button { transition: none; }
 </style>

@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeAll } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import {
   CODE_TTL_MS,
   back,
+  disconnect,
   discard,
   expire,
   initialState,
@@ -237,6 +240,43 @@ describe('the words of every state, verbatim', () => {
       sentence: 'This server refused the request. Nothing changed. Connect again above, then try once more.',
       actions: [{ id: 'back', label: 'Back to phones' }],
     })
+  })
+})
+
+describe('what the section can and cannot know (#434)', () => {
+  it('a lost answer to Pair this phone or Disconnect does not claim that nothing changed', async () => {
+    const h = harness({ confirm: () => { throw new PhonesFault('unreachable') } })
+    h.ports.api.codeState = async () => redeemedBy(KEY_A, ID_A)()
+    const comparing = await poll(h.ports, await codeShown(h))
+    expect(comparing.pairing.step).toBe('compare')
+    const lost = phonesView(await pairThisPhone(h.ports, comparing), 0).area
+    expect(lost).toMatchObject({ kind: 'ended', sentence: COPY.UNREACHABLE_AFTER_SEND })
+    expect(JSON.stringify(lost)).not.toContain('Nothing changed')
+
+    const listed = await loadList(harness({ listDevices: () => [{ keyId: ID_A, publicKey: KEY_A, pairedAt: 1, revokedAt: null }] }).ports, initialState(true))
+    const d = harness({ revoke: () => { throw new PhonesFault('unreachable') } })
+    const after = phonesView(await disconnect(d.ports, listed, ID_A), 0).area
+    expect(after).toMatchObject({ kind: 'ended', sentence: COPY.UNREACHABLE_AFTER_SEND })
+  })
+
+  it('a lost answer to a read still says nothing changed (control)', async () => {
+    const h = harness({ listDevices: () => { throw new PhonesFault('unreachable') } })
+    expect(phonesView(await loadList(h.ports, initialState(true)), 0).area).toMatchObject({ sentence: COPY.UNREACHABLE })
+  })
+
+  it('a server that cannot pair phones says so, and not that it refused', async () => {
+    const h = harness({ listDevices: () => { throw new PhonesFault('unsupported') } })
+    const area = phonesView(await loadList(h.ports, initialState(true)), 0).area
+    expect(area).toEqual({ kind: 'ended', sentence: COPY.CANNOT_PAIR_PHONES, actions: [] })
+    expect(JSON.stringify(area)).not.toContain('refused')
+  })
+
+  it('nothing in the section moves on hover', () => {
+    const src = readFileSync(resolve(process.cwd(), 'src/lib/components/phones/PhonesSection.svelte'), 'utf8')
+    const style = src.slice(src.indexOf('<style>'))
+    expect(style).toMatch(/\n\s*button \{ transition: none; \}/)
+    // Control: the global rule this overrides is there to override.
+    expect(readFileSync(resolve(process.cwd(), 'src/app.css'), 'utf8')).toContain('transition: background 120ms ease')
   })
 })
 
@@ -546,7 +586,8 @@ describe('the owner phone routes, as the section calls them', () => {
     expect(await kind(api(404).codeState('c'))).toBe('gone')
     expect(await kind(api(404).confirm('c', 'k'))).toBe('gone')
     expect(await kind(api(404).revoke('k'))).toBe('refused')
-    expect(await kind(api(404).listDevices())).toBe('refused')
+    // The list is read first, so a server with no phone routes is told apart there (#434).
+    expect(await kind(api(404).listDevices())).toBe('unsupported')
     for (const s of [401, 403, 429, 400]) expect(await kind(api(s).listDevices()), String(s)).toBe('refused')
     for (const s of [500, 502, 503, 504]) expect(await kind(api(s).listDevices()), String(s)).toBe('unreachable')
     const offline = devicesApi('', 't', (async () => { throw new TypeError('Failed to fetch') }) as typeof fetch)
@@ -673,7 +714,7 @@ describe('the list, and Disconnect', () => {
     })
     const { disconnect } = await import('./ceremony')
     const lost = await disconnect(h.ports, await ready(h), ID_A)
-    expect(phonesView(lost, 0).area).toMatchObject({ sentence: 'This server could not be reached. Nothing changed.' })
+    expect(phonesView(lost, 0).area).toMatchObject({ sentence: COPY.UNREACHABLE_AFTER_SEND })
     expect(phonesView(lost, 0).rows![0]!.connected).toBe(true)
     fail = false
     const s = await tryAgain(h.ports, lost)

@@ -96,6 +96,7 @@ export type Pairing =
   | { step: 'unconfirmed' }
   | { step: 'unreachable'; retry: Retry }
   | { step: 'refused' }
+  | { step: 'unsupported' }
 
 export interface PhonesState {
   /** Whether the card above has proved an address and token in this visit. */
@@ -186,6 +187,7 @@ const CLOSED: Pairing = { step: 'closed' }
 function failed(state: PhonesState, e: unknown, retry: Retry): PhonesState {
   const kind = e instanceof PhonesFault ? e.kind : 'unreachable'
   if (kind === 'http') return { ...state, httpOnly: true, pairing: CLOSED }
+  if (kind === 'unsupported') return { ...state, pairing: { step: 'unsupported' } }
   if (kind === 'refused' || kind === 'gone') return { ...state, pairing: { step: 'refused' } }
   return { ...state, pairing: { step: 'unreachable', retry } }
 }
@@ -456,10 +458,14 @@ function areaOf(pairing: Pairing, now: number): AreaView | null {
       return { kind: 'ended', sentence: COPY.LAPSED, actions: [NEW_CODE, BACK] }
     case 'unconfirmed':
       return { kind: 'ended', sentence: COPY.UNCONFIRMED, actions: [NEW_CODE, BACK] }
-    case 'unreachable':
-      return { kind: 'ended', sentence: COPY.UNREACHABLE, actions: [TRY_AGAIN, BACK] }
+    case 'unreachable': {
+      const sent = pairing.retry.act === 'confirm' || pairing.retry.act === 'disconnect'
+      return { kind: 'ended', sentence: sent ? COPY.UNREACHABLE_AFTER_SEND : COPY.UNREACHABLE, actions: [TRY_AGAIN, BACK] }
+    }
     case 'refused':
       return { kind: 'ended', sentence: COPY.REFUSED, actions: [BACK] }
+    case 'unsupported':
+      return { kind: 'ended', sentence: COPY.CANNOT_PAIR_PHONES, actions: [] }
   }
 }
 
