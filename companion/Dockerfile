@@ -11,7 +11,7 @@
 # §7, "Base images").
 
 # ---- 1. Web bundle ----------------------------------------------------------
-FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS web
+FROM node:26-alpine@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80 AS web
 WORKDIR /web
 # Node 22 is Maintenance LTS (EOL 2027-04-30); 24 is Active LTS (EOL 2028-04-30).
 # Alpine/musl is fine here — nothing from this stage runs at runtime.
