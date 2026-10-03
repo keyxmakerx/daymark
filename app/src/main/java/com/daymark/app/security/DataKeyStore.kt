@@ -55,7 +55,7 @@ sealed interface DataKeyResult {
  * `BootReceiver` re-arms every reminder from the database after a restart and `ReminderReceiver`
  * reads its row when the alarm fires, both from a cold process with nobody having typed anything.
  * Daily reminders quietly stopping for everybody who sets a PIN is a decision about somebody's
- * product and somebody's users, and it is not made here. `docs/DECISIONS_2026-08.md` has it.
+ * product and somebody's users, and it is not made here. `docs/DECISIONS.md` has it.
  */
 @Singleton
 class DataKeyStore @Inject constructor(

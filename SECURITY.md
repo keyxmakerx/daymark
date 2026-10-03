@@ -27,17 +27,24 @@ connect to. Its surface is on-device:
 
 **The `sync` build and the Companion are in scope, and are unreleased.** The `sync` flavor is a
 separate, opt-in build with its own application id (`.sync` suffix); a `foss` install can never
-be updated into it. It talks to a Companion server (`companion/server`) and web consoles
-(`companion/web`) in this repository. No `sync` build has been tagged, so fixes for this surface
-target `main` only, and reports against it are welcome now. The design assumes the server is
-untrusted: it must never see journal content, its logs must never carry content, and it vouches
-for no key it relays. A report showing any of those does not hold is the one we most want.
+be updated into it. It is meant to talk to a Companion server (`companion/server`), whose web
+consoles (`companion/web`) already work on their own; the phone's half is not built yet (#138). No
+`sync` build has been tagged, so fixes for this surface target `main` only, and reports against it
+are welcome now. The design assumes the server is untrusted: it must never see journal content, its
+logs must never carry content, and it vouches for no key it relays. A report showing any of those
+does not hold is the one we most want. The Companion's threat model is
+[docs/COMPANION_SECURITY.md](docs/COMPANION_SECURITY.md).
 
 Out of scope: the standard sideloading "unknown app" warning is an Android behavior, not a
 vulnerability.
 
 ## What we already do
 
+- The journal database is encrypted at rest (SQLCipher) under a random key that is wrapped by the
+  phone's hardware keystore, so a copy of the app's files taken off the phone cannot be opened. An
+  existing unencrypted journal is migrated on first launch; a phone whose keystore cannot make a key
+  keeps an unencrypted one. Wrapping that key under the PIN or a written-down recovery code is built
+  but not switched on (#109).
 - PIN stored as PBKDF2 (random per-PIN salt) in AES-256 `EncryptedSharedPreferences`, with
   failed-attempt lockout/backoff and constant-time comparison.
 - `FLAG_SECURE` while the app lock is enabled (keeps content out of screenshots/recents).

@@ -9,7 +9,7 @@
    * blob as untrusted until the owner signature checks against the pinned key.
    */
   import type { Grant } from '../../assignments/types'
-  import { verifyGrantBlob, hasCapability } from '../../therapist/grant'
+  import { verifyGrantBlob, hasCapability, GrantAddressError } from '../../therapist/grant'
   import { isLive, touch } from '../../therapist/session'
   import { zeroize } from '../../therapist/keyStore'
   import type { UnlockedContext } from '../../therapist/context'
@@ -64,6 +64,8 @@
     ctx = c
     grant = null
     grantError = ''
+    // A lock notice describes the session that just ended; this is a new one.
+    locked = false
     // Whatever the last leave said is stale the moment somebody signs in again — on this machine
     // that is a different relationship, since the one that was left cannot be signed into at all.
     leftNotice = ''
@@ -74,11 +76,15 @@
         grantError = 'No grant has been published for you. The owner grants capabilities from their console.'
         return
       }
-      grant = verifyGrantBlob(current.bytes, c.pinnedOwnerSignPub)
-    } catch {
-      // Refuse to trust: an unverifiable grant yields no capabilities.
+      grant = verifyGrantBlob(current.bytes, c.pinnedOwnerSignPub, c.therapistFp)
+    } catch (e) {
+      // Refuse to trust: an unverifiable grant, or one written for someone else, yields no
+      // capabilities.
       grant = null
-      grantError = 'Refused to trust the grant — it did not verify against the pinned owner key.'
+      grantError =
+        e instanceof GrantAddressError
+          ? 'This grant names a different clinician key than the one on this device, so none of it is shown. The owner can publish a grant for this key from their console.'
+          : 'Refused to trust the grant — it did not verify against the pinned owner key.'
     }
   }
 
@@ -94,6 +100,23 @@
     // The decrypted bundle goes with the session. Leaving it behind would keep a person's records
     // in memory on a machine whose therapist has just said they were finished with it.
     shared = null
+    // The person's own Log out says nothing afterwards: they know what they did.
+    locked = false
+  }
+
+  /*
+   * THE AUTOMATIC LOCK SAYS WHAT HAPPENED (#262).
+   *
+   * Everything logout() does, and then one flag for the sign-in screen, which states the rule and
+   * that nothing else changed (SCREEN_COPY.lockedNotice). Without it the page simply returned to
+   * sign-in, which reads as something having gone wrong, or as someone else having done it. The
+   * flag is component state and nothing more: no storage call, so it cannot outlive this tab or
+   * tell anyone else that a session was here.
+   */
+  let locked = $state(false)
+  function lock() {
+    logout()
+    locked = true
   }
 
   /*
@@ -118,6 +141,7 @@
     tab = 'allowed'
     shared = null
     leftNotice = notice
+    locked = false
   }
 
   const canAssign = $derived(
@@ -154,7 +178,7 @@
   const live = $derived(ctx ? isLive(ctx.session, clock) : false)
 
   $effect(() => {
-    if (ctx && !live) logout()
+    if (ctx && !live) lock()
   })
 
   /*
@@ -205,7 +229,7 @@
     -->
     <p class="left-notice" role="status">{leftNotice}</p>
   {/if}
-  <SignInScreen>
+  <SignInScreen {locked}>
     {#snippet credentials()}
       <LoginGate onunlock={onUnlock} standalone={false} />
     {/snippet}
@@ -214,7 +238,7 @@
   <section class="portal">
     <LowerAssuranceBanner />
     <div class="topline">
-      <nav class="tabs" aria-label="Therapist portal section">
+      <nav class="tabs" aria-label="Clinician console section">
         <button class:active={tab === 'allowed'} aria-pressed={tab === 'allowed'} onclick={() => (tab = 'allowed')}>Allowed</button>
         {#if canAssign}
           <button class:active={tab === 'assign'} aria-pressed={tab === 'assign'} onclick={() => (tab = 'assign')}>Assign</button>

@@ -393,10 +393,9 @@ class SkySurfaceSourceTest {
     /**
      * The core's alpha comes from the pure layer whole, and the inner glow is two fixed constants.
      *
-     * §1, quoted in `SkySprite.kt` at the line that draws it: *"Every star has a white heart. The
-     * core is the same near-white for every star; the mood is the colour of the glow and how far it
-     * spreads."* Equal presence is exactly this: whatever the day was, the point at the centre of
-     * the mark is the same point.
+     * `docs/SKY.md` §3.2, quoted in `SkySprite.kt` at the line that draws it: *"The core is the
+     * same near-white for every star. Age tints the glow around it."* Equal presence is exactly
+     * this: whatever the day was, the point at the centre of the mark is the same point.
      */
     @Test
     fun `the core is the pure layer's alpha and the inner glow is two fixed constants`() {

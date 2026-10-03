@@ -4,12 +4,15 @@
   import { fingerprint } from '../../assignments/crypto'
   import { loadPins, savePins, pinOnFirstUse } from '../../therapist/pinStore'
   import type { ShareMeta, SealedShare } from '../../share/sharecrypto'
-  import { toBase64 } from '../../share/sharecrypto'
+  import { toBase64, SHARE_CONTEXT } from '../../share/sharecrypto'
   import NonDiagnosticBanner from './NonDiagnosticBanner.svelte'
   import InvitePanel from './InvitePanel.svelte'
   import type { OwnerSession, PinnedTherapist } from './session'
   import { PortalClient, relRefOf } from '../../sync/portal'
-  import { shareRefusedBecauseEnded } from '../../owner/sharing'
+  import {
+    shareRefusedBecauseEnded, SHARE_DAYS_DEFAULT, SHARE_DAYS_MAX, SHARE_DAYS_OUT_OF_RANGE, shareDays, shareEndsLine,
+  } from '../../owner/sharing'
+  import { sealShare } from '../../owner/sealShare'
 
   let {
     session,
@@ -26,12 +29,29 @@
   } = $props()
 
   let sel = $state<ShareSelection>(emptySelection())
-  let expiryDays = $state(30)
+  let expiryDays = $state<number | null>(SHARE_DAYS_DEFAULT)
   let busy = $state(false)
   let status = $state('')
   let error = $state('')
 
   const ownerFp = $derived(fingerprint(session.ownerSign.publicKey))
+
+  const DAY_MS = 24 * 60 * 60 * 1000
+  // Null while the field holds anything the server would not honour; the line then says so.
+  const days = $derived(shareDays(expiryDays))
+  // The date moves with the clock: read once, it would show the day before the real end on a page
+  // left open past midnight. Times are absolute (epoch ms) throughout; only this display is local,
+  // so time zones and daylight saving change how the date is written, never which instant it is.
+  let now = $state(Date.now())
+  $effect(() => {
+    const id = setInterval(() => (now = Date.now()), 60_000)
+    return () => clearInterval(id)
+  })
+  const endsOn = $derived(
+    days === null
+      ? null
+      : new Date(now + days * DAY_MS).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }),
+  )
 
   const bundle = $derived(
     data
@@ -48,60 +68,62 @@
 
   async function seal() {
     if (!data) { error = 'Load your own backup first (via the sync source).'; return }
+    if (days === null) { error = `${SHARE_DAYS_OUT_OF_RANGE} Nothing was sealed or sent.`; return }
     error = ''
     status = ''
     busy = true
     try {
+      const source = data
+      const portal = client
       const shareId = crypto.randomUUID()
       const createdAt = Date.now()
-      const expiry = createdAt + expiryDays * 24 * 60 * 60 * 1000
+      const expiry = createdAt + days * DAY_MS
       const recipientFp = fingerprint(therapist.boxPub)
-
-      const meta: ShareBundleMeta = { shareId, version: 0, createdAt, ownerFp, expiry }
-      const finalBundle = buildShareBundle(data, sel, meta)
-
-      // Pin gate. The pins come from storage, NOT from `therapist`: this block used to build an
-      // empty PinStore and pin the same keys it was about to seal to, so buildShare compared each
-      // value against itself and could not refuse anything. See ../../therapist/pinStore.ts.
-      const pins = loadPins()
-      if (pinOnFirstUse(pins, { x25519Pub: therapist.boxPub, ed25519Pub: therapist.signPub }) === 'pinned-now') {
-        savePins(pins)
-      }
       const ed25519Fp = fingerprint(therapist.signPub)
+      const lineage = 'share'
 
-      const shareMeta: ShareMeta = {
-        context: 'daymark.share.v1', shareId, version: 0, recipientFp, expiry, ownerSigningFp: ownerFp,
-      }
-      const sealed: SealedShare = buildShare(finalBundle, shareMeta, therapist.boxPub, session.ownerSign, ed25519Fp, pins)
+      // WHEN each step runs is sealShare's to decide, and its node test holds it: whether the
+      // clinician ended the relationship is asked before anything below is pinned, built, sealed
+      // or sent, and a check that fails is not an ending (#91, #275). What is here is the work.
+      const outcome = await sealShare({
+        server: portal
+          ? {
+              relationshipEnding: async () => portal.relationshipEnding(await relRefOf(therapist.inboxToken)),
+              listVersions: () => portal.listVersions(therapist.inboxToken, 'shares', lineage),
+              publish: (sealed: SealedShare, version: number) =>
+                portal.putBlob(therapist.inboxToken, 'shares', lineage, version, encodeSealed(sealed), {
+                  'X-Share-Meta': toBase64(new TextEncoder().encode(JSON.stringify({ shareId, version, expiry, ownerSigningFp: ownerFp }))),
+                }),
+            }
+          : null,
+        // Pin gate. The pins come from storage, NOT from `therapist`: this block used to build an
+        // empty PinStore and pin the same keys it was about to seal to, so buildShare compared each
+        // value against itself and could not refuse anything. See ../../therapist/pinStore.ts.
+        pin: () => {
+          const pins = loadPins()
+          if (pinOnFirstUse(pins, { x25519Pub: therapist.boxPub, ed25519Pub: therapist.signPub }) === 'pinned-now') {
+            savePins(pins)
+          }
+          return pins
+        },
+        // Sealed with the version it is published as: the therapist refuses a share whose signed
+        // version differs from the one the server serves it under.
+        build: (version) => {
+          const meta: ShareBundleMeta = { shareId, version, createdAt, ownerFp, expiry }
+          return buildShareBundle(source, sel, meta)
+        },
+        seal: (bundle, version, pins) => {
+          const shareMeta: ShareMeta = {
+            context: SHARE_CONTEXT, shareId, version, recipientFp, createdAt, expiry, ownerSigningFp: ownerFp,
+          }
+          return buildShare(bundle, shareMeta, therapist.boxPub, session.ownerSign, ed25519Fp, pins)
+        },
+      })
 
-      if (client) {
-        /*
-         * THEY ENDED IT, AND NOTHING SENT NOW WOULD BE READ (issue #91).
-         *
-         * Checked BEFORE anything is sealed, so the refusal can say "nothing was sealed or sent"
-         * and have it be literally true. The server refuses the publish too, and that is the rule
-         * that actually binds — but a 410 from a route is not a sentence a person can act on, and
-         * this is the moment where the owner can still do something about it.
-         *
-         * A FAILED CHECK IS NOT AN ENDING, and the catch says so by continuing. An unreachable
-         * server tells this console nothing about whether the clinician left, and refusing to
-         * share on a timeout would stop somebody sending their journal to a therapist who is
-         * perfectly well still there. If it really has ended, the publish below meets the server's
-         * own refusal and this screen shows that instead.
-         */
-        const ending = await client.relationshipEnding(await relRefOf(therapist.inboxToken)).catch(() => null)
-        if (ending) {
-          error = shareRefusedBecauseEnded(therapist.displayName, new Date(ending.endedAt).toLocaleDateString())
-          return
-        }
-        const lineage = 'share'
-        const existing = await client.listVersions(therapist.inboxToken, 'shares', lineage).catch(() => [])
-        const version = existing.reduce((m, v) => Math.max(m, v.version), -1) + 1
-        const body = encodeSealed(sealed)
-        await client.putBlob(therapist.inboxToken, 'shares', lineage, version, body, {
-          'X-Share-Meta': toBase64(new TextEncoder().encode(JSON.stringify({ shareId, version, expiry, ownerSigningFp: ownerFp }))),
-        })
-        status = `Sealed & published share v${version}.`
+      if (outcome.kind === 'ended') {
+        error = shareRefusedBecauseEnded(therapist.displayName, new Date(outcome.endedAt).toLocaleDateString())
+      } else if (outcome.kind === 'published') {
+        status = `Sealed & published share v${outcome.version}.`
       } else {
         status = 'Share sealed locally (no server configured).'
       }
@@ -123,7 +145,7 @@
   /** Encode a SealedShare to opaque bytes (Uint8Arrays → base64url in a small JSON envelope). */
   function encodeSealed(s: SealedShare): Uint8Array {
     const obj = {
-      fmt: s.fmt, shareId: s.shareId, version: s.version, expiry: s.expiry,
+      fmt: s.fmt, shareId: s.shareId, version: s.version, createdAt: s.createdAt, expiry: s.expiry,
       recipientFp: s.recipientFp, ownerSigningFp: s.ownerSigningFp,
       body: toBase64(s.body), wrappedCEK: toBase64(s.wrappedCEK), ownerSig: toBase64(s.ownerSig),
     }
@@ -134,9 +156,17 @@
 <section class="share">
   <NonDiagnosticBanner />
   <h3>Build a share for {therapist.displayName}</h3>
+  <!--
+    What a share is, in the words #305 set: access, not a copy, which ends on the date set or when
+    it is stopped. A report says "a copy" where it is made; this says "access" where a share is
+    built (#337). The end-date line beside the days field does not repeat here, and the revoke
+    caveat stays at the revoke click, not here.
+  -->
   <p class="hint">
-    Curate exactly what to share. Self-checks are reduced to scores and bands only — never raw
-    answers. The bundle is sealed to {therapist.displayName}'s pinned key and signed by you.
+    A share is access. {therapist.displayName} can read what you choose here until the date you
+    set, or until you stop it. Self-checks are reduced to scores and bands only — never raw
+    answers. Your own words go only if you switch them on below, whole, never trimmed. The share
+    is sealed to {therapist.displayName}'s pinned key and signed by you.
   </p>
 
   <fieldset class="types">
@@ -147,15 +177,21 @@
     <label><input type="checkbox" checked={sel.types.sleep} onchange={() => toggle('sleep')} /> Sleep logs ({counts.sleep})</label>
   </fieldset>
 
+  <!--
+    Off unless the person turns it on (#337, #305): the safe choice is the default, so the control
+    names what turning it on does rather than nudging with "(recommended)". It covers both kinds
+    of their own words the bundle can carry — mood notes and journal text — whole or not at all.
+  -->
   <label class="strip">
-    <input type="checkbox" checked={sel.stripNotes} onchange={() => (sel = { ...sel, stripNotes: !sel.stripNotes })} />
-    Strip free-text notes (recommended)
+    <input type="checkbox" checked={sel.includeOwnWords} onchange={() => (sel = { ...sel, includeOwnWords: !sel.includeOwnWords })} />
+    Include my own words (mood notes and journal text)
   </label>
 
   <label class="expiry">
-    <span>Expires after (days)</span>
-    <input type="number" min="1" max="365" bind:value={expiryDays} />
+    <span>Ends after (days)</span>
+    <input type="number" min="1" max={SHARE_DAYS_MAX} step="1" bind:value={expiryDays} />
   </label>
+  <p class="ends">{endsOn ? shareEndsLine(endsOn) : SHARE_DAYS_OUT_OF_RANGE}</p>
 
   <div class="actions">
     <button class="primary" onclick={seal} disabled={busy || !data}>{busy ? 'Sealing…' : 'Seal & publish share'}</button>
@@ -173,6 +209,7 @@
   .types legend { padding: 0 var(--space-2); color: var(--ink-soft); font-size: 0.85rem; }
   .types label, .strip { display: flex; align-items: center; gap: var(--space-2); font-size: 0.9rem; }
   .expiry { display: flex; flex-direction: column; gap: var(--space-1); font-size: 0.85rem; max-width: 12rem; }
+  .ends { margin: 0; color: var(--ink-text); font-size: 0.85rem; }
   .expiry input { font: inherit; padding: var(--space-1) var(--space-2); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-bg); color: var(--ink-text); }
   .actions { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
   /* Confirmation is solid ink, never green — a green tick would be a claim this product cannot

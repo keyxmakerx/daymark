@@ -47,7 +47,7 @@ export interface ValidationResult {
 
 /* --- dialogue authoring guards (docs/COMPANION_DIALOGUE.md) ------------------------------
  *
- * Two lines of that document's shipping checklist are validation work. Their runtime halves
+ * That document's Findings 1 and 2 are validation work. Their runtime halves
  * already landed in predicate.ts: unknown refs fail closed for every op, and the evaluator
  * bounds its own recursion. What follows is the authoring-time pair, which is where the useful
  * error message lives — a clinician can fix a rejected upload, and cannot fix a throw that

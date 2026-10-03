@@ -98,7 +98,7 @@ private fun JournalCard(entry: JournalEntry, onClick: () -> Unit, modifier: Modi
             Text(
                 text = DateUtils.formatDate(entry.dateTime) + " · " + DateUtils.formatTime(entry.dateTime),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.tertiary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (entry.body.isNotBlank()) {
                 Text(

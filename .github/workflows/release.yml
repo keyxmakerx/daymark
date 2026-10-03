@@ -38,7 +38,7 @@ jobs:
       # build). The keystore gating is done in shell — the `secrets` context is not
       # allowed inside a GitHub `if:` conditional.
       # Only the `foss` (flagship, network-free) flavor is published here. The opt-in `sync`
-      # flavor (docs/COMPANION_PHONE_2B.md) isn't feature-complete yet and will get its own
+      # flavor (docs/COMPANION_PHONE.md) is not feature-complete and will get its own
       # release path once it is.
       - name: Build release APK
         env:

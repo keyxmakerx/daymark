@@ -186,7 +186,7 @@ fun EntryEditorScreen(
                             text = MaterialTheme.moodLabels.forLevel(mood.level),
                             style = MaterialTheme.typography.labelSmall,
                             color = if (selected) MaterialTheme.colorScheme.onSurface
-                            else MaterialTheme.colorScheme.tertiary,
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             textAlign = TextAlign.Center,

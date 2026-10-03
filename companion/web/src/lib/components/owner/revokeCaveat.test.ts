@@ -51,18 +51,31 @@ function markupOf(source: string): string {
 }
 
 describe('the revoke caveat is the shared constant, not a rewording of it', () => {
-  it('GrantManager states the caveat verbatim, then keeps the re-key fact as a second sentence', () => {
+  it('GrantManager states the caveat verbatim, and nothing after it promises a cutoff', () => {
     const source = readFileSync(new URL('./GrantManager.svelte', import.meta.url), 'utf8')
     expect(source).toMatch(/import \{ REVOKE_CAVEAT \} from '\.\.\/\.\.\/pairing\/copy'/)
 
     const markup = markupOf(source)
     expect(markup).toContain('{REVOKE_CAVEAT}')
 
-    // The re-key fact is real information and stays — but AFTER the verbatim sentence, not
-    // instead of it (the issue's explicit instruction: second sentence, not a replacement).
+    /*
+     * The caveat is the last word in its paragraph (#320). The sentence that followed it said "a
+     * true cutoff for past data is a re-key, which is a separate step", and there is no such cutoff:
+     * pairing again protects only what is sealed afterwards (pairing/copy.ts, replaceBody).
+     */
     const constantAt = markup.indexOf('{REVOKE_CAVEAT}')
-    const rekeyAt = markup.indexOf('re-key')
-    expect(rekeyAt).toBeGreaterThan(constantAt)
+    const paragraphEnd = markup.indexOf('</p>', constantAt)
+    const after = (m: string) => m.slice(m.indexOf('{REVOKE_CAVEAT}'), m.indexOf('</p>', m.indexOf('{REVOKE_CAVEAT}')))
+    expect(paragraphEnd).toBeGreaterThan(constantAt)
+    expect(after(markup).replace('{REVOKE_CAVEAT}', '').trim()).toBe('')
+    expect(after(markup)).not.toMatch(/re-?key|cutoff/i)
+    // Control: the retired sentence planted back after the constant is seen by the same checks.
+    const planted = markup.replace(
+      '{REVOKE_CAVEAT}',
+      '{REVOKE_CAVEAT} A true cutoff for past data is a re-key, which is a separate step.',
+    )
+    expect(after(planted)).toMatch(/re-?key|cutoff/i)
+    expect(after(planted).replace('{REVOKE_CAVEAT}', '').trim()).not.toBe('')
 
     // Control: a screen that says something else in that paragraph does not pass this check —
     // proving the assertion is actually reading the sentence, not just the presence of the tag.

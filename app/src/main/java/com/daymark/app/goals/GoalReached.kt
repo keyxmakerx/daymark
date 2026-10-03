@@ -9,7 +9,7 @@ package com.daymark.app.goals
  * ## The one thing this file exists to keep apart
  *
  * `Goal.archived` is not this. Archiving is what a person does when they give up on something, put
- * it aside, or lose interest, and `docs/DECISIONS_2026-08.md` §D5 protects that act: *"Abandoning is
+ * it aside, or lose interest, and `docs/DECISIONS.md` §D5 protects that act: *"Abandoning is
  * one tap, neutrally worded, never counted as failure."* Reading an archived goal as a reached one
  * would file that act under achievement and, on the Sky, draw a star for it — the app congratulating
  * someone for letting go of something, on the one surface whose whole claim is that it does not

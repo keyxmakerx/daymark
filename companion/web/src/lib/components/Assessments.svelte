@@ -21,7 +21,7 @@
   }
 
   // Results stay on this device. Export mirrors the planned BackupData v14 shape so they can
-  // later fold into the encrypted snapshot and sync symmetrically (COMPANION_FEATURES.md §5).
+  // later fold into the encrypted snapshot and sync symmetrically (not built: #237).
   function download() {
     if (!lastResult) return
     const blob = new Blob([JSON.stringify(lastResult, null, 2)], { type: 'application/json' })

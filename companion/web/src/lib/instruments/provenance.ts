@@ -13,9 +13,14 @@ export const PROVENANCE_LABEL: Record<ProvenanceTier, string> = {
   custom: 'Custom',
 }
 
-/** A small glyph paired with the label in the UI. */
-export const PROVENANCE_GLYPH: Record<ProvenanceTier, string> = {
-  validated: '✓',
+/**
+ * The mark beside the label, for the tiers that depart from a published instrument: ◐ draws on
+ * part of one, ✎ on none. A validated tool departs from nothing, so it carries its word alone:
+ * any mark there reads as a verdict, and a tick as a pass, which this product never shows
+ * (CLAUDE.md §4, #278). The phone's badge draws the same (`ui/components/ProvenanceBadge.kt`).
+ */
+export const PROVENANCE_GLYPH: Record<ProvenanceTier, string | null> = {
+  validated: null,
   adapted: '◐',
   custom: '✎',
 }

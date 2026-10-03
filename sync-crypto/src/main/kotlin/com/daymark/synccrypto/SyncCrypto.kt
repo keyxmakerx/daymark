@@ -6,6 +6,8 @@ import com.goterl.lazysodium.interfaces.KeyDerivation
 import com.goterl.lazysodium.interfaces.PwHash
 import com.goterl.lazysodium.interfaces.Sign
 import com.sun.jna.NativeLong
+import java.nio.CharBuffer
+import java.nio.charset.CodingErrorAction
 import java.util.Base64
 
 /**
@@ -14,11 +16,31 @@ import java.util.Base64
  * `docs/SYNC_PROTOCOL.md` for the normative wire format this implements.
  *
  * Contract (per docs/COMPANION_SECURITY.md §4):
- *   passphrase --Argon2id(salt, mem>=256MiB, ops>=3)--> master(32)
+ *   the key parameters: passphrase --Argon2id(salt, 256<=mem<=512 MiB, 3<=ops<=8)--> master(32)
+ *   the wrapped key:    passphrase or recovery code --Argon2id(the slot's salt, same range)--> KEK
+ *                       KEK --XChaCha20-Poly1305 open(the slot, AAD "daymark.datakey.v1|" + kind)--> master(32)
  *   master --crypto_kdf(ctx="dmsync01")--+- id 1 -> SYNC_KEY        (XChaCha20-Poly1305)
  *                                         +- id 2 -> MANIFEST_SEED   (Ed25519 signing seed)
- *   snapshot blob = MAGIC("DMS1") | FMT(1) | nonce(24) | XChaCha20Poly1305(plaintext, AAD, nonce, SYNC_KEY)
- *   AAD = utf8("daymark.snapshot.v1|" + lineage + "|" + version)
+ *                                         (ids 3 and 4 are the owner's pairing identity, which the web
+ *                                          derives in owner/identity.ts and this module does not)
+ *   snapshot blob = MAGIC("DMS1") | FMT | nonce(24) | XChaCha20Poly1305(body, AAD, nonce, SYNC_KEY)
+ *     FMT 0x02, the only format written:  body = pad(plaintext)   AAD = utf8("daymark.snapshot.v2|" + lineage + "|" + version)
+ *     FMT 0x01, still read, never written: body = plaintext        AAD = utf8("daymark.snapshot.v1|" + lineage + "|" + version)
+ *
+ * Padded snapshots (#315, #316): a snapshot is padded by [Padding] before it is encrypted, so the
+ * stored size says which size bucket it falls in and not how much was written between two syncs.
+ * The server still sees when each version arrives. The format byte sits outside the ciphertext,
+ * where the server can change it, so each format also names itself in the associated data: a
+ * relabelled envelope fails to open instead of opening in the wrong form. Unpadding runs only
+ * after the AEAD has authenticated the body, and it is strict. Format 1 is opened and never
+ * written: every snapshot stored before #315 is in it.
+ *
+ * The key document (#403): once the owner has a wrapped key, the server serves it instead of the
+ * key parameters (docs/SYNC_PROTOCOL.md §1.2), so [openWithPassphrase] reads either kind and
+ * [openWithRecoveryCode] opens the wrapped key with a recovery code, as
+ * `companion/web/src/lib/recovery/dataKey.ts` does. [KeyDocument] reads the document strictly and
+ * [RecoveryCode] reads the code exactly as the web does. No key is derived below the floor or above
+ * the ceiling ([KdfParams]), by any public path: both travel in documents the server hands out.
  *
  * [sodium] is typed as the shared abstract `com.goterl.lazysodium.LazySodium` base class,
  * which both `lazysodium-java` (LazySodiumJava, used by this module's own unit tests — real
@@ -36,10 +58,34 @@ class SyncCrypto(private val sodium: LazySodium) {
 
     class SyncCryptoException(message: String) : Exception(message)
 
+    /**
+     * Argon2id parameters. The algorithm is always Argon2id (ALG_ARGON2ID13); a document naming another is refused.
+     *
+     * Every public path derives only between the floor and the ceiling, the floor checked first, as
+     * the web's `kdfRange` checks it (`companion/web/src/lib/sync/crypto.ts`). The parameters travel
+     * in documents the server hands out, so both bounds are the server's to move: under the floor a
+     * key is cheap to guess from what the server stores, and over the ceiling the server would
+     * decide how much memory and time the phone spends, because Argon2id runs before the AEAD can
+     * refuse anything.
+     */
     class KdfParams(val memMiB: Int, val ops: Int) {
+        /** At or above the floor every key this module derives through a public path meets. */
+        val meetsFloor: Boolean get() = memMiB >= FLOOR_MEM_MIB && ops >= FLOOR_OPS
+
+        /** At or under the ceiling every key this module derives through a public path keeps to. */
+        val withinCeiling: Boolean get() = memMiB <= CEILING_MEM_MIB && ops <= CEILING_OPS
+
         companion object {
-            /** Meets the security doc's floor (>=256 MiB, >=3 ops). */
-            val DEFAULT = KdfParams(memMiB = 256, ops = 3)
+            /** The security doc's floor (docs/SYNC_PROTOCOL.md §1.2): at least 256 MiB and 3 passes. */
+            const val FLOOR_MEM_MIB = 256
+            const val FLOOR_OPS = 3
+
+            /** The ceiling (docs/SYNC_PROTOCOL.md §1.2): at most 512 MiB and 8 passes. */
+            const val CEILING_MEM_MIB = 512
+            const val CEILING_OPS = 8
+
+            /** Exactly the floor, which is what every writer uses: well inside the ceiling. */
+            val DEFAULT = KdfParams(memMiB = FLOOR_MEM_MIB, ops = FLOOR_OPS)
         }
     }
 
@@ -52,74 +98,266 @@ class SyncCrypto(private val sodium: LazySodium) {
     /** 16-byte random KDF salt (non-secret; published in keyparams). */
     fun newSalt(): ByteArray = sodium.randomBytesBuf(PwHash.SALTBYTES)
 
-    /** passphrase + salt + params -> master -> purpose-separated subkeys. */
+    /**
+     * passphrase + salt + params -> master -> purpose-separated subkeys. Refuses params below the
+     * floor or above the ceiling, before anything is derived: they arrive in the key parameters the
+     * server hands out, and a server that lowered them would make the master cheap to guess from
+     * what it stores, and one that raised them would decide how much memory and time this derivation
+     * takes.
+     */
     fun deriveKeys(passphrase: String, salt: ByteArray, params: KdfParams = KdfParams.DEFAULT): OwnerKeys {
-        val passwordBytes = passphrase.toByteArray(Charsets.UTF_8)
-        val master = ByteArray(KeyDerivation.MASTER_KEY_BYTES)
-        val memLimit = NativeLong(params.memMiB.toLong() * 1024 * 1024)
-        val ok = sodium.cryptoPwHash(
-            master, master.size, passwordBytes, passwordBytes.size, salt,
-            params.ops.toLong(), memLimit, PwHash.Alg.PWHASH_ALG_ARGON2ID13,
-        )
-        if (!ok) throw SyncCryptoException("Argon2id key derivation failed")
-
-        val syncKey = deriveSubkey(master, SUBKEY_SYNC, AEAD.XCHACHA20POLY1305_IETF_KEYBYTES)
-        val manifestSeed = deriveSubkey(master, SUBKEY_MANIFEST, Sign.SEEDBYTES)
-        return OwnerKeys(syncKey, manifestSeed)
+        if (!params.meetsFloor) throw SyncCryptoException(BELOW_FLOOR)
+        if (!params.withinCeiling) throw SyncCryptoException(ABOVE_CEILING)
+        return deriveKeysWithoutFloor(passphrase, salt, params)
     }
 
-    private fun deriveSubkey(master: ByteArray, subkeyId: Long, subkeyLen: Int): ByteArray {
+    /**
+     * [deriveKeys] without the floor or the ceiling, for the web's conformance vectors only: they
+     * are derived at 8 MiB and 2 passes so that both suites stay fast, and the phone must reproduce
+     * them exactly. Internal, so that nothing outside this module derives a key outside the range.
+     */
+    internal fun deriveKeysWithoutFloor(passphrase: String, salt: ByteArray, params: KdfParams): OwnerKeys =
+        ownerKeysThenWipe(argon2id(secretBytes(passphrase), salt, params))
+
+    /**
+     * The owner's key document, of either kind, and their passphrase -> their keys (#403).
+     *
+     * The key parameters give the master by Argon2id, as [deriveKeys] does. The wrapped key gives it
+     * from its first passphrase slot, the one the web opens with a passphrase, and a passphrase that
+     * does not open that slot is [KeyDocumentException.Reason.DID_NOT_OPEN] and nothing more
+     * specific. Over the key parameters a wrong passphrase cannot be told from a right one: it
+     * derives another master, and the snapshot is what then refuses to open.
+     *
+     * The master is wiped before this returns; only the subkeys leave. Throws [SyncCryptoException]
+     * if Argon2id itself fails, as it does when the device cannot spare the memory.
+     */
+    fun openWithPassphrase(document: KeyDocument, passphrase: String): OwnerKeys =
+        ownerKeysThenWipe(masterWithPassphrase(document, passphrase))
+
+    /**
+     * The wrapped key and a recovery code as the person typed it -> their keys (#403).
+     *
+     * The code is read first ([RecoveryCode.parse]), so one mistyped character is a
+     * [RecoveryCodeException] before any key is derived, rather than a failed open seconds later.
+     * Then each recovery slot is tried in document order, as the web tries them, and the first that
+     * opens gives the master. The key parameters have no recovery slot, so they are
+     * [KeyDocumentException.Reason.NO_SLOT_OF_THAT_KIND].
+     */
+    fun openWithRecoveryCode(document: KeyDocument, typedCode: String): OwnerKeys =
+        ownerKeysThenWipe(masterWithRecoveryCode(document, typedCode))
+
+    /** [openWithPassphrase] up to the master, which the caller wipes. Internal, so the tests can pin it. */
+    internal fun masterWithPassphrase(document: KeyDocument, passphrase: String): ByteArray = when (document) {
+        is KeyDocument.KeyParams -> {
+            requireDocumentRange(document.kdf)
+            argon2id(secretBytes(passphrase), document.salt, document.kdf)
+        }
+        is KeyDocument.WrappedKey -> {
+            val slot = document.slots.firstOrNull { it.kind == KeyDocument.SlotKind.PASSPHRASE }
+                ?: throw KeyDocumentException(KeyDocumentException.Reason.NO_SLOT_OF_THAT_KIND)
+            unwrapSlot(slot, passphrase) ?: throw KeyDocumentException(KeyDocumentException.Reason.DID_NOT_OPEN)
+        }
+    }
+
+    /** [openWithRecoveryCode] up to the master, which the caller wipes. Internal, so the tests can pin it. */
+    internal fun masterWithRecoveryCode(document: KeyDocument, typedCode: String): ByteArray {
+        val code = RecoveryCode.parse(typedCode)
+        val slots = (document as? KeyDocument.WrappedKey)?.slots.orEmpty()
+            .filter { it.kind == KeyDocument.SlotKind.RECOVERY }
+        if (slots.isEmpty()) throw KeyDocumentException(KeyDocumentException.Reason.NO_SLOT_OF_THAT_KIND)
+        for (slot in slots) unwrapSlot(slot, code.canonical)?.let { return it }
+        throw KeyDocumentException(KeyDocumentException.Reason.DID_NOT_OPEN)
+    }
+
+    /** One slot and one secret -> the master, or null when the secret does not open the slot. */
+    private fun unwrapSlot(slot: KeyDocument.WrappedKey.Slot, secret: String): ByteArray? {
+        // The reader checked all of this for every slot; it is checked again where it is used, and a
+        // nonce or ciphertext of another length would be read past its end by libsodium.
+        requireDocumentRange(slot.kdf)
+        if (slot.nonce.size != KeyDocument.NONCE_BYTES || slot.ciphertext.size != KeyDocument.MASTER_BYTES + KeyDocument.TAG_BYTES) {
+            throw KeyDocumentException(KeyDocumentException.Reason.WRONG_LENGTH)
+        }
+        val kek = argon2id(secretBytes(secret), slot.salt, slot.kdf)
+        try {
+            val aad = dataKeyAad(slot.kind)
+            val master = ByteArray(KeyDocument.MASTER_BYTES)
+            val masterLen = LongArray(1)
+            val ok = sodium.cryptoAeadXChaCha20Poly1305IetfDecrypt(
+                master, masterLen, null, slot.ciphertext, slot.ciphertext.size.toLong(),
+                aad, aad.size.toLong(), slot.nonce, kek,
+            )
+            if (ok && masterLen[0] == master.size.toLong()) return master
+            master.fill(0)
+            return null
+        } finally {
+            kek.fill(0)
+        }
+    }
+
+    /**
+     * One locked copy of [master] under [secret], as the web's `wrapDataKey` makes it: Argon2id over
+     * [salt] at [params], never below the floor or above the ceiling, then XChaCha20-Poly1305 under
+     * [nonce] with the slot's associated data. For a recovery slot the secret is the code's 30
+     * canonical symbols.
+     *
+     * The salt and nonce are passed in so that the phone's writer is held to the web's byte for byte
+     * (KeyDocumentVectorTest). Internal, because no phone flow writes a key document yet; the one that
+     * does must draw a fresh salt and nonce for every slot.
+     */
+    internal fun wrapSlot(
+        master: ByteArray,
+        secret: String,
+        kind: KeyDocument.SlotKind,
+        params: KdfParams,
+        salt: ByteArray,
+        nonce: ByteArray,
+    ): KeyDocument.WrappedKey.Slot {
+        if (!params.meetsFloor) throw SyncCryptoException(BELOW_FLOOR)
+        if (!params.withinCeiling) throw SyncCryptoException(ABOVE_CEILING)
+        if (master.size != KeyDocument.MASTER_BYTES) throw SyncCryptoException("master key must be ${KeyDocument.MASTER_BYTES} bytes")
+        if (nonce.size != KeyDocument.NONCE_BYTES) throw SyncCryptoException("nonce must be ${KeyDocument.NONCE_BYTES} bytes")
+        val kek = argon2id(secretBytes(secret), salt, params)
+        try {
+            val aad = dataKeyAad(kind)
+            val ciphertext = ByteArray(KeyDocument.MASTER_BYTES + KeyDocument.TAG_BYTES)
+            val ciphertextLen = LongArray(1)
+            val ok = sodium.cryptoAeadXChaCha20Poly1305IetfEncrypt(
+                ciphertext, ciphertextLen, master, master.size.toLong(),
+                aad, aad.size.toLong(), null, nonce, kek,
+            )
+            if (!ok || ciphertextLen[0] != ciphertext.size.toLong()) throw SyncCryptoException("AEAD encryption failed")
+            return KeyDocument.WrappedKey.Slot(kind, params, salt.copyOf(), nonce.copyOf(), ciphertext)
+        } finally {
+            kek.fill(0)
+        }
+    }
+
+    /** The floor first, then the ceiling, as [KeyDocument] reads them. */
+    private fun requireDocumentRange(params: KdfParams) {
+        if (!params.meetsFloor) throw KeyDocumentException(KeyDocumentException.Reason.KDF_BELOW_FLOOR)
+        if (!params.withinCeiling) throw KeyDocumentException(KeyDocumentException.Reason.KDF_ABOVE_CEILING)
+    }
+
+    /**
+     * Argon2id (`crypto_pwhash`, ALG_ARGON2ID13) of [secret] to 32 bytes: the master from the key
+     * parameters, or a slot's KEK. [secret] is wiped here and the caller wipes the result. The salt
+     * length is checked here because lazysodium does not check it and libsodium reads 16 bytes of
+     * whatever it is handed.
+     */
+    private fun argon2id(secret: ByteArray, salt: ByteArray, params: KdfParams): ByteArray {
+        try {
+            if (salt.size != PwHash.SALTBYTES) throw SyncCryptoException("salt must be ${PwHash.SALTBYTES} bytes")
+            val memLimit = try {
+                NativeLong(params.memMiB.toLong() * 1024 * 1024)
+            } catch (_: IllegalArgumentException) {
+                // More bytes than this platform's native long holds: a 32-bit device, at 4 GiB and up.
+                throw SyncCryptoException(ARGON2ID_FAILED)
+            }
+            val out = ByteArray(KeyDerivation.MASTER_KEY_BYTES)
+            val ok = sodium.cryptoPwHash(
+                out, out.size, secret, secret.size, salt,
+                params.ops.toLong(), memLimit, PwHash.Alg.PWHASH_ALG_ARGON2ID13,
+            )
+            if (!ok) {
+                out.fill(0)
+                throw SyncCryptoException(ARGON2ID_FAILED)
+            }
+            return out
+        } finally {
+            secret.fill(0)
+        }
+    }
+
+    /** master -> the subkeys this module uses (ids 1 and 2), and the master wiped either way. */
+    private fun ownerKeysThenWipe(master: ByteArray): OwnerKeys {
+        try {
+            return OwnerKeys(
+                syncKey = deriveSubkey(master, SUBKEY_SYNC, AEAD.XCHACHA20POLY1305_IETF_KEYBYTES),
+                manifestSeed = deriveSubkey(master, SUBKEY_MANIFEST, Sign.SEEDBYTES),
+            )
+        } finally {
+            master.fill(0)
+        }
+    }
+
+    internal fun deriveSubkey(master: ByteArray, subkeyId: Long, subkeyLen: Int): ByteArray {
         val subkey = ByteArray(subkeyLen)
         val rc = sodium.cryptoKdfDeriveFromKey(subkey, subkey.size, subkeyId, KDF_CONTEXT, master)
         if (rc != 0) throw SyncCryptoException("crypto_kdf_derive_from_key failed (id=$subkeyId)")
         return subkey
     }
 
-    /** plaintext (e.g. a BackupData JSON, UTF-8) -> opaque envelope bytes for the server. */
-    fun encryptSnapshot(plaintext: ByteArray, syncKey: ByteArray, lineage: String, version: Long): ByteArray {
-        val nonce = sodium.randomBytesBuf(AEAD.XCHACHA20POLY1305_IETF_NPUBBYTES)
-        val aad = aad(lineage, version)
-        val cipher = ByteArray(plaintext.size + AEAD.XCHACHA20POLY1305_IETF_ABYTES)
+    /**
+     * plaintext (e.g. a BackupData JSON, UTF-8) -> opaque envelope bytes for the server, padded
+     * (format 2), `snapshotBlobLength(plaintext.size)` bytes long.
+     */
+    fun encryptSnapshot(plaintext: ByteArray, syncKey: ByteArray, lineage: String, version: Long): ByteArray =
+        sealSnapshot(plaintext, syncKey, lineage, version, sodium.randomBytesBuf(NONCE_BYTES))
+
+    /**
+     * [encryptSnapshot] under a nonce the caller supplies, so the writer itself can be held to the
+     * web's conformance vector. Not public: a nonce used twice under one key breaks
+     * XChaCha20-Poly1305, and production draws a fresh one for every snapshot.
+     */
+    internal fun sealSnapshot(plaintext: ByteArray, syncKey: ByteArray, lineage: String, version: Long, nonce: ByteArray): ByteArray {
+        if (nonce.size != NONCE_BYTES) throw SyncCryptoException("nonce must be $NONCE_BYTES bytes")
+        val body = try {
+            Padding.pad(plaintext)
+        } catch (_: Padding.PaddingException) {
+            throw SyncCryptoException("snapshot too large to pad")
+        }
+        val aad = aad(FMT_PADDED, lineage, version)
+        val cipher = ByteArray(body.size + TAG_BYTES)
         val cipherLen = LongArray(1)
         val ok = sodium.cryptoAeadXChaCha20Poly1305IetfEncrypt(
-            cipher, cipherLen, plaintext, plaintext.size.toLong(),
+            cipher, cipherLen, body, body.size.toLong(),
             aad, aad.size.toLong(), null, nonce, syncKey,
         )
         if (!ok) throw SyncCryptoException("AEAD encryption failed")
 
-        val out = ByteArray(MAGIC.size + 1 + nonce.size + cipherLen[0].toInt())
+        val out = ByteArray(HEADER_BYTES + cipherLen[0].toInt())
         var offset = 0
         MAGIC.copyInto(out, offset); offset += MAGIC.size
-        out[offset] = FMT; offset += 1
+        out[offset] = FMT_PADDED; offset += 1
         nonce.copyInto(out, offset); offset += nonce.size
         cipher.copyInto(out, offset, 0, cipherLen[0].toInt())
         return out
     }
 
-    /** Opaque envelope bytes -> plaintext. Throws if tampered, wrong key, or wrong lineage/version. */
+    /**
+     * Opaque envelope bytes -> plaintext, from either format. Throws if tampered, wrong key, wrong
+     * lineage/version, or the format byte was changed (the associated data names the format).
+     */
     fun decryptSnapshot(envelope: ByteArray, syncKey: ByteArray, lineage: String, version: Long): ByteArray {
-        val nb = AEAD.XCHACHA20POLY1305_IETF_NPUBBYTES
-        val headerLen = MAGIC.size + 1 + nb
-        if (envelope.size < headerLen) throw SyncCryptoException("envelope too short")
+        if (envelope.size < HEADER_BYTES) throw SyncCryptoException("envelope too short")
         for (i in MAGIC.indices) {
             if (envelope[i] != MAGIC[i]) throw SyncCryptoException("bad magic — not a Daymark snapshot envelope")
         }
-        if (envelope[MAGIC.size] != FMT) {
-            throw SyncCryptoException("unsupported envelope format ${envelope[MAGIC.size]}")
+        val format = envelope[MAGIC.size]
+        if (format != FMT_PADDED && format != FMT_UNPADDED) {
+            throw SyncCryptoException("unsupported envelope format ${format.toInt() and 0xff}")
         }
-        val nonce = envelope.copyOfRange(MAGIC.size + 1, headerLen)
-        val cipher = envelope.copyOfRange(headerLen, envelope.size)
-        if (cipher.size < AEAD.XCHACHA20POLY1305_IETF_ABYTES) throw SyncCryptoException("envelope too short")
+        val nonce = envelope.copyOfRange(MAGIC.size + 1, HEADER_BYTES)
+        val cipher = envelope.copyOfRange(HEADER_BYTES, envelope.size)
+        if (cipher.size < TAG_BYTES) throw SyncCryptoException("envelope too short")
 
-        val aad = aad(lineage, version)
-        val plaintext = ByteArray(cipher.size - AEAD.XCHACHA20POLY1305_IETF_ABYTES)
-        val plaintextLen = LongArray(1)
+        val aad = aad(format, lineage, version)
+        val opened = ByteArray(cipher.size - TAG_BYTES)
+        val openedLen = LongArray(1)
         val ok = sodium.cryptoAeadXChaCha20Poly1305IetfDecrypt(
-            plaintext, plaintextLen, null, cipher, cipher.size.toLong(),
+            opened, openedLen, null, cipher, cipher.size.toLong(),
             aad, aad.size.toLong(), nonce, syncKey,
         )
         if (!ok) throw SyncCryptoException("decryption failed — tampered, wrong key, or wrong lineage/version")
-        return if (plaintextLen[0].toInt() == plaintext.size) plaintext else plaintext.copyOf(plaintextLen[0].toInt())
+        val body = if (openedLen[0].toInt() == opened.size) opened else opened.copyOf(openedLen[0].toInt())
+        if (format == FMT_UNPADDED) return body
+        // Only an authenticated body reaches here, so a padding refusal is never about tampering:
+        // it means the writer that holds the sync key padded wrongly.
+        return try {
+            Padding.unpad(body)
+        } catch (_: Padding.PaddingException) {
+            throw SyncCryptoException("snapshot opened, but its padding is not in the standard form")
+        }
     }
 
     /** SHA-256 hex over arbitrary bytes (matches the server's X-Content-Hash). */
@@ -162,14 +400,72 @@ class SyncCrypto(private val sodium: LazySodium) {
 
     companion object {
         val MAGIC = byteArrayOf(0x44, 0x4D, 0x53, 0x31) // "DMS1"
-        const val FMT: Byte = 0x01
+
+        /** The unpadded format of every snapshot stored before #315. Opened, never written. */
+        const val FMT_UNPADDED: Byte = 0x01
+
+        /** The padded format (#315): the only one [encryptSnapshot] writes. */
+        const val FMT_PADDED: Byte = 0x02
+
+        // Fixed by the algorithm (crypto_aead_xchacha20poly1305_ietf_NPUBBYTES and _ABYTES).
+        private const val NONCE_BYTES = AEAD.XCHACHA20POLY1305_IETF_NPUBBYTES
+        private const val TAG_BYTES = AEAD.XCHACHA20POLY1305_IETF_ABYTES
+        private val HEADER_BYTES = MAGIC.size + 1 + NONCE_BYTES
+
+        /** The u32 length prefix [Padding] puts in front of the plaintext (its layout). */
+        private const val PAD_PREFIX_BYTES = 4
 
         private val KDF_CONTEXT = "dmsync01".toByteArray(Charsets.UTF_8) // exactly 8 bytes
         private const val SUBKEY_SYNC = 1L
         private const val SUBKEY_MANIFEST = 2L
 
-        fun aad(lineage: String, version: Long): ByteArray =
-            "daymark.snapshot.v1|$lineage|$version".toByteArray(Charsets.UTF_8)
+        private const val BELOW_FLOOR = "KDF parameters are below the security floor; refusing to derive"
+        private const val ABOVE_CEILING = "KDF parameters are above the ceiling; refusing to derive"
+        private const val ARGON2ID_FAILED = "Argon2id key derivation failed"
+
+        /** A wrapped-key slot's associated data: the kind of secret is part of what the AEAD authenticates. */
+        private fun dataKeyAad(kind: KeyDocument.SlotKind): ByteArray =
+            "daymark.datakey.v1|${kind.wire}".toByteArray(Charsets.UTF_8)
+
+        private val U_FFFD_UTF8 = byteArrayOf(0xEF.toByte(), 0xBF.toByte(), 0xBD.toByte())
+
+        /**
+         * A secret's UTF-8 bytes as the web's `TextEncoder` makes them, which is what libsodium's
+         * JavaScript wrapper hashes: an unpaired surrogate becomes U+FFFD (EF BF BD), where
+         * [String.toByteArray] would write "?" and so derive a key the web never would. Well-formed
+         * text encodes the same either way. The encoder's own buffer is wiped; the String cannot be.
+         */
+        internal fun secretBytes(secret: String): ByteArray {
+            val encoder = Charsets.UTF_8.newEncoder()
+                .onMalformedInput(CodingErrorAction.REPLACE)
+                .onUnmappableCharacter(CodingErrorAction.REPLACE)
+                .replaceWith(U_FFFD_UTF8)
+            val buffer = encoder.encode(CharBuffer.wrap(secret))
+            val bytes = ByteArray(buffer.remaining())
+            buffer.get(bytes)
+            if (buffer.hasArray()) buffer.array().fill(0)
+            return bytes
+        }
+
+        /** Each format's name in the associated data, so the format byte cannot be changed on its own. */
+        private fun aad(format: Byte, lineage: String, version: Long): ByteArray {
+            val context = when (format) {
+                FMT_PADDED -> "daymark.snapshot.v2"
+                FMT_UNPADDED -> "daymark.snapshot.v1"
+                else -> throw SyncCryptoException("unsupported envelope format ${format.toInt() and 0xff}")
+            }
+            return "$context|$lineage|$version".toByteArray(Charsets.UTF_8)
+        }
+
+        /**
+         * The size of the blob [encryptSnapshot] writes for a plaintext of [plaintextLength] bytes:
+         * the header, the padded body and the tag. Needs no libsodium, so a writer can check a
+         * snapshot against the server's size limit before it derives a key or sends anything.
+         */
+        fun snapshotBlobLength(plaintextLength: Long): Long {
+            require(plaintextLength >= 0) { "snapshotBlobLength: bad length $plaintextLength" }
+            return HEADER_BYTES + Padding.paddedLength(PAD_PREFIX_BYTES + plaintextLength) + TAG_BYTES
+        }
 
         /**
          * All base64 in the protocol is RFC 4648 §5 URL-safe, NO padding. Deliberately uses
@@ -178,7 +474,28 @@ class SyncCrypto(private val sodium: LazySodium) {
          * conformance vector in SyncCryptoTest / docs/SYNC_PROTOCOL.md §1.2.
          */
         fun toBase64(bytes: ByteArray): String = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
-        fun fromBase64(b64: String): ByteArray = Base64.getUrlDecoder().decode(b64)
+
+        /**
+         * That one form and no other, as the web's libsodium `URLSAFE_NO_PADDING` decoder reads it:
+         * no `=`, no `+` or `/`, no whitespace, no lone final character, and no set bits after the
+         * last byte. [java.util.Base64]'s URL decoder alone takes the padding and ignores the stray
+         * bits. Throws [IllegalArgumentException], without repeating the input.
+         */
+        fun fromBase64(b64: String): ByteArray {
+            for (c in b64) {
+                if (c !in 'A'..'Z' && c !in 'a'..'z' && c !in '0'..'9' && c != '-' && c != '_') {
+                    throw IllegalArgumentException(NOT_BASE64URL)
+                }
+            }
+            if (b64.length % 4 == 1) throw IllegalArgumentException(NOT_BASE64URL)
+            val bytes = Base64.getUrlDecoder().decode(b64)
+            // The only encoding of these bytes is the canonical one: the unused bits of the last
+            // character are zero.
+            if (toBase64(bytes) != b64) throw IllegalArgumentException(NOT_BASE64URL)
+            return bytes
+        }
+
+        private const val NOT_BASE64URL = "not URL-safe base64 without padding"
 
         /** Canonical bytes a manifest is signed over (stable key order, matches JSON.stringify). */
         fun manifestBytes(manifest: Manifest): ByteArray {

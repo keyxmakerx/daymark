@@ -122,7 +122,7 @@ export function loadPins(storage: PinStorage | null = defaultPinStorage()): PinS
     return PinStore.load(raw)
   } catch {
     throw new PairingError(
-      'the stored therapist pins are unreadable — clear them and re-pin after checking the fingerprint words out of band',
+      'the stored clinician pins are unreadable — clear them and re-pin after checking the fingerprint words out of band',
     )
   }
 }
@@ -136,7 +136,7 @@ export function savePins(pins: PinStore, storage: PinStorage | null = defaultPin
     // Fail closed, but not with a raw DOMException: "The quota has been exceeded." tells an owner
     // trying to share with their therapist nothing about what to do next.
     throw new PairingError(
-      'this browser refused to save the pin, so it could not remember this therapist\'s keys — nothing was sealed or sent',
+      'this browser refused to save the pin, so it could not remember this clinician\'s keys — nothing was sealed or sent',
     )
   }
 }
@@ -338,8 +338,8 @@ export function rotatePin(
   if (!rotation) {
     throw new PairingError(
       pins.isPinned(ed25519Fp)
-        ? 'the key on file for this therapist is already the one you are holding — nothing to rotate'
-        : 'nothing is pinned for this therapist, so there is nothing to rotate — the first share you seal records their key',
+        ? 'the key on file for this clinician is already the one you are holding — nothing to rotate'
+        : 'nothing is pinned for this clinician, so there is nothing to rotate — the first share you seal records their key',
     )
   }
   if (normalizeWords(confirmation.expectedWords).split(' ').length < 4) {

@@ -100,9 +100,10 @@ describe('forgetting and rotating the pin record', () => {
   /** What ShareBuilder.seal() does: address the share to whatever box key it was handed. */
   function seal(boxPub: Uint8Array, pins: PinStore, peer: Identity = ther) {
     const meta: ShareMeta = {
-      context: 'daymark.share.v1',
+      context: 'daymark.share.v2',
       shareId: 'share-1',
       version: 0,
+      createdAt: 1_000,
       recipientFp: fingerprint(boxPub),
       expiry: 10_000,
       ownerSigningFp: ownerFp,

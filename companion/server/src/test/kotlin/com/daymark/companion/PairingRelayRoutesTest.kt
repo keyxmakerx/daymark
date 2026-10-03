@@ -31,9 +31,9 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * The CPace relay, over the wire (plan §3.7.3: owner posts, therapist fetches and responds,
- * owner collects — three touches, none simultaneous), and the approval that turns a matched
- * code into an enrolment.
+ * The CPace relay, over the wire (COMPANION_PAIRING.md §4: owner posts, therapist fetches and
+ * responds, owner collects — three touches, none simultaneous), and the approval that turns a
+ * matched code into an enrolment.
  *
  * The properties under test are the ones the pairing design's security argument leans on:
  *

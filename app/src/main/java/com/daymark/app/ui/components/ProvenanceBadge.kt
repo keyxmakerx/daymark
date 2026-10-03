@@ -21,10 +21,16 @@ import com.daymark.app.ui.theme.HairlineWidth
  *
  * The label is immutable per version: a tool cannot quietly promote itself, and editing a
  * Validated tool's wording downgrades it to [ADAPTED].
+ *
+ * [symbol] says how a tool departs from a published instrument: a half circle for part of one, a
+ * pencil for none. A Validated tool departs from nothing, so it carries no mark and its word says the
+ * rest. Never a tick and never green: beside a questionnaire either reads as "you passed", and a
+ * filled circle beside Adapted's half would read as full marks against half (`CLAUDE.md` §4, #278).
+ * `TickAndGreenSourceTest` holds `ui/components/` to that.
  */
-enum class ProvenanceTier(val symbol: String, val label: String) {
+enum class ProvenanceTier(val symbol: String?, val label: String) {
     /** A published instrument used faithfully — exact wording, scoring, and banding. */
-    VALIDATED("✅", "Validated"),
+    VALIDATED(null, "Validated"),
 
     /** Built on an evidence-based method but modified. Names the method it draws from. */
     ADAPTED("◐", "Adapted"),
@@ -33,7 +39,13 @@ enum class ProvenanceTier(val symbol: String, val label: String) {
     ORIGINAL("✎", "Original"),
 }
 
-/** The small pill naming a tool's tier, shown on its start screen. */
+/**
+ * The small pill naming a tool's tier, shown on its start screen.
+ *
+ * Its words, and the note's below, take the full ink: on the hairline fill the soft ink measures
+ * 4.36:1 in the light theme, under the 4.5:1 small text needs (#408). `HairlineFillSourceTest` holds
+ * every word on that fill to it.
+ */
 @Composable
 fun ProvenanceBadge(tier: ProvenanceTier, modifier: Modifier = Modifier) {
     Surface(
@@ -43,9 +55,9 @@ fun ProvenanceBadge(tier: ProvenanceTier, modifier: Modifier = Modifier) {
         border = BorderStroke(HairlineWidth, MaterialTheme.colorScheme.outline),
     ) {
         Text(
-            text = "${tier.symbol} ${tier.label}",
+            text = tier.symbol?.let { "$it ${tier.label}" } ?: tier.label,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
         )
     }
@@ -77,7 +89,7 @@ fun ProvenanceNote(
             Text(
                 text = disclaimer,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
     }

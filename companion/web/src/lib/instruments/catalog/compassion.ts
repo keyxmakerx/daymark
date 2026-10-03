@@ -8,7 +8,7 @@ import type { InstrumentDefinition } from '../types'
  * of any future share. `scoring.scales` is deliberately empty, which the validator accepts —
  * an instrument may measure nothing and still be a legitimate thing to hand someone.
  *
- * WHY THESE TWO AND NOT AN AFFIRMATION DECK (docs/EVIDENCE_REVIEW_2026-08.md §2).
+ * WHY THESE TWO AND NOT AN AFFIRMATION DECK (docs/DECISIONS.md §D3).
  * "Affirmation" names at least three different practices and the popular one is the weakest:
  *
  *   - Positive self-statements ("I am enough"). Wood, Perunovic & Lee (2009) found people with

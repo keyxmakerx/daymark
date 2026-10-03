@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.daymark.app.BuildConfig
+import com.daymark.app.flavor.FlavorDoors
 import com.daymark.app.util.DateUtils
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -58,6 +59,8 @@ fun SettingsScreen(
     /** Opens the timing debug screen. Only ever called from a debug build — see the "Debug" row. */
     onOpenTimingDebug: () -> Unit,
     onShowMessage: (String) -> Unit,
+    /** Opens Sync with your server. Only the `sync` flavour draws the row that calls it. */
+    onOpenServerSync: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
@@ -283,11 +286,22 @@ fun SettingsScreen(
                 viewModel.prepareForFilePicker(); csvLauncher.launch("daymark-entries.csv")
             },
         )
+        // "Clinician" is the one word for whoever the person shares with (#158). The row makes no
+        // claim about the verification hash, which no tool checks yet (#311), and says of its file
+        // what the other export rows say of theirs: it is not encrypted.
         ListItem(
-            headlineContent = { Text("Export PDF for therapist") },
-            supportingContent = { Text("A printable mood report with an authenticity stamp") },
+            headlineContent = { Text("Export a PDF report") },
+            supportingContent = { Text("A printable copy to hand to a clinician. Not encrypted.") },
             modifier = Modifier.clickable { showPdfDialog = true },
         )
+
+        // The `sync` flavour's row, through its door (#432). The offline build's door is null, so it
+        // draws no section here and names nothing that could reach a network.
+        FlavorDoors.serverSync?.let { door ->
+            Divider()
+            SectionHeader("Sync")
+            door.SettingsRow(onOpen = onOpenServerSync)
+        }
 
         Divider()
         SectionHeader("Appearance")
@@ -426,16 +440,26 @@ private fun PdfOptionsDialog(
     onExport: (com.daymark.app.export.PdfExportOptions) -> Unit,
 ) {
     var days by remember { mutableStateOf(90) } // 0 = all time
-    var notes by remember { mutableStateOf(true) }
+    // Off until switched on (#336): a check-in note is the person's own words. Charts carry none.
+    var notes by remember { mutableStateOf(false) }
     var charts by remember { mutableStateOf(true) }
     var journal by remember { mutableStateOf(false) }
     val ranges = listOf(30 to "Last 30 days", 90 to "Last 90 days", 365 to "Last 12 months", 0 to "All time")
 
+    // What a report is comes first, before any choice about what goes in it (#336). The words are
+    // the report's own, read from its fixed copy, so there is one sentence and never two. The body
+    // scrolls, so on a short screen the last switch is reached rather than cut off.
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Export PDF report") },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(
+                    com.daymark.app.export.Copy.WHAT_A_REPORT_IS,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
                 Text("Date range", style = MaterialTheme.typography.labelLarge)
                 ranges.forEach { (d, label) ->
                     Row(
@@ -447,7 +471,7 @@ private fun PdfOptionsDialog(
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                ToggleRow("Include notes", notes) { notes = it }
+                ToggleRow("Include check-in notes", notes) { notes = it }
                 ToggleRow("Include charts", charts) { charts = it }
                 ToggleRow("Include all journal entries in range", journal) { journal = it }
             }
@@ -488,7 +512,7 @@ private fun SectionHeader(text: String) {
         text = text.uppercase(),
         style = MaterialTheme.typography.labelSmall,
         letterSpacing = 1.sp,
-        color = MaterialTheme.colorScheme.tertiary,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 18.dp, top = 18.dp, bottom = 6.dp),
     )
 }

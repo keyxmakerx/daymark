@@ -79,17 +79,13 @@ class ReminderScheduler @Inject constructor(
     }
 
     /**
-     * Posts the notification for a fired reminder, with a one-tap "Log" action — if the decision
-     * engine permits an interruption right now.
+     * Posts the notification for a fired reminder, with a one-tap "Log" action, and writes one
+     * ledger line for the firing.
      *
-     * A reminder that keeps going unanswered ends up asking less often, and that is the only
-     * direction available: [OfferKind.REMINDER]'s declared frequency is
-     * [OfferLedgerRepository.defaultFrequency] — every firing, because the person chose these times
-     * themselves and nothing here has any business second-guessing a schedule they set — and
-     * reception can only step that down. There is no combination of rows that posts more
-     * notifications than the schedule already asks for.
-     *
-     * A suppressed firing writes nothing: a ledger line means the app asked, and it did not.
+     * Every firing posts: the decision engine does not gate reminders (the comment inside says why).
+     * The person chose these times, so the schedule they set is the whole of the permission. The
+     * ledger records the firing and whether the one before it was answered; nothing reads that
+     * record to ration this schedule.
      */
     suspend fun showNotification(reminder: Reminder, nowMillis: Long = System.currentTimeMillis()) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -157,7 +153,7 @@ class ReminderScheduler @Inject constructor(
      *
      * **What counts as answered, and what deliberately does not.** A check-in the person wrote.
      * That is the thing the reminder asks for, and it is them doing something on purpose. It is
-     * explicitly *not* "did they open the app" — `docs/DECISIONS_2026-08.md` §D6 rules that one out,
+     * explicitly *not* "did they open the app" — `docs/DECISIONS.md` §D6 rules that one out,
      * and it is right to: a notification raises the odds of an app open ~3.66× with nothing
      * underneath it improving, so it is the metric that would move most easily while meaning least.
      *

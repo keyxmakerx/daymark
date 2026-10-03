@@ -20,8 +20,15 @@
    * and never reached the code.
    *
    * So: no green, and no self-asserted "makes no network requests" — a tampered page could
-   * not be trusted to police itself, which is why the copy points at integrity verification
-   * instead. The strip now states the posture of the surface you are actually on.
+   * not be trusted to police itself, which is why the copy says a page cannot prove that about
+   * itself. The strip now states the posture of the surface you are actually on.
+   *
+   * THE LOCAL SENTENCE ASKS FOR NO CHECK (#252). It used to end "Verify this build's integrity
+   * before you unlock an encrypted backup": no release publishes a value to verify against, and
+   * no local tab opens an encrypted backup. It now says what is true today — there is nothing
+   * to check against yet — and when a release publishes a value (#144), that clause becomes the
+   * pointer to it. The local tabs are the file tab, self-checks, the tool builder and the
+   * practice panel, and none of them reads anything but what is already in this browser.
    *
    * TOKENS. The strip used to be washed in --mood-3-wash with a --mood-3 dot: the middle of
    * the DATA ramp, borrowed to mean "caution". The ramp encodes a person's reported experience
@@ -64,9 +71,9 @@
 <aside class="trust" aria-label="Privacy and trust">
   <p>
     {#if surface === 'local'}
-      <strong>Meant to run offline.</strong> This tab reads your backup in the browser and
-      sends nothing — but a page cannot prove that about itself. Verify this build's integrity
-      before you unlock an encrypted backup.
+      <strong>Meant to run offline.</strong> This tab works on what is already in this browser
+      and sends nothing — but a page cannot prove that about itself, and nothing yet lets you
+      check this build against a published value.
     {:else if surface === 'setup'}
       <!--
         THE FIRST-RUN SCREEN, WHICH IS THE ONE LOCAL-LOOKING SURFACE THAT DOES REACH THE SERVER.
@@ -86,9 +93,16 @@
       entries stay in this browser; what crosses the network is ciphertext your server cannot
       read. It can still see that you synced, and when.
     {:else}
-      <strong>This tab sends data to your server.</strong> Account actions here transmit
-      identifiers, and account recovery transmits the email address you type. Your passphrase
-      and your entries are not involved and never leave this browser.
+      <!--
+        Shown on the owner console and on account recovery. The owner console seals shares and
+        uploads them, so this strip may not say entries never leave (#273): it says what crosses,
+        in the sync strip's shape — what stays, what leaves, what the server can still see — and
+        scopes the claim to the one key a share is sealed to rather than promising who can read it.
+      -->
+      <strong>This tab sends data to your server.</strong> Account actions send identifiers, and
+      recovery sends the email address you type. A share you seal leaves this browser too, as
+      ciphertext sealed to one clinician's pinned key: the server can see that it exists and how
+      big it is, not what is in it. Your passphrase stays in this browser.
     {/if}
   </p>
 </aside>

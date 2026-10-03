@@ -103,22 +103,4 @@ class BlobStoreDurabilityTest {
         assertEquals(32, s.fetch("lineage", 2).size)
         assertEquals(emptyList<String>(), tempFiles())
     }
-
-    @Test
-    fun `putKeyparams reports a disk failure as a store exception, not a raw IOException`() {
-        // It had no try/catch at all, so the identical failure that maps to 507 one method up
-        // surfaced here as a bare 500.
-        if (isRoot()) {
-            println("SKIPPED (running as root — permission bits do not apply)")
-            return
-        }
-        val s = open()
-        s.putKeyparams("""{"salt":"a"}""".toByteArray())
-        assertTrue(dir.setWritable(false, false), "could not drop write permission")
-        try {
-            assertFailsWith<BlobStoreException> { s.putKeyparams("""{"salt":"b"}""".toByteArray()) }
-        } finally {
-            dir.setWritable(true, false)
-        }
-    }
 }

@@ -6,7 +6,7 @@ import androidx.room.Index
 /**
  * Many-to-many link between a [MoodEntry] and the [Person]s an entry says it was *with*.
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2: *"An entry gains **with**."*
+ * `docs/FEATURES.md` §11.1: *"An entry gains **with**."*
  *
  * ## Deliberately the same shape as [EntryActivityCrossRef], column for column
  *

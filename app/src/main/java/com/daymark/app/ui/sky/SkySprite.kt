@@ -17,12 +17,12 @@ import kotlin.math.max
 /**
  * Stars, drawn once into small bitmaps and then stamped.
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1 asks for *"a point, then a glow, never a blur
- * alone"*: a hard-edged near-white core, a tight bright inner glow right against it, and a soft
- * faint outer glow whose spread is the mood. That is three radial gradients per star, and a sky
- * has thousands of stars — so each distinct star is rasterised once and every star that looks the
- * same reuses it. `docs/prototypes/your-sky.html`'s `makeSprite` is the recipe this follows, and
- * where it is departed from the reason is written at the departure.
+ * `docs/SKY.md` §3.5 asks for *"a point, then a glow"*: a hard-edged near-white core, a tight
+ * bright inner glow right against it, and a soft faint outer glow whose spread is the mood. That is
+ * three radial gradients per star, and a sky has thousands of stars — so each distinct star is
+ * rasterised once and every star that looks the same reuses it. `docs/prototypes/your-sky.html`'s
+ * `makeSprite` is the recipe this follows, and where it is departed from the reason is written at
+ * the departure.
  *
  * **This file decides nothing that carries meaning.** Colour comes from [SkyGlyph.starTint], which
  * is age and temperature; brightness from [SkyGlyph.starBrightness], which is age; halo geometry
@@ -172,9 +172,9 @@ internal class SkySprites(private val pxPerDp: Float) {
         }
 
         // The point: hard-edged, crisp, and the same near-white for every star on the surface.
-        // §1: "Every star has a white heart. The core is the same near-white for every star; the
-        // mood is the colour of the glow and how far it spreads." The core carries no age and no
-        // mood, which is what makes equal presence structural rather than arithmetic.
+        // `docs/SKY.md` §3.2: "The core is the same near-white for every star. Age tints the glow
+        // around it." The core carries no age and no mood, which is what makes equal presence
+        // structural rather than arithmetic.
         paint.shader = null
         paint.color = CORE_TINT.copy(alpha = SkyGlyph.coreAlpha(kind, moodLevel))
         canvas.drawCircle(
@@ -189,9 +189,9 @@ internal class SkySprites(private val pxPerDp: Float) {
      * The four soft spikes on a landmark, the way a bright star flares in the eye.
      *
      * Not a kind mark. `SkyDetail.drawsGlyphs` holds kind marks back until the person has leaned
-     * in to one day; a landmark's spikes are part of its *light*, and §1 gives it that light
-     * because the person placed the mark by hand — prominence follows authorship. They are white
-     * rather than tinted for the same reason its core is: a landmark is never redshifted.
+     * in to one day; a landmark's spikes are part of its *light*, and `docs/SKY.md` §3.4 gives it
+     * that light because the person placed the mark by hand — prominence follows authorship. They
+     * are white rather than tinted for the same reason its core is: a landmark is never redshifted.
      */
     private fun spikes(canvas: Canvas, paint: Paint, centre: Offset, radius: Float) {
         val half = SPIKE_THICKNESS_DP * pxPerDp / 2f

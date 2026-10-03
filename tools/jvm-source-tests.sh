@@ -21,14 +21,37 @@
 # the statement and watching the wrong tests fail, which is a thing you only do when the answer
 # takes a second.
 #
+# The same holds for the report's copy. `export/ReportCopySourceTest` reads the PDF renderer, which
+# draws on an Android Canvas and so cannot be compiled here, as text, and
+# `ui/settings/ReportExportSourceTest` reads the Compose settings screen the same way. They import
+# `repoFile` and the string helpers in `ui/SourceText.kt`, and none of those reaches Android or Room.
+# So does the theme: `ui/theme/ColorSchemeSourceTest` reads Theme.kt and Color.kt, which import
+# Compose, holds every colour-scheme role off the mood colours, and holds both schemes to setting
+# every surface container with words at 4.5:1 on each (#410); `ui/FaintInkSourceTest` reads
+# every production file and holds the faint ink off every word. And the Insights month:
+# `ui/insights/MonthGridSourceTest` reads InsightsScreen.kt and the calendar's view model and day
+# model, and holds every day off a mood fill, a blend and an average (#397). `ui/WeekDaysSourceTest`
+# does the same for Insights → Week and Home's strip (#411), measures the ring on every mood dot
+# against Theme.kt and Color.kt, and holds the dots to the order of the day's own list (#412).
+# `ui/theme/DynamicColorSourceTest` reads every production file and holds dynamic colour off until a
+# person turns it on, with the Settings switch as the one thing that writes it (#309).
+# `ui/components/TickAndGreenSourceTest` reads ui/components and the PDF renderer and holds both off a
+# tick, and the components off green (#278). `ui/HairlineFillSourceTest` reads every production file
+# and holds every word drawn on the hairline fill off the soft and faint inks (#408).
+# `export/ReportInkSourceTest` reads the PDF renderer and holds every word it draws to 4.5:1 on the
+# white page, with its faint grey for marks only (#409).
+#
 # WHAT IT WILL NOT CATCH. Everything tools/jvm-tests.sh cannot: anything outside these files, Room's
 # annotation processing, Hilt, resources, R8. And it runs a HAND-LISTED set of test files. A new
-# source test in `data/` is not picked up until somebody adds it below, and CI remains the oracle
-# for all of it.
+# source test is not picked up until somebody adds it below, and CI remains the oracle for all of
+# it.
 set -eu
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
-OUT="${TMPDIR:-/tmp}/daymark-jvm-source-tests"
+# A folder of its own for every run, removed on exit: two runs at once must never compile into, or
+# delete, each other's classes.
+OUT=$(mktemp -d "${TMPDIR:-/tmp}/daymark-jvm-source-tests.XXXXXX")
+trap 'rm -rf "$OUT"' EXIT
 GL=/opt/gradle-8.14.3/lib
 GC="$HOME/.gradle/caches/modules-2/files-2.1"
 
@@ -48,12 +71,46 @@ JUNIT=$(find_jar junit/junit "junit-4.13.2.jar")
 HAMCREST="$GL/hamcrest-core-1.3.jar"
 ANNOT=$(find_jar org.jetbrains/annotations "annotations-13.0.jar")
 
-# The test files this runs, and the one class outside `data/` they need. Adding a file here is a
-# deliberate act: read its imports first and confirm none of them is a Room or Android type.
-TESTS="com.daymark.app.data.PeopleSchemaTest com.daymark.app.data.TimedOfferSchemaTest"
+# The test files this runs, and the helpers they need. Adding a file here is a deliberate act: read
+# its imports first and confirm none of them is a Room or Android type. `CompanionSchemaTest` and
+# `MigrationSchemaExportTest` import `repoFile`, JUnit and `java.io.File` and nothing else; the
+# second reads the exported schemas under app/schemas as JSON text. The two report tests also use
+# `ui/SourceText.kt`, which imports nothing from the app, and so do `ColorSchemeSourceTest`, which
+# also reads the web's token sheet as text, `FaintInkSourceTest`, which also imports `java.io.File`,
+# `MonthGridSourceTest`, which imports `repoFile`, the helpers in `ui/SourceText.kt` and JUnit only,
+# and `WeekDaysSourceTest`, which imports the same and `java.util.Locale`.
+# `DynamicColorSourceTest` and `TickAndGreenSourceTest` import `repoFile`, `codeOnly`, `java.io.File`
+# and JUnit only; `HairlineFillSourceTest` imports `repoFile`, `java.io.File` and JUnit and uses
+# `codeOnly` and `withoutComments` from its own package; `ReportInkSourceTest` imports `repoFile`,
+# `codeOnly` and JUnit only; `ServerSyncSeamSourceTest` imports `repoFile`, `codeOnly`, `java.io.File`
+# and JUnit only, and reads the `foss` and `sync` source sets as text.
+TESTS="com.daymark.app.data.PeopleSchemaTest com.daymark.app.data.TimedOfferSchemaTest
+com.daymark.app.data.CompanionSchemaTest com.daymark.app.data.MigrationSchemaExportTest
+com.daymark.app.export.ReportCopySourceTest com.daymark.app.ui.settings.ReportExportSourceTest
+com.daymark.app.ui.theme.ColorSchemeSourceTest com.daymark.app.ui.FaintInkSourceTest
+com.daymark.app.ui.insights.MonthGridSourceTest com.daymark.app.ui.WeekDaysSourceTest
+com.daymark.app.ui.theme.DynamicColorSourceTest
+com.daymark.app.ui.components.TickAndGreenSourceTest
+com.daymark.app.ui.HairlineFillSourceTest
+com.daymark.app.export.ReportInkSourceTest
+com.daymark.app.ui.settings.ServerSyncSeamSourceTest"
 SOURCES="$REPO/app/src/test/java/com/daymark/app/data/PeopleSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/TimedOfferSchemaTest.kt
-$REPO/app/src/test/java/com/daymark/app/backup/RepoFile.kt"
+$REPO/app/src/test/java/com/daymark/app/data/CompanionSchemaTest.kt
+$REPO/app/src/test/java/com/daymark/app/data/MigrationSchemaExportTest.kt
+$REPO/app/src/test/java/com/daymark/app/export/ReportCopySourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/ui/settings/ReportExportSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/ui/theme/ColorSchemeSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/ui/FaintInkSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/ui/insights/MonthGridSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/ui/WeekDaysSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/ui/theme/DynamicColorSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/ui/components/TickAndGreenSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/ui/HairlineFillSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/export/ReportInkSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/ui/settings/ServerSyncSeamSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/backup/RepoFile.kt
+$REPO/app/src/test/java/com/daymark/app/ui/SourceText.kt"
 
 # `TimedOfferSchemaTest` calls TimingGrid to prove the sentinel is really refused, so `stats/` is
 # compiled in — minus the files that import outside it, the same rule tools/jvm-tests.sh applies.
@@ -67,7 +124,6 @@ $f"
   fi
 done
 
-rm -rf "$OUT"; mkdir -p "$OUT"
 
 # shellcheck disable=SC2086
 java -cp "$KC:$STDLIB:$GL/kotlin-reflect-$KOTLIN.jar:$GL/kotlin-script-runtime-$KOTLIN.jar:$GL/kotlin-daemon-embeddable-$KOTLIN.jar:$GL/kotlinx-coroutines-core-jvm-1.6.4.jar:$GL/annotations-24.0.1.jar:$GL/trove4j-1.0.20200330.jar" \

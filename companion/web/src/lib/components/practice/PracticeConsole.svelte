@@ -47,6 +47,7 @@
     CONSOLE_BUILD_STATE,
     CONSOLE_LEDE,
     CONSOLE_TITLE,
+    NO_REAL_PATIENT_DATA_YET,
     ADMIN_CANNOT_RESET_A_PASSPHRASE,
     NO_PATIENT_LIST,
     PLACEHOLDERS,
@@ -134,6 +135,8 @@
   <div class="page">
     {#if view === 'practice'}
       <p class="lede">{CONSOLE_LEDE}</p>
+      <!-- Its own paragraph, plain, directly under the lede and above the first-pass note (#333). -->
+      <p class="lede">{NO_REAL_PATIENT_DATA_YET}</p>
 
       <Callout tone="info" title="First pass">
         <p class="para">{CONSOLE_BUILD_STATE}</p>

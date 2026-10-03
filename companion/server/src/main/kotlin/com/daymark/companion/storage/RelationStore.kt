@@ -5,15 +5,17 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.sql.Connection
-import java.sql.DriverManager
 import kotlin.io.path.exists
 
+/** Who writes a channel. The routes enforce it by role; the store budgets storage by it. */
+enum class Writer { OWNER, CLINICIAN }
+
 /** The four zero-knowledge per-relationship blob channels. */
-enum class Channel(val wire: String) {
-    GRANTS("grants"),
-    ASSIGNMENTS("assignments"),
-    SHARES("shares"),
-    GAMEPLANS("gameplans");
+enum class Channel(val wire: String, val writer: Writer) {
+    GRANTS("grants", Writer.OWNER),
+    ASSIGNMENTS("assignments", Writer.CLINICIAN),
+    SHARES("shares", Writer.OWNER),
+    GAMEPLANS("gameplans", Writer.CLINICIAN);
 
     companion object {
         fun fromWire(s: String): Channel? = entries.firstOrNull { it.wire == s }
@@ -28,19 +30,36 @@ data class RelMeta(
     val createdAt: Long,
 )
 
+/**
+ * Everything the ending rule ([RelationStore.hasEnded]) reads about one stored item. Every field
+ * comes from the index rows themselves, so the read gate and the sweep, which both ask the rule,
+ * are reading the same facts.
+ */
+internal data class ItemFacts(
+    val channel: Channel,
+    val version: Long,
+    /** The highest version stored in this item's lineage; a share below it has been replaced. */
+    val newestVersion: Long,
+    val createdAt: Long,
+    /** The end the writer chose, or null when they chose none. */
+    val expiry: Long?,
+    val revoked: Boolean,
+)
+
 class RelationStoreException(message: String, val kind: Kind) : Exception(message) {
     enum class Kind {
         BAD_NAME, CONFLICT, TOO_OLD, TOO_LARGE, QUOTA, DISK_FULL, NOT_FOUND, SETTING_KEY_NOT_ALLOWED,
 
         /**
-         * The blob exists but must not be served: its expiry has passed, or the owner withdrew it.
+         * The item exists but has ended ([RelationStore.hasEnded]): the end the owner chose has
+         * passed, or 90 days have, or a newer share replaced it, or the owner withdrew it.
          *
-         * **One kind for both on purpose.** Whether the owner *actively withdrew* rather than simply
-         * let a deadline lapse is a social fact about the owner's intent, and the server should not
-         * announce it to the party being restricted. Collapsing them here rather than at the HTTP
-         * layer means the route physically cannot leak the difference — there is no second value to
-         * accidentally map to a second status code. The owner can tell them apart from their own
-         * audit log, which is the correct place for it.
+         * **One kind for all of them on purpose.** Whether the owner *actively withdrew*, published
+         * a newer share, or simply let a deadline lapse is a social fact about the owner's intent,
+         * and the server should not announce it to the party being restricted. Collapsing them here
+         * rather than at the HTTP layer means the route physically cannot leak the difference —
+         * there is no second value to accidentally map to a second status code. The owner can tell
+         * a withdrawal apart from their own audit log, which is the correct place for it.
          */
         GONE,
     }
@@ -52,11 +71,16 @@ class RelationStoreException(message: String, val kind: Kind) : Exception(messag
  * strict-charset path segments, keep-last-N prune, per-relationship quota, atomic write,
  * server-side SHA-256) — the server never decrypts and never inspects blob contents.
  *
- * STRUCTURAL SETTING-ALLOWLIST: a `setting`-type assignment carries a NON-SECRET routing tag
+ * STRUCTURAL SETTING-ALLOWLIST: a `setting`-type assignment may carry a NON-SECRET routing tag
  * (X-Setting-Key). The store rejects any tag outside the fixed [SETTING_ALLOWLIST] constant
- * WITHOUT reading the (sealed) value. This is a redundant structural gate on top of the
- * client-side authoritative check; it guarantees no PIN/lock/encryption/network/backup key
- * can ever transit the setting channel. See docs/COMPANION_ASSIGNMENTS.md.
+ * WITHOUT reading the (sealed) value. That keeps a stray string out of the index and guarantees
+ * nothing about the setting: the tag is a second claim by the same author, the shipped clinician
+ * client does not send it, and the setting itself is inside the sealed body. The check that
+ * binds is the owner's, on the decrypted item. See docs/COMPANION_ASSIGNMENTS.md §2.2.
+ *
+ * EVERY ITEM BUT A GRANT ENDS, by one rule ([hasEnded], #332), and [sweepEnded] deletes the stored
+ * copy of each item that has ended (#338). The index row outlives its bytes, so version numbers
+ * keep counting and a read of an ended item answers GONE, never NOT_FOUND.
  */
 class RelationStore(
     dataDir: String,
@@ -65,6 +89,22 @@ class RelationStore(
     private val perRelQuotaBytes: Long,
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) : AutoCloseable {
+
+    /*
+     * EACH WRITING DIRECTION HAS ITS OWN BUDGET, carved out of the one configured quota: the
+     * clinician's channels may hold at most a quarter of it, and the other three quarters are the
+     * owner's alone. With a single shared budget, a clinician's own assignments and game plans could
+     * fill it, and the owner's next grant or share to that relationship would be refused, including
+     * a grant written to narrow what that clinician may do. Nothing one direction writes can now
+     * refuse the other's. The total stays what the operator configured (DAYMARK_REL_QUOTA_BYTES).
+     */
+    private val clinicianQuotaBytes: Long = perRelQuotaBytes / 4
+    private val ownerQuotaBytes: Long = perRelQuotaBytes - clinicianQuotaBytes
+
+    private fun quotaFor(writer: Writer): Long = when (writer) {
+        Writer.OWNER -> ownerQuotaBytes
+        Writer.CLINICIAN -> clinicianQuotaBytes
+    }
 
     private val root: Path = Path.of(dataDir).toAbsolutePath().normalize()
     private val relDir: Path = root.resolve("rel")
@@ -75,57 +115,9 @@ class RelationStore(
     init {
         Files.createDirectories(relDir)
         Files.createDirectories(tmpDir)
-        Class.forName("org.sqlite.JDBC")
-        conn = DriverManager.getConnection("jdbc:sqlite:${root.resolve("rel-index.db")}")
+        conn = SCHEMA.open(root)
         conn.createStatement().use { st ->
-            st.execute("PRAGMA journal_mode=WAL")
             st.execute("PRAGMA synchronous=FULL") // see BlobStore.init for why not NORMAL
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS rel_blobs (
-                    rel_ref      TEXT    NOT NULL,
-                    channel      TEXT    NOT NULL,
-                    lineage      TEXT    NOT NULL,
-                    version      INTEGER NOT NULL,
-                    size         INTEGER NOT NULL,
-                    content_hash TEXT    NOT NULL,
-                    setting_key  TEXT,
-                    created_at   INTEGER NOT NULL,
-                    PRIMARY KEY (rel_ref, channel, lineage, version)
-                )
-                """.trimIndent(),
-            )
-
-            /*
-             * ACCESS STATE — added after the fact, so it arrives by ALTER for existing databases.
-             *
-             * `expiry`  epoch ms after which this blob must not be served. NULL means "no deadline
-             *           recorded", which is only reachable for non-share channels and for rows
-             *           written before this column existed (see the grandfather note on `gateLocked`).
-             * `revoked` 1 once the owner withdraws the lineage. NOT NULL DEFAULT 0 because SQLite
-             *           requires a default to add a NOT NULL column to a populated table.
-             *
-             * Both are NON-SECRET routing metadata, like `size` and `content_hash`. The server still
-             * never decrypts anything; this is access control over ciphertext, not over keys.
-             *
-             * The `runCatching` swallows the duplicate-column error on every start after the first
-             * (the same idiom as AuthStore's session columns). But swallowing ALL errors here would
-             * be its own outage: a genuinely failed ALTER would leave construction succeeding and
-             * every later query throwing, i.e. a 500 on every relationship request, misattributed.
-             * So the columns are VERIFIED outside the catch, and a server that cannot see them
-             * refuses to start. A failed boot is diagnosable; a silent 500 on every request is not.
-             */
-            runCatching { st.execute("ALTER TABLE rel_blobs ADD COLUMN expiry INTEGER") }
-            runCatching { st.execute("ALTER TABLE rel_blobs ADD COLUMN revoked INTEGER NOT NULL DEFAULT 0") }
-            try {
-                st.executeQuery("SELECT expiry, revoked FROM rel_blobs LIMIT 0").close()
-            } catch (e: java.sql.SQLException) {
-                throw IllegalStateException(
-                    "rel_blobs is missing the expiry/revoked columns and they could not be added: ${e.message}. " +
-                        "Refusing to start: without them the server cannot enforce share expiry or revocation.",
-                    e,
-                )
-            }
         }
     }
 
@@ -137,7 +129,10 @@ class RelationStore(
         bytes: ByteArray,
         settingKey: String?,
         /**
-         * Epoch ms after which this blob must not be served, or null for "no deadline".
+         * The end the writer chose, in epoch ms, or null when they chose none.
+         *
+         * One input to [hasEnded], never the whole answer: whatever is recorded here, an item on
+         * any channel but grants still ends [ITEM_LIFETIME_MS] after it was written (#332).
          *
          * Deliberately has NO default. A default would let every existing and future call site
          * compile unchanged and then fail at runtime on the one channel where it matters; the
@@ -164,7 +159,7 @@ class RelationStore(
         if (countVersionsAbove(relRef, channel, lineage, version) >= maxVersions) {
             throw RelationStoreException("version below retention window", RelationStoreException.Kind.TOO_OLD)
         }
-        if (usedBytesLocked(relRef) + bytes.size > perRelQuotaBytes) {
+        if (usedBytesLocked(relRef, channel.writer) + bytes.size > quotaFor(channel.writer)) {
             throw RelationStoreException("storage quota exceeded", RelationStoreException.Kind.QUOTA)
         }
 
@@ -189,8 +184,8 @@ class RelationStore(
             conn.autoCommit = false
             try {
                 conn.prepareStatement(
-                    "INSERT INTO rel_blobs(rel_ref, channel, lineage, version, size, content_hash, setting_key, created_at, expiry, revoked) " +
-                        "VALUES (?,?,?,?,?,?,?,?,?,0)",
+                    "INSERT INTO rel_blobs(rel_ref, channel, lineage, version, size, content_hash, setting_key, created_at, expiry, revoked, held) " +
+                        "VALUES (?,?,?,?,?,?,?,?,?,0,1)",
                 ).use { ps ->
                     ps.setString(1, relRef)
                     ps.setString(2, channel.wire)
@@ -227,43 +222,58 @@ class RelationStore(
     }
 
     /**
-     * Refuse to serve a blob whose deadline has passed or which the owner withdrew.
+     * Refuse to serve an item that has ended ([hasEnded]), or whose stored copy is gone.
      *
      * ## Why this lives in the store rather than in the route
      *
      * It runs inside the same `synchronized(lock)` that already guards the row read, so a
-     * concurrent [revokeLineage] cannot slip past a check that has already succeeded — there is no
-     * window between "this is servable" and "these are the bytes". It is also the same query that
-     * establishes existence, so the two answers cannot disagree. And any future route built on
-     * [fetch] or [fetchCurrent] inherits it; a gate written in the routes layer would protect only
-     * the two handlers that exist today. The original defect was precisely a guard applied to some
-     * of the doors.
+     * concurrent [revokeLineage] or [sweepEnded] cannot slip past a check that has already
+     * succeeded — there is no window between "this is servable" and "these are the bytes". It is
+     * also the same query that establishes existence, so the two answers cannot disagree. And any
+     * future route built on [fetch] or [fetchCurrent] inherits it; a gate written in the routes
+     * layer would protect only the two handlers that exist today. The original defect was
+     * precisely a guard applied to some of the doors.
      *
-     * ## The grandfather rule
+     * ## The gate and the sweep ask one rule
      *
-     * A NULL `expiry` never expires. Rows written before this column existed have one, and locking
-     * every already-published share out on upgrade would be an outage delivered as a security fix.
-     * That is bounded rather than open-ended because the PUT path now *requires* the expiry header
-     * on the shares channel — so after this change, "no expiry recorded" can only mean "written by
-     * an older build", never "written today without one".
+     * [sweepEnded] deletes the file of exactly the rows [hasEnded] calls ended, and this gate
+     * refuses exactly those rows, so a row whose bytes the sweep removed is always answered GONE.
+     * Were the two ever to use different rules, a row with no file would fall through to the
+     * NOT_FOUND in [fetch], and the clinician's screen reads a 404 as "nothing was ever shared"
+     * (the comment on `failRel` in RelationRoutes.kt). A row whose copy is gone is refused as GONE
+     * even when the rule would now call it live — a wall clock can step backwards — which closes
+     * that fall-through from the other side too.
      *
-     * `revoked` has no such carve-out: it defaults to 0, which is exactly right for old rows.
+     * A row with no recorded expiry, which an older build could write on the shares channel, is
+     * not exempt: the rule measures the 90-day ceiling from `created_at`, which every row has.
      */
     private fun gateLocked(relRef: String, channel: Channel, lineage: String, version: Long) {
+        val item = itemLocked(relRef, channel, lineage, version)
+            ?: throw RelationStoreException("not found", RelationStoreException.Kind.NOT_FOUND)
+        if (!item.held || hasEnded(item.facts, clock())) {
+            throw RelationStoreException("no longer available", RelationStoreException.Kind.GONE)
+        }
+    }
+
+    /** One index row as the gate reads it: the rule's facts, and whether its file is still held. */
+    private class StoredItem(val facts: ItemFacts, val held: Boolean)
+
+    private fun itemLocked(relRef: String, channel: Channel, lineage: String, version: Long): StoredItem? {
         conn.prepareStatement(
-            "SELECT expiry, revoked FROM rel_blobs WHERE rel_ref=? AND channel=? AND lineage=? AND version=?",
+            "SELECT b.created_at, b.expiry, b.revoked, b.held, ($NEWEST_IN_LINEAGE) FROM rel_blobs b " +
+                "WHERE b.rel_ref=? AND b.channel=? AND b.lineage=? AND b.version=?",
         ).use { ps ->
             ps.setString(1, relRef); ps.setString(2, channel.wire); ps.setString(3, lineage); ps.setLong(4, version)
             ps.executeQuery().use { rs ->
-                if (!rs.next()) throw RelationStoreException("not found", RelationStoreException.Kind.NOT_FOUND)
-                if (rs.getInt(2) != 0) throw RelationStoreException("withdrawn", RelationStoreException.Kind.GONE)
-                // getLong returns 0 for SQL NULL, so wasNull() must be consulted BEFORE the value is
-                // used — otherwise a NULL expiry reads as epoch 0 and every grandfathered row is
-                // instantly expired, which is the outage this rule exists to avoid.
-                val expiry = rs.getLong(1)
-                if (!rs.wasNull() && clock() >= expiry) {
-                    throw RelationStoreException("expired", RelationStoreException.Kind.GONE)
-                }
+                if (!rs.next()) return null
+                val createdAt = rs.getLong(1)
+                // getLong returns 0 for SQL NULL, so wasNull() must be consulted straight after the
+                // read — otherwise a NULL expiry reads as epoch 0 and the item as ended in 1970.
+                val expiry = rs.getLong(2).takeUnless { rs.wasNull() }
+                val revoked = rs.getInt(3) != 0
+                val held = rs.getInt(4) != 0
+                val newest = rs.getLong(5)
+                return StoredItem(ItemFacts(channel, version, newest, createdAt, expiry, revoked), held)
             }
         }
     }
@@ -279,10 +289,11 @@ class RelationStore(
     /**
      * Withdraw every version of a lineage.
      *
-     * Marks all versions, not just the newest: prior versions stay on disk up to the retention
-     * window and are individually fetchable by `GET /{lineage}/{version}`, so withdrawing only the
-     * head would leave the previous share readable — the same partial-guard shape as the original
-     * bug.
+     * Marks all versions, not just the newest. A share version below the newest is already refused
+     * as replaced ([hasEnded]), but its file stays on the volume until the next sweep, and a
+     * withdrawal is the owner taking the whole lineage back now: every copy goes at once. Marking
+     * only the head would also leave older versions to a rule that could change — the same
+     * partial-guard shape as the original bug.
      *
      * The ciphertext is deleted too. Keeping withdrawn bytes on the volume is live exposure against
      * a compromised-server threat model for data the owner has explicitly taken back, and nothing
@@ -293,6 +304,9 @@ class RelationStore(
      * slip, or a stray directory left "withdrawn" reading as complete while the bytes stayed. If the
      * directory cannot even be listed, every marked version is reported as undeletable, because
      * that is what is known.
+     *
+     * A withdrawn row whose file is gone stops counting against its writer's quota at once (#338);
+     * one whose file would not delete keeps counting, and the next sweep tries it again.
      */
     fun revokeLineage(relRef: String, channel: Channel, lineage: String): RevokeOutcome = synchronized(lock) {
         requireName(relRef)
@@ -306,6 +320,7 @@ class RelationStore(
         val dir = relDir.resolve(relRef).resolve(channel.wire).resolve(lineage)
         if (!Files.isDirectory(dir)) {
             // Nothing was ever written under this lineage (or it was already cleared): no copies to remove.
+            releaseAbsentLocked(relRef, channel, lineage)
             return@synchronized RevokeOutcome(marked, deleted = 0, undeletable = 0)
         }
         val blobs = try {
@@ -322,8 +337,118 @@ class RelationStore(
                 undeletable++
             }
         }
+        releaseAbsentLocked(relRef, channel, lineage)
         RevokeOutcome(marked, deleted, undeletable)
     }
+
+    /**
+     * Stop counting every held row of this lineage whose file is confirmed absent. `notExists`
+     * rather than `!exists`: a file whose presence cannot be checked is still held, and still
+     * counted, because that is what is known.
+     */
+    private fun releaseAbsentLocked(relRef: String, channel: Channel, lineage: String) {
+        val versions = mutableListOf<Long>()
+        conn.prepareStatement("SELECT version FROM rel_blobs WHERE rel_ref=? AND channel=? AND lineage=? AND held=1").use { ps ->
+            ps.setString(1, relRef); ps.setString(2, channel.wire); ps.setString(3, lineage)
+            ps.executeQuery().use { rs -> while (rs.next()) versions += rs.getLong(1) }
+        }
+        for (v in versions) {
+            if (Files.notExists(blobPath(relRef, channel, lineage, v))) markReleasedLocked(relRef, channel, lineage, v)
+        }
+    }
+
+    private fun markReleasedLocked(relRef: String, channel: Channel, lineage: String, version: Long) {
+        conn.prepareStatement("UPDATE rel_blobs SET held=0 WHERE rel_ref=? AND channel=? AND lineage=? AND version=?").use { ps ->
+            ps.setString(1, relRef); ps.setString(2, channel.wire); ps.setString(3, lineage); ps.setLong(4, version)
+            ps.executeUpdate()
+        }
+    }
+
+    private fun blobPath(relRef: String, channel: Channel, lineage: String, version: Long): Path =
+        relDir.resolve(relRef).resolve(channel.wire).resolve(lineage).resolve("$version.blob")
+
+    /**
+     * What one sweep did, as counts only: stored copies removed; rows whose copy was already gone
+     * (a withdrawal removed it before the store tracked which bytes it holds), now no longer
+     * counted; and copies that would not delete, which stay counted and are tried again next sweep.
+     */
+    data class SweepOutcome(val removed: Int, val alreadyGone: Int, val notRemoved: Int)
+
+    /**
+     * Delete the stored copy of every item that has ended (#338): expired, past the 90-day
+     * ceiling, replaced by a newer share, or withdrawn.
+     *
+     * The row stays, marked as no longer held, so version numbers keep counting, the quota stops
+     * counting the bytes, and a read still answers GONE rather than NOT_FOUND. Which rows have
+     * ended is [hasEnded]'s answer and nothing else's — the gate asks the same function — so the
+     * sweep can never remove the bytes of an item the gate would still serve.
+     *
+     * A copy that will not delete is COUNTED, not swallowed, the way [revokeLineage] reports it:
+     * its row stays held, so the bytes it still occupies are still counted, and the next sweep
+     * tries it again. Only held rows are read, so a row whose copy is gone is never visited again.
+     * The sync API's snapshots live in another store and are out of this one's reach entirely.
+     *
+     * Runs under the store's lock, like every read, so no fetch can find a row servable and then
+     * its file missing. The files go first and the rows are marked after, in one transaction: a
+     * crash in between leaves rows that have ended (so the gate already refuses them) still counted,
+     * and the next sweep finds their files gone and clears them.
+     */
+    fun sweepEnded(): SweepOutcome = synchronized(lock) {
+        val now = clock()
+        val ended = mutableListOf<EndedRow>()
+        conn.prepareStatement(
+            "SELECT b.rel_ref, b.channel, b.lineage, b.version, b.created_at, b.expiry, b.revoked, ($NEWEST_IN_LINEAGE) " +
+                "FROM rel_blobs b WHERE b.held=1",
+        ).use { ps ->
+            ps.executeQuery().use { rs ->
+                while (rs.next()) {
+                    val relRef = rs.getString(1)
+                    val lineage = rs.getString(3)
+                    // A path to delete is only ever built from names this store would have written,
+                    // and a channel it does not know is not its to judge.
+                    val channel = Channel.fromWire(rs.getString(2)) ?: continue
+                    if (!NAME.matches(relRef) || !NAME.matches(lineage)) continue
+                    val version = rs.getLong(4)
+                    val createdAt = rs.getLong(5)
+                    val expiry = rs.getLong(6).takeUnless { rs.wasNull() }
+                    val revoked = rs.getInt(7) != 0
+                    val newest = rs.getLong(8)
+                    if (hasEnded(ItemFacts(channel, version, newest, createdAt, expiry, revoked), now)) {
+                        ended += EndedRow(relRef, channel, lineage, version)
+                    }
+                }
+            }
+        }
+        var removed = 0
+        var alreadyGone = 0
+        var notRemoved = 0
+        val released = mutableListOf<EndedRow>()
+        for (row in ended) {
+            val existed = try {
+                Files.deleteIfExists(blobPath(row.relRef, row.channel, row.lineage, row.version))
+            } catch (e: IOException) {
+                notRemoved++
+                continue
+            }
+            released += row
+            if (existed) removed++ else alreadyGone++
+        }
+        if (released.isNotEmpty()) {
+            conn.autoCommit = false
+            try {
+                for (row in released) markReleasedLocked(row.relRef, row.channel, row.lineage, row.version)
+                conn.commit()
+            } catch (e: Throwable) {
+                runCatching { conn.rollback() }
+                throw e
+            } finally {
+                conn.autoCommit = true
+            }
+        }
+        SweepOutcome(removed, alreadyGone, notRemoved)
+    }
+
+    private class EndedRow(val relRef: String, val channel: Channel, val lineage: String, val version: Long)
 
     fun fetch(relRef: String, channel: Channel, lineage: String, version: Long): ByteArray = synchronized(lock) {
         requireName(relRef)
@@ -332,7 +457,7 @@ class RelationStore(
             throw RelationStoreException("not found", RelationStoreException.Kind.NOT_FOUND)
         }
         gateLocked(relRef, channel, lineage, version)
-        val file = relDir.resolve(relRef).resolve(channel.wire).resolve(lineage).resolve("$version.blob")
+        val file = blobPath(relRef, channel, lineage, version)
         if (!file.exists()) throw RelationStoreException("not found", RelationStoreException.Kind.NOT_FOUND)
         Files.readAllBytes(file)
     }
@@ -342,10 +467,11 @@ class RelationStore(
         requireName(lineage)
         val v = highestVersion(relRef, channel, lineage)
             ?: throw RelationStoreException("not found", RelationStoreException.Kind.NOT_FOUND)
-        // No fallback to an older version: "current" stays MAX(version). Falling back would serve
-        // a previous share the owner also withdrew, which is the opposite of what withdrawing means.
+        // No fallback to an older version: "current" stays MAX(version). Falling back would serve a
+        // share the newest replaced, or one the owner also withdrew — the opposite of what
+        // publishing anew and withdrawing mean.
         gateLocked(relRef, channel, lineage, v)
-        val file = relDir.resolve(relRef).resolve(channel.wire).resolve(lineage).resolve("$v.blob")
+        val file = blobPath(relRef, channel, lineage, v)
         if (!file.exists()) throw RelationStoreException("not found", RelationStoreException.Kind.NOT_FOUND)
         v to Files.readAllBytes(file)
     }
@@ -388,9 +514,20 @@ class RelationStore(
         }
     }
 
-    private fun usedBytesLocked(relRef: String): Long {
-        conn.prepareStatement("SELECT COALESCE(SUM(size),0) FROM rel_blobs WHERE rel_ref=?").use { ps ->
+    /**
+     * Bytes the server still holds on the channels [writer] writes, for this relationship.
+     *
+     * Held rows only (#338). A row whose file withdrawal or the sweep removed occupies nothing, and
+     * counting it would refuse an owner who refreshes a share often the space they no longer use.
+     * A copy that would not delete is still held, and still counted.
+     */
+    private fun usedBytesLocked(relRef: String, writer: Writer): Long {
+        val channels = Channel.entries.filter { it.writer == writer }
+        val marks = channels.joinToString(",") { "?" }
+        val sql = "SELECT COALESCE(SUM(size),0) FROM rel_blobs WHERE rel_ref=? AND held=1 AND channel IN ($marks)"
+        conn.prepareStatement(sql).use { ps ->
             ps.setString(1, relRef)
+            channels.forEachIndexed { i, c -> ps.setString(i + 2, c.wire) }
             ps.executeQuery().use { rs -> return if (rs.next()) rs.getLong(1) else 0L }
         }
     }
@@ -409,27 +546,141 @@ class RelationStore(
         }
     }
 
+    /**
+     * Keep-last-N: only the newest [maxVersions] versions of a lineage stay servable. An older one
+     * is ENDED, not forgotten (#374). Its row is marked `revoked`, which [hasEnded] already reads
+     * as ended, so every read answers GONE and never NOT_FOUND. Its file is deleted now, and the
+     * row stops counting once the file is confirmed gone. A file that will not delete stays
+     * counted, and the next sweep tries it again. Deleting the row as well, as this used to, left
+     * such a file on the volume with nothing pointing at it, where no sweep would ever find it.
+     *
+     * Only rows not already ended this way count toward the N, so no row is pruned twice. This is
+     * retention, not a withdrawal, and writes no audit entry.
+     */
     private fun pruneLocked(relRef: String, channel: Channel, lineage: String) {
         val versions = mutableListOf<Long>()
-        conn.prepareStatement("SELECT version FROM rel_blobs WHERE rel_ref=? AND channel=? AND lineage=? ORDER BY version DESC").use { ps ->
+        conn.prepareStatement(
+            "SELECT version FROM rel_blobs WHERE rel_ref=? AND channel=? AND lineage=? AND revoked=0 ORDER BY version DESC",
+        ).use { ps ->
             ps.setString(1, relRef); ps.setString(2, channel.wire); ps.setString(3, lineage)
             ps.executeQuery().use { rs -> while (rs.next()) versions += rs.getLong(1) }
         }
         if (versions.size <= maxVersions) return
         for (v in versions.drop(maxVersions)) {
-            try {
-                Files.deleteIfExists(relDir.resolve(relRef).resolve(channel.wire).resolve(lineage).resolve("$v.blob"))
-            } catch (_: IOException) { /* best-effort */ }
-            conn.prepareStatement("DELETE FROM rel_blobs WHERE rel_ref=? AND channel=? AND lineage=? AND version=?").use { ps ->
+            conn.prepareStatement("UPDATE rel_blobs SET revoked=1 WHERE rel_ref=? AND channel=? AND lineage=? AND version=?").use { ps ->
                 ps.setString(1, relRef); ps.setString(2, channel.wire); ps.setString(3, lineage); ps.setLong(4, v)
                 ps.executeUpdate()
             }
+            val path = blobPath(relRef, channel, lineage, v)
+            try {
+                Files.deleteIfExists(path)
+            } catch (_: IOException) {
+                // Still held, so still counted; the next sweep tries it again.
+            }
+            if (Files.notExists(path)) markReleasedLocked(relRef, channel, lineage, v)
         }
     }
 
     override fun close() = synchronized(lock) { conn.close() }
 
     companion object {
+        /**
+         * rel-index.db, version by version (#193). [Schema] says what a version is, and how a
+         * database written by an earlier release is brought to [Schema.current] before it is served.
+         * No version touches a blob file under `rel/`.
+         */
+        internal val SCHEMA = Schema(
+            "rel-index.db",
+            listOf(
+                // Version 1: the structure as it stood when versions began to be kept.
+                listOf(
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS rel_blobs (
+                            rel_ref      TEXT    NOT NULL,
+                            channel      TEXT    NOT NULL,
+                            lineage      TEXT    NOT NULL,
+                            version      INTEGER NOT NULL,
+                            size         INTEGER NOT NULL,
+                            content_hash TEXT    NOT NULL,
+                            setting_key  TEXT,
+                            created_at   INTEGER NOT NULL,
+                            PRIMARY KEY (rel_ref, channel, lineage, version)
+                        )
+                        """.trimIndent(),
+                    ),
+                    /*
+                     * ACCESS STATE — added after the fact, so it arrives by ALTER, on a new database
+                     * as on an old one.
+                     *
+                     * `expiry`  epoch ms of the end the writer chose, or NULL when they chose none: the
+                     *           non-share channels, and shares written before this column existed. A
+                     *           NULL never means "forever" — see [hasEnded].
+                     * `revoked` 1 once the owner withdraws the lineage. NOT NULL DEFAULT 0 because
+                     *           SQLite requires a default to add a NOT NULL column to a populated table.
+                     * `held`    1 while this row's ciphertext file is on the volume, 0 once withdrawal or
+                     *           the sweep has removed it. The quota counts held rows only (#338).
+                     *           DEFAULT 1 is true of every older row except a withdrawn one whose file is
+                     *           already gone; those have ended, so the start-up sweep finds them and
+                     *           clears the flag.
+                     *
+                     * All three are NON-SECRET routing metadata, like `size` and `content_hash`. The
+                     * server still never decrypts anything; this is access control over ciphertext, not
+                     * over keys.
+                     *
+                     * Without them the server cannot tell when an item has ended, or which stored bytes
+                     * it still holds, and every relationship request would fail. So a database that
+                     * lacks one after its changes, or claims version 1 without it, refuses the start
+                     * ([Schema.open]): a refused start is diagnosable, a 500 on every request is not.
+                     */
+                    SchemaChange.Column("rel_blobs", "expiry", "INTEGER"),
+                    SchemaChange.Column("rel_blobs", "revoked", "INTEGER NOT NULL DEFAULT 0"),
+                    SchemaChange.Column("rel_blobs", "held", "INTEGER NOT NULL DEFAULT 1"),
+                ),
+            ),
+        )
+
+        /**
+         * The longest the server serves anything the owner and the clinician send each other: 90
+         * days after it was written (#332, decided in #228). The sealing has no forward secrecy
+         * (COMPANION_SECURITY.md §11), so time is the only limit on what a stolen clinician key
+         * could open. The owner console must offer no end later than this (#339); its tests and
+         * this server's tests each pin 90 days, and change together.
+         */
+        const val ITEM_LIFETIME_MS: Long = 90L * 24 * 60 * 60 * 1000
+
+        /**
+         * THE ONE RULE FOR WHEN A RELATIONSHIP ITEM HAS ENDED (#332). The read gate refuses what it
+         * calls ended and the sweep deletes the bytes of what it calls ended (#338); nothing else
+         * decides either, so the two cannot disagree.
+         *
+         * - A withdrawn item has ended, on every channel.
+         * - A grant ends only at an end recorded for it, which the routes never record: the
+         *   clinician needs the current grant for as long as the relationship lasts, and it is
+         *   signed, not sealed (COMPANION_THERAPIST.md §5).
+         * - A share version below the newest of its lineage has ended: publishing a new share ends
+         *   the ones before it, so an owner who narrows a share has narrowed it. Read from the rows
+         *   themselves, so it needs no column of its own, and it is not a withdrawal — it writes no
+         *   `share.revoke` entry. Shares only: nothing says a newer assignment ends an older one.
+         * - Anything else ends at the end its writer chose or [ITEM_LIFETIME_MS] after it was
+         *   written, whichever comes first. A row with no recorded end — an assignment, a game plan,
+         *   or a share an older build wrote — ends at the ceiling rather than never.
+         *
+         * Refusal is at `now >= end`, matching the client's `now < expiry`.
+         */
+        internal fun hasEnded(item: ItemFacts, now: Long): Boolean {
+            if (item.revoked) return true
+            if (item.channel == Channel.GRANTS) return item.expiry != null && now >= item.expiry
+            if (item.channel == Channel.SHARES && item.version < item.newestVersion) return true
+            val ceiling = item.createdAt + ITEM_LIFETIME_MS
+            val end = if (item.expiry == null) ceiling else minOf(item.expiry, ceiling)
+            return now >= end
+        }
+
+        /** The newest version of the lineage of the row aliased `b`, for [hasEnded]'s replacement test. */
+        private const val NEWEST_IN_LINEAGE =
+            "SELECT MAX(n.version) FROM rel_blobs n WHERE n.rel_ref=b.rel_ref AND n.channel=b.channel AND n.lineage=b.lineage"
+
         /**
          * The fixed server-side setting-key allowlist. Mirrors
          * companion/web/src/lib/assignments/types.ts SETTING_ALLOWLIST. Nothing

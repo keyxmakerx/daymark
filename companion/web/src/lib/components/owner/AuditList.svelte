@@ -22,7 +22,7 @@
   async function refresh() {
     error = ''
     if (!therapist) {
-      error = 'Pin a therapist to see their access log.'
+      error = 'Pin a clinician to see their access log.'
       return
     }
     if (!client) {
@@ -74,7 +74,7 @@
   {/if}
 
   {#if !loaded && !busy}
-    <EmptyState title="Refresh to fetch this therapist's access log." />
+    <EmptyState title="Refresh to fetch this clinician's access log." />
   {:else if loaded && events.length === 0}
     <EmptyState title="No access events recorded." />
   {:else}

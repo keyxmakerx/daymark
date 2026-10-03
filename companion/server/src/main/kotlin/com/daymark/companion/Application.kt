@@ -2,14 +2,20 @@ package com.daymark.companion
 
 import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.auth.AuthStore
+import com.daymark.companion.auth.OwnerAuth
 import com.daymark.companion.auth.PairingStore
 import com.daymark.companion.mail.Mailer
 import com.daymark.companion.mail.OwnerAccountStore
 import com.daymark.companion.mail.OwnerNotifier
 import com.daymark.companion.org.OrgStore
+import com.daymark.companion.routes.DEVICE_REVOKED_BY_REISSUE
 import com.daymark.companion.routes.ErrorDto
+import com.daymark.companion.routes.PHONE_REFUSED_ROUTES
 import com.daymark.companion.routes.auditChainRoutes
+import com.daymark.companion.routes.auditDevice
+import com.daymark.companion.routes.auditLockout
 import com.daymark.companion.routes.auditRoutes
+import com.daymark.companion.routes.deviceRoutes
 import com.daymark.companion.routes.orgRoutes
 import com.daymark.companion.routes.pairingRelayRoutes
 import com.daymark.companion.routes.recoveryRoutes
@@ -19,13 +25,16 @@ import com.daymark.companion.routes.syncRoutes
 import com.daymark.companion.routes.therapistAuthRoutes
 import com.daymark.companion.routes.ownerKeyRoutes
 import com.daymark.companion.routes.therapistKeyRoutes
+import com.daymark.companion.storage.AuditAction
 import com.daymark.companion.storage.AuditStore
 import com.daymark.companion.storage.BlobStore
+import com.daymark.companion.storage.KeyDocumentStore
 import com.daymark.companion.storage.RelationStore
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationStopping
 import io.ktor.server.application.install
 import io.ktor.server.engine.connector
 import io.ktor.server.engine.embeddedServer
@@ -40,21 +49,47 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import io.ktor.server.routing.Route
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.nio.file.Files
+import kotlin.system.exitProcess
 
 private val log = LoggerFactory.getLogger("com.daymark.companion")
 
-/** The single non-secret capability flag the owner portal reads from /v1/config. */
+/** The non-secret facts the consoles read from /v1/config. */
 @kotlinx.serialization.Serializable
-data class ServerConfigDto(val smtpEnabled: Boolean)
+data class ServerConfigDto(
+    val smtpEnabled: Boolean,
+    /**
+     * The shape the operator chose with `DAYMARK_SETUP_MODE` — `solo`, `paired` or `practice`, the
+     * field and ids the first-run screen reads (`companion/web/src/lib/setup/shape.ts`) — so the
+     * screen stops asking (#330). Absent when none was chosen: the screen reads a published shape as
+     * the configuration having answered, and a shape the server assumed is not that. The body is then
+     * the one it was before the setting existed.
+     */
+    val setupMode: String? = null,
+)
+
+/** The exit status of a [StartupRefusal]: `EX_CONFIG` in sysexits.h, a configuration error. */
+internal const val EXIT_CONFIG = 78
+
+/** The owner's own audit chain (#189), beside the relationship log and the practice log. */
+internal const val OWNER_AUDIT_DB = "owner-audit.db"
 
 fun main() {
-    val config = Config.fromEnv()
+    val config = try {
+        Config.fromEnv()
+    } catch (refusal: StartupRefusal) {
+        // One line naming the setting, and out. It is logged before DAYMARK_LOG_LEVEL is applied,
+        // so no level can hide it, and without the exception, so no stack trace buries it (#180).
+        log.error(refusal.message)
+        exitProcess(EXIT_CONFIG)
+    }
     applyLogLevel(config.logLevel)
     log.info(
         "Daymark Companion starting on {}:{} basePath={} sync={} smtp={} dataDir={}",
@@ -75,7 +110,7 @@ fun main() {
     // slowloris weak, not the slow-request kind, and Ktor's own default here is
     // `requestReadTimeoutSeconds = 0` — infinite (verified against the Ktor 3.0.3 source, not
     // assumed). The operator's proxy is asked for the same thing in
-    // COMPANION_DEPLOYMENT_HARDENING.md §3.1 requirement 9, but the app must not depend on a proxy
+    // COMPANION_DEPLOYMENT.md §3.1 requirement 9, but the app must not depend on a proxy
     // it cannot see for its floor.
     //
     // 120 s, not 10: a 25 MiB snapshot over a slow mobile uplink is a legitimate long request, and
@@ -86,18 +121,29 @@ fun main() {
     // NOTE the shape: Ktor 3.0.3 has NO embeddedServer overload taking port/host AND configure
     // together (the compiler will list the three that exist if you get this wrong). Connectors are
     // set inside `configure` instead, via the `connector` extension on ApplicationEngine.Configuration.
-    embeddedServer(
-        Netty,
-        configure = {
-            connector {
-                host = config.bindAddr
-                port = config.port
-            }
-            requestReadTimeoutSeconds = 120
-        },
-    ) {
-        module(config)
-    }.start(wait = true)
+    try {
+        embeddedServer(
+            Netty,
+            configure = {
+                connector {
+                    host = config.bindAddr
+                    port = config.port
+                }
+                requestReadTimeoutSeconds = 120
+            },
+        ) {
+            module(config)
+        }.start(wait = true)
+    } catch (e: Throwable) {
+        // A database this release must not open, or could not change, refuses the start as a setting
+        // does: one line naming the database and its versions, and out with 78 (#193). The stores
+        // raise it as the module opens them, before a port is bound or a request is taken. Logged at
+        // a level DAYMARK_LOG_LEVEL cannot hide, as the settings refusal above is.
+        val refusal = generateSequence(e) { it.cause }.filterIsInstance<StartupRefusal>().firstOrNull() ?: throw e
+        applyLogLevel("error")
+        log.error(refusal.message)
+        exitProcess(EXIT_CONFIG)
+    }
 }
 
 /** Apply DAYMARK_LOG_LEVEL to the app's logger at startup (logback). */
@@ -120,6 +166,21 @@ fun Application.module(
     orgStore: OrgStore? = null,
     orgAuditStore: AuditStore? = null,
     pairingStore: PairingStore? = null,
+    /**
+     * The relationship surface's clock: it reads a share's end against it, and the relationship
+     * store built here dates each item by it and ends it by it (#332). Injectable so a test can move
+     * 90 days without sleeping; a caller that passes its own [relationStore] gives it the same clock.
+     */
+    relationClock: () -> Long = { System.currentTimeMillis() },
+    /**
+     * The scheduler for the server's chores ([Housekeeping]). Injectable so a test can drive its
+     * ticker; this module registers the jobs on it, starts it, and stops it as the application stops.
+     */
+    housekeeping: Housekeeping? = null,
+    /** The owner's own log, `owner-audit.db` (#189). Injectable so a test can read what was written. */
+    ownerAuditStore: AuditStore? = null,
+    /** The routes a paired phone may not use: [PHONE_REFUSED_ROUTES]. Injectable so a test can plant one. */
+    phoneRefusedRoutes: Set<String> = PHONE_REFUSED_ROUTES,
 ) {
     // Publish the trusted-proxy allowlist before any route runs: every per-client lockout and rate
     // limit reads it via ApplicationCall.clientAddress(). Empty (the default) means forwarded
@@ -158,11 +219,15 @@ fun Application.module(
     val store = if (config.syncEnabled) {
         blobStore ?: BlobStore(config.dataDir, config.maxBlobBytes, config.maxVersions, config.perTokenQuotaBytes)
     } else null
+    // The owner's key documents (#258): the key parameters and the wrapped key that supersedes them.
+    // Part of the sync API, so opened with it and on the same volume.
+    val keyDocuments = if (config.syncEnabled) KeyDocumentStore(config.dataDir) else null
 
-    // Track T2 (email Option A): the owner/bearer token now lives here, not just in config —
-    // this is what makes it rotatable at runtime via the email-triggered recovery flow without a
-    // restart. Bootstrapped from (and reconciled against, on every boot) DAYMARK_AUTH_TOKEN; see
-    // OwnerAccountStore's kdoc for the reconciliation rule.
+    // The owner's email, for notifications and access-token recovery (COMPANION_SECURITY.md §6,
+    // "Owner notifications and server-access recovery"): the owner/bearer token now lives here, not
+    // just in config — this is what makes it rotatable at runtime via the email-triggered recovery
+    // flow without a restart. Bootstrapped from (and reconciled against, on every boot)
+    // DAYMARK_AUTH_TOKEN; see OwnerAccountStore's kdoc for the reconciliation rule.
     val account = config.authToken?.let { token ->
         accountStore ?: OwnerAccountStore(config.dataDir, token)
     }
@@ -170,40 +235,85 @@ fun Application.module(
         AuthGuard(it.currentTokenHash(), config.authLockoutFails, config.authLockoutSeconds * 1000, config.rateLimitRps)
     }
 
+    // The owner's own log (#189): phones paired and revoked, and the lockouts owner credentials arm.
+    // A third chain in a file of its own, like the practice's, keyed on the owner's id, and opened in
+    // every shape that syncs, because phones pair in every one of them.
+    val ownerAudit = account?.let {
+        ownerAuditStore ?: AuditStore(config.dataDir, config.auditRetentionDays * 86_400L, dbName = OWNER_AUDIT_DB)
+    }
+
+    // Who a request is from (#186): the bearer token, or a registered phone's signature, on one owner
+    // id. Every owner route below takes this, never the token's digest.
+    val ownerAuth = if (account != null && guard != null && ownerAudit != null) {
+        // One row when a lockout is armed, never per probe; OwnerAuth spaces them out server-wide.
+        OwnerAuth(guard, account.devices, config.maxRequestBytes, phoneRefusedRoutes) { source, credential ->
+            auditLockout(ownerAudit, account.devices.ownerId, credential, source.takeIf { config.auditSourceIpEnabled })
+        }
+    } else {
+        null
+    }
+    // The phones this start disconnected because DAYMARK_AUTH_TOKEN changed: one row each.
+    if (account != null && ownerAudit != null) {
+        for (keyId in account.revokedAtStart) {
+            auditDevice(ownerAudit, account.devices.ownerId, AuditAction.DEVICE_REVOKED, keyId, DEVICE_REVOKED_BY_REISSUE)
+        }
+    }
+
     // Built once and DI'd to the invite/notification services. When SMTP is disabled this never
     // opens a socket. Tests can inject an InMemory-backed mailer.
     val mail = mailer ?: Mailer.forConfig(config.mailer)
     val notifier = account?.let { OwnerNotifier(it, mail) }
 
-    // Therapist portal: relationship blob channels + auth. Gated on DAYMARK_THERAPIST_AUTH and
-    // (for the owner-write direction / mint route) the owner bearer token being configured.
-    val relStore = if (config.therapistAuthEnabled) {
-        relationStore ?: RelationStore(config.dataDir, config.maxBlobBytes, config.relMaxVersions, config.relQuotaBytes)
+    // The shape (#330): which route groups and pages this server serves, and so which stores it
+    // opens. A group's stores are opened only in a shape that serves the group, so a solo server
+    // writes no relationship, clinician sign-in, relationship audit or clinician pairing file to the
+    // volume, and a paired one no practice file. One line per start says which shape, and whether it
+    // was chosen or assumed.
+    val shape = config.shape
+    log.info(shapeLogLine(config))
+
+    // The clinician group's stores: relationship blob channels and sign-in. Its routes also need the
+    // owner bearer token (the owner-write direction, the mint route); without one they answer 503.
+    val relStore = if (shape.clinicianGroup) {
+        relationStore ?: RelationStore(config.dataDir, config.maxBlobBytes, config.relMaxVersions, config.relQuotaBytes, relationClock)
     } else null
-    val auth = if (config.therapistAuthEnabled) {
+    val auth = if (shape.clinicianGroup) {
         authStore ?: AuthStore(config.dataDir)
     } else null
-    // Owner-readable audit log (COMPANION_SECURITY.md §9). Same feature gate as the rest of the
-    // therapist portal — it only makes sense once relationships/sessions exist.
-    val audit = if (config.therapistAuthEnabled) {
+    // Owner-readable audit log (COMPANION_SECURITY.md §9). Same group as the rest of the clinician
+    // portal — it only makes sense once relationships/sessions exist.
+    val audit = if (shape.clinicianGroup) {
         auditStore ?: AuditStore(config.dataDir, config.auditRetentionDays * 86_400L)
     } else null
-    // The org / practice control plane, under the same feature gate as the rest of the portal: it
-    // authorises on portal sessions, so it has no meaning in a deployment that has none.
-    val orgs = if (config.therapistAuthEnabled) {
+    // Store-and-forward state for the CPace pairing exchange (COMPANION_PAIRING.md §4). Same
+    // group: an exchange belongs to an invite, and invites only exist when the portal is on.
+    val pairing = if (shape.clinicianGroup) {
+        pairingStore ?: PairingStore(config.dataDir)
+    } else null
+    // The practice group's stores, in the practice shape only. The control plane authorises on
+    // clinician portal sessions, so it has no meaning without the clinician group, which every shape
+    // with the practice group also has.
+    val orgs = if (shape.practiceGroup) {
         orgStore ?: OrgStore(config.dataDir)
     } else null
     // A SECOND audit chain, in its own database file. Same class, same hash chain, same
     // metadata-only contract — and a separate file so that a practice's membership history and a
     // patient's access history can never be keyed into the same table. See AuditStore's `dbName`.
-    val orgAudit = if (config.therapistAuthEnabled) {
+    val orgAudit = if (shape.practiceGroup) {
         orgAuditStore ?: AuditStore(config.dataDir, config.auditRetentionDays * 86_400L, dbName = "org-audit.db")
     } else null
-    // Store-and-forward state for the CPace pairing exchange (plan §3.7.3). Same feature gate:
-    // an exchange belongs to an invite, and invites only exist when the portal is on.
-    val pairing = if (config.therapistAuthEnabled) {
-        pairingStore ?: PairingStore(config.dataDir)
-    } else null
+
+    // The server's scheduled chores (Housekeeping): each runs now, before a request is taken, and
+    // then on its interval. Only the relationship store is swept; the sync API's snapshots are the
+    // owner's own backups and have no end (#338). Ending a relationship deletes nothing by itself —
+    // its items follow the same clock as everyone's.
+    val chores = housekeeping ?: Housekeeping()
+    if (relStore != null) {
+        chores.every("relationship sweep", RELATION_SWEEP_INTERVAL_MS) { sweepRelationships(relStore) }
+    }
+    // Stopped as the application stops, before anything a chore uses can be closed under it.
+    monitor.subscribe(ApplicationStopping) { chores.close() }
+    chores.start()
 
     routing {
         // Unauthenticated, content-free LIVENESS probe — never under the base path.
@@ -233,15 +343,26 @@ fun Application.module(
             }
         }
 
-        // Unauthenticated capability probe. Reveals ONLY whether the operator enabled outbound
-        // SMTP, so the owner portal knows whether to offer the "send email invite" button. No
-        // secrets, no config values — just the single boolean the UI needs.
+        // Unauthenticated capability probe. Reveals whether the operator enabled outbound SMTP, so
+        // the owner portal knows whether to offer the "send email invite" button, and the shape the
+        // operator chose, so the first-run screen does not ask (#330). No secrets and no value the
+        // operator typed: the shape is one of three fixed words, and anyone who can reach the server
+        // can already read it from the routes.
         get("/v1/config") {
-            call.respond(ServerConfigDto(smtpEnabled = config.smtpEnabled))
+            call.respond(ServerConfigDto(smtpEnabled = config.smtpEnabled, setupMode = config.setupMode?.wire))
         }
 
-        if (store != null && guard != null) {
-            syncRoutes(store, guard, config.maxRequestBytes)
+        if (store != null && keyDocuments != null && ownerAuth != null && ownerAudit != null) {
+            syncRoutes(store, keyDocuments, ownerAuth, config.maxRequestBytes)
+            // Pairing a phone and the phones paired (#186, #189): part of the sync API, since a phone
+            // pairs to sync, so on in every shape with it.
+            deviceRoutes(
+                auth = ownerAuth,
+                pairingOpen = config.publicAddressIsHttps,
+                publicBaseUrl = config.publicBaseUrl,
+                ownerAudit = ownerAudit,
+                auditSourceIp = config.auditSourceIpEnabled,
+            )
         } else {
             // Fail-closed: sync not configured. Cover the methods the API uses. Scope to the
             // exact sync paths so the therapist portal's /v1/rel + /v1/invite etc. can still be
@@ -250,21 +371,31 @@ fun Application.module(
             put("/v1/snapshots/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
             get("/v1/keyparams") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
             put("/v1/keyparams") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
+            get("/v1/keydoc") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
+            post("/v1/keydoc") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
+            put("/v1/keydoc/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
+            get("/v1/devices") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
+            get("/v1/devices/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
+            post("/v1/devices/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
+            get("/v1/owner/audit") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
         }
 
-        // Therapist portal. Fail-closed: 503 on every portal path when the feature is off, so a
-        // probe cannot tell configured-but-empty from not-configured.
-        if (relStore != null && auth != null && guard != null && audit != null && notifier != null &&
-            orgs != null && orgAudit != null
+        // The clinician group (#330): on in paired and practice. Fail-closed: when it is off, every
+        // path it answers answers 503 instead (clinicianGroupOff), so a probe cannot tell
+        // configured-but-empty from not-configured. The group is all or nothing: a store missing
+        // here would leave its routes answered by nothing at all rather than by the 503.
+        if (relStore != null && auth != null && ownerAuth != null && audit != null && notifier != null &&
+            pairing != null
         ) {
             relationRoutes(
-                relStore, guard, auth, config.sessionIdleSeconds, config.maxRequestBytes,
+                relStore, ownerAuth, auth, config.sessionIdleSeconds, config.maxRequestBytes,
                 auditStore = audit, auditSourceIp = config.auditSourceIpEnabled,
                 notifier = notifier, publicBaseUrl = config.publicBaseUrl,
+                clock = relationClock,
             )
             therapistAuthRoutes(
                 authStore = auth,
-                ownerGuard = guard,
+                ownerGuard = ownerAuth,
                 mailer = mail,
                 inviteTtlSeconds = config.inviteTtlSeconds,
                 sessionIdleSeconds = config.sessionIdleSeconds,
@@ -282,7 +413,7 @@ fun Application.module(
             // keys belong to a relationship, and relationships only exist when the portal is on.
             therapistKeyRoutes(
                 authStore = auth,
-                ownerGuard = guard,
+                ownerGuard = ownerAuth,
                 sessionIdleSeconds = config.sessionIdleSeconds,
                 auditStore = audit,
                 auditSourceIp = config.auditSourceIpEnabled,
@@ -290,7 +421,7 @@ fun Application.module(
 
             ownerKeyRoutes(
                 authStore = auth,
-                ownerGuard = guard,
+                ownerGuard = ownerAuth,
                 sessionIdleSeconds = config.sessionIdleSeconds,
                 auditStore = audit,
                 auditSourceIp = config.auditSourceIpEnabled,
@@ -301,73 +432,62 @@ fun Application.module(
             // relationships only exist when the portal is on. See routes/RelationshipEndingRoutes.kt.
             relationshipEndingRoutes(
                 authStore = auth,
-                ownerGuard = guard,
+                ownerGuard = ownerAuth,
                 sessionIdleSeconds = config.sessionIdleSeconds,
                 auditStore = audit,
                 auditSourceIp = config.auditSourceIpEnabled,
             )
             // The CPace relay: opaque pairing blobs between the owner and a holder of the invite
             // link. The server never has the code and never parses a message — see the routes file.
-            if (pairing != null) {
-                pairingRelayRoutes(
-                    authStore = auth,
-                    pairingStore = pairing,
-                    ownerGuard = guard,
-                    auditStore = audit,
-                    totpLockoutFails = config.totpLockoutFails,
-                    totpLockoutSeconds = config.totpLockoutSeconds,
-                    auditSourceIp = config.auditSourceIpEnabled,
-                )
-            }
-            auditRoutes(audit, guard)
+            pairingRelayRoutes(
+                authStore = auth,
+                pairingStore = pairing,
+                ownerGuard = ownerAuth,
+                auditStore = audit,
+                totpLockoutFails = config.totpLockoutFails,
+                totpLockoutSeconds = config.totpLockoutSeconds,
+                auditSourceIp = config.auditSourceIpEnabled,
+            )
+            auditRoutes(audit, ownerAuth)
             // The chain's own check: recompute the stored audit chain for one relationship and
             // report its head. Owner bearer token, same gate as the therapist-keys read — a head
             // plus a count per relRef is exactly the relationship metadata this server does not
             // hand to anonymous callers. See routes/AuditChainRoutes.kt for the whole argument.
-            auditChainRoutes(audit, guard)
-            // The org / practice control plane. Membership and roles only — it holds no key, serves
-            // no ciphertext, and cannot mint a grant. See routes/OrgRoutes.kt for the whole argument.
+            auditChainRoutes(audit, ownerAuth)
+        } else {
+            clinicianGroupOff()
+        }
+
+        // The practice group (#330): on in practice only, and fail-closed the same way. The org /
+        // practice control plane: membership and roles only — it holds no key, serves no
+        // ciphertext, and cannot mint a grant. See routes/OrgRoutes.kt for the whole argument.
+        if (orgs != null && orgAudit != null && auth != null && ownerAuth != null) {
             orgRoutes(
                 orgStore = orgs,
                 authStore = auth,
-                ownerGuard = guard,
+                ownerGuard = ownerAuth,
                 sessionIdleSeconds = config.sessionIdleSeconds,
                 orgAudit = orgAudit,
                 auditSourceIp = config.auditSourceIpEnabled,
             )
         } else {
-            get("/v1/rel/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            put("/v1/rel/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            post("/v1/invite") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            post("/v1/invite/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            post("/v1/totp/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            post("/v1/session/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            post("/v1/webauthn/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            // Both halves of the therapist-key exchange, so a probe cannot tell "configured but
-            // nobody has registered yet" (404) from "this deployment has no portal at all" (503).
-            get("/v1/relations/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            post("/v1/relations/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            // Every method the org control plane answers, so a probe cannot tell "this practice has
-            // no such member" (404) from "this deployment has no practices at all" (503).
-            get("/v1/orgs") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            post("/v1/orgs") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            get("/v1/orgs/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            post("/v1/orgs/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
-            delete("/v1/orgs/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("therapist portal not configured")) }
+            practiceGroupOff()
         }
 
-        // Track T2 (email Option A): owner notification-email registration + the unauthenticated
-        // access-token recovery flow. Gated on the sync/owner bearer token being configured at
-        // all (independent of the therapist portal — recovery covers plain /v1 sync access too),
-        // fail-closed to 503 otherwise so a probe cannot tell configured-but-empty from absent.
-        if (account != null && guard != null && notifier != null) {
+        // The owner's email (COMPANION_SECURITY.md §6, "Owner notifications and server-access
+        // recovery"): notification-email registration + the unauthenticated access-token recovery
+        // flow. Gated on the sync/owner bearer token being configured at all (independent of the
+        // therapist portal — recovery covers plain /v1 sync access too), fail-closed to 503
+        // otherwise so a probe cannot tell configured-but-empty from absent.
+        if (account != null && ownerAuth != null && notifier != null) {
             recoveryRoutes(
                 accountStore = account,
-                ownerGuard = guard,
+                ownerGuard = ownerAuth,
                 mailer = mail,
                 confirmTtlSeconds = config.reissueConfirmTtlSeconds,
                 reissueMaxPerHour = config.reissueMaxPerHour,
                 publicBaseUrl = config.publicBaseUrl,
+                ownerAudit = ownerAudit,
             )
         } else {
             get("/v1/owner/notifications") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("recovery not configured")) }
@@ -378,8 +498,9 @@ fun Application.module(
         // The therapist portal is a SEPARATE surface served at its own route. Map the clean path
         // "/therapist" to the second SPA entry (therapist.html), distinct from the owner viewer's
         // default (index.html). The bundled therapist.html is also reachable directly via static
-        // serving; this route just gives it a clean URL. Same CSP headers apply.
-        val therapistEntry = File(webRoot, "therapist.html")
+        // serving; this route just gives it a clean URL. Same CSP headers apply. Both are served only
+        // in a shape with the clinician group (pageRoutes).
+        val therapistEntry = File(webRoot, Pages.CLINICIAN)
         val serveTherapist: suspend io.ktor.server.routing.RoutingContext.() -> Unit = {
             if (therapistEntry.isFile) call.respondFile(therapistEntry)
             else call.respond(HttpStatusCode.NotFound, ErrorDto("therapist portal not built"))
@@ -394,12 +515,11 @@ fun Application.module(
          * why the therapist half of the product could not be used and why the sign-in form ended up
          * asking a clinician to paste nine values by hand.
          *
-         * It serves the therapist entry, not the owner's: `staticFiles`' `default` applies to
-         * DIRECTORY requests, so an unmatched path like this one would not fall through to a SPA
-         * shell, and if it ever did it would land on index.html — the owner's viewer, the wrong
-         * surface entirely. The fragment carrying the invitation is never sent to the server
-         * (deliberately — see buildInviteLink), so this route sees only the path and hands back the
-         * page that knows how to read the rest client-side.
+         * It serves the therapist entry, not the owner's: `staticFiles`' `default` answers every
+         * path that names no file with index.html, so without this route the link would land on the
+         * owner's viewer, the wrong surface entirely. The fragment carrying the invitation is never
+         * sent to the server (deliberately — see buildInviteLink), so this route sees only the path
+         * and hands back the page that knows how to read the rest client-side.
          */
         val invitePaths = listOf("/portal/invite", "/portal/invite/")
 
@@ -432,15 +552,135 @@ fun Application.module(
         }
 
         if (config.basePath == "/") {
-            get("/therapist") { serveTherapist() }
-            invitePaths.forEach { p -> get(p) { redirectToTherapist() } }
-            staticFiles("/", webRoot) { default("index.html") }
+            pageRoutes(shape, webRoot, invitePaths, serveTherapist, redirectToTherapist)
         } else {
             route(config.basePath) {
-                get("/therapist") { serveTherapist() }
-                invitePaths.forEach { p -> get(p) { redirectToTherapist() } }
-                staticFiles("/", webRoot) { default("index.html") }
+                pageRoutes(shape, webRoot, invitePaths, serveTherapist, redirectToTherapist)
             }
         }
     }
+}
+
+/**
+ * The one line a start logs about its shape (#330), at info. It names the shape and the settings that
+ * decided it, never a value the operator typed, and it is logged once per start, never per request.
+ */
+internal fun shapeLogLine(config: Config): String {
+    val shape = config.shape
+    return if (config.setupMode != null) {
+        "Serving the ${shape.wire} shape, as DAYMARK_SETUP_MODE says: ${shape.serves}."
+    } else {
+        "Serving the ${shape.wire} shape, assumed because DAYMARK_SETUP_MODE is not set and " +
+            "DAYMARK_THERAPIST_AUTH is ${if (config.therapistAuthEnabled) "on" else "off"}: ${shape.serves}. " +
+            "Set DAYMARK_SETUP_MODE to solo, paired or practice to choose; see docs/COMPANION_DEPLOYMENT.md §0."
+    }
+}
+
+/**
+ * The one answer every route of a group that is off gives (#330): exactly what every clinician,
+ * pairing and practice route answered with `DAYMARK_THERAPIST_AUTH` off, before the groups were split,
+ * whichever group is off and in whichever shape. So a probe learns nothing from a group being off
+ * that the old switch did not already tell it, and the body says "therapist portal" for the practice
+ * group too, for that reason.
+ */
+private const val GROUP_OFF_ERROR = "therapist portal not configured"
+
+private val groupOff: suspend io.ktor.server.routing.RoutingContext.() -> Unit = {
+    call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto(GROUP_OFF_ERROR))
+}
+
+/**
+ * The clinician group, off: every method and path the group answers when it is on — relationship
+ * channels and their revocation, the owner's access log, invitations, pairing, sign-in, the passkey
+ * scaffold, keys and endings — answers 503 instead. A probe cannot tell "configured but nobody has
+ * registered yet" (404) or "not signed in" (401) from "this shape has no clinicians" (503).
+ * ShapeRoutingTest walks the routes of a server with the group on and asks every one of them here.
+ */
+private fun Route.clinicianGroupOff() {
+    get("/v1/rel/{...}", groupOff)
+    put("/v1/rel/{...}", groupOff)
+    post("/v1/rel/{...}", groupOff)
+    post("/v1/invite", groupOff)
+    post("/v1/invite/{...}", groupOff)
+    post("/v1/totp/{...}", groupOff)
+    post("/v1/session/{...}", groupOff)
+    get("/v1/webauthn/{...}", groupOff)
+    post("/v1/webauthn/{...}", groupOff)
+    get("/v1/relations/{...}", groupOff)
+    post("/v1/relations/{...}", groupOff)
+}
+
+/**
+ * The practice group, off: every method the org control plane answers, so a probe cannot tell "this
+ * practice has no such member" (404) from "this shape has no practices" (503).
+ */
+private fun Route.practiceGroupOff() {
+    get("/v1/orgs", groupOff)
+    post("/v1/orgs", groupOff)
+    get("/v1/orgs/{...}", groupOff)
+    post("/v1/orgs/{...}", groupOff)
+    delete("/v1/orgs/{...}", groupOff)
+}
+
+/**
+ * The web build's pages, and the shapes that serve each (#330). The owner's page and the server
+ * console are served in every shape; the clinician's page with the clinician group; the practice page
+ * with the practice group. A page of the build that is not named here is served in every shape by the
+ * static handler, which is why ShapeRoutingTest fails on a page it has not classified.
+ */
+internal object Pages {
+    const val OWNER = "index.html"
+    const val SERVER_CONSOLE = "admin.html"
+    const val CLINICIAN = "therapist.html"
+    const val PRACTICE = "practice.html"
+
+    /** The page files [shape] does not serve. */
+    fun notServed(shape: SetupMode): List<String> = listOfNotNull(
+        CLINICIAN.takeUnless { shape.clinicianGroup },
+        PRACTICE.takeUnless { shape.practiceGroup },
+    )
+}
+
+/**
+ * The pages, under the base path (#330).
+ *
+ * A page the shape does not serve is REFUSED AT THE FILE, not at a path. The static handler resolves
+ * `/therapist.html/`, `/./therapist.html`, `/x/../therapist.html` and `/%2Ftherapist.html` to the same
+ * file as `/therapist.html`, so a route on that one spelling would leave the others serving the page.
+ * `exclude` sees the file the handler resolved, whatever the spelling, and the handler answers it 403
+ * with no body. The clean paths that lead to the clinician's page — `/therapist` and the invitation
+ * link's `/portal/invite` — answer the same 403, so "not served in this shape" has one answer, apart
+ * from "not in this build", which `/therapist` answers 404.
+ */
+private fun Route.pageRoutes(
+    shape: SetupMode,
+    webRoot: File,
+    invitePaths: List<String>,
+    serveTherapist: suspend io.ktor.server.routing.RoutingContext.() -> Unit,
+    redirectToTherapist: suspend io.ktor.server.routing.RoutingContext.() -> Unit,
+) {
+    if (shape.clinicianGroup) {
+        get("/therapist") { serveTherapist() }
+        invitePaths.forEach { p -> get(p) { redirectToTherapist() } }
+    } else {
+        val refused: suspend io.ktor.server.routing.RoutingContext.() -> Unit = { call.respond(HttpStatusCode.Forbidden) }
+        get("/therapist", refused)
+        invitePaths.forEach { p -> get(p, refused) }
+    }
+    val notServed = Pages.notServed(shape).map { File(webRoot, it) }
+    staticFiles("/", webRoot) {
+        default(Pages.OWNER)
+        exclude { requested -> notServed.any { page -> isSamePage(requested, page) } }
+    }
+}
+
+/**
+ * Whether [requested] is the file [page], as the filesystem sees it: by identity rather than by name,
+ * so another spelling of the same file — another case on a case-insensitive disk, a link — is the
+ * same page. Two files that cannot be compared count as the same, so a failure refuses rather than
+ * serves. Nothing is there to serve, or to refuse, when either is not a file.
+ */
+private fun isSamePage(requested: File, page: File): Boolean {
+    if (!requested.isFile || !page.isFile) return false
+    return runCatching { Files.isSameFile(requested.toPath(), page.toPath()) }.getOrDefault(true)
 }

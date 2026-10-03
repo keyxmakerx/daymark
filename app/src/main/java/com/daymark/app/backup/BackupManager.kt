@@ -391,6 +391,11 @@ internal fun replacePersonIdMap(people: List<BackupPerson>): Map<Long, Long> =
  * One table is outside that rule on purpose: the reception ledger (`offer_records`) is neither
  * exported nor restored, and a REPLACE import empties it. The end of [importReplace] says why —
  * worth reading before adding a field for it in the name of completeness.
+ *
+ * The Companion's six tables are outside it too, for a different reason. Game plans, the owner's
+ * progress against them, accepted assignments, and self-check and task results are not in the file,
+ * because whether they belong there is not settled (#386); a REPLACE import empties them and
+ * restores nothing into them. [importReplace] says why that direction, and not the other.
  */
 @Singleton
 class BackupManager @Inject constructor(
@@ -413,9 +418,11 @@ class BackupManager @Inject constructor(
     private val personDao: com.daymark.app.data.dao.PersonDao,
     private val personNoteDao: com.daymark.app.data.dao.PersonNoteDao,
     // The entry -> person link, through its own DAO rather than EntryDao. That separation is the
-    // shape `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §2 asks for — EntryDao is the door that returns
-    // moodLevel, and it has no method that touches entry_people. See EntryPersonDao's header.
+    // shape `docs/FEATURES.md` §11.2 asks for — EntryDao is the door that returns moodLevel, and it
+    // has no method that touches entry_people. See EntryPersonDao's header.
     private val entryPersonDao: com.daymark.app.data.dao.EntryPersonDao,
+    // The Companion's tables, held only to be able to empty them on a REPLACE — see importReplace.
+    private val companionDao: com.daymark.app.data.dao.CompanionDao,
     // The reception ledger, held only to be able to empty it on a REPLACE — see importReplace.
     // Deliberately the repository and not `OfferRecordDao`: the repository is the seam that decides
     // what may be read out of that table, and a backup path has no business reading rows at all.
@@ -664,6 +671,24 @@ class BackupManager @Inject constructor(
         personDao.setGroupShares(data.personGroupShares.map { PersonGroupShare(it.groupKey, it.shared) })
 
         /*
+         * The Companion's tables are emptied here and nothing is written back into them: game plans
+         * and their items, the owner's progress against them, accepted assignments, and self-check
+         * and task results (#177). CompanionDao.deleteAll names all six.
+         *
+         * EMPTIED, because this is "Replace all current data", and whatever a REPLACE leaves standing
+         * outlives the one operation somebody performs because they want the old data gone — the way
+         * the reception ledger below was found. A clinician's guidance and the results of a self-check
+         * are rows nobody would expect to survive it.
+         *
+         * NOT RESTORED, because the file carries none of them. That is not a ruling that they never
+         * belong in it: whether game plans, assignments and results travel in the backup, and so in
+         * the synced snapshot, is not settled (#386). Until it is, the file format does not change,
+         * and a REPLACE leaves these tables empty rather than holding a previous life's rows beside
+         * a restored one.
+         */
+        companionDao.deleteAll()
+
+        /*
          * The reception ledger is emptied here, and it is the one table with no matching restore
          * because it is not in the backup file at all.
          *
@@ -681,7 +706,7 @@ class BackupManager @Inject constructor(
          * a sixty-day retention (OfferLedgerRepository.RETENTION_DAYS), not history, and everything
          * a person would miss is already in `entries`. A field for it here would also be the first
          * step towards the ledger looking like data worth keeping, which is the direction
-         * `docs/DECISIONS_2026-08.md` §D1a exists to block.
+         * `docs/DECISIONS.md` §D1a exists to block.
          *
          * WHAT A PERSON WILL NOTICE. A standing "stop asking" is stored as a STOP row in this table
          * (OfferLedgerRepository.saidStop), so clearing it lifts that preference and the support

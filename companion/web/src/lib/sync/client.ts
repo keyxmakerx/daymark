@@ -4,6 +4,32 @@
  * Used by the browser portal (read path), the reference CLI writer, and the integration
  * test. The server is zero-knowledge: this client encrypts before PUT and decrypts after
  * GET; the server only ever holds opaque bytes.
+ *
+ * THE SIZE LIMIT AND PADDING (#315). Snapshots are padded before they are encrypted, so a padded
+ * snapshot can be larger than the server's blob limit where the unpadded one would have fitted:
+ * at the default 25 MiB limit that is any plaintext from 25,690,109 to 26,214,355 bytes. Such a
+ * snapshot is never sent unpadded instead. pushSnapshot checks the padded size against the limit
+ * it was given BEFORE it derives a key or makes a request, and refuses with fixed words that say
+ * nothing was sent, both sizes, and the limit. The limit defaults to the server's own default
+ * (DEFAULT_MAX_BLOB_BYTES); the server's actual limit is its operator's setting, which this client
+ * cannot see, so a server that refuses anyway (413) is reported as the server's answer, with the
+ * same two sizes.
+ *
+ * THE KEY IS READ FROM THE KEY DOCUMENT (#258; docs/SYNC_PROTOCOL.md §2 and §3). Both flows here —
+ * the reader's pull and the writer's push — learn how to reach the master from `GET /v1/keydoc`,
+ * which answers with the owner's wrapped key when one exists and with the key parameters
+ * otherwise. A wrapped key is opened with the passphrase slot; key parameters are derived from as
+ * they always were. Nothing here reads `/v1/keyparams`: once a wrapped key exists the server
+ * answers it 410, and a reader that still asked there would stop at a key the owner has. The one
+ * request left on that path is the writer's create-only PUT when the server holds no key document
+ * at all; a 409 or 410 to it means another writer got there first, and the writer reads the key
+ * document again and uses what is there.
+ *
+ * TWO THINGS THE WRITER WILL NOT DO. It publishes no key parameters on a server that stores
+ * snapshots and no key document, because a fresh salt would open none of them. And it uploads no
+ * snapshot whose key the server no longer serves: the key document is read again right before the
+ * upload, and what it holds must open, with the same passphrase, to the key the snapshot was
+ * encrypted under (assertKeyUnchanged). Both refuse in fixed words, having stored nothing.
  */
 import {
   initCrypto,
@@ -11,12 +37,31 @@ import {
   newSalt,
   encryptSnapshot,
   decryptSnapshot,
+  snapshotBlobLength,
+  unpaddedSnapshotBlobLength,
   toBase64,
   fromBase64,
+  kdfRange,
   DEFAULT_KDF,
   type KdfParams,
   type OwnerKeys,
 } from './crypto'
+import {
+  DataKeyError,
+  KDF_ABOVE_CEILING,
+  KDF_BELOW_FLOOR,
+  unwrapWithPassphrase,
+  zeroizeDataKey,
+  type RecoverableDataKey,
+} from '../recovery/dataKey'
+import { subkeysFromMaster } from '../recovery/migration'
+import { isLaneLineage } from '../lane/lineage'
+
+/**
+ * The largest blob a Daymark server stores unless its operator sets DAYMARK_MAX_BLOB_BYTES
+ * (docs/COMPANION_DEPLOYMENT.md). A writer whose server accepts more is given that number instead.
+ */
+export const DEFAULT_MAX_BLOB_BYTES = 26_214_400
 
 export interface KeyParams {
   v: 1
@@ -32,6 +77,24 @@ export interface SnapshotMeta {
   createdAt: number
 }
 
+/**
+ * What `GET /v1/keydoc` answered: nothing yet, the key parameters, or the newest wrapped key.
+ *
+ * `etag` is kept exactly as the server sent it, quotes included, because an enrolment names the key
+ * parameters it wrapped by sending that value back unchanged (docs/SYNC_PROTOCOL.md §2).
+ */
+export type KeyDocument =
+  | { kind: 'none' }
+  | { kind: 'keyparams'; params: KeyParams; etag: string }
+  | { kind: 'wrapped'; wrapped: RecoverableDataKey; version: number; etag: string }
+
+/**
+ * The state a create of the wrapped key is made against: a first run, which the server takes only
+ * while it holds no key document of either kind, or an enrolment of the key parameters whose
+ * `ETag` this is.
+ */
+export type CreateAgainst = { kind: 'firstRun' } | { kind: 'enrolment'; etag: string }
+
 type FetchLike = typeof fetch
 
 export class SyncError extends Error {
@@ -40,23 +103,200 @@ export class SyncError extends Error {
   }
 }
 
+/** The refusal when the passphrase does not open the passphrase slot of the server's wrapped key. */
+export const PASSPHRASE_DOES_NOT_OPEN_KEY = 'That passphrase does not open the key this server holds.'
+
+/**
+ * The writer's refusal to make a key on a server that stores snapshots and no key document (#258):
+ * a new salt derives a new master, which would open none of them. Said before anything is written,
+ * in the same words the set-up form uses for the same server (components/recovery/copy.ts,
+ * SETUP_FAULT_TEXT.snapshotsWithoutKey); decidedWords.test.ts holds the two equal.
+ */
+export const SNAPSHOTS_WITHOUT_KEY =
+  'This server stores snapshots but not what is needed to open them. A new key would not open those ' +
+  'snapshots, so none was made, and nothing has been stored.'
+
+/**
+ * The writer's refusal when the key document changed between the read that gave it its key and the
+ * upload (#258): an enrolment or a first run landed in between, and this passphrase does not open
+ * what the server holds now to the key the snapshot was encrypted under. Sent, the snapshot would
+ * open with nothing the server serves, so it is not sent.
+ */
+export const KEY_CHANGED_BEFORE_UPLOAD =
+  'The snapshot was not sent. The key this server holds changed while the snapshot was being ' +
+  'encrypted, and this passphrase does not open it to the key the snapshot was encrypted under.'
+
+/**
+ * The pull's answer when the server holds no key document at all: nothing has been synced to it, and
+ * there is nothing to open. Shown by the sync card as it stands.
+ */
+export const HOLDS_NO_KEY = 'This server holds no key: nothing has been synced to it.'
+
+/**
+ * The refusal of a lineage that names the web console's lane (#345; lane/lineage.ts). A lane holds
+ * what the console adds, sealed under its own associated data, and is never written or read as a
+ * snapshot, so every lane stays findable by its name alone. Said before any request.
+ */
+export const LANE_IS_NOT_A_SNAPSHOT =
+  'A lineage whose name begins "lane_" holds what the web console adds, never a snapshot. Nothing was read or sent.'
+
+/** A server that asks which state a create was made against is answering a fault in this client. */
+const CREATE_NAMED_NO_STATE =
+  'the server answered 428: this create named no state it was made against, which this client always names'
+
+/** The one refusal for KDF parameters under the floor, wherever on the server they came from. */
+export const WEAK_KDF = 'server returned weak/unknown KDF parameters — refusing to derive a key'
+
+/**
+ * The one refusal for KDF parameters over the ceiling (crypto.ts KDF_CEILING), wherever on the
+ * server they came from: deriving at them would spend this device's memory and time on the
+ * server's say-so, before anything could tell whether they open anything.
+ */
+export const COSTLY_KDF = 'server returned KDF parameters above the ceiling — refusing to derive a key'
+
+const isRecord = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x)
+
+/** The shape of key parameters, and nothing more: the KDF floor and ceiling are checked where the key is derived. */
+function isKeyParams(x: unknown): x is KeyParams {
+  return isRecord(x) && x.v === 1 && isRecord(x.kdf) && typeof x.saltB64 === 'string'
+}
+
+/** The kinds of slot this client opens (recovery/dataKey.ts SlotKind). */
+const KNOWN_SLOT_KINDS: ReadonlySet<unknown> = new Set(['passphrase', 'recovery'])
+
+/**
+ * The shape of a wrapped key, read as recovery/dataKey.ts and the phone read one (#403, #419):
+ * every slot is an object, and a slot of a kind this client opens carries all of its fields. A slot
+ * of any other kind — a passkey's, a Shamir share, one with no kind — is not read here at all, so a
+ * kind added later does not make the whole key unreadable. Its KDF parameters are still held to the
+ * floor and the ceiling, with every other slot's, before anything is derived: dataKey.ts
+ * validateBlob checks every slot of every kind against crypto.ts kdfRange on every use, and
+ * keysFrom turns its two refusals into WEAK_KDF and COSTLY_KDF.
+ */
+function isWrappedKey(x: unknown): x is RecoverableDataKey {
+  return (
+    isRecord(x) &&
+    x.v === 1 &&
+    Array.isArray(x.slots) &&
+    x.slots.every(
+      (s) =>
+        isRecord(s) &&
+        (!KNOWN_SLOT_KINDS.has(s.kind) ||
+          (isRecord(s.kdf) &&
+            typeof s.saltB64 === 'string' &&
+            typeof s.nonceB64 === 'string' &&
+            typeof s.ctB64 === 'string')),
+    )
+  )
+}
+
+/**
+ * A 200 from `GET /v1/keydoc`, read as the kind `X-Key-Document` names and checked as that kind,
+ * because the server vouches for neither (docs/SYNC_PROTOCOL.md §2). Anything this client cannot
+ * read as what it claims to be is refused rather than guessed at.
+ */
+export function parseKeyDocument(headers: Headers, body: string): KeyDocument {
+  const kind = headers.get('X-Key-Document')
+  const etag = headers.get('ETag')
+  if (!etag) throw new SyncError('the server sent a key document without an ETag')
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(body)
+  } catch {
+    throw new SyncError('the server sent a key document that is not JSON')
+  }
+  if (kind === 'keyparams') {
+    if (!isKeyParams(parsed)) throw new SyncError('the server sent a key document this client cannot read')
+    return { kind: 'keyparams', params: parsed, etag }
+  }
+  if (kind === 'wrapped') {
+    const version = headers.get('X-Key-Document-Version') ?? ''
+    if (!/^[1-9][0-9]{0,15}$/.test(version) || !Number.isSafeInteger(Number(version))) {
+      throw new SyncError('the server sent a wrapped key without a version')
+    }
+    if (!isWrappedKey(parsed)) throw new SyncError('the server sent a wrapped key this client cannot read')
+    return { kind: 'wrapped', wrapped: parsed, version: Number(version), etag }
+  }
+  throw new SyncError('the server sent a key document of a kind this client does not know')
+}
+
+/**
+ * A snapshot that was not stored because of its size. `limitBytes` is the limit this client
+ * refused it against before sending anything, or null when the server refused it (status 413).
+ */
+export class SnapshotTooLargeError extends SyncError {
+  constructor(
+    message: string,
+    readonly paddedBytes: number,
+    readonly unpaddedBytes: number,
+    readonly limitBytes: number | null,
+    status?: number,
+  ) {
+    super(message, status)
+  }
+}
+
+/** 26214400 → "26,214,400", so a size can be read at a glance and compared with a setting. */
+function bytesText(n: number): string {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+/**
+ * The refusal when a padded snapshot is over this client's limit. Fixed words with the sizes
+ * slotted in: the consequence first, then only what this client knows — the padded size, the
+ * unpadded size and the limit it was given. Whether padding is what took it over is said, because
+ * this client knows it; what the server would have done is never said, because the server's limit
+ * is its operator's setting.
+ */
+export function snapshotTooLargeText(paddedBytes: number, unpaddedBytes: number, limitBytes: number): string {
+  const head =
+    `Nothing was sent. Padded, this snapshot is ${bytesText(paddedBytes)} bytes, and the most ` +
+    `this writer sends is ${bytesText(limitBytes)}.`
+  if (unpaddedBytes <= limitBytes) {
+    return (
+      `${head} Unpadded it would have been ${bytesText(unpaddedBytes)} bytes, but snapshots are ` +
+      'always padded before they are encrypted, so that the server learns only roughly how big ' +
+      'each one is.'
+    )
+  }
+  return `${head} Unpadded it would have been ${bytesText(unpaddedBytes)} bytes, which is more than that too.`
+}
+
+/** The refusal when the server answers 413 to a snapshot this client did send. */
+export function snapshotRefusedText(paddedBytes: number, unpaddedBytes: number): string {
+  return (
+    'Nothing was stored. The server answered that this snapshot is larger than it accepts. ' +
+    `Padded, it is ${bytesText(paddedBytes)} bytes; unpadded it would have been ${bytesText(unpaddedBytes)}.`
+  )
+}
+
+export interface SyncClientOptions {
+  /** The largest snapshot blob this client sends. Defaults to DEFAULT_MAX_BLOB_BYTES. */
+  maxBlobBytes?: number
+}
+
 export class SyncClient {
   private readonly base: string
+  private readonly maxBlobBytes: number
   // Cache the (expensive, ≥256 MiB) Argon2id derivation per passphrase+salt within this instance.
   private keyCache: { tag: string; keys: OwnerKeys } | null = null
   constructor(
     baseUrl: string,
     private readonly token: string,
     private readonly doFetch: FetchLike = fetch.bind(globalThis),
+    options: SyncClientOptions = {},
   ) {
     this.base = baseUrl.replace(/\/+$/, '')
+    const max = options.maxBlobBytes ?? DEFAULT_MAX_BLOB_BYTES
+    if (!Number.isSafeInteger(max) || max < 1) throw new RangeError(`maxBlobBytes must be a positive whole number, not ${max}`)
+    this.maxBlobBytes = max
   }
 
-  /** Reject server-supplied KDF params below the security-doc floor (downgrade defense). */
+  /** Reject server-supplied KDF params outside the range (crypto.ts kdfRange): a downgrade, or a cost the server chose. */
   private validateKdf(params: KdfParams) {
-    if (params.alg !== 'argon2id' || params.memMiB < 256 || params.ops < 3) {
-      throw new SyncError('server returned weak/unknown KDF parameters — refusing to derive a key')
-    }
+    const range = kdfRange(params)
+    if (range === 'belowFloor') throw new SyncError(WEAK_KDF)
+    if (range === 'aboveCeiling') throw new SyncError(COSTLY_KDF)
   }
 
   private derive(passphrase: string, saltB64: string, params: KdfParams): OwnerKeys {
@@ -79,20 +319,65 @@ export class SyncClient {
 
   // --- raw API ---
 
-  async getKeyParams(): Promise<KeyParams | null> {
-    const res = await this.req('/v1/keyparams')
-    if (res.status === 404) return null
-    if (!res.ok) throw new SyncError(`keyparams fetch failed`, res.status)
-    return (await res.json()) as KeyParams
+  /** The owner's key document: the newest wrapped key, else the key parameters, else nothing. */
+  async getKeyDocument(): Promise<KeyDocument> {
+    const res = await this.req('/v1/keydoc')
+    if (res.status === 404) return { kind: 'none' }
+    if (!res.ok) throw new SyncError('key document fetch failed', res.status)
+    return parseKeyDocument(res.headers, await res.text())
   }
 
-  async putKeyParams(kp: KeyParams): Promise<void> {
+  /**
+   * Create version 1 of the wrapped key against the state this client read (docs/SYNC_PROTOCOL.md
+   * §2): `If-None-Match: *` for a first run, `If-Match` with the key parameters' ETag, exactly as
+   * received, for an enrolment. Exactly one of the two, always, so the server never has to ask
+   * (428). 'moved' is the server's 412: the key documents are no longer the ones read, so the
+   * caller reads them again and acts on what is there now.
+   */
+  async createKeyDocument(wrapped: RecoverableDataKey, against: CreateAgainst): Promise<'created' | 'moved'> {
+    const precondition: Record<string, string> =
+      against.kind === 'firstRun' ? { 'If-None-Match': '*' } : { 'If-Match': against.etag }
+    const res = await this.req('/v1/keydoc', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...precondition },
+      body: JSON.stringify(wrapped),
+    })
+    if (res.status === 201) return 'created'
+    if (res.status === 412) return 'moved'
+    if (res.status === 428) throw new SyncError(CREATE_NAMED_NO_STATE, 428)
+    throw new SyncError('key document store failed', res.status)
+  }
+
+  /**
+   * Store the next version of the wrapped key: a new passphrase or a new recovery code. `version`
+   * is the one this write makes, so it is taken only while `version - 1` is the newest; 'moved' is
+   * the server's 409, another device having written first.
+   */
+  async putKeyDocumentVersion(version: number, wrapped: RecoverableDataKey): Promise<'written' | 'moved'> {
+    if (!Number.isSafeInteger(version) || version < 2) throw new RangeError(`a new version of the wrapped key is 2 or more, not ${version}`)
+    const res = await this.req(`/v1/keydoc/${version}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(wrapped),
+    })
+    if (res.status === 201) return 'written'
+    if (res.status === 409) return 'moved'
+    throw new SyncError('key document store failed', res.status)
+  }
+
+  /**
+   * Publish the key parameters. Create-only on the server: false when another writer published
+   * first (409) or a wrapped key already supersedes them (410), and the caller reads again.
+   */
+  async publishKeyParams(kp: KeyParams): Promise<boolean> {
     const res = await this.req('/v1/keyparams', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(kp),
     })
-    if (!res.ok) throw new SyncError('keyparams store failed', res.status)
+    if (res.ok) return true
+    if (res.status === 409 || res.status === 410) return false
+    throw new SyncError('key store failed', res.status)
   }
 
   async listLineages(): Promise<string[]> {
@@ -127,29 +412,115 @@ export class SyncClient {
 
   // --- high-level (crypto applied) ---
 
-  /** Get existing key params or create+publish them (writer only — needs the passphrase). */
+  /**
+   * The subkeys a key document and a passphrase reach: derived from key parameters as they always
+   * were, or opened from the passphrase slot of a wrapped key. The master is wiped as soon as its
+   * two subkeys exist.
+   */
+  private async keysFrom(doc: Exclude<KeyDocument, { kind: 'none' }>, passphrase: string): Promise<OwnerKeys> {
+    if (doc.kind === 'keyparams') return this.derive(passphrase, doc.params.saltB64, doc.params.kdf)
+    const tag = `wrapped|${doc.etag}|${passphrase}`
+    if (this.keyCache?.tag === tag) return this.keyCache.keys
+    let master: Uint8Array
+    try {
+      master = await unwrapWithPassphrase(doc.wrapped, passphrase)
+    } catch (e) {
+      if (e instanceof DataKeyError && e.message === KDF_BELOW_FLOOR) throw new SyncError(WEAK_KDF)
+      if (e instanceof DataKeyError && e.message === KDF_ABOVE_CEILING) throw new SyncError(COSTLY_KDF)
+      throw new SyncError(PASSPHRASE_DOES_NOT_OPEN_KEY)
+    }
+    try {
+      const keys = subkeysFromMaster(master)
+      this.keyCache = { tag, keys }
+      return keys
+    } finally {
+      zeroizeDataKey(master)
+    }
+  }
+
+  /**
+   * The writer's keys: from the key document, or, when the server holds none, from key parameters
+   * this writer publishes. The publish is create-only, so when another writer's key parameters or a
+   * wrapped key got there first, this reads the key document again and uses what is there.
+   */
   async ensureKeys(passphrase: string): Promise<OwnerKeys> {
     await initCrypto()
-    const existing = await this.getKeyParams()
-    if (existing) return this.derive(passphrase, existing.saltB64, existing.kdf)
+    const doc = await this.getKeyDocument()
+    if (doc.kind !== 'none') return this.keysFrom(doc, passphrase)
+    // No key document, and snapshots already stored: whatever key wrote them, a fresh salt is not
+    // it, and publishing one would leave every stored snapshot opening with nothing served.
+    if ((await this.listLineages()).length > 0) throw new SyncError(SNAPSHOTS_WITHOUT_KEY)
     const saltB64 = toBase64(newSalt())
-    await this.putKeyParams({ v: 1, alg: 'xchacha20poly1305', kdf: DEFAULT_KDF, saltB64 })
-    return this.derive(passphrase, saltB64, DEFAULT_KDF)
+    if (await this.publishKeyParams({ v: 1, alg: 'xchacha20poly1305', kdf: DEFAULT_KDF, saltB64 })) {
+      return this.derive(passphrase, saltB64, DEFAULT_KDF)
+    }
+    const now = await this.getKeyDocument()
+    if (now.kind === 'none') throw new SyncError('the server refused a new key and holds none')
+    return this.keysFrom(now, passphrase)
   }
 
-  /** Encrypt a plaintext snapshot and PUT it as the given append-only version. */
+  /**
+   * Encrypt a plaintext snapshot, padded, and PUT it as the given append-only version. Refuses a
+   * snapshot whose padded blob is over this client's limit before anything else happens, so the
+   * refusal's "nothing was sent" holds even for the key parameters (see the header).
+   */
   async pushSnapshot(lineage: string, version: number, plaintext: Uint8Array, passphrase: string): Promise<SnapshotMeta> {
+    if (isLaneLineage(lineage)) throw new SyncError(LANE_IS_NOT_A_SNAPSHOT)
+    this.assertSnapshotFits(plaintext.length)
     const keys = await this.ensureKeys(passphrase)
     const blob = encryptSnapshot(plaintext, keys.syncKey, lineage, version)
-    return this.putBlob(lineage, version, blob)
+    await this.assertKeyUnchanged(keys, passphrase)
+    try {
+      return await this.putBlob(lineage, version, blob)
+    } catch (e) {
+      if (e instanceof SyncError && e.status === 413) {
+        const unpaddedBytes = unpaddedSnapshotBlobLength(plaintext.length)
+        throw new SnapshotTooLargeError(snapshotRefusedText(blob.length, unpaddedBytes), blob.length, unpaddedBytes, null, 413)
+      }
+      throw e
+    }
   }
 
-  /** Fetch + decrypt the highest version of a lineage. Throws if no keyparams/snapshots. */
+  /**
+   * The key document again, right before an upload (#258). The key a snapshot is encrypted under
+   * came from one read; an enrolment or a first run can land between that read and the upload, and
+   * once one has, the server serves the new locked key and answers the key parameters 410. So the
+   * upload goes ahead only if what the server holds now opens, with this passphrase, to the same
+   * sync key — the same master — the snapshot was encrypted under. Otherwise nothing is sent.
+   *
+   * The common case costs one request: an unchanged document hits the key cache.
+   */
+  private async assertKeyUnchanged(keys: OwnerKeys, passphrase: string): Promise<void> {
+    const now = await this.getKeyDocument()
+    let current: OwnerKeys | null = null
+    if (now.kind !== 'none') current = await this.keysFrom(now, passphrase).catch(() => null)
+    const same = current !== null && current.syncKey.length === keys.syncKey.length && current.syncKey.every((b, i) => b === keys.syncKey[i])
+    if (!same) throw new SyncError(KEY_CHANGED_BEFORE_UPLOAD)
+  }
+
+  /**
+   * Throws SnapshotTooLargeError when a snapshot of this many plaintext bytes, padded, is over this
+   * client's limit. Makes no request, so a caller can check before it contacts the server at all.
+   */
+  assertSnapshotFits(plaintextLength: number): void {
+    const paddedBytes = snapshotBlobLength(plaintextLength)
+    if (paddedBytes <= this.maxBlobBytes) return
+    const unpaddedBytes = unpaddedSnapshotBlobLength(plaintextLength)
+    throw new SnapshotTooLargeError(
+      snapshotTooLargeText(paddedBytes, unpaddedBytes, this.maxBlobBytes),
+      paddedBytes,
+      unpaddedBytes,
+      this.maxBlobBytes,
+    )
+  }
+
+  /** Fetch + decrypt the highest version of a lineage. Throws if no key document/snapshots. */
   async pullLatest(lineage: string, passphrase: string): Promise<{ version: number; plaintext: Uint8Array }> {
+    if (isLaneLineage(lineage)) throw new SyncError(LANE_IS_NOT_A_SNAPSHOT)
     await initCrypto()
-    const kp = await this.getKeyParams()
-    if (!kp) throw new SyncError('no key parameters on server — nothing has been synced yet')
-    const keys = this.derive(passphrase, kp.saltB64, kp.kdf)
+    const doc = await this.getKeyDocument()
+    if (doc.kind === 'none') throw new SyncError(HOLDS_NO_KEY)
+    const keys = await this.keysFrom(doc, passphrase)
     const versions = await this.listVersions(lineage)
     if (versions.length === 0) throw new SyncError(`no snapshots for lineage "${lineage}"`)
     const head = versions.reduce((a, b) => (b.version > a.version ? b : a))

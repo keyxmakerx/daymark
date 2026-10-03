@@ -1,7 +1,7 @@
 package com.daymark.companion.routes
 
 import com.daymark.companion.auth.AttemptLimiter
-import com.daymark.companion.auth.AuthGuard
+import com.daymark.companion.auth.OwnerAuth
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.auth.Secrets
 import com.daymark.companion.auth.Totp
@@ -184,7 +184,7 @@ private const val STEP_UP_HEADER = "X-Stepup-Code"
 fun Route.orgRoutes(
     orgStore: OrgStore,
     authStore: AuthStore,
-    ownerGuard: AuthGuard,
+    ownerGuard: OwnerAuth,
     sessionIdleSeconds: Long,
     orgAudit: AuditStore,
     auditSourceIp: Boolean = false,

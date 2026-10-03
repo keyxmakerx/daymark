@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, dirname, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -68,6 +69,14 @@ function candidatePaths(text: string): string[] {
 }
 
 /**
+ * Directories inside the checkout that are not this repository. `.claude/worktrees/` holds the full
+ * checkouts the harness makes for parallel agents (gitignored). Indexed, they let a path that exists
+ * only in an agent's copy resolve here while CI, which has no such copies, fails it, and they
+ * reported each copy's own citations as this tree's.
+ */
+const NOT_THIS_REPOSITORY = new Set(['.claude/worktrees'])
+
+/**
  * Every tracked file in the repo, as repo-relative paths, for suffix matching.
  *
  * Documentation legitimately writes shorthand — `stats/SupportOffer.kt`, `instruments/predicate.ts`,
@@ -76,12 +85,14 @@ function candidatePaths(text: string): string[] {
  * demanded the prefix would flag correct prose, and a guard that cries wolf is one that gets
  * switched off, which is worse than not having it.
  */
-function indexFiles(dir: string, acc: string[] = []): string[] {
+function indexFiles(dir: string, root: string = REPO, acc: string[] = []): string[] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     if (/^(node_modules|\.git|build|dist|\.gradle|\.idea)$/.test(e.name)) continue
     const p = join(dir, e.name)
-    if (e.isDirectory()) indexFiles(p, acc)
-    else acc.push(p.slice(REPO.length + 1).split(sep).join('/'))
+    const rel = p.slice(root.length + 1).split(sep).join('/')
+    if (e.isDirectory()) {
+      if (!NOT_THIS_REPOSITORY.has(rel)) indexFiles(p, root, acc)
+    } else acc.push(rel)
   }
   return acc
 }
@@ -126,12 +137,8 @@ function resolves(p: string): boolean {
  */
 const ABSENT_PATHS: Record<string, string> = {
   'companion/docker-compose.smtp.yml':
-    'HARDENING §2.1 — an opt-in override the operator writes if they enable SMTP. Shipping it would ' +
-    'put a mail network in the default topology, which is the thing that section argues against.',
-  'renovate.json':
-    'HARDENING §4.7 — proposed config, not adopted. The repo uses .github/dependabot.yml instead; ' +
-    'the section is kept because its point (a pinned-and-rotting digest is worse than an unpinned ' +
-    'one) applies to whichever updater is running.',
+    'COMPANION_DEPLOYMENT.md §8 — an opt-in override the operator writes if they enable SMTP. Shipping ' +
+    'it would put a mail network in the default topology, which is the thing that section argues against.',
 }
 
 describe('the corpus is actually being read', () => {
@@ -149,6 +156,22 @@ describe('the corpus is actually being read', () => {
   it('the resolver is not simply saying yes to everything', () => {
     expect(resolves('docs/THIS_FILE_DOES_NOT_EXIST.md')).toBe(false)
     expect(resolves('companion/web/src/app.css')).toBe(true)
+  })
+
+  it("indexes this repository, not the agents' checkouts inside it", () => {
+    const root = mkdtempSync(join(tmpdir(), 'docs-index-'))
+    try {
+      mkdirSync(join(root, '.claude', 'worktrees', 'agent-x', 'docs'), { recursive: true })
+      writeFileSync(join(root, '.claude', 'worktrees', 'agent-x', 'docs', 'ONLY_IN_A_COPY.md'), '')
+      mkdirSync(join(root, '.claude', 'agents'), { recursive: true })
+      writeFileSync(join(root, '.claude', 'agents', 'pilot.md'), '')
+      const index = indexFiles(root, root)
+      // Positive control: the rest of .claude is read, so an empty index cannot pass this.
+      expect(index).toContain('.claude/agents/pilot.md')
+      expect(index.filter((f) => f.startsWith('.claude/worktrees/'))).toEqual([])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 
   it('the ellipsis segment matches a real path and still rejects a false one', () => {
@@ -185,6 +208,61 @@ describe('every file the documentation points at exists', () => {
 })
 
 /**
+ * THE OTHER DIRECTION: every document the code names exists.
+ *
+ * Comments, test names and user-visible copy cite documents by name — "COMPANION_SECURITY.md §9", or
+ * `specifiedAt: 'docs/COMPANION_ACCESS_CONTROL.md, revocation.'` rendered on a screen. Plans, session
+ * logs and dated audits are deleted once their open work is in GitHub issues, so a citation of one
+ * is a pointer into nothing, and nothing else notices: a comment compiles whatever it says. This
+ * checks that the file named exists. It cannot check that the section still says what the comment
+ * claims — that still needs a reader.
+ */
+const CODE_PREFIXES = ['app/', 'companion/', 'sync-crypto/', 'tools/', 'gradle/', '.github/', '.claude/']
+const CODE_EXT = /\.(kt|kts|ts|svelte|js|mjs|sh|yml|yaml|json|toml|properties|html|css|md|example)$|(^|\/)Dockerfile$/
+/** An uppercase document name, optionally with a directory: `COMPANION_UX.md`, `docs/SKY.md`. */
+const DOC_NAME_IN_CODE = /(?<![A-Za-z0-9_.-])((?:[a-z][a-z0-9-]*\/)*[A-Z][A-Z0-9]*(?:[_-][A-Z0-9]+)*\.md)\b/g
+/** This file plants a missing name on purpose, to prove the resolver can say no. */
+const SELF = 'companion/web/src/lib/docs.test.ts'
+
+const CODE_FILES = FILE_INDEX.filter(
+  (f) => CODE_PREFIXES.some((p) => f.startsWith(p)) && CODE_EXT.test(f) && f !== SELF && !f.includes('node_modules/'),
+)
+
+function docNamesIn(text: string): string[] {
+  return [...new Set([...text.matchAll(DOC_NAME_IN_CODE)].map((m) => m[1]))]
+}
+
+/** A bare name resolves to any document with that file name; a path must resolve as a path. */
+function docResolves(name: string): boolean {
+  return name.includes('/') ? resolves(name) : FILE_INDEX.some((f) => f === name || f.endsWith('/' + name))
+}
+
+describe('every document the code names exists', () => {
+  const cited = CODE_FILES.map((f) => ({ f, names: docNamesIn(readFileSync(join(REPO, f), 'utf8')) })).filter(
+    (c) => c.names.length,
+  )
+
+  it('found code that cites documents, and the check can fail', () => {
+    // Guards the assertion below: a scanner that finds nothing makes it pass vacuously.
+    expect(cited.length).toBeGreaterThan(100)
+    expect(cited.some((c) => c.names.includes('COMPANION_SECURITY.md'))).toBe(true)
+    expect(docNamesIn('see docs/PLAN_THAT_NEVER_EXISTED.md §3 and COMPANION_UX.md')).toEqual([
+      'docs/PLAN_THAT_NEVER_EXISTED.md',
+      'COMPANION_UX.md',
+    ])
+    expect(docResolves('docs/PLAN_THAT_NEVER_EXISTED.md')).toBe(false)
+    expect(docResolves('PLAN_THAT_NEVER_EXISTED.md')).toBe(false)
+    expect(docResolves('COMPANION_SECURITY.md')).toBe(true)
+    expect(docResolves('docs/SKY.md')).toBe(true)
+  })
+
+  it('no code, config or agent instruction points at a document that does not exist', () => {
+    const missing = cited.flatMap((c) => c.names.filter((n) => !docResolves(n)).map((n) => `${c.f}: ${n}`))
+    expect(missing, 'these files cite documents that do not exist — repoint them').toEqual([])
+  })
+})
+
+/**
  * Tokens the documentation names that app.css does not define — each with the reason.
  *
  * The first version of this test asserted the simple rule "if a doc names a token, app.css defines
@@ -197,34 +275,20 @@ describe('every file the documentation points at exists', () => {
  *  FORBIDDEN   the name must never appear in app.css. Enforced for real, against values as well as
  *              names, in components/ui/invariants.test.ts group (d).
  *  SUPERSEDED  a pre-implementation sketch's name for something that shipped under another name.
+ *              None are left: the sketches were cut when the docs were consolidated.
  *  UNBUILT     named in a proposal the docs mark as not built.
  */
 const ABSENT_TOKENS: Record<string, string> = {
   // FORBIDDEN — a green "you are fine" is a clinical claim this product does not get to make.
   '--success': 'DESIGN_SYSTEM §2.3.2 — no health-coloured status token; ui/invariants.test.ts (d)',
   '--warning': 'DESIGN_SYSTEM §2.3.2 — same rule; the mood ramp is data, not a severity palette',
-  '--trust-locked': 'UX §10.1/§496 — a served page is never painted green, whatever it claims',
-  '--trust-caution': 'UX §10 — the trust strip carries no colour vocabulary of its own',
-  '--trust-open': 'UX §10 — same; assurance is worded, not hued',
+  '--trust-locked': 'UX §10.1 — a served page is never painted green, whatever it claims',
+  '--trust-caution': 'DESIGN_SYSTEM §2.3.2 — the trust strip carries no colour vocabulary of its own',
+  '--trust-open': 'DESIGN_SYSTEM §2.3.2 — same; assurance is worded, not hued',
 
-  // SUPERSEDED — UX.md §3 and FEATURES.md §7.2 predate app.css. Both now carry a status banner
-  // naming the replacements; these entries are the mechanical half of the same correction.
-  '--paper': 'sketch name; shipped as --paper-bg',
-  '--sheet': 'sketch name; shipped as --paper-sheet',
-  '--surface': 'sketch name; shipped as --paper-sheet',
-  '--ink': 'sketch name; shipped as --ink-text',
-  '--soft': 'sketch name; shipped as --ink-soft',
-  '--faint': 'sketch name; shipped as --ink-faint',
-  '--accent': 'sketch name; shipped as --ink-accent',
-  '--hair': 'sketch name; shipped as --hairline',
-  '--radius-card': 'sketch name; shipped as --radius',
-  '--radius-chip': 'sketch name; shipped as --radius-sm',
-  '--font-serif': 'sketch name; shipped as --font-display',
-  '--font-sans': 'sketch name; shipped as --font-text',
-
-  // UNBUILT — DESIGN_SYSTEM §3.2 says so in its own banner. The reduced-motion guarantee does not
+  // UNBUILT — DESIGN_SYSTEM §3.2 names them as not built. The reduced-motion guarantee does not
   // depend on them: the global block neutralises durations rather than each site opting in.
-  '--ease-standard': 'DESIGN_SYSTEM §3.2 "motion tokens do not exist"; transitions are per-component',
+  '--ease-standard': 'DESIGN_SYSTEM §3.2 — not built; transitions are per-component',
   '--ease-entrance': 'DESIGN_SYSTEM §3.2 — same',
   '--dur-fast': 'DESIGN_SYSTEM §3.2 — same',
   '--dur-base': 'DESIGN_SYSTEM §3.2 — same',
@@ -270,8 +334,9 @@ describe('every design token the documentation names is defined', () => {
 
 describe('claims of the form "not built" stay true', () => {
   /*
-   * PLAN §5 exists to stop green CI being read as "the feature landed". If something on that list
-   * quietly acquires a production caller, the list becomes the lie instead of the safeguard.
+   * The docs' "not built" claims (docs/DECISIONS.md §D1b, docs/COMPANION_DIALOGUE.md) exist to stop
+   * green CI being read as "the feature landed". If something they name quietly acquires a
+   * production caller, the claim becomes the lie instead of the safeguard.
    */
   const webSrc = join(REPO, 'companion', 'web', 'src')
 
@@ -292,8 +357,9 @@ describe('claims of the form "not built" stay true', () => {
 
   it('the companion dialogue is still unmounted, as the docs say', () => {
     // Three of its six destinations (check-in, journal, safety-plan) do not exist in this app, so
-    // mounting it here would give endings nothing to open. When that changes, this test should be
-    // updated in the same commit as the mount — and PLAN §5 with it.
+    // mounting it here would give endings nothing to open. When that changes (#272), this test
+    // should be updated in the same commit as the mount — and docs/DECISIONS.md §D1b and
+    // docs/COMPANION_DIALOGUE.md with it.
     const importers = PRODUCTION.filter(
       (p) => /from '.*companion\/(content|walk)'/.test(p.text) && !p.f.endsWith('Companion.svelte'),
     )

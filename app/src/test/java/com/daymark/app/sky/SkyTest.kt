@@ -13,9 +13,8 @@ import org.junit.Test
  *    differs by one record draws a different one. [fingerprint] is the whole layout as a string, so
  *    "the same sky" means every coordinate, not a summary of them.
  * 2. **Nothing moves.** A star's position is fixed by its own identity — its kind and its anchor
- *    record id — so inserting a thousand records elsewhere leaves it exactly where it was. Since
- *    `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1.0 that is a stronger claim than it used to be:
- *    the date is not an input either, so a star does not even know when it is from.
+ *    record id — so inserting a thousand records elsewhere leaves it exactly where it was. The date
+ *    is not an input either (`docs/SKY.md` §3.1), so a star does not even know when it is from.
  * 3. **The field has no regions.** There are no month rows and no axis. Nothing about the sky maps
  *    a stretch of time onto a patch of screen, so there is no patch that a hard month could empty.
  *    The absence assertions here are paired with a demonstration that their detector can see a
@@ -307,8 +306,8 @@ class SkyTest {
 
     @Test
     fun `the date decides nothing about where a star is`() {
-        // Position is the record's kind and id, and the date is not in it — which is new since
-        // §1.0 and is the whole reason a hard month cannot be drawn as an empty band. The same six
+        // Position is the record's kind and id, and the date is not in it (`docs/SKY.md` §3.1) —
+        // which is the whole reason a hard month cannot be drawn as an empty band. The same six
         // records, moved eleven years and three days, land on exactly the same coordinates.
         val records = SkyKind.entries.mapIndexed { i, kind ->
             SkyRecord(kind, id = 31L + i, epochDay = start + i, moodLevel = SkyGlyph.MOOD_NONE)

@@ -5,16 +5,15 @@
  * WHAT IT IS FOR, AND WHAT IT IS NOT. It is the password-related string of a CPace run (cpace.ts).
  * It is generated on the owner's device, shown there, spoken or texted to the therapist by any
  * route EXCEPT the one the link took, typed once on the therapist's device, and never sent to the
- * server by either side (plan §3.7.4; relay.test.ts greps the wire for it). It is NOT a recovery
- * code, and the two must never be confused, which is why this is its own file rather than a
- * parameter on recovery/recoveryCode.ts: a recovery code opens a person's own data key and is
- * never to be said aloud to anyone; a pairing code is MEANT to be said aloud, once, to one person.
- * Same alphabet, opposite instructions. The framing around each has to say which one it is.
+ * server by either side (COMPANION_PAIRING.md §5; relay.test.ts greps the wire for it). It is NOT
+ * a recovery code, and the two must never be confused, which is why this is its own file rather
+ * than a parameter on recovery/recoveryCode.ts: a recovery code opens a person's own data key and
+ * is never to be said aloud to anyone; a pairing code is MEANT to be said aloud, once, to one
+ * person. Same alphabet, opposite instructions. The framing around each has to say which one it is.
  *
  * SHAPE. Eight symbols shown as two groups of four — K7M4-RD96. Seven carry entropy and the eighth
  * is a check symbol, over the same 31-symbol alphabet as the recovery code (digits 2–9, letters
- * A–Z without I, L and O). Decided 2026-09-03; recorded in docs/PLAN_2026-08-COMPANION-NEXT.md
- * under open question 7.
+ * A–Z without I, L and O). Decided 2026-09-03; recorded in docs/COMPANION_PAIRING.md §2.
  *
  * WHY THE CHECK SYMBOL IS WORTH A CHARACTER HERE. A wrong pairing code produces no error by design:
  * two different keys and silence (relay.ts, WRONG CODE ≠ ERROR). So the ONLY place a mistyped code
@@ -27,7 +26,7 @@
  * ENTROPY, STATED RATHER THAN IMPLIED. Seven symbols over 31 is 7 × log2(31) = 34.68 bits. That
  * would be absurd for a password and is enough here because of what the PAKE gives: an attacker
  * holding the link gets at most one online test per exchange the owner opens, at most eight
- * exchanges per invitation, and zero offline tests (plan 4.0a AUDIT banner). Eight guesses out of
+ * exchanges per invitation, and zero offline tests (COMPANION_PAIRING.md §2). Eight guesses out of
  * 31^7 ≈ 27.5 billion is a chance below one in three billion per invitation, and each guess is an
  * audited event the owner sees counted. More symbols would buy nothing against that bound and cost
  * every clinician a longer read-back.

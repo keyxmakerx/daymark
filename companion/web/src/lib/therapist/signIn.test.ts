@@ -325,6 +325,40 @@ describe('the contract this screen shows', () => {
     )
   })
 
+  it('calls what a clinician opens a share — access, not a copy (#337)', () => {
+    const opened = SIGN_IN_CONTRACT.find((c) => c.id === 'trusted.notARecord')!.text
+    expect(opened).toBe(
+      'What you open is a share: access to what this person chose, until the date they set or until ' +
+        'they stop it. It is not a clinical record, it is not complete, and nothing in it is a diagnosis.',
+    )
+    // A report is the copy, handed over on paper (#305); the contract may not call a share one.
+    const A_COPY = /\ba copy of what\b|chose to export/i
+    expect(SIGN_IN_CONTRACT.map((c) => c.text).filter((t) => A_COPY.test(t))).toEqual([])
+    // Control: the retired clause is seen by the same pattern.
+    expect(A_COPY.test('What you open is a copy of what they chose to export.')).toBe(true)
+  })
+
+  it('calls the digest the page’s own report, never a control (#320)', () => {
+    const scope = SIGN_IN_CONTRACT.find((c) => c.id === 'cannot.scope')!.text
+    expect(scope).toBe(
+      'Both of those describe the software as released, not the page in front of you. That is what ' +
+        "the notice at the top of this screen is about. The digest shown here is this page's own report " +
+        'of what it is running; whoever runs the server can compare it against the release they ' +
+        'pulled, and nothing on this screen can.',
+    )
+    // A changed page can print the right value, so nothing may present the digest as a check.
+    const A_CONTROL = /\ba control\b|rather than a footnote|verify the (?:released )?(?:image )?digest/i
+    const everything = [...SIGN_IN_CONTRACT.map((c) => c.text), ...Object.values(SCREEN_COPY)]
+    expect(everything.filter((t) => A_CONTROL.test(t))).toEqual([])
+    // Control: the retired clause is seen by the same pattern.
+    expect(
+      A_CONTROL.test(
+        'Both of those describe the software as released, not the page in front of you — which is what the ' +
+          'notice at the top of this screen is about, and why the image digest is a control here rather than a footnote.',
+      ),
+    ).toBe(true)
+  })
+
   it('groups into reading order without losing or duplicating a clause', () => {
     const groups = contractSections()
     expect(groups.map((g) => g.section)).toEqual([...SECTION_ORDER])
@@ -390,6 +424,30 @@ describe('the copy on this screen makes no claim this product cannot keep', () =
       expect(text.trim(), key).toBe(text)
       expect(text.length, key).toBeGreaterThan(0)
     }
+  })
+})
+
+describe('what the server sees of the blobs themselves (#315)', () => {
+  // Every blob is padded before it is encrypted, so the server learns a rounded size. Padding
+  // hides how much, never when.
+  const shape = SIGN_IN_CONTRACT.find((c) => c.id === 'sees.shape')
+
+  it('says the size is only roughly known, and that timing and order are seen', () => {
+    expect(shape?.section).toBe('serverSees')
+    expect(shape!.text).toContain('roughly how big they are')
+    expect(shape!.text).toMatch(/\btiming\b/)
+    expect(shape!.text).toMatch(/\border\b/)
+  })
+
+  it('and nothing under "cannot see" mentions timing, order or size, which padding does not hide', () => {
+    const mentionsShape = /\b(?:timing|timed|when|order|size|sizes|how big)\b/i
+    // The detector sees the subject on a planted sentence, and on the real clause that does name it.
+    expect(mentionsShape.test('When each blob arrives, and how big it is.')).toBe(true)
+    expect(mentionsShape.test(shape!.text)).toBe(true)
+    expect(mentionsShape.test('Your reading passphrase, which is not sent anywhere.')).toBe(false)
+    const cannot = SIGN_IN_CONTRACT.filter((c) => c.section === 'serverCannotSee')
+    expect(cannot.length).toBeGreaterThan(0)
+    for (const clause of cannot) expect(mentionsShape.test(clause.text), clause.id).toBe(false)
   })
 })
 
@@ -540,5 +598,73 @@ describe('the module reads no clock', () => {
     // The comment stripper is load-bearing here, so prove it removed the prose that names it.
     expect(MODULE_SRC).toContain('Date.now()')
     expect(detector.test(codeOnly(MODULE_SRC))).toBe(false)
+  })
+})
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   What the lock reaches, and what it does not (#262)
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+describe('the contract says what the lock does and what it cannot reach (#262)', () => {
+  const clause = (id: string) => SIGN_IN_CONTRACT.find((c) => c.id === id)?.text ?? ''
+  const MEMORY =
+    'Keys are held in memory only. Logging out, closing the tab, 15 minutes without activity, or 8 ' +
+    'hours in all drops them, and signing in starts again from this screen.'
+  const SCREEN =
+    'What you open is on screen like any other page. A browser extension can read it, a screenshot ' +
+    'can keep it, and on a computer other people use both matter more. The lock drops the keys from ' +
+    'memory; it does not reach a copy an extension or a screenshot already took.'
+  const RETIRED =
+    'Keys are held in memory only. Logging out, going idle, or closing the tab drops them, and the ' +
+    'next visit starts from this screen again.'
+
+  it('names every trigger the page acts on', () => {
+    expect(clause('session.memory')).toBe(MEMORY)
+  })
+
+  it('says what an extension and a screenshot can do, beside the lock that does not reach them', () => {
+    expect(clause('session.screen')).toBe(SCREEN)
+    const session = SIGN_IN_CONTRACT.filter((c) => c.section === 'session').map((c) => c.id)
+    expect(session.indexOf('session.screen')).toBe(session.indexOf('session.memory') + 1)
+  })
+
+  it('no longer says "going idle" or "the next visit"', () => {
+    const texts = SIGN_IN_CONTRACT.map((c) => c.text)
+    expect(texts).not.toContain(RETIRED)
+    expect(texts.join(' ')).not.toMatch(/going idle|next visit/i)
+    // Control: the retired clause planted back into the real contract is seen by both checks.
+    const planted = SIGN_IN_CONTRACT.map((c) => (c.id === 'session.memory' ? RETIRED : c.text))
+    expect(planted).toContain(RETIRED)
+    expect(planted.join(' ')).toMatch(/going idle|next visit/i)
+  })
+
+  it('the after-lock line states the rule, past tense, and that nothing else changed', () => {
+    expect(SCREEN_COPY.lockedNotice).toBe(
+      'This session ended. Sessions end after 15 minutes without activity, or 8 hours in all, and ' +
+        "the keys are dropped from this browser's memory. Nothing else changed.",
+    )
+  })
+
+  it('the screen shows it only when told the lock fired, above the fields, and in no warning', () => {
+    const needle = '{SCREEN_COPY.lockedNotice}'
+    const at = SCREEN_MARKUP.indexOf(needle)
+    expect(at).toBeGreaterThan(-1)
+    // Inside exactly one block, and that block is `{#if locked}`.
+    expect(blockDepthAt(SCREEN_MARKUP, needle)).toBe(1)
+    const opened = SCREEN_MARKUP.lastIndexOf('{#if', at)
+    expect(SCREEN_MARKUP.slice(opened, opened + '{#if locked}'.length)).toBe('{#if locked}')
+    // Above the credential entry, inside the same card.
+    const cardTag = '<Card title={SCREEN_COPY.credentialTitle}>'
+    const card = SCREEN_MARKUP.lastIndexOf(cardTag, at)
+    expect(card).toBeGreaterThan(-1)
+    expect(SCREEN_MARKUP.indexOf('{@render credentials()}', at)).toBeGreaterThan(at)
+    // Plain text: no Callout between the card and the line, so no warn, critical or info tone.
+    expect(SCREEN_MARKUP.slice(card, at)).not.toMatch(/<Callout\b/)
+    // Control: the same slice check does see a Callout when one wraps the line.
+    const wrapped = SCREEN_MARKUP.replace(needle, `<Callout tone="warn">${needle}</Callout>`)
+    const wrappedAt = wrapped.indexOf(needle)
+    expect(wrapped.slice(wrapped.lastIndexOf(cardTag, wrappedAt), wrappedAt)).toMatch(/<Callout\b/)
+    // The prop that carries the flag defaults to off.
+    expect(SCREEN_CODE).toMatch(/locked = false,/)
   })
 })

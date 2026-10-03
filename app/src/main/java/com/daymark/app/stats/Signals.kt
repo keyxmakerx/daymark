@@ -46,8 +46,7 @@ object Signals {
     sealed interface Action {
         /**
          * Offer to turn a positive factor into a gentle goal. [factor] names the factor for the
-         * card copy; the router currently opens a blank goal editor (factor prefill is a planned
-         * follow-up).
+         * card copy; the router opens a blank goal editor (factor prefill is not built: #178).
          */
         data class CreateGoalFromFactor(val factor: String) : Action
         /** Open the daily check-in / mood logger. */
@@ -344,7 +343,7 @@ object Signals {
  *
  * `docs/COMPANION_DIALOGUE.md` — "The signal vocabulary". These eight facts are the whole substrate
  * a dialogue may branch on. The list is CLOSED on purpose: every signal is a coupling point, and
- * the closed list is what keeps the companion from becoming the beast `docs/DECISIONS_2026-08.md`
+ * the closed list is what keeps the companion from becoming the beast `docs/DECISIONS.md`
  * §D1 warns about. A ninth is a design decision, not a patch, and the test asserting the count is
  * there so that argument cannot be skipped.
  *

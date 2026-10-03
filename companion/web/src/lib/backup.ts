@@ -78,6 +78,12 @@ export interface BackupData {
   assessments?: BackupAssessment[]
   moodLabels?: Record<string, string>
   moodColors?: Record<string, number>
+  /**
+   * The ids of the web console's lane records the phone has taken in (#345, docs/SYNC_PROTOCOL.md,
+   * the lane section). Written by the phone once it takes records in (#346); absent from every
+   * backup before that. The console drops a record from its lane only once this lists its id.
+   */
+  laneRecordsTakenIn?: string[]
   // Remaining tables (treatments, trackers, trackerLogs, reminders, photos,
   // achievements, thoughtRecords) exist in the file but are not rendered yet in
   // this Phase-0 scaffold; they are intentionally not typed here to keep the
@@ -122,6 +128,10 @@ export function parseBackup(text: string): BackupData {
     assessments: Array.isArray(obj.assessments) ? (obj.assessments as BackupAssessment[]) : [],
     moodLabels: (obj.moodLabels as Record<string, string>) ?? {},
     moodColors: (obj.moodColors as Record<string, number>) ?? {},
+    // Only where the phone wrote it, so a backup from before it round-trips as it was.
+    ...(Array.isArray(obj.laneRecordsTakenIn)
+      ? { laneRecordsTakenIn: obj.laneRecordsTakenIn.filter((id): id is string => typeof id === 'string') }
+      : {}),
   }
 }
 

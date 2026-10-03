@@ -55,7 +55,9 @@
     busy = true
     try {
       const signed = signGrant(draft, session.ownerSign)
-      onGrantChange(structuredClone(draft))
+      // A plain copy for the console. `draft` is $state, so it is a Proxy, and structuredClone
+      // refuses every Proxy (components/stateCopy.test.ts).
+      onGrantChange($state.snapshot(draft))
       if (client) {
         // Append a new version. The therapist reads it; nobody but the owner can forge it.
         const existing = await client.listVersions(therapist.inboxToken, 'grants', 'grant')
@@ -77,7 +79,7 @@
 <section class="grants card">
   <h3>What {therapist.displayName} can do</h3>
   <p class="hint">
-    Grants are like app permissions: default OFF, you turn on exactly what this therapist may do.
+    Grants are like app permissions: default OFF, you turn on exactly what this clinician may do.
     Each grant is signed by you — nobody can forge or edit it. Publishing appends a new version.
   </p>
 
@@ -101,9 +103,14 @@
     {/each}
   </div>
 
+  <!--
+    The caveat is the last word here (#320). Nothing reaches back to what was already read: pairing
+    again protects only what is sealed afterwards, which the replace-keys screen says in full
+    (pairing/copy.ts, replaceBody). A second explanation at this click would promise a cutoff that
+    does not exist.
+  -->
   <p class="revoke-note faint">
-    Revoking (turning a grant off) stops <em>future</em> server-mediated delivery. {REVOKE_CAVEAT} A
-    true cutoff for past data is a re-key, which is a separate step.
+    Revoking (turning a grant off) stops <em>future</em> server-mediated delivery. {REVOKE_CAVEAT}
   </p>
 
   <div class="actions">

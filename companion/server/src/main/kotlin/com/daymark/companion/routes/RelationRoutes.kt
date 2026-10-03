@@ -2,8 +2,8 @@ package com.daymark.companion.routes
 
 import com.daymark.companion.clientAddress
 import com.daymark.companion.auth.AttemptLimiter
-import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.auth.AuthStore
+import com.daymark.companion.auth.OwnerAuth
 import com.daymark.companion.auth.Secrets
 import com.daymark.companion.mail.MailMessage
 import com.daymark.companion.mail.OwnerNotifier
@@ -12,6 +12,7 @@ import com.daymark.companion.storage.AuditAction
 import com.daymark.companion.storage.AuditStore
 import com.daymark.companion.storage.Channel
 import com.daymark.companion.storage.RelMeta
+import com.daymark.companion.storage.Writer
 import com.daymark.companion.storage.RelationStore
 import com.daymark.companion.storage.RelationStoreException
 import io.ktor.http.ContentType
@@ -89,12 +90,12 @@ enum class Role { OWNER, THERAPIST }
  *   ASSIGN  therapist-PUT / owner-GET
  *   GAMEPLAN therapist-PUT / owner-GET
  *
- * Transitional-state note (see spec risks): OWNER role = a valid owner bearer token; THERAPIST
+ * Transitional-state note (#208): OWNER role = a valid owner bearer token; THERAPIST
  * role = a valid therapist session cookie bound to this relRef.
  */
 fun Route.relationRoutes(
     store: RelationStore,
-    ownerGuard: AuthGuard,
+    ownerGuard: OwnerAuth,
     authStore: AuthStore,
     sessionIdleSeconds: Long,
     maxRequestBytes: Long,
@@ -107,8 +108,8 @@ fun Route.relationRoutes(
     /**
      * The cookie-caller budget, built once here because `Application.module` has no knob for it —
      * `DAYMARK_RATE_LIMIT_RPS` sizes AuthGuard's bearer bucket, which is a different resource with
-     * different traffic. Defaulted rather than required so this stays one file's change; wiring an
-     * operator-visible knob through Config is a follow-up, not part of closing the bypass.
+     * different traffic. Defaulted rather than required so this stays one file's change; an
+     * operator-visible knob through Config is not built: #204.
      */
     therapistLimiter: AttemptLimiter = AttemptLimiter(THERAPIST_MAX_PER_WINDOW, THERAPIST_WINDOW_MS),
 ) {
@@ -284,10 +285,12 @@ fun Route.relationRoutes(
                  * owner can do about it — but a rule that lives only in a screen is a rule that a
                  * second client, a retry, or a future edit does not inherit.
                  *
-                 * BEFORE THE BODY IS READ. Refusing after would mean taking delivery of somebody's
-                 * sealed journal in order to throw it away, which is a strange thing for a server
-                 * that holds no content to do. 410 rather than 403 because the caller's authority is
-                 * not in question; the thing they are addressing has ended.
+                 * BEFORE THE HANDLER READS THE BODY. Refusing after would mean taking delivery of
+                 * somebody's sealed journal in order to throw it away, which is a strange thing for a
+                 * server that holds no content to do. (A phone's signed request has had its body read
+                 * already, since its signature covers it; it is refused here all the same.) 410 rather
+                 * than 403 because the caller's authority is not in question; the thing they are
+                 * addressing has ended.
                  *
                  * SHARES ONLY. The other channels are untouched and deliberately so: this branch is
                  * already the shares-only branch, and widening it would be inventing rules for
@@ -304,6 +307,9 @@ fun Route.relationRoutes(
                     return@put
                 }
             } else {
+                // No chosen end on the other channels. The store's one rule (RelationStore.hasEnded)
+                // ends an assignment or a game plan 90 days after it arrives, and leaves a grant for
+                // as long as the relationship lasts (#332).
                 expiry = null
             }
             val body = call.readCappedRel(maxRequestBytes) ?: return@put
@@ -373,9 +379,9 @@ private fun auditSafely(block: () -> Unit) {
     }
 }
 
-private fun writerRole(channel: Channel): Role = when (channel) {
-    Channel.GRANTS, Channel.SHARES -> Role.OWNER
-    Channel.ASSIGNMENTS, Channel.GAMEPLANS -> Role.THERAPIST
+private fun writerRole(channel: Channel): Role = when (channel.writer) {
+    Writer.OWNER -> Role.OWNER
+    Writer.CLINICIAN -> Role.THERAPIST
 }
 
 /** Which owner-facing notification (if any) a successful therapist PUT to this channel triggers. */
@@ -398,7 +404,7 @@ private data class RelContext(val relRef: String, val channel: Channel, val role
  */
 private suspend fun io.ktor.server.routing.RoutingContext.resolve(
     store: RelationStore,
-    ownerGuard: AuthGuard,
+    ownerGuard: OwnerAuth,
     authStore: AuthStore,
     sessionIdleSeconds: Long,
     auditStore: AuditStore,
@@ -443,18 +449,32 @@ private suspend fun io.ktor.server.routing.RoutingContext.resolve(
         call.respond(HttpStatusCode.TooManyRequests, ErrorDto("rate limited")); return null
     }
 
-    // Determine role. Prefer an owner bearer token; else a therapist session cookie bound here.
-    // For state-changing therapist calls (requireCsrf), a missing/mismatched X-CSRF-Token is a
-    // rejection, not a bypass — the cookie alone must not authorize a write.
-    val role = resolveRole(call, ownerGuard, authStore, sessionIdleSeconds, pathRelRef, requireCsrf, auditStore, auditSourceIp) ?: run {
-        call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized")); return null
+    // Determine role. Prefer an owner credential — the bearer token or a registered phone's signature
+    // (#186); else a therapist session cookie bound here. For state-changing therapist calls
+    // (requireCsrf), a missing/mismatched X-CSRF-Token is a rejection, not a bypass — the cookie alone
+    // must not authorize a write.
+    val owner = if (ownerGuard.presentsCredential(call)) ownerGuard.check(call) else null
+    // A signed body's size is answered as such, whoever the request claims to be.
+    if (owner == OwnerAuth.Outcome.TooLarge || owner == OwnerAuth.Outcome.LengthRequired) {
+        call.refuse(owner); return null
     }
+    // The owner's side keeps the rule every owner route keeps: a route on the list refuses a phone here too.
+    if (owner is OwnerAuth.Outcome.Ok && !call.mayUseRoute(owner.principal, ownerGuard)) return null
+    // A signed request is judged by its signature alone, as on every owner route: refused, it is not
+    // tried as a clinician's, and no handler runs for it.
+    if (owner != null && owner !is OwnerAuth.Outcome.Ok && ownerGuard.isSigned(call)) {
+        call.refuse(owner); return null
+    }
+    val role = (if (owner is OwnerAuth.Outcome.Ok) Role.OWNER else null)
+        ?: resolveTherapist(call, authStore, sessionIdleSeconds, pathRelRef, requireCsrf, auditStore, auditSourceIp)
+        ?: run {
+            call.respond(HttpStatusCode.Unauthorized, ErrorDto("unauthorized")); return null
+        }
     return RelContext(pathRelRef, channel, role)
 }
 
-private fun resolveRole(
+private fun resolveTherapist(
     call: ApplicationCall,
-    ownerGuard: AuthGuard,
     authStore: AuthStore,
     sessionIdleSeconds: Long,
     relRef: String,
@@ -462,11 +482,6 @@ private fun resolveRole(
     auditStore: AuditStore,
     auditSourceIp: Boolean,
 ): Role? {
-    val sourceId = call.clientAddress()
-    val bearer = call.request.headers[HttpHeaders.Authorization]?.removePrefix("Bearer ")?.trim()
-    if (bearer != null && ownerGuard.authorize(sourceId, bearer) == AuthGuard.Result.OK) {
-        return Role.OWNER
-    }
     val sessionId = call.request.cookies["daymark_session"]
     if (sessionId != null) {
         // On a CSRF-required (write) path, the header MUST be present; a null header must never
@@ -488,21 +503,7 @@ private fun resolveRole(
 }
 
 private suspend fun ApplicationCall.readCappedRel(max: Long): ByteArray? {
-    val stream = receiveStream()
-    val buf = ByteArray(64 * 1024)
-    val out = java.io.ByteArrayOutputStream()
-    var total = 0L
-    while (true) {
-        val n = stream.read(buf)
-        if (n < 0) break
-        total += n
-        if (total > max) {
-            respond(HttpStatusCode.PayloadTooLarge, ErrorDto("request body too large"))
-            return null
-        }
-        out.write(buf, 0, n)
-    }
-    return out.toByteArray()
+    return readBodyCapped(max)
 }
 
 /**
@@ -510,16 +511,19 @@ private suspend fun ApplicationCall.readCappedRel(max: Long): ByteArray? {
  *
  * Returns null — meaning "reject this publish" on the shares channel — for absent, oversized,
  * un-decodable, non-JSON, missing-field, non-integer, non-positive, and already-past values. Failing
- * closed here is what keeps the grandfather rule in `gateLocked` bounded: after this change a share
- * row with no expiry can only be one an older build wrote, never one written today.
+ * closed here means every share written today records an end.
  *
  * A past expiry is rejected rather than stored because the alternative is silent: the owner sees
  * "published" and the therapist sees 410 forever, with nothing anywhere saying why.
  *
+ * An end further out than [RelationStore.ITEM_LIFETIME_MS] (90 days) is clamped to it (#332). The
+ * store also ends every share that long after it was written, whatever is recorded, so the clamp
+ * keeps the stored end honest rather than being the only thing enforcing it.
+ *
  * URL-safe base64 without padding, because that is what the client's `toBase64` (libsodium
  * URLSAFE_NO_PADDING) emits. The standard decoder would reject it.
  */
-internal fun parseShareExpiry(header: String?, now: Long, maxAheadMs: Long = 366L * 24 * 60 * 60 * 1000): Long? {
+internal fun parseShareExpiry(header: String?, now: Long, maxAheadMs: Long = RelationStore.ITEM_LIFETIME_MS): Long? {
     val raw = header?.trim() ?: return null
     if (raw.isEmpty() || raw.length > 4096) return null // don't base64-decode an attacker-sized header
     val json = runCatching { String(java.util.Base64.getUrlDecoder().decode(raw), Charsets.UTF_8) }.getOrNull() ?: return null
@@ -537,8 +541,9 @@ internal fun parseShareExpiry(header: String?, now: Long, maxAheadMs: Long = 366
             ?.toLongOrNull()
     }.getOrNull() ?: return null
     if (expiry <= 0 || expiry <= now) return null
-    // Clamp rather than reject: only a modified client can exceed the UI's 365-day ceiling, and
-    // clamping keeps "effectively no expiry" from being reachable by writing a huge number.
+    // Clamp rather than reject: the share is still published and served for as long as the server
+    // serves anything, and clamping keeps "effectively no expiry" from being reachable by writing a
+    // huge number.
     return minOf(expiry, now + maxAheadMs)
 }
 
@@ -563,9 +568,11 @@ private suspend fun ApplicationCall.failRel(e: RelationStoreException) {
          * and re-authenticating cannot help. It is also already spoken for on this surface ("wrong
          * direction for this channel").
          *
-         * 410 means "it was here, it is deliberately gone." True of both an elapsed deadline and a
-         * withdrawal, and already this codebase's word for it (a consumed invite returns Gone).
-         * Expired and revoked share one message on purpose — see RelationStoreException.Kind.GONE.
+         * 410 means "it was here, it is deliberately gone." True of an elapsed deadline, a share a
+         * newer version replaced, and a withdrawal, and already this codebase's word for it (a
+         * consumed invite returns Gone). All of them share one message on purpose — see
+         * RelationStoreException.Kind.GONE. The sweep that deletes an ended item's bytes keeps its
+         * row, so an item whose bytes are gone is still answered here, never with the 404 above.
          */
         RelationStoreException.Kind.GONE -> HttpStatusCode.Gone to "no longer available"
     }

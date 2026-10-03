@@ -24,9 +24,9 @@ import kotlinx.coroutines.flow.Flow
  *
  * ## What is not on here, and must not be added
  *
- * **No query on this DAO joins `mood_entries`, and none may.** `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md`
- * §2: *"Never in any rule that reads mood. Correlations, patterns and the cards they produce cannot
- * receive a person or a community, groups included."* The cheapest way to break that rule is a
+ * **No query on this DAO joins `mood_entries`, and none may.** `docs/FEATURES.md` §11.2: *"Never in
+ * any rule that reads mood. Correlations, patterns and the cards they produce cannot receive a
+ * person or a community, groups included."* The cheapest way to break that rule is a
  * convenience query here — `SELECT p.id, e.moodLevel FROM people p JOIN entry_people ...` — written
  * to fill a screen and reused a release later by something that ranks. There is no such query, and
  * the entries that name a person are reached through `EntryPersonDao`, which returns ids.
@@ -62,10 +62,11 @@ interface PersonDao {
     /**
      * Existing rows whose name matches, ignoring case, archived included.
      *
-     * For the one prompt §2 allows — *"an entry names someone who has no page yet, so offer one,
-     * once"* — which needs to know whether a name is already known. It is a lookup and nothing
-     * more: it counts nothing, dates nothing, and archived rows are deliberately included, because
-     * somebody who was archived does already have a page and must not be offered a second one.
+     * For the first prompt `docs/FEATURES.md` §11.3 allows — *"an entry names someone who has no
+     * page, so offer one, once"* — which needs to know whether a name is already known. It is a
+     * lookup and nothing more: it counts nothing, dates nothing, and archived rows are deliberately
+     * included, because somebody who was archived does already have a page and must not be offered
+     * a second one.
      */
     @Query("SELECT * FROM people WHERE name = :name COLLATE NOCASE")
     suspend fun findByName(name: String): List<Person>

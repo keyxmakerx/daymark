@@ -20,14 +20,15 @@
    * lib/instruments/provenance.ts, next to the disclaimer copy and the validation that
    * enforces the tiers. Re-spelling "Custom" here would let the badge and the disclaimer drift
    * apart, and a badge that says one thing while the gate says another is worse than no badge.
-   * The maps are Record<ProvenanceTier, string>, so a new tier is a type error rather than a
+   * Both maps are keyed by every ProvenanceTier, so a new tier is a type error rather than a
    * blank badge.
    *
-   * WHY THE ✓ IS NOT A SUCCESS TICK. It is the glyph for 'validated' — a claim about where the
-   * instrument came from, not about whether anything is going well. It is drawn in chrome ink
-   * and it is never, under any circumstance, green: there is no success colour in this system
-   * (app.css, invariant 2), and a green tick on a questionnaire would read as reassurance the
-   * product has no standing to offer.
+   * WHY VALIDATED HAS NO MARK. The marks on the other two tiers say how a tool departs from a
+   * published instrument: ◐ draws on part of one, ✎ on none. A validated tool departs from
+   * nothing, so the badge carries its word alone. Any mark there would read as a verdict, and a
+   * tick as a pass: reassurance the product has no standing to offer, and a tick it never draws
+   * (CLAUDE.md §4, #278). The badge is never green either: there is no success colour in this
+   * system (app.css, invariant 2).
    *
    * WHY custom IS AMBER AND THE OTHER TWO ARE NOT. Amber means warn severity and only warn
    * severity, and provenance "Custom" is one of exactly two places in the whole system allowed
@@ -39,8 +40,8 @@
    * toward the alarm hue neither would mean anything.
    *
    * WHY HUE IS NEVER THE ONLY SIGNAL. Three non-colour signals, in order of reliability: the
-   * written tier name, which is always present and always the point; the glyph, which differs
-   * per tier; and the edge FORM — validated closes a solid outline, adapted is broken (it is
+   * written tier name, which is always present and always the point; the mark the adapted and
+   * custom tiers carry; and the edge FORM — validated closes a solid outline, adapted is broken (it is
    * not the whole instrument), custom is filled. That ordering survives greyscale, a
    * projector, a printout and any colour vision. A visually hidden "Provenance:" prefix gives
    * a screen reader the context a sighted reader gets from the badge's position on the row.
@@ -62,7 +63,7 @@
 
 <span class="badge" data-tier={tier}>
   <span class="visually-hidden">Provenance: </span>
-  <span class="glyph" aria-hidden="true">{PROVENANCE_GLYPH[tier]}</span>
+  {#if PROVENANCE_GLYPH[tier]}<span class="glyph" aria-hidden="true">{PROVENANCE_GLYPH[tier]}</span>{/if}
   <span class="tier">{PROVENANCE_LABEL[tier]}</span>
 </span>
 
@@ -88,7 +89,7 @@
   }
 
   /* Sits on the same optical line as the tier name rather than on the text baseline: the
-     glyphs have wildly different heights (✓ ◐ ✎) and a shared baseline makes them jitter. */
+     marks have different heights (◐ ✎) and a shared baseline makes them jitter. */
   .glyph {
     font-size: 11px;
     line-height: 1;

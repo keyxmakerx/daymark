@@ -262,7 +262,7 @@ class GoalBoardTest {
 
     /**
      * Vocabulary this product does not use about someone's own plans, from
-     * `docs/DECISIONS_2026-08.md` §D6 and the no-shaming rule: anything that counts undone things,
+     * `docs/DECISIONS.md` §D6 and the no-shaming rule: anything that counts undone things,
      * anything that turns a count into a rate, and anything that frames a pause as a lapse.
      */
     private val bannedWords = listOf(

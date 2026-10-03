@@ -1,8 +1,26 @@
 <script lang="ts">
   import type { Component } from 'svelte'
   import { parseBackup, type BackupData } from '../backup'
+  import type { OwnerConnection } from '../owner/recoveryEmail'
+  import PhonesSection from './phones/PhonesSection.svelte'
 
-  let { onload }: { onload: (data: BackupData, source: string) => void } = $props()
+  let {
+    onload,
+    /**
+     * Handed the server address and access token once the server has accepted them: a pull with
+     * them succeeded, or the server answered the phone list with them (see [proveToken]). The
+     * "Recover access" card registers the recovery email with them without asking for the token
+     * again (#330), and the Phones section below pairs with them (#431). Never called with a token
+     * the server has not accepted.
+     */
+    onconnected = undefined,
+    /** The connection this visit has proved, from whichever card proved it; null until one has. */
+    connection = null,
+  }: {
+    onload: (data: BackupData, source: string) => void
+    onconnected?: (connection: OwnerConnection) => void
+    connection?: OwnerConnection | null
+  } = $props()
 
   // Default to the same origin (this portal is served by the companion). Users behind a
   // separate URL can override.
@@ -13,19 +31,56 @@
   let busy = $state(false)
   let error = $state('')
 
+  /*
+   * A TOKEN IS PROVED BY THE SERVER TAKING IT, NOT BY A SNAPSHOT OPENING (#431). A pull proves the
+   * address and token only when there is a snapshot and the passphrase opens it, and the first phone
+   * is paired before anything has been synced: that server holds no key and no snapshot, so the pull
+   * stops at "holds no key" and, proved that way alone, the Phones section could never appear. So
+   * where the pull did not open a snapshot for any reason but the server refusing the token, and
+   * where no passphrase was given, the phone list is asked with the same address and token: it is an
+   * owner route that needs the token and nothing else, and an answer in its shape proves them. A
+   * refused token is not asked twice, since each refusal counts toward the address's lockout.
+   */
+  async function proveToken(tried: OwnerConnection) {
+    try {
+      const { devicesApi } = await import('../phones/devices')
+      await devicesApi(tried.serverUrl, tried.token).listDevices()
+      onconnected?.(tried)
+    } catch {
+      /* not proved: nothing is handed up, and the card's own sentence stands */
+    }
+  }
+
   async function fetchAndDecrypt() {
     error = ''
     if (!token) { error = 'Enter your server access token.'; return }
-    if (!passphrase) { error = 'Enter your sync passphrase.'; return }
     busy = true
+    // The fields as they were when the button was pressed: what an answer proves.
+    const tried: OwnerConnection = { serverUrl, token }
     try {
+      if (!passphrase) {
+        await proveToken(tried)
+        error = 'Enter your sync passphrase.'
+        return
+      }
       // Lazy-load the crypto client so the offline viewer never pays for libsodium.
-      const { SyncClient } = await import('../sync/client')
-      const client = new SyncClient(serverUrl, token)
-      const { version, plaintext } = await client.pullLatest(lineage, passphrase)
-      const text = new TextDecoder().decode(plaintext)
+      const { SyncClient, SyncError } = await import('../sync/client')
+      const client = new SyncClient(tried.serverUrl, tried.token)
+      let pulled: { version: number; plaintext: Uint8Array }
+      try {
+        pulled = await client.pullLatest(lineage, passphrase)
+      } catch (e) {
+        error = e instanceof Error ? e.message : 'Could not fetch and decrypt.'
+        const refused = e instanceof SyncError && (e.status === 401 || e.status === 403 || e.status === 429)
+        if (!refused) await proveToken(tried)
+        return
+      }
+      // The server accepted the token and returned this person's snapshot, so the token is proved.
+      // Handed up before `onload`, which replaces this card with the dashboard.
+      onconnected?.(tried)
+      const text = new TextDecoder().decode(pulled.plaintext)
       const data = parseBackup(text)
-      onload(data, `sync · ${lineage} v${version}`)
+      onload(data, `sync · ${lineage} v${pulled.version}`)
     } catch (e) {
       error = e instanceof Error ? e.message : 'Could not fetch and decrypt.'
     } finally {
@@ -38,7 +93,7 @@
    *
    * WHY IT HANGS OFF THIS PANEL. This is the screen about the sync server, and the sync server is
    * the answer to "my phone is gone, how do I get the past years of my life back"
-   * (PLAN_2026-08-COMPANION-NEXT.md §3.11.1). A recovery code is the second half of that same
+   * (COMPANION_ARCHITECTURE.md §1). A recovery code is the second half of that same
    * question — the half that applies when what was lost is the passphrase rather than the handset —
    * so it belongs beside the passphrase field rather than behind a separate route nobody visits
    * until it is too late to be useful.
@@ -57,8 +112,12 @@
    *
    * Held as a component value rather than behind an `{#await}` so that opening it is one decision
    * with one loading state, and so it stays mounted once it is there.
+   *
+   * IT IS HANDED THIS CARD'S ADDRESS AND TOKEN (#258). The key the recovery code opens is kept on the
+   * server, locked, and both of the screen's flows read and write it there. The fields for reaching
+   * that server are this card's, so the screen uses them rather than asking for them a second time.
    */
-  let RecoveryPanel = $state<Component | null>(null)
+  let RecoveryPanel = $state<Component<{ serverUrl?: string; token?: string }> | null>(null)
   let loadingRecovery = $state(false)
   let recoveryError = $state('')
 
@@ -83,7 +142,7 @@
     <strong>Lower-assurance path.</strong> Decrypting in the browser is convenient but the
     page is served by the server it talks to; a malicious server could tamper with it. Your
     phone (the future Sync flavor) is the trusted, secret-handling path. Use a passphrase
-    you are comfortable entering here, and verify the released image digest.
+    you are comfortable entering here.
   </p>
 
   <label>
@@ -110,6 +169,9 @@
   {#if error}
     <p class="error" role="alert">{error}</p>
   {/if}
+
+  <!-- At the card's foot: the phones pair with the address and token this card proved (#431). -->
+  <PhonesSection {connection} />
 </div>
 
 <!--
@@ -119,13 +181,12 @@
 -->
 <section class="recovery">
   {#if RecoveryPanel}
-    <RecoveryPanel />
+    <RecoveryPanel {serverUrl} {token} />
   {:else}
     <h2 class="recovery-title">Recovery code</h2>
     <p class="recovery-lede">
-      The passphrase above is the only way into your snapshots. A recovery code is a second one,
-      held by you and by nobody else — not this server, which holds ciphertext and has never held
-      the key.
+      Your snapshots open with the passphrase above, or with your recovery code once you have made
+      one.
     </p>
     <button type="button" onclick={openRecovery} disabled={loadingRecovery}>
       {loadingRecovery ? 'Loading' : 'Open the recovery code screen'}

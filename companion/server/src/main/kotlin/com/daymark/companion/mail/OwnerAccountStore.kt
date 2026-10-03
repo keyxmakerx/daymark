@@ -1,29 +1,34 @@
 package com.daymark.companion.mail
 
+import com.daymark.companion.auth.DeviceKeyStore
 import com.daymark.companion.auth.Secrets
+import com.daymark.companion.auth.inTransaction
+import com.daymark.companion.storage.Schema
+import com.daymark.companion.storage.SchemaChange
 import java.nio.file.Files
 import java.nio.file.Path
 import java.sql.Connection
-import java.sql.DriverManager
 import java.util.concurrent.ConcurrentHashMap
 
 /** The owner's registered notification address + which [MailMessage.ReviewKind] events it wants. */
 data class NotificationSettings(val email: String?, val events: Set<MailMessage.ReviewKind>)
 
-/** A minted, single-use recovery-confirmation link (Track T2 access-token re-issue). */
+/** A minted, single-use recovery-confirmation link (the owner's access-token re-issue). */
 data class ReissueMint(val email: String, val confirmToken: String, val expiresAt: Long)
 
 sealed interface ReissueConfirmOutcome {
-    data class Rotated(val newToken: String) : ReissueConfirmOutcome
+    /** The new token, and the device keys the re-issue revoked with it (#186), each owed an audit row. */
+    data class Rotated(val newToken: String, val revokedDevices: List<String> = emptyList()) : ReissueConfirmOutcome
     data object Gone : ReissueConfirmOutcome
 }
 
 /**
- * Server-side state for Track T2 (email Option A): the owner's registered
- * notification email + per-event preferences, the currently accepted owner/bearer token
- * (rotatable via the email-triggered recovery flow, durable across restarts), and single-use
- * recovery-confirmation tokens. One SQLite file per data dir, independent of the therapist-portal
- * feature flag — the bearer token also gates the plain sync API, which does not need the portal.
+ * Server-side state for the owner's email (COMPANION_SECURITY.md §6, "Owner notifications and
+ * server-access recovery"): the owner's registered notification email + per-event preferences,
+ * the currently accepted owner/bearer token (rotatable via the email-triggered recovery flow,
+ * durable across restarts), and single-use recovery-confirmation tokens. One SQLite file per data
+ * dir, independent of the therapist-portal feature flag — the bearer token also gates the plain
+ * sync API, which does not need the portal.
  *
  * **Token storage is a digest, not the token.** `owner_token.token` and `owner_token.bootstrap_token`
  * hold [Secrets.tokenHash] of the bearer token, never the token itself;
@@ -46,8 +51,8 @@ sealed interface ReissueConfirmOutcome {
  * *stored copy* changes.
  *
  * The registered notification email is likewise stored in plaintext, but by necessity (the server
- * must read it to address an outbound message) rather than by the stale reasoning above; see the
- * T2 security note in COMPANION_SECURITY.md.
+ * must read it to address an outbound message) rather than by the stale reasoning above; see
+ * COMPANION_SECURITY.md §6, "Owner notifications and server-access recovery".
  */
 class OwnerAccountStore(
     dataDir: String,
@@ -61,45 +66,27 @@ class OwnerAccountStore(
     private val requestBuckets = ConcurrentHashMap<String, Bucket>()
     private class Bucket(var tokens: Double, var last: Long)
 
+    /**
+     * The owner's id and the phones registered to it (#186, #189), on this database's connection and
+     * under its lock, so a re-issued token and the revocation of every device are one transaction.
+     */
+    val devices: DeviceKeyStore
+
+    /**
+     * The device keys this start revoked because `DAYMARK_AUTH_TOKEN` changed since the last one — the
+     * operator's way of re-issuing the token. Each is owed one audit row, written once the owner's log
+     * is open.
+     */
+    val revokedAtStart: List<String>
+
     init {
         Files.createDirectories(root)
-        Class.forName("org.sqlite.JDBC")
-        conn = DriverManager.getConnection("jdbc:sqlite:${root.resolve("owner-account.db")}")
-        conn.createStatement().use { st ->
-            st.execute("PRAGMA journal_mode=WAL")
-            st.execute("PRAGMA synchronous=NORMAL")
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS owner_token (
-                    id              INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
-                    token           TEXT    NOT NULL,
-                    bootstrap_token TEXT    NOT NULL,
-                    updated_at      INTEGER NOT NULL
-                )
-                """.trimIndent(),
-            )
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS owner_notify (
-                    id         INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
-                    email      TEXT,
-                    events     TEXT    NOT NULL,
-                    updated_at INTEGER NOT NULL
-                )
-                """.trimIndent(),
-            )
-            st.execute(
-                """
-                CREATE TABLE IF NOT EXISTS reissue_confirm (
-                    token_hash TEXT    NOT NULL PRIMARY KEY,
-                    expiry     INTEGER NOT NULL,
-                    status     TEXT    NOT NULL,
-                    created_at INTEGER NOT NULL
-                )
-                """.trimIndent(),
-            )
-        }
-        synchronized(lock) { bootstrapToken(envToken) }
+        conn = SCHEMA.open(root)
+        // FULL, not NORMAL: a signed request's nonce is written here before the request is served, and
+        // the memory of seen nonces has to outlast a power cut as well as a restart (#186).
+        conn.createStatement().use { st -> st.execute("PRAGMA synchronous=FULL") }
+        devices = DeviceKeyStore(conn, lock, clock)
+        revokedAtStart = synchronized(lock) { bootstrapToken(envToken) }
     }
 
     // ---- Owner bearer token (sync/portal access) ----------------------------------
@@ -126,18 +113,23 @@ class OwnerAccountStore(
      * flow) before the upgrade does not survive this specific boot — the server reverts to
      * accepting the operator's env-var token, which the operator can always still present.
      */
-    private fun bootstrapToken(envToken: String) {
+    private fun bootstrapToken(envToken: String): List<String> {
         val envHash = Secrets.tokenHash(envToken)
         val existing = conn.prepareStatement("SELECT token, bootstrap_token FROM owner_token WHERE id=1").use { ps ->
             ps.executeQuery().use { rs -> if (rs.next()) rs.getString(1) to rs.getString(2) else null }
         }
-        if (existing == null || existing.second != envHash) {
+        if (existing != null && existing.second == envHash) return emptyList()
+        // A token the operator sets is a re-issue like the emailed one, and disconnects every paired
+        // phone in the same transaction (#186). A first start has none to disconnect.
+        return conn.inTransaction {
+            val revoked = devices.revokeAllLocked(devices.ownerId)
             conn.prepareStatement(
                 "INSERT INTO owner_token(id, token, bootstrap_token, updated_at) VALUES (1,?,?,?) " +
                     "ON CONFLICT(id) DO UPDATE SET token=excluded.token, bootstrap_token=excluded.bootstrap_token, updated_at=excluded.updated_at",
             ).use { ps ->
                 ps.setString(1, envHash); ps.setString(2, envHash); ps.setLong(3, clock()); ps.executeUpdate()
             }
+            revoked
         }
     }
 
@@ -160,12 +152,21 @@ class OwnerAccountStore(
      * own head, on its way to the recovery-confirm HTTP response / the caller's `onRotated`
      * callback, and it is never itself stored.
      */
-    fun rotateToken(): String = synchronized(lock) {
+    fun rotateToken(): String = synchronized(lock) { rotateLocked().first }
+
+    /**
+     * [rotateToken], and the ids of the device keys it revoked. Re-issuing the token revokes every
+     * device key of the owner, in the transaction that writes the new digest (#186); a phone pairs
+     * again by QR. Revoked first, so no moment has the new token standing beside a device the old one
+     * paired.
+     */
+    private fun rotateLocked(): Pair<String, List<String>> = conn.inTransaction {
+        val revoked = devices.revokeAllLocked(devices.ownerId)
         val newToken = Secrets.newToken()
         conn.prepareStatement("UPDATE owner_token SET token=?, updated_at=? WHERE id=1").use { ps ->
             ps.setString(1, Secrets.tokenHash(newToken)); ps.setLong(2, clock()); ps.executeUpdate()
         }
-        newToken
+        newToken to revoked
     }
 
     // ---- Notification email + prefs -----------------------------------------------
@@ -299,14 +300,60 @@ class OwnerAccountStore(
             ps.setString(1, hash)
             ps.executeUpdate()
         }
-        val newToken = rotateToken()
+        val (newToken, revoked) = rotateLocked()
         onRotated(newToken)
-        ReissueConfirmOutcome.Rotated(newToken)
+        ReissueConfirmOutcome.Rotated(newToken, revoked)
     }
 
     override fun close() = synchronized(lock) { conn.close() }
 
     companion object {
         private const val MAX_RATE_ENTRIES = 50_000
+
+        /**
+         * owner-account.db, version by version (#193). [Schema] says what a version is, and how a
+         * database written by an earlier release is brought to [Schema.current] before it is served.
+         */
+        internal val SCHEMA = Schema(
+            "owner-account.db",
+            listOf(
+                // Version 1: the structure as it stood when versions began to be kept.
+                listOf(
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS owner_token (
+                            id              INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+                            token           TEXT    NOT NULL,
+                            bootstrap_token TEXT    NOT NULL,
+                            updated_at      INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    ),
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS owner_notify (
+                            id         INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+                            email      TEXT,
+                            events     TEXT    NOT NULL,
+                            updated_at INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    ),
+                    SchemaChange.Table(
+                        """
+                        CREATE TABLE IF NOT EXISTS reissue_confirm (
+                            token_hash TEXT    NOT NULL PRIMARY KEY,
+                            expiry     INTEGER NOT NULL,
+                            status     TEXT    NOT NULL,
+                            created_at INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    ),
+                ),
+                // Version 2: the owner's id, the phones registered to it, the codes that pair them, and
+                // the nonces signed requests have used (#186, #189). DeviceKeyStore says what each holds.
+                DeviceKeyStore.TABLES,
+            ),
+        )
     }
 }

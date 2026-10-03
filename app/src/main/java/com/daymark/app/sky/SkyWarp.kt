@@ -8,11 +8,11 @@ package com.daymark.app.sky
  *
  * ## Why a warp at all
  *
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1.0 removed the month rows: a star is placed by a hash
- * of its own identity, and *when* it is from is carried by [SkyAge]'s redshift and fade instead of
- * by where it sits. That fixes the thing the rows got wrong — a hard month drawn as a visibly empty
- * band — but a hash is *uniform*, and a uniform scatter of points does not read as a sky. It reads
- * as a texture swatch, evenly grey at a distance, with no constellations and nothing to find.
+ * There are no month rows (`docs/SKY.md` §3.1): a star is placed by a hash of its own identity,
+ * and *when* it is from is carried by [SkyAge]'s redshift and fade instead of by where it sits.
+ * That fixes the thing the rows got wrong — a hard month drawn as a visibly empty band — but a hash
+ * is *uniform*, and a uniform scatter of points does not read as a sky. It reads as a texture
+ * swatch, evenly grey at a distance, with no constellations and nothing to find.
  *
  * So the hashed position is pushed through a slowly-varying displacement field. Where the field
  * converges, stars crowd; where it spreads, they thin. The result has clumps and lanes and looks

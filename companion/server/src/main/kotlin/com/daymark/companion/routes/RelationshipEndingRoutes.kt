@@ -1,7 +1,7 @@
 package com.daymark.companion.routes
 
 import com.daymark.companion.auth.AttemptLimiter
-import com.daymark.companion.auth.AuthGuard
+import com.daymark.companion.auth.OwnerAuth
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.auth.Secrets
 import com.daymark.companion.clientAddress
@@ -31,7 +31,7 @@ private fun auditSafely(block: () -> Unit) {
 @Serializable data class RelationshipEndingRecord(val endedAt: Long)
 
 /**
- * A CLINICIAN PUTTING DOWN THEIR OWN ACCESS, AND THE OWNER FINDING OUT (issue #91, Slice E).
+ * A CLINICIAN PUTTING DOWN THEIR OWN ACCESS, AND THE OWNER FINDING OUT (issue #91).
  *
  * Two routes. The clinician ends the relationship from their own console; the owner reads back
  * whether it has ended. Between them they are the whole server side of self-leave.
@@ -67,7 +67,9 @@ private fun auditSafely(block: () -> Unit) {
  * all belonging to the owner moves. Their entries, the material they shared, and their record of
  * having shared it are exactly as they were. A clinician leaving must never be a route to reaching
  * into somebody else's records, and the way that is guaranteed is that the code to do it is not
- * here to be called.
+ * here to be called. What the ending leaves in place still ends on the one clock every relationship
+ * item follows (RelationStore.hasEnded, #332), and the sweep removes its stored copy then (#338),
+ * exactly as it would had the relationship not ended.
  *
  * ─── AND WHAT IT CANNOT DO, WHICH THE COPY HAS TO SAY ───────────────────────────────────────────
  *
@@ -98,7 +100,7 @@ private fun auditSafely(block: () -> Unit) {
  */
 fun Route.relationshipEndingRoutes(
     authStore: AuthStore,
-    ownerGuard: AuthGuard,
+    ownerGuard: OwnerAuth,
     sessionIdleSeconds: Long,
     auditStore: AuditStore,
     auditSourceIp: Boolean = false,

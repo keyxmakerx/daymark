@@ -102,7 +102,7 @@ fun HistoryScreen(
                     Text(
                         text = "That's everything.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.tertiary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 6.dp, bottom = 2.dp)
@@ -128,7 +128,7 @@ private fun DaySheet(
             Text(
                 text = label.uppercase(),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.tertiary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 letterSpacing = 1.2.sp,
                 modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 16.dp),
             )

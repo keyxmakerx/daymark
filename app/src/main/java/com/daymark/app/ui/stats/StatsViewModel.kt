@@ -6,6 +6,8 @@ import com.daymark.app.data.EntryRepository
 import com.daymark.app.data.entity.EntryWithActivities
 import com.daymark.app.stats.MoodCorrelations
 import com.daymark.app.stats.MoodStats
+import com.daymark.app.ui.calendar.CalendarDays
+import com.daymark.app.ui.calendar.toDayEntry
 import com.daymark.app.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -29,6 +31,11 @@ data class StatsUiState(
     val moodCounts: Map<Int, Int> = emptyMap(),
     /** Last 30 days, oldest → newest; null where no entry that day. */
     val trend: List<Double?> = emptyList(),
+    /**
+     * Insights → Week: the last seven days, oldest first, and the mood of each entry on each, in the
+     * day's own order (#411). Each entry keeps its own mood; a day is never reduced to one number.
+     */
+    val week: CalendarDays.Week = CalendarDays.Week(),
     val topActivities: List<ActivityStat> = emptyList(),
 )
 
@@ -76,6 +83,7 @@ class StatsViewModel @Inject constructor(
             daysWithEntryLast30 = MoodStats.daysWithEntryInLast30(days, today),
             moodCounts = MoodStats.moodCounts(levels),
             trend = trend,
+            week = CalendarDays.week(entries.map { it.toDayEntry() }, today),
             topActivities = topActivities,
         )
     }

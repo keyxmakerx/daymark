@@ -11,10 +11,12 @@
  * tampered / ungranted / off-allowlist item is never applyable.
  */
 import type { Assignment } from './types'
-import { openAssignment, AssignmentOpenError, type BoxKeyPair } from './crypto'
+import { openAssignmentSigned, AssignmentOpenError, type BoxKeyPair } from './crypto'
 import { validateAssignment, shouldAutoApply, type AssignmentCheck } from './validate'
 import { describeAssignment } from './describe'
 import type { Grant } from './types'
+import { PortalError, type RelMeta } from '../sync/portal'
+import type { SignedEnvelope } from '../lane/record'
 
 export type Verdict = 'VERIFIED' | 'REJECTED' | 'UNTRUSTED_KEY' | 'OPEN_FAILED'
 export type Decision = 'accepted' | 'declined' | 'snoozed'
@@ -46,6 +48,12 @@ export interface InboxItem {
   errors: string[]
   raw: { lineage: string; version: number }
   decision?: Decision
+  /**
+   * The assignment as the clinician signed it, verbatim, for an item whose signature verified
+   * against the pinned key (VERIFIED or REJECTED): what an accept or decline carries in the owner's
+   * lane, and how a decision read back from it finds this item again (inboxLane.ts, #345).
+   */
+  signed?: SignedEnvelope
 }
 
 /**
@@ -60,8 +68,11 @@ export function evaluateBlob(raw: RawAssignmentBlob, therapist: PinnedTherapist,
   }
 
   let assignment: Assignment
+  let signed: SignedEnvelope
   try {
-    assignment = openAssignment(raw.bytes, ownerBox, therapist.signPub)
+    const opened = openAssignmentSigned(raw.bytes, ownerBox, therapist.signPub)
+    assignment = opened.assignment
+    signed = { payloadJson: opened.payloadJson, sigB64: opened.sigB64 }
   } catch (e) {
     // A signature mismatch means the author is not the pinned therapist (forged / substituted
     // key) — call that out distinctly from a sealed-box failure (not-for-us / tampered).
@@ -71,9 +82,22 @@ export function evaluateBlob(raw: RawAssignmentBlob, therapist: PinnedTherapist,
       verdict: untrusted ? 'UNTRUSTED_KEY' : 'OPEN_FAILED',
       requiresAccept: false,
       preview: untrusted
-        ? 'Could not verify authorship against the pinned therapist key — refused.'
+        ? 'Could not verify authorship against the pinned clinician key — refused.'
         : 'Could not open this item (not addressed to you, or tampered) — refused.',
       errors: [e instanceof Error ? e.message : 'open failed'],
+    }
+  }
+
+  // The lineage and version the server files an item under are not signed; the ones inside it
+  // are. An item served under another label is a signed assignment re-presented as something it
+  // is not (an old one shown as new, or one shown twice), so it is refused like a tampered one.
+  if (assignment.lineageId !== raw.lineage || assignment.version !== raw.version) {
+    return {
+      ...base,
+      verdict: 'OPEN_FAILED',
+      requiresAccept: false,
+      preview: 'Could not open this item (not addressed to you, or tampered) — refused.',
+      errors: ['assignment is filed under a different lineage or version than it was signed with'],
     }
   }
 
@@ -84,6 +108,7 @@ export function evaluateBlob(raw: RawAssignmentBlob, therapist: PinnedTherapist,
     return {
       ...base,
       assignment,
+      signed,
       verdict: 'REJECTED',
       check,
       requiresAccept: false,
@@ -99,6 +124,7 @@ export function evaluateBlob(raw: RawAssignmentBlob, therapist: PinnedTherapist,
   return {
     ...base,
     assignment,
+    signed,
     verdict: 'VERIFIED',
     check,
     requiresAccept,
@@ -124,3 +150,76 @@ export function buildInbox(blobs: RawAssignmentBlob[], therapists: PinnedTherapi
 export function canApply(item: InboxItem): boolean {
   return item.verdict === 'VERIFIED'
 }
+
+/* ── Fetching, item by item (#339) ────────────────────────────────────────────────────────── */
+
+/** What the inbox needs from the server: the listings and single items. PortalClient has all three. */
+export interface InboxSource {
+  listLineages(inboxToken: string, channel: 'assignments'): Promise<string[]>
+  listVersions(inboxToken: string, channel: 'assignments', lineage: string): Promise<RelMeta[]>
+  getBlob(inboxToken: string, channel: 'assignments', lineage: string, version: number): Promise<Uint8Array>
+}
+
+/** A clinician whose items are fetched: the pinned entry's id and name, and its inbox token. */
+export interface InboxSender {
+  id: string
+  displayName: string
+  inboxToken: string
+}
+
+/** An item the server no longer keeps. Its contents are gone, so only who sent it and when remain. */
+export interface GoneItem {
+  therapistName: string
+  sentAt: number
+  lineage: string
+  version: number
+}
+
+/**
+ * Fetch the head of every assignment lineage, one item at a time.
+ *
+ * The server keeps an assignment for 90 days and then answers 410 for it (#332, #338). That is the
+ * normal end of an item, not a failure, so it becomes a GoneItem and the rest of the inbox still
+ * loads; before this, one ended item stopped the whole load. Any other failure still stops it,
+ * because a transient error is not a fact about the item and Refresh is the honest answer to it.
+ */
+export async function fetchInbox(
+  source: InboxSource,
+  senders: readonly InboxSender[],
+): Promise<{ blobs: RawAssignmentBlob[]; gone: GoneItem[] }> {
+  const blobs: RawAssignmentBlob[] = []
+  const gone: GoneItem[] = []
+  for (const t of senders) {
+    // Nothing to list (404) or a relationship the server no longer serves (410) is an empty list.
+    // Any other failure fails the load: drawn as "No assignments to review", it would be a claim
+    // about the clinician that the console does not know to be true.
+    const lineages = await source.listLineages(t.inboxToken, 'assignments').catch((e: unknown) => {
+      if (e instanceof PortalError && (e.status === 404 || e.status === 410)) return [] as string[]
+      throw e
+    })
+    for (const lineage of lineages) {
+      const versions = await source.listVersions(t.inboxToken, 'assignments', lineage)
+      // Only the head of each lineage is surfaced (append-only supersede).
+      const head = versions.reduce((a, b) => (b.version > a.version ? b : a), versions[0])
+      if (!head) continue
+      try {
+        const bytes = await source.getBlob(t.inboxToken, 'assignments', lineage, head.version)
+        blobs.push({ therapistId: t.id, lineage, version: head.version, bytes })
+      } catch (e) {
+        if (!(e instanceof PortalError && e.status === 410)) throw e
+        gone.push({ therapistName: t.displayName, sentAt: head.createdAt, lineage, version: head.version })
+      }
+    }
+  }
+  return { blobs, gone }
+}
+
+/**
+ * The one line an item the server no longer keeps gets. Two facts the console knows and nothing
+ * else: it cannot say what the item was, and "expired" or "missed" would read as a lapse on the
+ * owner's part. Same ink as the live items, no alarm colour, nothing to click.
+ */
+export function goneItemLine(name: string, date: string): string {
+  return `Sent by ${name} on ${date}. The server keeps items for 90 days.`
+}
+

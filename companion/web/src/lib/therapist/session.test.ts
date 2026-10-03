@@ -32,6 +32,20 @@ describe('therapist portal session client', () => {
     expect(JSON.parse(String(log[0].init.body))).toMatchObject({ credentialId: 'cred-1', code: '123456' })
   })
 
+  it('holds the keys no longer than 8 hours, whatever the server allows; a shorter server limit applies (#262)', async () => {
+    const now = 1_000_000
+    const login = (absoluteExpiry: number) =>
+      new PortalClient(
+        'https://s.example',
+        fakeFetch({ '/v1/totp/verify': () => new Response(JSON.stringify({ csrfToken: 'C', absoluteExpiry }), { status: 200 }) }),
+      ).loginTotp('c', '123456', now)
+    const eightHours = 8 * 60 * 60 * 1000
+    // An operator who lengthened the server's limit to 12 hours: the page still stops at 8.
+    expect((await login(now + 12 * 60 * 60 * 1000)).session?.absoluteExpiresAt).toBe(now + eightHours)
+    // A shorter server limit is the one that applies.
+    expect((await login(now + 2 * 60 * 60 * 1000)).session?.absoluteExpiresAt).toBe(now + 2 * 60 * 60 * 1000)
+  })
+
   it('surfaces lockout (429) as an error', async () => {
     const client = new PortalClient('https://s.example', fakeFetch({ '/v1/totp/verify': () => new Response('locked', { status: 429 }) }))
     const res = await client.loginTotp('c', '000000')

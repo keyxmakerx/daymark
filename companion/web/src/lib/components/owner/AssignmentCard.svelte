@@ -4,11 +4,14 @@
 
   let {
     item,
+    saving = false,
     onaccept,
     ondecline,
     onsnooze,
   }: {
     item: InboxItem
+    /** While this item's decision is being saved to the owner's lane, its buttons wait (#345). */
+    saving?: boolean
     onaccept: () => void
     ondecline: () => void
     onsnooze: () => void
@@ -57,9 +60,9 @@
     {#if item.decision}
       <span class="decided">{item.decision}</span>
     {:else}
-      <button class="primary" onclick={onaccept} disabled={!applyable} title={applyable ? '' : 'Cannot accept an unverified or rejected item.'}>Accept</button>
-      <button onclick={onsnooze} disabled={!applyable}>Snooze</button>
-      <button class="danger" onclick={ondecline}>Decline</button>
+      <button class="primary" onclick={onaccept} disabled={!applyable || saving} title={applyable ? '' : 'Cannot accept an unverified or rejected item.'}>Accept</button>
+      <button onclick={onsnooze} disabled={!applyable || saving}>Snooze</button>
+      <button class="danger" onclick={ondecline} disabled={saving}>Decline</button>
     {/if}
   </footer>
 </article>

@@ -703,7 +703,7 @@ export const KEY_CHECK_COPY = {
   both:
     'Both of them, not just the interesting one. They travelled together, sealed under the same ' +
     'code, and their console recorded the pair — an encryption key without its signing key is not ' +
-    'a therapist, it is half a record.',
+    'a clinician’s record, it is half of one.',
   mismatch:
     'If what they have does not match what you read, stop and say so. Do not send anything, and do ' +
     'not accept a new invitation until you have worked out why, on a channel that is not this ' +
@@ -854,7 +854,8 @@ export function sameKeys(a: TherapistKeys, b: TherapistKeys): boolean {
 }
 
 /*
- * `beginAcceptance` USED TO LIVE HERE, and its removal is the cut-over (plan §3.7, 2026-09-04).
+ * `beginAcceptance` USED TO LIVE HERE, and its removal is the cut-over (COMPANION_PAIRING.md §4,
+ * "No enrolment without approval").
  *
  * It began by redeeming the invitation secret — which the emailed link carries — so the ceremony
  * it opened was reachable by whoever read that email, and the short pairing code in the design

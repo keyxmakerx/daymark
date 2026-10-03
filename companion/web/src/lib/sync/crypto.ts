@@ -5,15 +5,44 @@
  * client MUST produce byte-identical envelopes; see ../../../../docs/SYNC_PROTOCOL.md.
  *
  * Contract (per docs/COMPANION_SECURITY.md §4):
- *   passphrase ──Argon2id(salt, mem≥256MiB, ops≥3)──▶ master(32)
+ *   passphrase ──Argon2id(salt, 256≤mem≤512 MiB, 3≤ops≤8)──▶ master(32)
  *   master ──crypto_kdf(ctx="dmsync01")──┬─ id 1 ▶ SYNC_KEY        (XChaCha20-Poly1305)
  *                                        └─ id 2 ▶ MANIFEST_SEED   (Ed25519 signing seed)
- *   snapshot blob = MAGIC("DMS1") | FMT(1) | nonce(24) | XChaCha20Poly1305(plaintext, AAD, nonce, SYNC_KEY)
- *   AAD = utf8("daymark.snapshot.v1|" + lineage + "|" + version)
+ *   snapshot blob = MAGIC("DMS1") | FMT | nonce(24) | XChaCha20Poly1305(body, AAD, nonce, SYNC_KEY)
+ *     FMT 0x02, the only format written:  body = pad(plaintext)   AAD = utf8("daymark.snapshot.v2|" + lineage + "|" + version)
+ *     FMT 0x01, still read, never written: body = plaintext        AAD = utf8("daymark.snapshot.v1|" + lineage + "|" + version)
  *
  * The server never sees the passphrase, the keys, or the plaintext — only opaque blobs.
+ *
+ * PADDED SNAPSHOTS (#315). A snapshot is padded by ../padding.ts before it is encrypted, so the
+ * stored size says which size bucket it falls in and not how much was written between two syncs.
+ * Padding hides how much, never when: the server still sees when each version arrives.
+ *
+ * The format byte sits outside the ciphertext, where the server can change it, so each format
+ * names itself in the associated data as well. A server that turns 0x02 into 0x01 to make a reader
+ * skip unpadding (or 0x01 into 0x02) changes the associated data the reader authenticates against,
+ * and the envelope fails to open instead of opening in the wrong form. Unpadding happens only after
+ * the AEAD has authenticated the body; it is strict, so a writer that pads wrongly is refused
+ * loudly rather than read loosely.
+ *
+ * Format 1 is opened and never written: every snapshot stored before #315 is in it, and nothing
+ * about it is unsound except that it tells the server exact sizes.
+ *
+ * THE WEB CONSOLE'S LANE (#345; docs/SYNC_PROTOCOL.md, the lane section). What the owner's console
+ * adds to the person's record travels in lineages of its own, each version sealed in exactly the
+ * bytes of a format-2 snapshot — magic, 0x02, nonce, padded body — under the same sync key, and
+ * told apart by its associated data alone:
+ *
+ *   lane version = MAGIC | 0x02 | nonce(24) | XChaCha20Poly1305(pad(plaintext), AAD, nonce, SYNC_KEY)
+ *     AAD = utf8("daymark.lane.v1|" + lineage + "|" + version)
+ *
+ * So a lane version never opens as a snapshot and a snapshot never opens as a lane version, under
+ * the same key, lineage and version: the AEAD refuses before a byte of either is read as the other.
+ * The layout is shared on purpose, so that the associated data is the whole of the separation and a
+ * test can show it is.
  */
 import _sodium from 'libsodium-wrappers-sumo'
+import { pad, paddedLength, unpad, PaddingError } from '../padding'
 
 export type Sodium = typeof _sodium
 let sodium: Sodium | null = null
@@ -38,10 +67,51 @@ export interface KdfParams {
   ops: number
 }
 
-export const DEFAULT_KDF: KdfParams = { alg: 'argon2id', memMiB: 256, ops: 3 }
+/**
+ * The range every reader holds KDF parameters to before it derives anything (docs/SYNC_PROTOCOL.md
+ * §1.2): Argon2id, at least KDF_FLOOR and at most KDF_CEILING, in memory and in passes alike. The
+ * parameters travel inside what the server hands out, so both ends are the server's to move. Under
+ * the floor, a key is cheap to guess from what the server stores. Over the ceiling, the server
+ * would decide how much memory and time a reader spends, because Argon2id runs before the AEAD can
+ * refuse anything. sync-crypto's SyncCrypto.KdfParams holds the phone to the same four numbers.
+ */
+export const KDF_FLOOR = { memMiB: 256, ops: 3 } as const
+export const KDF_CEILING = { memMiB: 512, ops: 8 } as const
+
+/** Exactly the floor, which is what every writer uses: well inside the ceiling. */
+export const DEFAULT_KDF: KdfParams = { alg: 'argon2id', memMiB: KDF_FLOOR.memMiB, ops: KDF_FLOOR.ops }
+
+/**
+ * Where KDF parameters fall against the range: 'belowFloor' for anything that is not Argon2id at or
+ * above the floor, 'aboveCeiling' for Argon2id past the ceiling, and 'inRange' otherwise. The floor
+ * is checked first, as the phone checks it, so parameters under one bound and over the other are
+ * 'belowFloor' on both sides. Every comparison is written so that a value that is not a number
+ * fails it: a member that is missing is refused here, not handed to libsodium.
+ */
+export function kdfRange(params: KdfParams | undefined | null): 'inRange' | 'belowFloor' | 'aboveCeiling' {
+  if (!params || params.alg !== 'argon2id') return 'belowFloor'
+  if (!(params.memMiB >= KDF_FLOOR.memMiB && params.ops >= KDF_FLOOR.ops)) return 'belowFloor'
+  if (!(params.memMiB <= KDF_CEILING.memMiB && params.ops <= KDF_CEILING.ops)) return 'aboveCeiling'
+  return 'inRange'
+}
 
 export const MAGIC = new Uint8Array([0x44, 0x4d, 0x53, 0x31]) // "DMS1"
-export const FMT = 0x01
+/** The unpadded format of every snapshot stored before #315. Opened, never written. */
+export const FMT_UNPADDED = 0x01
+/** The padded format (#315): the only one encryptSnapshot writes. */
+export const FMT_PADDED = 0x02
+/** Each format's name in the associated data, so the format byte cannot be changed on its own. */
+const AAD_CONTEXT: Readonly<Record<number, string>> = {
+  [FMT_UNPADDED]: 'daymark.snapshot.v1',
+  [FMT_PADDED]: 'daymark.snapshot.v2',
+}
+// Fixed by the algorithm (crypto_aead_xchacha20poly1305_ietf_NPUBBYTES and _ABYTES). Written out
+// so a snapshot's stored size can be worked out before libsodium has loaded.
+const NONCE_BYTES = 24
+const TAG_BYTES = 16
+const HEADER_BYTES = MAGIC.length + 1 + NONCE_BYTES
+/** The u32 length prefix ../padding.ts puts in front of the plaintext (its LAYOUT). */
+const PAD_PREFIX_BYTES = 4
 const KDF_CONTEXT = 'dmsync01' // exactly 8 bytes, per crypto_kdf
 const SUBKEY_SYNC = 1
 const SUBKEY_MANIFEST = 2
@@ -72,33 +142,104 @@ export function deriveKeys(passphrase: string, salt: Uint8Array, params: KdfPara
   return { syncKey, manifestSeed }
 }
 
-function aad(lineage: string, version: number | bigint): Uint8Array {
-  return s().from_string(`daymark.snapshot.v1|${lineage}|${version}`)
+/** The lane's name in the associated data (#345): never a snapshot's, so neither opens as the other. */
+export const LANE_CONTEXT = 'daymark.lane.v1'
+
+function aad(format: number, lineage: string, version: number | bigint): Uint8Array {
+  return s().from_string(`${AAD_CONTEXT[format]}|${lineage}|${version}`)
 }
 
-/** plaintext (e.g. a BackupData JSON, UTF-8) → opaque envelope bytes for the server. */
-export function encryptSnapshot(plaintext: Uint8Array, syncKey: Uint8Array, lineage: string, version: number | bigint): Uint8Array {
+/** MAGIC | FMT_PADDED | nonce | the AEAD of pad(plaintext) under this associated data. */
+function sealPadded(plaintext: Uint8Array, associated: Uint8Array, syncKey: Uint8Array): Uint8Array {
   const so = s()
-  const nonce = so.randombytes_buf(so.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES)
-  const ct = so.crypto_aead_xchacha20poly1305_ietf_encrypt(plaintext, aad(lineage, version), null, nonce, syncKey)
-  const out = new Uint8Array(MAGIC.length + 1 + nonce.length + ct.length)
+  const nonce = so.randombytes_buf(NONCE_BYTES)
+  const ct = so.crypto_aead_xchacha20poly1305_ietf_encrypt(pad(plaintext), associated, null, nonce, syncKey)
+  const out = new Uint8Array(HEADER_BYTES + ct.length)
   out.set(MAGIC, 0)
-  out[MAGIC.length] = FMT
+  out[MAGIC.length] = FMT_PADDED
   out.set(nonce, MAGIC.length + 1)
-  out.set(ct, MAGIC.length + 1 + nonce.length)
+  out.set(ct, HEADER_BYTES)
   return out
 }
 
-/** Opaque envelope bytes → plaintext. Throws if tampered, wrong key, or wrong lineage/version. */
-export function decryptSnapshot(envelope: Uint8Array, syncKey: Uint8Array, lineage: string, version: number | bigint): Uint8Array {
-  const so = s()
-  const nb = so.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES
-  if (envelope.length < MAGIC.length + 1 + nb) throw new Error('envelope too short')
+/** The magic and the format byte of an envelope, checked before anything is decrypted. */
+function envelopeFormat(envelope: Uint8Array): number {
+  if (envelope.length < HEADER_BYTES) throw new Error('envelope too short')
   for (let i = 0; i < MAGIC.length; i++) if (envelope[i] !== MAGIC[i]) throw new Error('bad magic — not a Daymark snapshot envelope')
-  if (envelope[MAGIC.length] !== FMT) throw new Error(`unsupported envelope format ${envelope[MAGIC.length]}`)
-  const nonce = envelope.subarray(MAGIC.length + 1, MAGIC.length + 1 + nb)
-  const ct = envelope.subarray(MAGIC.length + 1 + nb)
-  return so.crypto_aead_xchacha20poly1305_ietf_decrypt(null, ct, aad(lineage, version), nonce, syncKey)
+  return envelope[MAGIC.length]!
+}
+
+/** The body of an envelope under this associated data, still padded. Throws if it does not open. */
+function openBody(envelope: Uint8Array, associated: Uint8Array, syncKey: Uint8Array): Uint8Array {
+  const nonce = envelope.subarray(MAGIC.length + 1, HEADER_BYTES)
+  const ct = envelope.subarray(HEADER_BYTES)
+  return s().crypto_aead_xchacha20poly1305_ietf_decrypt(null, ct, associated, nonce, syncKey)
+}
+
+/**
+ * The size of the blob encryptSnapshot writes for a plaintext of `plaintextLength` bytes: the
+ * header, the padded body and the tag. Needs no libsodium, so a writer can check a snapshot
+ * against a size limit before it derives a key or sends anything.
+ */
+export function snapshotBlobLength(plaintextLength: number): number {
+  return HEADER_BYTES + paddedLength(PAD_PREFIX_BYTES + plaintextLength) + TAG_BYTES
+}
+
+/** The size the same snapshot had in format 1, unpadded. Only ever reported, never written. */
+export function unpaddedSnapshotBlobLength(plaintextLength: number): number {
+  return HEADER_BYTES + plaintextLength + TAG_BYTES
+}
+
+/** plaintext (e.g. a BackupData JSON, UTF-8) → opaque envelope bytes for the server, padded (format 2). */
+export function encryptSnapshot(plaintext: Uint8Array, syncKey: Uint8Array, lineage: string, version: number | bigint): Uint8Array {
+  return sealPadded(plaintext, aad(FMT_PADDED, lineage, version), syncKey)
+}
+
+/**
+ * Opaque envelope bytes → plaintext, from either format. Throws if tampered, wrong key, wrong
+ * lineage/version, or the format byte was changed (the associated data names the format).
+ */
+export function decryptSnapshot(envelope: Uint8Array, syncKey: Uint8Array, lineage: string, version: number | bigint): Uint8Array {
+  const format = envelopeFormat(envelope)
+  if (format !== FMT_PADDED && format !== FMT_UNPADDED) throw new Error(`unsupported envelope format ${format}`)
+  const body = openBody(envelope, aad(format, lineage, version), syncKey)
+  if (format === FMT_UNPADDED) return body
+  try {
+    return unpad(body)
+  } catch (e) {
+    if (e instanceof PaddingError) throw new Error('snapshot opened, but its padding is not in the standard form')
+    throw e
+  }
+}
+
+/** The associated data of one lane version: the lane's own context, its lineage and its version. */
+function laneAad(lineage: string, version: number | bigint): Uint8Array {
+  return s().from_string(`${LANE_CONTEXT}|${lineage}|${version}`)
+}
+
+/**
+ * One version of the web console's lane (a UTF-8 JSON, lane/record.ts) → envelope bytes, padded, in
+ * a format-2 snapshot's layout under the lane's associated data (see the header).
+ */
+export function encryptLaneVersion(plaintext: Uint8Array, syncKey: Uint8Array, lineage: string, version: number | bigint): Uint8Array {
+  return sealPadded(plaintext, laneAad(lineage, version), syncKey)
+}
+
+/**
+ * Envelope bytes → one lane version's plaintext. Throws for anything that is not a lane version of
+ * this lineage and version under this key, a snapshot of the same lineage and version included, and
+ * for padding that is not in the standard form. Only the padded format exists for a lane.
+ */
+export function decryptLaneVersion(envelope: Uint8Array, syncKey: Uint8Array, lineage: string, version: number | bigint): Uint8Array {
+  const format = envelopeFormat(envelope)
+  if (format !== FMT_PADDED) throw new Error(`unsupported lane envelope format ${format}`)
+  const body = openBody(envelope, laneAad(lineage, version), syncKey)
+  try {
+    return unpad(body)
+  } catch (e) {
+    if (e instanceof PaddingError) throw new Error('lane version opened, but its padding is not in the standard form')
+    throw e
+  }
 }
 
 /** SHA-256 hex over arbitrary bytes (matches the server's X-Content-Hash). */

@@ -1,7 +1,7 @@
 package com.daymark.companion.routes
 
 import com.daymark.companion.auth.AttemptBudget
-import com.daymark.companion.auth.AuthGuard
+import com.daymark.companion.auth.OwnerAuth
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.auth.PairingStore
 import com.daymark.companion.auth.PersistentAttemptLimiter
@@ -181,16 +181,17 @@ internal const val PAIRING_STATUS_REFILL_MS = 10_000L
 const val PAIRING_STATUS_POLL_SECONDS = 45L
 
 /**
- * The store-and-forward relay for the CPace pairing exchange (plan §3.7.3 — "owner posts,
- * therapist fetches and responds, owner finishes next time they open the app") and, since the
- * screens were planned, the approval that turns a matched code into an enrolment.
+ * The store-and-forward relay for the CPace pairing exchange (COMPANION_PAIRING.md §4 — the owner
+ * posts, the therapist fetches and responds, the owner finishes the next time they look) and,
+ * since the screens were planned, the approval that turns a matched code into an enrolment.
  *
  * WHAT THE SERVER IS HERE, in one line: a parcel shelf between two people who share a code it
- * will never see. The security argument of the whole §3.7 design is that the server cannot
- * participate in the exchange because it does not have the code (§3.7.4) — so every handler in
- * this file treats the messages and the envelope as opaque bytes, sized but never parsed, and
- * nothing in any request or response carries the code in any form. The web client has the test
- * that PROVES no request ever contains it; this file's job is to have nowhere to put it.
+ * will never see. The security argument of the whole pairing design is that the server cannot
+ * participate in the exchange because it does not have the code (COMPANION_PAIRING.md §5) — so
+ * every handler in this file treats the messages and the envelope as opaque bytes, sized but
+ * never parsed, and nothing in any request or response carries the code in any form. The web
+ * client has the test that PROVES no request ever contains it; this file's job is to have nowhere
+ * to put it.
  *
  * ONE SEALED PARCEL EACH WAY, AND THE SERVER HAS A KEY FOR NEITHER. The therapist's reply carries
  * their offer (their keys, a name, a ticket); the owner's approval carries their own keys back.
@@ -239,7 +240,7 @@ const val PAIRING_STATUS_POLL_SECONDS = 45L
 fun Route.pairingRelayRoutes(
     authStore: AuthStore,
     pairingStore: PairingStore,
-    ownerGuard: AuthGuard,
+    ownerGuard: OwnerAuth,
     auditStore: AuditStore,
     /** The same two values redeem passes to the store, so the SHARED per-invite counter arms
      *  identically whichever surface a guess lands on. */
@@ -389,13 +390,13 @@ fun Route.pairingRelayRoutes(
         }
 
         /*
-         * The owner cancels. From OPEN or RESPONDED it is 4.0a's owner Cancel. From CLOSED it is
-         * an ABANDON: an approval nobody finished (the therapist lost the tab, the ticket sat
-         * unused, the owner changed their mind) puts the invitation back to PENDING and takes the
-         * ticket with it, so the owner can start over with a new code rather than being left with
-         * an invitation that is neither open nor enrolled. Only while the invitation is still
-         * REDEEMING: once it is CONSUMED there is a credential behind it, and that is revoked,
-         * not abandoned.
+         * The owner cancels (COMPANION_PAIRING.md §8). From OPEN or RESPONDED it is the owner's
+         * Cancel. From CLOSED it is an ABANDON: an approval nobody finished (the therapist lost the
+         * tab, the ticket sat unused, the owner changed their mind) puts the invitation back to
+         * PENDING and takes the ticket with it, so the owner can start over with a new code rather
+         * than being left with an invitation that is neither open nor enrolled. Only while the
+         * invitation is still REDEEMING: once it is CONSUMED there is a credential behind it, and
+         * that is revoked, not abandoned.
          */
         post("/{exchangeId}/cancel") {
             if (!call.ownerAuthorized(ownerGuard)) return@post

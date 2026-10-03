@@ -2,11 +2,11 @@
  * SIGN-IN — the contract a person reads before they are trusted with someone else's record,
  * and the digest of the image serving them, as plain data.
  *
- * WHAT THIS SCREEN IS FOR. Signing in here opens another person's mental-health record. The
- * plan (COMPANION_WEB_REDESIGN_PLAN.md, Phase 3 item 4) calls it a "two-column contract": on
- * one side the credential entry, on the other an explicit statement of what the person signing
- * in is about to be trusted with and what the server does and does not learn. This module owns
- * the second column and the digest control. It owns no credential, no key, no request.
+ * WHAT THIS SCREEN IS FOR. Signing in here opens another person's mental-health record.
+ * COMPANION_UX.md §10.4 makes it a two-column contract: on one side the credential entry, on the
+ * other an explicit statement of what the person signing in is about to be trusted with and what
+ * the server does and does not learn. This module owns the second column and the digest control.
+ * It owns no credential, no key, no request.
  *
  * WHY THE CONTRACT IS DATA AND NOT MARKUP. Every sentence below is a premade constant written
  * by a person. Holding them here rather than in the component buys three things a <p> cannot:
@@ -17,11 +17,11 @@
  * Nothing here is generated, inferred, or phrased by a model.
  *
  * WHY THE MODULE REFUSES TO STATE THE ASSURANCE CAVEAT ITSELF. The fixed LowerAssuranceBanner
- * copy is quoted verbatim in COMPANION_SECURITY.md and asserted character-for-character by
- * components/invariants.tree.test.ts. It is rendered by the component that owns it and is
- * retyped nowhere — not here, not in the screen. `checkContract` actively rejects a clause that
- * reaches for the banner's subjects, because the way fixed copy actually gets softened is not
- * an edit to the fixed copy: it is a friendlier paraphrase added beside it.
+ * copy is asserted character-for-character by components/invariants.tree.test.ts. It is rendered
+ * by the component that owns it and is retyped nowhere — not here, not in the screen.
+ * `checkContract` actively rejects a clause that reaches for the banner's subjects, because the
+ * way fixed copy actually gets softened is not an edit to the fixed copy: it is a friendlier
+ * paraphrase added beside it.
  *
  * WHY THE DIGEST IS SHOWN WHOLE. A truncated hash is a hash you cannot compare. `sha256:e7c40c…`
  * and a tampered image whose digest shares those eight characters read identically, and the
@@ -281,9 +281,11 @@ export const SIGN_IN_CONTRACT: readonly ContractClause[] = [
   {
     id: 'trusted.notARecord',
     section: 'trusted',
+    // A share is access, not a copy (#305, #337): the report is the copy, handed over on paper.
     text:
-      'What you open is a copy of what they chose to export. It is not a clinical record, it is ' +
-      'not complete, and nothing in it is a diagnosis.',
+      'What you open is a share: access to what this person chose, until the date they set or ' +
+      'until they stop it. It is not a clinical record, it is not complete, and nothing in it is a ' +
+      'diagnosis.',
   },
   {
     id: 'sees.signIn',
@@ -295,9 +297,12 @@ export const SIGN_IN_CONTRACT: readonly ContractClause[] = [
   {
     id: 'sees.shape',
     section: 'serverSees',
+    // Every blob is padded before it is encrypted (#315), so the server learns a rounded size,
+    // never an exact one. Padding hides how much, never when, so timing and order stay listed
+    // among what the server sees, and no clause may say or imply that they are hidden.
     text:
-      'The size, timing and order of the encrypted blobs that move between you and the person ' +
-      'who shared them.',
+      'The timing and order of the encrypted blobs that move between you and the person who ' +
+      'shared them, and roughly how big they are.',
   },
   {
     id: 'sees.audit',
@@ -323,17 +328,34 @@ export const SIGN_IN_CONTRACT: readonly ContractClause[] = [
   {
     id: 'cannot.scope',
     section: 'serverCannotSee',
+    // The digest is the page's own report, never a control (#222, #320): a changed page can print
+    // the right value, so only a comparison made somewhere else counts for anything.
     text:
-      'Both of those describe the software as released, not the page in front of you — which is ' +
-      'what the notice at the top of this screen is about, and why the image digest is a control ' +
-      'here rather than a footnote.',
+      'Both of those describe the software as released, not the page in front of you. That is what ' +
+      "the notice at the top of this screen is about. The digest shown here is this page's own report " +
+      'of what it is running; whoever runs the server can compare it against the release they ' +
+      'pulled, and nothing on this screen can.',
   },
   {
     id: 'session.memory',
     section: 'session',
+    // Each trigger is one the page itself acts on: logout() zeroizes, a closed tab takes its
+    // memory with it, and TherapistPortal's guard locks on the idle deadline (DEFAULT_IDLE_MS) and
+    // on the absolute expiry the server returns at sign-in, 8 hours by default
+    // (DAYMARK_SESSION_ABSOLUTE_SECONDS). portalLock.test.ts holds the numbers to the code.
     text:
-      'Keys are held in memory only. Logging out, going idle, or closing the tab drops them, and ' +
-      'the next visit starts from this screen again.',
+      'Keys are held in memory only. Logging out, closing the tab, 15 minutes without activity, or ' +
+      '8 hours in all drops them, and signing in starts again from this screen.',
+  },
+  {
+    id: 'session.screen',
+    section: 'session',
+    // Beside the lock, because the lock is what a clinician will assume covers these, and it does
+    // not (#262). Information, not an alarm: a clause like the others, in no warning container.
+    text:
+      'What you open is on screen like any other page. A browser extension can read it, a ' +
+      'screenshot can keep it, and on a computer other people use both matter more. The lock drops ' +
+      'the keys from memory; it does not reach a copy an extension or a screenshot already took.',
   },
   {
     id: 'session.noVerdicts',
@@ -376,6 +398,15 @@ export const SCREEN_COPY = {
     'The contract above is incomplete, so the sign-in form is not being offered. Reading someone ' +
     "else's record starts with a complete statement of what that means; without one there is " +
     'nothing here to agree to.',
+  /*
+   * Shown above the credentials after the automatic lock, and only then (#262). A page that
+   * silently returns to sign-in reads as "something went wrong" or "someone else did this", so it
+   * says what happened in the past tense and states the rule rather than guessing which limit
+   * fired. Never after the person's own "Log out": they know what they did.
+   */
+  lockedNotice:
+    'This session ended. Sessions end after 15 minutes without activity, or 8 hours in all, and ' +
+    "the keys are dropped from this browser's memory. Nothing else changed.",
 } as const
 
 /* ── Checking the contract ───────────────────────────────────────────────────────────────── */

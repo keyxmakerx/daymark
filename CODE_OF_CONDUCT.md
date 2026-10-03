@@ -21,9 +21,16 @@ and other conduct that could reasonably be considered inappropriate.
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the
-project maintainers through GitHub. All complaints will be reviewed and investigated promptly
-and fairly. Maintainers are obligated to respect the privacy and security of the reporter.
+To report abusive, harassing, or otherwise unacceptable behavior privately, use GitHub's own
+tools: "Report content" in the "…" menu of an issue, pull request or comment, or "Report abuse"
+on the person's profile. Those reports go to GitHub's staff, not to the maintainer, because this
+repository belongs to a personal account. GitHub acts on them under its own Community Guidelines.
+
+The maintainer acts on conduct they see here. They may hide or delete it, lock a conversation,
+block someone, or limit who can interact with the repository for a while.
+
+There is no email address, and no private channel for behavior away from GitHub. Security
+problems go through [SECURITY.md](SECURITY.md), not through a conduct report.
 
 The full text and enforcement guidelines are available at
 <https://www.contributor-covenant.org/version/2/1/code_of_conduct/>.

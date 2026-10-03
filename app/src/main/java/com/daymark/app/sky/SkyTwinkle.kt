@@ -7,14 +7,14 @@ package com.daymark.app.sky
  * Import-free, like the rest of `sky/`. **No clock and no random source**: every function here is
  * pure, and time arrives as an elapsed-millisecond count the renderer passes in. That is what makes
  * a twinkle testable, and it is the same discipline that keeps [Sky.layout] deterministic —
- * `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §1 asks for twinkle to live *"in `sky/` so it is
- * unit-tested"*, and this is why.
+ * `docs/SKY.md` §0.1 puts everything the Sky decides, twinkle included (§3.6), in `sky/` so that
+ * every rule is a plain-JVM test, and this is why.
  *
  * ## What a rhythm is allowed to know
  *
- * §1: *"Each star's rhythm is a hash of its own identity, the way its position is: every star
- * twinkles, each to its own beat, the same beat forever. **Never a function of mood, kind or
- * count.**"*
+ * `docs/SKY.md` §3.6: *"Every value comes from the star's identity and the time, never from its
+ * mood or any count, so each star has its own beat, forever. Kind matters only in that every life
+ * event glints."*
  *
  * So the inputs are the star's kind and its anchor record id — the same pair [Sky.layout] hashes
  * for position ([identityIdAt] hands the renderer the right id so it cannot pick a different one)
@@ -26,7 +26,8 @@ package com.daymark.app.sky
  *
  * ## The motion-safety rules, as arithmetic
  *
- * §1 lists four, and each is a property of this file rather than a promise about the renderer:
+ * `docs/SKY.md` §7.4 lists four, and each is a property of this file rather than a promise about
+ * the renderer:
  *
  *  - **Everything stops under the motion switch.** [alphaAt] and [scaleAt] return exactly `1`, and
  *    [glintEnvelopeAt] exactly `0`, whenever `options.motionEnabled` is false. The switch is a
@@ -42,10 +43,10 @@ package com.daymark.app.sky
  *    four independent values.
  *
  * The amplitudes are deliberately small — the breathe moves brightness by at most [BREATHE_DEPTH]
- * and size by [BREATHE_SCALE], the shimmer by [SHIMMER_DEPTH] — because §1 asks for *"a night sky,
- * not an instrument"*. A star's tint never changes at all: the glint is a coloured fringe added
- * over the star and taken away again, which is why its colours live here as separate values rather
- * than as a shift applied to [SkyAge.tintFor].
+ * and size by [BREATHE_SCALE], the shimmer by [SHIMMER_DEPTH] — because `docs/SKY.md` §3.6 makes
+ * twinkle *"decoration only"*: a night sky, not an instrument. A star's tint never changes at all:
+ * the glint is a coloured fringe added over the star and taken away again, which is why its colours
+ * live here as separate values rather than as a shift applied to [SkyAge.tintFor].
  *
  * ## A note on the salts, which is a real trap and not a style preference
  *
@@ -122,8 +123,8 @@ object SkyTwinkle {
      *
      * Drawn from its own hash rather than from the breathe phase — the prototype reuses the phase
      * (`phase > 4.2`), which is fine on a canvas of five hundred but puts every shimmering star
-     * into the same third of the breathe cycle. §1 asks that *"nothing is ever in step with
-     * anything else"*, so the two are independent here.
+     * into the same third of the breathe cycle. `docs/SKY.md` §7.4 asks that *"nothing is ever in
+     * step with anything else"*, so the two are independent here.
      */
     const val SHIMMER_SHARE = 1f / 3f
 
@@ -143,24 +144,24 @@ object SkyTwinkle {
     // The glint. About one star in five, plus every landmark.
     // -------------------------------------------------------------------------------------------
 
-    /** About one in five, as §1 asks and the prototype draws. */
+    /** About one in five, as `docs/SKY.md` §3.6 asks and the prototype draws. */
     const val GLINT_SHARE = 0.22f
 
     /** Seconds between one star's glints. Wide and irregular, so no two stars beat together. */
     const val GLINT_PERIOD_MIN_MS = 7000f
     const val GLINT_PERIOD_MAX_MS = 22000f
 
-    /** How long one glint lasts. §1's motion rule is *"under a third of a second"*. */
+    /** How long one glint lasts. `docs/SKY.md` §7.4's rule is *"under a third of a second"*. */
     const val GLINT_MS = 280f
 
     /**
      * Whether this star ever glints at all.
      *
-     * Every landmark does, because §1 gives the mark the person placed the one prominence on this
-     * surface, and about one star in five otherwise. This is the only place kind is anything other
-     * than an ordinal in a hash, and the question it answers is *who authored this*, never *how
-     * much is it worth*: a goal the app watched being reached does not glint more than a journal
-     * page.
+     * Every landmark does, because `docs/SKY.md` §3.4 gives the mark the person placed the one
+     * prominence on this surface, and about one star in five otherwise. This is the only place kind
+     * is anything other than an ordinal in a hash, and the question it answers is *who authored
+     * this*, never *how much is it worth*: a goal the app watched being reached does not glint more
+     * than a journal page.
      */
     fun glints(kind: SkyKind, id: Long): Boolean =
         kind == SkyKind.LIFE_EVENT || hash(kind, id, GLINT_SALT) < GLINT_SHARE
@@ -238,8 +239,8 @@ object SkyTwinkle {
      * The two halves of the prism flash: a red fringe and a blue one, drawn *added* on either side
      * of the star and gone again.
      *
-     * Added and not blended, which is the reason a glint never changes what colour a star is. §1:
-     * *"The star's own tint never changes; the glint passes over it."* A star that shifted hue as
+     * Added and not blended, which is the reason a glint never changes what colour a star is.
+     * `docs/SKY.md` §3.6: *"The star's own tint never changes."* A star that shifted hue as
      * it glinted would put a second, moving colour dimension on a surface whose one colour
      * dimension is age.
      */

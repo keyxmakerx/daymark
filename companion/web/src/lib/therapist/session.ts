@@ -100,6 +100,15 @@ export class PortalError extends Error {
 /** Default client-side idle window (server also enforces its own idle/absolute limits). */
 export const DEFAULT_IDLE_MS = 15 * 60 * 1000
 
+/**
+ * The longest this page holds a session's keys, whatever absolute expiry the server returns. The
+ * sign-in contract tells the clinician that 8 hours in all drops them (signIn.ts `session.memory`),
+ * and a promise made on this screen has to hold on every deployment: an operator may shorten the
+ * server's limit (DAYMARK_SESSION_ABSOLUTE_SECONDS), which then applies, but cannot lengthen what
+ * this page keeps (#262).
+ */
+export const MAX_ABSOLUTE_MS = 8 * 60 * 60 * 1000
+
 export class PortalClient {
   private readonly base: string
 
@@ -117,12 +126,12 @@ export class PortalClient {
   }
 
   /*
-   * `redeemInvite` USED TO BE HERE, and its route is gone from the server (plan §3.7,
-   * 2026-09-04). It exchanged the invitation secret — which the emailed link carries — for an
-   * enrolment ticket, so the pairing code secured nothing. A ticket is now chosen by the
-   * therapist, sealed to the owner under the pairing key, and made live by the owner's approval;
-   * see therapist/pairingAccept.ts and pairing/relay.ts. `RedeemResult` survives as the shape the
-   * pairing fetch answers with.
+   * `redeemInvite` USED TO BE HERE, and its route is gone from the server (COMPANION_PAIRING.md
+   * §4, "No enrolment without approval"). It exchanged the invitation secret — which the emailed
+   * link carries — for an enrolment ticket, so the pairing code secured nothing. A ticket is now
+   * chosen by the therapist, sealed to the owner under the pairing key, and made live by the
+   * owner's approval; see therapist/pairingAccept.ts and pairing/relay.ts. `RedeemResult`
+   * survives as the shape the pairing fetch answers with.
    */
 
   /**
@@ -173,7 +182,7 @@ export class PortalClient {
           relRef: '',
           credentialKind: 'totp',
           csrf: body.csrfToken,
-          absoluteExpiresAt: body.absoluteExpiry,
+          absoluteExpiresAt: Math.min(body.absoluteExpiry, now + MAX_ABSOLUTE_MS),
           idleExpiresAt: now + this.idleMs,
         },
       }

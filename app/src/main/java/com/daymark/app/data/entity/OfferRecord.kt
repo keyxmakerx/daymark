@@ -12,10 +12,11 @@ import androidx.room.PrimaryKey
  * It began as the three columns `docs/COMPANION_DIALOGUE.md` specifies and now carries three more,
  * all of them facts about *the app's own behaviour at the moment it spoke* and none of them about
  * the person: which hour and weekday the ask was made in ([offeredHour], [offeredWeekday]) and
- * whether anything came back ([responded]). `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md` §4 is what
- * asks for them, and `com.daymark.app.stats.TimingGrid` is what reads them.
+ * whether anything came back ([responded]). `docs/FEATURES.md` §13.2 describes them.
+ * `OfferLedgerRepository.timedOffers` reads them, folding [responded] into the outcome that
+ * `com.daymark.app.stats.TimingGrid` places by.
  *
- * This is the decision engine's own table (`docs/DECISIONS_2026-08.md` §D1a). It holds the app's
+ * This is the decision engine's own table (`docs/DECISIONS.md` §D1a). It holds the app's
  * behaviour and the reception of that behaviour — **never anything about the person**. There is no
  * note, no answer, no dialogue text, no mood, no free-text column of any kind, and there must never
  * be one: the moment this table carries content it stops being a ledger of interruptions and starts
@@ -33,7 +34,7 @@ import androidx.room.PrimaryKey
  *
  * It follows that nothing here is a streak or a score. Rows are immutable facts about single
  * moments; there is no [androidx.room.Update] path in the DAO, and consecutive-run counting over
- * them is exactly the shape `docs/DECISIONS_2026-08.md` §D6 rules out.
+ * them is exactly the shape `docs/DECISIONS.md` §D6 rules out.
  */
 @Entity(tableName = "offer_records", indices = [Index("kind"), Index("offeredAt")])
 data class OfferRecord(
@@ -100,7 +101,7 @@ data class OfferRecord(
      *
      * It says nothing about *why* nothing came back. Asleep, at work, out of battery and having a
      * terrible week are indistinguishable here and get the same response, which is the property
-     * that keeps this column from becoming a reading of a person (`docs/DECISIONS_2026-08.md` §D1a).
+     * that keeps this column from becoming a reading of a person (`docs/DECISIONS.md` §D1a).
      */
     val responded: Boolean? = null,
 ) {
@@ -123,7 +124,7 @@ data class OfferRecord(
 
 /**
  * Which feature asked. Each kind carries its own budget, which is the whole of the generalisation
- * described in `docs/DECISIONS_2026-08.md` §D1 — the engine still knows nothing about what any of
+ * described in `docs/DECISIONS.md` §D1 — the engine still knows nothing about what any of
  * these features *are*, only that they are different callers.
  */
 enum class OfferKind(val key: String) {

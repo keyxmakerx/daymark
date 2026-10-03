@@ -187,8 +187,8 @@ export const ROLES: readonly PracticeRole[] = [
   },
   {
     id: 'assistant',
-    docLabel: 'Therapist assistant',
-    label: 'Therapist assistant',
+    docLabel: 'Clinical assistant',
+    label: 'Clinical assistant',
     // Data plane only: an assistant supports one clinician's work with granted clients and holds
     // no practice-level authority at all. Nothing to invite, nothing to revoke, no log to review.
     planes: ['data'],

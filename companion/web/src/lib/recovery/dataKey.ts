@@ -46,12 +46,15 @@
  * worth; and if the entropy argument ever turns out to be weaker than believed, the memory-hard
  * KDF is the layer that was quietly holding the line anyway.
  *
- * WHY THE FLOOR IS RE-CHECKED ON EVERY SLOT OF EVERY BLOB. The blob arrives from the server, and
+ * WHY THE RANGE IS RE-CHECKED ON EVERY SLOT OF EVERY BLOB. The blob arrives from the server, and
  * the KDF parameters travel inside it — so the parameters are attacker-controlled input, exactly as
  * they are in therapist/keyStore.ts and sync/client.ts. A blob claiming 8 MiB / 1 pass is a
- * downgrade attempt and is refused before a single byte is derived. Every slot is checked, not just
- * the one being opened, so that a weakened sibling slot cannot survive a round trip through an
- * honest client and end up re-uploaded next to a strong one.
+ * downgrade attempt and is refused before a single byte is derived. A blob claiming more than the
+ * ceiling (512 MiB, 8 passes; sync/crypto.ts KDF_CEILING) is refused the same way, because the
+ * derivation runs before the AEAD can say anything, so without a ceiling whoever stores the blob
+ * decides how much memory and time a reader spends. Every slot is checked, not just the one being
+ * opened, so that a weakened sibling slot cannot survive a round trip through an honest client and
+ * end up re-uploaded next to a strong one.
  *
  * WHAT THIS MODULE DELIBERATELY DOES NOT DO. It does not talk to the server: no fetch, no storage,
  * no transport. It hands back plain data structures and lets the caller decide where they live,
@@ -64,7 +67,7 @@
  * it is written down in migration.ts rather than hand-waved here.
  */
 import _sodium from 'libsodium-wrappers-sumo'
-import { initCrypto, DEFAULT_KDF, type KdfParams } from '../sync/crypto'
+import { initCrypto, kdfRange, DEFAULT_KDF, type KdfParams } from '../sync/crypto'
 import { newRecoveryCode, requireRecoveryCode, type RecoveryCode } from './recoveryCode'
 
 const URLSAFE = () => _sodium.base64_variants.URLSAFE_NO_PADDING
@@ -131,16 +134,24 @@ function aadFor(kind: SlotKind): Uint8Array {
 }
 
 /**
- * Reject KDF parameters below the security-doc floor (>=256 MiB, >=3 ops) — downgrade defence.
+ * The two refusals of a slot's KDF parameters, each one fixed sentence that names no value.
+ * sync/client.ts tells them apart from a secret that did not open by these exact words.
+ */
+export const KDF_BELOW_FLOOR = 'data-key KDF parameters are below the security floor — refusing to derive'
+export const KDF_ABOVE_CEILING = 'data-key KDF parameters are above the ceiling — refusing to derive'
+
+/**
+ * Reject KDF parameters outside the range sync/crypto.ts states (kdfRange): below the floor, a
+ * downgrade; above the ceiling, a reader made to spend memory and time on the storer's say-so.
  *
  * Takes an optional argument on purpose: the blob is parsed from whatever the server sent, so a slot
  * with no `kdf` field at all is a thing that can actually arrive, and it must be refused here rather
  * than crash three lines later reading `.alg` off undefined.
  */
 function validateKdf(params: KdfParams | undefined | null): void {
-  if (!params || params.alg !== 'argon2id' || params.memMiB < 256 || params.ops < 3) {
-    throw new DataKeyError('data-key KDF parameters are below the security floor — refusing to derive')
-  }
+  const range = kdfRange(params)
+  if (range === 'belowFloor') throw new DataKeyError(KDF_BELOW_FLOOR)
+  if (range === 'aboveCeiling') throw new DataKeyError(KDF_ABOVE_CEILING)
 }
 
 /**

@@ -17,7 +17,7 @@
  * device holding an exported copy of the record is an independent, untracked way in — which is why
  * a clinician "leaving" by forgetting the record in one browser is not leaving (issue #91).
  *
- *   master     = Argon2id(passphrase, salt, mem≥256MiB, ops≥3)          // floor reused from sync/crypto
+ *   master     = Argon2id(passphrase, salt, 256≤mem≤512 MiB, 3≤ops≤8)    // range reused from sync/crypto
  *   plaintext  = box.priv(32) || box.pub(32) || sign.priv(64) || sign.pub(32)   // 160 bytes, fixed layout
  *   ct         = XChaCha20-Poly1305(plaintext, aad="daymark.tkeys.v1", nonce, master)
  *   blob       = { v:1, kdf, saltB64, nonceB64, ctB64 }
@@ -30,7 +30,7 @@
  */
 import _sodium from 'libsodium-wrappers-sumo'
 import { initAssignmentCrypto, type BoxKeyPair, type SignKeyPair } from '../assignments/crypto'
-import type { KdfParams } from '../sync/crypto'
+import { kdfRange, type KdfParams } from '../sync/crypto'
 
 const URLSAFE = () => _sodium.base64_variants.URLSAFE_NO_PADDING
 const enc = new TextEncoder()
@@ -57,11 +57,15 @@ export interface TherapistKeys {
 
 export class KeyUnwrapError extends Error {}
 
-/** Reject server-supplied KDF params below the security floor (downgrade defense). */
+/**
+ * Reject KDF params outside the range sync/crypto.ts states (kdfRange): below the floor, a
+ * downgrade; above the ceiling, a record that makes this browser spend memory and time on the say-so
+ * of whoever wrote it.
+ */
 function validateKdf(params: KdfParams) {
-  if (params.alg !== 'argon2id' || params.memMiB < 256 || params.ops < 3) {
-    throw new KeyUnwrapError('wrapped-key KDF parameters are below the security floor — refusing to derive')
-  }
+  const range = kdfRange(params)
+  if (range === 'belowFloor') throw new KeyUnwrapError('wrapped-key KDF parameters are below the security floor — refusing to derive')
+  if (range === 'aboveCeiling') throw new KeyUnwrapError('wrapped-key KDF parameters are above the ceiling — refusing to derive')
 }
 
 /** Wrap a keypair set under a reading passphrase (used by tests + a future enrol UI). */

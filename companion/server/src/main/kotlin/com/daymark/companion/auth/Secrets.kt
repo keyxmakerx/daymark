@@ -12,8 +12,10 @@ import java.util.Base64
  * hierarchy (that is client-side only; the server holds nothing that decrypts a record). It
  * is used ONLY to:
  *
- *  - hash the low-entropy *authenticating* secrets we must store at rest (invite code, TOTP
- *    secret) with Argon2id, so a DB leak does not hand over the plaintext secret;
+ *  - hash the *authenticating* secrets we must store at rest (invite code) with
+ *    Argon2id, so a DB leak does not hand over the plaintext secret. The TOTP seed is NOT hashed:
+ *    a verifier must recompute codes from it, so it is stored in the clear
+ *    (docs/COMPANION_SECURITY.md §5.2);
  *  - derive an opaque, non-reversible routing id (`relRef`) from an inbox token with BLAKE2b,
  *    exactly like the sync bearer token is only ever compared, never printed;
  *  - hash session / rel tokens for lookup (BLAKE2b) so the DB never stores a live bearer.
@@ -27,7 +29,7 @@ object Secrets {
     private val B64URL_DEC = Base64.getUrlDecoder()
 
     // Argon2id parameters for at-rest hashing of authenticating secrets. These are modest by
-    // design: the secrets we hash (invite codes, TOTP secrets) are high-entropy tokens, so the
+    // design: the secrets we hash (invite codes) are high-entropy tokens, so the
     // KDF cost is defense-in-depth against a DB leak, not the primary barrier. Tunable but
     // fixed here so a stored hash is self-describing by its embedded salt.
     private const val ARGON_ITERATIONS = 3

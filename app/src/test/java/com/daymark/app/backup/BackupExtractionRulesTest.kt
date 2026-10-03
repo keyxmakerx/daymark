@@ -13,8 +13,8 @@ import javax.xml.parsers.DocumentBuilderFactory
 /**
  * What the OS is allowed to copy off the device.
  *
- * `PRIVACY.md`: *"`android:allowBackup="false"` is set, so the OS won't copy your data into
- * cloud/adb backups."* That attribute was the app's only enforcement of that sentence, and since
+ * `PRIVACY.md`: *"`android:allowBackup="false"` is set, so the system does not copy your data into
+ * cloud or adb backups."* That attribute was the app's only enforcement of that sentence, and since
  * Android 12 it no longer covers every channel: the documented note on `android:allowBackup` is
  * that setting it false does **not** disable device-to-device transfer. `targetSdk` is 35, so on
  * every phone from 12 onwards D2D was governed by the platform default — copy everything — and a

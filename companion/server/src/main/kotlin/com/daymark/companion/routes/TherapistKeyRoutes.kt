@@ -1,7 +1,7 @@
 package com.daymark.companion.routes
 
 import com.daymark.companion.auth.AttemptLimiter
-import com.daymark.companion.auth.AuthGuard
+import com.daymark.companion.auth.OwnerAuth
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.auth.Secrets
 import com.daymark.companion.clientAddress
@@ -82,7 +82,7 @@ private const val PUBLIC_KEY_BYTES = 32
  */
 fun Route.therapistKeyRoutes(
     authStore: AuthStore,
-    ownerGuard: AuthGuard,
+    ownerGuard: OwnerAuth,
     sessionIdleSeconds: Long,
     auditStore: AuditStore,
     auditSourceIp: Boolean = false,
@@ -287,7 +287,7 @@ fun Route.therapistKeyRoutes(
  */
 fun Route.ownerKeyRoutes(
     authStore: AuthStore,
-    ownerGuard: AuthGuard,
+    ownerGuard: OwnerAuth,
     sessionIdleSeconds: Long,
     auditStore: AuditStore,
     auditSourceIp: Boolean = false,
@@ -337,13 +337,14 @@ fun Route.ownerKeyRoutes(
          * The clinician reads them with their session cookie; the owner reads their own with the
          * bearer token. No CSRF token on either, because this changes nothing.
          *
-         * The bearer branch is taken only when an Authorization header is actually present, so a
-         * clinician's ordinary request is unaffected. Sending a bogus one gains nothing — it is
-         * answered 401 by the same guard that protects every other owner route — and sending a
-         * valid one means being the owner, who already writes here.
+         * The owner branch is taken only when an owner credential is actually present — an
+         * Authorization header, or a device's signature (#186) — so a clinician's ordinary request is
+         * unaffected. Sending a bogus one gains nothing — it is answered 401 by the same guard that
+         * protects every other owner route — and sending a valid one means being the owner, who
+         * already writes here.
          */
         get {
-            if (call.request.headers[HttpHeaders.Authorization] != null) {
+            if (ownerGuard.presentsCredential(call)) {
                 if (!call.ownerAuthorized(ownerGuard)) return@get
                 val relRef = call.parameters["relRef"]
                     ?: return@get call.respond(HttpStatusCode.BadRequest, ErrorDto("missing relRef"))
