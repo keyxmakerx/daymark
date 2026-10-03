@@ -170,3 +170,21 @@ export function devicesApi(serverUrl: string, token: string, doFetch: FetchLike 
     },
   }
 }
+
+/**
+ * Whether two server addresses, as typed, name the same server. Blank is this page's own server, as
+ * every client here reads it. An address that does not parse names no server, so it matches nothing:
+ * the Recover card's count must describe the server it would re-issue on, or not be shown (#434).
+ */
+export function sameServer(a: string, b: string, pageOrigin: string): boolean {
+  const where = (typed: string): string | null => {
+    try {
+      const url = new URL(typed.trim() || '/', pageOrigin)
+      return url.origin + url.pathname.replace(/\/+$/, '')
+    } catch {
+      return null
+    }
+  }
+  const left = where(a)
+  return left !== null && left === where(b)
+}
