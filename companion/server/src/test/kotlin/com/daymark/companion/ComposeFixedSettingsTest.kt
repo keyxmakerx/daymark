@@ -49,7 +49,49 @@ class ComposeFixedSettingsTest {
         assertEquals(setOf("DAYMARK_PORT"), setIn(env) intersect fixedByCompose(compose))
     }
 
+    /** Keys a `.env` line sets or shows how to set, commented out or not: `KEY=` at the start. */
+    private fun named(text: String): Set<String> =
+        text.lines().mapNotNull { NAMED.find(it.trim())?.groupValues?.get(1) }.toSet()
+
+    /** Keys a compose file, or the §8 SMTP override, fills from `.env` with `${KEY`. */
+    private fun interpolated(text: String): Set<String> =
+        INTERPOLATED.findAll(text).map { it.groupValues[1] }.toSet()
+
+    /** The SMTP override `docs/COMPANION_DEPLOYMENT.md` §8 gives the operator to write. */
+    private fun smtpOverride(): String {
+        val doc = File(companion, "../docs/COMPANION_DEPLOYMENT.md")
+        assertTrue(doc.isFile, "${doc.path} must exist")
+        val section = doc.readText().substringAfter("## 8. ").substringBefore("\n## 9. ")
+        return section.substringAfter("```yaml").substringBefore("```")
+    }
+
+    @Test
+    fun `every setting the example environment shows how to set reaches the server`() {
+        // #443: the example showed email and limit settings that compose never passed on, so
+        // uncommenting them changed nothing and said nothing.
+        val reached = interpolated(read("docker-compose.yml")) + interpolated(read("docker-compose.no-egress.yml")) +
+            interpolated(smtpOverride())
+        // The readers really read: compose's own and the override's keys are found.
+        assertTrue("DAYMARK_DOMAIN" in reached && "DAYMARK_SMTP_HOST" in reached, "found $reached")
+        val shown = named(read(".env.example"))
+        assertTrue("DAYMARK_DOMAIN" in shown && "DAYMARK_SMTP_HOST" in shown, "found $shown")
+        assertEquals(emptySet(), shown - reached, "shown in .env.example but never passed to the server")
+        // Planted: the line #443 found is caught.
+        assertEquals(setOf("DAYMARK_MAX_VERSIONS"), named("# DAYMARK_MAX_VERSIONS=200\n") - reached)
+    }
+
+    @Test
+    fun `every limit the example lists as fixed is fixed by compose`() {
+        val fixed = fixedByCompose(read("docker-compose.yml"))
+        for (key in listOf("DAYMARK_MAX_BLOB_BYTES", "DAYMARK_MAX_VERSIONS", "DAYMARK_RATE_LIMIT_RPS", "DAYMARK_AUTH_TOKEN_FILE")) {
+            assertTrue(key in fixed, "$key is described as fixed by compose, and compose does not set it")
+        }
+    }
+
     private companion object {
+        val NAMED = Regex("""^#?\s*(DAYMARK_[A-Z0-9_]+)=""")
+        val INTERPOLATED = Regex("""\$\{(DAYMARK_[A-Z0-9_]+)""")
+
         val COMPOSE_LITERAL = Regex("""^\s+(DAYMARK_[A-Z0-9_]+):\s*+(?!"?\$\{)""")
         val ENV_SETTING = Regex("""^(DAYMARK_[A-Z0-9_]+)=""")
 
