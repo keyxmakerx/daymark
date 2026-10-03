@@ -208,13 +208,13 @@ body.drawing .bar, body.drawing .card { display: none; }
         <div class="grab"></div>
         <header><h2>How things form</h2><button class="icon" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
         <div class="body"><ul class="keylist">
-    <li><b>Long band</b><span>Days in a row of doing your thing. Memories line up along it and gather into knots.</span></li>
-    <li><b>Small clusters</b><span>On-and-off weeks. Each run of days pulls together into its own little cluster.</span></li>
-    <li><b>Supernova</b><span>A life event you marked as a hard one. What came after gathers around it.</span></li>
+    <li><b>Colour</b><span>Colour is age. New memories are blue; older ones turn white, gold, then red, and drift outward. Red only means old, never bad.</span></li>
+    <li><b>Bands</b><span>Long stretches with something on most days. Memories line up along them and gather into knots. Rare: most skies have one or two.</span></li>
+    <li><b>Clusters</b><span>On-and-off weeks. Each run of days gathers into its own cluster: oval, spiral or open.</span></li>
+    <li><b>Supernova</b><span>A life event you marked as hard. It marks that day and nothing more; what came after stays where it is.</span></li>
     <li><b>Nebula</b><span>Weeks with a lot of writing. Every sky gets its own colours; try New colours.</span></li>
     <li><b>Giant stars</b><span>Life events. Zoom right in and they burn like a sun.</span></li>
-    <li><b>Colour</b><span>New memories are blue. Older ones turn white, gold, then red, and drift outward.</span></li>
-    <li><b>Streams</b><span>A couple of weeks in a row. The run stretches into a thin trail, like a comet.</span></li>
+    <li><b>Streams</b><span>A longer run of days, drawn out into a thin trail like a comet.</span></li>
     <li><b>Constellations</b><span>You draw them between your own stars and name them. If a star in one is put away, its outline stays, kept as a snapshot.</span></li>
     <li><b>Binary stars</b><span>Two memories about the same person, slowly turning around each other.</span></li>
     <li><b>Comet</b><span>Something that comes back every year, like a birthday. It passes through on that day.</span></li>
@@ -224,7 +224,7 @@ body.drawing .bar, body.drawing .card { display: none; }
     <li><b>Planetary nebula</b><span>A habit you chose to end. It finishes as a glowing ring, not a gap.</span></li>
     <li><b>Whirlpool</b><span>A weekly habit kept for years. Its memories turn slowly around each other; each turn is about a year.</span></li>
     <li><b>Dark matter</b><span>Memories you tucked away to find again later. They don't shine, but the light behind them bends.</span></li>
-    <li><b>Black hole</b><span>Forms when you put memories away and draws them in slowly. Hidden, not deleted. It fades once nothing is left inside.</span></li>
+    <li><b>Black hole</b><span>Forms when you put memories away, draws them in, then closes and is gone. Nothing marks where they were. Hidden, not deleted: bring them back from the list.</span></li>
     <li><b>Ringed planet</b><span>A place you keep going back to. Memories logged there ride around it as moons.</span></li>
     <li><b>Favourites</b><span>Memories you starred carry a soft ring.</span></li>
     <li><b>Bridge</b><span>Two runs of days close together, joined by the days that carried one into the next.</span></li>
@@ -387,22 +387,14 @@ const place = (s0, s1, off, R) => { let best = null, bd = -1e9;
     const d = placed.reduce((m, q) => Math.min(m, Math.hypot(q.x - x, q.y - y) - q.R - R), 99); if (d > bd) { bd = d; best = { x, y, R, s }; } if (d > .5) break; }
   placed.push(best); return best; };
 const SN = (() => { const s = sOfDay(SN_DAY), q = place(s, s, 1.15, .75 * 1.5); return { x: q.x, y: q.y, R: .62 + .26 * rnd() }; })();
-let afterSN = 0; const SN_COUNT = 180 + Math.floor(rnd() * 180);
-const SN_KNOTS = Array.from({ length: 6 + Math.floor(rnd() * 6) }, () => { const a = rnd() * 6.2832, r = SN.R * (.25 + .6 * Math.sqrt(rnd())); return [Math.cos(a) * r, Math.sin(a) * r]; });
 const clusters = new Map();
 let knotC = null, knotLeft = 0;
 entries.forEach((e, i) => {
   const age = (ND - 1 - e.day) / 365, s = i / (N - 1), p = pathAt(s);
   let cx, cy, ox = 0, oy = 0, om = 0, info = "";
-  if (e.day >= SN_DAY && afterSN < SN_COUNT) {
-    afterSN++; cx = SN.x; cy = SN.y; om = .01;
-    if (afterSN % 5 < 3) { const kn = SN_KNOTS[afterSN % SN_KNOTS.length]; ox = kn[0] + gauss() * .045; oy = kn[1] + gauss() * .045; e.born = true;
-      info = "Born inside the supernova's cloud, after " + fmtS(SN_DAY); }
-    else { const a = rnd() * 6.2832, rr = SN.R * (1.06 + Math.abs(gauss()) * .32); ox = Math.cos(a) * rr; oy = Math.sin(a) * rr;
-      info = "Gathered around the supernova of " + fmtS(SN_DAY); }
-  } else if (e.mode === "daily") {
+  if (e.mode === "daily") {
     const sig = .2 * STYLE.bandW * BANDK * (1 + .25 * age) * (.65 + .7 * (.5 + .5 * Math.sin(s * 140 + Math.sin(s * 37) * 2)));
-    info = "Part of a daily stretch, " + fmtS(e.period.from) + " to " + fmtS(e.period.to);
+    info = "Part of a band, " + fmtS(e.period.from) + " to " + fmtS(e.period.to);
     if (knotLeft <= 0) { knotLeft = 10 + Math.floor(rnd() * rnd() * 90); const v = gauss() * sig * .9; knotC = [p.x + p.nx * v, p.y + p.ny * v, (.025 + .05 * rnd() + .02 * age) * STYLE.knotSize]; }
     knotLeft--;
     const roll = rnd();
@@ -471,7 +463,7 @@ LIFE.forEach(l => {
   giants.push(s); stars.push(s);
 });
 // the supernova's own star: what is left at its heart, pulsing slowly
-const snStar = { cx: SN.x, cy: SN.y, ox: 0, oy: 0, om: 0, R: .0028, col: ageCol((ND - 1 - SN_DAY) / 365).map(v => v * .8 + .2 * lin(200)), lum: 2.6, flag: 3, day: SN_DAY, kind: "Life event, marked hard", info: "What came after it gathered around it" };
+const snStar = { cx: SN.x, cy: SN.y, ox: 0, oy: 0, om: 0, R: .0028, col: ageCol((ND - 1 - SN_DAY) / 365).map(v => v * .8 + .2 * lin(200)), lum: 2.6, flag: 3, day: SN_DAY, kind: "Life event, marked hard", info: "It marks that day and nothing more. You can unmark it as hard, or put it away like any memory." };
 stars.push(snStar);
 // favourites: memories the person starred. A soft ring, nothing more.
 { const pool = stars.filter(s => s.flag === 0 && s.lum > .9); for (let i = 0; i < 6 + Math.floor(rnd() * 7); i++) { const s = choose(pool); if (s.fav) continue; s.fav = true; s.flag = 5; s.info = "A favourite. " + s.info; } }
@@ -544,12 +536,20 @@ const whPos = s => { const t = whTime(), p = smoothstep(3 + s.whI * 2, 15 + s.wh
 const whStars = [0, 1, 2, 3].map(i => { const wa = i * 1.7 + rnd(), wr = .22 + .3 * rnd(), day = Math.floor(ND * (.3 + .6 * rnd()));
   const st = { cx: WH.x + Math.cos(wa) * wr, cy: WH.y + Math.sin(wa) * wr, ox: 0, oy: 0, om: 0, wa, wr, whI: i, R: .0016, col: [.9, .92, 1], lum: 1.6, flag: 0, day, kind: "Brought back", info: "Put away for a while, then brought back. The white hole is sending it home to where it was.", dyn: whPos };
   stars.push(st); return st; });
-const diskStars = stars.filter(s => s.flag === 0 && !s.cl && !s.pair && !s.dyn && s !== radiant && s !== pnStar && Math.hypot(s.cx - BH.x, s.cy - BH.y) < 1.2).slice(0, 50 + Math.floor(rnd() * 40));
-diskStars.forEach(s => { s.disk = true; s.a0 = rnd() * 6.2832; s.rr = 1.75 + 2.6 * Math.pow(rnd(), 1.3); s.info = "Put away. Riding in the black hole's disk, hidden but not deleted."; });
-// a few put away recently, still being drawn in slowly from where they were
-const infall = stars.filter(s => s.flag === 0 && !s.cl && !s.pair && !s.disk && !s.dyn && s !== radiant && s !== pnStar && Math.hypot(s.cx - BH.x, s.cy - BH.y) < .9).slice(0, 6 + Math.floor(rnd() * 6));
-infall.forEach((s, i) => { s.disk = true; s.infall = i / infall.length; s.a0 = rnd() * 6.2832; s.rr = 9; s.info = "Put away recently. It's being drawn in slowly. You can bring it back any time."; diskStars.push(s); });
-const dynStars = [...diskStars, ...whStars, ...moons];
+// Put away: a black hole forms beside the memories, draws them in, then closes and is gone. Nothing is left to show
+// where they were; they come back from the list. (The showcase plays it as the sky opens; Explore > Black hole again.)
+let bhT0 = 0;
+const bhTime = () => T - bhT0;
+const bhOn = () => { const t = bhTime(); return smoothstep(0, 3, t) * (1 - smoothstep(19, 25, t)); };
+const putAway = stars.filter(s => s.flag === 0 && !s.cl && !s.pair && !s.dyn && !s.om && s !== radiant && s !== pnStar && Math.hypot(s.cx + s.ox - BH.x, s.cy + s.oy - BH.y) < .5).slice(0, 8 + Math.floor(rnd() * 6));
+const awayP = s => smoothstep(2.5 + s.awayI * 1.1, 9.5 + s.awayI * 1.1, bhTime());
+const awayPos = s => { const p = awayP(s), e = Math.pow(p, 1.3), r = s.r0 * (1 - e) + BH.R * 1.9 * e, a = s.a0 + e * 4.5;
+  const ux = r * Math.cos(a), uy = r * Math.sin(a), dy = uy / BH.squash, c = Math.cos(BH.tilt), n = Math.sin(BH.tilt);
+  const vx = ux * (1 - e) + (c * ux - n * dy) * e, vy = uy * (1 - e) + (n * ux + c * dy) * e;
+  return [BH.x + vx, BH.y - vy, p >= 1]; };
+putAway.forEach((s, i) => { const hx = s.cx + s.ox, hy = s.cy + s.oy; s.away = true; s.awayI = i; s.r0 = Math.hypot(hx - BH.x, hy - BH.y); s.a0 = Math.atan2(-(hy - BH.y), hx - BH.x);
+  s.dyn = awayPos; s.dk = q => 1.3 * smoothstep(0, 1.2, bhTime()) * (1 - smoothstep(.75, 1, awayP(q))); });
+const dynStars = [...putAway, ...whStars, ...moons];
 
 // ---------- the look: every colour in this sky is this person's own ----------
 // One palette per sky, built from a colour scheme (close hues, opposites, or three or four spread apart),
@@ -911,12 +911,7 @@ const zoomAt = (px, py, f) => {
 };
 let te = 0;
 let T = 0;
-const infallP = s => ((T / 80 + s.infall) % 1 + 1) % 1;
-const diskScreen = s => { const [bx, by] = toScreen(BH.x, BH.y), Rs = BH.R * cam.s; if (s.infall != null) { const p = infallP(s); s.rr = 1.9 + 8 * Math.pow(1 - p, 1.6); }
-  const a = s.a0 + (s.infall != null ? infallP(s) * 5 : T * 1.1 / Math.pow(s.rr, 1.5));
-  const vrx = s.rr * Math.cos(a) * Rs, vry = s.rr * Math.sin(a) / BH.squash * Rs, c = Math.cos(BH.tilt), n = Math.sin(BH.tilt), vx = c * vrx - n * vry, vy = n * vrx + c * vry;
-  return [bx + vx, by - vy, vry > 0 && Math.hypot(vx, vy) < Rs * 1.03]; };
-const starPos = s => { if (s.dyn) return s.dyn(s); if (s.disk) { const [x, y] = diskScreen(s); return [cam.x + (x - W / 2) / cam.s, cam.y + (y - Hh / 2) / cam.s]; } const a = s.om * te, c = Math.cos(a), n = Math.sin(a); return [s.cx + c * s.ox - n * s.oy, s.cy + n * s.ox + c * s.oy]; };
+const starPos = s => { if (s.dyn) return s.dyn(s); const a = s.om * te, c = Math.cos(a), n = Math.sin(a); return [s.cx + c * s.ox - n * s.oy, s.cy + n * s.ox + c * s.oy]; };
 const toScreen = (x, y) => [(x - cam.x) * cam.s + W / 2, (y - cam.y) * cam.s + Hh / 2];
 
 // ---------- picking and the card ----------
@@ -924,6 +919,7 @@ const card = document.getElementById("card"), ring = document.getElementById("ri
 const closeBtn = `<button class="icon x" type="button" aria-label="Close" data-card-close><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg></button>`;
 const esc = t => String(t).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
 card.addEventListener("click", e => { if (e.target.closest("[data-card-close]")) show(null);
+  if (e.target.closest("[data-bring]")) { show({ wh: true }); flyTo(GO.wh()); }
   if (e.target.closest("[data-remove]") && sel && sel.cons) { const i = CONS.indexOf(sel.cons); if (i >= 0) CONS.splice(i, 1); saveMine(); show(null); } });
 let sel = null;
 const show = (s) => { showInner(s); if (s && !card.hidden) card.insertAdjacentHTML("afterbegin", closeBtn); };
@@ -938,17 +934,18 @@ const showInner = (s) => {
   if (s.pn) { card.innerHTML = `<div class="d">Planetary nebula</div><div class="k">“${ENDED_HABIT}”, a habit you chose to end on ${fmtS(PN_DAY)}. Its last memory sits in the middle.</div>`; return; }
   if (s.dn) { card.innerHTML = `<div class="d">Dark nebula</div><div class="k">A cloud of cold dust, part of this sky's own scenery. It holds no memories.</div>`; return; }
   if (s.neb) { card.innerHTML = `<div class="d">Nebula</div><div class="k">Weeks with a lot of writing: ${s.neb.journals} journal entries, ${fmtS(s.neb.a)} to ${fmtS(s.neb.b)}</div>`; return; }
-  if (s.sn) { card.innerHTML = `<div class="d">Supernova, ${fmt(SN_DAY)}</div><div class="k">A life event you marked as hard. ${afterSN} memories since have formed in and around it.</div>`; return; }
+  if (s.sn) { card.innerHTML = `<div class="d">Supernova, ${fmt(SN_DAY)}</div><div class="k">A life event you marked as hard. It marks that day and nothing more: what came after stays where it is.</div>`; return; }
   if (s.pl) { card.innerHTML = `<div class="d">Ringed planet: ${PLACE}</div><div class="k">A place you keep going back to. ${moons.length} memories logged there ride around it as moons. Tap one to see its day.</div>`; return; }
   if (s.cons) { const c = s.cons, days = c.pts.map(q => q.day), lo = Math.min(...days), hi = Math.max(...days);
     card.innerHTML = `<div class="d">${esc(c.name)}</div><div class="k">Drawn ${fmtS(c.made)}. ${c.pts.length} memories, ${fmtS(lo)} to ${fmtS(hi)}.</div>${c.ghost != null ? `<div class="k">One star has since been put away. The outline is kept as it was when you drew it.</div>` : ""}${c.mine ? `<button class="textbtn" type="button" data-remove>Remove this constellation</button>` : ""}`; return; }
-  if (s === "bh") { card.innerHTML = `<div class="d">Black hole</div><div class="k">Forms where you put memories away, and draws them in slowly. Hidden, not deleted, and still yours to tap. When nothing is left inside, it fades away.</div>`; return; }
+  if (s === "bh") { card.innerHTML = `<div class="d">Black hole</div><div class="k">It formed when memories were put away. It draws them in, then closes and is gone, and nothing is left to show where they were. Hidden, not deleted: they come back from the list.</div>`; return; }
+  if (s.away) { card.innerHTML = `<div class="d">Put away</div><button class="textbtn" type="button" data-bring>Bring back</button>`; return; }
   card.innerHTML = `<div class="d">${fmt(s.day)}</div><div class="k">${s.kind}${s.flag === 1 ? " " + s.info : ""}</div>${s.flag === 1 ? "" : `<div class="k">${s.info}</div>`}`;
 };
 const pick = (px, py) => {
   let best = null, bd = 1e9;
   for (const s of stars) {
-    if (s.disk && diskScreen(s)[2]) continue; if (s.dyn && s.dyn(s)[2]) continue;
+    if (s.dyn && s.dyn(s)[2]) continue;
     const [x, y] = toScreen(...starPos(s)); const r = Math.max(s.R * cam.s, s.flag === 1 ? 2.7 : 1), dd = Math.hypot(x - px, y - py) - r;
     if (dd < bd) { bd = dd; best = s; }
   }
@@ -965,7 +962,7 @@ const pick = (px, py) => {
   { const [x, y] = toScreen(DM.x, DM.y); if (Math.hypot(px - x, py - y) < DM.R * cam.s * .7 && cam.s / fitS < 12) return { dm: true }; }
   if (cam.s / fitS < 3) { const [x, y] = toScreen(DN.x, DN.y); if (Math.hypot(px - x, py - y) < DN.R * cam.s * .8) return { dn: true }; }
   { const [x, y] = toScreen(PL.x, PL.y); if (Math.hypot(px - x, py - y) < PL.R * cam.s * 1.1) return { pl: true }; }
-  const [bx, by] = toScreen(BH.x, BH.y); if (Math.hypot(px - bx, py - by) < Math.max(14, BH.R * cam.s * 1.15)) return "bh";
+  const [bx, by] = toScreen(BH.x, BH.y); if (bhOn() > .2 && Math.hypot(px - bx, py - by) < Math.max(14, BH.R * cam.s * 1.15)) return "bh";
   if (cam.s / fitS < 2.5) {
     const [sx, sy] = toScreen(SN.x, SN.y); if (Math.hypot(px - sx, py - sy) < SN.R * cam.s * 1.1) return { sn: true };
     for (const n of nebs) { const [nx, ny] = toScreen(n.x, n.y); if (Math.hypot(px - nx, py - ny) < n.R * cam.s * .75) return { neb: n }; }
@@ -976,7 +973,7 @@ const pick = (px, py) => {
 // ---------- input: drag, wheel, pinch, tap (all in screen-local pixels) ----------
 const loc = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
 const pts = new Map(); let moved = 0, lastTap = 0, pinch0 = null;
-cv.addEventListener("pointerdown", e => { cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); moved = 0; fly = null; cv.classList.add("drag");
+cv.addEventListener("pointerdown", e => { if (skipOpening()) { skipped = true; return; } cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); moved = 0; fly = null; cv.classList.add("drag");
   if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch0 = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), s: cam.s }; } });
 cv.addEventListener("pointermove", e => {
   if (!pts.has(e.pointerId)) return; const p = pts.get(e.pointerId), dx = e.clientX - p[0], dy = e.clientY - p[1];
@@ -985,7 +982,9 @@ cv.addEventListener("pointermove", e => {
   else if (pts.size === 2 && pinch0) { const [a, b] = [...pts.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
     { const r = cv.getBoundingClientRect(); zoomAt((a[0] + b[0]) / 2 - r.left, (a[1] + b[1]) / 2 - r.top, (pinch0.s * d / pinch0.d) / cam.s); } cam.x -= dx / cam.s / 2; cam.y -= dy / cam.s / 2; }
 });
+let skipped = false;
 const up = e => {
+  if (skipped) { skipped = false; return; }
   if (!pts.has(e.pointerId)) return; pts.delete(e.pointerId); if (pts.size < 2) pinch0 = null; if (pts.size === 0) cv.classList.remove("drag");
   if (moved < 6 && pts.size === 0) {
     if (drawing) { const s = pickStar(...loc(e)); if (s && s !== drawing.pts[drawing.pts.length - 1]) { drawing.pts.push(s); setDrawMsg(); } return; }
@@ -1017,7 +1016,7 @@ const GO = {
   clusters: () => ({ x: bigCluster.x, y: bigCluster.y, s: Math.min(W, Hh) * .5 / (bigCluster.r * 9) }),
   sn: () => ({ x: SN.x, y: SN.y, s: Math.min(W, Hh) * .42 / (SN.R * 1.6) }),
   neb: () => { const n = nebs[Math.min(1, nebs.length - 1)]; return { x: n.x, y: n.y, s: Math.min(W, Hh) * .5 / (n.R * 1.2) }; },
-  bh: () => ({ x: BH.x, y: BH.y, s: Math.min(W, Hh) * .5 / (BH.R * 6) }),
+  bh: () => { bhT0 = T; return { x: BH.x, y: BH.y, s: Math.min(W, Hh) * .5 / .62 }; },
   giant: () => ({ x: giant.cx, y: giant.cy, s: Math.min(W, Hh) * .3 / giant.R }),
   bin: () => { const [x, y] = starPos(binaries[0]); return { x, y, s: Math.min(W, Hh) * .12 / .008 }; },
   comet: () => { const c = cometAt(te); return { x: c.x + c.dx * .4, y: c.y + c.dy * .4, s: Math.min(W, Hh) * .45 / 1.1 }; },
@@ -1072,6 +1071,13 @@ let last = performance.now(), ema = 16, lastAdapt = 0, reveal = reduce ? 1 : 0, 
 const todayIdx = stars.indexOf(todayStar);
 const setTodayWaiting = w => { gl.bindBuffer(gl.ARRAY_BUFFER, ib); gl.bufferSubData(gl.ARRAY_BUFFER, (todayIdx * 16 + 15) * 4, new Float32Array([w ? 2 : .5])); };
 if (intro && intro.birth) { setTodayWaiting(true); birthP = 0; }
+// Any tap skips the opening, and a birth still to come, straight to today: nobody should have to wait for it.
+const skipOpening = () => {
+  if (!intro && !birth && birthP >= 1) return false;
+  intro = null; reveal = 1; fly = null; birth = null; birthP = 1; setTodayWaiting(false);
+  try { localStorage.setItem(seenKey, "1"); } catch (e) {}
+  const g = GO.today(); cam.x = g.x; cam.y = g.y; cam.s = g.s; clampCam(); show(todayStar); return true;
+};
 const replay = () => { flyTo(GO.all(), true); show(null); reveal = 0; intro = { t0: performance.now(), birth: true }; birth = null; birthP = 0; setTodayWaiting(true); };
 const frame = now => {
   const dt = Math.min(.1, (now - last) / 1000); last = now; ema = ema * .93 + dt * 1000 * .07;
@@ -1134,15 +1140,14 @@ const frame = now => {
   gl.useProgram(P_FIN.p); const uf = P_FIN.u;
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, scene.t); gl.uniform1i(uf.uScene, 0);
   gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, glow.t); gl.uniform1i(uf.uGlow, 1);
-  const [bx, by] = toScreen(BH.x, BH.y), Rs = BH.R * cam.s, on = bx > -Rs * 40 && bx < W + Rs * 40 && by > -Rs * 40 && by < Hh + Rs * 40;
+  const bk = bhOn(), [bx, by] = toScreen(BH.x, BH.y), Rs = BH.R * cam.s * Math.max(.02, bk), on = bk > .005 && bx > -Rs * 40 && bx < W + Rs * 40 && by > -Rs * 40 && by < Hh + Rs * 40;
   gl.uniform4f(uf.uBH, bx * dpr, ch - by * dpr, Rs * dpr, on ? 1 : 0); gl.uniform3fv(uf.uDkH, LOOK.disk[0]); gl.uniform3fv(uf.uDkW, LOOK.disk[1]); gl.uniform3fv(uf.uDMc, LOOK.dm); gl.uniform2f(uf.uBHk, BH.tilt, BH.squash); { const [px, py] = toScreen(PL.x, PL.y), Rp = PL.R * cam.s; gl.uniform4f(uf.uPLs, px * dpr, py * dpr, Rp * dpr, Rp > .3 && px > -Rp * 3 && px < W + Rp * 3 && py > -Rp * 3 && py < Hh + Rp * 3 ? 1 : 0); gl.uniform2f(uf.uPLk, PL.tilt, PL.open); gl.uniform3fv(uf.uPLA, LOOK.planet[0]); gl.uniform3fv(uf.uPLB, LOOK.planet[1]); gl.uniform1f(uf.uPLshow, smoothstep(.2, 1, reveal)); } { const [dx, dy] = toScreen(DM.x, DM.y), Rp = DM.R * cam.s; gl.uniform4f(uf.uDM, dx * dpr, ch - dy * dpr, Rp * dpr, dx > -Rp * 2 && dx < W + Rp * 2 && dy > -Rp * 2 && dy < Hh + Rp * 2 ? 1 : 0); }
-  gl.uniform1f(uf.uBHFade, (1 - .55 * smoothstep(70, 420, Rs)) * smoothstep(.2, 1, reveal)); gl.uniform2f(uf.uRes, cw, ch); gl.uniform1f(uf.uT, T); gl.uniform1f(uf.uTe, te);
+  gl.uniform1f(uf.uBHFade, (1 - .55 * smoothstep(70, 420, Rs)) * smoothstep(.2, 1, reveal) * bk); gl.uniform2f(uf.uRes, cw, ch); gl.uniform1f(uf.uT, T); gl.uniform1f(uf.uTe, te);
   gl.bindVertexArray(vaoQ); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  // memories in the black hole's disk, on top of the lensing so they sit in the disk you see
+  // memories on the move (being drawn into the black hole, sent home by the white hole, moons), on top of the lensing
   {
     dynStars.forEach((s, i) => { let wx, wy, hid, k = 1.3;
-      if (s.dyn) { [wx, wy, hid] = s.dyn(s); k = 1; }
-      else { const [x, y, h_] = diskScreen(s); hid = h_; wx = cam.x + (x - W / 2) / cam.s; wy = cam.y + (y - Hh / 2) / cam.s; if (s.infall != null) { const p = infallP(s); k = 1.3 * smoothstep(0, .08, p) * (1 - .45 * p); } }
+      [wx, wy, hid] = s.dyn(s); k = s.dk ? s.dk(s) : 1;
       const [xh, xl] = split(wx), [yh, yl] = split(wy);
       dinst.set([xh, yh, xl, yl, 0, 0, 0, s.R, s.col[0], s.col[1], s.col[2], hid ? 0 : s.lum * k * smoothstep(.3, 1, reveal), dSeed[i][0], 0, dSeed[i][1], 0], i * 16); });
     gl.bindBuffer(gl.ARRAY_BUFFER, db); gl.bufferSubData(gl.ARRAY_BUFFER, 0, dinst);
@@ -1151,6 +1156,7 @@ const frame = now => {
   }
   drawLines();
   // selection ring
+  if (sel && sel.away && sel.dyn(sel)[2]) show(null);
   if (sel && sel !== "bh" && !sel.neb && !sel.sn && !sel.comet && !sel.pn && !sel.dn && !sel.meteor && !sel.wh && !sel.dm && !sel.cons && !sel.pl) { const [x, y] = toScreen(...starPos(sel)), r = Math.max(sel.R * cam.s, 3) * 2 + 10; ring.hidden = false; ring.style.left = x + "px"; ring.style.top = y + "px"; ring.style.width = ring.style.height = r + "px"; }
   else ring.hidden = true;
   requestAnimationFrame(frame);
@@ -1288,6 +1294,6 @@ const drawLines = () => {
 };
 function smoothstep(a, b, x) { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
 requestAnimationFrame(frame);
-window.__sky = { onScreen: n => { const out = []; for (const s of stars) { if (s.disk || s.dyn) continue; const [x, y] = toScreen(...starPos(s)); if (x > 40 && y > 140 && x < W - 40 && y < Hh - 160 && out.every(o => Math.hypot(o[0] - x, o[1] - y) > 60)) out.push([x, y]); if (out.length >= n) break; } return out; }, info: () => ({ path: PATH_STYLE, N, span: SPAN, periods: PERIODS.map(p => p.mode[0] + (p.to - p.from)).join(" "), clusters: clusters.size, bridges: bridges.length, nebs: nebs.length, scheme: LOOK.scheme }), WH, whAt: t => { whT0 = T - t; }, meteorNow: () => { meteorNext = T; }, get nMet() { return meteors.length; }, flyTo, GO, cam, show, replay, introAt: t => { if (intro) intro.hold = t; }, get reveal() { return reveal; }, get birthP() { return birthP; }, cometHead: () => { const c = cometAt(te); return toScreen(c.x, c.y); }, get birthOn() { return !!birth; }, giant, oneStar, snStar, get fitS() { return fitS; } };
+window.__sky = { onScreen: n => { const out = []; for (const s of stars) { if (s.disk || s.dyn) continue; const [x, y] = toScreen(...starPos(s)); if (x > 40 && y > 140 && x < W - 40 && y < Hh - 160 && out.every(o => Math.hypot(o[0] - x, o[1] - y) > 60)) out.push([x, y]); if (out.length >= n) break; } return out; }, info: () => ({ path: PATH_STYLE, N, span: SPAN, periods: PERIODS.map(p => p.mode[0] + (p.to - p.from)).join(" "), clusters: clusters.size, bridges: bridges.length, nebs: nebs.length, scheme: LOOK.scheme }), WH, whAt: t => { whT0 = T - t; }, BH, bhAt: t => { bhT0 = T - t; }, get nAway() { return putAway.length; }, awayScreen: () => putAway.map(q => { const [x, y, h] = q.dyn(q); return [...toScreen(x, y), h]; }), skipOpening: () => skipOpening(), meteorNow: () => { meteorNext = T; }, get nMet() { return meteors.length; }, flyTo, GO, cam, show, replay, introAt: t => { if (intro) intro.hold = t; }, get reveal() { return reveal; }, get birthP() { return birthP; }, cometHead: () => { const c = cometAt(te); return toScreen(c.x, c.y); }, get birthOn() { return !!birth; }, giant, oneStar, snStar, get fitS() { return fitS; } };
 })();
 </script>

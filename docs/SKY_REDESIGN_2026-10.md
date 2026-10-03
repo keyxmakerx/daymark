@@ -15,11 +15,12 @@
 
 **In one paragraph.** Every star is one memory, and nothing else in the sky is a star. The
 background is deep space: colour and gas, no stars of its own. The shapes come from how the person
-kept their record. Months of doing their thing almost every day draw a long band, which is rare;
-on-and-off weeks gather into small clusters and streams, and a weekly habit kept for years turns into a whirlpool. Life events
-are giant stars. A life event the person marked as hard becomes a supernova, and what came after
-gathers in its cloud. Memories the person puts away are drawn slowly into a black hole that forms
-beside them; bringing them back opens a white hole that sends each one home. Memories tucked away to
+kept their record, and no shape is a reward. Months with something on most days draw a band, which
+is rare; on-and-off weeks gather into clusters and streams, and a weekly habit kept for years turns
+into a whirlpool. Life events are giant stars. A life event the person marked as hard becomes a
+supernova, which marks that day and nothing more. Memories the person puts away are drawn into a
+black hole that forms beside them, which then closes and is gone; bringing them back opens a white
+hole that sends each one home. Memories tucked away to
 find again later become dark matter, unseen except for a faint bend in the light. The person can
 join stars into constellations and name them. No two skies are alike: the course of the river, the
 shapes, where everything sits and every colour grow from the person's own record and a seed of their
@@ -36,13 +37,13 @@ given after approval are in §10.
 |---|---|
 | **Every star is a memory** | No background stars at all. The space behind the stars is colour, gas, nebulas and shadow. |
 | **Zoom until a star is a sun** | Stars cover the whole space and you zoom in to any one of them. Close up, a star is big and looks like a real sun. Level of detail changes with zoom so phones are not overloaded. |
-| **Shape rewards keeping at it** | Doing a daily thing every day forms a long, beautiful band. Inconsistent tracking gives small scattered clusters. Random but realistic smaller formations too, like the comet-like streak. |
-| **The supernova is never a guess** | It appears only when the person marks a life event as hard. New small white stars form in its gas, and the memories after it gather there. |
-| **Hiding and bringing back** | Hiding memories forms a black hole right beside them, which absorbs them slowly. Unhiding them forms a white hole. Both are temporary. Hidden memories ride in the black hole's disk and stay tappable. |
+| **Shape follows rhythm** | Something on most days for months forms a long band; on-and-off weeks give small clusters; random but realistic smaller formations too, like the comet-like streak. *Revised 2026-10-03 after the safety review:* this was "shape rewards keeping at it". No shape is a reward, clusters and streams get the same care as bands, and no card says "in a row", because a band that stops is a broken streak drawn large. |
+| **The supernova is never a guess** | It appears only when the person marks a life event as hard. *Revised 2026-10-03 after the safety review:* it is a marker only. What came after stays on the river where it would be anyway and is never drawn into it, "hard" can be unmarked, the event can be put away like any memory, and the opening never flies to it. |
+| **Hiding and bringing back** | Hiding memories forms a black hole right beside them, which absorbs them. Unhiding them forms a white hole. Both are temporary events. *Revised 2026-10-03 after the safety review:* the black hole appears, absorbs the memories, then closes and is gone; nothing in the sky marks where they were. They come back from the list. |
 | **Every sky as unique as possible** | Nebulas and the other objects come in the full range of colours, not one fixed palette. "Even the patterns should be different." |
 | **Dim, soft and real** | Everything fades into the background as you zoom into it, the black hole a bit less. Nebulas were cut by 15% and then 10%, the supernova by 25% overall. No hard edges on any glow. |
 | **Motion that looks real** | Twinkle is never all stars at once. Moving objects travel in a believable direction and are tappable. |
-| **The opening** | Stars twinkle in slowly, ramp up gently and burst into view, then the view flies to the closest day. If today's star is new and not yet seen, it is shown being born. |
+| **The opening** | Stars twinkle in slowly, ramp up gently and burst into view, then the view flies to the closest day. If today's star is new and not yet seen, it is shown being born. Any tap skips it (safety review, 2026-10-03). |
 | **Constellations** | The person draws and names their own. When stars drift apart and a constellation breaks, the outline is kept as a snapshot. A clear menu lists them. |
 | **Age** | Older stars drift away and are red-shifted; newer ones are blue. Bigger stars for main events. |
 | **Never** | No moon, no land. Never frame anything as depression or as memories being eaten. |
@@ -90,6 +91,10 @@ real dates, so the thresholds are a proposal to tune on real data, not a decisio
 - **Bridge:** two clusters whose centres end up within a short distance of each other, and only if
   there are real memories between them. The prototype adds made-up "bridge" memories; a build must
   never draw a star for something that did not happen (`docs/SKY.md` §1.3).
+
+**No shape is the good one.** A band, a cluster, a stream and a single star are drawn with the same
+care and described in the same plain words. No card or key line says "in a row", "kept up" or
+anything that makes a band read as an achievement or its end as a break (DECISIONS §D6 on streaks).
 
 **Shapes settle; they do not keep changing.** The newest stretch is still forming, so its shape can
 change as days arrive (a run becomes a stream; a band ends). Once a stretch is over, its shape is
@@ -150,7 +155,7 @@ and the dark nebula.
 |---|---|---|---|
 | **Star** | every memory | One memory. White heart, a tight bright glow, a soft outer glow. Colour is age (§6.2). | Date, kind, and what it is part of |
 | **Giant star** | marked: a life event | Bigger and brighter. Zoom in and it burns like a sun. | Date and the person's own words for it |
-| **Supernova** | marked: a life event the person marked as hard | A glowing shell with a slowly pulsing star at its heart. A few hundred of the memories after it are drawn in: some are born as new small white stars in knots of its gas, the rest gather in a ring around it. | "A life event you marked as hard. *N* memories since have formed in and around it." |
+| **Supernova** | marked: a life event the person marked as hard | A glowing shell with a slowly pulsing star at its heart. A marker only: the memories after it stay on the river where they would be anyway, and nothing is drawn into it. The person can unmark "hard" or put the event away like any memory. The opening never flies to it. | "A life event you marked as hard. It marks that day and nothing more: what came after stays where it is." |
 | **Favourite** | marked: the person starred a memory | A soft ring around the star, nothing more | "A favourite." then the usual card |
 | **Binary stars** | rule: two memories on the same day that both name the same person | The two turn slowly around each other | "One of a pair. Both mention *name*." |
 | **Pulsar** | marked: a habit the person set a time for | Pulses on that beat | "*habit*, a habit you set a time for. It pulses on that beat." No count of days. |
@@ -160,9 +165,9 @@ and the dark nebula.
 
 | Object | Made by | What it is |
 |---|---|---|
-| **Long band** | rule: §2.2 | Days in a row of doing your thing. Memories line up along it and gather into knots. |
-| **Small clusters** | rule: §2.2 | On-and-off weeks. Each run of days pulls together into its own little cluster. |
-| **Stream** | rule: §2.2 | A couple of weeks in a row. The run stretches into a thin trail, like a comet. |
+| **Band** | rule: §2.2 | A long stretch with something on most days. Memories line up along it and gather into knots. Rare. |
+| **Clusters** | rule: §2.2 | On-and-off weeks. Each run of days gathers into its own cluster: oval, spiral or open. |
+| **Stream** | rule: §2.2 | A longer run of days, drawn out into a thin trail like a comet. |
 | **Bridge** | rule: §2.2 | Two runs close together, joined by the days that carried one into the next. |
 | **Whirlpool** | rule: a habit goal done weekly for a long time | Its memories turn slowly around each other; each turn of the spiral is about a year. Two to four arms. |
 | **Planetary nebula** | marked: a habit the person chose to end | It finishes as a glowing ring, not a gap. Its last memory sits in the middle. |
@@ -200,9 +205,11 @@ values slotted in, like every other word in the product.
 
 ### 3.6 The Key
 
-The Key stays: the maintainer leaned yes on 2026-10-03, and it is recommended. In a mental-health
-app an unexplained dark shape beside someone's memories can read as a judgement about them. The Key
-says in fixed words what each object is and what made it, so nobody has to guess.
+The Key stays (the maintainer, and the safety review, 2026-10-03). In a mental-health app an
+unexplained shape beside someone's memories can read as a judgement about them. The Key says in fixed
+words what each object is and what made it, so nobody has to guess. Above all it says that **red only
+means old, never bad**: colour is age, older stars turn red, and without the Key someone with years
+of memories sees their past drawn in warning colours. That line comes first.
 
 - It lists **only what is in this person's sky**. The prototype lists every object; the app should
   not, so it never reads as a checklist of things they have not got.
@@ -217,24 +224,30 @@ The design adds two ways to set memories aside. They do different jobs and look 
 | | Put away (§4.1) | Tuck away for later (§4.2) |
 |---|---|---|
 | What it is for | Not wanting to see them for now | Leaving something to come across again |
-| What you see | A black hole beside them; they ride in its disk | Nothing, only a faint bend in the light |
-| Can they be tapped | Yes, in the disk | Once found |
-| Coming back | Bring back: a white hole sends them home | Found: they shine again where they were |
+| What you see | A black hole forms beside them, draws them in, then closes and is gone | Nothing, only a faint bend in the light |
+| Can they be tapped | Only while being drawn in, and the card says only "Put away" | Once found |
+| Coming back | From the list, with Bring back: a white hole sends them home | Found: they shine again where they were |
 
 ### 4.1 Put away: the black hole and the white hole
 
-The maintainer decided this rule.
+The maintainer decided this rule, and on 2026-10-03, after the safety review, that both holes are
+events: they appear, do their work, and are gone.
 
 1. **Put away.** The person chooses memories to hide. A small black hole forms right beside them.
-2. **Drawn in, slowly.** Over time it draws those memories in. A memory being drawn in travels in a
-   slow spiral and still shines; once it arrives it rides in the black hole's bright disk.
-3. **Hidden, not deleted.** Every memory in the disk can still be tapped and still opens its card:
-   "Put away. Riding in the black hole's disk, hidden but not deleted." One being drawn in says "Put
-   away recently. It's being drawn in slowly. You can bring it back any time."
-4. **Brought back.** When the person brings memories back, a white hole forms. It sends each one home
-   to where it was, one after another, then fades away.
-5. **Both are temporary.** A white hole lasts only while it is sending memories home. A black hole
-   lasts while anything is inside it, and fades away once nothing is left.
+2. **Drawn in.** It draws those memories in. A memory being drawn in travels in a slow spiral and
+   still shines, fading as it reaches the disk.
+3. **Then it closes and is gone.** Once everything is inside, the black hole shrinks to nothing and
+   disappears. Nothing in the sky marks where the memories were: no hole, no gap, no dashed point
+   (constellations aside, §7.3, because the person drew those lines themselves). Someone looking over
+   the person's shoulder sees an ordinary sky.
+4. **What a card says.** Tapping a memory while it is being drawn in shows only "Put away" and
+   **Bring back**: never its date, its kind or its words. Tapping the black hole says what it is.
+5. **Where they are kept.** Put-away memories are hidden, not deleted. The sky's text list has them
+   under their own "Put away" heading, collapsed until opened. Each row shows only "Put away" and the
+   day it was put away (never the memory's own date, kind or words), with Bring back, plus "Bring them
+   all back". That is also the accessible way to reach them.
+6. **Brought back.** When the person brings memories back, a white hole forms where they were put
+   away. It sends each one home to where it was, one after another, then fades away.
 
 What it is not: never framed as depression, never as memories being lost or eaten, never a
 punishment. The card copy above is the whole of what the sky says about it. Hiding is not deletion,
@@ -468,7 +481,9 @@ date, so nothing else needs storing.
    seconds: a cloud collapses, the core heats, and the star switches on. Its card then opens. Each
    star is born on screen once, ever.
 
-Under reduced motion none of this plays: the sky opens on today. It never notifies anyone that a star
+**Any tap skips it**, and a birth still to come, straight to today, with today's card open (safety
+review, 2026-10-03): someone opening the app in a hard moment to reach their safety plan should never
+wait for an animation. Under reduced motion none of this plays: the sky opens on today. It never notifies anyone that a star
 was born (`docs/SKY.md` §6.6).
 
 ---
@@ -563,6 +578,12 @@ changes what it shows.
 | 9 | Name a single star | Yes | §3.1. |
 | 10 | Review a year as a flight along its river | No: bands should be rare, never one a year | §2.2: bands are rare by rule, at most two in the prototype. |
 | 11 | A constellation's then and now | No, but see it again as a replica with its surroundings in shadow | §7.6. |
+
+**After the safety review** of 2026-10-03, the maintainer approved five changes to the sky, all now
+in this document and the prototype: no shape is a reward and no card says "in a row" (§1, §2.2,
+§3.2); the supernova is a marker only (§3.1); the black hole closes and is gone once the memories are
+in, and a put-away memory's card shows only "Put away" and Bring back (§4.1); any tap skips the
+opening (§8); and the Key stays, leading with "red only means old" (§3.6).
 
 Two more follow from standing rules rather than a new answer, and the prototype now follows both:
 a card never describes the stretch a memory sits in (it used to say "from a quieter stretch"), and
