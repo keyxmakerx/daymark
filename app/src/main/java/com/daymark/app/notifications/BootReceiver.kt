@@ -11,11 +11,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** Re-arms all reminders after a device reboot (alarms don't survive boot). */
+/** Re-arms all reminders and tracker check-ins after a device reboot (alarms don't survive boot). */
 @AndroidEntryPoint
 class BootReceiver : BroadcastReceiver() {
 
     @Inject lateinit var repository: ReminderRepository
+    @Inject lateinit var trackerCheckIns: TrackerCheckInScheduler
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -25,6 +26,7 @@ class BootReceiver : BroadcastReceiver() {
         scope.launch {
             try {
                 repository.rescheduleAll()
+                trackerCheckIns.refreshAll()
             } catch (_: RuntimeException) {
                 // Same reason as ReminderReceiver: a journal this phone can no longer open must
                 // not crash a boot receiver. The reminders are re-armed when the app is next

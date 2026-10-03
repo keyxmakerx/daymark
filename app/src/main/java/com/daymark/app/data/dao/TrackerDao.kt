@@ -25,6 +25,9 @@ interface TrackerDao {
     @Query("SELECT * FROM trackers")
     suspend fun getAll(): List<Tracker>
 
+    @Query("SELECT * FROM trackers WHERE id = :id")
+    suspend fun getById(id: Long): Tracker?
+
     @Query("DELETE FROM trackers")
     suspend fun deleteAll()
 }

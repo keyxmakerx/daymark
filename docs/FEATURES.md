@@ -180,6 +180,29 @@ no**. Each has a history and an average. A tracker with values on at least 14 da
 mood appears in "What goes with your mood" (§3). Do one thing and Move keep their own trackers
 (Enjoyment, Mastery, Movement minutes), so those show up against mood too.
 
+### 6.1 Check-ins and quick log
+
+Each tracker has its own **check-ins**, on its own screen, and a new tracker asks nothing:
+
+- **When it happens** (the default): no check-ins. Logging is one tap away from the quick log.
+- **Once a day**, at a time the person picks.
+- **A few times a day**: two to six check-ins between hours the person sets, at times that change
+  from day to day. Each sits in its own equal share of the hours, at least half a share from the
+  next, and the same day always gets the same times (`stats/TrackerRhythm.kt`).
+- **Don't ask**: no check-ins and no prompt.
+
+A tracker's check-ins run through the same rules engine as the reminders (§12): unanswered ones
+ease it off with no cap, it is never switched off except by the person, and every change is
+announced with **Put it back**. Each tracker eases on its own: its ledger rows carry its id
+(§13.2), so one tracker's quiet never touches another's. A check-in counts as answered when the
+tracker was logged since the one before or in the last day, so a few-times-a-day tracker eases off
+only after a whole day with no log, and then first to once a day. **Stop asking** on a check-in
+sets the tracker back to "When it happens".
+
+The **quick log** comes two ways, both the person's to switch on: a quiet, silent notification per
+tracker that opens it (a yes/no tracker logs straight from its Yes and No), and a **Trackers**
+home-screen widget listing every active tracker. Neither shows a value or a count.
+
 ## 7. Skills and "Take a moment"
 
 ### 7.1 Self-help skills
@@ -431,11 +454,13 @@ nothing about moods, goals or people, and it may only ever ask less
 
 ### 13.2 The reception ledger
 
-The `offer_records` table notes which feature asked (the support offer, a reminder, and two kinds
-nothing uses yet: the companion and an assignment), when, the hour and weekday at the moment of
-asking, whether anything came back, and what became of it (accepted, dismissed, snoozed, or stop).
-It holds no free text and nothing about the person. Rows are never updated, and are deleted after
-60 days, except each kind's newest 32, which the rules engine still reads (§12).
+The `offer_records` table notes which feature asked (the support offer, a reminder, a tracker's
+check-in, and two kinds nothing uses yet: the companion and an assignment), when, the hour and
+weekday at the moment of asking, whether anything came back, and what became of it (accepted,
+dismissed, snoozed, or stop). A tracker's check-in also carries the tracker's id as its subject
+(schema v20); every other row's subject is 0. It holds no free text and nothing about the person.
+Rows are never updated, and are deleted after 60 days, except the newest 32 of each kind and
+subject, which the rules engine still reads (§12, §6.1).
 
 **The reception ledger and the timing grid are never shared with a clinician.** When someone answers
 is the app's business with them, and it stays on the phone. The ledger is in no backup, CSV or

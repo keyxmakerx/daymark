@@ -110,7 +110,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
+fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false, openTracker: Long = -1L) {
     val navController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -119,11 +119,14 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false) {
 
     // From the home-screen widget: jump straight into a new entry with the tapped mood.
     // From a reminder notification (openEditor): open a blank new entry.
-    androidx.compose.runtime.LaunchedEffect(initialMood, openEditor) {
+    // From a tracker's check-in or quick-log notification (openTracker): open that tracker.
+    androidx.compose.runtime.LaunchedEffect(initialMood, openEditor, openTracker) {
         if (initialMood in 1..5) {
             navController.navigate(Routes.entry(mood = initialMood))
         } else if (openEditor) {
             navController.navigate(Routes.entry())
+        } else if (openTracker > 0L) {
+            navController.navigate(Routes.tracker(openTracker))
         }
     }
 

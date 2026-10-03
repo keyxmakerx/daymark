@@ -423,6 +423,7 @@ class BackupManager @Inject constructor(
     private val trackerLogDao: TrackerLogDao,
     private val reminderDao: com.daymark.app.data.dao.ReminderDao,
     private val reminderRepository: com.daymark.app.data.ReminderRepository,
+    private val trackerCheckIns: com.daymark.app.notifications.TrackerCheckInScheduler,
     private val photoStore: com.daymark.app.data.PhotoStore,
     private val moodCustomization: com.daymark.app.data.MoodCustomizationStore,
     private val assessmentDao: com.daymark.app.data.dao.AssessmentDao,
@@ -568,6 +569,8 @@ class BackupManager @Inject constructor(
         }
         // Re-arm alarms for whatever reminder set we now hold.
         reminderRepository.rescheduleAll()
+        // And each tracker's check-ins and quick-log notification, as the restored rows say.
+        trackerCheckIns.refreshAll()
         // Restore mood label/colour overrides. REPLACE starts clean; MERGE overlays.
         if (mode == ImportMode.REPLACE) moodCustomization.reset()
         data.moodLabels.forEach { (lvl, label) -> moodCustomization.setLabel(lvl, label) }
@@ -577,6 +580,7 @@ class BackupManager @Inject constructor(
     private suspend fun importReplace(data: BackupData) {
         // Cancel alarms for the reminders we're about to wipe, so stale ids don't keep firing.
         reminderRepository.cancelAllAlarms()
+        trackerDao.getAll().forEach { trackerCheckIns.cancel(it.id) }
         entryDao.deleteAllCrossRefs()
         entryDao.deleteAllEntries()
         activityDao.deleteAll()

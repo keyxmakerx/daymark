@@ -35,9 +35,6 @@ data class Tracker(
     /** The quiet quick-log notification for this tracker, which the person switches on. */
     @ColumnInfo(defaultValue = "0") val quickLog: Boolean = false,
 ) {
-    val rhythmChoice: TrackerRhythm.Rhythm get() = TrackerRhythm.Rhythm.fromKey(rhythm)
-    val window: TrackerRhythm.Window get() = TrackerRhythm.Window(windowStart, windowEnd)
-
     companion object {
         const val SCALE = "SCALE"
         const val NUMERIC = "NUMERIC"
@@ -45,3 +42,11 @@ data class Tracker(
         val TYPES = listOf(SCALE, NUMERIC, BOOLEAN)
     }
 }
+
+// Outside the class so Room never mistakes them for columns.
+
+/** The stored [Tracker.rhythm] as a [TrackerRhythm.Rhythm]; a key this version does not know asks nothing. */
+val Tracker.rhythmChoice: TrackerRhythm.Rhythm get() = TrackerRhythm.Rhythm.fromKey(rhythm)
+
+/** The hours a few-times-a-day tracker asks in. */
+val Tracker.window: TrackerRhythm.Window get() = TrackerRhythm.Window(windowStart, windowEnd)

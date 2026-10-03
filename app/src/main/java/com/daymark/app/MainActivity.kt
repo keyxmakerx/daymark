@@ -66,6 +66,8 @@ class MainActivity : FragmentActivity() {
     companion object {
         const val EXTRA_PREFILL_MOOD = "prefill_mood"
         const val EXTRA_OPEN_EDITOR = "open_editor"
+        /** A tracker's check-in or quick-log notification: open that tracker. */
+        const val EXTRA_OPEN_TRACKER = "open_tracker"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -73,6 +75,7 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         val initialMood = intent?.getIntExtra(EXTRA_PREFILL_MOOD, -1) ?: -1
         val openEditor = intent?.getBooleanExtra(EXTRA_OPEN_EDITOR, false) ?: false
+        val openTracker = intent?.getLongExtra(EXTRA_OPEN_TRACKER, -1L) ?: -1L
         setContent {
             // Map the prefs-change flow to a *content-based* snapshot. SettingsRepository.changes()
             // re-emits the same SharedPreferences instance, which collectAsState would dedup — so a
@@ -167,7 +170,7 @@ class MainActivity : FragmentActivity() {
                         )
                         !onboarded -> OnboardingScreen(onFinish = { unlocked = true; onboarded = true })
                         lockEnabled && !unlocked -> LockScreen(onUnlocked = { unlocked = true })
-                        else -> DaymarkAppScaffold(initialMood = initialMood, openEditor = openEditor)
+                        else -> DaymarkAppScaffold(initialMood = initialMood, openEditor = openEditor, openTracker = openTracker)
                     }
                 }
             }

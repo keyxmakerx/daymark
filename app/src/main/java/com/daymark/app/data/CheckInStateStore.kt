@@ -7,7 +7,7 @@ import javax.inject.Singleton
 
 /**
  * What the rules engine has to remember between check-ins that the reception ledger cannot hold,
- * for the reminders (`docs/DECISIONS.md` §D1).
+ * for the reminders and for each tracker's check-ins, kept apart (`docs/DECISIONS.md` §D1).
  *
  * The ledger is facts about moments; these are the person's answers to the engine's notices and the
  * engine's own place in its rhythm. Every value here can only move the app toward asking less,
@@ -39,36 +39,51 @@ class CheckInStateStore @Inject constructor(
         val announced: CheckInEngine.Pace get() = CheckInEngine.Pace(announcedGap)
     }
 
-    fun reminders(): State = State(
-        countFrom = prefs.getLong(KEY_COUNT_FROM, 0L),
-        trialSteps = prefs.getInt(KEY_TRIAL_STEPS, 0),
-        trialSince = prefs.getLong(KEY_TRIAL_SINCE, 0L),
-        trialDeclined = prefs.getBoolean(KEY_TRIAL_DECLINED, false),
-        lastChangeWasTrial = prefs.getBoolean(KEY_LAST_WAS_TRIAL, false),
-        announcedGap = prefs.getLong(KEY_ANNOUNCED_GAP, 0L),
-        rotation = prefs.getInt(KEY_ROTATION, 0),
-    )
+    fun reminders(): State = read(REMINDERS)
 
-    fun write(state: State) {
-        prefs.edit()
-            .putLong(KEY_COUNT_FROM, state.countFrom)
-            .putInt(KEY_TRIAL_STEPS, state.trialSteps)
-            .putLong(KEY_TRIAL_SINCE, state.trialSince)
-            .putBoolean(KEY_TRIAL_DECLINED, state.trialDeclined)
-            .putBoolean(KEY_LAST_WAS_TRIAL, state.lastChangeWasTrial)
-            .putLong(KEY_ANNOUNCED_GAP, state.announcedGap)
-            .putInt(KEY_ROTATION, state.rotation)
-            .apply()
-    }
+    fun write(state: State) = write(REMINDERS, state)
 
     /**
      * The person's **Put it back**: the reminders return to the times they set, at once. Rows before
      * [nowMillis] stop counting, kept trials are dropped, and if the change being put back was a
      * trial, no longer wait is tried again.
      */
-    fun putBack(nowMillis: Long) {
-        val state = reminders()
+    fun putBack(nowMillis: Long) = putBack(REMINDERS, nowMillis)
+
+    /** The engine's state for one tracker's check-ins, kept apart from every other's. */
+    fun tracker(trackerId: Long): State = read(trackerPrefix(trackerId))
+
+    fun writeTracker(trackerId: Long, state: State) = write(trackerPrefix(trackerId), state)
+
+    /** **Put it back** for one tracker's check-ins, as [putBack] does for the reminders. */
+    fun putBackTracker(trackerId: Long, nowMillis: Long) = putBack(trackerPrefix(trackerId), nowMillis)
+
+    private fun read(prefix: String) = State(
+        countFrom = prefs.getLong(prefix + KEY_COUNT_FROM, 0L),
+        trialSteps = prefs.getInt(prefix + KEY_TRIAL_STEPS, 0),
+        trialSince = prefs.getLong(prefix + KEY_TRIAL_SINCE, 0L),
+        trialDeclined = prefs.getBoolean(prefix + KEY_TRIAL_DECLINED, false),
+        lastChangeWasTrial = prefs.getBoolean(prefix + KEY_LAST_WAS_TRIAL, false),
+        announcedGap = prefs.getLong(prefix + KEY_ANNOUNCED_GAP, 0L),
+        rotation = prefs.getInt(prefix + KEY_ROTATION, 0),
+    )
+
+    private fun write(prefix: String, state: State) {
+        prefs.edit()
+            .putLong(prefix + KEY_COUNT_FROM, state.countFrom)
+            .putInt(prefix + KEY_TRIAL_STEPS, state.trialSteps)
+            .putLong(prefix + KEY_TRIAL_SINCE, state.trialSince)
+            .putBoolean(prefix + KEY_TRIAL_DECLINED, state.trialDeclined)
+            .putBoolean(prefix + KEY_LAST_WAS_TRIAL, state.lastChangeWasTrial)
+            .putLong(prefix + KEY_ANNOUNCED_GAP, state.announcedGap)
+            .putInt(prefix + KEY_ROTATION, state.rotation)
+            .apply()
+    }
+
+    private fun putBack(prefix: String, nowMillis: Long) {
+        val state = read(prefix)
         write(
+            prefix,
             state.copy(
                 countFrom = nowMillis,
                 trialSteps = 0,
@@ -80,13 +95,17 @@ class CheckInStateStore @Inject constructor(
         )
     }
 
+    private fun trackerPrefix(trackerId: Long) = "checkin_tracker_${trackerId}_"
+
     private companion object {
-        const val KEY_COUNT_FROM = "checkin_reminder_count_from"
-        const val KEY_TRIAL_STEPS = "checkin_reminder_trial_steps"
-        const val KEY_TRIAL_SINCE = "checkin_reminder_trial_since"
-        const val KEY_TRIAL_DECLINED = "checkin_reminder_trial_declined"
-        const val KEY_LAST_WAS_TRIAL = "checkin_reminder_last_was_trial"
-        const val KEY_ANNOUNCED_GAP = "checkin_reminder_announced_gap"
-        const val KEY_ROTATION = "checkin_reminder_rotation"
+        /** The reminders' keys, unchanged from before trackers had check-ins. */
+        const val REMINDERS = "checkin_reminder_"
+        const val KEY_COUNT_FROM = "count_from"
+        const val KEY_TRIAL_STEPS = "trial_steps"
+        const val KEY_TRIAL_SINCE = "trial_since"
+        const val KEY_TRIAL_DECLINED = "trial_declined"
+        const val KEY_LAST_WAS_TRIAL = "last_was_trial"
+        const val KEY_ANNOUNCED_GAP = "announced_gap"
+        const val KEY_ROTATION = "rotation"
     }
 }

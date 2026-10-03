@@ -21,6 +21,10 @@ interface TrackerLogDao {
     @Query("SELECT * FROM tracker_logs")
     suspend fun getAll(): List<TrackerLog>
 
+    /** How many times [trackerId] was logged from [from] up to, not including, [to]. */
+    @Query("SELECT COUNT(*) FROM tracker_logs WHERE trackerId = :trackerId AND dateTime >= :from AND dateTime < :to")
+    suspend fun countBetween(trackerId: Long, from: Long, to: Long): Int
+
     @Query("SELECT * FROM tracker_logs")
     fun observeAll(): Flow<List<TrackerLog>>
 
