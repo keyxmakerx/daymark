@@ -385,7 +385,8 @@ class ShapeRoutingTest {
                 // The positive control: the listing sees the stores every shape opens, the wrapped key's
                 // among them (#258), and the owner's own log, which a phone's pairing writes to (#189).
                 assertTrue(
-                    "owner-account.db" in files && "index.db" in files && "wrapped-key.db" in files && "owner-audit.db" in files,
+                    "owner-account.db" in files && "index.db" in files && "wrapped-key.db" in files && "owner-audit.db" in files &&
+                        "admin.db" in files && "admin-audit.db" in files,
                     "${case.name}: $files",
                 )
                 val clinician = case.serves in GROUP_ON_IN.getValue(Group.CLINICIAN)
@@ -455,7 +456,7 @@ class ShapeRoutingTest {
             "practice.html" to setOf(PRACTICE),
         )
 
-        enum class Group { PROBE, SYNC, OWNER, CLINICIAN, PRACTICE, CLINICIAN_PAGE, STATIC }
+        enum class Group { PROBE, SYNC, OWNER, ADMIN, CLINICIAN, PRACTICE, CLINICIAN_PAGE, STATIC }
 
         /** The issue's table (#330): the shapes that switch each gated route group on. */
         val GROUP_ON_IN = mapOf(
@@ -464,7 +465,7 @@ class ShapeRoutingTest {
         )
 
         /** The groups asked route by route; the page mounts are asked by [assertPages]. */
-        val ASKED = setOf(Group.PROBE, Group.SYNC, Group.OWNER, Group.CLINICIAN, Group.PRACTICE)
+        val ASKED = setOf(Group.PROBE, Group.SYNC, Group.OWNER, Group.ADMIN, Group.CLINICIAN, Group.PRACTICE)
 
         /**
          * The groups no shape switches off. Their prefixes do not say a route is served in every shape:
@@ -493,6 +494,9 @@ class ShapeRoutingTest {
             "POST /v1/devices/redeem", "GET /v1/devices/registration",
             // The owner's own log: phones paired and revoked, and lockouts (#189).
             "GET /v1/owner/audit",
+            // The server console (#322): every server is claimed and run by an administrator.
+            "GET /v1/admin/status", "POST /v1/admin/claim", "POST /v1/admin/session",
+            "POST /v1/admin/session/logout", "GET /v1/admin/overview",
         )
 
         /** Each route's group, by the first two segments of its path. */
@@ -501,6 +505,7 @@ class ShapeRoutingTest {
             "v1/keyparams" to Group.SYNC, "v1/keydoc" to Group.SYNC, "v1/snapshots" to Group.SYNC,
             "v1/devices" to Group.SYNC,
             "v1/owner" to Group.OWNER, "v1/recovery" to Group.OWNER,
+            "v1/admin" to Group.ADMIN,
             "v1/rel" to Group.CLINICIAN, "v1/invite" to Group.CLINICIAN, "v1/totp" to Group.CLINICIAN,
             "v1/session" to Group.CLINICIAN, "v1/webauthn" to Group.CLINICIAN, "v1/relations" to Group.CLINICIAN,
             "v1/orgs" to Group.PRACTICE,

@@ -30,9 +30,11 @@ enum class AuditActor(val wire: String) {
     ORG_MEMBER("org_member"),
 
     /**
-     * The operator's provisioning identity, which creates practices and seats their first admin.
+     * The operator's provisioning identity, which creates practices and seats their first admin, and
+     * the server's administrators, who claim the server and sign in to its console (#322).
      *
-     * The platform plane: runs the server, holds no grant, appears in exactly one action. It is
+     * The platform plane: runs the server and holds no grant. Its rows about the server itself go to
+     * their own chain (`admin-audit.db`), never a practice's or an owner's. It is
      * listed here rather than folded into [OWNER] because conflating "the person who runs the
      * infrastructure" with "the person whose data it is" is the exact confusion the three-plane
      * rule exists to prevent, and an audit log that made them the same word would be arguing for it.
@@ -244,6 +246,18 @@ enum class AuditAction(val wire: String) {
      * identifies a real clinic in a leaked file.
      */
     ORG_CREATED("org.created"),
+
+    /**
+     * The server was claimed with its one-time setup code, and its first administrator made (#322).
+     * Carries the administrator's random id, never the name they typed or the code.
+     */
+    SERVER_CLAIMED("server.claimed"),
+
+    /**
+     * The server started printing a setup code although it has an administrator, because the
+     * operator asked for one at start-up (`DAYMARK_ADMIN_RESET`). One row per start that does so.
+     */
+    SETUP_CODE_REISSUED("server.setup_code_reissued"),
 
     /**
      * Somebody was seated in a practice with a role.

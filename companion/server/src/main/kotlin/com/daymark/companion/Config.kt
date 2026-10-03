@@ -120,6 +120,13 @@ data class Config(
      * answered its question (`companion/web/src/lib/setup/shape.ts`).
      */
     val setupMode: SetupMode? = null,
+    /**
+     * `DAYMARK_ADMIN_RESET`: on for `1` or `true`. For when every administrator is lost (#322): a
+     * server that has administrators then still prints a setup code at each start, writes one audit
+     * row saying so, and lets that code make one more administrator. The operator already holds the
+     * host, which is what the code proves; they remove the setting once they are back in.
+     */
+    val adminReset: Boolean = false,
 ) {
     /** True when the sync API has a configured access token and may serve /v1. */
     val syncEnabled: Boolean get() = !authToken.isNullOrBlank()
@@ -211,6 +218,7 @@ data class Config(
                 mailer = readMailer(env),
                 therapistAuthEnabled = therapistAuthOn,
                 setupMode = setupMode,
+                adminReset = env["DAYMARK_ADMIN_RESET"]?.trim().let { it == "1" || it.equals("true", true) },
                 webauthnRpId = env["DAYMARK_WEBAUTHN_RP_ID"]?.trim()?.ifBlank { null },
                 webauthnOrigins = webauthnOrigins,
                 publicBaseUrl = explicitBaseUrl ?: webauthnOrigins.firstOrNull(),

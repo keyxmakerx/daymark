@@ -14,7 +14,7 @@ import kotlin.test.assertEquals
 /**
  * A start checks and changes only the databases its shape opens (#193, #330).
  *
- * All ten files are planted, each an unversioned database holding one table of its own, and a server
+ * All twelve files are planted, each an unversioned database holding one table of its own, and a server
  * of each shape is started on them. The ones its shape opens are adopted: they gain their structure,
  * are copied first, and are marked with the version this release brings them to. The rest are left
  * byte for byte as they were, unversioned, so a server that changes shape keeps the files it no longer
@@ -25,17 +25,19 @@ class ShapeSchemaTest {
 
     private val every = listOf(
         "index.db", "wrapped-key.db", "owner-account.db", "owner-audit.db",
+        "admin.db", "admin-audit.db",
         "auth.db", "rel-index.db", "audit.db", "pairing.db",
         "org.db", "org-audit.db",
     )
 
     /**
      * What each shape opens, restated from the issue's table (#330) rather than read from the code. The
-     * owner's log is the sync API's (#189): a phone pairs in every shape.
+     * owner's log is the sync API's (#189): a phone pairs in every shape. Every server has
+     * administrators and their log (#322).
      */
     private val opens = mapOf(
-        SetupMode.SOLO to every.take(4),
-        SetupMode.PAIRED to every.take(8),
+        SetupMode.SOLO to every.take(6),
+        SetupMode.PAIRED to every.take(10),
         SetupMode.PRACTICE to every,
     )
 
