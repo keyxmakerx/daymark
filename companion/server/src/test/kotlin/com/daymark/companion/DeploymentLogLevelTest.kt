@@ -6,9 +6,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * A new install logs at `info` (#367). The image, the compose file and `.env.example` each set
- * `DAYMARK_LOG_LEVEL` to the code's own default, so whoever runs a Companion sees the three lines
- * `warn` hides: the startup settings line, the SMTP-enabled line and "readiness restored".
+ * A new install logs at `info` (#367). The image and the compose file each set `DAYMARK_LOG_LEVEL`
+ * to the code's own default, so whoever runs a Companion sees the three lines `warn` hides: the
+ * startup settings line, the SMTP-enabled line and "readiness restored". `.env.example` lists it
+ * only as a comment, because compose fixes it and a value there would do nothing (#381).
  */
 class DeploymentLogLevelTest {
 
@@ -27,12 +28,20 @@ class DeploymentLogLevelTest {
     }
 
     @Test
-    fun `the image, the compose file and the example environment each set it once, to the code's default`() {
+    fun `the image and the compose file each set it once, to the code's default`() {
         val fallback = Config.fromEnv(emptyMap()).logLevel
-        for (name in listOf("Dockerfile", "docker-compose.yml", ".env.example")) {
+        for (name in listOf("Dockerfile", "docker-compose.yml")) {
             // Exactly one value, so a renamed or commented-out key fails here as surely as a wrong one.
             assertEquals(listOf(fallback), logLevelsSetIn(deploymentFile(name)), "DAYMARK_LOG_LEVEL in $name")
         }
+    }
+
+    @Test
+    fun `the example environment does not set it, because compose fixes it and a value there would change nothing`() {
+        // #381: compose writes DAYMARK_LOG_LEVEL itself and has no env_file, so a line in .env
+        // would be a setting that silently does nothing. ComposeFixedSettingsTest owns the rule
+        // for every such key; this keeps the #367 file list honest about where the level is set.
+        assertEquals(emptyList(), logLevelsSetIn(deploymentFile(".env.example")))
     }
 
     @Test
