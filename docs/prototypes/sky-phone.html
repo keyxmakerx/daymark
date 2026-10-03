@@ -1053,6 +1053,18 @@ mb.addEventListener("click", () => { motion = !motion; mb.innerHTML = motion ? P
 
 
 // ---------- frame loop ----------
+// The opening's pace. Stars arrive at a rate that is one continuous curve, never a switch from slow
+// to fast: a faint trickle for the first two and a half seconds, a burst that builds over about
+// three and a half more, then a settle of about two as the last ones arrive. Tabulated once.
+const INTRO_S = 8.4, revealAt = (() => {
+  const N = 600, TS = 2.6, c = new Float32Array(N + 1);
+  const ss = (a, b, x) => { const u = Math.min(1, Math.max(0, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
+  const trickle = t => ss(0, 1.2, t) * (1 - ss(INTRO_S - 1.5, INTRO_S, t));
+  const burst = t => { const x = (t - TS) / (INTRO_S - TS); return x > 0 && x < 1 ? Math.pow(x, 1.8) * (1 - x) : 0; };
+  let sa = 0, sb = 0; for (let i = 0; i < N; i++) { const t = (i + .5) / N * INTRO_S; sa += trickle(t); sb += burst(t); }
+  for (let i = 0; i < N; i++) { const t = (i + .5) / N * INTRO_S; c[i + 1] = c[i] + .05 * trickle(t) / sa + .95 * burst(t) / sb; }
+  return t => { const f = Math.min(1, Math.max(0, t / INTRO_S)) * N, i = Math.floor(f); return i >= N ? 1 : c[i] + (c[i + 1] - c[i]) * (f - i); };
+})();
 const zr = document.getElementById("zr");
 const seenKey = "daymark-sky-born-" + todayStar.day;
 let seen = false; try { seen = localStorage.getItem(seenKey) === "1"; } catch (e) {}
@@ -1081,11 +1093,11 @@ const frame = now => {
     if (birthP >= 1) { birth = null; try { localStorage.setItem(seenKey, "1"); } catch (e) {} show(todayStar); card.querySelector(".d").insertAdjacentHTML("beforebegin", `<div class="k">Born just now</div>`); }
   }
   if (intro) {
-    const t = (now - intro.t0) / 1000;
-    reveal = t < 3.2 ? .035 * Math.pow(t / 3.2, 1.6) : (() => { const u = Math.min(1, (t - 3.2) / 2.6); return .035 + .965 * u * u * (3 - 2 * u); })();
-    if (t > 6.3 && !intro.flown) { intro.flown = true; flyTo(GO.today());
+    const t = intro.hold ?? (now - intro.t0) / 1000;
+    reveal = revealAt(t);
+    if (t > INTRO_S + .3 && !intro.flown) { intro.flown = true; flyTo(GO.today());
       if (intro.birth) birth = { t0: now + (fly ? fly.dur : 0) + 300 }; else show(todayStar); }
-    if (t > 6.5) intro = null;
+    if (t > INTRO_S + .5) intro = null;
   }
   if (motion) { T += dt; te += dt * Math.min(1, 1.6 / zRel); }
   zr.textContent = zRel < 10 ? zRel.toFixed(1) : Math.round(zRel).toLocaleString("en-GB");
@@ -1276,6 +1288,6 @@ const drawLines = () => {
 };
 function smoothstep(a, b, x) { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
 requestAnimationFrame(frame);
-window.__sky = { onScreen: n => { const out = []; for (const s of stars) { if (s.disk || s.dyn) continue; const [x, y] = toScreen(...starPos(s)); if (x > 40 && y > 140 && x < W - 40 && y < Hh - 160 && out.every(o => Math.hypot(o[0] - x, o[1] - y) > 60)) out.push([x, y]); if (out.length >= n) break; } return out; }, info: () => ({ path: PATH_STYLE, N, span: SPAN, periods: PERIODS.map(p => p.mode[0] + (p.to - p.from)).join(" "), clusters: clusters.size, bridges: bridges.length, nebs: nebs.length, scheme: LOOK.scheme }), WH, whAt: t => { whT0 = T - t; }, meteorNow: () => { meteorNext = T; }, get nMet() { return meteors.length; }, flyTo, GO, cam, show, replay, get reveal() { return reveal; }, get birthP() { return birthP; }, cometHead: () => { const c = cometAt(te); return toScreen(c.x, c.y); }, get birthOn() { return !!birth; }, giant, oneStar, snStar, get fitS() { return fitS; } };
+window.__sky = { onScreen: n => { const out = []; for (const s of stars) { if (s.disk || s.dyn) continue; const [x, y] = toScreen(...starPos(s)); if (x > 40 && y > 140 && x < W - 40 && y < Hh - 160 && out.every(o => Math.hypot(o[0] - x, o[1] - y) > 60)) out.push([x, y]); if (out.length >= n) break; } return out; }, info: () => ({ path: PATH_STYLE, N, span: SPAN, periods: PERIODS.map(p => p.mode[0] + (p.to - p.from)).join(" "), clusters: clusters.size, bridges: bridges.length, nebs: nebs.length, scheme: LOOK.scheme }), WH, whAt: t => { whT0 = T - t; }, meteorNow: () => { meteorNext = T; }, get nMet() { return meteors.length; }, flyTo, GO, cam, show, replay, introAt: t => { if (intro) intro.hold = t; }, get reveal() { return reveal; }, get birthP() { return birthP; }, cometHead: () => { const c = cometAt(te); return toScreen(c.x, c.y); }, get birthOn() { return !!birth; }, giant, oneStar, snStar, get fitS() { return fitS; } };
 })();
 </script>

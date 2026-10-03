@@ -433,7 +433,10 @@ date, so nothing else needs storing.
 ## 8. The opening
 
 1. Stars twinkle in slowly, for about three seconds, barely there.
-2. They ramp up gently and burst into view over about two and a half seconds.
+2. They ramp up gradually into a burst that builds over about three and a half seconds, then settle
+   over about two more as the last ones arrive. The pace is one continuous curve, never a switch
+   from slow to fast; at its busiest it is about half the pace of the first version, which the
+   maintainer found too fast at the end.
 3. The view flies to today's star.
 4. **If today's star is new and has not been seen yet**, it is shown being born, over about six
    seconds: a cloud collapses, the core heats, and the star switches on. Its card then opens. Each
