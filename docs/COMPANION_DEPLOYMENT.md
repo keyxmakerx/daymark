@@ -95,7 +95,7 @@ What `companion/docker-compose.yml` sets:
 **Secret files must be readable by UID 65532 on the host.** Compose ignores the `uid`, `gid` and
 `mode` keys on secrets outside Swarm, so the container sees the host file's owner and mode:
 `sudo chown 65532:65532 secrets/auth_token && chmod 400 secrets/auth_token`. Otherwise the server
-stops at start with a message naming the file.
+stops at start with one line naming the setting, such as `DAYMARK_AUTH_TOKEN_FILE` (§5.3).
 
 ## 3. Your reverse proxy — the contract
 
@@ -320,13 +320,16 @@ versions (§7.2).
 | `DAYMARK_SETUP_MODE` set to anything but `solo`, `paired` or `practice` | The server will not guess a shape, and never switches everything on for a value it cannot read (#330) | Set it to one of the three; case and space around it do not matter. Leave it unset for the server to assume one |
 | `DAYMARK_SETUP_MODE=solo` with `DAYMARK_THERAPIST_AUTH` on | The two contradict each other: a solo server has no clinician portal (#330) | Remove `DAYMARK_THERAPIST_AUTH`, or choose `paired` or `practice` |
 | `DAYMARK_SETUP_MODE` `paired` or `practice` with `DAYMARK_THERAPIST_AUTH` set to anything but `1` or `true` | The two contradict each other: the mode turns the clinician portal on and the switch turns it off (#330) | Remove `DAYMARK_THERAPIST_AUTH`, which the mode replaces, or choose `solo` |
+| `DAYMARK_SMTP_TLS` set to `none`, `plain` or `plaintext`, or to a value the server does not recognise | Email is never sent without encryption (COMPANION_OBSERVABILITY.md §3.2), and the server will not guess a mode (#380) | Set it to `starttls` or `implicit`, or remove it for `starttls` |
+| `DAYMARK_SMTP_HOST` set with no `DAYMARK_SMTP_FROM` | Mail needs a sender address (#380) | Set `DAYMARK_SMTP_FROM`, or remove `DAYMARK_SMTP_HOST` |
+| `DAYMARK_SMTP_PORT` outside 1 to 65535, with email on | No mail server listens there (#380) | Set your mail server's port, usually 587, or remove it for 587 |
+| A `_FILE` secret the process cannot read | Docker secrets keep the host file's owner and mode (§2, #380) | On the host, `chown 65532:65532` and `chmod 400` that file |
 
 The public address is `DAYMARK_PUBLIC_BASE_URL`, or the first `DAYMARK_WEBAUTHN_ORIGINS` entry when
 that is unset; a refusal names whichever it read.
 
-These also stop the start, with a Java stack trace rather than one line: an SMTP TLS mode of `none`
-or one the server does not recognise, a missing `DAYMARK_SMTP_FROM`, an SMTP port out of range
-(COMPANION_OBSERVABILITY.md §3.2), and a `_FILE` secret the process cannot read (§2).
+No refusal repeats the value it refused: a host, an address, a port or a path can each identify the
+deployment.
 
 ## 6. Backup and restore
 

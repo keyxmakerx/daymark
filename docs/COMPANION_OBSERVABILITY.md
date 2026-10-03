@@ -263,11 +263,11 @@ Connect, read and write timeouts are 10, 15 and 15 seconds and cannot be configu
 
 ### 3.2 TLS is mandatory, and `none` is refused at start
 
-`MailerConfig.parseTls` throws on `none`, `plain` or `plaintext` when SMTP is on, and on any value it
-does not recognise. That happens inside `Config.fromEnv`, the first thing `main` does — so the process
-dies before it binds a port or logs a line. You will see a Java stack trace and a container that never
-becomes healthy. A missing `DAYMARK_SMTP_FROM` or an out-of-range port also stops the start
-(`MailerConfig.validate`).
+`DAYMARK_SMTP_TLS` set to `none`, `plain` or `plaintext` with SMTP on, or to any value the server does
+not recognise, is refused inside `Config.fromEnv`, the first thing `main` does: the process logs one
+line beginning `Refusing to start:`, naming the setting and never its value, and exits with status 78
+before it binds a port. A missing `DAYMARK_SMTP_FROM` or an out-of-range port is refused the same way
+(#380; COMPANION_DEPLOYMENT.md §5.3).
 
 The transport refuses to downgrade (`SmtpMailTransport`): STARTTLS mode requires the upgrade rather
 than falling back to the clear; implicit mode is TLS from the first byte; the server's identity is
