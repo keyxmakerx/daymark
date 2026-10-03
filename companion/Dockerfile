@@ -80,5 +80,9 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
 
 # The base image sets its own ENTRYPOINT ["/usr/bin/java","-jar"]. It must be replaced in
 # FULL or -Djava.io.tmpdir=/tmp is silently dropped. (JAVA_TOOL_OPTIONS in compose also
-# carries the flag; both are set deliberately, belt and braces.)
-ENTRYPOINT ["/usr/bin/java", "-XX:MaxRAMPercentage=70.0", "-XX:+ExitOnOutOfMemoryError", "-Djava.io.tmpdir=/tmp", "-jar", "/app/app.jar"]
+# carries the flags; both are set deliberately, belt and braces.)
+# -Dorg.sqlite.tmpdir=/data is here as well as in compose: every server opens its
+# administrators' database at start (#322), and sqlite-jdbc unpacks its native library into
+# that directory and loads it from there. A hardened `docker run --tmpfs /tmp` mounts /tmp
+# noexec, so without this the server exits before it binds a port.
+ENTRYPOINT ["/usr/bin/java", "-XX:MaxRAMPercentage=70.0", "-XX:+ExitOnOutOfMemoryError", "-Djava.io.tmpdir=/tmp", "-Dorg.sqlite.tmpdir=/data", "-jar", "/app/app.jar"]
