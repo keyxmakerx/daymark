@@ -524,6 +524,24 @@ as follows. This is a map, not a plan of work:
   entry; and the sky's chosen colours with the date the colour window closes. The pulsar reads a time
   the person set on a habit, and does not exist for a habit without one.
 
+### 9.4 How the rest of the app reaches the sky
+
+Checked against the app on 2026-10-03, so nothing in it meets the sky undecided.
+
+| In the app | What the sky does |
+|---|---|
+| **Delete** an entry, a page, a step, a life event | Its star goes and leaves no trace; later stars close up one place (§2.3). |
+| **Undo** a delete | The star comes back to exactly the same place, because its place is its count in the river. |
+| **Archive** a goal, tracker, person, activity or place | Nothing moves. Archiving tidies a picker; it never hides a memory. A pulsar whose habit is archived stops pulsing and stays an ordinary star; a binary or a place card still uses the name as written. |
+| **Restore a backup** (replace) | The sky is rebuilt from what was restored. The backup must therefore carry the seed, the chosen colours and the date the colour window closes, as well as the marks and constellations (§7.5), or a restore onto a new phone grows a different sky. Today the seed lives only in preferences and is not in the backup. |
+| **Merge a backup, sync, or back-date an entry** | Memories with older dates shift later stars along, animated as the sky settling (§2.3). |
+| **Put away, tuck away** | §4. |
+| **Light or dark theme, dynamic colour** | The sky is always a night sky, in both themes, as it is today. Its controls sit on the app's ordinary surfaces. Dynamic colour never tints it. |
+| **Custom mood colours** | Do not reach the sky. Colour is age (§6.2), never mood. |
+| **Reduced motion** | No opening, no twinkle, no drift, no meteors; the sky opens still, on today (§6.3, §8). |
+| **App lock** | The sky is behind the lock like everything else. A card never shows journal prose (§3.5). |
+| **Trackers, sleep logs, screeners, the safety plan** | Not stars. The sky keeps the kinds it has today: check-ins, practices, journal pages, goals reached, project steps and life events. A tracker logged a few times a day would flood the river and make bands out of how often someone logs, and a screener is a score. Open: the maintainer may want tracker logs in (§10). |
+
 ---
 
 ## 10. Settled after approval, and what is still open
@@ -558,6 +576,8 @@ brightness never follows kind (it used to make a journal entry slightly brighter
    prototype red-shifts giants like every other star. Default: follow the prototype; the giant still
    stands out by size.
 3. **The rhythm thresholds in §2.2** are proposals and need tuning on real data, keeping bands rare.
+4. **Tracker logs as stars** (§9.4). Default: not stars, so how often someone logs never shapes
+   their sky.
 
 ---
 
