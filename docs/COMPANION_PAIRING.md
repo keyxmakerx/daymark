@@ -397,11 +397,10 @@ approve anything.
   context `"dmsync01"`: subkey id 3 is the X25519 seed, id 4 the Ed25519 seed, 32 bytes each, then
   `crypto_box_seed_keypair` and `crypto_sign_seed_keypair`. Ids 1 and 2 belong to sync
   (SYNC_PROTOCOL.md §1). The reference is `companion/web/src/lib/owner/identity.ts`; `identity.test.ts`
-  pins the master bytes 0x00…0x1F to fixed public keys so the phone can be tested against the same
-  vector. Deriving is what makes the phone and the browser the same owner.
-- **Same bytes.** The phone builds the §13 channel identifier (`CpaceCrypto.kt` has `lvCat` and no
-  builder yet; the builder and a test against the same structure `relay.test.ts` checks come first),
-  opens E1, and seals E2 at approval and not before, so "the owner said yes" and "the clinician learned
+  pins the master bytes 0x00…0x1F to fixed public keys, and the phone's `SyncCrypto.ownerIdentityFromMaster`
+  reproduces them (`OwnerPairingVectorTest.kt`). Deriving is what makes the phone and the browser the same owner.
+- **Same bytes.** The phone builds the §13 channel identifier (`CpaceCrypto.channelIdentifier`,
+  pinned to the bytes `relay.test.ts` pins), opens E1, and seals E2 at approval and not before, so "the owner said yes" and "the clinician learned
   the owner's keys" stay one event.
 - **When a reply does not open (issue #112).** The phone may raise **one local notification per
   invitation**, reading *"A reply to your invitation needs a look."* It is visible on the lock screen,
