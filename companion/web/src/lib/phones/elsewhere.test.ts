@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { CONSOLE_POINTER, REISSUE_DISCONNECTS, reissueLine } from './copy'
+import { sameServer } from './devices'
 
 /*
  * WHAT THE REST OF THE OWNER'S PAGE SAYS ABOUT PHONES (#431): the line above the access token's
@@ -44,7 +45,25 @@ describe('the re-issue line', () => {
   it('counts the phones still connected, through the connection this visit proved', () => {
     expect(RECOVER).toMatch(/devicesApi\(c\.serverUrl, c\.token\)\.listDevices\(\)/)
     expect(RECOVER).toMatch(/phones\.filter\(\(p\) => p\.revokedAt === null\)\.length/)
-    expect(RECOVER).toMatch(/const reissue = \$derived\(reissueLine\(connectedPhones\)\)/)
+    expect(RECOVER).toMatch(/const reissue = \$derived\(reissueLine\(countApplies \? connectedPhones : null\)\)/)
+  })
+
+  it("shows the count only while the card's own Server URL names the server it was read from (#434)", () => {
+    expect(RECOVER).toMatch(
+      /const countApplies = \$derived\(connection !== null && sameServer\(serverUrl, connection\.serverUrl, location\.origin\)\)/,
+    )
+    const page = 'https://daymark.example.com'
+    // Blank is this page's own server, however the other side spells it.
+    expect(sameServer('', '', page)).toBe(true)
+    expect(sameServer('', 'https://daymark.example.com/', page)).toBe(true)
+    expect(sameServer(' https://DAYMARK.example.com// ', 'https://daymark.example.com', page)).toBe(true)
+    // Another server is not this one: the count would describe phones the re-issue never touches.
+    expect(sameServer('https://other.example.com', '', page)).toBe(false)
+    expect(sameServer('', 'https://other.example.com', page)).toBe(false)
+    expect(sameServer('https://daymark.example.com:8443', '', page)).toBe(false)
+    expect(sameServer('https://daymark.example.com/a', 'https://daymark.example.com/b', page)).toBe(false)
+    // An address that does not parse names nothing, not even another one that does not parse.
+    expect(sameServer('http://', 'http://', page)).toBe(false)
   })
 })
 

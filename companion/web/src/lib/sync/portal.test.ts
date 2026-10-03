@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { PortalClient, requestAccessRecovery, confirmAccessRecovery } from './portal'
+import { PortalClient, relRefOf, requestAccessRecovery, confirmAccessRecovery } from './portal'
 
 interface Recorded {
   url: string
@@ -121,5 +121,36 @@ describe('access-token recovery client functions', () => {
   it('confirmAccessRecovery throws PortalError when the link is gone', async () => {
     const fetchMock = vi.fn<FetchMock>(async () => jsonResponse({}, false, 410))
     await expect(confirmAccessRecovery('https://host', 'expired-tok', fetchMock as unknown as typeof fetch)).rejects.toMatchObject({ status: 410 })
+  })
+})
+
+describe('PortalClient.auditChainHead', () => {
+  it('reads the chain head with the owner token, at the relationship the inbox token names', async () => {
+    const log: Recorded[] = []
+    const body = JSON.stringify({ entryCount: 3, oldestSeq: 1, headSeq: 3, headHash: 'ab'.repeat(32), firstBreakSeq: null })
+    const client = new PortalClient('https://s.example', 'owner-token', fakeFetch({ '/audit-chain': () => new Response(body, { status: 200 }) }, log))
+    const res = await client.auditChainHead(inboxToken)
+    expect(res).toEqual({ kind: 'response', status: 200, body })
+    expect(log[0].url).toBe(`https://s.example/v1/relations/${encodeURIComponent(await relRefOf(inboxToken))}/audit-chain`)
+    const headers = log[0].init.headers as Record<string, string>
+    expect(headers['Authorization']).toBe('Bearer owner-token')
+    // The route is keyed by the relRef alone; the inbox token itself stays on this device. The
+    // getAuditLog test above is the control: the same lookup finds the header when it is sent.
+    expect(headers['X-Rel-Token']).toBeUndefined()
+    expect(log[0].url).not.toContain(inboxToken)
+  })
+
+  it('returns a transport failure as a value instead of throwing', async () => {
+    const client = new PortalClient('https://s.example', 'owner-token', (async () => {
+      throw new TypeError('offline')
+    }) as unknown as typeof fetch)
+    expect(await client.auditChainHead(inboxToken)).toEqual({ kind: 'transport', error: 'TypeError: offline' })
+  })
+})
+
+describe('relRefOf', () => {
+  it('is BLAKE2b-256 of the token text, base64url: the bytes the phone computes too (#174)', async () => {
+    // Pinned with the same value in sync-crypto's ClinicianCeremonyTest.
+    expect(await relRefOf('inbox-token-example')).toBe('PmoLo2aBLjo0CAzUlM2MhtNp2fCKQvpN17Qgod-1w2s')
   })
 })

@@ -423,6 +423,52 @@ class MigrationTest {
     }
 
     @Test
+    fun migrate19To20_everyTrackerStillAsksNothing_andOldLedgerRowsAreAboutNoOneThing() {
+        helper.createDatabase(TEST_DB, 19).use { db ->
+            db.execSQL(
+                "INSERT INTO trackers (id, name, type, minValue, maxValue, unit, sortOrder, archived) " +
+                    "VALUES (1, 'Water', 'NUMERIC', 0, 12, 'glasses', 0, 0)",
+            )
+            db.execSQL(
+                "INSERT INTO offer_records (id, kind, offeredAt, outcome, offeredHour, offeredWeekday, responded) " +
+                    "VALUES (1, 'reminder', 1700000000000, 'accepted', 20, 3, 1)",
+            )
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 20, true, AppDatabase.MIGRATION_19_20).use { db ->
+            db.query("SELECT name, rhythm, quickLog FROM trackers WHERE id = 1").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("Water", c.getString(0))
+                assertEquals("when", c.getString(1))
+                assertEquals(0, c.getInt(2))
+            }
+            db.query("SELECT subject, outcome FROM offer_records WHERE id = 1").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals(0L, c.getLong(0))
+                assertEquals("accepted", c.getString(1))
+            }
+        }
+    }
+
+    @Test
+    fun migrate20To21_everyTrackerKeepsEasingAsBefore() {
+        helper.createDatabase(TEST_DB, 20).use { db ->
+            db.execSQL(
+                "INSERT INTO trackers (id, name, type, minValue, maxValue, unit, sortOrder, archived, rhythm) " +
+                    "VALUES (1, 'Took meds', 'BOOLEAN', 0, 1, '', 0, 0, 'daily')",
+            )
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 21, true, AppDatabase.MIGRATION_20_21).use { db ->
+            // Nothing is guessed from a name: only the person turns keeping on.
+            db.query("SELECT name, rhythm, keepAsSet FROM trackers WHERE id = 1").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("Took meds", c.getString(0))
+                assertEquals("daily", c.getString(1))
+                assertEquals(0, c.getInt(2))
+            }
+        }
+    }
+
+    @Test
     fun migrateAll_from3_toLatest() {
         helper.createDatabase(TEST_DB, 3).use { db ->
             db.execSQL(

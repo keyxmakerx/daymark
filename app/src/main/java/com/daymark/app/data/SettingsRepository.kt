@@ -34,6 +34,16 @@ class SettingsRepository @Inject constructor(
         get() = prefs.getBoolean(KEY_LEGACY_REMINDER_MIGRATED, false)
         set(value) = prefs.edit().putBoolean(KEY_LEGACY_REMINDER_MIGRATED, value).apply()
 
+    /**
+     * The person's "Keep reminding me at these times" for the reminders, asked when they set the
+     * first one: the reminders then never ease off and never try a longer wait
+     * (`CheckInEngine.paceOf`). Written only through `ReminderScheduler.setKeepAsSet`, which also
+     * starts the engine over from the person's schedule.
+     */
+    var remindersKeepAsSet: Boolean
+        get() = prefs.getBoolean(KEY_REMINDERS_KEEP_AS_SET, false)
+        set(value) = prefs.edit().putBoolean(KEY_REMINDERS_KEEP_AS_SET, value).apply()
+
     // --- App lock ---
     var lockEnabled: Boolean
         get() = prefs.getBoolean(KEY_LOCK_ENABLED, false)
@@ -110,6 +120,7 @@ class SettingsRepository @Inject constructor(
         private const val KEY_REMINDER_HOUR = "reminder_hour"
         private const val KEY_REMINDER_MINUTE = "reminder_minute"
         private const val KEY_LEGACY_REMINDER_MIGRATED = "legacy_reminder_migrated"
+        private const val KEY_REMINDERS_KEEP_AS_SET = "reminders_keep_as_set"
         private const val KEY_LOCK_ENABLED = "lock_enabled"
         private const val KEY_PIN_HASH = "pin_hash"
         private const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"

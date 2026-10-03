@@ -46,7 +46,26 @@ enum class ServerSyncStage {
 
     /** A copy is on its way. */
     SENDING,
+
+    /** The newest copy on the server is being fetched and opened (#168). */
+    FETCHING,
+
+    /** A fetched copy is held in memory, and the person chooses what to do with it. Nothing has changed yet. */
+    CHOOSING,
+
+    /** The chosen copy is going into the journal. */
+    TAKING_IN,
 }
+
+/** What a fetched copy holds, beside what the phone holds, for the person to choose between. */
+data class FoundCopy(
+    /** When the copy was made, written inside the copy: the server cannot change it. */
+    val savedAt: Long,
+    val copyEntries: Int,
+    val copyPages: Int,
+    val phoneEntries: Int,
+    val phonePages: Int,
+)
 
 data class ServerSyncUiState(
     val stage: ServerSyncStage = ServerSyncStage.LOADING,
@@ -60,6 +79,8 @@ data class ServerSyncUiState(
     val lastSentAt: Long? = null,
     /** The name this phone's copies have on the server, once one has been sent: the web reads them by it. */
     val lineage: String? = null,
+    /** While [ServerSyncStage.CHOOSING]: what the fetched copy and the phone each hold. */
+    val found: FoundCopy? = null,
 )
 
 /**
@@ -87,6 +108,12 @@ class ServerSyncViewModel @Inject constructor(
     val state: StateFlow<ServerSyncUiState> = _state.asStateFlow()
 
     private var pairingJob: Job? = null
+
+    /**
+     * The fetched copy's backup, in memory only while the person chooses, and dropped the moment they
+     * do. It is never written anywhere but into the journal, and only by [takeIn].
+     */
+    @Volatile private var heldCopy: String? = null
 
     init {
         viewModelScope.launch {
@@ -258,6 +285,102 @@ class ServerSyncViewModel @Inject constructor(
             syncKey?.fill(0)
             link.wipe()
         }
+    }
+
+    /**
+     * Fetches the newest copy on the server and opens it (#168). Nothing on the phone changes: the
+     * copy is held while the screen shows what it and the phone each hold, and the person chooses.
+     */
+    fun fetchNow() {
+        if (_state.value.stage != ServerSyncStage.READY) return
+        val before = _state.value
+        _state.update { it.copy(stage = ServerSyncStage.FETCHING, message = null) }
+        viewModelScope.launch {
+            // This phone's counts first, so the choice shows both sides; counts only, no row is read.
+            val here = try {
+                withContext(Dispatchers.IO) { backupManager.countsHere() }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _state.value = before.copy(message = PhoneWords.NOT_FETCHED)
+                return@launch
+            }
+            _state.value = offMain({ before.copy(message = PhoneWords.NOT_FETCHED) }) { fetchKept(here) }
+        }
+    }
+
+    /** [fetchNow]'s errand, off the main thread: the copy fetched, opened and read, and the counts beside it. */
+    private fun fetchKept(here: Pair<Int, Int>): ServerSyncUiState {
+        val link = store.read() ?: return stateOf(null, null)
+        val syncKey = link.syncKey()
+        val tag = link.keyDocumentTag
+        try {
+            val server = link.server(sodium) ?: return forgotten()
+            if (syncKey == null || tag == null) return stateOf(link, null)
+            return when (val fetching = phoneSync.fetch(server, syncKey, tag)) {
+                is PhoneSync.Fetching.Stopped -> after(fetching.then, link, fetching.words)
+                is PhoneSync.Fetching.Fetched -> {
+                    val text = try {
+                        String(fetching.plaintext, Charsets.UTF_8)
+                    } finally {
+                        fetching.plaintext.fill(0)
+                    }
+                    when (val reading = backupManager.read(text)) {
+                        BackupManager.Reading.Unreadable -> stateOf(link, PhoneWords.NOT_FETCHED)
+                        BackupManager.Reading.FromNewerApp -> stateOf(link, PhoneWords.COPY_FROM_NEWER_APP)
+                        is BackupManager.Reading.Readable -> {
+                            val (entries, pages) = here
+                            heldCopy = text
+                            val c = reading.contents
+                            stateOf(link, null).copy(
+                                stage = ServerSyncStage.CHOOSING,
+                                found = FoundCopy(c.exportedAt, c.entries, c.journalPages, entries, pages),
+                            )
+                        }
+                    }
+                }
+            }
+        } finally {
+            syncKey?.fill(0)
+            link.wipe()
+        }
+    }
+
+    /**
+     * Takes the held copy into the journal, as the person chose: [replace] empties this phone's journal
+     * and puts the copy in its place, in one transaction; otherwise the copy's rows are added beside
+     * this phone's. The held copy is dropped either way.
+     */
+    fun takeIn(replace: Boolean) {
+        if (_state.value.stage != ServerSyncStage.CHOOSING) return
+        val text = heldCopy ?: return keepThisPhone()
+        heldCopy = null
+        val before = _state.value.copy(stage = ServerSyncStage.READY, found = null)
+        _state.value = _state.value.copy(stage = ServerSyncStage.TAKING_IN, message = null)
+        viewModelScope.launch {
+            val mode = if (replace) BackupManager.ImportMode.REPLACE else BackupManager.ImportMode.MERGE
+            val words = try {
+                withContext(Dispatchers.IO) { backupManager.importFromJson(text, mode) }
+                if (replace) PhoneWords.REPLACED else PhoneWords.ADDED
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                if (replace) PhoneWords.NOT_REPLACED else PhoneWords.NOT_ALL_ADDED
+            }
+            _state.value = before.copy(message = words)
+        }
+    }
+
+    /** Drops the held copy: nothing on the phone changes, and the server's copy stays where it is. */
+    fun keepThisPhone() {
+        if (_state.value.stage != ServerSyncStage.CHOOSING) return
+        heldCopy = null
+        _state.update { it.copy(stage = ServerSyncStage.READY, found = null, message = null) }
+    }
+
+    override fun onCleared() {
+        heldCopy = null
+        super.onCleared()
     }
 
     /** Forgets the server on this phone. The server keeps the key's row until it is revoked on the web. */

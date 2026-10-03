@@ -1,7 +1,9 @@
-# The companion — dialogue, signals, and who may author them
+# Dialogue — signals, and who may author them
 
-The companion is a presence a person can open and talk to through fixed choices (decided in
-[DECISIONS.md](DECISIONS.md) §D1b). This document records its substrate, its format, and the security
+The fixed-choice dialogue was built for a helper character that the maintainer has since dropped:
+Daymark has no persona, and whatever it says, it says through the rules engine
+([DECISIONS.md](DECISIONS.md) §D1b). No page mounts the dialogue; whether it is removed or its lines
+are reused by the engine is #272. This document records its substrate, its format, and the security
 properties that must hold when both the app and a clinician may author dialogue.
 
 ## What exists

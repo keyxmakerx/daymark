@@ -13,6 +13,7 @@
  */
 import { initCrypto } from './crypto'
 import _sodium from 'libsodium-wrappers-sumo'
+import type { ChainHeadResponse } from '../admin/chainHead'
 
 export type Channel = 'grants' | 'shares' | 'assignments' | 'gameplans'
 
@@ -198,6 +199,24 @@ export class PortalClient {
     if (res.status === 404) return { events: [], nextCursor: null }
     if (!res.ok) throw new PortalError('audit log fetch failed', res.status)
     return (await res.json()) as AuditLogPage
+  }
+
+  /**
+   * The server's own chain check over [inboxToken]'s relationship (lib/admin/chainHead.ts):
+   * a count, the sequence extent and the head digest, never an entry. Never throws: a transport
+   * failure is a value, which readChainHead renders like any other answer.
+   */
+  async auditChainHead(inboxToken: string): Promise<ChainHeadResponse> {
+    try {
+      const relRef = await relRefOf(inboxToken)
+      const res = await this.req(`/v1/relations/${encodeURIComponent(relRef)}/audit-chain`, {
+        headers: { accept: 'application/json' },
+        cache: 'no-store',
+      })
+      return { kind: 'response', status: res.status, body: await res.text() }
+    } catch (e) {
+      return { kind: 'transport', error: e instanceof Error ? `${e.name}: ${e.message}` : String(e) }
+    }
   }
 
   // --- invites (owner mints; link is ALWAYS returned in-band for OOB delivery) ---

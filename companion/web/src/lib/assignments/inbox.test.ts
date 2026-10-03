@@ -170,6 +170,7 @@ describe('a clinician who re-paired with new keys', () => {
 })
 
 describe('fetching the inbox item by item (#339)', () => {
+  const noWait = async (): Promise<void> => {}
   const sender = { id: 't1', displayName: 'Dr. Example', inboxToken: 'tok' }
   const meta = (version: number, createdAt: number): RelMeta => ({ version, size: 1, contentHash: 'h', createdAt })
 
@@ -199,12 +200,12 @@ describe('fetching the inbox item by item (#339)', () => {
   })
 
   it('still fails the load on any other refusal, which says nothing about the item', async () => {
-    await expect(fetchInbox(source({ a: { createdAt: 1000, status: 500 } }), [sender])).rejects.toThrow(PortalError)
+    await expect(fetchInbox(source({ a: { createdAt: 1000, status: 500 } }), [sender], noWait)).rejects.toThrow(PortalError)
   })
 
   it('a failed listing fails the load, rather than reading as an empty inbox', async () => {
     const failing: InboxSource = { ...source({ a: { createdAt: 1000 } }), listLineages: async () => { throw new PortalError('list lineages failed', 500) } }
-    await expect(fetchInbox(failing, [sender])).rejects.toThrow(PortalError)
+    await expect(fetchInbox(failing, [sender], noWait)).rejects.toThrow(PortalError)
   })
 
   it('nothing to list, or a relationship no longer served, is an empty list (positive control)', async () => {
@@ -212,6 +213,49 @@ describe('fetching the inbox item by item (#339)', () => {
       const empty: InboxSource = { ...source({}), listLineages: async () => { throw new PortalError('list lineages failed', status) } }
       await expect(fetchInbox(empty, [sender])).resolves.toEqual({ blobs: [], gone: [] })
     }
+  })
+
+  it('a 429 is waited out and asked again, and the Refresh shows the items (#433)', async () => {
+    const waits: number[] = []
+    let asked = 0
+    const busyOnce: InboxSource = {
+      ...source({ a: { createdAt: 1000 } }),
+      listLineages: async () => {
+        asked++
+        if (asked === 1) throw new PortalError('list lineages failed', 429)
+        return ['a']
+      },
+    }
+    const { blobs } = await fetchInbox(busyOnce, [sender], async (ms) => { waits.push(ms) })
+    expect(blobs.map((b) => b.lineage)).toEqual(['a'])
+    expect(asked).toBe(2)
+    expect(waits).toEqual([300])
+  })
+
+  it('a server that is always busy is asked five times in all, then the load fails (control)', async () => {
+    let asked = 0
+    const alwaysBusy: InboxSource = {
+      ...source({ a: { createdAt: 1000 } }),
+      getBlob: async () => {
+        asked++
+        throw new PortalError('blob fetch failed', 429)
+      },
+    }
+    await expect(fetchInbox(alwaysBusy, [sender], noWait)).rejects.toThrow(PortalError)
+    expect(asked).toBe(5)
+  })
+
+  it('a refusal that is an answer is not asked again', async () => {
+    let asked = 0
+    const refused: InboxSource = {
+      ...source({}),
+      listLineages: async () => {
+        asked++
+        throw new PortalError('list lineages failed', 403)
+      },
+    }
+    await expect(fetchInbox(refused, [sender], noWait)).rejects.toThrow(PortalError)
+    expect(asked).toBe(1)
   })
 
   it('the line says who and when, and nothing about what or why', () => {

@@ -35,7 +35,7 @@ lookup, no "enriching" a source address. That is a product constraint, not a def
 | Structured or JSON log | **No.** Plain text | `logback.xml` |
 | Request ids | **No.** Nothing creates or passes one | — |
 | Security-event log and alerts | **No.** `SecurityLog`, `SecurityEvent` and `AlertRules` in `observability/` have no callers (#190) | — |
-| Administrator identity | **No.** No setting or route authenticates an administrator, and the admin page loads without a credential. By decision, an administrator signs in with an account of their own (#208); not built: #322 | `Config.kt` |
+| Administrator identity | **Yes.** A new server is claimed with a one-time setup code from its log, and an administrator signs in with a name and a six-digit code into a session of their own (#322). Their routes return membership, health and counts only | `routes/AdminRoutes.kt` |
 
 The admin console reaches the same conclusion independently: `lib/admin/health.ts` shows each missing
 counter as "this build exposes no counter for X" rather than substituting something nearby.
@@ -263,11 +263,11 @@ Connect, read and write timeouts are 10, 15 and 15 seconds and cannot be configu
 
 ### 3.2 TLS is mandatory, and `none` is refused at start
 
-`MailerConfig.parseTls` throws on `none`, `plain` or `plaintext` when SMTP is on, and on any value it
-does not recognise. That happens inside `Config.fromEnv`, the first thing `main` does — so the process
-dies before it binds a port or logs a line. You will see a Java stack trace and a container that never
-becomes healthy. A missing `DAYMARK_SMTP_FROM` or an out-of-range port also stops the start
-(`MailerConfig.validate`).
+`DAYMARK_SMTP_TLS` set to `none`, `plain` or `plaintext` with SMTP on, or to any value the server does
+not recognise, is refused inside `Config.fromEnv`, the first thing `main` does: the process logs one
+line beginning `Refusing to start:`, naming the setting and never its value, and exits with status 78
+before it binds a port. A missing `DAYMARK_SMTP_FROM` or an out-of-range port is refused the same way
+(#380; COMPANION_DEPLOYMENT.md §5.3).
 
 The transport refuses to downgrade (`SmtpMailTransport`): STARTTLS mode requires the upgrade rather
 than falling back to the clear; implicit mode is TLS from the first byte; the server's identity is
@@ -345,13 +345,13 @@ stored entry cannot be altered or reordered without breaking every later hash.
 > that quietly never appends an event leaves a chain that checks out; so does one that cuts off the
 > newest entries. **Tampering with a stored entry is detectable. Never having stored one is not.**
 
-The admin console is built around that caveat. It shows `CHAIN_CAVEAT` under every verdict, including
-the clean one, and says "internally consistent" rather than "verified", "valid" or "intact"
-(`lib/admin/health.ts`). It has two ways to look: a panel that asks the server's own check
-(`GET /v1/relations/{relRef}/audit-chain`, owner bearer token; `lib/admin/chainHead.ts`), and an
-examiner that recomputes a run pasted in from the database, which does not take the server's word for
-it. What outlives a lying server is the **head hash, written down** somewhere the server cannot reach;
-the console groups it for copying by hand.
+The consoles are built around that caveat. Each shows its caveat under every verdict, including the
+clean one, and says "internally consistent" rather than "verified", "valid" or "intact". There are two
+ways to look: the owner console's access log asks the server's own check
+(`GET /v1/relations/{relRef}/audit-chain`, owner bearer token; `lib/admin/chainHead.ts`), and the
+admin console's examiner recomputes a run pasted in from the database, which does not take the
+server's word for it (`lib/admin/health.ts`). What outlives a lying server is the **head hash,
+written down** somewhere the server cannot reach; the owner console groups it for copying by hand.
 
 Limits worth an operator's attention:
 
@@ -421,10 +421,9 @@ docker system df -v | grep daymark-companion_blobs
   ([COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md) §6). A backup never restored is a hypothesis.
 - **Image freshness:** every `FROM` is digest-pinned, so nothing updates by itself. Look at the open
   Dependabot pull requests, and rebuild or pull (COMPANION_DEPLOYMENT.md §7).
-- **The audit chain,** if clinicians are active: in the admin console, check a relationship's chain,
-  write down its head, and read the verdict together with its caveat (§4). By decision the check
-  belongs in the owner's own console, and the admin console never asks for the owner's token (#208).
-  Not built: #322.
+- **The audit chain,** if clinicians are active: in the owner console's access log, check the
+  relationship's chain, write down its head, and read the verdict together with its caveat (§4). The
+  admin console never asks for the owner's token (#322).
 
 ### 6.3 What each log pattern means
 

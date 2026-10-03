@@ -16,6 +16,7 @@ import { validateAssignment, shouldAutoApply, type AssignmentCheck } from './val
 import { describeAssignment } from './describe'
 import type { Grant } from './types'
 import { PortalError, type RelMeta } from '../sync/portal'
+import { paced, pause, type Wait } from '../sync/paced'
 import type { SignedEnvelope } from '../lane/record'
 
 export type Verdict = 'VERIFIED' | 'REJECTED' | 'UNTRUSTED_KEY' | 'OPEN_FAILED'
@@ -186,6 +187,8 @@ export interface GoneItem {
 export async function fetchInbox(
   source: InboxSource,
   senders: readonly InboxSender[],
+  /** A 429 or a 5xx is asked again, paced, as the lanes are (#433). Tests pass one that does not wait. */
+  wait: Wait = pause,
 ): Promise<{ blobs: RawAssignmentBlob[]; gone: GoneItem[] }> {
   const blobs: RawAssignmentBlob[] = []
   const gone: GoneItem[] = []
@@ -193,17 +196,17 @@ export async function fetchInbox(
     // Nothing to list (404) or a relationship the server no longer serves (410) is an empty list.
     // Any other failure fails the load: drawn as "No assignments to review", it would be a claim
     // about the clinician that the console does not know to be true.
-    const lineages = await source.listLineages(t.inboxToken, 'assignments').catch((e: unknown) => {
+    const lineages = await paced(() => source.listLineages(t.inboxToken, 'assignments'), wait).catch((e: unknown) => {
       if (e instanceof PortalError && (e.status === 404 || e.status === 410)) return [] as string[]
       throw e
     })
     for (const lineage of lineages) {
-      const versions = await source.listVersions(t.inboxToken, 'assignments', lineage)
+      const versions = await paced(() => source.listVersions(t.inboxToken, 'assignments', lineage), wait)
       // Only the head of each lineage is surfaced (append-only supersede).
       const head = versions.reduce((a, b) => (b.version > a.version ? b : a), versions[0])
       if (!head) continue
       try {
-        const bytes = await source.getBlob(t.inboxToken, 'assignments', lineage, head.version)
+        const bytes = await paced(() => source.getBlob(t.inboxToken, 'assignments', lineage, head.version), wait)
         blobs.push({ therapistId: t.id, lineage, version: head.version, bytes })
       } catch (e) {
         if (!(e instanceof PortalError && e.status === 410)) throw e

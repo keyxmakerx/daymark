@@ -31,6 +31,11 @@ class TrackerDetailViewModel @Inject constructor(
         viewModelScope.launch { repository.log(id, value, System.currentTimeMillis()) }
     }
 
+    /** Saves a change to this tracker's check-ins or quick-log notification, which re-arms them. */
+    fun update(tracker: Tracker) {
+        viewModelScope.launch { repository.update(tracker) }
+    }
+
     fun deleteLog(log: TrackerLog) {
         viewModelScope.launch { repository.deleteLog(log) }
     }

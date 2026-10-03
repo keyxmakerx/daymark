@@ -2,6 +2,7 @@ package com.daymark.synccrypto
 
 import com.goterl.lazysodium.LazySodium
 import com.goterl.lazysodium.interfaces.AEAD
+import com.goterl.lazysodium.interfaces.Box
 import com.goterl.lazysodium.interfaces.KeyDerivation
 import com.goterl.lazysodium.interfaces.PwHash
 import com.goterl.lazysodium.interfaces.Sign
@@ -21,8 +22,8 @@ import java.util.Base64
  *                       KEK --XChaCha20-Poly1305 open(the slot, AAD "daymark.datakey.v1|" + kind)--> master(32)
  *   master --crypto_kdf(ctx="dmsync01")--+- id 1 -> SYNC_KEY        (XChaCha20-Poly1305)
  *                                         +- id 2 -> MANIFEST_SEED   (Ed25519 signing seed)
- *                                         (ids 3 and 4 are the owner's pairing identity, which the web
- *                                          derives in owner/identity.ts and this module does not)
+ *                                         +- id 3 -> owner X25519 seed  ([ownerIdentityFromMaster])
+ *                                         +- id 4 -> owner Ed25519 seed ([ownerIdentityFromMaster])
  *   snapshot blob = MAGIC("DMS1") | FMT | nonce(24) | XChaCha20Poly1305(body, AAD, nonce, SYNC_KEY)
  *     FMT 0x02, the only format written:  body = pad(plaintext)   AAD = utf8("daymark.snapshot.v2|" + lineage + "|" + version)
  *     FMT 0x01, still read, never written: body = plaintext        AAD = utf8("daymark.snapshot.v1|" + lineage + "|" + version)
@@ -89,7 +90,12 @@ class SyncCrypto(private val sodium: LazySodium) {
         }
     }
 
-    class OwnerKeys(val syncKey: ByteArray, val manifestSeed: ByteArray)
+    /**
+     * What the master opens to. [ownerPublic] is the public halves of the owner's pairing identity
+     * (subkeys 3 and 4): not secret, and all a pairing approval needs, so the private halves are
+     * wiped as soon as the public ones exist.
+     */
+    class OwnerKeys(val syncKey: ByteArray, val manifestSeed: ByteArray, val ownerPublic: PairingPayloads.OwnerKeys)
 
     data class ManifestEntry(val version: Long, val hash: String)
     data class Manifest(val lineage: String, val head: Long, val entries: List<ManifestEntry>)
@@ -271,12 +277,61 @@ class SyncCrypto(private val sodium: LazySodium) {
     /** master -> the subkeys this module uses (ids 1 and 2), and the master wiped either way. */
     private fun ownerKeysThenWipe(master: ByteArray): OwnerKeys {
         try {
+            val identity = ownerIdentityFromMaster(master)
+            val ownerPublic = PairingPayloads.ownerKeysOf(identity)
+            identity.wipe()
             return OwnerKeys(
                 syncKey = deriveSubkey(master, SUBKEY_SYNC, AEAD.XCHACHA20POLY1305_IETF_KEYBYTES),
                 manifestSeed = deriveSubkey(master, SUBKEY_MANIFEST, Sign.SEEDBYTES),
+                ownerPublic = ownerPublic,
             )
         } finally {
             master.fill(0)
+        }
+    }
+
+    /**
+     * The owner's pairing identity, both halves, held only while a pairing needs it.
+     * [wipe] zeroes the private halves; the public halves are not secret.
+     */
+    class OwnerIdentity(
+        val boxPublicKey: ByteArray,
+        val boxSecretKey: ByteArray,
+        val signPublicKey: ByteArray,
+        val signSecretKey: ByteArray,
+    ) {
+        fun wipe() {
+            boxSecretKey.fill(0)
+            signSecretKey.fill(0)
+        }
+    }
+
+    /**
+     * master -> the owner's pairing identity: subkey 3 seeds the X25519 pair and subkey 4 the
+     * Ed25519 pair (docs/COMPANION_PAIRING.md §14). Derived, never generated, so the phone and
+     * the browser are the same owner and the phone stores no identity of its own. Must equal
+     * `ownerIdentityFromMaster` in `companion/web/src/lib/owner/identity.ts` byte for byte;
+     * OwnerPairingVectorTest pins the vector that file pins.
+     *
+     * Refuses anything but 32 bytes rather than fitting it: a wrong-length master is a wrong
+     * master, and an identity from it would verify against nothing. The master is left as it
+     * was; the seeds are wiped before this returns.
+     */
+    internal fun ownerIdentityFromMaster(master: ByteArray): OwnerIdentity {
+        if (master.size != KeyDerivation.MASTER_KEY_BYTES) throw SyncCryptoException("master key must be exactly 32 bytes")
+        val boxSeed = deriveSubkey(master, SUBKEY_OWNER_BOX, Box.SEEDBYTES)
+        val signSeed = deriveSubkey(master, SUBKEY_OWNER_SIGN, Sign.SEEDBYTES)
+        try {
+            val boxPublic = ByteArray(Box.PUBLICKEYBYTES)
+            val boxSecret = ByteArray(Box.SECRETKEYBYTES)
+            if (!sodium.cryptoBoxSeedKeypair(boxPublic, boxSecret, boxSeed)) {
+                throw SyncCryptoException("X25519 keypair derivation failed")
+            }
+            val (signPublic, signSecret) = deriveSignKeypair(signSeed)
+            return OwnerIdentity(boxPublic, boxSecret, signPublic, signSecret)
+        } finally {
+            boxSeed.fill(0)
+            signSeed.fill(0)
         }
     }
 
@@ -418,6 +473,10 @@ class SyncCrypto(private val sodium: LazySodium) {
         private val KDF_CONTEXT = "dmsync01".toByteArray(Charsets.UTF_8) // exactly 8 bytes
         private const val SUBKEY_SYNC = 1L
         private const val SUBKEY_MANIFEST = 2L
+
+        /** Reserved for the owner's pairing identity on both platforms (owner/identity.ts). */
+        internal const val SUBKEY_OWNER_BOX = 3L
+        internal const val SUBKEY_OWNER_SIGN = 4L
 
         private const val BELOW_FLOOR = "KDF parameters are below the security floor; refusing to derive"
         private const val ABOVE_CEILING = "KDF parameters are above the ceiling; refusing to derive"

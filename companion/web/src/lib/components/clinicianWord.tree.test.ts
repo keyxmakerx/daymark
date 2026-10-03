@@ -294,7 +294,7 @@ const NOW: Record<string, string[]> = {
     "There's the writing exercise your clinician set up, about what matters to you.",
   ],
   'src/lib/admin/chainHead.ts': [
-    'exactly as reading the clinician’s published keys is',
+    'This asks the server to recompute this clinician’s access log',
     'The server answered that the clinician console is not configured on this deployment, so there are no relationships here and no chain to check.',
   ],
   'src/lib/admin/health.ts': [

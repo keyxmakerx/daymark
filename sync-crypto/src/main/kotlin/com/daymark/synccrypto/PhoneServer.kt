@@ -48,6 +48,11 @@ internal class SignedRequests(private val server: PairedServer, private val tran
     fun put(target: String, body: ByteArray): TransportAnswer =
         send("PUT", target, body, mapOf("Content-Type" to "application/octet-stream"))
 
+    /** A JSON body, or none at all when [json] is null. */
+    fun post(target: String, json: ByteArray?): TransportAnswer =
+        if (json == null) send("POST", target, ByteArray(0), emptyMap())
+        else send("POST", target, json, mapOf("Content-Type" to "application/json"))
+
     private fun send(method: String, target: String, body: ByteArray, plain: Map<String, String>): TransportAnswer {
         val headers = LinkedHashMap<String, String>(plain)
         headers.putAll(server.key.signRequest(method, target, body, clock.nowMillis() / 1000))

@@ -7,7 +7,7 @@ both devices turn that code into the same key through a password-authenticated k
 everything and learns neither the code nor the key.
 
 As built, both halves run in the browser: the owner's in the owner console, the clinician's on the
-acceptance page. The phone's half is specified in §14 and not built: #174. Pairing grants access
+acceptance page. The phone's half (§14) has its protocol built and its screens not: #174. Pairing grants access
 to nothing (§10).
 
 Code: `companion/web/src/lib/pairing/`, `companion/web/src/lib/therapist/pairingAccept.ts`,
@@ -389,19 +389,23 @@ The clinician polls status every 45 seconds (`PAIRING_STATUS_POLL_MS` on the web
 
 ## 14. The phone's half
 
-Not built: #174. The protocol does not change; only the device running the owner's half does. Until
-the phone can talk to the server at all (#168), no Companion screen may claim the phone will show or
-approve anything.
+The protocol does not change; only the device running the owner's half does. The phone's run is
+built in `sync-crypto` (`ClinicianPairing.kt`: open, collect, approve, cancel, each request signed by
+the phone's key), with its bytes pinned to the web's. So are its invitations (`ClinicianInvites.kt`:
+the inbox token, the relationship reference, mint, list, and the owner's report) and the ceremony that
+orders them (`ClinicianCeremony.kt`, the mirror of `pairing/ownerCeremony.ts`, with the same rules
+pinned in `ClinicianCeremonyTest.kt`). The screens that drive it, and where the phone keeps a run and
+its relationships, are not built: #174. Until they are, no Companion screen may claim the phone will
+show or approve anything.
 
 - **Identity is derived, not generated.** `crypto_kdf_derive_from_key` over the owner's master with
   context `"dmsync01"`: subkey id 3 is the X25519 seed, id 4 the Ed25519 seed, 32 bytes each, then
   `crypto_box_seed_keypair` and `crypto_sign_seed_keypair`. Ids 1 and 2 belong to sync
   (SYNC_PROTOCOL.md §1). The reference is `companion/web/src/lib/owner/identity.ts`; `identity.test.ts`
-  pins the master bytes 0x00…0x1F to fixed public keys so the phone can be tested against the same
-  vector. Deriving is what makes the phone and the browser the same owner.
-- **Same bytes.** The phone builds the §13 channel identifier (`CpaceCrypto.kt` has `lvCat` and no
-  builder yet; the builder and a test against the same structure `relay.test.ts` checks come first),
-  opens E1, and seals E2 at approval and not before, so "the owner said yes" and "the clinician learned
+  pins the master bytes 0x00…0x1F to fixed public keys, and the phone's `SyncCrypto.ownerIdentityFromMaster`
+  reproduces them (`OwnerPairingVectorTest.kt`). Deriving is what makes the phone and the browser the same owner.
+- **Same bytes.** The phone builds the §13 channel identifier (`CpaceCrypto.channelIdentifier`,
+  pinned to the bytes `relay.test.ts` pins), opens E1, and seals E2 at approval and not before, so "the owner said yes" and "the clinician learned
   the owner's keys" stay one event.
 - **When a reply does not open (issue #112).** The phone may raise **one local notification per
   invitation**, reading *"A reply to your invitation needs a look."* It is visible on the lock screen,

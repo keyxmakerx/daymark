@@ -1,8 +1,8 @@
 /*
  * The admin console's structure, asserted over its source.
  *
- * Every sentence on the console comes from lib/admin/health.ts and lib/admin/chainHead.ts, and
- * those modules carry the tests for the words. What is left to check is composition — the
+ * Every sentence on the console comes from lib/admin/health.ts, and
+ * that module carries the tests for the words. What is left to check is composition — the
  * index lands on the sections it names, the standing facts are folded and not removed, the
  * masthead is the shared one, and the fact panels are drawn the way the design notes define a
  * callout. There is no component-rendering harness in this project (vite.config.ts sets
@@ -85,13 +85,12 @@ describe('the masthead is the shared one', () => {
 })
 
 describe('the in-page index lands on the sections it names', () => {
-  it('lists the six sections, in page order', () => {
+  it('lists the five sections, in page order', () => {
     expect(SECTION_IDS).toEqual([
       'standing-facts',
       'operational-health',
       'authentication-pressure',
       'audit-chain-integrity',
-      'server-chain-check',
       'scope',
     ])
   })
@@ -262,5 +261,21 @@ describe('the "Read it at" line clears AA on both fact panels in the dark palett
       expect(contrast(inDark(heading), inDark(fill))).toBeGreaterThanOrEqual(4.5)
       expect(contrast(inDark(body), inDark(fill))).toBeGreaterThanOrEqual(4.5)
     }
+  })
+})
+
+describe('the console never asks for the owner token (#322)', () => {
+  /* What asking would take: a secret field, or a bearer header built in this file. */
+  const asksForAToken = (src: string) =>
+    /type="password"/.test(markupOf(src)) || /Bearer\b|Authorization/.test(src) || /chainHead/.test(src)
+
+  it('has no secret field, builds no bearer header and imports no owner-token read', () => {
+    expect(asksForAToken(SOURCE)).toBe(false)
+  })
+
+  it('control: the same check sees each of the three when planted', () => {
+    expect(asksForAToken(SOURCE + '\n<input type="password" />')).toBe(true)
+    expect(asksForAToken(SOURCE.replace('<script lang="ts">', '<script lang="ts">\nconst h = `Bearer ${t}`'))).toBe(true)
+    expect(asksForAToken(SOURCE.replace('<script lang="ts">', "<script lang=\"ts\">\nimport { fetchChainHead } from '../../admin/chainHead'"))).toBe(true)
   })
 })

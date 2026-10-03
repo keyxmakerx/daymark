@@ -1,14 +1,19 @@
 package com.daymark.companion
 
+import com.daymark.companion.admin.AdminStore
+import com.daymark.companion.admin.SetupCode
 import com.daymark.companion.auth.AuthGuard
 import com.daymark.companion.auth.AuthStore
 import com.daymark.companion.auth.OwnerAuth
 import com.daymark.companion.auth.PairingStore
+import com.daymark.companion.auth.TokenBucketLimiter
 import com.daymark.companion.mail.Mailer
 import com.daymark.companion.mail.OwnerAccountStore
 import com.daymark.companion.mail.OwnerNotifier
 import com.daymark.companion.org.OrgStore
 import com.daymark.companion.routes.DEVICE_REVOKED_BY_REISSUE
+import com.daymark.companion.routes.SERVER_AUDIT_REF
+import com.daymark.companion.routes.adminRoutes
 import com.daymark.companion.routes.ErrorDto
 import com.daymark.companion.routes.PHONE_REFUSED_ROUTES
 import com.daymark.companion.routes.auditChainRoutes
@@ -26,6 +31,7 @@ import com.daymark.companion.routes.therapistAuthRoutes
 import com.daymark.companion.routes.ownerKeyRoutes
 import com.daymark.companion.routes.therapistKeyRoutes
 import com.daymark.companion.storage.AuditAction
+import com.daymark.companion.storage.AuditActor
 import com.daymark.companion.storage.AuditStore
 import com.daymark.companion.storage.BlobStore
 import com.daymark.companion.storage.KeyDocumentStore
@@ -80,6 +86,9 @@ internal const val EXIT_CONFIG = 78
 
 /** The owner's own audit chain (#189), beside the relationship log and the practice log. */
 internal const val OWNER_AUDIT_DB = "owner-audit.db"
+
+/** The server's own chain: its claim, a reissued setup code, and its administrators' sign-ins (#322). */
+internal const val ADMIN_AUDIT_DB = "admin-audit.db"
 
 fun main() {
     val config = try {
@@ -181,6 +190,9 @@ fun Application.module(
     ownerAuditStore: AuditStore? = null,
     /** The routes a paired phone may not use: [PHONE_REFUSED_ROUTES]. Injectable so a test can plant one. */
     phoneRefusedRoutes: Set<String> = PHONE_REFUSED_ROUTES,
+    adminStore: AdminStore? = null,
+    adminAuditStore: AuditStore? = null,
+    setupCode: SetupCode? = null,
 ) {
     // Publish the trusted-proxy allowlist before any route runs: every per-client lockout and rate
     // limit reads it via ApplicationCall.clientAddress(). Empty (the default) means forwarded
@@ -307,7 +319,47 @@ fun Application.module(
     // then on its interval. Only the relationship store is swept; the sync API's snapshots are the
     // owner's own backups and have no end (#338). Ending a relationship deletes nothing by itself —
     // its items follow the same clock as everyone's.
+    // The server's administrators, in every shape (#322). A server without one prints a setup code.
+    // When the data directory cannot hold their database (mounted read-only, say), the server still
+    // starts, so /healthz answers and /readyz says what is wrong; the server console is then off
+    // altogether, with no claim and no sign-in, rather than open on nothing.
+    val adminStores = try {
+        Pair(
+            adminStore ?: AdminStore(config.dataDir),
+            adminAuditStore ?: AuditStore(config.dataDir, config.auditRetentionDays * 86_400L, dbName = ADMIN_AUDIT_DB),
+        )
+    } catch (e: java.sql.SQLException) {
+        log.error(
+            "The administrators' database could not be opened in {}, so the server console is off until the " +
+                "data directory is writable and the server is started again. /readyz reports the same directory.",
+            config.dataDir,
+        )
+        null
+    }
+    val admins = adminStores?.first
+    val adminAudit = adminStores?.second
+    val claimCode = setupCode ?: SetupCode()
+    val wantsCode = { admins != null && (admins.adminCount() == 0 || config.adminReset) }
+    if (admins != null && adminAudit != null && wantsCode()) {
+        if (admins.adminCount() > 0) {
+            log.warn(
+                "DAYMARK_ADMIN_RESET is on, so this start prints a setup code although the server has an " +
+                    "administrator. Remove the setting once you have signed in.",
+            )
+            try {
+                adminAudit.append(SERVER_AUDIT_REF, AuditActor.PLATFORM, AuditAction.SETUP_CODE_REISSUED)
+            } catch (e: Exception) {
+                log.warn("admin audit append failed", e)
+            }
+        }
+        printSetupCode(claimCode.mint())
+    }
+
     val chores = housekeeping ?: Housekeeping()
+    // A code that expired unused is replaced, and the replacement printed, for as long as one is wanted.
+    chores.every("setup code", SETUP_CODE_CHECK_INTERVAL_MS) {
+        if (wantsCode()) claimCode.rotateIfExpired()?.let(::printSetupCode)
+    }
     if (relStore != null) {
         chores.every("relationship sweep", RELATION_SWEEP_INTERVAL_MS) { sweepRelationships(relStore) }
     }
@@ -351,6 +403,24 @@ fun Application.module(
         get("/v1/config") {
             call.respond(ServerConfigDto(smtpEnabled = config.smtpEnabled, setupMode = config.setupMode?.wire))
         }
+
+        // The server administrator's claim, sign-in and console reads (#322), beside the probes at
+        // the server root so the console reaches them from wherever it is served, in every shape.
+        if (admins != null && adminAudit != null) adminRoutes(
+            adminStore = admins,
+            setupCode = claimCode,
+            shape = shape,
+            adminAudit = adminAudit,
+            claimBudget = TokenBucketLimiter(burst = ADMIN_ATTEMPT_BURST, refillIntervalMs = ADMIN_ATTEMPT_REFILL_MS),
+            signInBudget = TokenBucketLimiter(burst = ADMIN_ATTEMPT_BURST, refillIntervalMs = ADMIN_ATTEMPT_REFILL_MS),
+            allowClaimWhenClaimed = config.adminReset,
+            sessionIdleSeconds = config.sessionIdleSeconds,
+            sessionAbsoluteSeconds = config.sessionAbsoluteSeconds,
+            lockoutFails = config.totpLockoutFails,
+            lockoutSeconds = config.totpLockoutSeconds,
+            cookieSecure = config.cookieSecure,
+            auditSourceIp = config.auditSourceIpEnabled,
+        )
 
         if (store != null && keyDocuments != null && ownerAuth != null && ownerAudit != null) {
             syncRoutes(store, keyDocuments, ownerAuth, config.maxRequestBytes)
@@ -565,6 +635,28 @@ fun Application.module(
  * The one line a start logs about its shape (#330), at info. It names the shape and the settings that
  * decided it, never a value the operator typed, and it is logged once per start, never per request.
  */
+/** How often an unclaimed server checks whether its setup code has expired and needs replacing. */
+internal const val SETUP_CODE_CHECK_INTERVAL_MS = 60_000L
+
+/** Claim and sign-in attempts one address may make at once, and how often one more comes back. */
+private const val ADMIN_ATTEMPT_BURST = 10
+private const val ADMIN_ATTEMPT_REFILL_MS = 6_000L
+
+/**
+ * The one secret this server ever writes to its log, on purpose (#322). At WARN, so it shows at the
+ * default level and at warn alike. The line carries the code and when it stops working, and nothing
+ * else: no address, no path, no other credential (#160).
+ */
+internal fun printSetupCode(minted: SetupCode.Minted) {
+    val until = java.time.Instant.ofEpochMilli(minted.expiresAt).atZone(java.time.ZoneOffset.UTC)
+        .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+    log.warn(
+        "Setup code for this server: {} . It works once, until {} UTC. Enter it on the server console " +
+            "(admin.html) to make an administrator. A new one is printed when it expires and at each start.",
+        minted.code, until,
+    )
+}
+
 internal fun shapeLogLine(config: Config): String {
     val shape = config.shape
     return if (config.setupMode != null) {

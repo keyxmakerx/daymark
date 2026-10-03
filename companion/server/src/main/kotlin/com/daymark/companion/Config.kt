@@ -1,6 +1,7 @@
 package com.daymark.companion
 
 import com.daymark.companion.mail.MailerConfig
+import com.daymark.companion.mail.MailerConfigException
 import java.io.File
 import java.net.URI
 
@@ -119,6 +120,13 @@ data class Config(
      * answered its question (`companion/web/src/lib/setup/shape.ts`).
      */
     val setupMode: SetupMode? = null,
+    /**
+     * `DAYMARK_ADMIN_RESET`: on for `1` or `true`. For when every administrator is lost (#322): a
+     * server that has administrators then still prints a setup code at each start, writes one audit
+     * row saying so, and lets that code make one more administrator. The operator already holds the
+     * host, which is what the code proves; they remove the setting once they are back in.
+     */
+    val adminReset: Boolean = false,
 ) {
     /** True when the sync API has a configured access token and may serve /v1. */
     val syncEnabled: Boolean get() = !authToken.isNullOrBlank()
@@ -207,9 +215,10 @@ data class Config(
                 authLockoutFails = env["DAYMARK_AUTH_LOCKOUT_FAILS"]?.trim()?.toIntOrNull() ?: 8,
                 authLockoutSeconds = env["DAYMARK_AUTH_LOCKOUT_SECONDS"]?.trim()?.toLongOrNull() ?: 900L,
                 rateLimitRps = env["DAYMARK_RATE_LIMIT_RPS"]?.trim()?.toIntOrNull() ?: 5,
-                mailer = MailerConfig.fromEnv(env),
+                mailer = readMailer(env),
                 therapistAuthEnabled = therapistAuthOn,
                 setupMode = setupMode,
+                adminReset = env["DAYMARK_ADMIN_RESET"]?.trim().let { it == "1" || it.equals("true", true) },
                 webauthnRpId = env["DAYMARK_WEBAUTHN_RP_ID"]?.trim()?.ifBlank { null },
                 webauthnOrigins = webauthnOrigins,
                 publicBaseUrl = explicitBaseUrl ?: webauthnOrigins.firstOrNull(),
@@ -354,6 +363,46 @@ data class Config(
                 "//" !in uri.rawPath.orEmpty()
         }
 
+        /**
+         * The email settings, or a [StartupRefusal] naming the one to change (#380). Each refusal
+         * is the same check [MailerConfig.validate] makes, moved to where `main` reads the
+         * environment so it ends the start with one line and status 78, not a stack trace on every
+         * restart. Like every refusal, none repeats a value: a host, an address or a port number
+         * can each identify the deployment.
+         */
+        private fun readMailer(env: Map<String, String>): MailerConfig {
+            val mailer = try {
+                MailerConfig.fromEnv(env)
+            } catch (_: MailerConfigException) {
+                // The one MailerConfig.fromEnv throws is about DAYMARK_SMTP_TLS; which of its two
+                // cases is read here from the fixed words, never echoed back.
+                val tls = env["DAYMARK_SMTP_TLS"]?.trim()?.lowercase()
+                throw StartupRefusal(
+                    if (tls in setOf("none", "plain", "plaintext")) {
+                        "Refusing to start: DAYMARK_SMTP_TLS asks for email without encryption, which this server " +
+                            "never sends. Set it to starttls or implicit."
+                    } else {
+                        "Refusing to start: DAYMARK_SMTP_TLS is not starttls or implicit. Set it to one of those, " +
+                            "or remove it for starttls."
+                    },
+                )
+            }
+            if (!mailer.enabled) return mailer
+            if (mailer.from.isNullOrBlank()) {
+                throw StartupRefusal(
+                    "Refusing to start: DAYMARK_SMTP_HOST is set, which switches email on, and DAYMARK_SMTP_FROM " +
+                        "is not. Set DAYMARK_SMTP_FROM to the address mail is sent from, or remove DAYMARK_SMTP_HOST.",
+                )
+            }
+            if (mailer.port !in 1..65535) {
+                throw StartupRefusal(
+                    "Refusing to start: DAYMARK_SMTP_PORT is not a port from 1 to 65535. Set it to your mail " +
+                        "server's port, usually 587, or remove it for 587.",
+                )
+            }
+            return mailer
+        }
+
         /** Returns "/" or "/prefix" (leading slash, no trailing slash). */
         internal fun normalizeBasePath(raw: String): String {
             if (raw == "/" || raw.isBlank()) return "/"
@@ -375,18 +424,22 @@ data class Config(
                 // of the first statement of main(), before a single log line, which reads like a
                 // crash rather than a permissions problem.
                 if (f.isFile && !f.canRead()) {
-                    val user = System.getProperty("user.name") ?: "unknown"
-                    error(
-                        "${name}_FILE is set to '$path' and that file exists, but this process " +
-                            "(running as '$user') cannot read it. Docker secrets keep the HOST " +
-                            "file's owner and mode — Compose ignores the secrets uid/gid/mode keys " +
-                            "outside Swarm — so make it readable by the container user on the host: " +
-                            "chown 65532:65532 <file> && chmod 400 <file>.",
+                    // A refusal, not a crash (#380), and it names the setting, never the path: a
+                    // path can identify the deployment. Docker secrets keep the host file's owner
+                    // and mode, because Compose ignores the secrets uid/gid/mode keys outside
+                    // Swarm, so root:root 0600 is the common case while the process runs as 65532.
+                    throw StartupRefusal(
+                        "Refusing to start: ${name}_FILE names a file this server cannot read. Docker secrets keep " +
+                            "the host file's owner and mode, so on the host make that file readable by the " +
+                            "container user (chown 65532:65532, then chmod 400).",
                     )
                 }
                 if (f.isFile) {
-                    return runCatching { f.readText().trim() }.getOrElse { cause ->
-                        error("${name}_FILE is set to '$path' but reading it failed: ${cause.message}")
+                    return runCatching { f.readText().trim() }.getOrElse {
+                        throw StartupRefusal(
+                            "Refusing to start: ${name}_FILE names a file that could not be read. Check that it is " +
+                                "a plain, readable file.",
+                        )
                     }
                 }
             }

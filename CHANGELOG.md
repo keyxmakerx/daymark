@@ -37,6 +37,24 @@ All notable changes to this project are documented here. The format is based on
   still contains unlock times restores normally; the badges in it are just not brought back.
 
 ### Added
+- **Check-ins run through one set of rules, and ease off when you go quiet.** Daily check-ins,
+  reminders and tracker prompts are all decided by the same fixed rules, using only lines a person
+  wrote. A reminder offers *Log now*, *Try later* and *Stop asking* (#195). After every two
+  unanswered in a row the wait doubles, at the times you set and never outside them; one answer, or
+  *Put it back*, restores your schedule. Nothing switches itself off: only *Stop asking* does. A
+  check-in can be set to *Keep reminding me at these times*, which never eases.
+- **Trackers have a rhythm.** *When it happens* (the default, no notifications), *Once a day* or
+  *A few times a day* at varied times inside hours you set. Quick log from a silent notification or
+  a Trackers home-screen widget. The lock screen shows only "Daymark", answering needs the phone
+  unlocked, and the widget hides tracker names while app lock is on. Setting up the app now asks
+  you to confirm your crisis line.
+- **Companion — a phone can get the newest copy back from its server (#168).** Settings shows what
+  the copy holds next to what the phone holds, then asks: replace this phone's journal, add the
+  copy's entries beside it, or keep the phone as it is.
+- **Companion — claiming a new server (#322).** A new server prints a one-time setup code to its
+  own log; entering it on the server console makes that person its administrator, once. The
+  administrator signs in with a name and an authenticator app, and the server console never asks
+  for the owner's token. The audit chain check moved to the owner console's access log.
 - **Companion — the server can pair a phone, and a paired phone signs what it sends instead of
   carrying your access token.** This is the server's half; the owner console's pairing screen and the
   phone's side come next (#431, #432). The console asks the server for a code that lasts two
@@ -469,6 +487,10 @@ All notable changes to this project are documented here. The format is based on
   quiet notice that names nobody and counts nothing.
 
 ### Fixed
+- **Companion — first install** (#380, #381, #393, #443). A bad email setting or unreadable
+  secret file stops the server with one line naming the setting; the example environment shows
+  only settings that reach the server; the Caddy LAN example starts and refuses unknown hosts, and
+  the nginx example keeps no access log.
 - **Companion — the sync card and `pnpm push` keep working if your server's key gains a new kind of
   lock.** They refused the whole key when it held a lock of a kind they did not know, such as a future
   passkey lock, while the owner console and the phone skipped it. They now skip it too, and still

@@ -4,6 +4,7 @@ import com.daymark.app.data.dao.OfferRecordDao
 import com.daymark.app.data.entity.OfferKind
 import com.daymark.app.data.entity.OfferOutcome
 import com.daymark.app.data.entity.OfferRecord
+import com.daymark.app.stats.CheckInEngine
 import com.daymark.app.stats.InterruptionBudget
 import com.daymark.app.stats.SupportOfferFrequency
 import com.daymark.app.stats.TimingGrid
@@ -59,7 +60,7 @@ import javax.inject.Singleton
  * already states the rule for exactly this kind of store: *log the minimum — a rich behavioural
  * store is its own target and its own privacy liability — and keep it a short time.* This is that
  * store, so it takes that rule: [sweepRetention] deletes every line older than [RETENTION_DAYS]
- * days. The window is a constant, not a setting, so there is no configuration in which the ledger
+ * days, except each kind's newest [CHECK_IN_WINDOW], which the rules engine still reads. The window is a constant, not a setting, so there is no configuration in which the ledger
  * quietly becomes a long-term record.
  *
  * **Why sixty days and not seven.** Deleting rows is the one operation in this file that can make
@@ -120,6 +121,7 @@ class OfferLedgerRepository @Inject constructor(
         offeredAtMillis: Long,
         responded: Boolean? = null,
         zone: ZoneId = ZoneId.systemDefault(),
+        subject: Long = OfferRecord.NO_SUBJECT,
     ): Long =
         dao.insert(
             OfferRecord(
@@ -129,6 +131,7 @@ class OfferLedgerRepository @Inject constructor(
                 offeredHour = hourIn(offeredAtMillis, zone),
                 offeredWeekday = weekdayIn(offeredAtMillis, zone),
                 responded = responded,
+                subject = subject,
             ),
         )
 
@@ -207,6 +210,39 @@ class OfferLedgerRepository @Inject constructor(
                 outcome = record.outcome,
             )
         }
+
+    /**
+     * This kind's newest [CHECK_IN_WINDOW] rows, for the rules engine ([CheckInEngine]), mapped
+     * exactly as [recentOffers] maps them and for the same reasons.
+     *
+     * A longer window than the arbiter's because the engine reads a longer run: a run of unanswered
+     * check-ins stretches the wait with no fixed limit, and a try at a longer wait needs
+     * [CheckInEngine.ANSWERS_BEFORE_TRIAL] answered ones in a row.
+     */
+    suspend fun checkInRows(kind: OfferKind): List<InterruptionBudget.Offer> =
+        dao.recentForKind(kind.key, CHECK_IN_WINDOW).map { record ->
+            InterruptionBudget.Offer(
+                kind = budgetKind(kind).key,
+                offeredAt = record.offeredAt,
+                outcome = record.outcome,
+            )
+        }
+
+    /**
+     * As [checkInRows], for the asks of [kind] about one [subject] only: one tracker's check-ins,
+     * never another's.
+     */
+    suspend fun checkInRows(kind: OfferKind, subject: Long): List<InterruptionBudget.Offer> =
+        dao.recentForSubject(kind.key, subject, CHECK_IN_WINDOW).map { record ->
+            InterruptionBudget.Offer(
+                kind = budgetKind(kind).key,
+                offeredAt = record.offeredAt,
+                outcome = record.outcome,
+            )
+        }
+
+    /** When [kind] last asked about [subject], or 0 if it never has. */
+    suspend fun lastOfferedAt(kind: OfferKind, subject: Long): Long = dao.lastOfferedAtFor(kind.key, subject)
 
     /**
      * This kind's rows as **placement's** own input type — the second mapping this class exists for,
@@ -326,7 +362,15 @@ class OfferLedgerRepository @Inject constructor(
         val cutoff = nowMillis - RETENTION_MILLIS
         if (cutoff <= 0L) return
         val closedBefore = OfferKind.entries.filter { saidStop(it) }
-        dao.deleteOlderThan(cutoff)
+        // Each kind's newest CHECK_IN_WINDOW rows are kept whatever their age. The rules engine
+        // lets a quiet stretch lengthen the wait without limit, so its newest rows can be months
+        // old; deleting them would read as a shorter run of unanswered check-ins, which is the
+        // app asking more because it forgot.
+        // Per subject too, so one busy tracker cannot push another's rows out.
+        val kept = OfferKind.entries.flatMap { kind ->
+            dao.subjectsOf(kind.key).flatMap { dao.recentForSubject(kind.key, it, CHECK_IN_WINDOW) }
+        }.map { it.id }
+        dao.deleteOlderThanExcept(cutoff, kept)
         for (kind in closedBefore) {
             if (!saidStop(kind)) {
                 dao.insert(
@@ -377,6 +421,7 @@ class OfferLedgerRepository @Inject constructor(
         OfferKind.REMINDER -> InterruptionBudget.Kind.REMINDER
         OfferKind.ASSIGNMENT -> InterruptionBudget.Kind.ASSIGNMENT
         OfferKind.SUPPORT -> InterruptionBudget.Kind.SUPPORT
+        OfferKind.TRACKER -> InterruptionBudget.Kind.TRACKER
     }
 
     companion object {
@@ -385,6 +430,13 @@ class OfferLedgerRepository @Inject constructor(
          * note for why it is sixty days rather than a week.
          */
         const val RETENTION_DAYS: Int = 60
+
+        /**
+         * How many of each kind's newest rows the rules engine reads, and the retention sweep keeps
+         * whatever their age. Covers the longest run [CheckInEngine] can act on: the wait stops
+         * doubling after twelve steps of two misses each, and a trial needs fourteen answers.
+         */
+        const val CHECK_IN_WINDOW: Int = 32
 
         /** [RETENTION_DAYS] in millis, which is what the rows are stamped in. */
         const val RETENTION_MILLIS: Long = RETENTION_DAYS * 24L * 60L * 60L * 1000L

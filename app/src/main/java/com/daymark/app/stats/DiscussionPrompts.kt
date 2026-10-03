@@ -13,7 +13,8 @@ import kotlin.math.abs
  * style preference, it changes what the product legally is. So every rule here surfaces a pattern
  * in the person's own data and hands the judgement over:
  *
- * > *Wellbeing entries were lower on the 3 weeks with no logged activity. Worth asking about?*
+ * > *3 of the 84 days in this range have nothing logged, in 2 separate stretches. Nothing on these
+ * > pages is drawn across them. Worth asking about?*
  *
  * It cites nothing, prescribes nothing, and is useful precisely because it does not conclude. The
  * evidence base is citable in psychoeducation *for the person*, about a practice they are being
@@ -32,6 +33,11 @@ import kotlin.math.abs
  *
  * Nothing here labels the person or infers a clinical state (D1a): each prompt reflects what was
  * logged, counts what is there, and names where the data stops.
+ *
+ * **One measure per prompt.** No rule sets mood beside activity, or any measure beside another:
+ * "wellbeing was lower on the weeks with no activity" is the mood-and-activity insight §D6 does not
+ * build, a self-blame vector the person reads too, since they hand the report over. A rule that
+ * did exactly that is removed, and `DiscussionPromptsTest` holds every prompt off the pairing.
  *
  * Pure and Android-free like the rest of `stats/`: no Room types, no report types, no clock. The
  * caller maps `ReportData` onto [Inputs] — the mapping stays on the export side so this package
@@ -70,19 +76,6 @@ object DiscussionPrompts {
     )
 
     /**
-     * One week of the range.
-     *
-     * [activityCount] counts logged activities, not entries — a week can hold check-ins and no
-     * activity at all, which is exactly the co-occurrence the worked example in
-     * `docs/DECISIONS.md` §D8 is about.
-     */
-    data class Week(
-        val entryCount: Int,
-        val activityCount: Int,
-        val averageMood: Double?,
-    )
-
-    /**
      * Something a clinician published to this person, and what became of it.
      *
      * Declines are in scope here because this is the person's *own* export and they chose to
@@ -108,14 +101,12 @@ object DiscussionPrompts {
         val daysInRange: Int,
         val daysLogged: Int,
         val totalEntries: Int,
-        val weeks: List<Week> = emptyList(),
         val gapStretches: Int = 0,
         val instruments: List<Instrument> = emptyList(),
         val offers: List<Offer> = emptyList(),
     )
 
     const val KIND_THIN_DATA = "thin_data"
-    const val KIND_QUIET_WEEKS = "quiet_weeks"
     const val KIND_COVERAGE_GAPS = "coverage_gaps"
     const val KIND_NO_CHECKINS = "no_checkins"
     const val KIND_THIN_INSTRUMENT = "thin_instrument"
@@ -131,10 +122,6 @@ object DiscussionPrompts {
     private const val MIN_ENTRIES = 8
     /** Logging on fewer than one day in this many is thin however many entries it produced. */
     private const val LOGGED_DAY_DIVISOR = 4
-    /** Both sides of the quiet-week comparison need at least this many weeks. */
-    private const val MIN_WEEKS_EACH_SIDE = 2
-    /** Mean-mood difference (on the 1..5 scale) below which the quiet-week rule says nothing. */
-    private const val MIN_MOOD_DIFFERENCE = 0.5
     /** A gap this fraction of the range, in at least [MIN_GAP_STRETCHES] runs, is worth naming. */
     private const val GAP_FRACTION = 0.30
     private const val MIN_GAP_STRETCHES = 2
@@ -204,7 +191,7 @@ object DiscussionPrompts {
 
         // RULE 1 — too little data to say anything. Fires when the range holds fewer than
         // MIN_ENTRIES entries, or when something was logged on under a quarter of its days. The
-        // most honest thing on the page, and it silences the two rules below it that would
+        // most honest thing on the page, and it silences the coverage rule below it, which would
         // otherwise read a pattern out of four points.
         val thin = inputs.totalEntries < MIN_ENTRIES ||
             inputs.daysLogged * LOGGED_DAY_DIVISOR < inputs.daysInRange
@@ -220,33 +207,7 @@ object DiscussionPrompts {
             out.add(Prompt(KIND_THIN_DATA, text))
         }
 
-        // RULE 2 — the worked example in `docs/DECISIONS.md` §D8. Fires when at least
-        // MIN_WEEKS_EACH_SIDE weeks logged entries but no activity at all, at least that many
-        // logged both, and the quiet weeks averaged at least MIN_MOOD_DIFFERENCE lower.
-        // Co-occurrence, stated as co-occurrence: it reports two counts and two means and asks a
-        // question, and says nothing about which way round any of it runs.
-        if (!thin) {
-            val logged = inputs.weeks.filter { it.entryCount > 0 && it.averageMood != null }
-            val quietWeeks = logged.filter { it.activityCount == 0 }
-            val activeWeeks = logged.filter { it.activityCount > 0 }
-            if (quietWeeks.size >= MIN_WEEKS_EACH_SIDE && activeWeeks.size >= MIN_WEEKS_EACH_SIDE) {
-                val quietMean = quietWeeks.mapNotNull { it.averageMood }.average()
-                val activeMean = activeWeeks.mapNotNull { it.averageMood }.average()
-                if (activeMean - quietMean >= MIN_MOOD_DIFFERENCE) {
-                    out.add(
-                        Prompt(
-                            KIND_QUIET_WEEKS,
-                            "Wellbeing entries were lower on the ${quietWeeks.size} weeks with no " +
-                                "logged activity — averaging ${oneDp(quietMean, locale)} against " +
-                                "${oneDp(activeMean, locale)} on the other ${activeWeeks.size}. " +
-                                "Worth asking about?",
-                        ),
-                    )
-                }
-            }
-        }
-
-        // RULE 3 — where the data stops. Fires when at least GAP_FRACTION of the range has nothing
+        // RULE 2 — where the data stops. Fires when at least GAP_FRACTION of the range has nothing
         // logged, spread over MIN_GAP_STRETCHES or more separate runs. Restates the report's own
         // invariant rather than an observation about the person: nothing on any side is drawn
         // across a gap, and a reader who cannot see where the data stops cannot tell a flat line
@@ -265,7 +226,7 @@ object DiscussionPrompts {
             )
         }
 
-        // RULE 4 — entries but no self-checks. Fires when the range holds enough daily entries to
+        // RULE 3 — entries but no self-checks. Fires when the range holds enough daily entries to
         // be worth reading and no instrument results at all. Side 1's plots are empty in that case,
         // and an empty plot reads as a flat line unless something says otherwise.
         if (inputs.totalEntries >= MIN_ENTRIES && inputs.instruments.isEmpty()) {
@@ -279,7 +240,7 @@ object DiscussionPrompts {
             )
         }
 
-        // RULE 5 — a tool with too few results to say anything. Fires per instrument holding
+        // RULE 4 — a tool with too few results to say anything. Fires per instrument holding
         // between 1 and THIN_INSTRUMENT_MAX results. The per-tool twin of rule 1: a two-point plot
         // is two dots, and printing it next to a twelve-point one invites reading a line into it.
         inputs.instruments
@@ -295,7 +256,7 @@ object DiscussionPrompts {
                 )
             }
 
-        // RULE 6 — every result in the same band. Fires per instrument with at least
+        // RULE 5 — every result in the same band. Fires per instrument with at least
         // MIN_POINTS_FOR_BAND results that all carry the same non-blank band label. The band is the
         // instrument's own word, quoted and unaltered; the question is whether the number matched
         // the weeks, which only the two of them can answer.
@@ -315,7 +276,7 @@ object DiscussionPrompts {
                 }
             }
 
-        // RULE 7 — a change confined to one instrument. Fires when two or more instruments each
+        // RULE 6 — a change confined to one instrument. Fires when two or more instruments each
         // hold at least MIN_POINTS_FOR_SHIFT results, exactly one moved by SHIFT_MOVED of its own
         // scale between the first and last halves of its run, and every other one moved by less
         // than SHIFT_HELD. Measured against each instrument's own range so a 3-point move on a
@@ -344,7 +305,7 @@ object DiscussionPrompts {
             }
         }
 
-        // RULE 8 — a declined offer. Fires for anything published to this person and declined. It
+        // RULE 7 — a declined offer. Fires for anything published to this person and declined. It
         // is on the page because they put it there; the live portal keeps declines invisible so
         // that accepting never becomes a performance (D5). Mechanical, and it does not ask why —
         // the point is that only they know.
@@ -364,7 +325,7 @@ object DiscussionPrompts {
             )
         }
 
-        // RULE 9 — opened, never finished. Fires for an offer that was opened and completed zero
+        // RULE 8 — opened, never finished. Fires for an offer that was opened and completed zero
         // times, and was not declined. "Nothing here says why" is doing real work: an unfinished
         // module is a fact about a log, not about a person.
         val unfinished = inputs.offers.filter { it.opened && it.completedCount == 0 && !it.declined }
@@ -380,7 +341,7 @@ object DiscussionPrompts {
             )
         }
 
-        // RULE 10 — offered, never opened. Fires for an offer never opened, never completed and
+        // RULE 9 — offered, never opened. Fires for an offer never opened, never completed and
         // never declined. Kept apart from rule 9 because "did not open it" and "opened it and
         // stopped" are different facts, and collapsing them into one engagement number is exactly
         // the throughput metric this product does not print.

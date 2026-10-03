@@ -57,6 +57,8 @@ class PhoneSyncTest {
         val opened = phoneSync.unlock(paired, Wrapped.PASSPHRASE) as? PhoneSync.Unlock.Opened ?: throw AssertionError("not opened")
         assertArrayEquals(Wrapped.syncKey, opened.syncKey)
         assertEquals(tag, opened.keyDocumentTag)
+        // The owner's public pairing keys come out with it, the same the console derives (#174).
+        assertEquals(Wrapped.ownerPublic, opened.ownerPublic)
         assertEquals(1, server.requests.size)
 
         val wrong = stopped(phoneSync.unlock(paired, Wrapped.PASSPHRASE + "!"))
@@ -269,6 +271,161 @@ class PhoneSyncTest {
         assertTrue(phoneSync.send(paired, syncKey, tag, lineage, ByteArray((over - 1).toInt())) is PhoneSync.Sending.Sent)
     }
 
+    // ---- Fetching the newest copy back (#168) -------------------------------------------------------
+
+    private fun fetched(fetching: PhoneSync.Fetching) = fetching as? PhoneSync.Fetching.Fetched ?: throw AssertionError("not fetched: " + ((fetching as? PhoneSync.Fetching.Stopped)?.words))
+    private fun stopped(fetching: PhoneSync.Fetching) = fetching as? PhoneSync.Fetching.Stopped ?: throw AssertionError("fetched")
+
+    /** A stored copy: [lineage], [version], when the server says it stored it, and its sealed bytes. */
+    private class Copy(val lineage: String, val version: Long, val createdAt: Long, val envelope: ByteArray)
+
+    private fun sealed(lineage: String, version: Long, createdAt: Long, body: ByteArray = plaintext, key: ByteArray = syncKey) =
+        Copy(lineage, version, createdAt, SyncCrypto(sodium).encryptSnapshot(body, key, lineage, version))
+
+    /** The fake's answers for a fetch: the key document under [tag], [lineages] listed, and [copies] stored. */
+    private fun serveCopies(lineages: List<String>, copies: List<Copy>, blob: (Copy) -> TransportAnswer = { TransportAnswer(200, emptyMap(), it.envelope) }) {
+        server.answer = { request ->
+            assertEquals("${request.method} ${request.target} is not signed by the phone's key", key.keyId, request.signedBy)
+            assertEquals("a fetch only reads", "GET", request.method)
+            val versionsOf = Regex("^/v1/snapshots/([A-Za-z0-9_-]+)$")
+            val oneCopy = Regex("^/v1/snapshots/([A-Za-z0-9_-]+)/(\\d+)$")
+            when {
+                request.target == "/v1/keydoc" -> FakeServer.answer(200, "{}", "ETag" to tag)
+                request.target == "/v1/snapshots" -> FakeServer.answer(200, """{"lineages":[${lineages.joinToString(",") { "\"$it\"" }}]}""")
+                versionsOf.matches(request.target) -> {
+                    val name = versionsOf.find(request.target)!!.groupValues[1]
+                    val listed = copies.filter { it.lineage == name }
+                    FakeServer.answer(200, """{"lineage":"$name","versions":[${listed.joinToString(",") { """{"version":${it.version},"size":1,"contentHash":"x","createdAt":${it.createdAt}}""" }}]}""")
+                }
+                oneCopy.matches(request.target) -> {
+                    val (name, version) = oneCopy.find(request.target)!!.destructured
+                    blob(copies.single { it.lineage == name && it.version == version.toLong() })
+                }
+                else -> throw AssertionError("unexpected ${request.method} ${request.target}")
+            }
+        }
+    }
+
+    @Test
+    fun fetchOpensTheCopyTheServerStoredMostRecently_acrossThePhonesLineages() {
+        val other = PhoneLineage.create(sodium)
+        val newer = """{"version":12,"entries":[{"id":2,"note":"a later day"}]}""".toByteArray(Charsets.UTF_8)
+        val copies = listOf(
+            sealed(lineage, 0, createdAt = 100),
+            sealed(lineage, 1, createdAt = 200),
+            sealed(other, 0, createdAt = 300, body = newer),
+        )
+        serveCopies(listOf(lineage, other, "lane_" + other.removePrefix("phone_")), copies)
+        val got = fetched(phoneSync.fetch(paired, syncKey, tag))
+        assertEquals(other, got.lineage)
+        assertEquals(0L, got.version)
+        assertArrayEquals(newer, got.plaintext)
+        // A web console's lane is never read, and the copy is fetched once.
+        assertFalse(server.targets().any { "lane_" in it })
+        assertEquals(1, server.targets().count { it == "GET /v1/snapshots/$other/0" })
+        // Control: with the other phone's copy older, this phone's newest is the one.
+        server.requests.clear()
+        serveCopies(listOf(lineage, other), listOf(copies[0], copies[1], sealed(other, 0, createdAt = 150, body = newer)))
+        val mine = fetched(phoneSync.fetch(paired, syncKey, tag))
+        assertEquals(lineage, mine.lineage)
+        assertEquals(1L, mine.version)
+        assertArrayEquals(plaintext, mine.plaintext)
+    }
+
+    @Test
+    fun withinALineage_theHighestVersionIsTheNewest() {
+        serveCopies(listOf(lineage), listOf(sealed(lineage, 5, createdAt = 100), sealed(lineage, 7, createdAt = 50)))
+        assertEquals(7L, fetched(phoneSync.fetch(paired, syncKey, tag)).version)
+    }
+
+    @Test
+    fun aCopyThatDoesNotOpenUnderThisKeyIsRefused_andSoIsOneMovedToAnotherVersion() {
+        val foreign = sealed(lineage, 0, createdAt = 100, key = sodium.randomBytesBuf(32))
+        serveCopies(listOf(lineage), listOf(foreign))
+        assertEquals(PhoneWords.COPY_DID_NOT_OPEN, stopped(phoneSync.fetch(paired, syncKey, tag)).words)
+
+        // A real copy of version 0, served as version 3: its associated data names version 0, so it does not open.
+        val real = sealed(lineage, 0, createdAt = 100)
+        serveCopies(listOf(lineage), listOf(Copy(lineage, 3, 100, real.envelope)))
+        assertEquals(PhoneWords.COPY_DID_NOT_OPEN, stopped(phoneSync.fetch(paired, syncKey, tag)).words)
+
+        // Control: served where it was sealed, it opens.
+        serveCopies(listOf(lineage), listOf(real))
+        assertArrayEquals(plaintext, fetched(phoneSync.fetch(paired, syncKey, tag)).plaintext)
+    }
+
+    @Test
+    fun noPhoneCopy_saysSo_withoutFetchingAnything() {
+        val lane = "lane_" + lineage.removePrefix("phone_")
+        serveCopies(listOf(lane), listOf(sealed(lane, 0, createdAt = 100)))
+        assertEquals(PhoneWords.NO_COPY, stopped(phoneSync.fetch(paired, syncKey, tag)).words)
+        assertEquals(listOf("GET /v1/keydoc", "GET /v1/snapshots"), server.targets())
+
+        server.requests.clear()
+        serveCopies(listOf(lineage), emptyList())
+        assertEquals(PhoneWords.NO_COPY, stopped(phoneSync.fetch(paired, syncKey, tag)).words)
+    }
+
+    @Test
+    fun aChangedKeyDocument_fetchesNothing_andAsksForThePassphrase() {
+        server.answer = { FakeServer.answer(200, "{}", "ETag" to "\"" + "cd".repeat(32) + "\"") }
+        val stop = stopped(phoneSync.fetch(paired, syncKey, tag))
+        assertEquals(PhoneWords.KEY_CHANGED_FETCH, stop.words)
+        assertEquals(PhoneSync.Then.UNLOCK_AGAIN, stop.then)
+        assertEquals(listOf("GET /v1/keydoc"), server.targets())
+    }
+
+    @Test
+    fun fetchStopsOnEveryRefusal_afterOneRequest_andNothingIsSentAgain() {
+        val cases = listOf(
+            401 to (PhoneWords.DISCONNECTED to PhoneSync.Then.PAIR_AGAIN),
+            429 to (PhoneWords.PAUSED to PhoneSync.Then.TRY_AGAIN),
+            503 to (PhoneWords.UNREACHABLE_FETCH to PhoneSync.Then.TRY_AGAIN),
+            410 to (PhoneWords.NOT_FETCHED to PhoneSync.Then.TRY_AGAIN),
+        )
+        val copy = sealed(lineage, 0, createdAt = 100)
+        for ((status, expected) in cases) {
+            server.requests.clear()
+            serveCopies(listOf(lineage), listOf(copy)) { FakeServer.answer(status) }
+            val stop = stopped(phoneSync.fetch(paired, syncKey, tag))
+            assertEquals("$status", expected.first, stop.words)
+            assertEquals("$status", expected.second, stop.then)
+            assertEquals("$status was asked again", 1, server.targets().count { it == "GET /v1/snapshots/$lineage/0" })
+        }
+        server.answer = { throw IOException("no route") }
+        assertEquals(PhoneWords.UNREACHABLE_FETCH, stopped(phoneSync.fetch(paired, syncKey, tag)).words)
+    }
+
+    @Test
+    fun aListingThatIsNotOne_isRefused() {
+        server.answer = { request ->
+            when (request.target) {
+                "/v1/keydoc" -> FakeServer.answer(200, "{}", "ETag" to tag)
+                "/v1/snapshots" -> FakeServer.answer(200, """{"lineages":["$lineage"]}""")
+                else -> FakeServer.answer(200, """{"lineage":"someone_else","versions":[]}""")
+            }
+        }
+        assertEquals(PhoneWords.NOT_FETCHED, stopped(phoneSync.fetch(paired, syncKey, tag)).words)
+    }
+
+    @Test
+    fun atMostSixteenLineagesAreRead() {
+        val many = (1..40).map { PhoneLineage.create(sodium) }
+        serveCopies(many, many.map { sealed(it, 0, createdAt = 100) })
+        fetched(phoneSync.fetch(paired, syncKey, tag))
+        val listed = server.targets().count { Regex("^GET /v1/snapshots/phone_[A-Za-z0-9_-]+$").matches(it) }
+        assertEquals(PhoneSync.MAX_LINEAGES, listed)
+    }
+
+    @Test
+    fun theChoiceSaysWhatEachSideHolds_inWholeWords() {
+        assertEquals(
+            "The newest copy on your server was saved on 3 Oct. It has 1 mood entry and 0 journal pages.",
+            PhoneWords.copyHolds("3 Oct", 1, 0),
+        )
+        assertEquals("This phone has 12 mood entries and 1 journal page.", PhoneWords.phoneHolds(12, 1))
+    }
+
     /** One wrapped key, made once for the class: Argon2id at 256 MiB is seconds, and the tests open it twice. */
     private object Wrapped {
         const val PASSPHRASE = "a long enough sync passphrase"
@@ -276,6 +433,7 @@ class PhoneSyncTest {
         private val crypto = SyncCrypto(sodium)
         private val master = sodium.randomBytesBuf(32)
         val syncKey: ByteArray = crypto.deriveSubkey(master, 1, 32)
+        val ownerPublic: PairingPayloads.OwnerKeys = PairingPayloads.ownerKeysOf(crypto.ownerIdentityFromMaster(master))
         val document: String = KeyDocument.WrappedKey(
             listOf(
                 crypto.wrapSlot(

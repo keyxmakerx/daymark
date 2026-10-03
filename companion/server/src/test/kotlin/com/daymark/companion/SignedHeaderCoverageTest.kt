@@ -55,13 +55,19 @@ class SignedHeaderCoverageTest {
                 "running server (#180); a proxy in front may rewrite it"
             ),
         "Cookie" to (
-            SESSION_ROUTES to
+            SESSION_ROUTES + ADMIN_ROUTES to
                 "a clinician's or practice member's session. Where a route takes the owner too, a request whose owner " +
                 "credential passes is the owner's and no session is looked up for it. A cookie added to a phone's " +
                 "request can at most spend the clinicians' rate budget for the phone's own address, and so have the " +
-                "request refused, which whoever added it could as well do by dropping it"
+                "request refused, which whoever added it could as well do by dropping it. On the server console's " +
+                "routes it is the administrator's session, the only credential they take: no owner credential opens " +
+                "them, so no phone's request is one they answer (#322)"
             ),
-        "X-CSRF-Token" to (SESSION_ROUTES to "checked with a session cookie, only for a request no owner credential passed"),
+        "X-CSRF-Token" to (
+            SESSION_ROUTES + ADMIN_ROUTES to
+                "checked with a session cookie, only for a request no owner credential passed, and on the server " +
+                "console's routes always with the administrator's session"
+            ),
         "X-Stepup-Code" to (
             setOf("com/daymark/companion/routes/OrgRoutes.kt") to
                 "a practice admin's second factor, on practice-console routes that take no owner credential"
@@ -150,6 +156,9 @@ class SignedHeaderCoverageTest {
         const val SIGNATURE_OWN =
             "the signature's own: the key it names, the time and nonce its message holds, and the signature; a changed " +
                 "one fails the signature or names a key that did not make it"
+        /** The server console's routes, which take the administrator's session and nothing else (#322). */
+        val ADMIN_ROUTES = setOf("com/daymark/companion/routes/AdminRoutes.kt")
+
         val SESSION_ROUTES = setOf(
             "com/daymark/companion/routes/RelationRoutes.kt",
             "com/daymark/companion/routes/TherapistAuthRoutes.kt",

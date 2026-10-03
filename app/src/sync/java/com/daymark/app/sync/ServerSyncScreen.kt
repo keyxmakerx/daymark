@@ -20,6 +20,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -49,7 +50,8 @@ import java.time.LocalDate
  * Settings → Sync with your server (#432), in the `sync` flavour only. One step at a time: the server's
  * address and the pairing code (or the pairing text pasted into the address); the six words to compare
  * with the web while the phone waits for the confirmation there; the sync passphrase; and then Send a
- * copy now, with the time the server last took one.
+ * copy now, with the time the server last took one, or get the newest copy back and choose what to do
+ * with it (#168).
  *
  * Every sentence the phone says about the server is one of [PhoneWords], shown in the plain ink: a
  * refusal says what did and did not happen, and nothing here is coloured as a success. The code and the
@@ -122,14 +124,34 @@ fun ServerSyncScreen(
                         },
                     )
                 }
-                ServerSyncStage.READY, ServerSyncStage.SENDING -> {
+                ServerSyncStage.READY, ServerSyncStage.SENDING, ServerSyncStage.FETCHING, ServerSyncStage.TAKING_IN -> {
                     ServerAddress(state.address)
-                    Button(
-                        onClick = viewModel::sendNow,
-                        enabled = state.stage == ServerSyncStage.READY,
-                    ) {
+                    val idle = state.stage == ServerSyncStage.READY
+                    Button(onClick = viewModel::sendNow, enabled = idle) {
                         Text(if (state.stage == ServerSyncStage.SENDING) "Sending a copy…" else "Send a copy now")
                     }
+                    OutlinedButton(
+                        onClick = viewModel::fetchNow,
+                        enabled = idle,
+                        modifier = Modifier.padding(top = 8.dp),
+                    ) {
+                        Text(
+                            when (state.stage) {
+                                ServerSyncStage.FETCHING -> "Fetching the newest copy…"
+                                ServerSyncStage.TAKING_IN -> "Putting the copy on this phone…"
+                                else -> "Get the newest copy from your server"
+                            },
+                        )
+                    }
+                }
+                ServerSyncStage.CHOOSING -> state.found?.let { found ->
+                    ServerAddress(state.address)
+                    CopyChoice(
+                        found = found,
+                        onReplace = { viewModel.takeIn(replace = true) },
+                        onAdd = { viewModel.takeIn(replace = false) },
+                        onKeep = viewModel::keepThisPhone,
+                    )
                 }
             }
 
@@ -138,8 +160,8 @@ fun ServerSyncScreen(
                 Text(words, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
             }
 
-            val paired = state.stage == ServerSyncStage.NEEDS_PASSPHRASE || state.stage == ServerSyncStage.OPENING ||
-                state.stage == ServerSyncStage.READY || state.stage == ServerSyncStage.SENDING
+            val paired = state.stage != ServerSyncStage.LOADING && state.stage != ServerSyncStage.NOT_PAIRED &&
+                state.stage != ServerSyncStage.REDEEMING && state.stage != ServerSyncStage.COMPARING
             if (paired) {
                 state.lastSentAt?.let { at ->
                     Spacer(Modifier.height(16.dp))
@@ -188,6 +210,47 @@ fun ServerSyncScreen(
             },
             dismissButton = { TextButton(onClick = { confirmForget = false }) { Text("Keep") } },
         )
+    }
+}
+
+/**
+ * What a fetched copy holds beside what this phone holds, and the choice (#168). Nothing has changed
+ * yet: replacing, adding, or keeping this phone as it is are side by side, each said before it is
+ * pressed, and none is chosen for the person. The date is the one written inside the copy, which the
+ * server cannot change; a server can offer an older copy as the newest (#179), and this date is how
+ * the person would see it. Plain ink throughout: no colour marks either side as the right one.
+ */
+@Composable
+private fun CopyChoice(found: FoundCopy, onReplace: () -> Unit, onAdd: () -> Unit, onKeep: () -> Unit) {
+    Text(
+        PhoneWords.copyHolds(timeOf(found.savedAt), found.copyEntries, found.copyPages),
+        style = MaterialTheme.typography.bodyLarge,
+    )
+    Text(
+        PhoneWords.phoneHolds(found.phoneEntries, found.phonePages),
+        style = MaterialTheme.typography.bodyLarge,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+    Text(
+        PhoneWords.REPLACE_EXPLAINED,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 16.dp),
+    )
+    Text(
+        PhoneWords.ADD_EXPLAINED,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+    OutlinedButton(onClick = onReplace, modifier = Modifier.padding(top = 16.dp)) {
+        Text("Replace this phone's journal with the copy")
+    }
+    OutlinedButton(onClick = onAdd, modifier = Modifier.padding(top = 8.dp)) {
+        Text("Add the copy's entries beside this phone's")
+    }
+    TextButton(onClick = onKeep, modifier = Modifier.padding(top = 8.dp)) {
+        Text("Keep this phone as it is")
     }
 }
 

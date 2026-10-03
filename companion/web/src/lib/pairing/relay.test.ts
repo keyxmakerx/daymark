@@ -407,6 +407,8 @@ describe('what binds a run, and to what', () => {
     const ci = channelIdentifier('rel-a', 'inv-1')
     const parts = parseLv(ci, 3).map((p) => new TextDecoder().decode(p))
     expect(parts).toEqual(['daymark/cpace/v2', 'rel-a', 'inv-1'])
+    // The phone pins the same bytes (sync-crypto OwnerPairingVectorTest).
+    expect(hex(ci)).toBe('106461796d61726b2f63706163652f76320572656c2d6105696e762d31')
     expect(hex(ci)).not.toBe(hex(channelIdentifier('rel-a', 'inv-2')))
     expect(hex(ci)).not.toBe(hex(channelIdentifier('rel-b', 'inv-1')))
     // Length-prefixing means a boundary shift is not the same bytes: 'rel-a' + 'inv-1' is

@@ -73,6 +73,7 @@ fun TrackerDetailScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item { LogInput(t, onLog = viewModel::log) }
+            item { TrackerCheckInsCard(t, onChange = viewModel::update) }
             if (logs.isNotEmpty()) {
                 val numeric = logs.map { it.value }
                 item {

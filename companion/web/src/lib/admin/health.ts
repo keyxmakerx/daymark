@@ -757,8 +757,8 @@ export const CHAIN_NOT_ADMIN_READABLE =
   'This build serves audit entries from one route, and that route requires the relationship ' +
   'inbox token and the owner bearer token together. A server administrator holds neither, and ' +
   'should not: the log records a private relationship, and it is owner-readable by design. ' +
-  'The server-side chain check in the panel below is gated the same way — it demands the owner ' +
-  'bearer token — so no route an administrator can call verifies a chain on their behalf. To ' +
+  'The server-side chain check is gated the same way and is read from the owner’s own console, ' +
+  'so no route an administrator can call verifies a chain on their behalf. To ' +
   'examine a run here, take it from the audit database on the host you administer and paste it ' +
   'below; it stays in this browser tab.'
 

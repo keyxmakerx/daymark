@@ -10,16 +10,24 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
+import com.daymark.app.notifications.NotificationPrivacy.lockedAway
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.getSystemService
 import com.daymark.app.MainActivity
 import com.daymark.app.R
+import com.daymark.app.data.CheckInStateStore
 import com.daymark.app.data.OfferLedgerRepository
+import com.daymark.app.data.SettingsRepository
 import com.daymark.app.data.dao.EntryDao
+import com.daymark.app.data.dao.ReminderDao
 import com.daymark.app.data.entity.OfferKind
 import com.daymark.app.data.entity.OfferOutcome
 import com.daymark.app.data.entity.Reminder
+import com.daymark.app.stats.CheckInEngine
+import com.daymark.app.stats.InterruptionBudget
+import com.daymark.app.stats.PhrasePool
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import javax.inject.Inject
@@ -35,7 +43,7 @@ import javax.inject.Singleton
  * [schedule] is untouched by any of what follows. The alarm keeps firing at exactly the time the
  * person set, every day, and the receiver keeps re-arming it — a reminder that stopped scheduling
  * itself would be a reminder that never came back, which is not "asking less", it is breaking.
- * What the decision engine gates is the far cheaper thing to undo: whether [showNotification]
+ * What the rules engine gates is the far cheaper thing to undo: whether [showNotification]
  * actually posts. A suppressed firing costs nothing and leaves the schedule intact.
  */
 @Singleton
@@ -43,6 +51,9 @@ class ReminderScheduler @Inject constructor(
     @ApplicationContext private val context: Context,
     private val offerLedger: OfferLedgerRepository,
     private val entryDao: EntryDao,
+    private val checkInState: CheckInStateStore,
+    private val reminderDao: ReminderDao,
+    private val settings: SettingsRepository,
 ) {
     fun createChannel() {
         val manager = context.getSystemService<NotificationManager>() ?: return
@@ -79,15 +90,23 @@ class ReminderScheduler @Inject constructor(
     }
 
     /**
-     * Posts the notification for a fired reminder, with a one-tap "Log" action, and writes one
-     * ledger line for the firing.
+     * Posts the notification for a fired reminder, if the rules engine lets it through, and writes
+     * one ledger line for each one posted (`docs/DECISIONS.md` §D1, §D1a).
      *
-     * Every firing posts: the decision engine does not gate reminders (the comment inside says why).
-     * The person chose these times, so the schedule they set is the whole of the permission. The
-     * ledger records the firing and whether the one before it was answered; nothing reads that
-     * record to ration this schedule.
+     * The engine only ever lets through a subset of the times the person set: every one of them
+     * while check-ins are being answered, then, as a run of them goes unanswered, at most one per a
+     * wait that doubles with each step. It never adds a time and never switches a reminder off; only
+     * the person does that, with **Stop asking** or the switch in Settings → Reminders. Every change
+     * of pace is announced with **Put it back** ([announce]).
+     *
+     * [later] is a firing the person asked for with **Try later**. It is their own request for one
+     * more nudge, so it is posted without asking the engine, and it is not re-armed.
      */
-    suspend fun showNotification(reminder: Reminder, nowMillis: Long = System.currentTimeMillis()) {
+    suspend fun showNotification(
+        reminder: Reminder,
+        nowMillis: Long = System.currentTimeMillis(),
+        later: Boolean = false,
+    ) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ActivityCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED
@@ -97,18 +116,14 @@ class ReminderScheduler @Inject constructor(
 
         // Read before the new line is written, or it would find itself.
         val previousOfferedAt = offerLedger.lastOfferedAt(OfferKind.REMINDER)
-        // NOT GATED ON THE ARBITER, deliberately — this was wired and then unwired after the
-        // consequence was traced. A reminder is not an unsolicited offer: the person picked this
-        // time and asked for it, and that request IS their declared frequency. Rationing it by
-        // inferred reception meant two unanswered firings dropped Kind.REMINDER to OncePerWeek, so
-        // a 9am/1pm/9pm schedule collapsed to a single notification a week — silently, with no
-        // reminder-frequency setting anywhere for the person to turn back up, and roughly five
-        // weeks to recover. D1a's monotonic rule holds only because its escape hatch is "the person
-        // changes a setting"; where there is no setting, an inference that quiets something they
-        // explicitly scheduled is not restraint, it is overriding them.
-        //
-        // The ledger still RECORDS every firing and whether it was acted on. That is the signal the
-        // clinician asked for and the substrate the companion reads. Record, do not ration.
+        var state = checkInState.reminders()
+
+        if (!later) {
+            val pace = currentPace(state, previousOfferedAt, nowMillis)
+            announce(state, pace, trial = false)
+            state = checkInState.reminders()
+            if (!CheckInEngine.shouldPost(pace, previousOfferedAt, nowMillis)) return
+        }
 
         val openEditor = PendingIntent.getActivity(
             context,
@@ -119,13 +134,22 @@ class ReminderScheduler @Inject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
+        // One of the fixed, human-written lines, in turn. The draw is blind to how the person
+        // seemed: it takes the hour and a counter, and nothing else (stats/PhrasePool.kt).
+        val hour = Instant.ofEpochMilli(nowMillis).atZone(ZoneId.systemDefault()).hour
+        val line = PhrasePool.openerForHour(hour, state.rotation)
+        checkInState.write(state.copy(rotation = PhrasePool.nextRotation(state.rotation)))
+
         val title = reminder.label.ifBlank { context.getString(R.string.reminder_title) }
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .lockedAway(context, CHANNEL_ID)
             .setContentTitle(title)
-            .setContentText(context.getString(R.string.reminder_text))
+            .setContentText(line)
             .setContentIntent(openEditor)
-            .addAction(0, "Log now", openEditor)
+            .addAction(NotificationPrivacy.unlockedAction(context.getString(R.string.reminder_action_log), openEditor))
+            .addAction(NotificationPrivacy.unlockedAction(context.getString(R.string.reminder_action_later), actionIntent(ReminderActionReceiver.ACTION_TRY_LATER, reminder.id)))
+            .addAction(NotificationPrivacy.unlockedAction(context.getString(R.string.reminder_action_stop), actionIntent(ReminderActionReceiver.ACTION_STOP_ASKING, reminder.id)))
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
@@ -133,10 +157,141 @@ class ReminderScheduler @Inject constructor(
         NotificationManagerCompat.from(context).notify(notificationId(reminder.id), notification)
         offerLedger.record(
             kind = OfferKind.REMINDER,
-            outcome = outcomeCarriedBy(previousOfferedAt, nowMillis),
+            // A later nudge follows the person's own "Try later", which is them engaging.
+            outcome = if (later) OfferOutcome.SNOOZED else outcomeCarriedBy(previousOfferedAt, nowMillis),
             offeredAtMillis = nowMillis,
         )
+
+        if (!later) maybeTryLonger(nowMillis)
     }
+
+    /**
+     * The pace in force now. The ledger's newest line describes the interval before the last post,
+     * so whether anything was written since then is read here too: a person who comes back to
+     * Daymark between two widely spaced reminders gets their own schedule back now, not at the next
+     * post. That only ever returns toward the schedule they set, never past it.
+     */
+    private suspend fun currentPace(
+        state: CheckInStateStore.State,
+        lastPostedAt: Long,
+        nowMillis: Long,
+    ): CheckInEngine.Pace {
+        val rows = offerLedger.checkInRows(OfferKind.REMINDER).toMutableList()
+        if (lastPostedAt in 1 until nowMillis && entryDao.getBetween(lastPostedAt, nowMillis).isNotEmpty()) {
+            rows += InterruptionBudget.Offer(InterruptionBudget.Kind.REMINDER.key, nowMillis, InterruptionBudget.Outcome.ACCEPTED.key)
+        }
+        return CheckInEngine.paceOf(
+            kind = InterruptionBudget.Kind.REMINDER,
+            recent = rows,
+            saidStop = offerLedger.saidStop(OfferKind.REMINDER),
+            countFrom = state.countFrom,
+            trialSteps = state.trialSteps,
+            setSpacingMillis = setSpacingMillis(),
+            keepAsSet = settings.remindersKeepAsSet,
+        )
+    }
+
+    /**
+     * The shortest spacing between the reminder times the person has switched on, around the clock:
+     * a day for a single reminder, twelve hours for 9:00 and 21:00. Steps of quiet the schedule
+     * already keeps are skipped, so no notice announces a change that changes nothing.
+     */
+    private suspend fun setSpacingMillis(): Long {
+        val minutes = reminderDao.getAll().filter { it.enabled }.map { it.hour * 60 + it.minute }.distinct().sorted()
+        if (minutes.size <= 1) return DAY_MILLIS
+        val gaps = minutes.zipWithNext { a, b -> b - a } + (minutes.first() + 24 * 60 - minutes.last())
+        return gaps.min() * 60_000L
+    }
+
+    /** After a long run of answered reminders, tries one step longer a wait, and says so. */
+    private suspend fun maybeTryLonger(nowMillis: Long) {
+        val state = checkInState.reminders()
+        val rows = offerLedger.checkInRows(OfferKind.REMINDER)
+        val since = maxOf(state.countFrom, state.trialSince)
+        if (!CheckInEngine.mayTryLonger(InterruptionBudget.Kind.REMINDER, rows, since, state.trialDeclined, settings.remindersKeepAsSet)) return
+        val tried = state.copy(trialSteps = state.trialSteps + 1, trialSince = nowMillis)
+        checkInState.write(tried)
+        val pace = CheckInEngine.paceOf(
+            kind = InterruptionBudget.Kind.REMINDER,
+            recent = rows,
+            saidStop = offerLedger.saidStop(OfferKind.REMINDER),
+            countFrom = tried.countFrom,
+            trialSteps = tried.trialSteps,
+            setSpacingMillis = setSpacingMillis(),
+            keepAsSet = settings.remindersKeepAsSet,
+        )
+        announce(tried, pace, trial = true)
+    }
+
+    /**
+     * Tells the person about a change of pace, once: how often it now is, with **Put it back**, or
+     * that it is back to the times they set. Never silent, and never a word about anything missed
+     * (§D1a).
+     */
+    private fun announce(state: CheckInStateStore.State, pace: CheckInEngine.Pace, trial: Boolean) {
+        val change = CheckInEngine.changeBetween(state.announced, pace) ?: return
+        checkInState.write(state.copy(announcedGap = pace.gapMillis, lastChangeWasTrial = trial && change.quieter))
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .lockedAway(context, CHANNEL_ID)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+        // Worded by where the pace is, not which way it moved: coming back from a long quiet
+        // stretch to a longer wait the person kept is still less often than they set.
+        if (pace != CheckInEngine.Pace.AsSet) {
+            val days = pace.days.coerceIn(1L, Int.MAX_VALUE.toLong()).toInt()
+            builder
+                .setContentTitle(context.getString(R.string.checkin_quieter_title))
+                .setContentText(context.resources.getQuantityString(R.plurals.checkin_quieter_text, days, days))
+                .addAction(NotificationPrivacy.unlockedAction(context.getString(R.string.checkin_put_back), actionIntent(ReminderActionReceiver.ACTION_PUT_BACK, 0L)))
+        } else {
+            builder.setContentTitle(context.getString(R.string.checkin_back_title))
+        }
+        NotificationManagerCompat.from(context).notify(NOTICE_NOTIFICATION_ID, builder.build())
+    }
+
+    /**
+     * The person's choice between easing off and "Keep reminding me at these times". A change
+     * starts the engine over from their schedule and clears any notice about a pace that no longer
+     * applies.
+     */
+    fun setKeepAsSet(keep: Boolean, nowMillis: Long = System.currentTimeMillis()) {
+        if (settings.remindersKeepAsSet == keep) return
+        settings.remindersKeepAsSet = keep
+        checkInState.restart(nowMillis)
+        NotificationManagerCompat.from(context).cancel(NOTICE_NOTIFICATION_ID)
+    }
+
+    /** Asks for one more nudge for [reminder] in [TRY_LATER_MILLIS], because the person said so. */
+    fun scheduleLater(reminderId: Long, nowMillis: Long = System.currentTimeMillis()) {
+        val alarmManager = context.getSystemService<AlarmManager>() ?: return
+        val pending = PendingIntent.getBroadcast(
+            context,
+            LATER_REQUEST_BASE + reminderId.toInt(),
+            Intent(context, ReminderReceiver::class.java)
+                .putExtra(EXTRA_REMINDER_ID, reminderId)
+                .putExtra(EXTRA_LATER, true),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        try {
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nowMillis + TRY_LATER_MILLIS, pending)
+        } catch (_: SecurityException) {
+            alarmManager.set(AlarmManager.RTC_WAKEUP, nowMillis + TRY_LATER_MILLIS, pending)
+        }
+        NotificationManagerCompat.from(context).cancel(notificationId(reminderId))
+    }
+
+    /** Clears the change notice, after the person has answered it. */
+    fun cancelNotice() = NotificationManagerCompat.from(context).cancel(NOTICE_NOTIFICATION_ID)
+
+    private fun actionIntent(action: String, reminderId: Long): PendingIntent = PendingIntent.getBroadcast(
+        context,
+        (action.hashCode() * 31) + reminderId.toInt(),
+        Intent(context, ReminderActionReceiver::class.java)
+            .setAction(action)
+            .putExtra(EXTRA_REMINDER_ID, reminderId),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
 
     /**
      * What this firing's ledger line carries — the app's reading of whether the reminder before it
@@ -191,12 +346,24 @@ class ReminderScheduler @Inject constructor(
         )
     }
 
-    private fun notificationId(reminderId: Long): Int = NOTIFICATION_ID_BASE + reminderId.toInt()
+    fun notificationId(reminderId: Long): Int = NOTIFICATION_ID_BASE + reminderId.toInt()
 
     companion object {
         const val CHANNEL_ID = "daily_reminder"
         const val EXTRA_REMINDER_ID = "reminder_id"
+        const val EXTRA_LATER = "reminder_later"
         private const val NOTIFICATION_ID_BASE = 2000
+
+        /** The one notice of a change of pace. Below the reminders' range, so it never collides. */
+        private const val NOTICE_NOTIFICATION_ID = 1999
+
+        /** Request codes for "Try later" alarms, apart from the daily alarms' codes. */
+        private const val LATER_REQUEST_BASE = 500_000
+
+        private const val DAY_MILLIS = 24L * 60 * 60 * 1000
+
+        /** How long "Try later" waits: one hour. */
+        private const val TRY_LATER_MILLIS = 60L * 60 * 1000
 
         /**
          * How far back [outcomeCarriedBy] will look for a check-in before it reads a reminder as

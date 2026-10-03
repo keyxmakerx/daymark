@@ -27,6 +27,7 @@ import com.daymark.app.data.entity.SafetyPlanItem
 import com.daymark.app.data.entity.SleepLog
 import com.daymark.app.data.entity.Tracker
 import com.daymark.app.data.entity.TrackerLog
+import com.daymark.app.stats.TrackerRhythm
 import com.daymark.app.data.entity.Treatment
 import com.daymark.app.model.Mood
 import com.daymark.app.util.DateUtils
@@ -134,6 +135,20 @@ data class BackupTreatment(val id: Long, val kind: String, val startedAt: Long, 
 data class BackupTracker(
     val id: Long, val name: String, val type: String, val minValue: Int, val maxValue: Int,
     val unit: String, val sortOrder: Int, val archived: Boolean,
+    // Absent from a backup made before trackers could ask, which reads as asking nothing.
+    val rhythm: String = TrackerRhythm.Rhythm.DEFAULT.key,
+    val onceAtMinute: Int = 1200,
+    val fewCount: Int = 3,
+    val windowStart: Int = 540,
+    val windowEnd: Int = 1260,
+    val quickLog: Boolean = false,
+    val keepAsSet: Boolean = false,
+)
+
+/** The stored tracker, under [id]: the backup's own for a replace, 0 for a merge. */
+fun BackupTracker.toTracker(id: Long) = Tracker(
+    id, name, type, minValue, maxValue, unit, sortOrder, archived,
+    rhythm, onceAtMinute, fewCount, windowStart, windowEnd, quickLog, keepAsSet,
 )
 
 @Serializable
@@ -409,6 +424,7 @@ class BackupManager @Inject constructor(
     private val trackerLogDao: TrackerLogDao,
     private val reminderDao: com.daymark.app.data.dao.ReminderDao,
     private val reminderRepository: com.daymark.app.data.ReminderRepository,
+    private val trackerCheckIns: com.daymark.app.notifications.TrackerCheckInScheduler,
     private val photoStore: com.daymark.app.data.PhotoStore,
     private val moodCustomization: com.daymark.app.data.MoodCustomizationStore,
     private val assessmentDao: com.daymark.app.data.dao.AssessmentDao,
@@ -443,6 +459,25 @@ class BackupManager @Inject constructor(
 
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
 
+    /** What a backup holds, read without importing it: when it was made, and its mood entries and journal pages. */
+    data class Contents(val exportedAt: Long, val entries: Int, val journalPages: Int)
+
+    /** What [jsonText] holds, or why it cannot be taken in. Reads nothing from, and writes nothing to, the database. */
+    sealed interface Reading {
+        data class Readable(val contents: Contents) : Reading
+        data object FromNewerApp : Reading
+        data object Unreadable : Reading
+    }
+
+    fun read(jsonText: String): Reading {
+        val data = runCatching { json.decodeFromString<BackupData>(jsonText) }.getOrNull() ?: return Reading.Unreadable
+        if (data.version > CURRENT_VERSION) return Reading.FromNewerApp
+        return Reading.Readable(Contents(data.exportedAt, data.entries.size, data.journal.size))
+    }
+
+    /** How many mood entries and journal pages this phone holds now: counts only, no row is read. */
+    suspend fun countsHere(): Pair<Int, Int> = entryDao.count() to journalDao.count()
+
     suspend fun exportToJson(nowMillis: Long): String {
         val allEntries = entryDao.getAllEntries()
         // Embed each referenced photo's bytes as base64 so the backup stays a single portable file.
@@ -470,7 +505,10 @@ class BackupManager @Inject constructor(
             },
             treatments = treatmentDao.getAll().map { BackupTreatment(it.id, it.kind, it.startedAt, it.note) },
             trackers = trackerDao.getAll().map {
-                BackupTracker(it.id, it.name, it.type, it.minValue, it.maxValue, it.unit, it.sortOrder, it.archived)
+                BackupTracker(
+                    it.id, it.name, it.type, it.minValue, it.maxValue, it.unit, it.sortOrder, it.archived,
+                    it.rhythm, it.onceAtMinute, it.fewCount, it.windowStart, it.windowEnd, it.quickLog, it.keepAsSet,
+                )
             },
             trackerLogs = trackerLogDao.getAll().map { BackupTrackerLog(it.id, it.trackerId, it.dateTime, it.value, it.note) },
             reminders = reminderDao.getAll().map { BackupReminder(it.id, it.hour, it.minute, it.enabled, it.label) },
@@ -551,6 +589,8 @@ class BackupManager @Inject constructor(
         }
         // Re-arm alarms for whatever reminder set we now hold.
         reminderRepository.rescheduleAll()
+        // And each tracker's check-ins and quick-log notification, as the restored rows say.
+        trackerCheckIns.refreshAll()
         // Restore mood label/colour overrides. REPLACE starts clean; MERGE overlays.
         if (mode == ImportMode.REPLACE) moodCustomization.reset()
         data.moodLabels.forEach { (lvl, label) -> moodCustomization.setLabel(lvl, label) }
@@ -560,6 +600,7 @@ class BackupManager @Inject constructor(
     private suspend fun importReplace(data: BackupData) {
         // Cancel alarms for the reminders we're about to wipe, so stale ids don't keep firing.
         reminderRepository.cancelAllAlarms()
+        trackerDao.getAll().forEach { trackerCheckIns.cancel(it.id) }
         entryDao.deleteAllCrossRefs()
         entryDao.deleteAllEntries()
         activityDao.deleteAll()
@@ -603,7 +644,7 @@ class BackupManager @Inject constructor(
         trackerDao.deleteAll()
         trackerLogDao.deleteAll()
         data.trackers.forEach {
-            trackerDao.insert(Tracker(it.id, it.name, it.type, it.minValue, it.maxValue, it.unit, it.sortOrder, it.archived))
+            trackerDao.insert(it.toTracker(it.id))
         }
         data.trackerLogs.forEach { trackerLogDao.insert(TrackerLog(it.id, it.trackerId, it.dateTime, it.value, it.note)) }
         reminderDao.deleteAll()
@@ -780,7 +821,7 @@ class BackupManager @Inject constructor(
 
         val trackerIdMap = HashMap<Long, Long>()
         data.trackers.forEach { t ->
-            val newId = trackerDao.insert(Tracker(0, t.name, t.type, t.minValue, t.maxValue, t.unit, t.sortOrder, t.archived))
+            val newId = trackerDao.insert(t.toTracker(0))
             trackerIdMap[t.id] = newId
         }
         data.trackerLogs.forEach { l ->

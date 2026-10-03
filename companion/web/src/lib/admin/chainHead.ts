@@ -14,18 +14,19 @@
  * caller cares to probe. That is exactly the relationship metadata a compromised server is
  * documented as able to take (COMPANION_ARCHITECTURE.md §6, "Metadata is visible": how many
  * relationships exist, how often someone syncs), and this server does not volunteer it to callers
- * who present nothing. On a self-hosted box the operator and the owner are usually the same
- * person, which is why this panel lives on the admin console at all; an administrator who is NOT
- * the owner does not hold this token and this panel is not an invitation to obtain it.
+ * who present nothing. So the check is rendered in the owner's own console, beside the access log
+ * it summarises, and read with the token that console already holds. The server administrator's
+ * console never asks for the owner's token (#322): an administrator signs in with their own
+ * credential, which opens nothing a relationship owns.
  *
  * WHAT THE VERDICT IS WORTH, stated before anything else because it is less than it looks. The
  * check runs ON the server, over rows the server holds, and this module renders what the server
  * said about itself. Against an honest server with damaged storage — a bad disk, a botched
  * restore, a hand-edited row — a reported break is real evidence. Against a server that lies it
  * is nothing: whoever can rewrite the entries can recompute the chain over them, and whoever
- * writes the response can write it with no break in it. The pasted-run examiner beside this
- * panel, now that it has a real digest (lib/admin/sha256.ts), is the version of the same
- * arithmetic that does not take the server's word for it.
+ * writes the response can write it with no break in it. The pasted-run examiner on the admin
+ * console, now that it has a real digest (lib/admin/sha256.ts), is the version of
+ * the same arithmetic that does not take the server's word for it.
  *
  * WHAT SURVIVES EVEN A LYING SERVER: the head hash, once it is anchored somewhere the server
  * cannot reach. A server that rewrites or truncates history it has already served must change
@@ -142,7 +143,7 @@ export function parseChainHeadRecord(body: unknown): ChainHeadRecord | null {
  * ceremonies use (owner/therapistKeys.ts groupFingerprint, and the therapist acceptance page's
  * own), so a person who has compared fingerprints before is chunking the same way here. Restated
  * rather than imported for the same reason therapistKeys.ts restates it: that module pulls
- * libsodium in behind it, and none of that belongs in the admin console's bundle for the sake of
+ * libsodium in behind it, and none of that belongs in a console's bundle for the sake of
  * a slice() loop. The contract that matters is the group size, and it is stated in both places.
  */
 export function groupDigest(value: string, size = 4): string[] {
@@ -209,19 +210,14 @@ export const HEAD_PURPOSE =
   'exists, the note is the anchor.'
 
 /**
- * Why the panel asks for a credential the rest of the console refuses to have. Rendered above
- * the inputs, so the person typing the token knows what the gate is protecting and whether the
- * token is theirs to type.
+ * What the check is and whose sign-in it reads with, rendered above its button in the owner's
+ * console so the person pressing it knows what comes back and what does not.
  */
-export const CHAIN_HEAD_GATE =
-  'This check is gated on the owner bearer token, exactly as reading the clinician’s ' +
-  'published keys is — not because a chain head opens anything, but because a head plus an ' +
-  'entry count, served per relationship to anyone who asked, would tell an anonymous caller ' +
-  'which relationships exist on this server and how active each one is. That is relationship ' +
-  'metadata, and this server does not volunteer it. On a self-hosted deployment the operator ' +
-  'and the owner are often the same person, which is why the panel is here; if this token is ' +
-  'not yours, this panel is not an invitation to obtain it. The token is sent once, to this ' +
-  'server’s own route, and kept only in the field below while this page is open.'
+export const CHAIN_HEAD_INTRO =
+  'This asks the server to recompute this clinician’s access log from its oldest entry to its ' +
+  'newest and report one digest, the head. It reads with your own sign-in, because a head and a ' +
+  'count would tell anyone else which relationships exist on this server and how active each one ' +
+  'is. Nothing the log records comes back: only a count, the sequence numbers and the head.'
 
 export interface ChainHeadView {
   verdict: ChainHeadVerdict
@@ -291,8 +287,8 @@ export function readChainHead(res: ChainHeadResponse): ChainHeadView {
   if (res.status === 401 || res.status === 403) {
     return view(
       'refused',
-      'The server did not accept the owner token, and nothing was read. It does not say which ' +
-        'way the token was wrong, and neither can this panel.',
+      'The server did not accept this console’s sign-in, and nothing was read. It does not say ' +
+        'which way it was wrong, and neither can this panel.',
     )
   }
   if (res.status === 429) {

@@ -157,10 +157,12 @@ describe('time on screen', () => {
     expect(script).toMatch(/stopped = true\s*\n\s*clearTimeout\(timer\)/)
     // No animation anywhere in the section's styles, read without their comments.
     const style = (/<style>([\s\S]*?)<\/style>/.exec(SOURCE)?.[1] ?? '').replace(/\/\*[\s\S]*?\*\//g, '')
-    const MOTION = /@keyframes|animation\s*:|transition\s*:/
+    // `transition: none` is the one transition allowed: it is how the section stops the global one (#434).
+    const MOTION = /@keyframes|animation\s*:|transition(-[a-z]+)?\s*:(?!\s*none\s*;)/
     expect(style).toContain('.clock')
     expect(MOTION.test(style)).toBe(false)
     // Positive control: a transition written into the styles is seen.
     expect(MOTION.test(`${style} .code { transition: opacity 1s; }`)).toBe(true)
+    expect(MOTION.test(`${style} .code { transition-duration: 1s; }`)).toBe(true)
   })
 })

@@ -30,7 +30,7 @@
     type OwnerConnection,
   } from '../../owner/recoveryEmail'
   import { Card, Callout } from '../ui'
-  import { devicesApi } from '../../phones/devices'
+  import { devicesApi, sameServer } from '../../phones/devices'
   import { reissueLine } from '../../phones/copy'
 
   let {
@@ -91,11 +91,13 @@
    * RE-ISSUING THE TOKEN DISCONNECTS EVERY PAIRED PHONE (#431), so the line saying so stands directly
    * above the button that re-issues it, always. With a connection this visit proved, the phones still
    * connected are counted and the line names how many; with none, or when the count cannot be read,
-   * the count-free line stands, which is true either way. The effect reads only the prop, and what it
-   * writes it never reads.
+   * the count-free line stands, which is true either way. The count is shown only while this card's
+   * own Server URL names the server it was read from (#434). The effect reads only the prop, and what
+   * it writes it never reads.
    */
   let connectedPhones = $state<number | null>(null)
-  const reissue = $derived(reissueLine(connectedPhones))
+  const countApplies = $derived(connection !== null && sameServer(serverUrl, connection.serverUrl, location.origin))
+  const reissue = $derived(reissueLine(countApplies ? connectedPhones : null))
 
   $effect(() => {
     const c = connection

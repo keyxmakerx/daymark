@@ -180,6 +180,37 @@ no**. Each has a history and an average. A tracker with values on at least 14 da
 mood appears in "What goes with your mood" (§3). Do one thing and Move keep their own trackers
 (Enjoyment, Mastery, Movement minutes), so those show up against mood too.
 
+### 6.1 Check-ins and quick log
+
+Each tracker has its own **check-ins**, on its own screen, and a new tracker asks nothing:
+
+- **When it happens** (the default): no check-ins. Logging is one tap away from the quick log.
+- **Once a day**, at a time the person picks.
+- **A few times a day**: two to six check-ins between hours the person sets, at times that change
+  from day to day. Each sits in its own equal share of the hours, at least half a share from the
+  next, and the same day always gets the same times (`stats/TrackerRhythm.kt`).
+- **Don't ask**: no check-ins and no prompt.
+
+A tracker's check-ins run through the same rules engine as the reminders (§12): unanswered ones
+ease it off with no cap, it is never switched off except by the person, and every change is
+announced with **Put it back**. Each tracker eases on its own: its ledger rows carry its id
+(§13.2), so one tracker's quiet never touches another's. A check-in counts as answered when the
+tracker was logged since the one before or in the last day, so a few-times-a-day tracker eases off
+only after a whole day with no log, and then first to once a day. **Stop asking** on a check-in
+sets the tracker back to "When it happens". Switching check-ins on asks first whether this tracker
+may ease off or should keep reminding at its times (for something like a medication); nothing
+changes until the person answers, and the card shows the answer while check-ins are on.
+
+The **quick log** comes two ways, both the person's to switch on: a quiet, silent notification per
+tracker that opens it (a yes/no tracker logs straight from its Yes and No), and a **Trackers**
+home-screen widget listing every active tracker. Neither shows a value or a count.
+
+**A locked phone says only "Daymark".** Every reminder and check-in notification, the quick log
+included, shows the app's name and nothing else on the lock screen, and every notification button
+(Yes, No, Try later, Stop asking, Put it back) needs the phone unlocked first on Android 12 and later.
+While the app lock is on, the widget names no tracker and logs nothing; it only opens Daymark, which
+asks for the PIN (`notifications/NotificationPrivacy.kt`, held by `NotificationPrivacySourceTest`).
+
 ## 7. Skills and "Take a moment"
 
 ### 7.1 Self-help skills
@@ -251,7 +282,10 @@ recommending, never setting, how often the support space is offered: #172.
 
 - **One resource, kept on the phone and edited by the person.** It starts as "Call or text 988" /
   "988 Suicide & Crisis Lifeline (US)" and is changed under Gentle support → Crisis resources, or
-  with "Use a different number" on the crisis screen. The screen says Daymark cannot call for anyone
+  with "Use a different number" on the crisis screen. Onboarding asks about it straight after the
+  welcome ("If things get hard"): the line is shown with **This one is right**, **Use a different
+  line** and **Not now**. It is never guessed from the phone's region or location, and a blank name
+  or number is never saved. The screen says Daymark cannot call for anyone
   and is not a crisis service, and to call the local emergency number in immediate danger.
 - **Always reachable.** Last in every support menu, never dismissible, untouched by suggestion
   settings.
@@ -404,16 +438,26 @@ times and has no page, so offer once. Not built: #156.
   an on/off switch. First-run setup offers one. Android 13 and later ask for notification permission
   the first time. Reminders fire at the exact time where Android allows it, and are re-armed after a
   restart.
-- A reminder's notification, or its **Log now** action, opens a fresh entry.
-- **Recorded, never rationed.** A reminder is at a time the person chose, so the arbiter does not
-  gate it: quietening something they scheduled would override them, and there is no reminder
-  setting for them to turn back up (`notifications/ReminderScheduler.kt`). Every firing still
-  writes a line in the reception ledger (§13.2).
-- Today a reminder fires exactly when set, and goes quiet only if the person changes it. Not built:
-  the rules engine running reminders, which would ease off after unanswered ones with no fixed limit,
-  never switch one off by itself, and announce any move with **Put it back**
-  ([DECISIONS.md](DECISIONS.md) §D1, §D1a; #159).
-- Not built: answering a reminder with "this time works", "try later" or "stop asking": #195.
+- A reminder's notification, or its **Log now** action, opens a fresh entry. Its line is one of the
+  fixed, human-written openers (§13.3), in turn.
+- **Try later** sends one more nudge for that reminder an hour later. **Stop asking** switches that
+  reminder off; switching it back on in Settings → Reminders undoes it (#195).
+- **The rules engine decides which firings are posted** (`stats/CheckInEngine.kt`,
+  [DECISIONS.md](DECISIONS.md) §D1, §D1a). The alarms always fire at the times the person set; the
+  engine only lets some of them through. While reminders are answered, every one is posted. Every
+  two unanswered ones in a row double the wait (once a day, every 2 days, 4, 8, and on), with no
+  fixed limit, but the engine never switches a reminder off: only the person does. Writing an entry
+  undoes that easing at once. After two weeks of answered reminders the engine may
+  try one step longer a wait, and keeps it while the person answers.
+- **Every change is announced.** "Daymark will check in less often for now", with how often and
+  **Put it back**, or "Your check-ins are back to the times you set". No notice mentions anything
+  missed. Putting back a longer wait the engine tried means it never tries one again. The engine's
+  own state is kept in the app's preferences (`data/CheckInStateStore.kt`).
+- **Easing off is the person's choice.** Setting the first reminder, in onboarding or in Settings →
+  Reminders, asks *"Ease off if I'm not answering"* or *"Keep reminding me at these times"*, with
+  nothing chosen until the person picks. Kept, reminders come at every time set, never fewer and
+  never more, and no longer wait is tried. Settings → Reminders shows the answer and changes it;
+  a change starts the engine over from the person's schedule (§D1a).
 
 ## 13. Why it asks: the arbiter, the reception ledger and the timing layer
 
@@ -428,11 +472,13 @@ from fixed, human-written lines; #159.
 
 ### 13.2 The reception ledger
 
-The `offer_records` table notes which feature asked (the support offer, a reminder, and two kinds
-nothing uses yet: the companion and an assignment), when, the hour and weekday at the moment of
-asking, whether anything came back, and what became of it (accepted, dismissed, snoozed, or stop).
-It holds no free text and nothing about the person. Rows are never updated, and are deleted after
-60 days.
+The `offer_records` table notes which feature asked (the support offer, a reminder, a tracker's
+check-in, and two kinds nothing uses yet: the companion and an assignment), when, the hour and
+weekday at the moment of asking, whether anything came back, and what became of it (accepted,
+dismissed, snoozed, or stop). A tracker's check-in also carries the tracker's id as its subject
+(schema v20); every other row's subject is 0. It holds no free text and nothing about the person.
+Rows are never updated, and are deleted after 60 days, except the newest 32 of each kind and
+subject, which the rules engine still reads (§12, §6.1).
 
 **The reception ledger and the timing grid are never shared with a clinician.** When someone answers
 is the app's business with them, and it stays on the phone. The ledger is in no backup, CSV or
@@ -449,11 +495,11 @@ before schema v18 have no hour or weekday, and none is ever worked out for them.
   identical to it. It never holds a mood trend, goals, people or communities.
 - The phrase pool (`stats/PhrasePool.kt`) is a small set of fixed, human-written openers, one set
   for mornings and one for evenings. The draw is blind to mood.
-- **Today placement decides nothing, and the pool is never spoken.** A reminder is at a time the
-  person chose, and the support offer is made while they are already in the app, so neither is an
-  ask an hour should be chosen for. No rotation is stored. Both stay dormant until Daymark starts an
-  ask of its own, such as the companion surfacing itself (#272), and are never applied to a reminder
-  or to the support offer (#159).
+- **The pool is spoken by reminders** (§12), in turn, with the turn stored in the app's preferences.
+  **Placement still decides nothing.** A reminder is at a time the person chose, and the support
+  offer is made while they are already in the app, so neither is an ask an hour should be chosen
+  for. Placement stays dormant until Daymark starts an ask of its own, such as the companion
+  surfacing itself (#272).
 
 ### 13.4 The debug screen: "Why it asks"
 

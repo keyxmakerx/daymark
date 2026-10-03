@@ -105,6 +105,17 @@ export const BACK_TO_PHONES = 'Back to phones'
 /* ── The server did not do what was asked ───────────────────────────────────────────────────── */
 
 export const UNREACHABLE = 'This server could not be reached. Nothing changed.'
+
+/**
+ * After Pair this phone or Disconnect this phone got no answer: the request may have arrived and its
+ * answer been lost, so this says nothing about whether it was done (#434). Both are safe to send again.
+ */
+export const UNREACHABLE_AFTER_SEND =
+  'This server did not answer, so this may have been done. Try again, or go back and the list shows whether it was.'
+
+/** A server from before phones could pair: it has no such routes (#434). */
+export const CANNOT_PAIR_PHONES =
+  'This server cannot pair phones. It needs updating to a newer version of Daymark Companion first.'
 export const TRY_AGAIN = 'Try again'
 
 export const REFUSED =

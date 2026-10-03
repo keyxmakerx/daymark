@@ -4,6 +4,7 @@ import com.daymark.app.data.dao.TrackerDao
 import com.daymark.app.data.dao.TrackerLogDao
 import com.daymark.app.data.entity.Tracker
 import com.daymark.app.data.entity.TrackerLog
+import com.daymark.app.notifications.TrackerCheckInScheduler
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
@@ -13,6 +14,7 @@ import javax.inject.Singleton
 class TrackerRepository @Inject constructor(
     private val trackerDao: TrackerDao,
     private val trackerLogDao: TrackerLogDao,
+    private val checkIns: TrackerCheckInScheduler,
 ) {
     fun observeActive(): Flow<List<Tracker>> = trackerDao.observeActive()
 
@@ -22,7 +24,12 @@ class TrackerRepository @Inject constructor(
 
     fun observeAllLogs(): Flow<List<TrackerLog>> = trackerLogDao.observeAll()
 
-    suspend fun add(tracker: Tracker): Long = trackerDao.insert(tracker)
+    suspend fun add(tracker: Tracker): Long {
+        val id = trackerDao.insert(tracker)
+        checkIns.refresh(tracker.copy(id = id))
+        checkIns.redrawWidget()
+        return id
+    }
 
     suspend fun getAll(): List<Tracker> = trackerDao.getAll()
 
@@ -46,10 +53,17 @@ class TrackerRepository @Inject constructor(
         )
     }
 
-    suspend fun update(tracker: Tracker) = trackerDao.update(tracker)
+    /** Saves [tracker] and re-arms its check-ins and quick-log notification to match. */
+    suspend fun update(tracker: Tracker) {
+        val before = trackerDao.getById(tracker.id)
+        trackerDao.update(tracker)
+        if (before != null && before.keepAsSet != tracker.keepAsSet) checkIns.easingChanged(tracker.id)
+        checkIns.refresh(tracker)
+        checkIns.redrawWidget()
+    }
 
-    suspend fun setArchived(tracker: Tracker, archived: Boolean) =
-        trackerDao.update(tracker.copy(archived = archived))
+    /** An archived tracker asks nothing and shows nothing until it is brought back. */
+    suspend fun setArchived(tracker: Tracker, archived: Boolean) = update(tracker.copy(archived = archived))
 
     suspend fun log(trackerId: Long, value: Double, dateTime: Long, note: String = ""): Long =
         trackerLogDao.insert(TrackerLog(trackerId = trackerId, dateTime = dateTime, value = value, note = note))

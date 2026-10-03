@@ -15,7 +15,7 @@ import com.daymark.app.data.entity.GamePlanItem
  * `instrument_results` and `task_results` (#177).
  *
  * "Companion" here is the server, its consoles and the relationship channels
- * (`docs/COMPANION_ASSIGNMENTS.md`), not the in-app companion presence of `docs/DECISIONS.md` §D1b.
+ * (`docs/COMPANION_ASSIGNMENTS.md`), not the dropped helper character of `docs/DECISIONS.md` §D1b.
  *
  * ## Deliberately small
  *

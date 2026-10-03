@@ -5,8 +5,8 @@ package com.daymark.app.companion
  * even be offered: a port of `companion/web/src/lib/assignments/validate.ts` and of the constants it
  * takes from `types.ts` (#177). `docs/COMPANION_ASSIGNMENTS.md` §1 and §2 are the design.
  *
- * "Companion" here is the server, its consoles and the relationship channels, not the in-app
- * companion presence of `docs/DECISIONS.md` §D1b.
+ * "Companion" here is the server, its consoles and the relationship channels, not the
+ * dropped helper character of `docs/DECISIONS.md` §D1b.
  *
  * ## Import-free, and why
  *

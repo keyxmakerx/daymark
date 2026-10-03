@@ -380,16 +380,22 @@ it never falls back to an unpadded write. The limit it assumes is the server's d
 bytes; for a server whose operator raised `DAYMARK_MAX_BLOB_BYTES`, pass the same number with
 `--max-blob-bytes`. A 413 from the server is reported as the server's answer. Today's writer is the
 command-line tool (`pnpm push` in `companion/web`), which reads the passphrase and the access token
-from the environment. The phone's is not built: #168.
+from the environment. The phone writes the same way, signed (`PhoneSync.send`, #432).
 
 **Pull (reader — the browser).** Read the key document → open its passphrase slot, or derive from
 the key params → list versions → fetch the head → decrypt (the AEAD verifies integrity). A wrong
 passphrase makes the slot or the decryption fail, with no oracle beyond that. A server with no key
 document has had nothing synced to it, and the reader says so.
 
+**Pull (reader — the phone).** Read the key document, signed, and go on only while its `ETag` is the
+one the sync key came from → list the lineages and keep only phones' (`phone_`, never `lane_`), at most
+16 → list each one's versions → fetch the version the server lists as most recently stored → decrypt
+with that lineage and version as associated data (`PhoneSync.fetch`, #168). Nothing changes on the
+phone until the person chooses to replace, add or keep (COMPANION_PHONE.md §2).
+
 Neither flow reads `/v1/keyparams`; the writer's create-only `PUT` is the one request left there
 (`companion/web/src/lib/sync/client.ts`). The phone's crypto opens either key document (#403); the
-phone fetching it is #168.
+phone reads it signed, at `/v1/keydoc`.
 
 **The owner's key (the consoles).** The owner console and the Recovery code screen read the key
 document with the owner's access token (`companion/web/src/lib/recovery/serverKey.ts`). Nothing: a

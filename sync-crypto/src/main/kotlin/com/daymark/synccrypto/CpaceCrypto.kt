@@ -164,6 +164,18 @@ class CpaceCrypto(private val sodium: LazySodium) {
             return enc.toByteArray() + data
         }
 
+        /**
+         * The channel identifier for one pairing run (docs/COMPANION_PAIRING.md §13):
+         * lv_cat("daymark/cpace/v2", relRef, inviteId). Length-prefixed rather than joined, so no
+         * boundary shift between the two ids can give the same bytes. Must equal
+         * `channelIdentifier` in `companion/web/src/lib/pairing/relay.ts`; OwnerPairingVectorTest pins
+         * the bytes `relay.test.ts` pins.
+         */
+        fun channelIdentifier(relRef: String, inviteId: String): ByteArray =
+            lvCat(CHANNEL_V2, relRef.toByteArray(Charsets.UTF_8), inviteId.toByteArray(Charsets.UTF_8))
+
+        private val CHANNEL_V2 = "daymark/cpace/v2".toByteArray(Charsets.UTF_8)
+
         /** Concatenation of length-prefixed items. */
         fun lvCat(vararg items: ByteArray): ByteArray {
             var out = ByteArray(0)

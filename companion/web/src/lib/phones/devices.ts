@@ -49,7 +49,7 @@ export interface Registered {
   pairedAt: number
 }
 
-export type FaultKind = 'unreachable' | 'refused' | 'http' | 'gone'
+export type FaultKind = 'unreachable' | 'refused' | 'http' | 'gone' | 'unsupported'
 
 /** Why a call did not give what it asks for. Carries a kind and nothing the server said. */
 export class PhonesFault extends Error {
@@ -129,7 +129,8 @@ export function devicesApi(serverUrl: string, token: string, doFetch: FetchLike 
   return {
     async listDevices() {
       const res = await send('GET', '/v1/devices')
-      if (res.status !== 200) throw faultOf(res.status)
+      // The list is the first thing read, so a server with no phone routes is told apart here.
+      if (res.status !== 200) throw faultOf(res.status, 'unsupported')
       const body = await json(res)
       const rows = isRecord(body) && Array.isArray(body.devices) ? body.devices.map(asDevice) : null
       if (!rows || rows.some((r) => r === null)) throw new PhonesFault('unreachable')
@@ -168,4 +169,22 @@ export function devicesApi(serverUrl: string, token: string, doFetch: FetchLike 
       if (res.status !== 204) throw faultOf(res.status)
     },
   }
+}
+
+/**
+ * Whether two server addresses, as typed, name the same server. Blank is this page's own server, as
+ * every client here reads it. An address that does not parse names no server, so it matches nothing:
+ * the Recover card's count must describe the server it would re-issue on, or not be shown (#434).
+ */
+export function sameServer(a: string, b: string, pageOrigin: string): boolean {
+  const where = (typed: string): string | null => {
+    try {
+      const url = new URL(typed.trim() || '/', pageOrigin)
+      return url.origin + url.pathname.replace(/\/+$/, '')
+    } catch {
+      return null
+    }
+  }
+  const left = where(a)
+  return left !== null && left === where(b)
 }

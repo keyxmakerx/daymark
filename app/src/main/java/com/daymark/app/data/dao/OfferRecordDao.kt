@@ -73,6 +73,21 @@ interface OfferRecordDao {
     )
     suspend fun countSince(kind: String, outcome: String, since: Long): Int
 
+    /** The last [limit] offers of a kind about one [subject], newest first. */
+    @Query(
+        "SELECT * FROM offer_records WHERE kind = :kind AND subject = :subject " +
+            "ORDER BY offeredAt DESC LIMIT :limit",
+    )
+    suspend fun recentForSubject(kind: String, subject: Long, limit: Int): List<OfferRecord>
+
+    /** When a kind last asked about one [subject], or 0 if it never has. */
+    @Query("SELECT COALESCE(MAX(offeredAt), 0) FROM offer_records WHERE kind = :kind AND subject = :subject")
+    suspend fun lastOfferedAtFor(kind: String, subject: Long): Long
+
+    /** Every subject a kind has asked about. */
+    @Query("SELECT DISTINCT subject FROM offer_records WHERE kind = :kind")
+    suspend fun subjectsOf(kind: String): List<Long>
+
     @Insert
     suspend fun insert(record: OfferRecord): Long
 
@@ -82,6 +97,10 @@ interface OfferRecordDao {
     /** Prunes old lines. The ledger is working state, not history worth keeping indefinitely. */
     @Query("DELETE FROM offer_records WHERE offeredAt < :cutoff")
     suspend fun deleteOlderThan(cutoff: Long)
+
+    /** As [deleteOlderThan], keeping the rows whose ids are in [keep] whatever their age. */
+    @Query("DELETE FROM offer_records WHERE offeredAt < :cutoff AND id NOT IN (:keep)")
+    suspend fun deleteOlderThanExcept(cutoff: Long, keep: List<Long>)
 
     @Query("DELETE FROM offer_records")
     suspend fun deleteAll()

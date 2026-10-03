@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -50,6 +52,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.daymark.app.data.entity.Reminder
 import com.daymark.app.notifications.NotificationPermission
+import com.daymark.app.ui.components.KeepTimesChoice
 import com.daymark.app.ui.components.PaperSurface
 import com.daymark.app.ui.components.SentenceCaps
 import com.daymark.app.util.DateUtils
@@ -63,6 +66,7 @@ fun RemindersScreen(
     viewModel: RemindersViewModel = hiltViewModel(),
 ) {
     val reminders by viewModel.reminders.collectAsStateWithLifecycle()
+    val keepAsSet by viewModel.keepAsSet.collectAsStateWithLifecycle()
 
     // Edit target: null = none, a Reminder = editing, Reminder(id=0) = adding a new one.
     var editing by remember { mutableStateOf<Reminder?>(null) }
@@ -140,6 +144,14 @@ fun RemindersScreen(
                         )
                     }
                 }
+                item {
+                    PaperSurface(modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text("If reminders go unanswered", style = MaterialTheme.typography.titleSmall)
+                            KeepTimesChoice(keep = keepAsSet, onChange = viewModel::setKeepAsSet)
+                        }
+                    }
+                }
                 items(reminders, key = { it.id }) { reminder ->
                     ReminderRow(
                         reminder = reminder,
@@ -153,10 +165,14 @@ fun RemindersScreen(
     }
 
     editing?.let { target ->
+        // Setting the first reminder asks whether reminders may ease off; Save waits for the answer.
+        val asks = target.id == 0L && reminders.none { it.enabled }
         ReminderDialog(
             initial = target,
+            asksKeep = asks,
             onDismiss = { editing = null },
-            onConfirm = { hour, minute, label ->
+            onConfirm = { hour, minute, label, keep ->
+                if (keep != null) viewModel.setKeepAsSet(keep)
                 if (target.id == 0L) viewModel.add(hour, minute, label)
                 else viewModel.update(target.copy(hour = hour, minute = minute, label = label.trim()))
                 editing = null
@@ -227,8 +243,9 @@ private fun ReminderRow(
 @Composable
 private fun ReminderDialog(
     initial: Reminder,
+    asksKeep: Boolean,
     onDismiss: () -> Unit,
-    onConfirm: (hour: Int, minute: Int, label: String) -> Unit,
+    onConfirm: (hour: Int, minute: Int, label: String, keep: Boolean?) -> Unit,
 ) {
     val tpState = rememberTimePickerState(
         initialHour = initial.hour,
@@ -236,14 +253,20 @@ private fun ReminderDialog(
         is24Hour = false,
     )
     var label by remember { mutableStateOf(initial.label) }
+    var keep by remember { mutableStateOf<Boolean?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = { onConfirm(tpState.hour, tpState.minute, label) }) { Text("Save") }
+            TextButton(
+                onClick = { onConfirm(tpState.hour, tpState.minute, label, if (asksKeep) keep else null) },
+                enabled = !asksKeep || keep != null,
+            ) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            // Scrolls: the first reminder also asks whether reminders may ease off, which can
+            // outgrow a short screen.
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 TimePicker(state = tpState)
                 OutlinedTextField(
                     value = label,
@@ -253,6 +276,10 @@ private fun ReminderDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (asksKeep) {
+                    Text("If reminders go unanswered", style = MaterialTheme.typography.titleSmall)
+                    KeepTimesChoice(keep = keep, onChange = { keep = it })
+                }
             }
         },
     )

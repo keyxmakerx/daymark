@@ -23,5 +23,34 @@
     <string name="reminder_channel_name">Daily reminder</string>
     <string name="reminder_channel_desc">Reminds you to log your day</string>
     <string name="reminder_title">How was your day?</string>
-    <string name="reminder_text">Take a moment to log how you feel.</string>
+    <string name="reminder_action_log">Log now</string>
+    <string name="reminder_action_later">Try later</string>
+    <string name="reminder_action_stop">Stop asking</string>
+
+    <!-- The rules engine's notices (docs/DECISIONS.md §D1). They say what changed, never that
+         anything was missed (§D1a). -->
+    <string name="checkin_quieter_title">Daymark will check in less often for now</string>
+    <plurals name="checkin_quieter_text">
+        <item quantity="one">Once a day, at the time you set.</item>
+        <item quantity="other">Every %d days, at the time you set.</item>
+    </plurals>
+    <string name="checkin_back_title">Your check-ins are back to the times you set</string>
+    <string name="checkin_put_back">Put it back</string>
+
+    <!-- A tracker's own check-ins and its quick-log notification. Fixed lines; the tracker's name
+         is the only thing slotted in. Same rules as the notices above. -->
+    <string name="tracker_checkin_channel">Tracker check-ins</string>
+    <string name="tracker_quicklog_channel">Quick log</string>
+    <string name="tracker_checkin_text">A quick log, if now suits.</string>
+    <string name="tracker_quicklog_text">Tap to log.</string>
+    <string name="tracker_quicklog_logged">Logged at %1$s. Tap to log again.</string>
+    <string name="tracker_log_yes">Yes</string>
+    <string name="tracker_log_no">No</string>
+    <string name="tracker_quieter_title">%1$s will check in less often for now</string>
+    <plurals name="tracker_quieter_text">
+        <item quantity="one">Once a day, at a time you set.</item>
+        <item quantity="other">Every %d days, at a time you set.</item>
+    </plurals>
+    <string name="tracker_widget_label">Trackers</string>
+    <string name="tracker_back_title">%1$s check-ins are back to the times you set</string>
 </resources>
