@@ -147,7 +147,7 @@ body.drawing .bar, body.drawing .card { display: none; }
       <div class="ui status" aria-hidden="true"><span>9:41</span><span class="dots"><b></b><i></i></span></div>
       <header class="ui top">
         <button class="icon" type="button" aria-label="Back" tabindex="-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
-        <div class="t"><h1>Your sky</h1><p><span id="count">0</span> memories, one star each</p></div>
+        <div class="t"><h1>Your sky</h1></div>
         <button class="icon" type="button" id="motion" aria-pressed="true" aria-label="Pause motion"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="6" width="3.2" height="12" rx="1"/><rect x="13.8" y="6" width="3.2" height="12" rx="1"/></svg></button>
       </header>
       <p class="ui zoom">×<span id="zr">1</span></p>
@@ -218,12 +218,12 @@ body.drawing .bar, body.drawing .card { display: none; }
     <li><b>Constellations</b><span>You draw them between your own stars and name them. If a star in one is put away, its outline stays, kept as a snapshot.</span></li>
     <li><b>Binary stars</b><span>Two memories about the same person, slowly turning around each other.</span></li>
     <li><b>Comet</b><span>Something that comes back every year, like a birthday. It passes through on that day.</span></li>
-    <li><b>Meteor shower</b><span>On the anniversary of a day, a few streaks fall from its star.</span></li>
-    <li><b>Pulsar</b><span>A habit kept on a steady rhythm. It pulses on that beat.</span></li>
-    <li><b>Dark nebula</b><span>A stretch you chose to dim. Nothing is hidden or lost.</span></li>
+    <li><b>Meteor shower</b><span>On the anniversary of a day you starred, a few streaks fall from its star.</span></li>
+    <li><b>Pulsar</b><span>A habit you set a time for. It pulses on that beat.</span></li>
+    <li><b>Dark nebula</b><span>A cloud of cold dust, part of this sky's own scenery. It holds no memories.</span></li>
     <li><b>Planetary nebula</b><span>A habit you chose to end. It finishes as a glowing ring, not a gap.</span></li>
     <li><b>Whirlpool</b><span>A weekly habit kept for years. Its memories turn slowly around each other; each turn is about a year.</span></li>
-    <li><b>Dark matter</b><span>Private memories. They don't shine, but the light behind them bends.</span></li>
+    <li><b>Dark matter</b><span>Memories you tucked away to find again later. They don't shine, but the light behind them bends.</span></li>
     <li><b>Black hole</b><span>Forms when you put memories away and draws them in slowly. Hidden, not deleted. It fades once nothing is left inside.</span></li>
     <li><b>Ringed planet</b><span>A place you keep going back to. Memories logged there ride around it as moons.</span></li>
     <li><b>Favourites</b><span>Memories you starred carry a soft ring.</span></li>
@@ -264,10 +264,12 @@ const fmtDM = d => new Date(START + d * DAY).toLocaleDateString("en-GB", { day: 
 // the person: how their tracking went, what happened to them, what they named things
 const PERIODS = [];
 { const LEN = { daily: [140, 420], onoff: [90, 260], quiet: [50, 170] }; let d = 0, last = "";
-  while (d < ND) { let m; do { const r = rnd(); m = r < .38 ? "daily" : r < .76 ? "onoff" : "quiet"; } while (m === last);
+  while (d < ND) { let m; do { const r = rnd(); m = r < .22 ? "daily" : r < .74 ? "onoff" : "quiet"; } while (m === last);
     const [a, b] = LEN[m], len = Math.round(a + rnd() * (b - a)); PERIODS.push({ from: d, to: Math.min(ND - 1, d + len - 1), mode: m }); d += len; last = m; }
   const lp = PERIODS[PERIODS.length - 1]; if (lp.mode === "quiet") lp.mode = PERIODS.length > 1 && PERIODS[PERIODS.length - 2].mode === "daily" ? "onoff" : "daily";
-  for (const need of ["daily", "onoff"]) if (!PERIODS.some(p => p.mode === need)) { const q = PERIODS.filter(p => p !== lp).sort((x, y) => (y.to - y.from) - (x.to - x.from))[0] || lp; q.mode = need; } }
+  for (const need of ["daily", "onoff"]) if (!PERIODS.some(p => p.mode === need)) { const q = PERIODS.filter(p => p !== lp).sort((x, y) => (y.to - y.from) - (x.to - x.from))[0] || lp; q.mode = need; }
+  // a long band is rare: at most two in a sky, so it stays something special rather than one a year
+  PERIODS.filter(p => p.mode === "daily").sort((x, y) => (y.to - y.from) - (x.to - x.from)).slice(2).forEach(p => { p.mode = "onoff"; }); }
 const WRITE = [];
 for (let i = 0; i < 3; i++) for (let k = 0; k < 60; k++) { const len = 50 + Math.floor(rnd() * 110), a = Math.floor(rnd() * Math.max(1, ND - len));
   if (WRITE.every(w => a > w.b + 50 || a + len < w.a - 50)) { WRITE.push({ a, b: a + len, type: i }); break; } }
@@ -290,7 +292,7 @@ const COMET_OF = choose(["Mum's birthday", "Dad's birthday", "Gran's birthday", 
 const COMET_DAY = Math.floor(rnd() * 365), COMET_DATE = new Date(Date.UTC(2025, 0, 1) + COMET_DAY * DAY).toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" });
 const PLACE = choose(["The beach", "Grandma's house", "The allotment", "The climbing wall", "The library", "The bench by the river", "The café on the corner", "The hill behind the house"]);
 const CONS_NAMES = shuffle(["Home", "The trip", "Summer", "The climb", "First steps", "Little one", "Our song", "The kitchen", "Saturdays", "The long walk", "Lantern", "The garden"]);
-const KINDS = [["Check-in", .9, 30], ["Mood", .8, 22], ["Journal entry", 1.1, 9], ["Thought record", 1.05, 5], ["Habit done", .75, 20], ["Project step", 1.0, 7], ["Gratitude note", .9, 5], ["Breathing exercise", .7, 4]]
+const KINDS = [["Check-in", .9, 30], ["Mood", .9, 22], ["Journal entry", .9, 9], ["Thought record", .9, 5], ["Habit done", .9, 20], ["Project step", .9, 7], ["Gratitude note", .9, 5], ["Breathing exercise", .9, 4]]
   .map(([k, l, w]) => [k, l, w * (.5 + rnd())]);
 const pickKind = write => { const w = KINDS.map((k, i) => k[2] * (write && i === 2 ? 5 : 1)); let r = rnd() * w.reduce((a, b) => a + b); for (let i = 0; i < w.length; i++) { r -= w[i]; if (r < 0) return i; } return 0; };
 // how this person's shapes tend to look: wide or narrow bands, knotty or smooth, which kinds of cluster
@@ -422,7 +424,7 @@ entries.forEach((e, i) => {
     const sp = (e.mode === "quiet" ? .8 : 1.4) * BANDK;
     cx = p.x + gauss() * sp; cy = p.y + gauss() * sp;
     const dr = .05 * age; cx += gauss() * dr; cy += gauss() * dr;
-    info = e.mode === "quiet" ? "A single memory from a quieter stretch" : "A single memory between busier weeks";
+    info = "";
   }
   if (!e.cl) [cx, cy] = clamp(cx, cy);
   const mag = Math.pow(rnd(), 4), tint = .92 + rnd() * .16; let c0 = ageCol(age + gauss() * .15);
@@ -493,16 +495,17 @@ const binaries = [];
 // a pulsar: a habit kept on a steady rhythm
 const pulsar = stars.find(s => s.flag === 0 && !s.cl && !s.pair && s.day > ND - 200 && s.lum > 1) || stars.find(s => s.flag === 0 && !s.cl);
 const pulsarDays = 90 + Math.floor(rnd() * 200);
-pulsar.flag = 4; pulsar.kind = "Pulsar"; pulsar.info = "“" + DAILY_HABIT + "”, done at the same time for " + pulsarDays + " days. It pulses on that beat."; pulsar.R = .0016;
+pulsar.flag = 4; pulsar.kind = "Pulsar"; pulsar.info = "“" + DAILY_HABIT + "”, a habit you set a time for. It pulses on that beat."; pulsar.R = .0016;
 // meteor shower: a year ago today
-const radiant = stars.filter(s => s.flag === 0 && !s.cl && !s.pair && s.lum > .7).sort((a, b) => Math.abs(a.day - (ND - 366)) - Math.abs(b.day - (ND - 366)))[0] || stars[0];
-radiant.info = "A year ago, about now. A meteor shower falls from it on the anniversary.";
+const annDist = s => { const d = (ND - 1 - s.day) % 365; return Math.min(d, 365 - d); };
+const radiant = stars.filter(s => s.fav && ND - 1 - s.day > 300).sort((a, b) => annDist(a) - annDist(b))[0] || giants[0];
+radiant.info = (radiant.fav ? "A favourite. " : "") + "A day you chose. On its anniversary, a meteor shower falls from it.";
 // planetary nebula: a habit you chose to end
 const PN_DAY = Math.floor(ND * (.2 + .6 * rnd()));
 const PN = (() => { const s = sOfDay(PN_DAY), q = place(Math.max(0, s - .05), Math.min(1, s + .05), .95, .35); return { x: q.x, y: q.y, R: .17 + .08 * rnd() }; })();
 const pnStar = { cx: PN.x, cy: PN.y, ox: 0, oy: 0, om: 0, R: .0012, col: [.75, .82, 1], lum: 1.8, flag: 0, day: PN_DAY, kind: "Habit ended", info: "“" + ENDED_HABIT + "”, which you chose to end. It finishes as a glowing ring, not a gap." };
 stars.push(pnStar);
-// dark nebula: a patch the person chose to dim, not hide
+// dark nebula: scenery, a cloud of cold dust that holds no memories
 const DN = (() => { const q = place(.05, .7, .2, .9); return { x: q.x, y: q.y, R: .5 + .35 * rnd() }; })();
 // comet: something that comes back every year, on its own orbit
 const CO = { rx: WX * (.6 + .3 * rnd()), ry: WY * (.6 + .3 * rnd()), ph: rnd() * 6.283, dir: rnd() < .5 ? 1 : -1 };
@@ -519,7 +522,7 @@ for (let d = WP_FROM, j = 0; d < ND; d += 7, j++) {
   stars.push(st); wpStars.push(st);
   for (let e = 0; e < 3; e++) { const b2 = rnd() * 6.283, r2 = rr * (.3 + rnd()); stars.push({ ...st, ox: st.ox * .9 + Math.cos(b2) * r2 * .12, oy: st.oy * .9 + Math.sin(b2) * r2 * .12, lum: .5 + .4 * rnd(), R: .001, info: "Part of the whirlpool around “" + WEEKLY_HABIT + "”." }); }
 }
-// dark matter: private memories. They don't shine, but they bend the light behind them.
+// dark matter: memories tucked away to find again later. They don't shine, but they bend the light behind them.
 const DM = (() => { const q = place(0, 1, 1.3, .5); return { x: q.x, y: q.y, R: .38 + .15 * rnd(), count: 20 + Math.floor(rnd() * 60) }; })();
 // ringed planet: a place you keep going back to. The memories logged there ride around it as moons.
 const PL = (() => { const q = place(.1, .9, 1.4, .45); return { x: q.x, y: q.y, R: .06 + .03 * rnd(), tilt: (rnd() - .5) * 1.1, open: .22 + .14 * rnd() }; })();
@@ -547,7 +550,6 @@ diskStars.forEach(s => { s.disk = true; s.a0 = rnd() * 6.2832; s.rr = 1.75 + 2.6
 const infall = stars.filter(s => s.flag === 0 && !s.cl && !s.pair && !s.disk && !s.dyn && s !== radiant && s !== pnStar && Math.hypot(s.cx - BH.x, s.cy - BH.y) < .9).slice(0, 6 + Math.floor(rnd() * 6));
 infall.forEach((s, i) => { s.disk = true; s.infall = i / infall.length; s.a0 = rnd() * 6.2832; s.rr = 9; s.info = "Put away recently. It's being drawn in slowly. You can bring it back any time."; diskStars.push(s); });
 const dynStars = [...diskStars, ...whStars, ...moons];
-document.getElementById("count").textContent = stars.length.toLocaleString("en-GB");
 
 // ---------- the look: every colour in this sky is this person's own ----------
 // One palette per sky, built from a colour scheme (close hues, opposites, or three or four spread apart),
@@ -929,12 +931,12 @@ const showInner = (s) => {
   sel = s;
   if (!s) { card.hidden = true; ring.hidden = true; return; }
   card.hidden = false;
-  if (s.meteor) { card.innerHTML = `<div class="d">Shooting star</div><div class="k">A meteor shower for the anniversary of ${fmt(radiant.day)}. Every streak flies out from that day's star.</div>`; return; }
+  if (s.meteor) { card.innerHTML = `<div class="d">Shooting star</div><div class="k">A meteor shower for the anniversary of ${fmt(radiant.day)}, a day you chose. Every streak flies out from that day's star.</div>`; return; }
   if (s.wh) { card.innerHTML = `<div class="d">White hole</div><div class="k">Forms when you bring put-away memories back. It sends each one home to where it was, then fades away.</div>`; return; }
-  if (s.dm) { card.innerHTML = `<div class="d">Dark matter</div><div class="k">${DM.count} private memories. They don't shine, but you can see them bend the light around them.</div>`; return; }
+  if (s.dm) { card.innerHTML = `<div class="d">Dark matter</div><div class="k">${DM.count} memories you tucked away to find again later. They don't shine, but you can see them bend the light around them.</div>`; return; }
   if (s.comet) { card.innerHTML = `<div class="d">Comet: ${COMET_OF}</div><div class="k">Something that comes back every year. In the app it would pass through around ${COMET_DATE}.</div>`; return; }
   if (s.pn) { card.innerHTML = `<div class="d">Planetary nebula</div><div class="k">“${ENDED_HABIT}”, a habit you chose to end on ${fmtS(PN_DAY)}. Its last memory sits in the middle.</div>`; return; }
-  if (s.dn) { card.innerHTML = `<div class="d">Dark nebula</div><div class="k">A stretch you chose to dim. The memories are still there; tap one to see it.</div>`; return; }
+  if (s.dn) { card.innerHTML = `<div class="d">Dark nebula</div><div class="k">A cloud of cold dust, part of this sky's own scenery. It holds no memories.</div>`; return; }
   if (s.neb) { card.innerHTML = `<div class="d">Nebula</div><div class="k">Weeks with a lot of writing: ${s.neb.journals} journal entries, ${fmtS(s.neb.a)} to ${fmtS(s.neb.b)}</div>`; return; }
   if (s.sn) { card.innerHTML = `<div class="d">Supernova, ${fmt(SN_DAY)}</div><div class="k">A life event you marked as hard. ${afterSN} memories since have formed in and around it.</div>`; return; }
   if (s.pl) { card.innerHTML = `<div class="d">Ringed planet: ${PLACE}</div><div class="k">A place you keep going back to. ${moons.length} memories logged there ride around it as moons. Tap one to see its day.</div>`; return; }

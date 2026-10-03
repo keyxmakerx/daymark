@@ -9,24 +9,28 @@
 >
 > Where this document disagrees with `docs/SKY.md` or with §1 of
 > `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md`, this one governs. §9 lists exactly what it keeps from them
-> and what it reverses. §10 lists the places where the approved prototype breaks a standing rule and
-> someone has to choose, each with a recommendation. Nothing in §10 is decided by this document.
+> and what it reverses. §10 records the maintainer's answers to the questions the approved prototype
+> raised, given later on 2026-10-03, and the few that are still open. The prototype was updated to
+> match those answers.
 
 **In one paragraph.** Every star is one memory, and nothing else in the sky is a star. The
 background is deep space: colour and gas, no stars of its own. The shapes come from how the person
-kept their record. Days in a row of doing their thing draw a long band, on-and-off weeks gather into
-small clusters and streams, and a weekly habit kept for years turns into a whirlpool. Life events are
-giant stars. A life event the person marked as hard becomes a supernova, and what came after gathers
-in its cloud. Memories the person puts away are drawn slowly into a black hole that forms beside
-them; bringing them back opens a white hole that sends each one home. The person can join stars into
-constellations and name them. No two skies are alike: the course of the river, the shapes, where
-everything sits and every colour grow from the person's own record and a seed of their own.
+kept their record. Months of doing their thing almost every day draw a long band, which is rare;
+on-and-off weeks gather into small clusters and streams, and a weekly habit kept for years turns into a whirlpool. Life events
+are giant stars. A life event the person marked as hard becomes a supernova, and what came after
+gathers in its cloud. Memories the person puts away are drawn slowly into a black hole that forms
+beside them; bringing them back opens a white hole that sends each one home. Memories tucked away to
+find again later become dark matter, unseen except for a faint bend in the light. The person can
+join stars into constellations and name them. No two skies are alike: the course of the river, the
+shapes, where everything sits and every colour grow from the person's own record and a seed of their
+own.
 
 ---
 
 ## 1. What the maintainer decided
 
-In the order it was decided, across the design rounds of 2026-10-02 and 2026-10-03.
+In the order it was decided, across the design rounds of 2026-10-02 and 2026-10-03. The answers
+given after approval are in §10.
 
 | Decision | Detail |
 |---|---|
@@ -69,7 +73,7 @@ from **dates alone**: which days have at least one memory. Never mood, never kin
 
 | Rhythm | Shape | In the prototype |
 |---|---|---|
-| Something on most days, for weeks | **A band** along the river, with knots where days bunch up, and a few strays | `daily` periods, 140 to 420 days |
+| Something on most days, for months | **A band** along the river, with knots where days bunch up, and a few strays. **Rare**: most skies have one or two. | `daily` periods, 140 to 420 days, at most two per sky |
 | Runs of a few days with breaks between | **Small clusters** set off to one side of the river, one per run: oval, spiral or open | `onoff` periods |
 | A long run inside on-and-off weeks | **A stream**: the run stretches into a thin tapering trail, like a comet | a run at least `streamAt` days long (6 to 11, per sky) |
 | A single memory between runs | Scattered loosely near the river | |
@@ -78,7 +82,9 @@ from **dates alone**: which days have at least one memory. Never mood, never kin
 The prototype makes its example person out of these periods directly. A build has to read them from
 real dates, so the thresholds are a proposal to tune on real data, not a decision:
 
-- **Band:** a run of at least 21 days in which at least 6 of every 7 days have a memory.
+- **Band:** a run of at least 8 weeks in which at least 6 of every 7 days have a memory. Bands are
+  meant to be rare, something special, never one a year (the maintainer, 2026-10-03); the threshold
+  is set high on purpose, and a tuning pass should keep it that way.
 - **Run:** two or more consecutive days with a memory, outside a band.
 - **Stream:** a run at least as long as the sky's own `streamAt` (6 to 11 days).
 - **Bridge:** two clusters whose centres end up within a short distance of each other, and only if
@@ -120,6 +126,9 @@ Every object is made in one of two ways, and the difference matters:
 - **Rule**: a fixed rule over the person's own dates and tags. It reads no mood and no content, and
   its card says plainly what it is, never what it means.
 
+A third kind, **scenery**, is placed by the seed alone and holds no memories: the background's gas
+and the dark nebula.
+
 ### 3.1 Stars
 
 | Object | Made by | What it is | Card says |
@@ -129,7 +138,8 @@ Every object is made in one of two ways, and the difference matters:
 | **Supernova** | marked: a life event the person marked as hard | A glowing shell with a slowly pulsing star at its heart. A few hundred of the memories after it are drawn in: some are born as new small white stars in knots of its gas, the rest gather in a ring around it. | "A life event you marked as hard. *N* memories since have formed in and around it." |
 | **Favourite** | marked: the person starred a memory | A soft ring around the star, nothing more | "A favourite." then the usual card |
 | **Binary stars** | rule: two memories on the same day that both name the same person | The two turn slowly around each other | "One of a pair. Both mention *name*." |
-| **Pulsar** | rule: a habit kept on a steady rhythm | Pulses on that beat | See §10, item 4 |
+| **Pulsar** | marked: a habit the person set a time for | Pulses on that beat | "*habit*, a habit you set a time for. It pulses on that beat." No count of days. |
+| **Named star** | marked: the person named a single memory | Looks like any other star | The person's name for it, above the usual card |
 
 ### 3.2 Shapes the habits made
 
@@ -147,16 +157,16 @@ Every object is made in one of two ways, and the difference matters:
 | Object | Made by | What it is |
 |---|---|---|
 | **Comet** | marked: a date that comes back every year, like a birthday | It travels on its own slow orbit and passes through around that date. The tail always trails behind the direction it moves. Tappable while it moves. |
-| **Meteor shower** | rule, see §10 item 1 | On the anniversary of a day, a few fast thin streaks fly out from that day's star. Each starts some way from the star, never at it, and is over in under a second; a bright one leaves a glowing train for a couple of seconds. Tappable. |
-| **Ringed planet** | rule: a place the person keeps going back to | The memories logged there ride around it as moons, and the moons pass behind it. Up close it is solid: banded, lit from one side, with rings that have gaps, the rings' shadow across the planet, and the planet's shadow across the rings. See §10 item 6 on where places come from. |
+| **Meteor shower** | marked: a day the person chose (a favourite, or a life event they placed and did not mark hard) | On its anniversary, a few fast thin streaks fly out from that day's star. Never for a day the app picks. Each starts some way from the star, never at it, and is over in under a second; a bright one leaves a glowing train for a couple of seconds. Tappable. |
+| **Ringed planet** | marked: a place the person named themselves and keeps picking on entries | The memories logged there ride around it as moons, and the moons pass behind it. Up close it is solid: banded, lit from one side, with rings that have gaps, the rings' shadow across the planet, and the planet's shadow across the rings. Places work the way people do: named by the person, picked on an entry. Never device location. |
 
 ### 3.4 Clouds and shadows
 
 | Object | Made by | What it is |
 |---|---|---|
 | **Nebula** | rule: weeks with a lot of writing | Gas around those weeks' memories, in the sky's own colours. "Weeks with a lot of writing: *N* journal entries, *date* to *date*." |
-| **Dark nebula** | marked: a stretch the person chose to dim | A dark cloud over it. Nothing is hidden or lost; tap any star in it. |
-| **Dark matter** | marked: private memories | They do not shine, but the light behind them bends. See §10 item 7. |
+| **Dark nebula** | the seed: scenery | A cloud of cold dust, part of the sky's own scenery, placed by the seed and blind to data. It holds no memories and stars in front of it stay bright. |
+| **Dark matter** | marked: memories tucked away to find again later | They do not shine and cannot be seen; only a faint bend in the light behind them gives them away. §4.2. |
 | **Black hole** | marked: memories put away | §4. |
 | **White hole** | marked: memories brought back | §4. |
 
@@ -166,8 +176,8 @@ The card is the only text the sky adds, and it is fixed, human-written copy with
 values slotted in, like every other word in the product.
 
 - It **names**: the date, the kind, the object, the person's own words. It never interprets.
-- It never characterises the stretch a memory sits in. The prototype's "a single memory from a
-  quieter stretch" and "between busier weeks" are out (§10 item 3).
+- It never characterises the stretch a memory sits in. The prototype used to say "a single memory
+  from a quieter stretch" and "between busier weeks"; both are gone (§10).
 - It never praises: no "well done", no exclamation marks.
 - Counts appear only as plain description of an object the person is looking at ("14 memories, 3 to
   19 May"), never as a headline or a comparison (`docs/SKY.md` §6.3).
@@ -175,9 +185,20 @@ values slotted in, like every other word in the product.
 
 ---
 
-## 4. Putting memories away: the black hole and the white hole
+## 4. Setting memories aside
 
-This is the one new action the design adds to the product, and the maintainer decided its rule.
+The design adds two ways to set memories aside. They do different jobs and look different.
+
+| | Put away (§4.1) | Tuck away for later (§4.2) |
+|---|---|---|
+| What it is for | Not wanting to see them for now | Leaving something to come across again |
+| What you see | A black hole beside them; they ride in its disk | Nothing, only a faint bend in the light |
+| Can they be tapped | Yes, in the disk | Once found |
+| Coming back | Bring back: a white hole sends them home | Found: they shine again where they were |
+
+### 4.1 Put away: the black hole and the white hole
+
+The maintainer decided this rule.
 
 1. **Put away.** The person chooses memories to hide. A small black hole forms right beside them.
 2. **Drawn in, slowly.** Over time it draws those memories in. A memory being drawn in travels in a
@@ -198,6 +219,22 @@ leaves no trace anywhere (`docs/SKY.md` §2.1).
 The black hole bends the light behind it like a real one: a dark centre, a thin bright ring, a tilted
 glowing disk that passes in front of the centre on the near side and behind it on the far side, and
 the stars around it lensed outward. Each sky tilts and flattens its disk differently.
+
+### 4.2 Tuck away for later: dark matter
+
+From the maintainer's note on 2026-10-03: *"a way to hide stuff intentionally for you to come back
+later, it's gone, and you can find stuff you may have forgotten."* Proposed shape, not yet seen by
+the maintainer:
+
+1. The person tucks memories away. They stop shining and cannot be seen at all.
+2. Where they are, the light of the stars behind bends very slightly, the way real dark matter
+   gives itself away. Nothing else marks the place and nothing ever points to it.
+3. Coming across that bend and tapping it is finding them again: they shine where they were, and
+   the card says "Tucked away on *date*. Found again."
+4. Nothing ever brings them back on its own and nothing ever reminds anyone about them: no
+   notification, no "on this day" (`docs/SKY.md` §6.6).
+5. They are never lost. The text list (`docs/SKY.md` §7.5) has them under their own heading, so
+   anyone can reach them on purpose, and that is also the accessible way to find them.
 
 ---
 
@@ -245,10 +282,25 @@ Every sky gets one palette, and every object takes its colours from it.
 
 ### 5.4 The seed
 
-A person has exactly one sky, and its seed never changes once set, because a place whose layout and
+A person has exactly one sky, and nothing changes it on its own, because a place whose layout and
 colours change between openings is not a place. "Someone else's sky" and "New colours" in the
-prototype are showcase controls; neither exists in the app (see §10 item 10 for whether a person may
-change their own colours).
+prototype are showcase controls; neither exists in the app as it is. What the person can do instead,
+from the maintainer's answer on 2026-10-03:
+
+- **Colours, chosen up front.** When the sky is first made, the person sees it in its own colours
+  and can try others before keeping one. Trying others changes the colours only; the river's course
+  and the shapes are never chosen.
+- **Then the colours settle, and the person is told so at the start.** Proposed wording: *"You can
+  change these colours until 2 November. After that they stay, as part of your sky."* The date is
+  the end of the window.
+- **The window: proposed 30 days from the first memory.** The maintainer asked how long is
+  reasonable. A month is long enough to live with the colours through good and bad light and a few
+  different moods, and short enough that the sky has settled before there is much history in it.
+  Not yet confirmed (§10).
+- **Reset my sky**, always available, behind a confirmation that says what it does: it grows the sky
+  again from a new seed, with a new course, new shapes and new colours, and a new window to choose
+  colours in. It never deletes or changes a memory, a name or a constellation. Constellations are
+  drawn between the same memories in their new places, and each keeps its replica as drawn (§7.6).
 
 **The seed as built would undercut "no two alike".** `SkySeed.forFirstRecord` in `sky/SkyRandom.kt`
 derives the seed from the first record's id, date and kind. Record ids start at 1 on every install,
@@ -285,7 +337,7 @@ before the first memory, which is why `SkySeed.EMPTY_SKY` should stay as it is.
   the age still reads. `sky/SkyAge.kt` carries different stops today (five, ending at 5.5 years); the
   approved values are these.
 - **Size and brightness vary by identity only**: most stars small, a few bright. Never by mood,
-  never by kind (§10 item 5).
+  never by kind (§10).
 - Giants and the supernova's heart are the only stars made bigger on purpose, because the person
   marked them.
 
@@ -338,8 +390,8 @@ The card has **Remove this constellation**.
 A constellation keeps its outline **as it was when it was drawn**. Over the years its stars drift
 apart, which is what makes an old one memorable, and the outline stays.
 
-- **A star put away** (§4) keeps its point, drawn as a dashed ring, with the card line "One star has
-  since been put away. The outline is kept as it was when you drew it."
+- **A star put away or tucked away** (§4) keeps its point, drawn as a dashed ring, with the card
+  line "One star has since been put away. The outline is kept as it was when you drew it."
 - **A memory deleted** takes its point out of the outline, because deletion leaves no trace
   (`docs/SKY.md` §2.1). Proposed: a constellation left with fewer than two stars is removed, without
   comment.
@@ -355,6 +407,27 @@ only that the person can now draw their own.
 
 In the app's own database, in the person's own backup, and nowhere else: never synced, shared,
 reported or sent (`docs/SKY.md` §6.4). The prototype keeps them in the browser, per sky.
+
+### 7.6 Going back to one as you drew it
+
+From the maintainer's answers on 2026-10-03: there is no way to see the whole sky as it was on an
+earlier date, *"only constellations allowed that"*, and a constellation should be *"a way you can go
+back and see a replica of the constellation and to a lesser and shadowed portion the stars around
+it."*
+
+- A constellation's card has **See it as you drew it**.
+- That opens a replica: the constellation's stars exactly where they were on the day it was drawn,
+  with the lines joining them, and around it, fainter and in shadow, the stars that were near it
+  then, in the colours they had then.
+- It is a view, not a place to work: nothing can be tapped open or changed in it, and one tap takes
+  the person back to the sky as it is now.
+- A memory put away or tucked away since shows in the replica as the dashed ring. A memory deleted
+  since is not in the replica at all (`docs/SKY.md` §2.1).
+- This is the only way back in time anywhere in the sky.
+
+To build it, the app keeps, for each constellation, its stars' positions on the day it was drawn and
+the date itself; the shadowed stars around it are worked out again from the river as it stood on that
+date, so nothing else needs storing.
 
 ---
 
@@ -417,61 +490,55 @@ as follows. This is a map, not a plan of work:
 - **`sky/SkyTwinkle.kt`**: stays.
 - **`sky/SkyRandom.kt`**: `SkySeed.forFirstRecord` changes (§5.4).
 - **`ui/sky/SkySurface.kt`**: replaced by an OpenGL ES 3.0 surface (§6.4).
-- **New records** the build needs: a "marked hard" flag on a life event; hidden and favourite flags
-  on a memory; constellations; a yearly date for comets; and the sources §10 asks about.
+- **New records** the build needs: a "marked hard" flag on a life event; put-away, tucked-away and
+  favourite flags and an optional name on a memory; constellations, with their stars' positions on
+  the day they were drawn; a yearly date for comets; places, named by the person and picked on an
+  entry; and the sky's chosen colours with the date the colour window closes. The pulsar reads a time
+  the person set on a habit, and does not exist for a habit without one.
 
 ---
 
-## 10. To settle before building
+## 10. Settled after approval, and what is still open
 
-Each of these is a place where the approved prototype breaks a standing rule or needs data the app
-does not have. The prototype shows the object; the build needs a decision.
+The approved prototype broke a few standing rules and needed some data the app does not have. The
+maintainer answered each question on 2026-10-03, and the prototype now follows every answer that
+changes what it shows.
 
-1. **The meteor shower picks a day for the person.** It falls on the anniversary of a memory the
-   prototype chose because it was about a year old. `docs/SKY.md` §6.6 bans anniversary effects, and
-   a day the software picks could be the worst day of someone's year.
-   *Recommended:* only on the anniversary of a memory the person starred or a life event they placed
-   and did not mark hard. Never on one the app chose.
-2. **The header shows a total count** ("14,742 memories, one star each"). `docs/SKY.md` §6.3 forbids
-   a count as a headline. *Recommended:* drop it; the header says "Your sky".
-3. **Two card lines describe the stretch** ("from a quieter stretch", "between busier weeks"). That
-   comments on a gap. *Recommended:* the card says the date and the kind and nothing about the
-   stretch.
-4. **The pulsar reads time of day** ("done at the same time for 214 days"). `docs/SKY.md` §2.3 keeps
-   time of day out of the sky's shapes, because it draws a person's sleep across the surface.
-   *Recommended:* a pulsar is a habit with a reminder time the person set themselves, which is their
-   choice rather than something read from timestamps. Otherwise drop it.
-5. **The prototype makes some kinds brighter** (a journal entry slightly brighter than a check-in).
-   The September plan says a journal page stays the size of everything else. *Recommended:*
-   brightness from identity only.
-6. **The ringed planet needs places.** The app has no places, and must never use device location.
-   *Recommended:* places the person names themselves, the same way people work, picked on an entry.
-   Otherwise drop it.
-7. **Dark matter needs a meaning for "private".** The app has no private flag separate from hiding.
-   *Recommended:* drop it, or define it as journal entries kept behind the journal's own lock.
-8. **"Dim a stretch" (the dark nebula) is a second hiding action** next to putting memories away.
-   *Recommended:* keep only putting away (§4), the action the maintainer designed; drop dimming.
-9. **Giants and age colour.** The September plan says a life event never red-shifts; the approved
-   prototype red-shifts giants like every other star. *Recommended:* follow the prototype, since it
-   was approved; the giant still stands out by size.
-10. **May a person change their own colours?** The showcase has "New colours". *Recommended:* yes,
-    as a setting the person chooses, kept until they choose again, and never changed by anything
-    else.
-11. **The rhythm thresholds in §2.2** are proposals; they need tuning on real data before they are
-    called right.
+| # | Question | The maintainer's answer | Where it lands |
+|---|---|---|---|
+| 1 | Which days get a meteor shower | Only days the person chose | §3.3. The prototype's shower now falls from a favourite. |
+| 2 | The total count in the header | Dropped; the header says "Your sky" | Done in the prototype. |
+| 3 | The pulsar reads time of day | Only for a habit the person set a time for | §3.1, with no count of days on its card. |
+| 4 | Where places come from | Places the person names themselves | §3.3. Never device location. |
+| 5 | Dark matter | Keep it | §4.2, as memories tucked away to find again later. |
+| 6 | Dark nebula ("dim a stretch") | Needs changes: "maybe this or dark matter is a way to hide stuff intentionally for you to come back later" | That job went to dark matter (§4.2). The dark nebula is now scenery (§3.4). |
+| 7 | May a person change their colours | Needs changes: colours up front, a warning that the sky becomes permanent over time, and a way to reset the sky | §5.4. |
+| 8 | A slider to see the sky on an earlier date | No: "only constellations allowed that" | §7.6. |
+| 9 | Name a single star | Yes | §3.1. |
+| 10 | Review a year as a flight along its river | No: bands should be rare, never one a year | §2.2: bands are rare by rule, at most two in the prototype. |
+| 11 | A constellation's then and now | No, but see it again as a replica with its surroundings in shadow | §7.6. |
+
+Two more follow from standing rules rather than a new answer, and the prototype now follows both:
+a card never describes the stretch a memory sits in (it used to say "from a quieter stretch"), and
+brightness never follows kind (it used to make a journal entry slightly brighter).
+
+**Still open**, each with the default the build should take unless the maintainer says otherwise:
+
+1. **How long the colour window lasts.** Default: 30 days from the first memory (§5.4).
+2. **The proposed shape of "tuck away for later"** (§4.2) has not been seen by the maintainer.
+   Default: as written.
+3. **Giants and age colour.** The September plan says a life event never red-shifts; the approved
+   prototype red-shifts giants like every other star. Default: follow the prototype; the giant still
+   stands out by size.
+4. **The rhythm thresholds in §2.2** are proposals and need tuning on real data, keeping bands rare.
 
 ---
 
-## 11. Ideas not yet shown to the maintainer
+## 11. Ideas, and what became of them
 
-None of these is approved. Each fits the rules above.
-
-- **Sky as it was.** A slider that shows the sky on an earlier date: the river shorter, every star
-  bluer, because age is measured from that date. It ranks nothing and shows nothing the person has
-  not already seen.
-- **Name a single star**, the way a constellation is named, shown on its card.
-- **The year review as a flight.** "Review my year" flies slowly along that year's stretch of the
-  river and stops only at things the person marked: life events, constellations, favourites. Never
-  at anything the app picked.
-- **Constellation then and now.** On a constellation's card, switch between the outline as drawn and
-  where its stars are today.
+| Idea | Outcome |
+|---|---|
+| See the whole sky as it was on an earlier date | Rejected; only constellations go back in time (§7.6) |
+| Name a single star | Approved (§3.1) |
+| "Review my year" as a flight along that year's river | Rejected; bands are rare and never per year (§2.2) |
+| A constellation's then and now on its card | Replaced by the replica (§7.6) |
