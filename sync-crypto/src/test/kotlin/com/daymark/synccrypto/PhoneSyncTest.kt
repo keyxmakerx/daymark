@@ -57,6 +57,8 @@ class PhoneSyncTest {
         val opened = phoneSync.unlock(paired, Wrapped.PASSPHRASE) as? PhoneSync.Unlock.Opened ?: throw AssertionError("not opened")
         assertArrayEquals(Wrapped.syncKey, opened.syncKey)
         assertEquals(tag, opened.keyDocumentTag)
+        // The owner's public pairing keys come out with it, the same the console derives (#174).
+        assertEquals(Wrapped.ownerPublic, opened.ownerPublic)
         assertEquals(1, server.requests.size)
 
         val wrong = stopped(phoneSync.unlock(paired, Wrapped.PASSPHRASE + "!"))
@@ -431,6 +433,7 @@ class PhoneSyncTest {
         private val crypto = SyncCrypto(sodium)
         private val master = sodium.randomBytesBuf(32)
         val syncKey: ByteArray = crypto.deriveSubkey(master, 1, 32)
+        val ownerPublic: PairingPayloads.OwnerKeys = PairingPayloads.ownerKeysOf(crypto.ownerIdentityFromMaster(master))
         val document: String = KeyDocument.WrappedKey(
             listOf(
                 crypto.wrapSlot(

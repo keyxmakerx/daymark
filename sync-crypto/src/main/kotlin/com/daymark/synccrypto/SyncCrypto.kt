@@ -90,7 +90,12 @@ class SyncCrypto(private val sodium: LazySodium) {
         }
     }
 
-    class OwnerKeys(val syncKey: ByteArray, val manifestSeed: ByteArray)
+    /**
+     * What the master opens to. [ownerPublic] is the public halves of the owner's pairing identity
+     * (subkeys 3 and 4): not secret, and all a pairing approval needs, so the private halves are
+     * wiped as soon as the public ones exist.
+     */
+    class OwnerKeys(val syncKey: ByteArray, val manifestSeed: ByteArray, val ownerPublic: PairingPayloads.OwnerKeys)
 
     data class ManifestEntry(val version: Long, val hash: String)
     data class Manifest(val lineage: String, val head: Long, val entries: List<ManifestEntry>)
@@ -272,9 +277,13 @@ class SyncCrypto(private val sodium: LazySodium) {
     /** master -> the subkeys this module uses (ids 1 and 2), and the master wiped either way. */
     private fun ownerKeysThenWipe(master: ByteArray): OwnerKeys {
         try {
+            val identity = ownerIdentityFromMaster(master)
+            val ownerPublic = PairingPayloads.ownerKeysOf(identity)
+            identity.wipe()
             return OwnerKeys(
                 syncKey = deriveSubkey(master, SUBKEY_SYNC, AEAD.XCHACHA20POLY1305_IETF_KEYBYTES),
                 manifestSeed = deriveSubkey(master, SUBKEY_MANIFEST, Sign.SEEDBYTES),
+                ownerPublic = ownerPublic,
             )
         } finally {
             master.fill(0)

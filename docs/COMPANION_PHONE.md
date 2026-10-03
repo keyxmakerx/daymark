@@ -50,7 +50,7 @@ libsodium and no emulator; the `sync` flavour wires it to the Android binding
 | Manifest signing bytes | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
 | Base64: RFC 4648 §5, URL-safe, no padding | everywhere | `SyncCrypto.kt` (plain `java.util.Base64`, because lazysodium's own helper is standard base64) | Yes |
 | CPace (CPACE-RISTRETTO255-SHA512) | `pairing/cpace.ts` | `CpaceCrypto.kt` | Yes |
-| Pairing channel identifier and envelopes | `pairing/relay.ts`, `pairing/envelope.ts`, `pairing/payloads.ts` | `CpaceCrypto.kt` (`channelIdentifier`), `PairingEnvelope.kt`, `PairingPayloads.kt`, pinned to the web's bytes in `OwnerPairingVectorTest.kt` and `PairingPayloadsTest.kt` | The identifier, envelopes and payloads: yes. The relay run from the phone: #174 |
+| Pairing channel identifier and envelopes | `pairing/relay.ts`, `pairing/envelope.ts`, `pairing/payloads.ts` | `CpaceCrypto.kt` (`channelIdentifier`), `PairingEnvelope.kt`, `PairingPayloads.kt`, pinned to the web's bytes in `OwnerPairingVectorTest.kt` and `PairingPayloadsTest.kt` | The identifier, envelopes, payloads and the owner's run (`ClinicianPairing.kt`): yes. Its screens: #174 |
 | Assignment and game-plan opening: seal-open, unpad (an envelope that opens to `{` was sealed unpadded before #315 and is read as it is), then verify against the pinned clinician key, context and recipient fingerprint | `assignments/crypto.ts`, `therapist/gamePlan.ts` | — | No: #177 |
 | Share sealing, format 2: padded, and signed over the transcript, the encrypted body and the sealed key, at the version the share is published as and with the time it was sealed | `share/sharecrypto.ts` | — | No: #174 |
 

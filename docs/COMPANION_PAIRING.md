@@ -7,7 +7,7 @@ both devices turn that code into the same key through a password-authenticated k
 everything and learns neither the code nor the key.
 
 As built, both halves run in the browser: the owner's in the owner console, the clinician's on the
-acceptance page. The phone's half is specified in §14 and not built: #174. Pairing grants access
+acceptance page. The phone's half (§14) has its protocol built and its screens not: #174. Pairing grants access
 to nothing (§10).
 
 Code: `companion/web/src/lib/pairing/`, `companion/web/src/lib/therapist/pairingAccept.ts`,
@@ -389,9 +389,11 @@ The clinician polls status every 45 seconds (`PAIRING_STATUS_POLL_MS` on the web
 
 ## 14. The phone's half
 
-Not built: #174. The protocol does not change; only the device running the owner's half does. Until
-the phone can talk to the server at all (#168), no Companion screen may claim the phone will show or
-approve anything.
+The protocol does not change; only the device running the owner's half does. The phone's run is
+built in `sync-crypto` (`ClinicianPairing.kt`: open, collect, approve, cancel, each request signed by
+the phone's key), with its bytes pinned to the web's. The screens that drive it, and keeping a run
+across a restart, are not built: #174. Until they are, no Companion screen may claim the phone will
+show or approve anything.
 
 - **Identity is derived, not generated.** `crypto_kdf_derive_from_key` over the owner's master with
   context `"dmsync01"`: subkey id 3 is the X25519 seed, id 4 the Ed25519 seed, 32 bytes each, then
