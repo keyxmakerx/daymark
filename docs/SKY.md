@@ -1,5 +1,11 @@
 # The Sky — design specification
 
+> **Revised 2026-10-03.** The approved redesign is `docs/SKY_REDESIGN_2026-10.md`, and where it
+> disagrees with this document or with the plan below, it governs. It keeps §1's rule that a hard
+> stretch is never a void, and §4.1, §6, §7 and §8 as they stand. It reverses the decorative field
+> (M1), random placement (§3.1), the rejection of constellations (§3.1) and the rule that a life
+> event has no valence (§2.2). Its §9 has the exact list. Nothing of it is built yet.
+
 > **Revised 2026-09-16.** Several sections below are superseded by
 > `docs/PLAN_2026-09-SKY-PEOPLE-TIMING.md`: a star's colour is its age rather than its mood, the
 > core is white for every star, kind glyphs appear only when leaned in to a day, twinkle ships,

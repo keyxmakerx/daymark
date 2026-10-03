@@ -17,6 +17,11 @@ rotation. §5's per-decision history is one reading of the current moment, not a
 
 ## 1. The Sky
 
+> **Revised 2026-10-03.** This section is largely superseded by `docs/SKY_REDESIGN_2026-10.md`,
+> approved that day: stars lie along a river measured in memories rather than scattered at random
+> (§1.0 below), and there is no decorative field. Colour as age, the white heart, twinkle behind the
+> motion switch and the life event as the bright star carry over; its §9 lists exactly what does.
+
 ### 1.0 Placement is random — revised 2026-09-16, and it replaces the geography
 
 **Decided by the maintainer, and it reverses `docs/SKY.md` §3.1 ("Placement — time is the sky's
