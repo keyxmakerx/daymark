@@ -320,11 +320,27 @@ fun Application.module(
     // owner's own backups and have no end (#338). Ending a relationship deletes nothing by itself —
     // its items follow the same clock as everyone's.
     // The server's administrators, in every shape (#322). A server without one prints a setup code.
-    val admins = adminStore ?: AdminStore(config.dataDir)
-    val adminAudit = adminAuditStore ?: AuditStore(config.dataDir, config.auditRetentionDays * 86_400L, dbName = ADMIN_AUDIT_DB)
+    // When the data directory cannot hold their database (mounted read-only, say), the server still
+    // starts, so /healthz answers and /readyz says what is wrong; the server console is then off
+    // altogether, with no claim and no sign-in, rather than open on nothing.
+    val adminStores = try {
+        Pair(
+            adminStore ?: AdminStore(config.dataDir),
+            adminAuditStore ?: AuditStore(config.dataDir, config.auditRetentionDays * 86_400L, dbName = ADMIN_AUDIT_DB),
+        )
+    } catch (e: java.sql.SQLException) {
+        log.error(
+            "The administrators' database could not be opened in {}, so the server console is off until the " +
+                "data directory is writable and the server is started again. /readyz reports the same directory.",
+            config.dataDir,
+        )
+        null
+    }
+    val admins = adminStores?.first
+    val adminAudit = adminStores?.second
     val claimCode = setupCode ?: SetupCode()
-    val wantsCode = { admins.adminCount() == 0 || config.adminReset }
-    if (wantsCode()) {
+    val wantsCode = { admins != null && (admins.adminCount() == 0 || config.adminReset) }
+    if (admins != null && adminAudit != null && wantsCode()) {
         if (admins.adminCount() > 0) {
             log.warn(
                 "DAYMARK_ADMIN_RESET is on, so this start prints a setup code although the server has an " +
@@ -390,7 +406,7 @@ fun Application.module(
 
         // The server administrator's claim, sign-in and console reads (#322), beside the probes at
         // the server root so the console reaches them from wherever it is served, in every shape.
-        adminRoutes(
+        if (admins != null && adminAudit != null) adminRoutes(
             adminStore = admins,
             setupCode = claimCode,
             shape = shape,

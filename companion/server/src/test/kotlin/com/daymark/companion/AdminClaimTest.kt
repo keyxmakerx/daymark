@@ -436,4 +436,27 @@ class AdminClaimTest {
             assertEquals(1, s.admins.adminCount())
         }
     }
+
+    @Test
+    fun `a data directory that cannot hold the administrators' database leaves the server up and the console off`() = testApplication {
+        // A directory where the database file should be: it cannot be opened, as on a /data
+        // mounted read-only, and the permission bits play no part, so this runs as root too.
+        val dir = Files.createTempDirectory("admin-claim")
+        Files.createDirectory(dir.resolve("admin.db"))
+        application { module(config(dir.toString()).copy(authToken = null)) }
+        startApplication()
+        assertEquals(HttpStatusCode.OK, client.get("/healthz").status)
+        assertFalse("claimOpen" in client.get("/v1/admin/status").bodyAsText(), "the console answered")
+        assertTrue(printedCodes().isEmpty(), "no setup code is printed for a console that is off")
+        assertTrue(appender.list.any { it.level == Level.ERROR && "administrators' database" in it.formattedMessage })
+    }
+
+    @Test
+    fun `the same start in a usable directory serves the console`() = testApplication {
+        // The control for the test above: what is off there is on here.
+        application { module(config(Files.createTempDirectory("admin-claim").toString()).copy(authToken = null)) }
+        startApplication()
+        assertTrue("claimOpen" in client.get("/v1/admin/status").bodyAsText())
+        assertEquals(1, printedCodes().size)
+    }
 }
