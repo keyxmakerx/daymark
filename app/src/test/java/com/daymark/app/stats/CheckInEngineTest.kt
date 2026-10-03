@@ -252,6 +252,56 @@ class CheckInEngineTest {
         assertEquals(listOf(0L, 1L, 2L, 4L, 8L, 16L, 32L), (0..6).map { CheckInEngine.paceAfter(it).days })
     }
 
+    // ---- Trying a longer wait ----
+
+    @Test
+    fun `a kept trial only ever adds quiet, and an answer leaves it in place`() {
+        for (ledger in ledgers(5)) for (steps in 0..6) {
+            val before = CheckInEngine.paceOf(Kind.REMINDER, ledger, false, 0L, steps)
+            val after = CheckInEngine.paceOf(Kind.REMINDER, ledger, false, 0L, steps + 1)
+            assertFalse("$ledger: trial $steps to ${steps + 1} went from $before to $after", louder(after, before))
+        }
+        val quiet = (1..6).map { row(it, Outcome.DISMISSED.key) }
+        val answered = quiet + row(7, Outcome.ACCEPTED.key)
+        assertEquals(CheckInEngine.paceAfter(2), CheckInEngine.paceOf(Kind.REMINDER, answered, false, 0L, 2))
+        // Positive control: the run of misses really did add quiet on top of the trial.
+        assertTrue(CheckInEngine.paceOf(Kind.REMINDER, quiet, false, 0L, 2).quieterThan(CheckInEngine.paceAfter(2)))
+    }
+
+    private fun answers(n: Int, from: Int = 1) = (from until from + n).map { row(it, Outcome.ACCEPTED.key) }
+
+    private fun mayTry(ledger: List<Offer>, since: Long = 0L, declined: Boolean = false) =
+        CheckInEngine.mayTryLonger(Kind.REMINDER, ledger, since, declined)
+
+    @Test
+    fun `a longer wait is tried only after a long run of answered check-ins`() {
+        val n = CheckInEngine.ANSWERS_BEFORE_TRIAL
+        assertTrue(mayTry(answers(n)))
+        assertFalse(mayTry(answers(n - 1)))
+        for (i in 0 until n) for (other in listOf(Outcome.SNOOZED.key, Outcome.DISMISSED.key, unknownKey)) {
+            val broken = answers(n).toMutableList().also { it[i] = it[i].copy(outcome = other) }
+            assertFalse("row $i as $other", mayTry(broken))
+        }
+        // Only the newest run counts: an old miss before it does not block a trial.
+        assertTrue(mayTry(listOf(row(0, Outcome.DISMISSED.key)) + answers(n)))
+    }
+
+    @Test
+    fun `rows before the last trial or put it back do not count toward the next`() {
+        val n = CheckInEngine.ANSWERS_BEFORE_TRIAL
+        val ledger = answers(n)
+        assertFalse(mayTry(ledger, since = start + 2 * hour))
+        assertTrue(mayTry(ledger, since = start + 1 * hour))
+    }
+
+    @Test
+    fun `once the person puts a trial back, no longer wait is ever tried again`() {
+        val n = CheckInEngine.ANSWERS_BEFORE_TRIAL
+        for (len in listOf(n, 3 * n, 100)) assertFalse(mayTry(answers(len), declined = true))
+        // Positive control: the same ledger does earn a trial when nothing was declined.
+        assertTrue(mayTry(answers(100)))
+    }
+
     @Test
     fun `the ledger sweep covers every outcome`() {
         val known = InterruptionBudget.Outcome.entries.map { it.key }.toSet() - Outcome.STOP.key

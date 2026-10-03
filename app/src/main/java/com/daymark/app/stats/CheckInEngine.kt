@@ -40,6 +40,13 @@ package com.daymark.app.stats
  * `countFrom` moment the caller stores: ledger rows before it no longer count, so the pace returns
  * to as set at once. The wording of the notice lives with the caller and is human-written (§D1a: it
  * may say what changed, never that anything was missed).
+ *
+ * ## Trying a longer wait
+ *
+ * People differ, so the engine also looks for a quieter rhythm that still suits: after a long run
+ * of answered check-ins it may try one step longer a wait ([mayTryLonger]), announced like any other
+ * change. If the person keeps answering, the longer wait stays. If they put it back, it is never
+ * tried again for that check-in. A trial only ever asks less.
  */
 object CheckInEngine {
 
@@ -131,19 +138,60 @@ object CheckInEngine {
     /**
      * The pace in force for [kind]. [saidStop] is the person's standing "stop asking", read
      * separately because it outlives any window; it has no default so nobody can forget it.
+     *
+     * [trialSteps] is how many longer waits the engine has tried and kept ([mayTryLonger]). The
+     * quiet from a run of unanswered check-ins is added on top, so an answered check-in takes away
+     * only that part and leaves a kept trial in place. Both parts only ever add quiet.
      */
     fun paceOf(
         kind: InterruptionBudget.Kind,
         recent: List<InterruptionBudget.Offer>,
         saidStop: Boolean,
         countFrom: Long,
+        trialSteps: Int = 0,
     ): Pace {
         if (saidStop) return Pace.Off
         val mine = recent.filter { it.kind == kind.key && it.offeredAt >= countFrom }
         if (mine.any { InterruptionBudget.Outcome.fromKey(it.outcome) == InterruptionBudget.Outcome.STOP }) {
             return Pace.Off
         }
-        return paceAfter(unansweredRun(kind, recent, countFrom) / MISSES_PER_STEP)
+        val missSteps = unansweredRun(kind, recent, countFrom) / MISSES_PER_STEP
+        return paceAfter(maxOf(trialSteps, 0) + missSteps)
+    }
+
+    /**
+     * How many answered check-ins in a row, with nothing unanswered between them, earn a try at a
+     * longer wait. Two weeks of a daily check-in. A judgement call, recorded as one.
+     */
+    const val ANSWERS_BEFORE_TRIAL = 14
+
+    /**
+     * Whether the engine may now try one step longer a wait, on its own.
+     *
+     * Trying a longer wait asks less, which is always allowed, so this needs no permission; it
+     * needs a reason to think the check-ins are more than the person needs, and that reason is a
+     * long run of them all answered: the last [ANSWERS_BEFORE_TRIAL] of [kind]'s check-ins since
+     * [since] (the later of the last Put it back and the last trial). A snoozed or unanswered one
+     * anywhere in that run means no.
+     *
+     * The caller adds one to its stored trial steps, notes the moment as the new [since], and sends
+     * the notice. If the person answers **Put it back** to a trial, the caller sets the steps back to
+     * zero and [trialDeclined] to true, and the engine never tries a longer wait for that check-in
+     * again: the person has said this rhythm is the one they want. Nothing here ever tries a
+     * *shorter* wait than the one in force; only the person's answers and Put it back do that.
+     */
+    fun mayTryLonger(
+        kind: InterruptionBudget.Kind,
+        recent: List<InterruptionBudget.Offer>,
+        since: Long,
+        trialDeclined: Boolean,
+    ): Boolean {
+        if (trialDeclined) return false
+        val run = recent.filter { it.kind == kind.key && it.offeredAt >= since }
+            .sortedByDescending { it.offeredAt }
+            .take(ANSWERS_BEFORE_TRIAL)
+        return run.size == ANSWERS_BEFORE_TRIAL &&
+            run.all { InterruptionBudget.Outcome.fromKey(it.outcome) == InterruptionBudget.Outcome.ACCEPTED }
     }
 
     /**
