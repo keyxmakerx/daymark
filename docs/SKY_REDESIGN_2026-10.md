@@ -203,6 +203,34 @@ values slotted in, like every other word in the product.
   19 May"), never as a headline or a comparison (`docs/SKY.md` §6.3).
 - Journal prose never appears (`docs/SKY.md` §4.1).
 
+### 3.7 Trackers
+
+The maintainer decided on 2026-10-03 that tracker logs belong in the sky, with objects of their own.
+They are kept **beside the river and never on it**: tracker logs are not part of the rhythm a stretch
+is read from (§2.2), so a tracker logged a few times a day never floods the river or turns into a
+band, and how often someone logs never shapes the rest of their sky.
+
+| Object | Made by | What it is |
+|---|---|---|
+| **Globular cluster** | marked: a tracker the person shows in their sky | A round, dense ball of stars, thickest at the middle, turning very slowly. Each star is one log. |
+| **Asteroid belt** | the same | A tilted belt of fine grains orbiting a single star, the tracker's first log, inner grains a little faster than outer ones. Each grain is one log. |
+| **Ring** | the same | A ring of stars around a small knot at the centre, the tracker's first few logs. Each star in the ring is one log. |
+
+- **Which look** a tracker gets comes from the seed and the tracker, so two trackers in one sky
+  differ and the same tracker looks different in someone else's sky. Each sits beside the river near
+  the day the tracker was started.
+- **Logs are spread evenly** around a belt or ring by their order, never by their dates, so a week
+  without logs leaves no gap in it.
+- **Its total light stays the same** however often the tracker is logged: more logs, each one fainter.
+  A busy tracker is a denser object, never a brighter one.
+- **The person chooses which trackers show**, with a "Show in my sky" switch on each tracker. A tracker
+  can be about something hard (urges, symptoms, a medication), and nobody should have a large object
+  made of it in their sky unless they want one. Default: on, because the maintainer asked for them;
+  a tracker can also be put away whole, like any memory (§4.1).
+- **Card**: the tracker's own name, the look, and "Each time you log it is one star here." Never a
+  count of logs, never a rate, never "in a row".
+- An archived tracker's object stays, unchanged (§9.4).
+
 ### 3.6 The Key
 
 The Key stays (the maintainer, and the safety review, 2026-10-03). In a mental-health app an
@@ -536,7 +564,7 @@ as follows. This is a map, not a plan of work:
 - **New records** the build needs: a "marked hard" flag on a life event; put-away, tucked-away and
   favourite flags and an optional name on a memory; constellations, with their stars' positions on
   the day they were drawn; a yearly date for comets; places, named by the person and picked on an
-  entry; and the sky's chosen colours with the date the colour window closes. The pulsar reads a time
+  entry; the sky's chosen colours with the date the colour window closes; and a "show in my sky" flag on each tracker (§3.7). The pulsar reads a time
   the person set on a habit, and does not exist for a habit without one.
 
 ### 9.4 How the rest of the app reaches the sky
@@ -555,7 +583,8 @@ Checked against the app on 2026-10-03, so nothing in it meets the sky undecided.
 | **Custom mood colours** | Do not reach the sky. Colour is age (§6.2), never mood. |
 | **Reduced motion** | No opening, no twinkle, no drift, no meteors; the sky opens still, on today (§6.3, §8). |
 | **App lock** | The sky is behind the lock like everything else. A card never shows journal prose (§3.5). |
-| **Trackers, sleep logs, screeners, the safety plan** | Not stars. The sky keeps the kinds it has today: check-ins, practices, journal pages, goals reached, project steps and life events. A tracker logged a few times a day would flood the river and make bands out of how often someone logs, and a screener is a score. Open: the maintainer may want tracker logs in (§10). |
+| **Trackers** | In, as objects of their own beside the river, never on it (§3.7). Each tracker has a "Show in my sky" switch. |
+| **Sleep logs, screeners, the safety plan** | Not stars. A screener is a score, and the safety plan is for a hard moment, not a memory. |
 
 ---
 
@@ -585,6 +614,9 @@ in this document and the prototype: no shape is a reward and no card says "in a 
 in, and a put-away memory's card shows only "Put away" and Bring back (§4.1); any tap skips the
 opening (§8); and the Key stays, leading with "red only means old" (§3.6).
 
+**Tracker logs** are in the sky, by the maintainer's decision the same day, as three new objects kept
+beside the river (§3.7).
+
 Two more follow from standing rules rather than a new answer, and the prototype now follows both:
 a card never describes the stretch a memory sits in (it used to say "from a quieter stretch"), and
 brightness never follows kind (it used to make a journal entry slightly brighter).
@@ -597,8 +629,6 @@ brightness never follows kind (it used to make a journal entry slightly brighter
    prototype red-shifts giants like every other star. Default: follow the prototype; the giant still
    stands out by size.
 3. **The rhythm thresholds in §2.2** are proposals and need tuning on real data, keeping bands rare.
-4. **Tracker logs as stars** (§9.4). Default: not stars, so how often someone logs never shapes
-   their sky.
 
 ---
 

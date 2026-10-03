@@ -177,12 +177,16 @@ body.drawing .bar, body.drawing .card { display: none; }
         <div class="body"><div class="chips">
           <h3>Shapes your habits made</h3>
           <button type="button" data-go="all">Whole sky</button>
-          <button type="button" data-go="band">A daily stretch</button>
+          <button type="button" data-go="band">A band</button>
           <button type="button" data-go="clusters">Small clusters</button>
           <button type="button" data-go="wp">Whirlpool</button>
           <button type="button" data-go="pulsar">Pulsar</button>
           <button type="button" data-go="bin">Binary stars</button>
           <button type="button" data-go="bridge" id="bridgeChip">Bridge</button>
+          <h3>Trackers you show</h3>
+          <button type="button" data-go="trk0">Tracker</button>
+          <button type="button" data-go="trk1">Tracker</button>
+          <button type="button" data-go="trk2">Tracker</button>
           <h3>Events and moments</h3>
           <button type="button" data-go="giant">A giant star</button>
           <button type="button" data-go="one">One memory up close</button>
@@ -225,6 +229,7 @@ body.drawing .bar, body.drawing .card { display: none; }
     <li><b>Whirlpool</b><span>A weekly habit kept for years. Its memories turn slowly around each other; each turn is about a year.</span></li>
     <li><b>Dark matter</b><span>Memories you tucked away to find again later. They don't shine, but the light behind them bends.</span></li>
     <li><b>Black hole</b><span>Forms when you put memories away, draws them in, then closes and is gone. Nothing marks where they were. Hidden, not deleted: bring them back from the list.</span></li>
+    <li><b>Trackers</b><span>Trackers you choose to show. Each log is one star, gathered away from the river into a globular cluster, a belt or a ring of its own, so how often you log never shapes the rest of your sky.</span></li>
     <li><b>Ringed planet</b><span>A place you keep going back to. Memories logged there ride around it as moons.</span></li>
     <li><b>Favourites</b><span>Memories you starred carry a soft ring.</span></li>
     <li><b>Bridge</b><span>Two runs of days close together, joined by the days that carried one into the next.</span></li>
@@ -549,6 +554,51 @@ const awayPos = s => { const p = awayP(s), e = Math.pow(p, 1.3), r = s.r0 * (1 -
   return [BH.x + vx, BH.y - vy, p >= 1]; };
 putAway.forEach((s, i) => { const hx = s.cx + s.ox, hy = s.cy + s.oy; s.away = true; s.awayI = i; s.r0 = Math.hypot(hx - BH.x, hy - BH.y); s.a0 = Math.atan2(-(hy - BH.y), hx - BH.x);
   s.dyn = awayPos; s.dk = q => 1.3 * smoothstep(0, 1.2, bhTime()) * (1 - smoothstep(.75, 1, awayP(q))); });
+// Trackers the person chose to show. Each log is one star, gathered into an object of its own beside the river and never
+// on it: tracker logs are not part of the rhythm a stretch is read from (§2.2), so how often someone logs never shapes the
+// rest of the sky. Three looks, a globular cluster, an asteroid belt and a ring, chosen per tracker from the seed. They use
+// a random stream of their own so that adding them moved nothing else in an approved sky.
+let tseed = SKY ^ 0x5bd1e995;
+const trnd = () => { tseed |= 0; tseed = tseed + 0x6D2B79F5 | 0; let t = Math.imul(tseed ^ tseed >>> 15, 1 | tseed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const tgauss = () => { let u = 0; while (u === 0) u = trnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(6.2831853 * trnd()); };
+const placeT = (s0, s1, off, R) => { let best = null, bd = -1e9;
+  for (let i = 0; i < 120; i++) { const s = Math.max(0, Math.min(1, s0 + trnd() * (s1 - s0))), p = pathAt(s), side = trnd() < .5 ? -1 : 1, o = off * (.8 + .6 * trnd());
+    const x = Math.max(-WX + R + .2, Math.min(WX - R - .2, p.x + p.nx * o * side)), y = Math.max(-WY + R + .8, Math.min(WY - R - .8, p.y + p.ny * o * side));
+    const d = placed.reduce((m, q) => Math.min(m, Math.hypot(q.x - x, q.y - y) - q.R - R), 99); if (d > bd) { bd = d; best = { x, y, R, s }; } if (d > .45) break; }
+  placed.push(best); return best; };
+const TRK_LOOK = { globular: "Globular cluster", belt: "Asteroid belt", ring: "Ring" };
+const TRK_NAMES = ["Glasses of water", "Time outside", "Medication", "Cups of coffee", "Stretch breaks", "Walks with the dog", "Practising scales", "Screen-free hour"];
+const trkLooks = ["globular", "belt", "ring"]; for (let i = 2; i > 0; i--) { const j = Math.floor(trnd() * (i + 1)); [trkLooks[i], trkLooks[j]] = [trkLooks[j], trkLooks[i]]; }
+const trackers = [];
+const beltPos = s => { const t = s.trk, a = s.ba + T * s.bw, ct = Math.cos(t.tilt), sn = Math.sin(t.tilt), rx = Math.cos(a) * s.br, ry = Math.sin(a) * s.br * t.open + s.bz;
+  return [t.x + ct * rx - sn * ry, t.y + sn * rx + ct * ry, false]; };
+trkLooks.forEach(look => {
+  const name = TRK_NAMES.splice(Math.floor(trnd() * TRK_NAMES.length), 1)[0];
+  const from = Math.max(0, ND - 1 - Math.floor(365 * (.6 + trnd() * 2.2))), perDay = .5 + trnd() * 2.3;
+  let days = []; for (let d = from; d < ND; d++) { const n = Math.floor(perDay * (.3 + 1.4 * trnd()) + trnd() * .5); for (let j = 0; j < n; j++) days.push(d); }
+  if (days.length > 900) { const k = days.length / 900; days = Array.from({ length: 900 }, (_, i) => days[Math.floor(i * k)]); }
+  if (days.length < 12) days = Array.from({ length: 12 }, (_, i) => from + Math.floor(i * (ND - 1 - from) / 11));
+  const R = look === "globular" ? .24 + .1 * trnd() : look === "belt" ? .27 + .08 * trnd() : .26 + .08 * trnd();
+  // The object's total light stays about the same however often the tracker is logged: more logs, each one fainter.
+  const dim = Math.min(1, Math.pow(200 / days.length, .8));
+  const q = placeT(sOfDay(from) - .04, sOfDay(from) + .08, 1.55, R * 1.25);
+  const t = { name, look, x: q.x, y: q.y, R, from, n: days.length, tilt: (trnd() - .5) * 1.2, open: look === "belt" ? .22 + .3 * trnd() : .72 + .26 * trnd(), stars: [] };
+  const info = look === "globular" ? "“" + name + "”, a tracker you show in your sky. Each star in this cluster is one time you logged it."
+    : look === "belt" ? "“" + name + "”, a tracker you show in your sky. Each grain in the belt is one time you logged it; the first sits at the centre."
+    : "“" + name + "”, a tracker you show in your sky. Each star in the ring is one time you logged it; the first ones sit at the centre.";
+  const spin = trnd() < .5 ? -1 : 1, core = Math.max(3, Math.round(days.length * .04));
+  days.forEach((d, i) => {
+    const age = (ND - 1 - d) / 365, st = { cx: t.x, cy: t.y, ox: 0, oy: 0, om: 0, R: .0008 + .0006 * trnd(), col: ageCol(age), lum: (.5 + .35 * trnd()) * dim, flag: 0, day: d, kind: "Tracker logged", info, trk: t };
+    if (look === "globular") { const a = t.R * .26, r = Math.min(t.R * 1.5, a / Math.sqrt(Math.pow(Math.max(1e-4, trnd()), -2 / 3) - 1)), th = trnd() * 6.2832;
+      st.ox = Math.cos(th) * r; st.oy = Math.sin(th) * r; st.om = .012 * spin; }
+    else if (look === "belt") { if (i === 0) { st.R = .0018; st.lum = 1.5; }
+      else { st.ba = i * 2.39996 + tgauss() * .04; st.br = t.R * (.74 + .42 * Math.pow(trnd(), 1.4) + .04 * tgauss()); st.bz = tgauss() * t.R * .012; st.bw = .06 * spin * Math.pow(t.R / st.br, 1.5); st.dyn = beltPos; st.R *= .8; } }
+    else { if (i < core) { const r = t.R * .07 * Math.abs(tgauss()), th = trnd() * 6.2832; st.ox = Math.cos(th) * r; st.oy = Math.sin(th) * r; st.lum *= 1.3; }
+      else { const r = t.R * (1 + .1 * tgauss() + .05 * Math.sin(i * 2.39996 * 3)), th = i * 2.39996 + tgauss() * .03, ct = Math.cos(t.tilt), sn = Math.sin(t.tilt), rx = Math.cos(th) * r, ry = Math.sin(th) * r * t.open;
+        st.ox = ct * rx - sn * ry; st.oy = sn * rx + ct * ry; } }
+    stars.push(st); t.stars.push(st); });
+  trackers.push(t); });
+const beltGrains = stars.filter(s => s.trk && s.dyn);
 const dynStars = [...putAway, ...whStars, ...moons];
 
 // ---------- the look: every colour in this sky is this person's own ----------
@@ -873,6 +923,14 @@ gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.enableVertexAttribArray(0); gl.vertexAt
 const db = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, db); gl.bufferData(gl.ARRAY_BUFFER, dinst.byteLength, gl.DYNAMIC_DRAW);
 for (let k = 0; k < 4; k++) { gl.enableVertexAttribArray(1 + k); gl.vertexAttribPointer(1 + k, 4, gl.FLOAT, false, 64, k * 16); gl.vertexAttribDivisor(1 + k, 1); }
 gl.bindVertexArray(null);
+// A belt's grains orbit, so they are rewritten every frame like the moons, but they are drawn with the other stars, in
+// linear light before tone-mapping: hundreds of grains drawn directly on top would add up to a solid white bar.
+const binst = new Float32Array(Math.max(1, beltGrains.length) * 16), bSeed = beltGrains.map(() => [trnd() * 6.283, trnd()]);
+const vaoB = gl.createVertexArray(); gl.bindVertexArray(vaoB);
+gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+const bb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bb); gl.bufferData(gl.ARRAY_BUFFER, binst.byteLength, gl.DYNAMIC_DRAW);
+for (let k = 0; k < 4; k++) { gl.enableVertexAttribArray(1 + k); gl.vertexAttribPointer(1 + k, 4, gl.FLOAT, false, 64, k * 16); gl.vertexAttribDivisor(1 + k, 1); }
+gl.bindVertexArray(null);
 
 let W = 0, Hh = 0, dpr = 1, rs = 1, fitS = 1, scene = null, glow = null;
 const mkTarget = (w, h) => {
@@ -935,6 +993,7 @@ const showInner = (s) => {
   if (s.dn) { card.innerHTML = `<div class="d">Dark nebula</div><div class="k">A cloud of cold dust, part of this sky's own scenery. It holds no memories.</div>`; return; }
   if (s.neb) { card.innerHTML = `<div class="d">Nebula</div><div class="k">Weeks with a lot of writing: ${s.neb.journals} journal entries, ${fmtS(s.neb.a)} to ${fmtS(s.neb.b)}</div>`; return; }
   if (s.sn) { card.innerHTML = `<div class="d">Supernova, ${fmt(SN_DAY)}</div><div class="k">A life event you marked as hard. It marks that day and nothing more: what came after stays where it is.</div>`; return; }
+  if (s.trk && !s.day) { card.innerHTML = `<div class="d">${TRK_LOOK[s.trk.look]}: “${esc(s.trk.name)}”</div><div class="k">A tracker you show in your sky, since ${fmtS(s.trk.from)}. Each time you log it is one star here, gathered beside the river and never on it, so how often you log never shapes the rest of your sky.</div>`; return; }
   if (s.pl) { card.innerHTML = `<div class="d">Ringed planet: ${PLACE}</div><div class="k">A place you keep going back to. ${moons.length} memories logged there ride around it as moons. Tap one to see its day.</div>`; return; }
   if (s.cons) { const c = s.cons, days = c.pts.map(q => q.day), lo = Math.min(...days), hi = Math.max(...days);
     card.innerHTML = `<div class="d">${esc(c.name)}</div><div class="k">Drawn ${fmtS(c.made)}. ${c.pts.length} memories, ${fmtS(lo)} to ${fmtS(hi)}.</div>${c.ghost != null ? `<div class="k">One star has since been put away. The outline is kept as it was when you drew it.</div>` : ""}${c.mine ? `<button class="textbtn" type="button" data-remove>Remove this constellation</button>` : ""}`; return; }
@@ -1006,10 +1065,10 @@ addEventListener("keydown", e => { if (e.key === "Escape") openSheet(null); if (
 // ---------- the tour ----------
 const DAILY_P = PERIODS.filter(p => p.mode === "daily").sort((a, b) => (b.to - b.from) - (a.to - a.from))[0] || PERIODS[0];
 const bigCluster = [...clusters.values()].sort((a, b) => b.list.length - a.list.length)[0] || { x: 0, y: 0, r: .3 };
-const oneStar = stars.find(s => s.flag === 0 && s.day > ND - 240 && !s.cl && !s.dyn && !s.disk && s.lum > 1 && s.lum < 1.4) || stars[N - 50];
+const oneStar = stars.find(s => s.flag === 0 && !s.trk && s.day > ND - 240 && !s.cl && !s.dyn && !s.disk && s.lum > 1 && s.lum < 1.4) || stars[N - 50];
 const giant = giants[Math.min(3, giants.length - 1)];
 const favStar = stars.find(s => s.fav), bridgeStar = stars.find(s => s.info && s.info.startsWith("Part of a bridge"));
-const todayStar = stars.filter(s => s.day === ND - 1 && !s.cl && !s.disk && !s.dyn).sort((a, b) => b.lum - a.lum)[0] || stars[N - 1];
+const todayStar = stars.filter(s => s.day === ND - 1 && !s.trk && !s.cl && !s.disk && !s.dyn).sort((a, b) => b.lum - a.lum)[0] || stars[N - 1];
 const GO = {
   all: () => ({ x: 0, y: 0, s: fitS }),
   band: () => { const pr = DAILY_P, p = pathAt(sOfDay(Math.round(pr.from * .4 + pr.to * .6))); return { x: p.x, y: p.y, s: fitS * 3.2 }; },
@@ -1030,6 +1089,7 @@ const GO = {
   cons: (c = CONS[0]) => { const P = c.pts.map(starPos), xs = P.map(p => p[0]), ys = P.map(p => p[1]), w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys);
     return { x: (Math.max(...xs) + Math.min(...xs)) / 2, y: (Math.max(...ys) + Math.min(...ys)) / 2, s: Math.min(W * .45 / Math.max(w, .05), Hh * .45 / Math.max(h, .05)) }; },
   pl: () => ({ x: PL.x, y: PL.y, s: Math.min(W, Hh) * .42 / (PL.R * 7) }),
+  ...Object.fromEntries([0, 1, 2].map(i => ["trk" + i, () => ({ x: trackers[i].x, y: trackers[i].y, s: Math.min(W, Hh) * .44 / (trackers[i].R * 1.45) })])),
   fav: () => { const [x, y] = starPos(favStar); return { x, y, s: fitS * 30 }; },
   bridge: () => { const b = bridges[0], d = Math.hypot(b.a.x - b.b.x, b.a.y - b.b.y); return { x: b.x, y: b.y, s: Math.min(W, Hh) * .5 / Math.max(.4, d) }; },
   today: () => ({ x: starPos(todayStar)[0], y: starPos(todayStar)[1], s: fitS * 40 }),
@@ -1038,8 +1098,10 @@ const GO = {
 { const miss = { bridge: !bridges.length || !bridgeStar, fav: !favStar, bin: !binaries.length };
   document.querySelectorAll("[data-go]").forEach(b => { if (miss[b.dataset.go]) b.hidden = true; });
   document.querySelectorAll("[data-key]").forEach(b => { if (miss[b.dataset.key]) b.hidden = true; }); }
+document.querySelectorAll('[data-go^="trk"]').forEach(b => { b.textContent = TRK_LOOK[trackers[+b.dataset.go.slice(3)].look]; });
 document.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => {
   const k = b.dataset.go; openSheet(null); flyTo(GO[k]());
+  if (k.startsWith("trk")) { show({ trk: trackers[+k.slice(3)] }); return; }
   show(k === "pl" ? { pl: true } : k === "fav" ? favStar : k === "bridge" ? bridgeStar : k === "giant" ? giant : k === "one" ? oneStar : k === "bh" ? "bh" : k === "sn" ? snStar : k === "bin" ? binaries[0] : k === "pulsar" ? pulsar : k === "meteor" ? radiant : k === "comet" ? { comet: true } : k === "dn" ? { dn: true } : k === "pn" ? { pn: true } : k === "wp" ? wpStars[wpStars.length - 1] : k === "dm" ? { dm: true } : k === "wh" ? { wh: true } : null);
 }));
 const consOn = true;
@@ -1131,10 +1193,15 @@ const frame = now => {
     gl.uniform1f(us.uTe, te); gl.uniform1f(us.uT, T); gl.uniform1f(us.uMode, mode); gl.uniform1f(us.uGlowPx, gpx); gl.uniform1f(us.uGlowW, gw); gl.uniform1f(us.uZoom, zRel); gl.uniform1f(us.uDirect, 0); gl.uniform1f(us.uReveal, reveal); gl.uniform4f(us.uDN, DN.x, DN.y, DN.R, 0); gl.uniform1f(us.uBirthP, birthP); };
   setS(S, cw, ch, 0, 0, 0, dpr);
   gl.bindVertexArray(vaoS); gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, NS);
+  if (beltGrains.length) { beltGrains.forEach((s, i) => { const [wx, wy] = beltPos(s), [xh, xl] = split(wx), [yh, yl] = split(wy);
+      binst.set([xh, yh, xl, yl, 0, 0, 0, s.R, s.col[0], s.col[1], s.col[2], s.lum, bSeed[i][0], 0, bSeed[i][1], bSeed[i][1]], i * 16); });
+    gl.bindBuffer(gl.ARRAY_BUFFER, bb); gl.bufferSubData(gl.ARRAY_BUFFER, 0, binst);
+    gl.bindVertexArray(vaoB); gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, beltGrains.length); }
   // 3. their combined light, which fades as single stars come apart
   const gw = .04 * smoothstep(.3, 1, reveal) * (1 - smoothstep(1.3, 3.5, zRel));
   gl.bindFramebuffer(gl.FRAMEBUFFER, glow.f); gl.viewport(0, 0, glow.w, glow.h); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
-  if (gw > 0) { setS(S / 2, glow.w, glow.h, 1, 7 * dpr / 2, gw, dpr / 2); gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, NS); }
+  if (gw > 0) { setS(S / 2, glow.w, glow.h, 1, 7 * dpr / 2, gw, dpr / 2); gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, NS);
+    if (beltGrains.length) { gl.bindVertexArray(vaoB); gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, beltGrains.length); } }
   // 4. finish
   gl.disable(gl.BLEND); gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.useProgram(P_FIN.p); const uf = P_FIN.u;
@@ -1157,7 +1224,7 @@ const frame = now => {
   drawLines();
   // selection ring
   if (sel && sel.away && sel.dyn(sel)[2]) show(null);
-  if (sel && sel !== "bh" && !sel.neb && !sel.sn && !sel.comet && !sel.pn && !sel.dn && !sel.meteor && !sel.wh && !sel.dm && !sel.cons && !sel.pl) { const [x, y] = toScreen(...starPos(sel)), r = Math.max(sel.R * cam.s, 3) * 2 + 10; ring.hidden = false; ring.style.left = x + "px"; ring.style.top = y + "px"; ring.style.width = ring.style.height = r + "px"; }
+  if (sel && sel !== "bh" && !(sel.trk && !sel.day) && !sel.neb && !sel.sn && !sel.comet && !sel.pn && !sel.dn && !sel.meteor && !sel.wh && !sel.dm && !sel.cons && !sel.pl) { const [x, y] = toScreen(...starPos(sel)), r = Math.max(sel.R * cam.s, 3) * 2 + 10; ring.hidden = false; ring.style.left = x + "px"; ring.style.top = y + "px"; ring.style.width = ring.style.height = r + "px"; }
   else ring.hidden = true;
   requestAnimationFrame(frame);
 };
@@ -1165,7 +1232,7 @@ const frame = now => {
 // a constellation is a handful of bright stars close together, joined nearest to nearest
 const near = (g, k, r) => {
   const [gx, gy] = starPos(g);
-  const pool = stars.filter(s => s !== g && s.flag === 0 && !s.disk && !s.dyn && s.lum > 1.15 && Math.hypot(starPos(s)[0] - gx, starPos(s)[1] - gy) < r);
+  const pool = stars.filter(s => s !== g && s.flag === 0 && !s.trk && !s.disk && !s.dyn && s.lum > 1.15 && Math.hypot(starPos(s)[0] - gx, starPos(s)[1] - gy) < r);
   const out = [g], used = new Set([g]);
   while (out.length < k && pool.length) {
     const [lx_, ly_] = starPos(out[out.length - 1]); let best = null, bd = 1e9;
