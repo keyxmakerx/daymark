@@ -3,10 +3,11 @@
  *
  * The server's default allowance is five requests a second from one address, and a console that
  * reads one thing per lineage (recovery/serverKey.ts finding the newest snapshot, lane/lane.ts
- * reading every lane) can meet it on its own. So a read that failed for a transient reason is
+ * reading every lane, assignments/inbox.ts reading each clinician's items) can meet it on its own. So a read that failed for a transient reason is
  * asked again, a few times, with a growing pause. Used by both.
  */
 import { SyncError } from './client'
+import { PortalError } from './portal'
 
 /** How long to wait, in milliseconds. Tests pass one that records and does not wait. */
 export type Wait = (ms: number) => Promise<void>
@@ -19,7 +20,7 @@ export const pause: Wait = (ms) => new Promise<void>((done) => setTimeout(done, 
  * client could not read is the answer, and asking again would only repeat it.
  */
 export function transient(e: unknown): boolean {
-  if (e instanceof SyncError) return e.status === 429 || (e.status !== undefined && e.status >= 500)
+  if (e instanceof SyncError || e instanceof PortalError) return e.status === 429 || (e.status !== undefined && e.status >= 500)
   return e instanceof TypeError
 }
 
