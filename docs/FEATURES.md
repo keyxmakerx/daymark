@@ -197,7 +197,9 @@ announced with **Put it back**. Each tracker eases on its own: its ledger rows c
 (§13.2), so one tracker's quiet never touches another's. A check-in counts as answered when the
 tracker was logged since the one before or in the last day, so a few-times-a-day tracker eases off
 only after a whole day with no log, and then first to once a day. **Stop asking** on a check-in
-sets the tracker back to "When it happens".
+sets the tracker back to "When it happens". Switching check-ins on asks first whether this tracker
+may ease off or should keep reminding at its times (for something like a medication); nothing
+changes until the person answers, and the card shows the answer while check-ins are on.
 
 The **quick log** comes two ways, both the person's to switch on: a quiet, silent notification per
 tracker that opens it (a yes/no tracker logs straight from its Yes and No), and a **Trackers**
@@ -280,7 +282,10 @@ recommending, never setting, how often the support space is offered: #172.
 
 - **One resource, kept on the phone and edited by the person.** It starts as "Call or text 988" /
   "988 Suicide & Crisis Lifeline (US)" and is changed under Gentle support → Crisis resources, or
-  with "Use a different number" on the crisis screen. The screen says Daymark cannot call for anyone
+  with "Use a different number" on the crisis screen. Onboarding asks about it straight after the
+  welcome ("If things get hard"): the line is shown with **This one is right**, **Use a different
+  line** and **Not now**. It is never guessed from the phone's region or location, and a blank name
+  or number is never saved. The screen says Daymark cannot call for anyone
   and is not a crisis service, and to call the local emergency number in immediate danger.
 - **Always reachable.** Last in every support menu, never dismissible, untouched by suggestion
   settings.
@@ -448,6 +453,11 @@ times and has no page, so offer once. Not built: #156.
   **Put it back**, or "Your check-ins are back to the times you set". No notice mentions anything
   missed. Putting back a longer wait the engine tried means it never tries one again. The engine's
   own state is kept in the app's preferences (`data/CheckInStateStore.kt`).
+- **Easing off is the person's choice.** Setting the first reminder, in onboarding or in Settings →
+  Reminders, asks *"Ease off if I'm not answering"* or *"Keep reminding me at these times"*, with
+  nothing chosen until the person picks. Kept, reminders come at every time set, never fewer and
+  never more, and no longer wait is tried. Settings → Reminders shows the answer and changes it;
+  a change starts the engine over from the person's schedule (§D1a).
 
 ## 13. Why it asks: the arbiter, the reception ledger and the timing layer
 

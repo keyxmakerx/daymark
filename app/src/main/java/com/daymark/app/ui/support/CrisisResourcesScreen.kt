@@ -93,7 +93,13 @@ fun CrisisResourcesScreen(
                     OutlinedTextField(value = contact, onValueChange = { contact = it }, label = { Text("How to reach them") }, modifier = Modifier.fillMaxWidth())
                 }
             },
-            confirmButton = { TextButton(onClick = { viewModel.save(label, contact); editing = false }) { Text("Save") } },
+            // The crisis screen always shows a line, so blank fields are never saved.
+            confirmButton = {
+                TextButton(
+                    onClick = { viewModel.save(label, contact); editing = false },
+                    enabled = label.isNotBlank() && contact.isNotBlank(),
+                ) { Text("Save") }
+            },
             dismissButton = { TextButton(onClick = { editing = false }) { Text("Cancel") } },
         )
     }

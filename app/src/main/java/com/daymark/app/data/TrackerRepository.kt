@@ -55,7 +55,9 @@ class TrackerRepository @Inject constructor(
 
     /** Saves [tracker] and re-arms its check-ins and quick-log notification to match. */
     suspend fun update(tracker: Tracker) {
+        val before = trackerDao.getById(tracker.id)
         trackerDao.update(tracker)
+        if (before != null && before.keepAsSet != tracker.keepAsSet) checkIns.easingChanged(tracker.id)
         checkIns.refresh(tracker)
         checkIns.redrawWidget()
     }

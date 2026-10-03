@@ -17,6 +17,7 @@ import com.daymark.app.MainActivity
 import com.daymark.app.R
 import com.daymark.app.data.CheckInStateStore
 import com.daymark.app.data.OfferLedgerRepository
+import com.daymark.app.data.SettingsRepository
 import com.daymark.app.data.dao.EntryDao
 import com.daymark.app.data.dao.ReminderDao
 import com.daymark.app.data.entity.OfferKind
@@ -52,6 +53,7 @@ class ReminderScheduler @Inject constructor(
     private val entryDao: EntryDao,
     private val checkInState: CheckInStateStore,
     private val reminderDao: ReminderDao,
+    private val settings: SettingsRepository,
 ) {
     fun createChannel() {
         val manager = context.getSystemService<NotificationManager>() ?: return
@@ -185,6 +187,7 @@ class ReminderScheduler @Inject constructor(
             countFrom = state.countFrom,
             trialSteps = state.trialSteps,
             setSpacingMillis = setSpacingMillis(),
+            keepAsSet = settings.remindersKeepAsSet,
         )
     }
 
@@ -205,7 +208,7 @@ class ReminderScheduler @Inject constructor(
         val state = checkInState.reminders()
         val rows = offerLedger.checkInRows(OfferKind.REMINDER)
         val since = maxOf(state.countFrom, state.trialSince)
-        if (!CheckInEngine.mayTryLonger(InterruptionBudget.Kind.REMINDER, rows, since, state.trialDeclined)) return
+        if (!CheckInEngine.mayTryLonger(InterruptionBudget.Kind.REMINDER, rows, since, state.trialDeclined, settings.remindersKeepAsSet)) return
         val tried = state.copy(trialSteps = state.trialSteps + 1, trialSince = nowMillis)
         checkInState.write(tried)
         val pace = CheckInEngine.paceOf(
@@ -215,6 +218,7 @@ class ReminderScheduler @Inject constructor(
             countFrom = tried.countFrom,
             trialSteps = tried.trialSteps,
             setSpacingMillis = setSpacingMillis(),
+            keepAsSet = settings.remindersKeepAsSet,
         )
         announce(tried, pace, trial = true)
     }
@@ -244,6 +248,18 @@ class ReminderScheduler @Inject constructor(
             builder.setContentTitle(context.getString(R.string.checkin_back_title))
         }
         NotificationManagerCompat.from(context).notify(NOTICE_NOTIFICATION_ID, builder.build())
+    }
+
+    /**
+     * The person's choice between easing off and "Keep reminding me at these times". A change
+     * starts the engine over from their schedule and clears any notice about a pace that no longer
+     * applies.
+     */
+    fun setKeepAsSet(keep: Boolean, nowMillis: Long = System.currentTimeMillis()) {
+        if (settings.remindersKeepAsSet == keep) return
+        settings.remindersKeepAsSet = keep
+        checkInState.restart(nowMillis)
+        NotificationManagerCompat.from(context).cancel(NOTICE_NOTIFICATION_ID)
     }
 
     /** Asks for one more nudge for [reminder] in [TRY_LATER_MILLIS], because the person said so. */

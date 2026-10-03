@@ -194,6 +194,7 @@ class TrackerCheckInScheduler @Inject constructor(
             countFrom = state.countFrom,
             trialSteps = state.trialSteps,
             setSpacingMillis = TrackerRhythm.setSpacingMillis(tracker.rhythmChoice, tracker.fewCount, tracker.window),
+            keepAsSet = tracker.keepAsSet,
         )
     }
 
@@ -202,7 +203,7 @@ class TrackerCheckInScheduler @Inject constructor(
         val state = checkInState.tracker(tracker.id)
         val rows = offerLedger.checkInRows(OfferKind.TRACKER, tracker.id)
         val since = maxOf(state.countFrom, state.trialSince)
-        if (!CheckInEngine.mayTryLonger(InterruptionBudget.Kind.TRACKER, rows, since, state.trialDeclined)) return
+        if (!CheckInEngine.mayTryLonger(InterruptionBudget.Kind.TRACKER, rows, since, state.trialDeclined, tracker.keepAsSet)) return
         val tried = state.copy(trialSteps = state.trialSteps + 1, trialSince = nowMillis)
         checkInState.writeTracker(tracker.id, tried)
         val pace = CheckInEngine.paceOf(
@@ -212,6 +213,7 @@ class TrackerCheckInScheduler @Inject constructor(
             countFrom = tried.countFrom,
             trialSteps = tried.trialSteps,
             setSpacingMillis = TrackerRhythm.setSpacingMillis(tracker.rhythmChoice, tracker.fewCount, tracker.window),
+            keepAsSet = tracker.keepAsSet,
         )
         announce(tracker, tried, pace, trial = true)
     }
@@ -264,6 +266,15 @@ class TrackerCheckInScheduler @Inject constructor(
         trackerDao.update(quiet)
         NotificationManagerCompat.from(context).cancel(checkInId(trackerId))
         refresh(quiet)
+    }
+
+    /**
+     * The person switched [trackerId] between easing off and keeping their times: the engine starts
+     * over from their schedule, and a notice about a pace that no longer applies is cleared.
+     */
+    fun easingChanged(trackerId: Long, nowMillis: Long = System.currentTimeMillis()) {
+        checkInState.restartTracker(trackerId, nowMillis)
+        NotificationManagerCompat.from(context).cancel(noticeId(trackerId))
     }
 
     /** The person's **Put it back** on a notice: this tracker's check-ins return to the times they set. */

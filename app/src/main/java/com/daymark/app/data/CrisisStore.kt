@@ -21,7 +21,9 @@ class CrisisStore @Inject constructor(
         contact = prefs.getString(K_CONTACT, DEFAULT_CONTACT) ?: DEFAULT_CONTACT,
     )
 
+    /** Blank fields are never saved: the crisis screen must always have a line to show. */
     fun save(label: String, contact: String) {
+        if (label.isBlank() || contact.isBlank()) return
         prefs.edit().putString(K_LABEL, label.trim()).putString(K_CONTACT, contact.trim()).apply()
     }
 

@@ -25,7 +25,6 @@ class DiscussionPromptsTest {
         daysInRange = 84,
         daysLogged = 60,
         totalEntries = 90,
-        weeks = List(12) { DiscussionPrompts.Week(entryCount = 5, activityCount = 3, averageMood = 3.4) },
         gapStretches = 1,
         instruments = listOf(
             DiscussionPrompts.Instrument(
@@ -50,8 +49,6 @@ class DiscussionPromptsTest {
         daysInRange = 84,
         daysLogged = 40,
         totalEntries = 60,
-        weeks = List(4) { DiscussionPrompts.Week(entryCount = 3, activityCount = 0, averageMood = 2.3) } +
-            List(8) { DiscussionPrompts.Week(entryCount = 5, activityCount = 4, averageMood = 3.5) },
         gapStretches = 5,
         instruments = listOf(
             DiscussionPrompts.Instrument(
@@ -98,7 +95,6 @@ class DiscussionPromptsTest {
         daysInRange = 35,
         daysLogged = 4,
         totalEntries = 4,
-        weeks = List(5) { DiscussionPrompts.Week(entryCount = 1, activityCount = 0, averageMood = 2.0) },
         gapStretches = 4,
     )
 
@@ -154,7 +150,6 @@ class DiscussionPromptsTest {
         val kinds = allPrompts().kinds()
         listOf(
             DiscussionPrompts.KIND_THIN_DATA,
-            DiscussionPrompts.KIND_QUIET_WEEKS,
             DiscussionPrompts.KIND_COVERAGE_GAPS,
             DiscussionPrompts.KIND_NO_CHECKINS,
             DiscussionPrompts.KIND_THIN_INSTRUMENT,
@@ -199,9 +194,8 @@ class DiscussionPromptsTest {
 
     @Test
     fun `thin data stands the pattern rules down`() {
-        // The thin fixture has quiet weeks and four gap stretches; neither may speak on four entries.
+        // The thin fixture has four gap stretches; the coverage rule may not speak on four entries.
         val kinds = DiscussionPrompts.build(thin(), Locale.US).kinds()
-        assertFalse(DiscussionPrompts.KIND_QUIET_WEEKS in kinds)
         assertFalse(DiscussionPrompts.KIND_COVERAGE_GAPS in kinds)
     }
 
@@ -226,36 +220,26 @@ class DiscussionPromptsTest {
         assertEquals(emptyList<DiscussionPrompts.Prompt>(), DiscussionPrompts.build(base(), Locale.US))
     }
 
-    // --- rule 2: quiet weeks --------------------------------------------------------------------
+    // --- one measure per prompt (§D6) ---------------------------------------------------------
 
-    @Test
-    fun `wellbeing entries lower on weeks with no logged activity`() {
-        val text = DiscussionPrompts.build(everything(), Locale.US)
-            .first { it.kind == DiscussionPrompts.KIND_QUIET_WEEKS }.text
-        assertTrue(text, "4 weeks with no logged activity" in text)
-        assertTrue(text, "2.3" in text && "3.5" in text)
-        assertTrue(text, text.endsWith("Worth asking about?"))
+    /** A prompt that sets mood beside activity: the insight §D6 does not build. */
+    private fun pairsMoodWithActivity(text: String): Boolean {
+        val t = text.lowercase(Locale.US)
+        val mood = listOf("wellbeing", "mood", "feel").any { it in t }
+        val activity = listOf("activity", "activities", "exercise", "walk").any { it in t }
+        return mood && activity
     }
 
     @Test
-    fun `quiet weeks needs both sides of the comparison`() {
-        // Every week quiet: there is nothing to compare against, so the rule says nothing.
-        val allQuiet = everything().copy(
-            weeks = List(12) { DiscussionPrompts.Week(entryCount = 3, activityCount = 0, averageMood = 2.3) },
-        )
-        assertFalse(DiscussionPrompts.KIND_QUIET_WEEKS in DiscussionPrompts.build(allQuiet, Locale.US).kinds())
+    fun `no prompt sets mood beside activity`() {
+        val prompts = allPrompts()
+        assertTrue(prompts.isNotEmpty())
+        prompts.forEach { assertFalse("pairs two measures (${it.kind}): ${it.text}", pairsMoodWithActivity(it.text)) }
+        // Positive control: the prompt this rule removed is seen.
+        assertTrue(pairsMoodWithActivity("Wellbeing entries were lower on the 4 weeks with no logged activity. Worth asking about?"))
     }
 
-    @Test
-    fun `quiet weeks stays quiet when the difference is small`() {
-        val narrow = everything().copy(
-            weeks = List(4) { DiscussionPrompts.Week(entryCount = 3, activityCount = 0, averageMood = 3.3) } +
-                List(8) { DiscussionPrompts.Week(entryCount = 5, activityCount = 4, averageMood = 3.5) },
-        )
-        assertFalse(DiscussionPrompts.KIND_QUIET_WEEKS in DiscussionPrompts.build(narrow, Locale.US).kinds())
-    }
-
-    // --- rule 3: coverage -----------------------------------------------------------------------
+    // --- rule 2: coverage -----------------------------------------------------------------------
 
     @Test
     fun `gaps are counted against the range, not carried separately`() {
@@ -272,7 +256,7 @@ class DiscussionPromptsTest {
         assertFalse(DiscussionPrompts.KIND_COVERAGE_GAPS in DiscussionPrompts.build(oneGap, Locale.US).kinds())
     }
 
-    // --- rule 4: entries without self-checks ----------------------------------------------------
+    // --- rule 3: entries without self-checks ----------------------------------------------------
 
     @Test
     fun `empty plots are named as untaken, not as flat`() {

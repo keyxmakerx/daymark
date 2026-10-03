@@ -327,4 +327,39 @@ class CheckInEngineTest {
         val known = InterruptionBudget.Outcome.entries.map { it.key }.toSet() - Outcome.STOP.key
         assertTrue(outcomes.containsAll(known))
     }
+
+    // ---- Keep reminding me at these times ----
+
+    @Test
+    fun `kept, every ledger is the schedule the person set, never quieter and never louder`() {
+        for (ledger in ledgers(6)) {
+            assertEquals(Pace.AsSet, CheckInEngine.paceOf(Kind.REMINDER, ledger, false, 0L, keepAsSet = true))
+            // Even with a kept trial and a spacing the schedule already meets.
+            assertEquals(
+                Pace.AsSet,
+                CheckInEngine.paceOf(Kind.REMINDER, ledger, false, 0L, trialSteps = 3, setSpacingMillis = 2 * 86_400_000L, keepAsSet = true),
+            )
+        }
+        // Positive control: the same ledgers do ease off when the person did not choose to keep.
+        val quiet = (1..CheckInEngine.MISSES_PER_STEP * 2).map { row(it, Outcome.DISMISSED.key) }
+        assertTrue(pace(quiet).quieterThan(Pace.AsSet))
+        assertEquals(Pace.AsSet, CheckInEngine.paceOf(Kind.REMINDER, quiet, false, 0L, keepAsSet = true))
+    }
+
+    @Test
+    fun `kept, stop asking still stops`() {
+        val stopped = listOf(row(1, Outcome.STOP.key))
+        assertEquals(Pace.Off, CheckInEngine.paceOf(Kind.REMINDER, stopped, false, 0L, keepAsSet = true))
+        assertEquals(Pace.Off, CheckInEngine.paceOf(Kind.REMINDER, emptyList(), true, 0L, keepAsSet = true))
+    }
+
+    @Test
+    fun `kept, no longer wait is ever tried`() {
+        val n = CheckInEngine.ANSWERS_BEFORE_TRIAL
+        for (len in listOf(n, 3 * n, 100)) {
+            assertFalse(CheckInEngine.mayTryLonger(Kind.REMINDER, answers(len), 0L, false, keepAsSet = true))
+            // Positive control: the same run earns a trial when the person lets it ease.
+            assertTrue(mayTry(answers(len)))
+        }
+    }
 }

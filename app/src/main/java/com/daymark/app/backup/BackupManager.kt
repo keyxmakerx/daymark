@@ -142,12 +142,13 @@ data class BackupTracker(
     val windowStart: Int = 540,
     val windowEnd: Int = 1260,
     val quickLog: Boolean = false,
+    val keepAsSet: Boolean = false,
 )
 
 /** The stored tracker, under [id]: the backup's own for a replace, 0 for a merge. */
 fun BackupTracker.toTracker(id: Long) = Tracker(
     id, name, type, minValue, maxValue, unit, sortOrder, archived,
-    rhythm, onceAtMinute, fewCount, windowStart, windowEnd, quickLog,
+    rhythm, onceAtMinute, fewCount, windowStart, windowEnd, quickLog, keepAsSet,
 )
 
 @Serializable
@@ -487,7 +488,7 @@ class BackupManager @Inject constructor(
             trackers = trackerDao.getAll().map {
                 BackupTracker(
                     it.id, it.name, it.type, it.minValue, it.maxValue, it.unit, it.sortOrder, it.archived,
-                    it.rhythm, it.onceAtMinute, it.fewCount, it.windowStart, it.windowEnd, it.quickLog,
+                    it.rhythm, it.onceAtMinute, it.fewCount, it.windowStart, it.windowEnd, it.quickLog, it.keepAsSet,
                 )
             },
             trackerLogs = trackerLogDao.getAll().map { BackupTrackerLog(it.id, it.trackerId, it.dateTime, it.value, it.note) },

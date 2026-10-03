@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.dp
 import com.daymark.app.data.entity.Tracker
 import com.daymark.app.data.entity.rhythmChoice
 import com.daymark.app.stats.TrackerRhythm.Rhythm
+import com.daymark.app.ui.components.KeepTimesChoice
+import com.daymark.app.ui.components.KeepTimesDialog
 import com.daymark.app.ui.components.PaperSurface
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -55,7 +57,7 @@ fun TrackerCheckInsCard(tracker: Tracker, onChange: (Tracker) -> Unit) {
         pending?.let(onChange)
         pending = null
     }
-    fun choose(next: Tracker) {
+    fun save(next: Tracker) {
         val notifies = next.rhythmChoice.asks || next.quickLog
         if (notifies && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             pending = next
@@ -63,6 +65,11 @@ fun TrackerCheckInsCard(tracker: Tracker, onChange: (Tracker) -> Unit) {
         } else {
             onChange(next)
         }
+    }
+    // Switching check-ins on asks first whether they may ease off; nothing changes until answered.
+    var asking by remember { mutableStateOf<Tracker?>(null) }
+    fun choose(next: Tracker) {
+        if (!tracker.rhythmChoice.asks && next.rhythmChoice.asks) asking = next else save(next)
     }
 
     var picking by remember { mutableStateOf<TimeField?>(null) }
@@ -121,12 +128,8 @@ fun TrackerCheckInsCard(tracker: Tracker, onChange: (Tracker) -> Unit) {
                 )
             }
             if (rhythm.asks) {
-                Text(
-                    "If check-ins go unanswered for a while, Daymark asks less often and tells you, " +
-                        "with a way to put it back.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Text("If check-ins go unanswered", style = MaterialTheme.typography.titleSmall)
+                KeepTimesChoice(keep = tracker.keepAsSet, onChange = { onChange(tracker.copy(keepAsSet = it)) })
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -140,6 +143,16 @@ fun TrackerCheckInsCard(tracker: Tracker, onChange: (Tracker) -> Unit) {
                 Switch(checked = tracker.quickLog, onCheckedChange = { choose(tracker.copy(quickLog = it)) })
             }
         }
+    }
+
+    asking?.let { next ->
+        KeepTimesDialog(
+            onAnswer = { keep ->
+                asking = null
+                save(next.copy(keepAsSet = keep))
+            },
+            onDismiss = { asking = null },
+        )
     }
 
     picking?.let { field ->

@@ -450,6 +450,25 @@ class MigrationTest {
     }
 
     @Test
+    fun migrate20To21_everyTrackerKeepsEasingAsBefore() {
+        helper.createDatabase(TEST_DB, 20).use { db ->
+            db.execSQL(
+                "INSERT INTO trackers (id, name, type, minValue, maxValue, unit, sortOrder, archived, rhythm) " +
+                    "VALUES (1, 'Took meds', 'BOOLEAN', 0, 1, '', 0, 0, 'daily')",
+            )
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 21, true, AppDatabase.MIGRATION_20_21).use { db ->
+            // Nothing is guessed from a name: only the person turns keeping on.
+            db.query("SELECT name, rhythm, keepAsSet FROM trackers WHERE id = 1").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("Took meds", c.getString(0))
+                assertEquals("daily", c.getString(1))
+                assertEquals(0, c.getInt(2))
+            }
+        }
+    }
+
+    @Test
     fun migrateAll_from3_toLatest() {
         helper.createDatabase(TEST_DB, 3).use { db ->
             db.execSQL(

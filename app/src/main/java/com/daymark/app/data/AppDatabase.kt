@@ -45,7 +45,7 @@ import com.daymark.app.data.entity.Treatment
         com.daymark.app.data.entity.InstrumentResult::class,
         com.daymark.app.data.entity.TaskResult::class,
     ],
-    version = 20,
+    version = 21,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -710,6 +710,16 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE `trackers` ADD COLUMN `windowEnd` INTEGER NOT NULL DEFAULT 1260")
                 db.execSQL("ALTER TABLE `trackers` ADD COLUMN `quickLog` INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE `offer_records` ADD COLUMN `subject` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        /**
+         * v20 -> v21: each tracker's "Keep reminding me at these times". Every existing tracker keeps
+         * the easing it had; nothing is back-filled, and nothing is guessed from a tracker's name.
+         */
+        val MIGRATION_20_21 = object : Migration(20, 21) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `trackers` ADD COLUMN `keepAsSet` INTEGER NOT NULL DEFAULT 0")
             }
         }
 

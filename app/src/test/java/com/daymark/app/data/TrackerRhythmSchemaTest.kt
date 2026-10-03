@@ -74,4 +74,16 @@ class TrackerRhythmSchemaTest {
         // The detector sees a planted back-fill.
         assertTrue(writes.containsMatchIn("$body\nUPDATE `trackers` SET `rhythm` = 'daily'"))
     }
+
+    @Test
+    fun `v21 adds only keeping at the set times, off for every tracker, and back-fills nothing`() {
+        assertTrue(database.contains("val MIGRATION_20_21 = object : Migration(20, 21)"))
+        val v21 = database.substringAfter("val MIGRATION_20_21 = object").substringBefore("\n        }\n")
+        assertEquals(mapOf(("trackers" to "keepAsSet") to "0"), added(v21))
+        assertEquals("0", declared(tracker)["keepAsSet"])
+        assertTrue(tracker.contains("val keepAsSet: Boolean = false"))
+        assertFalse(Regex("""\b(UPDATE|INSERT|DELETE)\b""").containsMatchIn(v21))
+        // Positive control: a migration that turned keeping on for everyone is seen.
+        assertEquals("1", added(v21.replace("DEFAULT 0", "DEFAULT 1"))["trackers" to "keepAsSet"])
+    }
 }

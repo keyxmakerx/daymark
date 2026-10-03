@@ -90,8 +90,16 @@ asking") and what the person set up.
    person. The engine never opens them and never decides someone needs them.
 
 > **The invariant.** Going quiet never makes the app louder. Missed check-ins make the engine ease
-> off: fewer, further apart, and in the end silent. No signal, in any combination, may make it ask
-> more.
+> off: fewer and further apart, but never off by itself; only the person's own Stop asking turns a
+> check-in off. No signal, in any combination, may make it ask more.
+
+**Easing off is the person's to refuse.** For a check-in about the day, fewer reminders as answers
+stop is right. For a medication it is backwards: the reminder would fade exactly when doses are
+being missed. The engine cannot tell the two apart without reading what the person wrote, so when
+someone turns check-ins on, a reminder or a tracker, Daymark asks once: *"Ease off if I'm not
+answering"* or *"Keep reminding me at these times"*. Kept, the check-in never eases and never tries
+a longer wait; it is never more than the person set either, so the invariant holds both ways. The
+answer can be changed wherever the check-ins are set (`ui/components/KeepTimesChoice.kt`).
 
 **Asking for more is the person's, never an inference.** The one way to get repeat reminders is an
 explicit setting, *"nudge me again if I miss one"*, off until the person turns it on. The engine
@@ -119,6 +127,10 @@ concrete next steps. It may not:
   *"you seem depressed"* is a claim about them, which D1a forbids;
 - **come back uninvited** — hidden means hidden, and un-hiding is a setting the person finds;
 - **become the crisis path** — the safety plan stays the person's own; the companion may point at it.
+
+And it must always offer the way out: **every conversation offers the safety plan as one of its
+choices**, at every turn, so a fixed-choice dialogue is never a dead end for someone in crisis. It is
+offered, never opened on the person's behalf (D1a).
 
 **As built:** the dialogue content, rules and web component exist. No page mounts the component
 (`companion/web/src/lib/docs.test.ts` asserts that), and there is no phone surface. Not built: #272.
@@ -275,8 +287,10 @@ selects silently.
 
 **Side 4: prompts, never recommendations.** A report that tells a clinician what to do is clinical
 decision support, a regulated category that would change what the product legally is. Side 4 carries
-observations and questions ("Wellbeing entries were lower on the three weeks with no logged activity.
-Worth asking about?"). It cites nothing and prescribes nothing. Where evidence is citable, it is
+observations and questions about one measure at a time ('All 6 "PHQ-9" results in this range came back in
+the same band ("Mild"). Does that match how the weeks felt?'). It never sets one measure beside another: mood beside activity is
+the insight D6 does not build, and the person reads the report too. It cites nothing and prescribes
+nothing. Where evidence is citable, it is
 psychoeducation for the person, in the app.
 
 **As built:** `export/PdfReportGenerator.kt`, `export/ReportLayout.kt`, `stats/DiscussionPrompts.kt`.

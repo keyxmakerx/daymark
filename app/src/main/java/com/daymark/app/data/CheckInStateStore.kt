@@ -50,6 +50,16 @@ class CheckInStateStore @Inject constructor(
      */
     fun putBack(nowMillis: Long) = putBack(REMINDERS, nowMillis)
 
+    /**
+     * The person switched between easing off and keeping their times: the engine starts over from
+     * their schedule, now. Unlike [putBack], this declines nothing, so switching back to easing off
+     * later starts from a clean count and not from a run or a trial left over from before.
+     */
+    fun restart(nowMillis: Long) = restart(REMINDERS, nowMillis)
+
+    /** [restart] for one tracker's check-ins. */
+    fun restartTracker(trackerId: Long, nowMillis: Long) = restart(trackerPrefix(trackerId), nowMillis)
+
     /** The engine's state for one tracker's check-ins, kept apart from every other's. */
     fun tracker(trackerId: Long): State = read(trackerPrefix(trackerId))
 
@@ -89,6 +99,20 @@ class CheckInStateStore @Inject constructor(
                 trialSteps = 0,
                 trialSince = nowMillis,
                 trialDeclined = state.trialDeclined || state.lastChangeWasTrial,
+                lastChangeWasTrial = false,
+                announcedGap = CheckInEngine.Pace.AsSet.gapMillis,
+            ),
+        )
+    }
+
+    private fun restart(prefix: String, nowMillis: Long) {
+        val state = read(prefix)
+        write(
+            prefix,
+            state.copy(
+                countFrom = nowMillis,
+                trialSteps = 0,
+                trialSince = nowMillis,
                 lastChangeWasTrial = false,
                 announcedGap = CheckInEngine.Pace.AsSet.gapMillis,
             ),

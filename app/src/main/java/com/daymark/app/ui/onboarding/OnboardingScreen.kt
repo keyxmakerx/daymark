@@ -54,7 +54,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.daymark.app.data.CrisisStore
 import com.daymark.app.notifications.NotificationPermission
+import com.daymark.app.ui.components.KeepTimesChoice
+import com.daymark.app.ui.components.PaperSurface
+import com.daymark.app.ui.components.SentenceCaps
 import com.daymark.app.ui.components.MoodFaceIcon
 import com.daymark.app.util.DateUtils
 import java.time.LocalDateTime
@@ -67,7 +71,7 @@ fun OnboardingScreen(
     viewModel: OnboardingViewModel = hiltViewModel(),
 ) {
     var step by remember { mutableIntStateOf(0) }
-    val lastStep = 3
+    val lastStep = 4
 
     // The reminder set during onboarding, if any — needed to word the finish screen. Set once,
     // in enableReminder's callback below; never re-derived from anything stored.
@@ -143,17 +147,25 @@ fun OnboardingScreen(
                 ) {
                     when (s) {
                         0 -> Welcome()
-                        1 -> ReminderStep(
-                            onEnable = { h, m ->
-                                viewModel.enableReminder(h, m)
-                                reminderTime = h to m
-                                step = 2
-                            },
+                        // First after the welcome: the line it starts with is a US one, and someone
+                        // elsewhere must not find that out at the worst moment.
+                        1 -> CrisisStep(
+                            current = remember { viewModel.crisisLine() },
+                            onKeep = { step = 2 },
+                            onSave = { label, contact -> viewModel.saveCrisisLine(label, contact); step = 2 },
                             onSkip = { step = 2 },
                         )
-                        2 -> LockStep(
-                            onSetPin = { pin -> viewModel.setPin(pin); step = 3 },
+                        2 -> ReminderStep(
+                            onEnable = { h, m, keep ->
+                                viewModel.enableReminder(h, m, keep)
+                                reminderTime = h to m
+                                step = 3
+                            },
                             onSkip = { step = 3 },
+                        )
+                        3 -> LockStep(
+                            onSetPin = { pin -> viewModel.setPin(pin); step = 4 },
+                            onSkip = { step = 4 },
                         )
                         else -> Done(reminderTime = reminderTime, notificationsEnabled = notificationsEnabled)
                     }
@@ -201,10 +213,12 @@ private fun Welcome() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ReminderStep(onEnable: (Int, Int) -> Unit, onSkip: () -> Unit) {
+private fun ReminderStep(onEnable: (Int, Int, Boolean) -> Unit, onSkip: () -> Unit) {
     val tpState = rememberTimePickerState(initialHour = 21, initialMinute = 0, is24Hour = false)
+    // Unanswered until the person picks; the reminder waits for the answer.
+    var keep by remember { mutableStateOf<Boolean?>(null) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        onEnable(tpState.hour, tpState.minute)
+        keep?.let { onEnable(tpState.hour, tpState.minute, it) }
     }
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Text("A gentle daily nudge", style = MaterialTheme.typography.headlineSmall)
@@ -216,18 +230,90 @@ private fun ReminderStep(onEnable: (Int, Int) -> Unit, onSkip: () -> Unit) {
         )
         Spacer(20.dp)
         TimePicker(state = tpState)
+        Spacer(8.dp)
+        Text("If reminders go unanswered", style = MaterialTheme.typography.titleSmall, modifier = Modifier.fillMaxWidth())
+        KeepTimesChoice(keep = keep, onChange = { keep = it })
         Spacer(16.dp)
         Button(
             onClick = {
+                val answer = keep ?: return@Button
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     permission.launch(Manifest.permission.POST_NOTIFICATIONS)
                 } else {
-                    onEnable(tpState.hour, tpState.minute)
+                    onEnable(tpState.hour, tpState.minute, answer)
                 }
             },
+            enabled = keep != null,
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Enable reminder") }
         TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth()) { Text("Not now") }
+    }
+}
+
+/**
+ * Which crisis line the crisis screen shows. It starts as a US line, so the person is asked whether it
+ * is right for where they live. Never guessed from the phone's region or location: the person says.
+ */
+@Composable
+private fun CrisisStep(
+    current: CrisisStore.Resource,
+    onKeep: () -> Unit,
+    onSave: (String, String) -> Unit,
+    onSkip: () -> Unit,
+) {
+    var changing by remember { mutableStateOf(false) }
+    var label by remember { mutableStateOf("") }
+    var contact by remember { mutableStateOf("") }
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+        Text("If things get hard", style = MaterialTheme.typography.headlineSmall)
+        Spacer(8.dp)
+        Text(
+            "Daymark keeps one crisis line on your phone, always a tap away. Is this the right one " +
+                "where you live?",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(16.dp)
+        PaperSurface(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp)) {
+                Text(current.label, style = MaterialTheme.typography.titleMedium)
+                Text(current.contact, style = MaterialTheme.typography.bodyLarge)
+            }
+        }
+        Spacer(16.dp)
+        if (changing) {
+            OutlinedTextField(
+                value = label,
+                onValueChange = { label = it },
+                label = { Text("Name") },
+                keyboardOptions = SentenceCaps,
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(8.dp)
+            OutlinedTextField(
+                value = contact,
+                onValueChange = { contact = it },
+                label = { Text("How to reach them") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(16.dp)
+            Button(
+                onClick = { onSave(label, contact) },
+                enabled = label.isNotBlank() && contact.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Save and continue") }
+        } else {
+            Button(onClick = onKeep, modifier = Modifier.fillMaxWidth()) { Text("This one is right") }
+            TextButton(onClick = { changing = true }, modifier = Modifier.fillMaxWidth()) { Text("Use a different line") }
+        }
+        TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth()) { Text("Not now") }
+        Text(
+            "You can change it any time on the crisis screen.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

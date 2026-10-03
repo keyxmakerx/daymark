@@ -145,6 +145,13 @@ object CheckInEngine {
      *
      * [setSpacingMillis] is the shortest spacing between the times the person set (a day for a
      * single daily reminder); steps their schedule already keeps are skipped ([stepsAlreadyMet]).
+     *
+     * [keepAsSet] is the person's own "Keep reminding me at these times", asked when they turn the
+     * check-ins on. Easing off is right for a check-in about the day and backwards for a medication
+     * reminder, which would fade exactly when doses are being missed, and the engine cannot tell the
+     * two apart without reading what the person wrote, so the person says. Kept, the pace is the
+     * schedule they set, always: nothing eases and no longer wait is tried ([mayTryLonger]). It is
+     * never more than they set either, so "never louder" holds both ways. Stop asking still stops.
      */
     fun paceOf(
         kind: InterruptionBudget.Kind,
@@ -153,12 +160,14 @@ object CheckInEngine {
         countFrom: Long,
         trialSteps: Int = 0,
         setSpacingMillis: Long = 0L,
+        keepAsSet: Boolean = false,
     ): Pace {
         if (saidStop) return Pace.Off
         val mine = recent.filter { it.kind == kind.key && it.offeredAt >= countFrom }
         if (mine.any { InterruptionBudget.Outcome.fromKey(it.outcome) == InterruptionBudget.Outcome.STOP }) {
             return Pace.Off
         }
+        if (keepAsSet) return Pace.AsSet
         val missSteps = unansweredRun(kind, recent, countFrom) / MISSES_PER_STEP
         val quiet = maxOf(trialSteps, 0) + missSteps
         if (quiet == 0) return Pace.AsSet
@@ -194,14 +203,16 @@ object CheckInEngine {
      * zero and [trialDeclined] to true, and the engine never tries a longer wait for that check-in
      * again: the person has said this rhythm is the one they want. Nothing here ever tries a
      * *shorter* wait than the one in force; only the person's answers and Put it back do that.
+     * A check-in the person chose to keep at their times ([paceOf]'s `keepAsSet`) is never tried.
      */
     fun mayTryLonger(
         kind: InterruptionBudget.Kind,
         recent: List<InterruptionBudget.Offer>,
         since: Long,
         trialDeclined: Boolean,
+        keepAsSet: Boolean = false,
     ): Boolean {
-        if (trialDeclined) return false
+        if (trialDeclined || keepAsSet) return false
         val run = recent.filter { it.kind == kind.key && it.offeredAt >= since }
             .sortedByDescending { it.offeredAt }
             .take(ANSWERS_BEFORE_TRIAL)

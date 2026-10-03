@@ -34,6 +34,13 @@ data class Tracker(
     @ColumnInfo(defaultValue = "1260") val windowEnd: Int = 1260,
     /** The quiet quick-log notification for this tracker, which the person switches on. */
     @ColumnInfo(defaultValue = "0") val quickLog: Boolean = false,
+    /**
+     * The person's "Keep reminding me at these times", asked when they turn check-ins on: this
+     * tracker's check-ins never ease off and never try a longer wait (`CheckInEngine.paceOf`). For
+     * something like a medication, where fewer reminders as doses are missed is backwards. Off means
+     * the check-ins ease off when unanswered, as §D1a describes.
+     */
+    @ColumnInfo(defaultValue = "0") val keepAsSet: Boolean = false,
 ) {
     companion object {
         const val SCALE = "SCALE"
