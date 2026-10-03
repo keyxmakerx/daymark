@@ -203,6 +203,12 @@ The **quick log** comes two ways, both the person's to switch on: a quiet, silen
 tracker that opens it (a yes/no tracker logs straight from its Yes and No), and a **Trackers**
 home-screen widget listing every active tracker. Neither shows a value or a count.
 
+**A locked phone says only "Daymark".** Every reminder and check-in notification, the quick log
+included, shows the app's name and nothing else on the lock screen, and every notification button
+(Yes, No, Try later, Stop asking, Put it back) needs the phone unlocked first on Android 12 and later.
+While the app lock is on, the widget names no tracker and logs nothing; it only opens Daymark, which
+asks for the PIN (`notifications/NotificationPrivacy.kt`, held by `NotificationPrivacySourceTest`).
+
 ## 7. Skills and "Take a moment"
 
 ### 7.1 Self-help skills

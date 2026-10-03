@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
+import com.daymark.app.notifications.NotificationPrivacy.lockedAway
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.getSystemService
 import com.daymark.app.MainActivity
@@ -149,12 +150,13 @@ class TrackerCheckInScheduler @Inject constructor(
 
         val notification = NotificationCompat.Builder(context, CHECKIN_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .lockedAway(context, CHECKIN_CHANNEL_ID)
             .setContentTitle(tracker.name)
             .setContentText(context.getString(R.string.tracker_checkin_text))
             .setContentIntent(openTracker(trackerId))
-            .addAction(0, context.getString(R.string.reminder_action_log), openTracker(trackerId))
-            .addAction(0, context.getString(R.string.reminder_action_later), action(TrackerCheckInReceiver.ACTION_TRY_LATER, trackerId))
-            .addAction(0, context.getString(R.string.reminder_action_stop), action(TrackerCheckInReceiver.ACTION_STOP_ASKING, trackerId))
+            .addAction(NotificationPrivacy.unlockedAction(context.getString(R.string.reminder_action_log), openTracker(trackerId)))
+            .addAction(NotificationPrivacy.unlockedAction(context.getString(R.string.reminder_action_later), action(TrackerCheckInReceiver.ACTION_TRY_LATER, trackerId)))
+            .addAction(NotificationPrivacy.unlockedAction(context.getString(R.string.reminder_action_stop), action(TrackerCheckInReceiver.ACTION_STOP_ASKING, trackerId)))
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
@@ -220,6 +222,7 @@ class TrackerCheckInScheduler @Inject constructor(
         checkInState.writeTracker(tracker.id, state.copy(announcedGap = pace.gapMillis, lastChangeWasTrial = trial && change.quieter))
         val builder = NotificationCompat.Builder(context, CHECKIN_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .lockedAway(context, CHECKIN_CHANNEL_ID)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
         if (pace != CheckInEngine.Pace.AsSet) {
@@ -227,7 +230,7 @@ class TrackerCheckInScheduler @Inject constructor(
             builder
                 .setContentTitle(context.getString(R.string.tracker_quieter_title, tracker.name))
                 .setContentText(context.resources.getQuantityString(R.plurals.tracker_quieter_text, days, days))
-                .addAction(0, context.getString(R.string.checkin_put_back), action(TrackerCheckInReceiver.ACTION_PUT_BACK, tracker.id))
+                .addAction(NotificationPrivacy.unlockedAction(context.getString(R.string.checkin_put_back), action(TrackerCheckInReceiver.ACTION_PUT_BACK, tracker.id)))
         } else {
             builder.setContentTitle(context.getString(R.string.tracker_back_title, tracker.name))
         }
@@ -286,6 +289,7 @@ class TrackerCheckInScheduler @Inject constructor(
         }
         val builder = NotificationCompat.Builder(context, QUICKLOG_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .lockedAway(context, QUICKLOG_CHANNEL_ID)
             .setContentTitle(tracker.name)
             .setContentText(text)
             .setContentIntent(openTracker(tracker.id))
@@ -296,8 +300,8 @@ class TrackerCheckInScheduler @Inject constructor(
         // A yes/no tracker logs straight from the notification; any other opens the tracker.
         if (tracker.type == Tracker.BOOLEAN) {
             builder
-                .addAction(0, context.getString(R.string.tracker_log_yes), logAction(tracker.id, 1.0))
-                .addAction(0, context.getString(R.string.tracker_log_no), logAction(tracker.id, 0.0))
+                .addAction(NotificationPrivacy.unlockedAction(context.getString(R.string.tracker_log_yes), logAction(tracker.id, 1.0)))
+                .addAction(NotificationPrivacy.unlockedAction(context.getString(R.string.tracker_log_no), logAction(tracker.id, 0.0)))
         }
         NotificationManagerCompat.from(context).notify(quickLogId(tracker.id), builder.build())
     }

@@ -31,6 +31,7 @@ import androidx.glance.layout.width
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import com.daymark.app.MainActivity
+import com.daymark.app.data.SettingsRepository
 import com.daymark.app.data.dao.TrackerDao
 import com.daymark.app.data.entity.Tracker
 import com.daymark.app.notifications.TrackerCheckInReceiver
@@ -53,6 +54,10 @@ import dagger.hilt.components.SingletonComponent
  * tracker opens it to log; a yes/no tracker logs straight from its Yes and No. It never asks
  * anything and never shows a value or a count, so a phone left on a table says nothing about how
  * anyone has been.
+ *
+ * While the app lock is on, the widget names no tracker and logs nothing: a home screen is seen by
+ * anyone holding the phone, and a Yes from it would write past the lock. It then only opens Daymark,
+ * which asks for the PIN. [DaymarkApp] redraws it whenever the lock is switched on or off.
  */
 class TrackerWidget : GlanceAppWidget() {
 
@@ -60,20 +65,27 @@ class TrackerWidget : GlanceAppWidget() {
     @InstallIn(SingletonComponent::class)
     interface Deps {
         fun trackerDao(): TrackerDao
+        fun settings(): SettingsRepository
     }
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         // A journal this phone cannot open yet (locked, or its key lost) leaves the widget with
         // nothing to list; it then only opens the app, which says what happened.
-        val trackers = runCatching {
-            EntryPointAccessors.fromApplication(context.applicationContext, Deps::class.java)
-                .trackerDao().getAll().filter { !it.archived }.sortedWith(compareBy({ it.sortOrder }, { it.id }))
-        }.getOrDefault(emptyList())
-        provideContent { Content(context, trackers) }
+        val deps = EntryPointAccessors.fromApplication(context.applicationContext, Deps::class.java)
+        // Read first, and on its own: if the setting cannot be read, the widget stays locked.
+        val locked = runCatching { deps.settings().lockEnabled }.getOrDefault(true)
+        val trackers = if (locked) {
+            emptyList()
+        } else {
+            runCatching {
+                deps.trackerDao().getAll().filter { !it.archived }.sortedWith(compareBy({ it.sortOrder }, { it.id }))
+            }.getOrDefault(emptyList())
+        }
+        provideContent { Content(context, locked, trackers) }
     }
 
     @Composable
-    private fun Content(context: Context, trackers: List<Tracker>) {
+    private fun Content(context: Context, locked: Boolean, trackers: List<Tracker>) {
         val ink = ColorProvider(day = InkText, night = InkTextDark)
         val soft = ColorProvider(day = InkSoft, night = InkSoftDark)
         val chip = ColorProvider(day = Hairline, night = HairlineDark)
@@ -85,9 +97,9 @@ class TrackerWidget : GlanceAppWidget() {
         ) {
             Text("Log a tracker", style = TextStyle(fontSize = 15.sp, color = ink))
             Spacer(GlanceModifier.height(8.dp))
-            if (trackers.isEmpty()) {
+            if (locked || trackers.isEmpty()) {
                 Text(
-                    "Open Daymark to add or see your trackers.",
+                    if (locked) "Open Daymark to log." else "Open Daymark to add or see your trackers.",
                     style = TextStyle(fontSize = 13.sp, color = soft),
                     modifier = GlanceModifier.clickable(actionStartActivity(open(context, -1L))),
                 )

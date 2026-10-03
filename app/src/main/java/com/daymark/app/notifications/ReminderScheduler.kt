@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
+import com.daymark.app.notifications.NotificationPrivacy.lockedAway
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.getSystemService
 import com.daymark.app.MainActivity
@@ -140,12 +141,13 @@ class ReminderScheduler @Inject constructor(
         val title = reminder.label.ifBlank { context.getString(R.string.reminder_title) }
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .lockedAway(context, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(line)
             .setContentIntent(openEditor)
-            .addAction(0, context.getString(R.string.reminder_action_log), openEditor)
-            .addAction(0, context.getString(R.string.reminder_action_later), actionIntent(ReminderActionReceiver.ACTION_TRY_LATER, reminder.id))
-            .addAction(0, context.getString(R.string.reminder_action_stop), actionIntent(ReminderActionReceiver.ACTION_STOP_ASKING, reminder.id))
+            .addAction(NotificationPrivacy.unlockedAction(context.getString(R.string.reminder_action_log), openEditor))
+            .addAction(NotificationPrivacy.unlockedAction(context.getString(R.string.reminder_action_later), actionIntent(ReminderActionReceiver.ACTION_TRY_LATER, reminder.id)))
+            .addAction(NotificationPrivacy.unlockedAction(context.getString(R.string.reminder_action_stop), actionIntent(ReminderActionReceiver.ACTION_STOP_ASKING, reminder.id)))
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
@@ -227,6 +229,7 @@ class ReminderScheduler @Inject constructor(
         checkInState.write(state.copy(announcedGap = pace.gapMillis, lastChangeWasTrial = trial && change.quieter))
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .lockedAway(context, CHANNEL_ID)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
         // Worded by where the pace is, not which way it moved: coming back from a long quiet
@@ -236,7 +239,7 @@ class ReminderScheduler @Inject constructor(
             builder
                 .setContentTitle(context.getString(R.string.checkin_quieter_title))
                 .setContentText(context.resources.getQuantityString(R.plurals.checkin_quieter_text, days, days))
-                .addAction(0, context.getString(R.string.checkin_put_back), actionIntent(ReminderActionReceiver.ACTION_PUT_BACK, 0L))
+                .addAction(NotificationPrivacy.unlockedAction(context.getString(R.string.checkin_put_back), actionIntent(ReminderActionReceiver.ACTION_PUT_BACK, 0L)))
         } else {
             builder.setContentTitle(context.getString(R.string.checkin_back_title))
         }
