@@ -59,6 +59,7 @@ thing that the documents also call "the companion"; where the two could be confu
 
 - [design/README.md](design/README.md) — the concept mockups, kept as design history.
 - [prototypes/your-sky.html](prototypes/your-sky.html) — the signed-off look of the Sky.
+- [prototypes/sky-phone.html](prototypes/sky-phone.html) — the approved redesign of the Sky, on a phone. Not built: #449.
 
 ## Project files
 
