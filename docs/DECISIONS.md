@@ -90,13 +90,13 @@ asking") and what the person set up.
    person. The engine never opens them and never decides someone needs them.
 
 > **The invariant.** Going quiet never makes the app louder. Missed check-ins make the engine ease
-> off: fewer, further apart, and in the end silent. No signal, in any combination, may make it ask
-> more.
+> off: fewer and further apart, but never below once a week on its own. Only the person can switch
+> a check-in off. No signal, in any combination, may make it ask more.
 
 **Asking for more is the person's, never an inference.** The one way to get repeat reminders is an
 explicit setting, *"nudge me again if I miss one"*, off until the person turns it on. The engine
 may then repeat a check-in within the limits that setting states, and no further. It may quieten
-itself; only the person may silence it, or turn it up.
+itself down to once a week; only the person may silence it, or turn it up.
 
 That is the ethical guarantee and the engineering guarantee at once, and it is directly testable.
 
