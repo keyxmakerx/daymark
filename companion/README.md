@@ -19,7 +19,10 @@ topology, the proxy contract, every setting, backup and restore:
 - **Reading an exported backup file** in the browser. The file never leaves your device and no
   server is needed.
 - **Encrypted sync.** The server stores append-only ciphertext; the browser reads and decrypts it.
-  The writer today is the command-line tool below. **The phone does not sync yet.**
+  Two writers today: the phone's opt-in `sync` build (Settings → Sync with your server pairs by the
+  server's address and a code shown on the owner's page, then sends an encrypted copy of the
+  journal), and the command-line tool below. The phone does not yet take anything back from the
+  server (#346).
 - **Self-checks and a focus task** (Steady Attention) in the browser — non-diagnostic, licence-clean,
   and never uploaded. Results stay on that device.
 - **With `DAYMARK_SETUP_MODE=paired`:** the owner console (invite a clinician and pair with a spoken
@@ -32,7 +35,8 @@ topology, the proxy contract, every setting, backup and restore:
 
 Not built, among others: passkey sign-in, decided in #205 with the six-digit code kept as the
 fallback (#326; today the WebAuthn routes answer 501 and the code is the clinician's sign-in), and
-the phone's side of sync and pairing (issue #138). The build state of each feature is in the
+the rest of the phone's side of the Companion: taking data back, the inbox and the heartbeat (issue
+#138). The build state of each feature is in the
 documents under [`../docs/`](../docs/), and the open work is in the issues.
 
 ## Quick start (Docker)
@@ -139,7 +143,7 @@ None of this is observable from a web page, so it is a list to check by hand:
 
 ## Push a backup from your laptop
 
-Until the phone can sync, the command-line writer encrypts an exported Daymark backup with your sync
+Without the phone's `sync` build, the command-line writer encrypts an exported Daymark backup with your sync
 passphrase and uploads it as the next append-only version. The passphrase and the server's access
 token are both read from the environment, never from the command line, where other users of the
 machine could read them. The wire format is [`../docs/SYNC_PROTOCOL.md`](../docs/SYNC_PROTOCOL.md).
