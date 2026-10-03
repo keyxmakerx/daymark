@@ -90,8 +90,8 @@ asking") and what the person set up.
    person. The engine never opens them and never decides someone needs them.
 
 > **The invariant.** Going quiet never makes the app louder. Missed check-ins make the engine ease
-> off: fewer and further apart, but never off by itself; only the person's own Stop asking turns a
-> check-in off. No signal, in any combination, may make it ask more.
+> off: further and further apart, with no fixed limit, but never off by itself; only the person's
+> own Stop asking turns a check-in off. No signal, in any combination, may make it ask more.
 
 **Easing off is the person's to refuse.** For a check-in about the day, fewer reminders as answers
 stop is right. For a medication it is backwards: the reminder would fade exactly when doses are
@@ -104,7 +104,7 @@ answer can be changed wherever the check-ins are set (`ui/components/KeepTimesCh
 **Asking for more is the person's, never an inference.** The one way to get repeat reminders is an
 explicit setting, *"nudge me again if I miss one"*, off until the person turns it on. The engine
 may then repeat a check-in within the limits that setting states, and no further. It may quieten
-itself; only the person may silence it, or turn it up.
+itself, with no fixed limit; only the person may silence it, or turn it up.
 
 That is the ethical guarantee and the engineering guarantee at once, and it is directly testable.
 
