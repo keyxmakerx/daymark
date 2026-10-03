@@ -35,7 +35,9 @@ daymark.lan {
 		?Cross-Origin-Resource-Policy "same-origin"
 		?Permissions-Policy           "geolocation=(), camera=(), microphone=(), payment=(), usb=(), magnetometer=(), accelerometer=()"
 	}
-	request_body { max_size 28MB }
+	request_body {
+		max_size 28MB
+	}
 	encode zstd gzip
 	reverse_proxy daymark-companion:8080 {
 		header_up X-Forwarded-For   {client_ip}
@@ -44,7 +46,35 @@ daymark.lan {
 		health_uri /healthz
 		health_interval 10s
 	}
-	log { level ERROR  output stderr  format filter { wrap json  fields { request>remote_ip delete  request>client_ip delete } } }
+	# Only requests that failed on the server side are logged, without the visitor's address
+	# (docs/COMPANION_DEPLOYMENT.md §10).
+	log {
+		level ERROR
+		output stderr
+		format filter {
+			wrap json
+			fields {
+				request>remote_ip delete
+				request>client_ip delete
+			}
+		}
+	}
 }
-:2020 { respond /healthz 200
-        respond 404 }
+
+# ── Catch-all: refuse every host name this file does not serve ──────────────
+# Requirement 5 of docs/COMPANION_DEPLOYMENT.md §3.1. An unknown name has no certificate, so its
+# TLS handshake fails; a request naming another host on a connection opened for daymark.lan
+# lands here and is closed without an answer. Neither reaches the Companion. No `tls internal`
+# here, for the reason the public Caddyfile gives: a second hostless site key would make a
+# second catch-all TLS policy, and Caddy refuses to start when the two disagree.
+:443 {
+	abort
+}
+:80 {
+	abort
+}
+
+:2020 {
+	respond /healthz 200
+	respond 404
+}
