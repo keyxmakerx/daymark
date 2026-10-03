@@ -5,8 +5,9 @@ implementation under `companion/web/src/lib/` is the conformance oracle: the pho
 accept byte-identical data, and the web tests are what it is checked against. The wire formats are
 [SYNC_PROTOCOL.md](SYNC_PROTOCOL.md) and [COMPANION_PAIRING.md](COMPANION_PAIRING.md) §13.
 
-Built today: the `sync` flavour, the Kotlin port of the sync and pairing cryptography, and its tests.
-Nothing in the app talks to a server yet. The work is tracked in #138.
+Built today: the `sync` flavour, the Kotlin port of the sync and pairing cryptography and its tests,
+and Settings → Sync with your server, which pairs the phone and sends an encrypted copy of the journal
+(§2). The `foss` build still talks to nothing. Not built: pull and the rest of the phone's half, #138.
 
 ## 0. The default build stays offline
 
@@ -29,7 +30,7 @@ Everything the Companion needs lives in a separate, opt-in `sync` product flavou
 Use libsodium through lazysodium: `lazysodium-android` in the app, `lazysodium-java` in the tests. The
 Android-free module `sync-crypto/` holds the port, so its tests run on a plain JVM with real
 libsodium and no emulator; the `sync` flavour wires it to the Android binding
-(`app/src/sync/kotlin/com/daymark/app/sync/SyncCryptoFactory.kt`, which nothing calls yet).
+(`app/src/sync/kotlin/com/daymark/app/sync/SyncCryptoFactory.kt`, which `ServerSyncParts.kt` calls).
 
 | Must match | Web reference | Kotlin | Built |
 | --- | --- | --- | --- |

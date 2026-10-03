@@ -19,7 +19,7 @@ The app has one flavour dimension, `network`:
 | Flavour | Application id | Network | What it is |
 |---|---|---|---|
 | `foss` | `com.daymark.app`; `io.github.keyxmakerx.daymark` before the first public release (#232). Not built: #369 | none | The released app. No `INTERNET` permission; CI checks the built APK for it. |
-| `sync` | `com.daymark.app.sync`; `io.github.keyxmakerx.daymark.sync` likewise. Not built: #369 | `INTERNET` | Opt-in and unreleased. Adds `:sync-crypto` and lazysodium. Today it carries only a crypto factory that nothing calls; the phone's half of the Companion is #138. |
+| `sync` | `com.daymark.app.sync`; `io.github.keyxmakerx.daymark.sync` likewise. Not built: #369 | `INTERNET` | Opt-in and unreleased. Adds `:sync-crypto` and lazysodium. Today it carries Settings → Sync with your server, which pairs with a Companion and sends an encrypted copy of the journal (docs/COMPANION_PHONE.md §2); the rest of the phone's half is #138. |
 
 Network code may live only under `app/src/sync/`, and `INTERNET` is declared only in that source
 set's manifest. Gradle source sets enforce this: `foss` cannot reference that code at all.
