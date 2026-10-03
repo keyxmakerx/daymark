@@ -404,12 +404,21 @@ times and has no page, so offer once. Not built: #156.
   an on/off switch. First-run setup offers one. Android 13 and later ask for notification permission
   the first time. Reminders fire at the exact time where Android allows it, and are re-armed after a
   restart.
-- A reminder's notification, or its **Log now** action, opens a fresh entry.
-- **Recorded, never rationed.** A reminder is at a time the person chose, so the arbiter does not
-  gate it: quietening something they scheduled would override them, and there is no reminder
-  setting for them to turn back up (`notifications/ReminderScheduler.kt`). Every firing still
-  writes a line in the reception ledger (§13.2).
-- Not built: answering a reminder with "this time works", "try later" or "stop asking": #195.
+- A reminder's notification, or its **Log now** action, opens a fresh entry. Its line is one of the
+  fixed, human-written openers (§13.3), in turn.
+- **Try later** sends one more nudge for that reminder an hour later. **Stop asking** switches that
+  reminder off; switching it back on in Settings → Reminders undoes it (#195).
+- **The rules engine decides which firings are posted** (`stats/CheckInEngine.kt`,
+  [DECISIONS.md](DECISIONS.md) §D1, §D1a). The alarms always fire at the times the person set; the
+  engine only lets some of them through. While reminders are answered, every one is posted. Every
+  two unanswered ones in a row double the wait (once a day, every 2 days, 4, 8, and on), with no
+  fixed limit, but the engine never switches a reminder off: only the person does. Writing an entry
+  undoes that easing at once. After two weeks of answered reminders the engine may
+  try one step longer a wait, and keeps it while the person answers.
+- **Every change is announced.** "Daymark will check in less often for now", with how often and
+  **Put it back**, or "Your check-ins are back to the times you set". No notice mentions anything
+  missed. Putting back a longer wait the engine tried means it never tries one again. The engine's
+  own state is kept in the app's preferences (`data/CheckInStateStore.kt`).
 
 ## 13. Why it asks: the arbiter, the reception ledger and the timing layer
 
@@ -426,7 +435,7 @@ The `offer_records` table notes which feature asked (the support offer, a remind
 nothing uses yet: the companion and an assignment), when, the hour and weekday at the moment of
 asking, whether anything came back, and what became of it (accepted, dismissed, snoozed, or stop).
 It holds no free text and nothing about the person. Rows are never updated, and are deleted after
-60 days.
+60 days, except each kind's newest 32, which the rules engine still reads (§12).
 
 **The reception ledger and the timing grid are never shared with a clinician.** When someone answers
 is the app's business with them, and it stays on the phone. The ledger is in no backup, CSV or
@@ -443,11 +452,11 @@ before schema v18 have no hour or weekday, and none is ever worked out for them.
   identical to it. It never holds a mood trend, goals, people or communities.
 - The phrase pool (`stats/PhrasePool.kt`) is a small set of fixed, human-written openers, one set
   for mornings and one for evenings. The draw is blind to mood.
-- **Today placement decides nothing, and the pool is never spoken.** A reminder is at a time the
-  person chose, and the support offer is made while they are already in the app, so neither is an
-  ask an hour should be chosen for. No rotation is stored. Both stay dormant until Daymark starts an
-  ask of its own, such as the companion surfacing itself (#272), and are never applied to a reminder
-  or to the support offer (#159).
+- **The pool is spoken by reminders** (§12), in turn, with the turn stored in the app's preferences.
+  **Placement still decides nothing.** A reminder is at a time the person chose, and the support
+  offer is made while they are already in the app, so neither is an ask an hour should be chosen
+  for. Placement stays dormant until Daymark starts an ask of its own, such as the companion
+  surfacing itself (#272).
 
 ### 13.4 The debug screen: "Why it asks"
 

@@ -23,5 +23,17 @@
     <string name="reminder_channel_name">Daily reminder</string>
     <string name="reminder_channel_desc">Reminds you to log your day</string>
     <string name="reminder_title">How was your day?</string>
-    <string name="reminder_text">Take a moment to log how you feel.</string>
+    <string name="reminder_action_log">Log now</string>
+    <string name="reminder_action_later">Try later</string>
+    <string name="reminder_action_stop">Stop asking</string>
+
+    <!-- The rules engine's notices (docs/DECISIONS.md §D1). They say what changed, never that
+         anything was missed (§D1a). -->
+    <string name="checkin_quieter_title">Daymark will check in less often for now</string>
+    <plurals name="checkin_quieter_text">
+        <item quantity="one">Once a day, at the time you set.</item>
+        <item quantity="other">Every %d days, at the time you set.</item>
+    </plurals>
+    <string name="checkin_back_title">Your check-ins are back to the times you set</string>
+    <string name="checkin_put_back">Put it back</string>
 </resources>

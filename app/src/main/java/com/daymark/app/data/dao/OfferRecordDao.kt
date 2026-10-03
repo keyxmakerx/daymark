@@ -83,6 +83,10 @@ interface OfferRecordDao {
     @Query("DELETE FROM offer_records WHERE offeredAt < :cutoff")
     suspend fun deleteOlderThan(cutoff: Long)
 
+    /** As [deleteOlderThan], keeping the rows whose ids are in [keep] whatever their age. */
+    @Query("DELETE FROM offer_records WHERE offeredAt < :cutoff AND id NOT IN (:keep)")
+    suspend fun deleteOlderThanExcept(cutoff: Long, keep: List<Long>)
+
     @Query("DELETE FROM offer_records")
     suspend fun deleteAll()
 }

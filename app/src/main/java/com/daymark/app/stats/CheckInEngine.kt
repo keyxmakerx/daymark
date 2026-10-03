@@ -142,6 +142,9 @@ object CheckInEngine {
      * [trialSteps] is how many longer waits the engine has tried and kept ([mayTryLonger]). The
      * quiet from a run of unanswered check-ins is added on top, so an answered check-in takes away
      * only that part and leaves a kept trial in place. Both parts only ever add quiet.
+     *
+     * [setSpacingMillis] is the shortest spacing between the times the person set (a day for a
+     * single daily reminder); steps their schedule already keeps are skipped ([stepsAlreadyMet]).
      */
     fun paceOf(
         kind: InterruptionBudget.Kind,
@@ -149,6 +152,7 @@ object CheckInEngine {
         saidStop: Boolean,
         countFrom: Long,
         trialSteps: Int = 0,
+        setSpacingMillis: Long = 0L,
     ): Pace {
         if (saidStop) return Pace.Off
         val mine = recent.filter { it.kind == kind.key && it.offeredAt >= countFrom }
@@ -156,8 +160,19 @@ object CheckInEngine {
             return Pace.Off
         }
         val missSteps = unansweredRun(kind, recent, countFrom) / MISSES_PER_STEP
-        return paceAfter(maxOf(trialSteps, 0) + missSteps)
+        val quiet = maxOf(trialSteps, 0) + missSteps
+        if (quiet == 0) return Pace.AsSet
+        return paceAfter(quiet + stepsAlreadyMet(setSpacingMillis))
     }
+
+    /**
+     * How many steps the person's own schedule already keeps, given the shortest spacing between
+     * the times they set. A single daily reminder already comes at most once a day, so its first
+     * step of quiet is every two days, not a "once a day" that would change nothing and still be
+     * announced as a change.
+     */
+    fun stepsAlreadyMet(setSpacingMillis: Long): Int =
+        (1..MAX_DOUBLINGS + 1).count { paceAfter(it).gapMillis < setSpacingMillis }
 
     /**
      * How many answered check-ins in a row, with nothing unanswered between them, earn a try at a

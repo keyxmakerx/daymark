@@ -303,6 +303,26 @@ class CheckInEngineTest {
     }
 
     @Test
+    fun `a step of quiet is always quieter than the schedule the person set`() {
+        val misses = (1..2).map { row(it, Outcome.DISMISSED.key) }
+        for (spacingHours in listOf(0L, 4L, 12L, 24L, 48L, 24L * 7)) {
+            val spacing = spacingHours * hour
+            val p = CheckInEngine.paceOf(Kind.REMINDER, misses, false, 0L, setSpacingMillis = spacing)
+            assertTrue("spacing ${spacingHours}h gave $p", p.gapMillis >= spacing)
+            for (trial in 1..3) {
+                val t = CheckInEngine.paceOf(Kind.REMINDER, emptyList(), false, 0L, trial, spacing)
+                assertTrue("spacing ${spacingHours}h, trial $trial gave $t", t.gapMillis >= spacing)
+            }
+        }
+        // One reminder a day: the first step is every two days. Positive control: with several a
+        // day, the first step is once a day.
+        assertEquals(2L, CheckInEngine.paceOf(Kind.REMINDER, misses, false, 0L, setSpacingMillis = day).days)
+        assertEquals(1L, CheckInEngine.paceOf(Kind.REMINDER, misses, false, 0L, setSpacingMillis = 4 * hour).days)
+        // And nothing answered stays exactly as set, whatever the spacing.
+        assertEquals(Pace.AsSet, CheckInEngine.paceOf(Kind.REMINDER, emptyList(), false, 0L, 0, day))
+    }
+
+    @Test
     fun `the ledger sweep covers every outcome`() {
         val known = InterruptionBudget.Outcome.entries.map { it.key }.toSet() - Outcome.STOP.key
         assertTrue(outcomes.containsAll(known))
