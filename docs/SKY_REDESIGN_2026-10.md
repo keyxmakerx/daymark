@@ -293,10 +293,9 @@ from the maintainer's answer on 2026-10-03:
 - **Then the colours settle, and the person is told so at the start.** Proposed wording: *"You can
   change these colours until 2 November. After that they stay, as part of your sky."* The date is
   the end of the window.
-- **The window: proposed 30 days from the first memory.** The maintainer asked how long is
-  reasonable. A month is long enough to live with the colours through good and bad light and a few
-  different moods, and short enough that the sky has settled before there is much history in it.
-  Not yet confirmed (§10).
+- **The window: 30 days from the first memory**, chosen by the maintainer on 2026-10-03. A month is
+  long enough to live with the colours through good and bad light and a few different moods, and
+  short enough that the sky has settled before there is much history in it.
 - **Reset my sky**, always available, behind a confirmation that says what it does: it grows the sky
   again from a new seed, with a new course, new shapes and new colours, and a new window to choose
   colours in. It never deletes or changes a memory, a name or a constellation. Constellations are
@@ -512,7 +511,7 @@ changes what it shows.
 | 4 | Where places come from | Places the person names themselves | §3.3. Never device location. |
 | 5 | Dark matter | Keep it | §4.2, as memories tucked away to find again later. |
 | 6 | Dark nebula ("dim a stretch") | Needs changes: "maybe this or dark matter is a way to hide stuff intentionally for you to come back later" | That job went to dark matter (§4.2). The dark nebula is now scenery (§3.4). |
-| 7 | May a person change their colours | Needs changes: colours up front, a warning that the sky becomes permanent over time, and a way to reset the sky | §5.4. |
+| 7 | May a person change their colours | Needs changes: colours up front, a warning that the sky becomes permanent over time, and a way to reset the sky. Then: 30 days | §5.4. |
 | 8 | A slider to see the sky on an earlier date | No: "only constellations allowed that" | §7.6. |
 | 9 | Name a single star | Yes | §3.1. |
 | 10 | Review a year as a flight along its river | No: bands should be rare, never one a year | §2.2: bands are rare by rule, at most two in the prototype. |
@@ -524,13 +523,12 @@ brightness never follows kind (it used to make a journal entry slightly brighter
 
 **Still open**, each with the default the build should take unless the maintainer says otherwise:
 
-1. **How long the colour window lasts.** Default: 30 days from the first memory (§5.4).
-2. **The proposed shape of "tuck away for later"** (§4.2) has not been seen by the maintainer.
+1. **The proposed shape of "tuck away for later"** (§4.2) has not been seen by the maintainer.
    Default: as written.
-3. **Giants and age colour.** The September plan says a life event never red-shifts; the approved
+2. **Giants and age colour.** The September plan says a life event never red-shifts; the approved
    prototype red-shifts giants like every other star. Default: follow the prototype; the giant still
    stands out by size.
-4. **The rhythm thresholds in §2.2** are proposals and need tuning on real data, keeping bands rare.
+3. **The rhythm thresholds in §2.2** are proposals and need tuning on real data, keeping bands rare.
 
 ---
 
