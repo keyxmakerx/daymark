@@ -218,8 +218,9 @@ class ReminderScheduler @Inject constructor(
     }
 
     /**
-     * Tells the person about a change of pace, once: quieter, with **Put it back**, or back to the
-     * times they set. Never silent, and never a word about anything missed (§D1a).
+     * Tells the person about a change of pace, once: how often it now is, with **Put it back**, or
+     * that it is back to the times they set. Never silent, and never a word about anything missed
+     * (§D1a).
      */
     private fun announce(state: CheckInStateStore.State, pace: CheckInEngine.Pace, trial: Boolean) {
         val change = CheckInEngine.changeBetween(state.announced, pace) ?: return
@@ -228,7 +229,9 @@ class ReminderScheduler @Inject constructor(
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-        if (change.quieter) {
+        // Worded by where the pace is, not which way it moved: coming back from a long quiet
+        // stretch to a longer wait the person kept is still less often than they set.
+        if (pace != CheckInEngine.Pace.AsSet) {
             val days = pace.days.coerceIn(1L, Int.MAX_VALUE.toLong()).toInt()
             builder
                 .setContentTitle(context.getString(R.string.checkin_quieter_title))
