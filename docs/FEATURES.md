@@ -409,6 +409,10 @@ times and has no page, so offer once. Not built: #156.
   gate it: quietening something they scheduled would override them, and there is no reminder
   setting for them to turn back up (`notifications/ReminderScheduler.kt`). Every firing still
   writes a line in the reception ledger (§13.2).
+- Today a reminder fires exactly when set, and goes quiet only if the person changes it. Not built:
+  the rules engine running reminders, which would ease off after unanswered ones with no fixed limit,
+  never switch one off by itself, and announce any move with **Put it back**
+  ([DECISIONS.md](DECISIONS.md) §D1, §D1a; #159).
 - Not built: answering a reminder with "this time works", "try later" or "stop asking": #195.
 
 ## 13. Why it asks: the arbiter, the reception ledger and the timing layer
@@ -418,7 +422,9 @@ times and has no page, so offer once. Not built: #156.
 Each feature keeps its own reason to speak. One gate (`stats/InterruptionBudget.kt`) answers only
 "may I, now?", from the person's declared frequency and the gate's own history with them. It knows
 nothing about moods, goals or people, and it may only ever ask less
-([DECISIONS.md](DECISIONS.md) §D1, §D1a). Today its one caller is the support offer (§7.2).
+([DECISIONS.md](DECISIONS.md) §D1, §D1a). Today its one caller is the support offer (§7.2). Not
+built: the wider engine of §D1, which runs every check-in (the dailies, reminders and notifications)
+from fixed, human-written lines; #159.
 
 ### 13.2 The reception ledger
 

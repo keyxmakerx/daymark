@@ -6,6 +6,11 @@ These documents describe Daymark as it is built today. Work that is not done yet
 something designed but not built, it links the issue. [CONTRIBUTING.md](../CONTRIBUTING.md) explains
 which kind of information lives where.
 
+One word to keep straight: **the Companion** is the self-hosted server, its web pages (owner, clinician
+and server consoles) and the phone's sync to it. The small in-app helper with premade replies,
+[DECISIONS.md](DECISIONS.md) §D1b and [COMPANION_DIALOGUE.md](COMPANION_DIALOGUE.md), is a different
+thing that the documents also call "the companion"; where the two could be confused they say which.
+
 ## Start here
 
 | Document | What it answers |

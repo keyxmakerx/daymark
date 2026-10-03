@@ -9,8 +9,8 @@ accounts, no servers and no tracking. Because there is no backend, it is free fo
 
 > **Status.** The Android app is at version 0.3.0: built, usable and sideloadable. The optional,
 > self-hosted **Companion** is built too: a server plus web consoles that let a person share a chosen,
-> encrypted view with a clinician. The phone's half of the Companion is not built yet, so today the
-> owner uses the Companion from a browser. Everything open is tracked on GitHub; start at the
+> encrypted view with a clinician. In the opt-in `sync` build the phone pairs with a Companion and sends it an encrypted copy of the
+> journal; the phone does not yet take anything back, so the Companion's pages are where its data is read. Everything open is tracked on GitHub; start at the
 > [roadmap](https://github.com/keyxmakerx/daymark/issues/132).
 
 > **Not a medical device.** Daymark is a self-tracking and journaling tool. Its sleep, breathing,

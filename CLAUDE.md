@@ -14,7 +14,9 @@ means rules over the person's own data.
 Corollaries: non-diagnostic (screeners are self-checks; describe association, never causation);
 descriptive, never interpretive (state what the data shows, never narrate how they must have felt);
 crisis resources are offline, static and user-editable, never auto-escalating. The rules engine that
-personalises the app (Signals, the arbiter) exists precisely so that per-person help needs no model.
+personalises the app (Signals, the arbiter, and the engine that is to run every check-in, DECISIONS.md
+§D1) exists precisely so that per-person help needs no model: fixed lines, rules over the person's own
+data, easing off when they go quiet and never switching anything off by itself.
 
 ## 1. Where to look
 
