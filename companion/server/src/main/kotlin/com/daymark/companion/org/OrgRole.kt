@@ -123,7 +123,10 @@ enum class OrgAction(val plane: Plane) {
  * **Platform sysadmin.** They run the server and the infrastructure. They are not in anybody's
  * practice, so making them a member of one would be a lie about where their authority comes from,
  * and it would quietly create the god admin the design exists to rule out — someone who is inside
- * a tenant *and* outside every tenant at once.
+ * a tenant *and* outside every tenant at once. Their identity lives in a store of its own
+ * (admin/AdminStore.kt, #322), not here. On a one-practice server one person may hold both the
+ * server administrator's sign-in and a practice administrator's membership; those stay two roles,
+ * each granted on its own, and that is not the god admin, because neither carries a key.
  *
  * ## Why a role is a set of actions and never a key
  *

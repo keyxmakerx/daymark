@@ -43,7 +43,8 @@ internal const val ADMIN_COOKIE = "daymark_admin"
 @Serializable data class AdminClaimRequest(val setupCode: String, val name: String, val totpSecret: String, val totpCode: String)
 @Serializable data class AdminSignInRequest(val name: String, val code: String)
 @Serializable data class AdminSessionDto(val name: String, val csrfToken: String, val absoluteExpiry: Long)
-@Serializable data class AdminOverviewDto(val name: String, val setupMode: String, val administrators: Int)
+/** Who is signed in, the shape and a count; and the session's own anti-CSRF token, for a reloaded console. */
+@Serializable data class AdminOverviewDto(val name: String, val setupMode: String, val administrators: Int, val csrfToken: String)
 
 /**
  * The server administrator's routes (#322): claiming a new server with its setup code, signing in,
@@ -192,7 +193,11 @@ fun Route.adminRoutes(
 
     get("/v1/admin/overview") {
         val admin = requireAdmin(adminStore, sessionIdleSeconds, stateChanging = false) ?: return@get
-        call.respond(AdminOverviewDto(name = admin.name, setupMode = shape.wire, administrators = adminStore.adminCount()))
+        val csrf = call.request.cookies[ADMIN_COOKIE]?.let(adminStore::csrfOf) ?: run {
+            call.respond(HttpStatusCode.Unauthorized, ErrorDto("sign in as this server's administrator"))
+            return@get
+        }
+        call.respond(AdminOverviewDto(name = admin.name, setupMode = shape.wire, administrators = adminStore.adminCount(), csrfToken = csrf))
     }
 }
 

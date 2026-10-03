@@ -81,7 +81,9 @@ belongs to one owner (#219); several people's journals on one server: not built,
 
 The decided design replaces the shared token (#208): each person signs in with an account of their
 own, a new server is claimed with a one-time code from its own log, and access comes back by proving
-the owner's own key, never by email. Not built: #322, #324, #325.
+the owner's own key, never by email. The server console already works this way: it is claimed with
+the setup code a new server prints to its log, and its administrator signs in as themselves (#322).
+Not built for the rest: #324, #325.
 
 ## Health checks
 

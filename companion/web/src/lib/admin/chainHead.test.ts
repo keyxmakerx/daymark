@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import * as chainHead from './chainHead'
 import {
   CHAIN_HEAD_CAVEAT,
-  CHAIN_HEAD_GATE,
+  CHAIN_HEAD_INTRO,
   CHAIN_HEAD_WORD,
   HEAD_PURPOSE,
   fetchChainHead,
@@ -382,12 +382,10 @@ describe('nothing this module says is a score, a tick, or a success state', () =
     }
   })
 
-  it('the gate copy says whose token this is and what the gate protects', () => {
-    expect(CHAIN_HEAD_GATE).toMatch(/owner bearer token/i)
-    expect(CHAIN_HEAD_GATE).toMatch(/which relationships exist/i)
-    expect(CHAIN_HEAD_GATE).toMatch(/how active/i)
-    expect(CHAIN_HEAD_GATE).toMatch(/not an invitation to obtain it/i)
-    // And where the token goes, said before a person types it.
-    expect(CHAIN_HEAD_GATE).toMatch(/sent once/i)
+  it('the intro says whose sign-in it reads with, what that protects, and what comes back', () => {
+    expect(CHAIN_HEAD_INTRO).toMatch(/your own sign-in/i)
+    expect(CHAIN_HEAD_INTRO).toMatch(/which relationships exist/i)
+    expect(CHAIN_HEAD_INTRO).toMatch(/how active/i)
+    expect(CHAIN_HEAD_INTRO).toMatch(/nothing the log records comes back/i)
   })
 })

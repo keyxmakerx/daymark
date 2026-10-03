@@ -36,7 +36,7 @@ drafts made that were false (R1–R12); code cites them by number.
 | Owner, in the browser console (the phone later: #138) | The passphrase, the master key and the owner's X25519 and Ed25519 private keys (derived, §4), and plaintext — in memory while unlocked | The clinician's private keys |
 | Clinician, in the browser portal | Their X25519 and Ed25519 private keys, wrapped under a reading passphrase in their own browser; share plaintext in memory only | The owner's passphrase or keys; any other patient's data |
 | Server | Ciphertext, sealed content keys, signatures, public keys, token digests, sign-in code seeds (§5.2), routing metadata, audit chains | Any private key, unwrapped content key, passphrase or plaintext |
-| Practice administrator | Membership and roles. Every administrator, of a practice or of the server, signs in with an account of their own that holds no key (#208; not built: #314, #322) | Any key or content ([COMPANION_ACCESS_CONTROL.md](COMPANION_ACCESS_CONTROL.md)) |
+| Practice administrator | Membership and roles. Every administrator, of a practice or of the server, signs in with an account of their own that holds no key (#208). The server administrator's is built (#322); a practice's is not: #314 | Any key or content ([COMPANION_ACCESS_CONTROL.md](COMPANION_ACCESS_CONTROL.md)) |
 | Operator | The container, its volume, its logs | Nothing beyond what the server holds |
 
 **Assets, most sensitive first:** the owner's passphrase and private keys; the owner's plaintext; the

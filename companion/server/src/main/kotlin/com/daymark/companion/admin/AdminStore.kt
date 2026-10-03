@@ -172,6 +172,18 @@ class AdminStore(
         byId(adminId)
     }
 
+    /**
+     * The anti-CSRF token of a session already validated, so a reloaded console can carry on
+     * without signing in again. The cookie is HttpOnly and SameSite=Strict, and the server sends no
+     * CORS headers, so only a page of this origin can read the answer.
+     */
+    fun csrfOf(sessionId: String): String? = synchronized(lock) {
+        conn.prepareStatement("SELECT csrf_token FROM admin_sessions WHERE session_id_hash=?").use { ps ->
+            ps.setString(1, Secrets.tokenHash(sessionId))
+            ps.executeQuery().use { rs -> if (rs.next()) rs.getString(1) else null }
+        }
+    }
+
     fun revokeSession(sessionId: String) = synchronized(lock) {
         conn.prepareStatement("DELETE FROM admin_sessions WHERE session_id_hash=?").use { ps ->
             ps.setString(1, Secrets.tokenHash(sessionId)); ps.executeUpdate()

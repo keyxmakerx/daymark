@@ -103,8 +103,8 @@ is a side effect.
 - **Everyone signs in as themselves** (#208). The owner, an administrator, each clinician and each
   receptionist has an account of their own, and the shared token stops being anyone's sign-in (not
   built: #324, #314). A new server is claimed with a one-time setup code it prints to its own log,
-  and the server console, which today mounts with no credential, sits behind an administrator's own
-  sign-in (not built: #322). A lost sign-in comes back by proving the owner's own key, never by
+  and the server console sits behind an administrator's own sign-in, a name and a six-digit code
+  (#322). A lost sign-in comes back by proving the owner's own key, never by
   email (not built: #325).
 - **Clinicians sign in with a six-digit TOTP code** and a session cookie. Passkeys sign people in
   where the address is `https` with a hostname, codes stay as the fallback, and a passkey never
@@ -157,9 +157,10 @@ console" (#158).
   shared, and a today view, client record and calendar built from it; assign from the catalogue,
   author game plans, see what the owner allowed, leave.
 - **Server console** (`admin.html`): what an operator can check from a browser — health, readiness,
-  sign-in pressure, and audit-chain checks. It holds no credential of its own yet. By decision it
-  sits behind an administrator's own sign-in, optionally on an address of its own (#208); not
-  built: #322, #323.
+  sign-in pressure, and the pasted-run chain examiner, behind an administrator's own sign-in. A new
+  server is claimed there with the setup code from its log (#322). It never asks for the owner's
+  token: the server's own chain check is in the owner console, beside the access log. By decision
+  it may sit on an address of its own (#208); not built: #323.
 - **Practice console** (`practice.html`): membership, roles, removal, the practice log.
 
 ### 4.3 The phone

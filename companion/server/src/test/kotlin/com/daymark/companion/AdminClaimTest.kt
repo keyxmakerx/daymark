@@ -279,10 +279,11 @@ class AdminClaimTest {
                 }.status,
             )
             // The positive control: the administrator's own session opens the overview, which says
-            // who is signed in, the shape and a count, and nothing else.
+            // who is signed in, the shape and a count, and nothing else but this session's own
+            // anti-CSRF token, so a reloaded console can still sign out.
             val overview = client.get("/v1/admin/overview") { header(HttpHeaders.Cookie, cookie) }
             assertEquals(HttpStatusCode.OK, overview.status)
-            assertEquals("""{"name":"Sam","setupMode":"solo","administrators":1}""", overview.bodyAsText())
+            assertEquals("""{"name":"Sam","setupMode":"solo","administrators":1,"csrfToken":"$csrf"}""", overview.bodyAsText())
 
             // Signing out needs the anti-CSRF token, and then the session is gone.
             assertEquals(HttpStatusCode.Unauthorized, client.post("/v1/admin/session/logout") { header(HttpHeaders.Cookie, cookie) }.status)

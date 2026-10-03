@@ -1,10 +1,11 @@
 /*
  * The server admin console's entry point.
  *
- * Mounted with no props, deliberately. `baseUrl` defaults to '' because the three probes this
- * console reads — /healthz, /readyz and /v1/config — are registered at the server root rather than
- * under DAYMARK_BASE_PATH (Application.kt), so a relative fetch reaches them from wherever this
- * page is served.
+ * The gate mounts first (#322): the claim screen on a new server, sign-in otherwise, and the
+ * console only to a signed-in administrator. Mounted with no props, deliberately: `baseUrl`
+ * defaults to '' because everything this page reads (/healthz, /readyz, /v1/config and the
+ * /v1/admin routes) is registered at the server root rather than under DAYMARK_BASE_PATH
+ * (Application.kt), so a relative fetch reaches it from wherever this page is served.
  *
  * THE DIGEST IS REAL NOW (task #16). AdminConsole defaults its `digest` prop to
  * lib/admin/sha256.ts — a synchronous, dependency-free SHA-256 proven against the published
@@ -17,11 +18,11 @@
  */
 import { mount } from 'svelte'
 import './app.css'
-import AdminConsole from './lib/components/admin/AdminConsole.svelte'
+import AdminGate from './lib/components/admin/AdminGate.svelte'
 
 const target = document.getElementById('admin-app')
 if (!target) throw new Error('#admin-app mount point missing')
 
-const app = mount(AdminConsole, { target })
+const app = mount(AdminGate, { target })
 
 export default app

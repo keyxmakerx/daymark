@@ -249,9 +249,10 @@ read from a file named by `NAME_FILE`, which wins.
 | `DAYMARK_REL_QUOTA_BYTES` | `268435456` (256 MiB) | Storage quota per relationship. What the clinician writes may use a quarter of it and what the owner writes the rest, so neither can crowd out the other. Only bytes the server still holds count: a withdrawn share stops counting at once, an ended item once the hourly sweep has removed it |
 | `DAYMARK_RATE_LIMIT_RPS` | `5` | Requests per second per address, on bearer-token routes only |
 | `DAYMARK_AUTH_LOCKOUT_FAILS`, `_SECONDS` | `8`, `900` | Bad bearer tokens before an address is locked out, and for how long |
-| `DAYMARK_TOTP_LOCKOUT_FAILS`, `_SECONDS` | `5`, `300` | Bad sign-in codes before a credential is locked, and for how long; also the backoff for wrong invitation secrets |
+| `DAYMARK_TOTP_LOCKOUT_FAILS`, `_SECONDS` | `5`, `300` | Bad sign-in codes before a credential is locked, and for how long, for clinicians and server administrators alike; also the backoff for wrong invitation secrets |
 | `DAYMARK_INVITE_TTL_SECONDS` | `259200` (72 h) | Invitation lifetime |
-| `DAYMARK_SESSION_IDLE_SECONDS`, `_ABSOLUTE_SECONDS` | `900`, `28800` | Clinician session lifetimes on the server. The clinician console also drops its keys after 15 minutes without activity, and at the server's absolute expiry or 8 hours after sign-in, whichever is sooner, as its sign-in contract says: a shorter value here applies, a longer one does not extend what the page holds |
+| `DAYMARK_SESSION_IDLE_SECONDS`, `_ABSOLUTE_SECONDS` | `900`, `28800` | Clinician and server-administrator session lifetimes on the server. The clinician console also drops its keys after 15 minutes without activity, and at the server's absolute expiry or 8 hours after sign-in, whichever is sooner, as its sign-in contract says: a shorter value here applies, a longer one does not extend what the page holds |
+| `DAYMARK_ADMIN_RESET` | off | `1` or `true`: for a server that has lost every administrator. Each start with it on prints a new setup code to the log and writes one audit row, and that code makes one more administrator (§9). Turn it off again once you are signed in |
 | `DAYMARK_COOKIE_INSECURE` | off | Plain-HTTP testing only: drops `Secure` from the session cookie. Refused at start with an `https` public address (§5.3) |
 | `DAYMARK_ACCESS_LOG_RETENTION_DAYS` | `90` | Audit-log retention (COMPANION_SECURITY.md §9) |
 | `DAYMARK_ACCESS_LOG_SOURCE_IP` | off | Records the client address in audit entries |
@@ -298,9 +299,10 @@ also sets `TZ=UTC` and the `JAVA_TOOL_OPTIONS` in §2.
 - **A server serves one owner.** Never give its token to a second person: whoever holds it can list
   and download every encrypted copy on the server and push a newer version of each. Each stored
   journal belongs to one owner (#219); several people's journals on one server: not built, #318.
-- By decision, a new server is claimed with a one-time setup code it writes to its own log, and each
-  person signs in with an account of their own, so no token is created (#208). Not built: #322,
-  #324.
+- A new server's console is claimed with a one-time setup code it writes to its own log (§9), and
+  the administrator signs in with a code of their own; the bearer token opens nothing there. By
+  decision, each person signs in with an account of their own, so no token is created (#208). Not
+  built: #324.
 
 ### 5.3 Settings the server refuses
 
@@ -348,19 +350,22 @@ The volume is `daymark-companion_blobs`, mounted at `/data`.
 | `rel-index.db` and `rel/<relRef>/<channel>/<lineage>/<version>.blob` | Relationship ciphertext and its index | the `paired` or `practice` shape (§0) |
 | `audit.db` | The audit chain per relationship | the `paired` or `practice` shape |
 | `org-audit.db` | The audit chain per practice | the `practice` shape |
+| `admin.db` | Server administrators: names, sign-in code seeds (**in the clear**), attempt counters, session digests | always |
+| `admin-audit.db` | The server's own audit chain: the claim, administrators' sign-ins and lockouts, setup codes reprinted | always |
 | `org.db` | Practices, members, roles | the `practice` shape |
 | `pairing.db` | Pairing messages in transit | the `paired` or `practice` shape (§0) |
 | `_pre-migrate/<name>.v<from>.<time>.db` | A copy of one database, taken just before a start changed its structure: `<name>` is the database, `<from>` the version it held (0: written before versions were recorded), `<time>` the moment in UTC, e.g. `auth.v0.20260926T144512Z.db`. One whole file, with no `-wal` beside it | a start has changed a database's structure (§7.2) |
 | `tmp/` | Staging for atomic writes | with either blob store |
 
-That is ten SQLite databases, all in WAL mode: each may have `-wal` and `-shm` files beside it,
+That is twelve SQLite databases, all in WAL mode: each may have `-wal` and `-shm` files beside it,
 and those belong to it. Also present and not worth keeping: `.readyz` (the readiness probe's file)
 and the SQLite native library the server unpacks at every start. A server that changes shape keeps
 the files it no longer opens, and neither reads nor changes them: a database it opens again later is
 brought to the release's version then (§7.2).
 
 The volume holds **sign-in secrets**: anyone with a copy of `auth.db` can mint sign-in codes for every
-enrolled clinician (COMPANION_SECURITY.md §5.2). It also holds the owner's wrapped key. That opens
+enrolled clinician (COMPANION_SECURITY.md §5.2), and with a copy of `admin.db` for every server
+administrator. It also holds the owner's wrapped key. That opens
 nothing without the passphrase or the recovery code, but whoever copies `wrapped-key.db` can guess at
 the passphrase offline, and a passphrase or code the owner has since changed still opens the older
 versions in it. A copy in `_pre-migrate/` holds everything its database held when it was taken, and
@@ -560,13 +565,20 @@ check that a real email arrives (#207).
 
 1. `cp .env.example .env` in `companion/`; set `DAYMARK_DOMAIN`, and set `DAYMARK_SETUP_MODE` to
    what this machine is for (§0). The example says `solo`.
-2. Create the bearer token (§5.2). By decision, a one-time setup code from the server's own log
-   replaces this step (#208); not built: #322.
+2. Create the bearer token (§5.2). By decision, each person's own account replaces this step
+   (#208); not built: #324.
 3. Pick the topology (§1) and start: `docker compose up -d --build`, adding the override if your proxy
    is a container.
 4. Configure your proxy (§3), set `DAYMARK_TRUSTED_PROXIES` (§4.0), and restart.
-5. Run the checks in COMPANION_OBSERVABILITY.md §6.4, including the lockout-isolation test.
-6. Schedule backups (§6.2) and keep them off the host, encrypted.
+5. Claim the server console. A server with no administrator prints a line at `WARN` that begins
+   `Setup code for this server:`; read it with `docker compose logs companion | grep 'Setup code'`. Open
+   `admin.html`, enter the code, choose a name, add the key it shows to an authenticator app and
+   type the six digits. The code works once and for an hour; a new one is printed each hour and at
+   each start until the server is claimed, and never after. Do this before anyone else can reach
+   the address: whoever enters the code first is the administrator. Lost every administrator? Start
+   once with `DAYMARK_ADMIN_RESET=1` (§5.1).
+6. Run the checks in COMPANION_OBSERVABILITY.md §6.4, including the lockout-isolation test.
+7. Schedule backups (§6.2) and keep them off the host, encrypted.
 
 ## 10. Logging and retention policy
 
@@ -588,7 +600,9 @@ Two records, kept for different readers:
   `X-Setting-Key`;
 - any concrete path parameter — `relRef`, channel, lineage, version, invitation id — only the route
   template;
-- email addresses, sign-in codes, recovery and invitation secrets, credential ids;
+- email addresses, sign-in codes, recovery and invitation secrets, credential ids. The one exception
+  is the setup code (§9), which a server with no administrator prints deliberately, because the log
+  is the one place only its installer can read;
 - stack traces on request paths.
 
 The app breaks two of these today: the unhandled-error line logs the request path with a stack trace,

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { DEVICE_REVOKED_BY_REISSUE, auditActionLabel, auditActorLabel, ownerLogActionLabel } from './auditLabels'
 import { orgAuditActionLabel } from '../../practice/audit'
+import { serverLogActionLabel } from '../../admin/serverAudit'
 import { REVOKE_CAVEAT } from '../../pairing/copy'
 
 /*
@@ -12,7 +13,9 @@ import { REVOKE_CAVEAT } from '../../pairing/copy'
  * reads it from there, as text, rather than keeping a second list by hand: a hand list is how
  * `share.revoke` reached the owner's access log as a raw code. The `org.*` actions are written to a
  * practice's own log, a separate database the owner console never reads, so they are held to the
- * practice console's labels instead. Either way, a line somebody reads comes with words.
+ * practice console's labels instead, and the `server.*` actions are written to the server's own
+ * chain (#322) and held to lib/admin/serverAudit.ts. Either way, a line somebody reads comes with
+ * words.
  */
 
 const AUDIT_STORE = fileURLToPath(
@@ -35,8 +38,12 @@ function serverActions(kotlin: string): string[] {
 /** Written to a practice's log, which only the practice console reads (practice/audit.ts). */
 const onPracticeLog = (action: string) => action.startsWith('org.')
 
+/** Written to the server's own chain, which only the server console reads (admin/serverAudit.ts). */
+const onServerLog = (action: string) => action.startsWith('server.')
+
 /** What a reader sees for an action, in the console that reads the log it is written to. */
-const labelFor = (action: string) => (onPracticeLog(action) ? orgAuditActionLabel(action) : auditActionLabel(action))
+const labelFor = (action: string) =>
+  onPracticeLog(action) ? orgAuditActionLabel(action) : onServerLog(action) ? serverLogActionLabel(action) : auditActionLabel(action)
 
 /** The actions a reader would see as raw codes. Null when nothing was read: that is no verdict. */
 function unlabelled(kotlin: string): string[] | null {
@@ -63,9 +70,9 @@ describe('every action the server can write has a label (#277)', () => {
 
   it('fails for a planted action with no label on either log, and for an empty read (positive control)', () => {
     const header = 'enum class AuditAction(val wire: String) {'
-    const planted = KOTLIN.replace(header, `${header}\n    SHARE_FORWARDED("share.forwarded"),\n    ORG_RENAMED("org.renamed"),`)
+    const planted = KOTLIN.replace(header, `${header}\n    SHARE_FORWARDED("share.forwarded"),\n    ORG_RENAMED("org.renamed"),\n    SERVER_MOVED("server.moved"),`)
     expect(planted).not.toBe(KOTLIN)
-    expect(unlabelled(planted)).toEqual(expect.arrayContaining(['share.forwarded', 'org.renamed']))
+    expect(unlabelled(planted)).toEqual(expect.arrayContaining(['share.forwarded', 'org.renamed', 'server.moved']))
     // Nothing read is no verdict, never a pass.
     expect(unlabelled('')).toBeNull()
     const renamed = KOTLIN.replace('enum class AuditAction(', 'enum class Renamed(')

@@ -384,6 +384,12 @@ fun Application.module(
         // operator chose, so the first-run screen does not ask (#330). No secrets and no value the
         // operator typed: the shape is one of three fixed words, and anyone who can reach the server
         // can already read it from the routes.
+        get("/v1/config") {
+            call.respond(ServerConfigDto(smtpEnabled = config.smtpEnabled, setupMode = config.setupMode?.wire))
+        }
+
+        // The server administrator's claim, sign-in and console reads (#322), beside the probes at
+        // the server root so the console reaches them from wherever it is served, in every shape.
         adminRoutes(
             adminStore = admins,
             setupCode = claimCode,
@@ -399,10 +405,6 @@ fun Application.module(
             cookieSecure = config.cookieSecure,
             auditSourceIp = config.auditSourceIpEnabled,
         )
-
-        get("/v1/config") {
-            call.respond(ServerConfigDto(smtpEnabled = config.smtpEnabled, setupMode = config.setupMode?.wire))
-        }
 
         if (store != null && keyDocuments != null && ownerAuth != null && ownerAudit != null) {
             syncRoutes(store, keyDocuments, ownerAuth, config.maxRequestBytes)
