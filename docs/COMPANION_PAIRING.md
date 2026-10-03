@@ -391,8 +391,11 @@ The clinician polls status every 45 seconds (`PAIRING_STATUS_POLL_MS` on the web
 
 The protocol does not change; only the device running the owner's half does. The phone's run is
 built in `sync-crypto` (`ClinicianPairing.kt`: open, collect, approve, cancel, each request signed by
-the phone's key), with its bytes pinned to the web's. The screens that drive it, and keeping a run
-across a restart, are not built: #174. Until they are, no Companion screen may claim the phone will
+the phone's key), with its bytes pinned to the web's. So are its invitations (`ClinicianInvites.kt`:
+the inbox token, the relationship reference, mint, list, and the owner's report) and the ceremony that
+orders them (`ClinicianCeremony.kt`, the mirror of `pairing/ownerCeremony.ts`, with the same rules
+pinned in `ClinicianCeremonyTest.kt`). The screens that drive it, and where the phone keeps a run and
+its relationships, are not built: #174. Until they are, no Companion screen may claim the phone will
 show or approve anything.
 
 - **Identity is derived, not generated.** `crypto_kdf_derive_from_key` over the owner's master with

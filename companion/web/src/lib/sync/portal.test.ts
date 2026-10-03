@@ -147,3 +147,10 @@ describe('PortalClient.auditChainHead', () => {
     expect(await client.auditChainHead(inboxToken)).toEqual({ kind: 'transport', error: 'TypeError: offline' })
   })
 })
+
+describe('relRefOf', () => {
+  it('is BLAKE2b-256 of the token text, base64url: the bytes the phone computes too (#174)', async () => {
+    // Pinned with the same value in sync-crypto's ClinicianCeremonyTest.
+    expect(await relRefOf('inbox-token-example')).toBe('PmoLo2aBLjo0CAzUlM2MhtNp2fCKQvpN17Qgod-1w2s')
+  })
+})
