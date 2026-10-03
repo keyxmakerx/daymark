@@ -39,7 +39,7 @@ which kind of information lives where.
 | [COMPANION_THERAPIST.md](COMPANION_THERAPIST.md) | The clinician's side: shares, game plans, leaving |
 | [COMPANION_ACCESS_CONTROL.md](COMPANION_ACCESS_CONTROL.md) | Practices, roles, consent and revocation. Its unbuilt sections link their issues |
 | [COMPANION_ASSIGNMENTS.md](COMPANION_ASSIGNMENTS.md) | Capabilities and the clinician-to-owner assignment channel |
-| [COMPANION_DIALOGUE.md](COMPANION_DIALOGUE.md) | The companion dialogue: its content rules and security findings |
+| [COMPANION_DIALOGUE.md](COMPANION_DIALOGUE.md) | The unmounted fixed-choice dialogue (no helper character, §D1b): its content rules and security findings |
 | [COMPANION_FEATURES.md](COMPANION_FEATURES.md) | The self-check engine and its honesty gate |
 | [COMPANION_PHONE.md](COMPANION_PHONE.md) | What the phone must do to join the Companion |
 | [SYNC_PROTOCOL.md](SYNC_PROTOCOL.md) | The encrypted sync wire format |

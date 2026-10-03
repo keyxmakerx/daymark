@@ -108,33 +108,27 @@ itself, with no fixed limit; only the person may silence it, or turn it up.
 
 That is the ethical guarantee and the engineering guarantee at once, and it is directly testable.
 
-### D1b. The companion is a real presence, and a client of the arbiter
+### D1b. There is no helper character: the engine has no persona
 
-A "little guy" in the corner that expands: conversational, but every response is **premade**, it is
-aware of the person's own history, and it can be hidden at will. The maintainer proposed it and it
-was kept over two rounds of pushback, because a fixed-choice dialogue has no free-text failure mode.
-For someone alone at 2am, a warm presence offering two or three things to try may be the most
-valuable thing in the product.
+Daymark has no character, mascot or "presence" that talks to the person. Whatever Daymark says, it
+says through the rules engine (D1, D1a), in fixed lines, as the app and not as someone. A personality
+would invite the person to treat a set of rules as a relationship, and the rules are not one. An
+earlier proposal for a conversational "little guy" was dropped by the maintainer on 2026-10-03.
 
-The companion is a **feature that calls the arbiter**, not the arbiter itself. It owns its mood
-history, content and UI. When the person opens it, nothing needs permission. When it wants to
-surface itself, it must ask, and it may be told no.
+The rules that proposal carried still bind every line the engine shows:
+- **No free text** — the person picks from fixed choices, or writes in their own journal.
+- **Reflect, never label** — *"you logged three harder days this week"* hands someone their own data
+  back, while *"you seem depressed"* is a claim about them, which D1a forbids.
+- **Never uninvited** — a line the person has turned off stays off, and turning it back on is a
+  setting they find.
+- **Never the crisis path** — the safety plan stays the person's own. Wherever the engine offers a
+  set of choices about how someone is doing, the safety plan is one of them, offered and never
+  opened on the person's behalf (D1a).
 
-It may branch on real data, remember where a conversation left off, vary its openers, and offer
-concrete next steps. It may not:
-- **accept free text** — fixed choices only;
-- **label** — *"you logged three harder days this week"* hands someone their own data back, while
-  *"you seem depressed"* is a claim about them, which D1a forbids;
-- **come back uninvited** — hidden means hidden, and un-hiding is a setting the person finds;
-- **become the crisis path** — the safety plan stays the person's own; the companion may point at it.
-
-And it must always offer the way out: **every conversation offers the safety plan as one of its
-choices**, at every turn, so a fixed-choice dialogue is never a dead end for someone in crisis. It is
-offered, never opened on the person's behalf (D1a).
-
-**As built:** the dialogue content, rules and web component exist. No page mounts the component
-(`companion/web/src/lib/docs.test.ts` asserts that), and there is no phone surface. Not built: #272.
-How it works: `docs/COMPANION_DIALOGUE.md`.
+**As built:** a dialogue component and its content exist from the earlier proposal. No page mounts
+it (`companion/web/src/lib/docs.test.ts` asserts that), and there is no phone surface. Whether it is
+removed or its fixed lines are reused by the engine is #272. How it works:
+`docs/COMPANION_DIALOGUE.md`.
 
 ---
 
@@ -145,7 +139,7 @@ the setting that governs it reads *when Daymark asks*. It is plumbing, and its v
 justify any decision in one sentence because it is rules. **It is never called "AI."** That word
 promises opacity, and it carries a liability in mental-health software in particular.
 
-This is about the arbiter, not the companion (D1b), which may deserve a name.
+Nothing else in the app has a persona either (D1b).
 
 The clinician platform has no separate brand (#310). It is Daymark Companion, and each of its four
 pages is named for who uses it: the owner console, the clinician console, the practice console and
@@ -221,7 +215,7 @@ Recorded so they are not re-proposed as obvious wins.
 | **Inferring reminder quality from app opens** | A notification alone makes opening far likelier. That metric moves with nothing underneath improving. The signal must be declared by the person. |
 | **Lapse-referencing notifications** | "You haven't written in 3 days" is the only documented harm signal in the notification literature. |
 | **Sleep sensing by microphone, sonar or phone use** | An all-night microphone asks for more trust than a mood journal should. Snore detection misses quiet sleepers, and the classifier proposed for it was machine learning. A sleep window guessed from phone use is inferred, where the diary is declared (#212). |
-| **A free-text chat box in the companion** | See D1b. |
+| **A free-text chat box, or a helper character** | See D1b. |
 | **Inferring clinical state from usage** | See D1a. |
 | **Any signal that makes the arbiter ask more** | See D1a. |
 
