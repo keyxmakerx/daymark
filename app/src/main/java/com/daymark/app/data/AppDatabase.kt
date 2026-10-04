@@ -44,8 +44,9 @@ import com.daymark.app.data.entity.Treatment
         com.daymark.app.data.entity.AcceptedAssignment::class,
         com.daymark.app.data.entity.InstrumentResult::class,
         com.daymark.app.data.entity.TaskResult::class,
+        com.daymark.app.data.entity.Constellation::class,
     ],
-    version = 21,
+    version = 22,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -68,6 +69,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun personNoteDao(): com.daymark.app.data.dao.PersonNoteDao
     abstract fun entryPersonDao(): com.daymark.app.data.dao.EntryPersonDao
     abstract fun companionDao(): com.daymark.app.data.dao.CompanionDao
+    abstract fun constellationDao(): com.daymark.app.data.dao.ConstellationDao
 
     /** Seeds a sensible set of starter activities on first install. */
     class SeedCallback : Callback() {
@@ -720,6 +722,23 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_20_21 = object : Migration(20, 21) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `trackers` ADD COLUMN `keepAsSet` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        /**
+         * v21 -> v22: the constellations a person draws in their sky (`DECISIONS.md` §D11). A new,
+         * empty table; nothing is back-filled, because only the person draws one.
+         */
+        val MIGRATION_21_22 = object : Migration(21, 22) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `sky_constellations` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`madeEpochDay` INTEGER NOT NULL, " +
+                        "`points` TEXT NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL)",
+                )
             }
         }
 
