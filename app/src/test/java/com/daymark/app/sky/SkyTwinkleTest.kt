@@ -26,7 +26,7 @@ class SkyTwinkleTest {
     /**
      * One sky's seed, for the two cases here that lay a history out.
      *
-     * It seeds [SkyWarp] and so decides where the stars land; it has nothing to do with rhythm,
+     * It seeds [SkyForm] and so decides where the stars land; it has nothing to do with rhythm,
      * which is why every other case in this file hashes an identity directly and never builds a
      * layout at all.
      */
