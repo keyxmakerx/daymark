@@ -42,6 +42,7 @@
   } from '../../phones/ceremony'
   import { DISCONNECT } from '../../phones/copy'
   import { qrDrawing } from '../../phones/qr'
+  import OwnerLog from './OwnerLog.svelte'
 
   let {
     /** The server address and access token the sync card proved in this visit, or null. */
@@ -256,6 +257,8 @@
 
   <!-- Silent until thirty seconds are left on a code, then that one line, once. -->
   <p class="visually-hidden" aria-live="polite">{view.announcement}</p>
+
+  {#if connection}<OwnerLog {connection} />{/if}
 </section>
 
 <style>

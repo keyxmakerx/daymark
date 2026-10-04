@@ -37,6 +37,10 @@ All notable changes to this project are documented here. The format is based on
   still contains unlock times restores normally; the badges in it are just not brought back.
 
 ### Added
+- **Your own log, and a Connect button, on the sync card** (web). Connect checks the server address
+  and access token without a passphrase, so a first visit to an empty server no longer reads as an
+  error. Below your phones, "Your own log" lists phones paired and disconnected and addresses paused
+  after wrong tries at your credentials.
 - **Invite a clinician from your phone** (sync build). Settings → Sync with your server →
   Clinicians, once your sync passphrase has opened the key. Add a clinician under your own name for
   them, give them the sign-in key (shown once), then the link, then say the code. "Check for a
