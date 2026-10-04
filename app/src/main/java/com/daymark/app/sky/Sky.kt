@@ -452,14 +452,14 @@ class SkyLayout(
     /** The newest star: where the opening flies to. -1 in an empty sky. */
     val newest: Int get() = starCount - 1
 
-    /** The index of the star whose anchor record is [recordId] of [kind], or -1. */
+    /** The index of the star that holds record [recordId] of [kind], or -1 when there is none. */
     fun indexOf(kind: SkyKind, recordId: Long): Int {
         for (i in 0 until starCount) {
-            if (kindOrdinal[i] == kind.ordinal && recordIds[idStart[i]] == recordId) return i
+            if (kindOrdinal[i] != kind.ordinal) continue
+            for (r in idStart[i] until idStart[i + 1]) if (recordIds[r] == recordId) return i
         }
         return -1
     }
-
 
     val starCount: Int get() = x.size
 
