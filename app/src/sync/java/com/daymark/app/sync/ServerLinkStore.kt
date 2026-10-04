@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import com.daymark.app.security.KeystoreAead
 import com.daymark.synccrypto.KeptLink
 import com.daymark.synccrypto.PairedServer
+import com.daymark.synccrypto.PairingPayloads
 import com.daymark.synccrypto.PhoneLineage
 import java.util.Base64
 import javax.inject.Inject
@@ -19,6 +20,9 @@ import javax.inject.Singleton
  *   opened it the sync key and the ETag of the key document it came from, and the last copy sent. It is
  *   written only once the registration poll answers `registered`: a pending key is held in memory and
  *   nowhere else. Forgetting the pairing removes it.
+ * - THE OWNER'S PUBLIC PAIRING KEYS, which opening the sync key also yields: what approving a
+ *   clinician seals back to them (#174). Public, but kept sealed with the rest, and forgotten with the
+ *   link, since only the passphrase that opened them can show they are the owner's.
  * - THE LINEAGE: the name of this phone's copies on the server, made once for this phone and kept on
  *   its own, so pairing again sends to the same one.
  *
@@ -69,7 +73,21 @@ class ServerLinkStore @Inject constructor(
     @Synchronized
     fun forgetLink() {
         // commit(), not apply(): a phone told it was disconnected must not find the pairing again.
-        securePrefs.edit().remove(LINK).commit()
+        securePrefs.edit().remove(LINK).remove(OWNER_KEYS).commit()
+    }
+
+    /** Keeps the owner's public pairing keys, which the passphrase opened with the sync key. */
+    @Synchronized
+    fun keepOwnerKeys(keys: PairingPayloads.OwnerKeys) {
+        sealToPrefs(OWNER_KEYS, OWNER_KEYS_AAD, "${keys.boxPubB64}\n${keys.signPubB64}".toByteArray(Charsets.US_ASCII))
+    }
+
+    /** The owner's public pairing keys, or null until the passphrase has opened the key on this phone. */
+    @Synchronized
+    fun ownerKeys(): PairingPayloads.OwnerKeys? {
+        val bytes = openFromPrefs(OWNER_KEYS, OWNER_KEYS_AAD) ?: return null
+        val parts = String(bytes, Charsets.US_ASCII).split('\n')
+        return if (parts.size == 2 && parts.all { it.isNotEmpty() }) PairingPayloads.OwnerKeys(parts[0], parts[1]) else null
     }
 
     /** This phone's lineage, made the first time it is asked for and the same from then on. */
@@ -104,7 +122,9 @@ class ServerLinkStore @Inject constructor(
         const val ALIAS = "daymark_server_link_v1"
         const val LINK = "server_link_v1"
         const val LINEAGE = "server_lineage_v1"
+        const val OWNER_KEYS = "server_owner_keys_v1"
         val LINK_AAD = "daymark.server-link.v1".toByteArray(Charsets.US_ASCII)
         val LINEAGE_AAD = "daymark.server-lineage.v1".toByteArray(Charsets.US_ASCII)
+        val OWNER_KEYS_AAD = "daymark.server-owner-keys.v1".toByteArray(Charsets.US_ASCII)
     }
 }

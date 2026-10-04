@@ -51,7 +51,7 @@ libsodium and no emulator; the `sync` flavour wires it to the Android binding
 | Manifest signing bytes | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
 | Base64: RFC 4648 §5, URL-safe, no padding | everywhere | `SyncCrypto.kt` (plain `java.util.Base64`, because lazysodium's own helper is standard base64) | Yes |
 | CPace (CPACE-RISTRETTO255-SHA512) | `pairing/cpace.ts` | `CpaceCrypto.kt` | Yes |
-| Pairing channel identifier and envelopes | `pairing/relay.ts`, `pairing/envelope.ts`, `pairing/payloads.ts` | `CpaceCrypto.kt` (`channelIdentifier`), `PairingEnvelope.kt`, `PairingPayloads.kt`, pinned to the web's bytes in `OwnerPairingVectorTest.kt` and `PairingPayloadsTest.kt` | The identifier, envelopes, payloads, the owner's run (`ClinicianPairing.kt`), invitations (`ClinicianInvites.kt`) and the ceremony (`ClinicianCeremony.kt`): yes. Its screens: #174 |
+| Pairing channel identifier and envelopes | `pairing/relay.ts`, `pairing/envelope.ts`, `pairing/payloads.ts` | `CpaceCrypto.kt` (`channelIdentifier`), `PairingEnvelope.kt`, `PairingPayloads.kt`, pinned to the web's bytes in `OwnerPairingVectorTest.kt` and `PairingPayloadsTest.kt` | The identifier, envelopes, payloads, the owner's run (`ClinicianPairing.kt`), invitations (`ClinicianInvites.kt`) and the ceremony (`ClinicianCeremony.kt`): yes. Its screens: yes (`CliniciansScreen.kt`) |
 | Assignment and game-plan opening: seal-open, unpad (an envelope that opens to `{` was sealed unpadded before #315 and is read as it is), then verify against the pinned clinician key, context and recipient fingerprint | `assignments/crypto.ts`, `therapist/gamePlan.ts` | — | No: #177 |
 | Share sealing, format 2: padded, and signed over the transcript, the encrypted body and the sealed key, at the version the share is published as and with the time it was sealed | `share/sharecrypto.ts` | — | No: #174 |
 
@@ -212,7 +212,8 @@ reproducible build (#229); the offline app's listing never carries it (#194). No
 3. The schema version with the game-plan, progress, assignment and result tables, and the assignment
    checks. **Built** (v19).
 4. Inbound assignments and game plans, with the acceptance inbox: #177.
-5. The owner's half of pairing, grants and shares from the phone, and the connections screen: #174.
+5. The owner's half of pairing from the phone: **Built** (Clinicians). Grants and shares from the phone, and
+   the connections screen: #174.
 6. The anti-rollback watermark (#179), the audit anchor (#182), the heartbeat (#185), signed
    requests and pairing (**Built**), and the camera scanner (#432).
 7. The crypto tests on a real device: #192.

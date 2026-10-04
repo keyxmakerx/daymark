@@ -1,6 +1,9 @@
 package com.daymark.app.sync
 
 import android.os.SystemClock
+import com.daymark.synccrypto.ClinicianCode
+import com.daymark.synccrypto.ClinicianInvites
+import com.daymark.synccrypto.ClinicianPairing
 import com.daymark.synccrypto.HttpsTransport
 import com.daymark.synccrypto.PhoneClock
 import com.daymark.synccrypto.PhonePairing
@@ -37,6 +40,18 @@ class ServerSyncParts @Inject constructor() {
 
     /** Unlocking the sync key and sending a copy, over the same transport and clocks. */
     val phoneSync: PhoneSync by lazy { PhoneSync(sodium, transport, PhoneClocks) }
+
+    /** The owner's invitations to a clinician (#174), signed by the phone's key like every request here. */
+    val clinicianInvites: ClinicianInvites by lazy { ClinicianInvites(sodium, transport, PhoneClocks) }
+
+    /** The owner's side of pairing with a clinician (#174). */
+    val clinicianPairing: ClinicianPairing by lazy { ClinicianPairing(sodium, transport, PhoneClocks) }
+
+    /** Wall time, for when a clinician's keys were recorded. */
+    val clock: PhoneClock get() = PhoneClocks
+
+    /** A fresh code for one pairing run, drawn so no symbol is favoured. */
+    fun drawCode(): ClinicianCode = ClinicianCode.draw(sodium)
 
     /**
      * The phone's clocks. The poll's pace and its deadline run on [SystemClock.elapsedRealtime], which

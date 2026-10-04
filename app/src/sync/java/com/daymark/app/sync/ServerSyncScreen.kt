@@ -1,5 +1,6 @@
 package com.daymark.app.sync
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,6 +20,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -62,6 +64,7 @@ import java.time.LocalDate
 @Composable
 fun ServerSyncScreen(
     onBack: () -> Unit,
+    onClinicians: () -> Unit,
     viewModel: ServerSyncViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -180,6 +183,17 @@ fun ServerSyncScreen(
                     )
                 }
                 Spacer(Modifier.height(24.dp))
+                HorizontalDivider()
+                // Clinicians (#174): approving one seals the owner's keys back, which only an opened key has.
+                val open = state.stage == ServerSyncStage.READY
+                ListItem(
+                    headlineContent = { Text(ClinicianWords.ROW) },
+                    supportingContent = {
+                        val locked = state.stage == ServerSyncStage.NEEDS_PASSPHRASE || state.stage == ServerSyncStage.OPENING
+                        Text(if (locked) ClinicianWords.ROW_LOCKED else ClinicianWords.ROW_HINT)
+                    },
+                    modifier = Modifier.clickable(enabled = open) { onClinicians() },
+                )
                 HorizontalDivider()
                 TextButton(
                     onClick = { confirmForget = true },

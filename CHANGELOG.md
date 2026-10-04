@@ -37,6 +37,13 @@ All notable changes to this project are documented here. The format is based on
   still contains unlock times restores normally; the badges in it are just not brought back.
 
 ### Added
+- **Invite a clinician from your phone** (sync build). Settings → Sync with your server →
+  Clinicians, once your sync passphrase has opened the key. Add a clinician under your own name for
+  them, give them the sign-in key (shown once), then the link, then say the code. "Check for a
+  reply" is the only time the phone asks the server anything; a reply that does not open with your
+  code is a question for you, never a verdict. The code and the sign-in key are kept out of
+  screenshots, and the code is never copied or shared. A phone that opened its key before this
+  update asks for the passphrase once more.
 - **Check-ins run through one set of rules, and ease off when you go quiet.** Daily check-ins,
   reminders and tracker prompts are all decided by the same fixed rules, using only lines a person
   wrote. A reminder offers *Log now*, *Try later* and *Stop asking* (#195). After every two
