@@ -47,7 +47,7 @@ class SkyViewModel @Inject constructor(
             // record, persisted, never re-derived — and it seeds the decorative field and the
             // cluster warp in `Sky.layout`. Deriving it twice would be two chances to disagree,
             // and a sky whose stars clump around one field and are drawn over another is two skies.
-            val seed = repository.fieldSeed(records)
+            val seed = repository.skySeed(records)
             UiState(
                 layout = Sky.layout(records, seed),
                 fieldSeed = seed,
