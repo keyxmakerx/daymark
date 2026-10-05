@@ -351,9 +351,12 @@ Settled with it (2026-09-26, on #186 and #189):
 
 ## D11. Every star in the sky is a memory, and nothing in it is a reward or a verdict
 
-The maintainer approved a redesign of the Sky on 2026-10-03. Not built: #449, which holds the design.
-`docs/prototypes/sky-phone.html` shows it. Until it ships, `docs/SKY.md` describes the sky the app
-draws; where the two disagree, this decision governs the build.
+The maintainer approved a redesign of the Sky on 2026-10-03; `docs/prototypes/sky-phone.html` shows
+it and `docs/SKY.md` describes what is built. Built: every star a memory, the three forms, bands and
+clusters, the opening and a new star's birth, zoom down to suns, constellations and their photo, and
+the Key. Not built: the supernova, black and white holes, dark matter, the other objects, changing
+the colours, "Reset my sky" and tracker objects, #449. Where the prototype and this decision
+disagree, this decision governs the build.
 
 **Decision.**
 - **Every star is one memory.** There are no decorative stars; the space behind them is colour, gas

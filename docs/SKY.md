@@ -2,19 +2,19 @@
 
 "Your sky" draws the person's own acts, of six kinds (§2), as stars in one night sky. It is reached
 from the More hub and sits behind the app lock like every other screen. It is a *place* rather than
-a chart: stable (a star never moves), inhabited (there is always more sky than data), and navigable
-at more than one scale.
+a chart: every star is a memory, a star keeps its place, and the sky can be followed from the whole
+of it down to a single star drawn as a sun.
 
-How to read it: where a star sits says nothing. Its colour and brightness say how long ago it was;
-the spread of its glow is the mood recorded with it, if any; up close, its form says what kind of
-act it was; a bigger white star is a life event the person marked. The signed-off look is
-`docs/prototypes/your-sky.html`, which opens in any browser.
+How to read it: each sky takes a form of its own, a river, galaxies or an open sky, and the stars
+run along it from oldest to newest, counted in memories and never in days. A star's colour and
+brightness say how long ago it was; the spread of its glow is the mood recorded with it, if any; up
+close, its form says what kind of act it was; a bigger white star is a life event the person
+marked. The rules are `docs/DECISIONS.md` §D11 and the look is `docs/prototypes/sky-phone.html`,
+which opens in any browser.
 
-This is the single reference for the Sky. Code cites its section numbers.
-
-A redesign of the Sky is approved and not built: #449, with its rules in `docs/DECISIONS.md` §D11 and
-its look in `docs/prototypes/sky-phone.html`. Until it ships, this document describes the sky the app
-draws.
+This is the single reference for the Sky. Code cites its section numbers. Not built: the sky's other
+objects (nebulae, giant stars, the supernova, black and white holes, dark matter, tracker objects),
+changing its colours and "Reset my sky", #449.
 
 ---
 
@@ -29,14 +29,18 @@ decides nothing.
 | File | Owns |
 |---|---|
 | `sky/Sky.kt` | the six kinds, the layout, the text list |
+| `sky/SkyForm.kt` | the sky's form and guide, and where each star is placed: bands, clusters, streams, drift |
 | `sky/SkyAge.kt` | colour and brightness from age |
 | `sky/SkyGlyph.kt` | core, halo, temperature, the landmark, kind forms, zoom levels (`SkyDetail`), the Sky's switches (`SkyOptions`) |
 | `sky/SkyPalette.kt` | the night colours, contrast, equalising mood colours |
 | `sky/SkyTwinkle.kt` | each star's rhythm |
-| `sky/SkyWarp.kt`, `sky/SkyField.kt` | the clumping; the decorative field |
+| `sky/SkyOpening.kt` | the opening's pace, a new star's birth, every camera journey |
+| `sky/SkyConstellation.kt` | constellations: names, stored points, fading lines, the photo's neighbours |
+| `sky/SkyKey.kt` | the Key's fixed lines |
 | `sky/SkyRandom.kt`, `sky/SkyCalendar.kt` | the hash and the sky's seed; date arithmetic |
-| `ui/sky/` | `SkyScreen` (controls, detail strip, list), `SkySurface` (drawing, gestures), `SkySprite`, `SkyPresentation` (zoom, hit-testing, every word a screen reader hears), `SkyViewModel` |
-| `data/SkyRepository.kt` | the six projections merged, dates converted, the seed stored |
+| `sky/SkyField.kt` | the decorative field the year review still draws (§9); the Sky draws none |
+| `ui/sky/` | `SkyScreen` (controls, sheets, detail strip, list, the opening), `SkySurface` (drawing, gestures, the photo), `SkyCamera` (where the sky is seen from), `SkySprite`, `SkyPresentation` (zoom, hit-testing, every word a screen reader hears), `SkyViewModel` |
+| `data/SkyRepository.kt`, `data/entity/Constellation.kt` | the six projections merged, dates converted, the seed and constellations stored |
 
 `tools/jvm-tests.sh sky` and `tools/jvm-tests.sh ui/sky sky` run `sky/` and `SkyPresentation` on a
 plain JVM in seconds; the other Sky tests run in CI.
@@ -125,23 +129,23 @@ app**, the streak failure mode with a longer memory: a streak forgets; a sky doe
 
 | # | Mechanism | Rule | Checked by |
 |---|---|---|---|
-| **M1** | **A uniform decorative field** | The sky is dense with faint specks that are not data, at identical density everywhere, declared decorative and left out of every text equivalent (§3.7). | P3, P4 |
+| **M1** | **A gap takes no room** | Stars run along the sky's guide counted in memories, never in days (§3.1), so a quiet stretch takes no space and no region of the sky stands for a missing week. Nothing that is not a memory is drawn as a star (§D11). | P3, P4 |
 | **M2** | **Absence has no glyph** | A day with nothing logged draws nothing: no speck, no dimmed cell, no placeholder. The layout iterates records, never dates. | P2 |
 | **M3** | **No ruler, no axis** | No gridlines, rows, ticks, axis, or position that means a date (§3.1). | P5 |
 | **M4** | **Equal presence across moods** | At any age, a star's core, colour, brightness and total light are identical at every mood level. | P1, P6 |
 
-Take any one away and the void returns in a weaker form. Without M1, three stars in a month look like
-a broken render. Without M2, a stretch of grey specks *is* the void, drawn politely. Without M3, the
+Take any one away and the void returns in a weaker form. Without M1, a quiet month is a stretch of
+empty sky. Without M2, a stretch of grey specks *is* the void, drawn politely. Without M3, the
 empty slots between stars are countable, and someone will count them. Without M4, a month of hard
 days is a month of dim stars.
 
-**M1's own trap:** the field must never be denser where data is sparse. A field that fills in the
-gaps encodes the gaps. Compensation is a form of measurement.
+**M1's own trap:** nothing may fill a gap in. Anything drawn more densely where data is sparse
+encodes the gaps; compensation is a form of measurement.
 
 ### 1.3 What this rule does *not* license
 
-Inventing data. The Sky never draws a star for something that did not happen. The field is not
-stars; it is sky, and it says so. *The sky is always full; your stars are the ones you made.*
+Inventing data. The Sky never draws a star for something that did not happen, and draws nothing
+that could be taken for one. *Every star in it is one you made.*
 
 ---
 
@@ -198,39 +202,50 @@ detail or list); drawn, it would map the person's sleep across their whole histo
 
 ## 3. How a star is placed and drawn
 
-### 3.1 Placement — the sky is scattered, and time is not its geography
+### 3.1 Placement — a guide measured in memories
 
-**A star is scattered across one open field; when it is from is carried entirely by its colour and
-brightness** (§3.2, §3.5). There are no rows, no months on the surface, and no position that means a
-date.
+**Stars run along a seeded guide, oldest at the top, one step per memory.** When a star is from is
+carried by where it falls along that guide and by its colour (§3.2). No position means a date, and
+nothing on the surface is a row, an axis or a month.
 
-```
-hx, hy = two independent hashes of (kind, anchor record id)    in [0, 1)
-x, y   = SkyWarp(hx, hy, sky seed)                             clumped, still in [0, 1)
-```
+The sky's seed (§3.7) picks its **form**, and no form is the default (§D11):
 
-**Why:** a row per month draws a hard month as a visibly empty band, the exact reading §1 exists to
-prevent. When position encodes nothing, no region can be empty. **The cost, accepted knowingly:** a
-date cannot be found by looking; the list (§7.5) keeps month headings for that.
+- **a river**: the guide winds down the sky on one of six courses, a spiral, a serpent, rows, a
+  wander, loops or a zigzag;
+- **galaxies**: the guide fills one galaxy, then the next, each its own size;
+- **an open sky**: an unseen guide, with the stars spread wide round it and no line to follow.
 
-1. **A star never moves.** Its position is a hash of its own kind and anchor record id and nothing
-   else: never its index, the count, the date or the mood. Adding today's check-in or restoring a
-   thousand old records moves nothing (P5).
-2. **Coordinates are normalised to `[0, 1)`**, so a five-star sky spreads across the screen and a
-   ten-year sky is dense without any position changing. Zoom is a transform, never a relayout.
-3. **The clumps carry nothing.** Uniform scatter reads as machine-made, so positions pass through a
-   smooth value-noise field seeded by the sky's seed. `SkyWarp` takes a position and a seed and
-   cannot see a record.
-4. **Overlap is accepted, never resolved.** Nudging a star away from a neighbour would make its
+The seed also picks how big the sky is, so skies are wider or narrower in every form.
+
+**Shapes come from dates alone.** A steady stretch, 56 days or more with something on at least six
+days in seven, can form a **band**, at most two in a sky; on-and-off weeks gather into a
+**cluster**, oval, spiral or open; a longer run draws out into a thin **stream**; anything else is a
+**single** star near the guide. No shape is a reward, and nothing says "in a row" (§D11).
+
+1. **Appending moves nothing.** Today's check-in is placed after everything else, so no star already
+   drawn moves (P5). A record dated into the past shifts later stars along the guide and nothing
+   before it.
+2. **A gap takes no room** (M1). A month with nothing logged has no length along the guide, so a
+   long gap takes no more room than a short one.
+3. **Coordinates are normalised**: 0 to 1 across, and down as far as the sky reaches. Zoom is a
+   transform, never a relayout.
+4. **Drift is age.** Each star has its own direction and drifts a small distance per year of age, so
+   older stars move outward over the years. It is a position for a date, never an animation.
+5. **Overlap is accepted, never resolved.** Nudging a star away from a neighbour would make its
    position depend on other records. Zoom separates them; a tap takes the nearest.
-5. **A crowded day folds.** Past 16 stars in a day (`Sky.MAX_STARS_PER_DAY`), records of one kind
-   share a star that keeps every id and is drawn like any other. Nothing is dropped, and rule 1 holds
-   for every day under the cap.
-6. **Draw order is time order**, so newer stars land on top.
+6. **A crowded day folds.** Past 16 stars in a day (`Sky.MAX_STARS_PER_DAY`), records of one kind
+   share a star that keeps every id and is drawn like any other. Nothing is dropped.
+7. **Draw order is time order**, so newer stars land on top.
 
-**Rejected: constellations.** A grouping asserts a relationship, picked either by the software
-(inference) or by the person (a feature nobody asked for). The project thread (§3.3) is the one
-declared link; the warp's clumps know nothing about the stars they group.
+**Constellations are the person's own.** The software never groups stars. The person draws a
+constellation by tapping their own stars one after another (two to forty) and names it, in up to 28
+characters; left blank it is "Untitled". It keeps which memories it joins and where their stars were
+that day. In the live sky its lines are measured against those lengths and fade as the stars drift
+apart, so over the years every constellation falls out of the sky by itself. **"See it as you drew
+it"** is the photo: those stars where they were, their lines, and the stars that already existed
+around them, in shadow toward the edges. It is the only way the sky goes back in time. A deleted
+memory leaves nothing in either. Constellations live in the encrypted database, a full restore
+carries them with the seed, and a merge keeps the sky the phone already has.
 
 ### 3.2 Colour is age, not mood
 
@@ -251,9 +266,10 @@ today is drawn as new.
   detail, from the person's own palette (theme colours and their overrides; the Sky hardcodes no mood
   hue), equalised so no mood's dot is fainter than another's (§0.3). The word carries the mood.
 - **No other colour**: no accent, selection tint, warning amber, success green or "all clear". Past
-  the ground `#07070A`, the ink `#EBE5D8` (field, selection ring) and the faint `#8E887A` (project
-  stub), the only hues are a glint's passing fringes (§3.6). Selection is a ring, never a colour or
-  growth.
+  the ground `#07070A`, the ink `#EBE5D8` (selection ring, a constellation being drawn), the faint
+  `#8E887A` (project stub), a drawn constellation's cool blue lines and pale name, and a sun's
+  white-hot middle, the only hues are a glint's passing fringes (§3.6) and a new star's birth
+  (§4.3). Selection is a ring, never a colour or growth.
 
 ### 3.3 Kind — carried by form, and only up close
 
@@ -272,14 +288,15 @@ days into kinds of act at exactly the zoom where they see a stretch of their lif
 
 - **Silhouette first:** every form reads in monochrome (P7). Neither colour nor motion ever tells
   kinds apart. A life event looks different at every zoom, but that is its light (§3.4), not a mark.
-- **The project thread is the only line on the Sky.** Each step carries its stub (§0.3 finding 3);
+- **The project thread is the only line the software draws by itself**; every other line is a
+  constellation the person drew (§3.1). Each step carries its stub (§0.3 finding 3);
   the hairline joining steps of one project is not built, as it needs a project identity the layout
   deliberately does not carry: #152.
-- **A key**, one tap away at every zoom, says in fixed words what the Sky's marks mean: where a star
-  sits means nothing; colour and brightness are age, and red means old, never bad; the spread of the
-  glow is the mood recorded with the star, if any, and every star gives the same light; the six
-  forms, each drawn beside its introduction line (§5.1); the bigger white star is a mark the person
-  placed; and the faint specks are sky, not the person's stars (#154). Not built: #362.
+- **The Key**, one tap away, says in fixed words what is in this person's sky and nothing else
+  (`SkyKey`, #154): it leads with colour, *red only means old, never bad*; then the sky's form; then
+  bands, clusters, streams, life events and constellations, each only when the sky has one. Not
+  built: the Key's lines for the spread of the glow and the six kind forms, each drawn beside its
+  introduction line (§5.1), #362.
 
 ### 3.4 Mood is the character of the light, never its amount
 
@@ -339,42 +356,44 @@ The twinkle multiplies age brightness, so no star is twinkled past a younger one
 only the Motion switch (§7.4). Two `SkyTwinkle` functions have no caller, `scaleAt` (a 2% size
 breathe, which a sub-pixel sprite would only blur) and `glintFringeScale`: #153.
 
-### 3.7 The decorative field
+### 3.7 The sky's seed
 
-`SkyField.tile(seed, tileX, tileY)` takes a seed and a tile address and nothing else (P3). Each tile
-is a 12 × 12 grid with one speck jittered in each cell, so density is exact (P4). Tiles are 96 dp of
-*screen*, so the field keeps one density at every zoom instead of thinning as someone leans in, which
-would read as absence. Specks are 0.9 dp, smaller than any core, at 5–16% of the ink. The field
-drifts at 85% of the pan while motion is on, can be switched off (Field chip, or the quiet sky), and
-is invisible to assistive technology and absent from the list.
+**The seed is derived once, from the person's first record**, stored under `sky_field_seed` (the
+name it had when it also seeded a background field), and never re-derived: a sky that changed when
+that record was deleted would be a shape the deletion left (§2.1). It decides the form, the guide's
+course, the size, the clusters' shapes and every star's scatter, and nothing else (P3). A full
+restore carries it, so the restored sky is the same sky.
 
-**Its seed is derived once, from the person's first record**, stored under `sky_field_seed`, and
-never re-derived: a background that changed when that record was deleted would be a shape the
-deletion left (§2.1). The same seed shapes the clumps (§3.1).
-
-Not built: a sparser, smaller, fainter field when zoomed out, #150.
+There is no decorative field and no background star: every star is a memory (§D11). `SkyField`
+still draws the year review's backdrop (§9).
 
 ---
 
 ## 4. Zoom and focus
 
-Zoom runs continuously from 1× (the whole field exactly fills the screen, never less) to 32×.
-Nothing reflows, so a star can be followed from FAR to CLOSE by eye.
+Zoom runs continuously from the whole sky, exactly filling the screen and never less, to a single
+star drawn as a sun. The closest view puts 0.004 of the sky's width across the screen, less than one
+memory's step along the guide (`SkyPresentation.CLOSEST_SPAN`), and is measured against the screen,
+so a tall sky can be followed in as far as a short one. Nothing reflows, so a star can be followed
+from FAR to a sun by eye.
 
-| Level | Zoom | Drawn |
+| Level | Screen widths across the sky | Drawn |
 |---|---|---|
-| **FAR** | below 2.5× | Every star as point and glow. The view you leave open, and where the Sky opens. |
-| **NEAR** | 2.5× to 7× | The same, closer. |
-| **CLOSE** | 7× and in | Kind marks (§3.3) and project stubs as well. |
+| **FAR** | below 2.5 | Every star as point and glow. |
+| **NEAR** | 2.5 to 7 | The same, closer. |
+| **CLOSE** | 7 and in | Kind marks (§3.3) and project stubs as well. |
+| **A sun** | once a star's real size passes 2.5 dp | A white-hot middle, a rim in the star's own colour and a dim corona; kind marks step aside for it. A life event is a bigger sun. |
 
-A level depends on zoom alone, never on how many stars are on screen, which would make what is drawn
-depend on how much somebody logged.
+A level depends on how close the view is, never on how many stars are on screen, which would make
+what is drawn depend on how much somebody logged. Constellation lines and names fade out past about
+forty screen widths across, where a constellation is too big to read as one.
 
 - **A pinch magnifies the point under the fingers**, since with no labels to navigate by, a star that
-  slid away would be lost. Zoom follows the fingers directly, with no inertia or animation.
-- **"Fit the whole sky"** appears in the corner only once zoomed. It is not a double-tap, which would
-  make every tap on a star wait to see whether a second was coming. There is no "Today": no part of
-  the field is a date.
+  slid away would be lost. Zoom follows the fingers directly, with no inertia.
+- **Today** flies to the newest star, close enough to be a place, about eight memories across the
+  screen (`SkyPresentation.TODAY_SPAN`), and opens its detail. **"Fit the whole sky"** appears in
+  the corner once zoomed. A long journey draws back first, so the person sees where they are going
+  (`SkyOpening.Flight`); with motion off every journey is a cut.
 - **No level for one star.** A tap takes the nearest star within its 48 dp target and opens its
   detail as a strip over the bottom of the sky, which stays visible: coming close is not leaving.
 
@@ -399,17 +418,31 @@ was written.
 ### 4.2 Navigation invariants
 
 - **Anywhere is one gesture from anywhere.** No wizard, no forced sequence, no progress dots.
-- **No "start".** It opens on the whole sky every time; where someone last was is not kept.
+- **It opens on today.** Every time, after the opening (§4.3); where someone last was is not kept.
 - **No future is drawn**, so there are no empty forward slots to fill. A life event the person dates
   ahead is their own mark, drawn as new.
 - **No "jump to your best month".** There is no ranking (§6.2); the list runs in time order.
+
+### 4.3 The opening, and a new star's birth
+
+- **The pace is one continuous curve** (`SkyOpening.revealAt`): a faint trickle for the first two
+  and a half seconds, a burst that builds over about three and a half more, then a settle of about
+  two. Each star appears at its own moment, a hash of its identity, with a brief soft flare, so the
+  opening is the same sky every time.
+- **Then the camera flies to the newest star**, and nowhere else.
+- **A new star is born in front of the person, once.** When the newest star is one they have not yet
+  watched arrive, it waits through the opening; after the camera arrives, a cloud spins in and
+  collapses, a core warms, it ignites and a ring of light runs out, over six seconds. Its detail then
+  says "Born just now". The identity of the last star born is kept under `sky_born_identity`.
+- **Any tap skips all of it**, straight to today. With motion off there is no opening and no birth:
+  the sky opens still, on today (§D11).
 
 ---
 
 ## 5. The tutorial is the sky itself
 
-No walkthrough, carousel, coach marks or "3 of 5". Before anything is logged, the Sky is the field
-and one line: *"This is the sky. Nothing of yours is in it."* A sky with one star names it, such as
+No walkthrough, carousel, coach marks or "3 of 5". Before anything is logged, the Sky is the night
+ground and one line: *"This is the sky. Nothing of yours is in it."* A sky with one star names it, such as
 *"A check-in you logged."*, and that is the whole onboarding.
 
 ### 5.1 Each kind names itself
@@ -505,12 +538,13 @@ the Sky or the Sky does not ship.
   person picks go to exactly 6.5:1. One too dark or saturated to get there by scaling is blended
   toward the ink, visibly changing it; the lesser harm, since the alternative is a mood they cannot
   see. Swept over 5,832 colours, every one reaches the 4.5:1 floor.
-- **The quiet sky**, one tap on the surface: no field (the biggest obstacle to finding real stars),
-  the core alone and slightly larger, no glows or glints, thicker strokes, mood dots at 10.0:1. It
+- **The quiet sky**, one tap on the surface: the core alone and slightly larger, no glows or glints,
+  thicker strokes, mood dots at 10.0:1. It
   defaults to the platform's high-contrast text setting and stays independently switchable, because
   that signal is coarse.
 - **Touch targets are 48 dp** whatever a star's drawn size, resolving to the nearest core.
-- **No fixed-size text**: nothing is written on the canvas.
+- **No fixed-size text** but a constellation's name, which the person wrote and which the
+  Constellations sheet also lists in ordinary, scalable text.
 - How the colours read on a real OLED panel at low brightness is for a person to judge: #147.
 
 ### 7.2 Colour vision
@@ -524,7 +558,7 @@ adds no second colour axis, and does not double mood up in shape: shape is kind.
 
 - The canvas is **one node, described by what it is, not what it contains**: *"Your sky, 2019 to
   2026."* No enumeration, no total (§6.3). The route to the stars is the list.
-- The field is `clearAndSetSemantics {}`: sky, not data (M1).
+- A constellation's photo is `clearAndSetSemantics {}`; its name and date are read out beside it.
 - **Absence is never announced**, in any modality: no "no entries for March". That is M2 in text,
   and the rule most likely to be broken by someone being helpful.
 - **No live regions.**
@@ -534,13 +568,13 @@ same name and action as a tap, #151.
 
 ### 7.4 Motion
 
-Twinkle and drift are decoration and carry no meaning (§3.3). **Twinkle ships on**, behind the
+Twinkle, the opening and every journey are decoration and carry no meaning (§3.3). **Twinkle ships on**, behind the
 **Motion** chip, which starts off when the platform's "Remove animations" is set
 (`ANIMATOR_DURATION_SCALE` of 0, read in `SkyScreen`); the person can move it either way. The rules,
 asserted as arithmetic in `SkyTwinkleTest`:
 
-- **Everything stops under the switch**: no twinkle, no drift, no frame loop at all. Zoom has no
-  animation to stop.
+- **Everything stops under the switch**: no twinkle, no opening, no birth, no frame loop at all,
+  and every journey across the sky is a cut.
 - **Only a few stars glint at any moment**, about four in a thousand, and none in the quiet sky.
 - **A glint is under a third of a second.**
 - **Nothing is ever in step with anything else.**
@@ -555,7 +589,7 @@ One control in the top bar switches between the sky and the list.
   An empty heading is the void in text, so the list skips from March to July without comment (P10).
 - **One row per star**: its kind's line, date, mood word if any, and how many records it covers if
   folded. A row does what tapping its star does (§4.1).
-- **No field, no summary, no "your year in words".** The list is the data, not a reading of it.
+- **No summary, no "your year in words".** The list is the data, not a reading of it.
 
 The honest cost: the list is equal in information and not the same object emotionally, since nobody
 sits and looks at a list. It gets the same design attention; pretending it is the same experience
@@ -564,7 +598,8 @@ would be worse than admitting it is not.
 ### 7.6 Cognitive and situational
 
 No time limits, no auto-advance, nothing that pulls the eye; the Sky waits. No dead ends: Fit the
-whole sky, the list and the back arrow are always one tap away. Not built: a key (§3.3), #362.
+whole sky, Today, the Key, the list and the back arrow are always one tap away. Any tap skips the
+opening.
 
 ---
 
@@ -587,11 +622,12 @@ whole sky, the list and the back arrow are always one tap away. Not built: a key
    rasterised once. The cache holds 512, about 4 MB, and is dropped whole when full; a view with more
    distinct stars rebuilds them every frame, the number to watch if a five-year sky stutters.
 4. **Cull by a bounds check per star.** No array order matches screen order, so every star is visited
-   each frame: the price of a field with no empty regions.
+   each frame.
 5. **Level of detail.** Below CLOSE a star is one stamp; kind marks are stroked only at CLOSE, where
-   the screen shows at most a forty-ninth of the field.
-6. **The field costs screen area, not history.** Tiles come from `(seed, tile)` and are cached; the
-   cache is cleared, never grown.
+   the screen shows at most a forty-ninth of the sky, and suns only once a star is bigger than its
+   own point of light.
+6. **Draw only light.** There is no background to draw: every mark on the canvas is a memory, a
+   constellation the person drew, or a new star being born.
 7. **Project the query; never load content.** One narrow query per kind returning
    `(id, epochMillis, moodLevel?)` and nothing else (§0.4). **The Sky never loads journal text at
    all**: a privacy property (§4.1) and the biggest memory win. Fifteen thousand stars in packed
@@ -629,9 +665,9 @@ check is first shown to catch a planted violation (`CLAUDE.md` §5).
 |---|---|---|
 | **P1** | Mood never changes a star's presence: core and total light are identical at every level | Built: `SkyGlyphTest`; `SkySurfaceSourceTest` pins the renderer to the halo as mood's only sink |
 | **P2** | Absence has no glyph | Built: `SkyTest` |
-| **P3** | The field and the clumps cannot see data | Built at the type level (`SkyField.tile` has no data parameter); `SkyWarpTest` |
-| **P4** | The field is uniform | Built: `SkyFieldTest` |
-| **P5** | A star never moves, and its date decides nothing about where it is | Built: `SkyTest`, with a thousand records inserted on both sides |
+| **P3** | The seed shapes the sky and decides nothing about any one record | Built: `SkyTest` |
+| **P4** | A gap takes no room, in every form | Built: `SkyTest` |
+| **P5** | Appending moves nothing already drawn | Built: `SkyTest`, with a thousand records inserted on both sides |
 | **P6** | Colour and brightness are age and identity, never mood | Built: `SkyGlyphTest`, `SkySurfaceSourceTest` |
 | **P7** | Kind survives monochrome | Built as geometry (`SkyGlyphTest`); drawn pixels are not compared |
 | **P8** | No content leaves the record | Built: `SkyProjectionSourceTest` |
@@ -642,6 +678,9 @@ check is first shown to catch a planted violation (`CLAUDE.md` §5).
 | **P13** | Old stars never vanish | Built: `SkyAgeTest` |
 | **P14** | Twinkle is identity and time only, and stops under the switch | Built: `SkyTwinkleTest` |
 | **P15** | Only a mark the person placed is louder | Built: `SkyGlyphTest` |
+| **P16** | A constellation's lines fade as its stars drift, and a deleted memory leaves nothing | Built: `SkyConstellationTest` |
+| **P17** | The opening is the same every time, and arrives at every star | Built: `SkyOpeningTest` |
+| **P18** | The Key lists only what is in the sky, and leads with "red only means old" | Built: `SkyKeyTest` |
 
 ---
 

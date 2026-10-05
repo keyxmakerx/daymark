@@ -37,6 +37,21 @@ All notable changes to this project are documented here. The format is based on
   still contains unlock times restores normally; the badges in it are just not brought back.
 
 ### Added
+- **A new sky.** Every star in "Your sky" is one of your memories; the faint background specks are
+  gone, and the Field switch with them. Each sky takes a shape of its own from a seed that is yours alone: a river on one of six
+  courses, a run of galaxies, or an open sky with no line to follow, and skies come in different
+  sizes. Your memories run along it from oldest to newest, counted in memories rather than days, so
+  a quiet month takes no room. Steady stretches can form a band, rarely, and on-and-off weeks
+  gather into clusters; none of it is a reward. Older stars drift outward and turn from blue-white
+  to red, and red only means old.
+  The sky opens with its stars twinkling in and flies to your newest one; a new star you have not
+  seen yet is born in front of you. A tap skips all of it, and with Motion off the sky opens still,
+  on today. You can zoom from the whole sky to a single star drawn as a sun. **Today** takes you to
+  your newest star, and **Key** explains what is in your sky.
+  **Constellations**: tap your own stars one after another and give them a name. Over the years
+  their stars drift apart and the constellation falls out of the sky, but **See it as you drew it**
+  always shows it as it was. Constellations are kept in the encrypted database and come back with a
+  full restore, along with your sky's seed, so a restored sky is the same sky.
 - **Check-ins run through one set of rules, and ease off when you go quiet.** Daily check-ins,
   reminders and tracker prompts are all decided by the same fixed rules, using only lines a person
   wrote. A reminder offers *Log now*, *Try later* and *Stop asking* (#195). After every two
