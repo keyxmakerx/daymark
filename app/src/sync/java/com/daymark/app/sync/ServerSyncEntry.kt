@@ -4,6 +4,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.daymark.app.ui.settings.ServerSyncDoor
 
@@ -21,6 +25,12 @@ object ServerSyncEntry : ServerSyncDoor {
 
     @Composable
     override fun Screen(onBack: () -> Unit) {
-        ServerSyncScreen(onBack = onBack)
+        // The Clinicians screens (#174) open from inside this one, so they share its door and its route.
+        var clinicians by rememberSaveable { mutableStateOf(false) }
+        if (clinicians) {
+            CliniciansScreen(onBack = { clinicians = false })
+        } else {
+            ServerSyncScreen(onBack = onBack, onClinicians = { clinicians = true })
+        }
     }
 }
