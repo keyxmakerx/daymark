@@ -537,18 +537,11 @@ enum class SkyDetail {
  */
 data class SkyOptions(
     /**
-     * The decorative field. Off is the low-vision presentation ("quiet sky", §7.1): the field is
-     * the single biggest impediment to finding real stars, and switching it off is the one change
-     * that helps most. It follows the platform contrast preference as a *default* and stays
-     * independently toggleable, because the platform signal is coarse.
-     */
-    val fieldEnabled: Boolean = true,
-    /**
-     * When false: no drift, no parallax, no twinkle, and zoom transitions are instant cuts. Motion
-     * never carries meaning (§3.3), so nothing is lost by removing it — that is the property which
-     * makes reduced motion a rendering switch rather than a second design.
+     * When false: no twinkle, no opening, no birth, and every journey across the sky is an instant
+     * cut. Motion never carries meaning (§3.3), so nothing is lost by removing it — that is the
+     * property which makes reduced motion a rendering switch rather than a second design.
      */
     val motionEnabled: Boolean = true,
-    /** Maximum contrast, thicker strokes, no halos. Pairs with `fieldEnabled = false`. */
+    /** Maximum contrast, thicker strokes, no halos: the quiet sky (§7.1). */
     val highContrast: Boolean = false,
 )

@@ -544,10 +544,9 @@ class SkyGlyphTest {
     @Test
     fun `the ordinary sky is the default and the quiet one is reachable`() {
         val ordinary = SkyOptions()
-        assertTrue(ordinary.fieldEnabled)
         assertTrue(ordinary.motionEnabled)
         assertTrue(!ordinary.highContrast)
-        val quiet = SkyOptions(fieldEnabled = false, motionEnabled = false, highContrast = true)
+        val quiet = SkyOptions(motionEnabled = false, highContrast = true)
         assertNotEquals(ordinary, quiet)
     }
 }

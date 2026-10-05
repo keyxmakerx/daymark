@@ -54,6 +54,27 @@ object SkyOpening {
         return (since / 0.03f).coerceIn(0f, 1f) * (1f + 1.4f * exp(-since * 35f))
     }
 
+    /**
+     * How long a new star takes to be born, in milliseconds: a cloud spins in and collapses, a core
+     * warms and ignites, and a ring of light runs out. It plays once per newest star, after the
+     * camera arrives, and only for a star the person has not yet watched arrive.
+     */
+    const val BIRTH_MILLIS = 6000L
+
+    /**
+     * How bright the star being born is drawn at [progress] through its birth, 0 to 1, as a
+     * multiple of its own brightness: nothing until it ignites four fifths of the way through, the
+     * same soft flare every star gets as it arrives, then itself.
+     */
+    fun bornBrightness(progress: Float): Float = when {
+        progress >= 1f -> 1f
+        progress < IGNITES -> 0f
+        else -> brightness((progress - IGNITES) * 0.3f, 0f)
+    }
+
+    /** Where through a birth the new star ignites. */
+    const val IGNITES = 0.8f
+
     private const val STEPS = 600
     private const val BURST_FROM = 2.6f
     private const val MOMENT_SALT = 0x0BE1_1A5EL

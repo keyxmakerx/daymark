@@ -47,6 +47,9 @@ class SkyPresentationTest {
      *
      * Three stars in the unit field: two side by side halfway down, one near the top.
      */
+    /** The unit square as a sky's extent, so the hand-placed coordinates map straight onto pixels. */
+    private val unit = SkyPresentation.Bounds(0f, 0f, 1f, 1f)
+
     private fun handPlaced(): SkyLayout = SkyLayout(
         x = floatArrayOf(0.25f, 0.75f, 0.5f),
         y = floatArrayOf(0.5f, 0.5f, 0.1f),
@@ -94,20 +97,26 @@ class SkyPresentationTest {
         // DEFAULT_ZOOM is the whole field in the viewport: no border of nothing around it, which on
         // this surface would read as the edge of someone's history.
         assertEquals(SkyPresentation.MIN_ZOOM, SkyPresentation.DEFAULT_ZOOM, 0f)
-        assertEquals(400f, SkyPresentation.contentWidthPx(400f, SkyPresentation.DEFAULT_ZOOM), 0f)
-        assertEquals(800f, SkyPresentation.contentHeightPx(800f, SkyPresentation.DEFAULT_ZOOM), 0f)
+        // A sky as tall as it is wide fills the width of a portrait screen; a sky three times as
+        // tall fills its height instead, and either way all of it is on screen.
+        val square = SkyPresentation.Bounds(0f, 0f, 1f, 1f)
+        val tall = SkyPresentation.Bounds(0f, 0f, 1f, 3f)
+        assertEquals(400f, SkyPresentation.fitPx(400f, 800f, square), 0f)
+        assertEquals(800f / 3f, SkyPresentation.fitPx(400f, 800f, tall), 0.001f)
+        assertTrue(SkyPresentation.fitPx(400f, 800f, tall) * tall.height <= 800f + 0.01f)
+        assertEquals(400f, SkyPresentation.scalePx(400f, SkyPresentation.DEFAULT_ZOOM), 0f)
         // Zooming out past the stop cannot shrink it.
-        assertEquals(400f, SkyPresentation.contentWidthPx(400f, 0.1f), 0f)
+        assertEquals(400f, SkyPresentation.scalePx(400f, 0.1f), 0f)
     }
 
     @Test
     fun `zooming in grows the field, monotonically, up to the stop`() {
-        var previous = SkyPresentation.contentWidthPx(400f, SkyPresentation.MIN_ZOOM)
+        var previous = SkyPresentation.scalePx(400f, SkyPresentation.MIN_ZOOM)
         var zoom = SkyPresentation.MIN_ZOOM
         var grew = false
         while (zoom < SkyPresentation.MAX_ZOOM) {
             zoom *= 1.05f
-            val width = SkyPresentation.contentWidthPx(400f, zoom)
+            val width = SkyPresentation.scalePx(400f, zoom)
             assertTrue("the field shrank at zoom $zoom", width >= previous)
             if (width > previous) grew = true
             previous = width
@@ -115,7 +124,7 @@ class SkyPresentationTest {
         assertTrue("the field never grew at all", grew)
         assertEquals(
             400f * SkyPresentation.MAX_ZOOM,
-            SkyPresentation.contentWidthPx(400f, SkyPresentation.MAX_ZOOM * 4f),
+            SkyPresentation.scalePx(400f, SkyPresentation.MAX_ZOOM * 4f),
             0f,
         )
     }
@@ -146,8 +155,8 @@ class SkyPresentationTest {
         while (zoom <= SkyPresentation.MAX_ZOOM) {
             assertEquals(SkyPresentation.detailFor(zoom), SkyPresentation.detailFor(zoom))
             assertEquals(
-                SkyPresentation.contentWidthPx(400f, zoom),
-                SkyPresentation.contentWidthPx(400f, zoom),
+                SkyPresentation.scalePx(400f, zoom),
+                SkyPresentation.scalePx(400f, zoom),
                 0f,
             )
             zoom *= 1.3f
@@ -199,13 +208,13 @@ class SkyPresentationTest {
     @Test
     fun `culling keeps what is on screen and drops what is not`() {
         val layout = handPlaced()
-        val content = 100f
+        val scale = 100f
         val viewport = 100f
 
         fun onScreen(index: Int, panX: Float, panY: Float, margin: Float = 4f) =
             SkyPresentation.isOnScreen(
-                SkyPresentation.screenX(layout, index, content, panX),
-                SkyPresentation.screenY(layout, index, content, panY),
+                SkyPresentation.toScreen(layout.x[index], 0f, scale, panX),
+                SkyPresentation.toScreen(layout.y[index], 0f, scale, panY),
                 viewport,
                 viewport,
                 margin,
@@ -223,6 +232,27 @@ class SkyPresentationTest {
         assertFalse(onScreen(0, -30f, 0f, margin = 2f))
     }
 
+    @Test
+    fun `the sky's extent holds its world and every star that drifted beyond it`() {
+        val b = SkyPresentation.boundsOf(floatArrayOf(0.5f, 1.2f), floatArrayOf(0.2f, -0.1f), height = 2f)
+        assertTrue(b.left < 0f && b.top < -0.1f && b.right > 1.2f && b.bottom > 2f)
+        // The detector: with nothing outside the world, the extent is the world and a margin.
+        val plain = SkyPresentation.boundsOf(floatArrayOf(0.5f), floatArrayOf(0.5f), height = 1f)
+        assertEquals(1.06f, plain.width, 0.001f)
+        assertEquals(1.06f, plain.height, 0.001f)
+    }
+
+    @Test
+    fun `a point carried to the screen and back is the same point`() {
+        for (x in listOf(-0.2f, 0f, 0.37f, 2.5f)) {
+            val screen = SkyPresentation.toScreen(x, -0.03f, 812.5f, -140f)
+            assertEquals(x, SkyPresentation.fromScreen(screen, -0.03f, 812.5f, -140f), 1e-4f)
+        }
+        // And centring puts it in the middle.
+        val pan = SkyPresentation.panToCentre(0.37f, -0.03f, 812.5f, 400f)
+        assertEquals(200f, SkyPresentation.toScreen(0.37f, -0.03f, 812.5f, pan), 1e-3f)
+    }
+
     // -------------------------------------------------------------------------------------------
     // Hit testing.
     // -------------------------------------------------------------------------------------------
@@ -231,11 +261,10 @@ class SkyPresentationTest {
     fun `a tap resolves to the nearest core, and to nothing when it is nowhere near one`() {
         val layout = handPlaced()
         val content = 100f
-        val all = 0 until layout.starCount
 
         // Star 0 is at (25, 50); star 1 at (75, 50); star 2 at (50, 10).
         fun tap(x: Float, y: Float, radius: Float = 24f) = SkyPresentation.nearestStar(
-            layout, all, content, content, 0f, 0f, x, y, radius,
+            layout.x, layout.y, unit, content, 0f, 0f, x, y, radius,
         )
 
         assertEquals(0, tap(27f, 52f))
@@ -253,7 +282,7 @@ class SkyPresentationTest {
         val layout = handPlaced()
         // Exactly between the two stars at x 25 and 75, both 25 away; star 2 is 40 away.
         val hit = SkyPresentation.nearestStar(
-            layout, 0 until layout.starCount, 100f, 100f, 0f, 0f, 50f, 50f, 30f,
+            layout.x, layout.y, unit, 100f, 0f, 0f, 50f, 50f, 30f,
         )
         assertEquals(0, hit)
     }
@@ -261,10 +290,9 @@ class SkyPresentationTest {
     @Test
     fun `panning moves the targets with the sky`() {
         val layout = handPlaced()
-        val all = 0 until layout.starCount
-        val before = SkyPresentation.nearestStar(layout, all, 100f, 100f, 0f, 0f, 25f, 50f, 8f)
-        val afterWrongPlace = SkyPresentation.nearestStar(layout, all, 100f, 100f, 40f, 0f, 25f, 50f, 8f)
-        val afterRightPlace = SkyPresentation.nearestStar(layout, all, 100f, 100f, 40f, 0f, 65f, 50f, 8f)
+        val before = SkyPresentation.nearestStar(layout.x, layout.y, unit, 100f, 0f, 0f, 25f, 50f, 8f)
+        val afterWrongPlace = SkyPresentation.nearestStar(layout.x, layout.y, unit, 100f, 40f, 0f, 25f, 50f, 8f)
+        val afterRightPlace = SkyPresentation.nearestStar(layout.x, layout.y, unit, 100f, 40f, 0f, 65f, 50f, 8f)
         assertEquals(0, before)
         assertEquals(-1, afterWrongPlace)
         assertEquals(0, afterRightPlace)
@@ -285,9 +313,9 @@ class SkyPresentationTest {
         )
         val viewport = 400f
         fun gapAt(zoom: Float): Float {
-            val content = SkyPresentation.contentWidthPx(viewport, zoom)
-            return SkyPresentation.screenX(close, 1, content, 0f) -
-                SkyPresentation.screenX(close, 0, content, 0f)
+            val scale = SkyPresentation.scalePx(viewport, zoom)
+            return SkyPresentation.toScreen(close.x[1], 0f, scale, 0f) -
+                SkyPresentation.toScreen(close.x[0], 0f, scale, 0f)
         }
         // At the whole-sky view they are under 5 px apart: one mark, as far as a finger is concerned.
         assertTrue("they are already apart: ${gapAt(SkyPresentation.MIN_ZOOM)}", gapAt(SkyPresentation.MIN_ZOOM) < 5f)
@@ -467,12 +495,12 @@ class SkyPresentationTest {
             for (from in listOf(1f, 1.7f, 4f, 11.5f)) {
                 for (factor in listOf(0.4f, 0.9f, 1.15f, 3f)) {
                     val to = SkyPresentation.clampZoom(from * factor)
-                    val pan = -0.31f * SkyPresentation.contentWidthPx(viewport, from)
+                    val pan = -0.31f * SkyPresentation.scalePx(viewport, from)
                     val moved = SkyPresentation.panForZoomAbout(focus, pan, from, to)
 
                     // The normalised point that was under the focus before, and where it lands after.
-                    val before = (focus - pan) / SkyPresentation.contentWidthPx(viewport, from)
-                    val after = before * SkyPresentation.contentWidthPx(viewport, to) + moved
+                    val before = (focus - pan) / SkyPresentation.scalePx(viewport, from)
+                    val after = before * SkyPresentation.scalePx(viewport, to) + moved
                     assertEquals("focus $focus, $from -> $to", focus, after, 0.01f)
                 }
             }
@@ -521,7 +549,7 @@ class SkyPresentationTest {
         val viewport = 1000f
         val from = 2f
         val to = 8f
-        val pan = -0.31f * SkyPresentation.contentWidthPx(viewport, from)
+        val pan = -0.31f * SkyPresentation.scalePx(viewport, from)
         val focus = 640f
 
         val corner = pan * (to / from)
@@ -529,11 +557,85 @@ class SkyPresentationTest {
         assertNotEquals("the old behaviour and the new one agree, so this proves nothing", corner, held, 1f)
 
         // Where the corner-scaling answer actually puts the pinched point, which is not under it.
-        val before = (focus - pan) / SkyPresentation.contentWidthPx(viewport, from)
-        val strayed = before * SkyPresentation.contentWidthPx(viewport, to) + corner
+        val before = (focus - pan) / SkyPresentation.scalePx(viewport, from)
+        val strayed = before * SkyPresentation.scalePx(viewport, to) + corner
         assertNotEquals("the old behaviour kept the point in place", focus, strayed, 1f)
 
         // And at focus 0 the two are the same, because the top-left corner IS the focus there.
         assertEquals(corner, SkyPresentation.panForZoomAbout(0f, pan, from, to), 0.01f)
+    }
+
+    @Test
+    fun `the closest view shows less than one memory's step, on any shape of sky`() {
+        val width = 1080f
+        for (fit in floatArrayOf(1000f, 480f, 120f)) {
+            val limit = SkyPresentation.zoomLimit(fit, width)
+            val span = width / (fit * limit)
+            assertEquals(SkyPresentation.CLOSEST_SPAN, span, 1e-6f)
+            assertTrue("a memory's step is wider than the closest view", span < 0.005f)
+        }
+        assertEquals(SkyPresentation.MIN_ZOOM, SkyPresentation.zoomLimit(1e9f, width), 0f)
+        assertEquals(SkyPresentation.MIN_ZOOM, SkyPresentation.zoomLimit(0f, width), 0f)
+    }
+
+    @Test
+    fun `today puts its span across the screen, and lands where kind marks show`() {
+        val width = 1080f
+        val fit = 1000f
+        val zoom = SkyPresentation.zoomForSpan(SkyPresentation.TODAY_SPAN, fit, width)
+        assertEquals(SkyPresentation.TODAY_SPAN, width / (fit * zoom), 1e-6f)
+        assertTrue(zoom < SkyPresentation.zoomLimit(fit, width))
+        assertEquals(SkyDetail.CLOSE, SkyPresentation.detailFor(fit * zoom / width))
+    }
+
+    @Test
+    fun `a constellation is framed inside half the screen, and two close stars are not flown into`() {
+        val fit = 1000f
+        val zoom = SkyPresentation.zoomToFrame(0.2f, 0.05f, fit, 1080f, 2000f)
+        assertTrue(0.2f * fit * zoom <= 1080f * 0.5f)
+        val close = SkyPresentation.zoomToFrame(0.0001f, 0.0001f, fit, 1080f, 2000f)
+        assertTrue("two close stars fill the screen as suns", close < SkyPresentation.zoomLimit(fit, 1080f))
+    }
+
+    @Test
+    fun `a life event burns as a bigger sun, and a sun grows with the zoom`() {
+        val near = SkyPresentation.sunRadius(SkyKind.CHECK_IN, 1000f)
+        assertTrue(SkyPresentation.sunRadius(SkyKind.LIFE_EVENT, 1000f) > near)
+        assertEquals(near * 10f, SkyPresentation.sunRadius(SkyKind.CHECK_IN, 10_000f), 1e-6f)
+    }
+
+    @Test
+    fun `constellations wait for the opening and fade out deep in`() {
+        assertEquals(0f, SkyPresentation.constellationAlpha(0.5f, 1f), 0f)
+        assertEquals(1f, SkyPresentation.constellationAlpha(1f, 1f), 0f)
+        assertEquals(1f, SkyPresentation.constellationAlpha(1f, 25f), 0f)
+        assertEquals(0f, SkyPresentation.constellationAlpha(1f, 200f), 0f)
+        val mid = SkyPresentation.constellationAlpha(1f, 100f)
+        assertTrue(mid > 0f && mid < 1f)
+    }
+
+    @Test
+    fun `a constellation's card says when it was drawn and the span of what it joins`() {
+        val made = 20_000L
+        val drawn = SkyPresentation.dateLabel(made, Locale.UK)
+        val first = SkyPresentation.dateLabel(19_000L, Locale.UK)
+        val last = SkyPresentation.dateLabel(19_900L, Locale.UK)
+        assertEquals(
+            "Drawn $drawn. 3 memories, $first to $last.",
+            SkyPresentation.constellationSummary(made, listOf(19_900L, 19_000L, 19_500L), Locale.UK),
+        )
+        assertEquals(
+            "Drawn $drawn. 2 memories, all from $first.",
+            SkyPresentation.constellationSummary(made, listOf(19_000L, 19_000L), Locale.UK),
+        )
+        assertEquals("Drawn $drawn.", SkyPresentation.constellationSummary(made, emptyList(), Locale.UK))
+        assertEquals("Drawn $drawn · 4 stars", SkyPresentation.constellationRow(made, 4, Locale.UK))
+    }
+
+    @Test
+    fun `the draw bar counts only the stars joined so far`() {
+        assertEquals("Tap a star to start", SkyPresentation.drawingPrompt(0))
+        assertEquals("1 star. Tap the next one", SkyPresentation.drawingPrompt(1))
+        assertEquals("5 stars joined", SkyPresentation.drawingPrompt(5))
     }
 }

@@ -100,4 +100,14 @@ class SkyOpeningTest {
         near.at(near.millis / 2)
         assertEquals(4f, near.zoom, 0.001f)
     }
+
+    @Test
+    fun `a new star is unseen until it ignites, then flares and settles as itself`() {
+        assertEquals(0f, SkyOpening.bornBrightness(0f), 0f)
+        assertEquals(0f, SkyOpening.bornBrightness(SkyOpening.IGNITES - 0.01f), 0f)
+        val lit = SkyOpening.bornBrightness(SkyOpening.IGNITES + 0.15f)
+        assertTrue("an ignited star is not drawn: $lit", lit > 1f)
+        assertEquals(1f, SkyOpening.bornBrightness(1f), 0f)
+        assertEquals(1f, SkyOpening.bornBrightness(2f), 0f)
+    }
 }

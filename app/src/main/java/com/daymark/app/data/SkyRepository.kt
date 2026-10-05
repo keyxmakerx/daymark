@@ -174,6 +174,17 @@ class SkyRepository @Inject constructor(
         prefs.edit().apply { if (seed == 0L) remove(KEY_FIELD_SEED) else putLong(KEY_FIELD_SEED, seed) }.apply()
     }
 
+    /**
+     * The newest star the person has already watched being born, as its identity
+     * ([Sky.identityOf]); 0 before the first. The opening plays a birth only for a newest star that
+     * is not this one, so each new star is born once and never again.
+     */
+    fun bornIdentity(): Long = prefs.getLong(KEY_BORN, 0L)
+
+    fun markBorn(identity: Long) {
+        prefs.edit().putLong(KEY_BORN, identity).apply()
+    }
+
     /** The constellations the person has drawn, oldest first. */
     fun observeConstellations(): Flow<List<Constellation>> = constellationDao.observeConstellations()
 
@@ -202,6 +213,7 @@ class SkyRepository @Inject constructor(
 
     private companion object {
         const val KEY_FIELD_SEED = "sky_field_seed"
+        const val KEY_BORN = "sky_born_identity"
     }
 }
 
