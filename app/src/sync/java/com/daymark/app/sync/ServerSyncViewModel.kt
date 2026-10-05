@@ -134,7 +134,8 @@ class ServerSyncViewModel @Inject constructor(
      */
     private fun stateOf(link: KeptLink?, message: String?): ServerSyncUiState {
         if (link == null) return ServerSyncUiState(ServerSyncStage.NOT_PAIRED, message = message)
-        val stage = if (link.hasSyncKey) ServerSyncStage.READY else ServerSyncStage.NEEDS_PASSPHRASE
+        // A key opened before the owner's pairing keys were kept with it is opened once more, for them (#174).
+        val stage = if (link.hasSyncKey && store.ownerKeys() != null) ServerSyncStage.READY else ServerSyncStage.NEEDS_PASSPHRASE
         val lineage = if (link.lastSentAt != null) store.lineage() else null
         return ServerSyncUiState(stage, link.address, message = message, lastSentAt = link.lastSentAt, lineage = lineage)
     }
@@ -225,6 +226,7 @@ class ServerSyncViewModel @Inject constructor(
                     unlock.syncKey.fill(0)
                     try {
                         store.keep(unlocked)
+                        store.keepOwnerKeys(unlock.ownerPublic)
                         stateOf(unlocked, null)
                     } finally {
                         unlocked.wipe()

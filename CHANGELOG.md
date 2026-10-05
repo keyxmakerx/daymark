@@ -52,6 +52,17 @@ All notable changes to this project are documented here. The format is based on
   their stars drift apart and the constellation falls out of the sky, but **See it as you drew it**
   always shows it as it was. Constellations are kept in the encrypted database and come back with a
   full restore, along with your sky's seed, so a restored sky is the same sky.
+- **Your own log, and a Connect button, on the sync card** (web). Connect checks the server address
+  and access token without a passphrase, so a first visit to an empty server no longer reads as an
+  error. Below your phones, "Your own log" lists phones paired and disconnected and addresses paused
+  after wrong tries at your credentials.
+- **Invite a clinician from your phone** (sync build). Settings → Sync with your server →
+  Clinicians, once your sync passphrase has opened the key. Add a clinician under your own name for
+  them, give them the sign-in key (shown once), then the link, then say the code. "Check for a
+  reply" is the only time the phone asks the server anything; a reply that does not open with your
+  code is a question for you, never a verdict. The code and the sign-in key are kept out of
+  screenshots, and the code is never copied or shared. A phone that opened its key before this
+  update asks for the passphrase once more.
 - **Check-ins run through one set of rules, and ease off when you go quiet.** Daily check-ins,
   reminders and tracker prompts are all decided by the same fixed rules, using only lines a person
   wrote. A reminder offers *Log now*, *Try later* and *Stop asking* (#195). After every two

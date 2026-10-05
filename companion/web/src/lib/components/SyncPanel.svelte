@@ -30,6 +30,8 @@
   let passphrase = $state('')
   let busy = $state(false)
   let error = $state('')
+  /** A plain line about the connection, never a fault: what Connect, or a pull with no passphrase, found. */
+  let note = $state('')
 
   /*
    * A TOKEN IS PROVED BY THE SERVER TAKING IT, NOT BY A SNAPSHOT OPENING (#431). A pull proves the
@@ -41,26 +43,52 @@
    * owner route that needs the token and nothing else, and an answer in its shape proves them. A
    * refused token is not asked twice, since each refusal counts toward the address's lockout.
    */
-  async function proveToken(tried: OwnerConnection) {
+  async function proveToken(tried: OwnerConnection): Promise<boolean> {
     try {
       const { devicesApi } = await import('../phones/devices')
       await devicesApi(tried.serverUrl, tried.token).listDevices()
       onconnected?.(tried)
+      return true
     } catch {
       /* not proved: nothing is handed up, and the card's own sentence stands */
+      return false
+    }
+  }
+
+  /*
+   * CONNECT PROVES THE ADDRESS AND TOKEN AND NOTHING ELSE (#434 item 1). The first phone pairs before
+   * anything has been synced, so a server with nothing on it is the ordinary first visit, not a fault:
+   * connecting needs no passphrase, and what it finds is said in plain ink rather than as an error.
+   */
+  async function connect() {
+    error = ''
+    note = ''
+    if (!token) { error = 'Enter your server access token.'; return }
+    busy = true
+    try {
+      note = (await proveToken({ serverUrl, token }))
+        ? 'Connected. Your phones are below. To read a copy here, enter your sync passphrase and fetch it.'
+        : 'Not connected: the server did not accept this address and access token, or did not answer. Nothing has changed.'
+    } finally {
+      busy = false
     }
   }
 
   async function fetchAndDecrypt() {
     error = ''
+    note = ''
     if (!token) { error = 'Enter your server access token.'; return }
     busy = true
     // The fields as they were when the button was pressed: what an answer proves.
     const tried: OwnerConnection = { serverUrl, token }
     try {
       if (!passphrase) {
-        await proveToken(tried)
-        error = 'Enter your sync passphrase.'
+        // Still proves the connection, so a first visit never reads as a failure (#434).
+        if (await proveToken(tried)) {
+          note = 'Connected. Your phones are below. To read a copy here, enter your sync passphrase and fetch it.'
+        } else {
+          error = 'Enter your sync passphrase.'
+        }
         return
       }
       // Lazy-load the crypto client so the offline viewer never pays for libsodium.
@@ -162,12 +190,17 @@
     <input type="password" bind:value={passphrase} autocomplete="off" />
   </label>
 
-  <button class="primary" onclick={fetchAndDecrypt} disabled={busy}>
-    {busy ? 'Fetching & decrypting…' : 'Fetch & decrypt latest'}
-  </button>
+  <div class="sync-actions">
+    <button onclick={connect} disabled={busy}>Connect</button>
+    <button class="primary" onclick={fetchAndDecrypt} disabled={busy}>
+      {busy ? 'Fetching & decrypting…' : 'Fetch & decrypt latest'}
+    </button>
+  </div>
 
   {#if error}
     <p class="error" role="alert">{error}</p>
+  {:else if note}
+    <p class="note" role="status">{note}</p>
   {/if}
 
   <!-- At the card's foot: the phones pair with the address and token this card proved (#431). -->
@@ -224,6 +257,8 @@
     color: var(--ink-text);
   }
   button { align-self: flex-start; }
+  .sync-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .note { margin: 0; color: var(--ink-text); }
   /* Failure takes the single alarm hue; it was --mood-1, a person's worst reported day. */
   .error { color: var(--clay); background: var(--clay-wash); border: 1px solid var(--clay); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); margin: 0; }
 

@@ -7,7 +7,7 @@ both devices turn that code into the same key through a password-authenticated k
 everything and learns neither the code nor the key.
 
 As built, both halves run in the browser: the owner's in the owner console, the clinician's on the
-acceptance page. The phone's half (§14) has its protocol built and its screens not: #174. Pairing grants access
+acceptance page. The phone's half (§14) is built too, in the `sync` flavour. Pairing grants access
 to nothing (§10).
 
 Code: `companion/web/src/lib/pairing/`, `companion/web/src/lib/therapist/pairingAccept.ts`,
@@ -394,9 +394,14 @@ built in `sync-crypto` (`ClinicianPairing.kt`: open, collect, approve, cancel, e
 the phone's key), with its bytes pinned to the web's. So are its invitations (`ClinicianInvites.kt`:
 the inbox token, the relationship reference, mint, list, and the owner's report) and the ceremony that
 orders them (`ClinicianCeremony.kt`, the mirror of `pairing/ownerCeremony.ts`, with the same rules
-pinned in `ClinicianCeremonyTest.kt`). The screens that drive it, and where the phone keeps a run and
-its relationships, are not built: #174. Until they are, no Companion screen may claim the phone will
-show or approve anything.
+pinned in `ClinicianCeremonyTest.kt`). The screens that drive it are Settings → Sync with your server →
+Clinicians (`CliniciansScreen.kt`), reached once the passphrase has opened the key, since approving
+seals the owner's public keys back and only that opening yields them. The phone keeps its
+relationships as `KeptClinicians.kt` bytes (the owner's name for each clinician, the inbox token,
+insert-only key records and at most one open run), sealed under a keystore key of their own
+(`ClinicianStore.kt`). The sign-in key is shown once; the code is drawn only while its run is open, in
+a secure window, and is never selectable or shared; "Check for a reply" is the only read. Not built:
+the one local notification below, and sharing from the phone: #174.
 
 - **Identity is derived, not generated.** `crypto_kdf_derive_from_key` over the owner's master with
   context `"dmsync01"`: subkey id 3 is the X25519 seed, id 4 the Ed25519 seed, 32 bytes each, then
