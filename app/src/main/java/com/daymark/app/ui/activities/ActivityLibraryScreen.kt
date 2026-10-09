@@ -7,9 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -110,14 +108,11 @@ fun ActivityLibraryScreen(
                                 onClick = {
                                     if (isSelected) selected.remove(keyL) else selected[keyL] = activity
                                 },
-                                label = { Text(activity.name) },
+                                // Said in words; no mark (CLAUDE.md §4, #429).
+                                label = { Text(if (alreadyAdded) "${activity.name} · Added" else activity.name) },
                                 leadingIcon = {
                                     Icon(
-                                        painter = if (alreadyAdded) {
-                                            androidx.compose.ui.graphics.vector.rememberVectorPainter(Icons.Filled.Check)
-                                        } else {
-                                            painterResource(ActivityIcons.forKey(activity.iconKey))
-                                        },
+                                        painter = painterResource(ActivityIcons.forKey(activity.iconKey)),
                                         contentDescription = null,
                                         modifier = Modifier.size(18.dp),
                                     )

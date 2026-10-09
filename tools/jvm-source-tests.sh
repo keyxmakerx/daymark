@@ -91,7 +91,7 @@ com.daymark.app.data.MigrationSchemaExportTest
 com.daymark.app.export.ReportCopySourceTest com.daymark.app.ui.settings.ReportExportSourceTest
 com.daymark.app.ui.theme.ColorSchemeSourceTest com.daymark.app.ui.FaintInkSourceTest
 com.daymark.app.ui.insights.MonthGridSourceTest com.daymark.app.ui.WeekDaysSourceTest
-com.daymark.app.ui.theme.DynamicColorSourceTest
+com.daymark.app.ui.theme.DynamicColorSourceTest com.daymark.app.ui.insights.MoodLegendSourceTest
 com.daymark.app.ui.components.TickAndGreenSourceTest
 com.daymark.app.ui.HairlineFillSourceTest
 com.daymark.app.export.ReportInkSourceTest
@@ -108,6 +108,7 @@ $REPO/app/src/test/java/com/daymark/app/ui/settings/ReportExportSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/theme/ColorSchemeSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/FaintInkSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/insights/MonthGridSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/ui/insights/MoodLegendSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/WeekDaysSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/theme/DynamicColorSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/components/TickAndGreenSourceTest.kt

@@ -29,7 +29,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
+import com.daymark.app.ui.components.DaymarkSwitch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -231,7 +231,7 @@ private fun ReminderRow(
                     )
                 }
             }
-            Switch(checked = reminder.enabled, onCheckedChange = onToggle)
+            DaymarkSwitch(checked = reminder.enabled, onCheckedChange = onToggle)
             IconButton(onClick = onDelete) {
                 Icon(Icons.Filled.Delete, contentDescription = "Delete reminder")
             }

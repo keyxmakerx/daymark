@@ -58,6 +58,15 @@ lines `#34312A`, Low the sheet, Lowest and Dim the paper. `onSurface` and `onSur
 5.58:1 light and 4.84:1 dark. `ColorSchemeSourceTest` fails when a scheme leaves one unset or a
 word ink falls under 4.5:1.
 
+**Switches, Undo and the time picker's half.** Every switch is `DaymarkSwitch`; no screen draws
+Material's own. Off, its thumb and outline are the soft ink on a hairline track: the outline
+measures 5.53:1 on the sheet and 5.04:1 on the paper in the light theme, 7.29:1 and 7.99:1 in the
+dark, and the thumb on the track 4.36:1 light and 5.95:1 dark. On, the track is the accent ink with
+a paper thumb. `inversePrimary` is the Undo action on the ink snackbar (11.85:1 light, 10.48:1
+dark), and `tertiaryContainer` is the time picker's chosen AM or PM, the hairline with full ink
+(11.24:1 light, 10.34:1 dark); both are set so Material cannot fill them with lavender or pink.
+`ColorSchemeSourceTest` holds the off switch to 3:1 and fails on a bare `Switch(`.
+
 **The faint ink never carries words.** Faint (`tertiary`) measures 2.61:1 on the sheet and is for
 decoration only: rules and empty marks. A word that steps back takes the soft ink
 (`onSurfaceVariant`), which clears 4.5:1 on the sheet, the paper, a menu and a dialog in both

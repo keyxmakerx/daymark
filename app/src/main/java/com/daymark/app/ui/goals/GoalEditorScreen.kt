@@ -28,7 +28,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Switch
+import com.daymark.app.ui.components.DaymarkSwitch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -201,7 +201,7 @@ fun GoalEditorScreen(
                     // The switch's own description says which way a tap goes, because "Reached, on"
                     // read aloud does not tell someone what happens if they touch it — and the
                     // undo is the half of this control that has to be findable.
-                    Switch(
+                    DaymarkSwitch(
                         checked = state.reached,
                         onCheckedChange = viewModel::setReached,
                         modifier = Modifier.semantics {

@@ -27,9 +27,11 @@ import org.junit.Test
  *  - `export/PdfReportGenerator.kt`, for ticks only. Its mood ramp is a person's data, and two of the
  *    five mood colours are green by hue.
  *
+ * Ticks are also held off the whole of `ui/` (#429), and a goal's screen off every mood colour (#428).
+ *
  * ## What it does not
  *
- * Anything outside those two places, so that a use elsewhere cannot trip it: the Checkbox a person
+ * A green outside those two places, so that a use elsewhere cannot trip it: the Checkbox a person
  * ticks to choose journal entries for a report is a control, not a verdict. A person's own mood
  * colours reaching a component through `MaterialTheme.moodColors` are their data, and may be green by
  * their own choice, so they are not ruled on. Nor is a colour built from channels, `Color(r, g, b)`.
@@ -289,5 +291,35 @@ class TickAndGreenSourceTest {
             "Text(\"Step #1\")",
         )
         for (shape in notGreens) assertEquals("the check calls this green:\n$shape", 0, greens(shape).size)
+    }
+
+    /** Every Kotlin file under `ui/`, found as the folder above `ui/components/`. */
+    private val uiFiles: List<File> =
+        componentsDir.parentFile.walkTopDown().filter { it.isFile && it.extension == "kt" }.sortedBy { it.path }.toList()
+
+    @Test
+    fun `no tick anywhere in ui`() {
+        assertTrue("ui/ holds implausibly few files: ${uiFiles.size}", uiFiles.size >= 100)
+        assertTrue("the walk missed the journal editor", uiFiles.any { it.name == "JournalEditorScreen.kt" })
+        val found = uiFiles.flatMap { f -> ticks(f.readText()).map { "${f.name} $it" } }
+        assertTrue(
+            "A tick marks success, and this product has none, on a Save button no more than elsewhere " +
+                "(CLAUDE.md §4, #429). These are ticks:\n" + found.joinToString("\n"),
+            found.isEmpty(),
+        )
+        // Positive control: the Save action put back as it was is seen, in a file outside components/.
+        val journal = uiFiles.first { it.name == "JournalEditorScreen.kt" }.readText()
+        assertEquals(1, ticks(journal + "\nval save = Icons.Filled.Check\n").size)
+    }
+
+    @Test
+    fun `a goal's bar never takes a mood colour`() {
+        val goals = uiFiles.filter { it.parentFile.name == "goals" }
+        assertTrue("the walk missed the goals screen", goals.any { it.name == "GoalsScreen.kt" })
+        val mood = Regex("""\bmoodColors\b|\bMood(?:Awful|Bad|Meh|Good|Rad)\b""")
+        val found = goals.filter { mood.containsMatchIn(commentsBlanked(it.readText())) }.map { it.name }
+        assertTrue("A mood colour is a person's logged value, never a met goal's fill (#428): $found", found.isEmpty())
+        // Positive control: the old fill is seen.
+        assertTrue(mood.containsMatchIn("val fill = if (met) MaterialTheme.moodColors.good else x"))
     }
 }

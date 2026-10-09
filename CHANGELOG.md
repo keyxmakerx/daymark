@@ -6,7 +6,22 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+- **On/off switches can be told apart.** Every switch in the app now draws its off state with a
+  visible outline and thumb in the soft ink, where before the track was the colour of the page. On
+  is unchanged: a dark track with a light thumb. The "Undo" on a deleted entry and the chosen AM or
+  PM in a time picker now use the app's own paper colours instead of Material's lavender and pink.
+  The safety plan's lines name their ink rather than relying on Material to pick it.
+- **A goal's bar looks the same met or not.** It used to turn the "Good" mood colour once the week's
+  target was reached, which borrowed a person's own mood colour as a reward. The words
+  ("3 of 3 done") say where the goal stands.
+- **No check marks remain.** Saving a journal entry or a thought record is a "Save" text button, and
+  an activity already in your list says "Added" in words.
+- **Insights → Week is titled "Last seven days"**, which is what it shows, and the mood legend's
+  swatches carry the same ring as the dots they key.
+
 ### Removed
+- **The old Stats screen**, which nothing opened and which still drew daily averages, is gone.
 - **"Review my year" ends on two plain facts, and no longer offers to save a picture of your
   year.** The last page used to show three numbers: your average mood, your brightest month, and
   your longest streak. Each was a way of marking a year of your life out of something — an average
