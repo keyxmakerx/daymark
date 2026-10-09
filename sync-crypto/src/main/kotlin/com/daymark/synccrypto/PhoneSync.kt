@@ -44,12 +44,15 @@ class PhoneSync(
          * The passphrase opened the wrapped key. Keep [syncKey] (subkey 1 of the owner's master) and
          * [keyDocumentTag], the ETag of the document it came from, which every send checks first.
          * [ownerPublic] is the owner's public pairing keys, what approving a clinician seals back to
-         * them (#174); public, and the same keys the owner console derives.
+         * them (#174); public, and the same keys the owner console derives. [ownerBoxSecret] is the
+         * private half of the box key, which opens what clinicians seal to the owner (#177): secret,
+         * kept as the sync key is kept, and wiped by the caller.
          */
         class Opened internal constructor(
             val syncKey: ByteArray,
             val keyDocumentTag: String,
             val ownerPublic: PairingPayloads.OwnerKeys,
+            val ownerBoxSecret: ByteArray,
         ) : Unlock
 
         class Stopped internal constructor(val words: String, val then: Then) : Unlock
@@ -119,7 +122,7 @@ class PhoneSync(
             return Unlock.Stopped(PhoneWords.COULD_NOT_OPEN, Then.TRY_AGAIN)
         }
         keys.manifestSeed.fill(0)
-        return Unlock.Opened(keys.syncKey, tag, keys.ownerPublic)
+        return Unlock.Opened(keys.syncKey, tag, keys.ownerPublic, keys.ownerBoxSecret)
     }
 
     /**

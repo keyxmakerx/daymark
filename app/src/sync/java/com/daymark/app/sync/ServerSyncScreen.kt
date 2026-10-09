@@ -65,6 +65,7 @@ import java.time.LocalDate
 fun ServerSyncScreen(
     onBack: () -> Unit,
     onClinicians: () -> Unit,
+    onInbox: () -> Unit,
     viewModel: ServerSyncViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -193,6 +194,16 @@ fun ServerSyncScreen(
                         Text(if (locked) ClinicianWords.ROW_LOCKED else ClinicianWords.ROW_HINT)
                     },
                     modifier = Modifier.clickable(enabled = open) { onClinicians() },
+                )
+                HorizontalDivider()
+                // The inbox (#177): opening an item needs the owner's private box key, kept only once opened.
+                ListItem(
+                    headlineContent = { Text(InboxWords.ROW) },
+                    supportingContent = {
+                        val locked = state.stage == ServerSyncStage.NEEDS_PASSPHRASE || state.stage == ServerSyncStage.OPENING
+                        Text(if (locked) InboxWords.ROW_LOCKED else InboxWords.ROW_HINT)
+                    },
+                    modifier = Modifier.clickable(enabled = open) { onInbox() },
                 )
                 HorizontalDivider()
                 TextButton(

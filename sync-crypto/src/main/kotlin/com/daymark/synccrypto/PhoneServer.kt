@@ -45,6 +45,9 @@ internal class SignedRequests(private val server: PairedServer, private val tran
 
     fun get(target: String): TransportAnswer = send("GET", target, ByteArray(0), emptyMap())
 
+    /** A GET carrying [signed] headers, each covered by the signature and sent as signed (§2.1). */
+    fun get(target: String, signed: List<Pair<String, String>>): TransportAnswer = send("GET", target, ByteArray(0), emptyMap(), signed)
+
     fun put(target: String, body: ByteArray): TransportAnswer =
         send("PUT", target, body, mapOf("Content-Type" to "application/octet-stream"))
 
@@ -53,9 +56,15 @@ internal class SignedRequests(private val server: PairedServer, private val tran
         if (json == null) send("POST", target, ByteArray(0), emptyMap())
         else send("POST", target, json, mapOf("Content-Type" to "application/json"))
 
-    private fun send(method: String, target: String, body: ByteArray, plain: Map<String, String>): TransportAnswer {
+    private fun send(
+        method: String,
+        target: String,
+        body: ByteArray,
+        plain: Map<String, String>,
+        signed: List<Pair<String, String>> = emptyList(),
+    ): TransportAnswer {
         val headers = LinkedHashMap<String, String>(plain)
-        headers.putAll(server.key.signRequest(method, target, body, clock.nowMillis() / 1000))
+        headers.putAll(server.key.signRequest(method, target, body, clock.nowMillis() / 1000, signed))
         return transport.send(method, server.address + target, headers, body)
     }
 }

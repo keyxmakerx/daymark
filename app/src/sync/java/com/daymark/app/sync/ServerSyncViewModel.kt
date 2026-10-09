@@ -134,8 +134,8 @@ class ServerSyncViewModel @Inject constructor(
      */
     private fun stateOf(link: KeptLink?, message: String?): ServerSyncUiState {
         if (link == null) return ServerSyncUiState(ServerSyncStage.NOT_PAIRED, message = message)
-        // A key opened before the owner's pairing keys were kept with it is opened once more, for them (#174).
-        val stage = if (link.hasSyncKey && store.ownerKeys() != null) ServerSyncStage.READY else ServerSyncStage.NEEDS_PASSPHRASE
+        // A key opened before the owner's pairing keys (#174) and box key (#177) were kept with it is opened once more, for them.
+        val stage = if (link.hasSyncKey && store.ownerKeys() != null && hasBoxSecret()) ServerSyncStage.READY else ServerSyncStage.NEEDS_PASSPHRASE
         val lineage = if (link.lastSentAt != null) store.lineage() else null
         return ServerSyncUiState(stage, link.address, message = message, lastSentAt = link.lastSentAt, lineage = lineage)
     }
@@ -178,6 +178,9 @@ class ServerSyncViewModel @Inject constructor(
             }
         }
     }
+
+    /** Whether the owner's private box key is kept, without holding a copy longer than the look. */
+    private fun hasBoxSecret(): Boolean = store.ownerBoxSecret()?.let { it.fill(0); true } ?: false
 
     /** What the poll came to: the words to say, and whether the pairing is now kept. */
     private class Kept(val words: String, val paired: Boolean)
@@ -227,9 +230,11 @@ class ServerSyncViewModel @Inject constructor(
                     try {
                         store.keep(unlocked)
                         store.keepOwnerKeys(unlock.ownerPublic)
+                        store.keepOwnerBoxSecret(unlock.ownerBoxSecret)
                         stateOf(unlocked, null)
                     } finally {
                         unlocked.wipe()
+                        unlock.ownerBoxSecret.fill(0)
                     }
                 }
                 is PhoneSync.Unlock.Stopped -> after(unlock.then, link, unlock.words)

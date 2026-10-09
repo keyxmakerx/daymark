@@ -37,6 +37,13 @@ All notable changes to this project are documented here. The format is based on
   still contains unlock times restores normally; the badges in it are just not brought back.
 
 ### Added
+- **Game plans and suggestions from your clinicians, on your phone** (sync build). Settings → Sync
+  with your server → From your clinicians. "Check for new items" is the only time the phone asks;
+  each item is opened with your own key and believed only if it is signed by the clinician you
+  approved, sent to you, and filed where it was signed. Nothing reaches your journal until you tap
+  Accept, except a suggestion you set to apply on its own. Decline tells nobody. An item that fails
+  a check is shown with what happened to it, never silently dropped. A phone that opened its key
+  before this update asks for the passphrase once more.
 - **Your own log, and a Connect button, on the sync card** (web). Connect checks the server address
   and access token without a passphrase, so a first visit to an empty server no longer reads as an
   error. Below your phones, "Your own log" lists phones paired and disconnected and addresses paused
