@@ -52,6 +52,20 @@ All notable changes to this project are documented here. The format is based on
   their stars drift apart and the constellation falls out of the sky, but **See it as you drew it**
   always shows it as it was. Constellations are kept in the encrypted database and come back with a
   full restore, along with your sky's seed, so a restored sky is the same sky.
+- **The rest of the sky: its own colours, nebulae, hard days, putting memories away, and
+  trackers.** Each sky has colours of its own, never a green, in the deep tones of its space and the
+  soft glows behind your stars. For 30 days from first opening it, **Colours** lets you try others or
+  go back to the first ones; after that they stay. **Reset my sky**, at the foot of the Key, grows
+  your sky again with a new shape and new colours, and every memory, name and constellation stays.
+  A week with four or more journal entries has a nebula of gas round its stars, and weeks like that
+  one after another share one. On **Life events**, tap one to **Mark as hard**: its star gets a dim
+  supernova's shell, which marks that day and nothing more, and the sky never opens on it. You can
+  unmark it the same way. **Put away** on any star hides it from your sky and nowhere else; with
+  Motion on, a small black hole draws it in and closes. The list keeps what you put away under its
+  own heading, where **Bring back** returns it, and a white hole sends it home. A tracker can be an
+  object of its own beside your memories, a cluster, a belt or a ring, if you switch on **Show in
+  my sky** on its screen; more logs make it denser, never brighter. Backups (format 19) carry all of
+  it; a merge does not yet carry what you put away (#455).
 - **Your own log, and a Connect button, on the sync card** (web). Connect checks the server address
   and access token without a passphrase, so a first visit to an empty server no longer reads as an
   error. Below your phones, "Your own log" lists phones paired and disconnected and addresses paused

@@ -87,6 +87,7 @@ object AppModule {
                 AppDatabase.MIGRATION_19_20,
                 AppDatabase.MIGRATION_20_21,
                 AppDatabase.MIGRATION_21_22,
+                AppDatabase.MIGRATION_22_23,
             )
             .build()
 
@@ -143,6 +144,9 @@ object AppModule {
 
     @Provides
     fun provideConstellationDao(db: AppDatabase): com.daymark.app.data.dao.ConstellationDao = db.constellationDao()
+
+    @Provides
+    fun provideSkyPutAwayDao(db: AppDatabase): com.daymark.app.data.dao.SkyPutAwayDao = db.skyPutAwayDao()
 
     @Provides
     fun providePersonDao(db: AppDatabase): com.daymark.app.data.dao.PersonDao = db.personDao()

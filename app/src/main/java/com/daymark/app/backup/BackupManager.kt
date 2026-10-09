@@ -25,6 +25,7 @@ import com.daymark.app.data.entity.PersonNote
 import com.daymark.app.data.entity.ThoughtRecord
 import com.daymark.app.data.entity.Reminder
 import com.daymark.app.data.entity.SafetyPlanItem
+import com.daymark.app.data.entity.SkyPutAway
 import com.daymark.app.data.entity.SleepLog
 import com.daymark.app.data.entity.Tracker
 import com.daymark.app.data.entity.TrackerLog
@@ -144,12 +145,15 @@ data class BackupTracker(
     val windowEnd: Int = 1260,
     val quickLog: Boolean = false,
     val keepAsSet: Boolean = false,
+    // Added in v19. Absent from an older file, which reads as not shown: a tracker is in the sky
+    // only once the person switches it on (`DECISIONS.md` §D11).
+    val showInSky: Boolean = false,
 )
 
 /** The stored tracker, under [id]: the backup's own for a replace, 0 for a merge. */
 fun BackupTracker.toTracker(id: Long) = Tracker(
     id, name, type, minValue, maxValue, unit, sortOrder, archived,
-    rhythm, onceAtMinute, fewCount, windowStart, windowEnd, quickLog, keepAsSet,
+    rhythm, onceAtMinute, fewCount, windowStart, windowEnd, quickLog, keepAsSet, showInSky,
 )
 
 @Serializable
@@ -183,6 +187,8 @@ data class BackupSafetyPlanItem(
  * [epochDay] is a day number (`LocalDate.toEpochDay()`), not millis — see
  * [com.daymark.app.data.entity.LifeEvent]. It is carried across verbatim, so a backup restored on a
  * phone in another timezone puts the event back on the day the person chose.
+ *
+ * [hard] arrived in v19 (`DECISIONS.md` §D11), absent from an older file, where nothing was marked.
  */
 @Serializable
 data class BackupLifeEvent(
@@ -190,6 +196,20 @@ data class BackupLifeEvent(
     val epochDay: Long,
     val label: String,
     val createdAt: Long = 0,
+    val hard: Boolean = false,
+)
+
+/**
+ * One `sky_put_away` row: a memory the person put away from their sky. Added in v19.
+ *
+ * [kind] and [recordId] name the record by the sky's key for its table and its row id there, so
+ * the row is only meaningful next to the same ids, which is why only a full restore carries it.
+ */
+@Serializable
+data class BackupSkyPutAway(
+    val kind: String,
+    val recordId: Long,
+    val putAwayEpochDay: Long,
 )
 
 /**
@@ -354,6 +374,14 @@ data class BackupData(
      */
     val skySeed: Long = 0L,
     val constellations: List<BackupConstellation> = emptyList(),
+    /**
+     * The memories put away from the sky, the person's choice of colours and the last day they can
+     * still change them (0 for not started). Added in v19, defaulted so a v18 file still reads,
+     * with nothing put away, the sky's own colours and the window starting on the next open.
+     */
+    val skyPutAway: List<BackupSkyPutAway> = emptyList(),
+    val skyColourChoice: Int = 0,
+    val skyColourUntil: Long = 0L,
 )
 
 /**
@@ -457,6 +485,7 @@ class BackupManager @Inject constructor(
     // The sky's seed lives in its repository's preferences; the constellations in their own table.
     private val skyRepository: com.daymark.app.data.SkyRepository,
     private val constellationDao: com.daymark.app.data.dao.ConstellationDao,
+    private val skyPutAwayDao: com.daymark.app.data.dao.SkyPutAwayDao,
     private val personDao: com.daymark.app.data.dao.PersonDao,
     private val personNoteDao: com.daymark.app.data.dao.PersonNoteDao,
     // The entry -> person link, through its own DAO rather than EntryDao. That separation is the
@@ -534,6 +563,7 @@ class BackupManager @Inject constructor(
                 BackupTracker(
                     it.id, it.name, it.type, it.minValue, it.maxValue, it.unit, it.sortOrder, it.archived,
                     it.rhythm, it.onceAtMinute, it.fewCount, it.windowStart, it.windowEnd, it.quickLog, it.keepAsSet,
+                    it.showInSky,
                 )
             },
             trackerLogs = trackerLogDao.getAll().map { BackupTrackerLog(it.id, it.trackerId, it.dateTime, it.value, it.note) },
@@ -549,7 +579,7 @@ class BackupManager @Inject constructor(
                 BackupSafetyPlanItem(it.id, it.section, it.position, it.text, it.detail)
             },
             lifeEvents = lifeEventDao.getAll().map {
-                BackupLifeEvent(it.id, it.epochDay, it.label, it.createdAt)
+                BackupLifeEvent(it.id, it.epochDay, it.label, it.createdAt, it.hard)
             },
             people = personDao.getAll().map {
                 BackupPerson(it.id, it.name, it.groupKey, it.whoTheyAre, it.archived, it.createdAt, it.sharedOverride)
@@ -565,6 +595,9 @@ class BackupManager @Inject constructor(
             constellations = constellationDao.getAll().map {
                 BackupConstellation(it.id, it.name, it.madeEpochDay, it.points, it.createdAt)
             },
+            skyPutAway = skyPutAwayDao.getAll().map { BackupSkyPutAway(it.kind, it.recordId, it.putAwayEpochDay) },
+            skyColourChoice = skyRepository.colourChoice(),
+            skyColourUntil = skyRepository.colourUntil(),
         )
         return json.encodeToString(data)
     }
@@ -615,16 +648,20 @@ class BackupManager @Inject constructor(
             // journal, and the entries only in the file that had just failed to load. The deletes
             // now roll back with the inserts, so a failed restore leaves what was already there.
             //
-            // The sky's seed is a preference, outside the transaction, so it is set first and put
-            // back if the restore fails: the restored memories are then drawn in the sky they were
-            // drawn in, and a failed restore leaves the sky as it was.
+            // The sky's seed and colours are preferences, outside the transaction, so they are set
+            // first and put back if the restore fails: the restored memories are then drawn in the
+            // sky they were drawn in, and a failed restore leaves the sky as it was.
             ImportMode.REPLACE -> {
                 val seedBefore = skyRepository.storedSeed()
+                val choiceBefore = skyRepository.colourChoice()
+                val untilBefore = skyRepository.colourUntil()
                 skyRepository.restoreSeed(data.skySeed)
+                skyRepository.restoreColours(data.skyColourChoice, data.skyColourUntil)
                 try {
                     database.withTransaction { importReplace(data) }
                 } catch (e: Throwable) {
                     skyRepository.restoreSeed(seedBefore)
+                    skyRepository.restoreColours(choiceBefore, untilBefore)
                     throw e
                 }
             }
@@ -710,7 +747,7 @@ class BackupManager @Inject constructor(
         // at a life event, which is why an id collision here cannot misfile anything.
         lifeEventDao.deleteAll()
         data.lifeEvents.forEach {
-            lifeEventDao.insert(LifeEvent(it.id, it.epochDay, it.label, it.createdAt))
+            lifeEventDao.insert(LifeEvent(it.id, it.epochDay, it.label, it.createdAt, it.hard))
         }
         // The constellations drawn in the restored sky, with the file's ids. Their points name
         // records by the ids restored above, which REPLACE keeps. The seed is set in importFromJson.
@@ -718,6 +755,9 @@ class BackupManager @Inject constructor(
         data.constellations.forEach {
             constellationDao.insert(Constellation(it.id, it.name, it.madeEpochDay, it.points, it.createdAt))
         }
+        // The memories put away, named by the record ids restored above, which REPLACE keeps.
+        skyPutAwayDao.deleteAll()
+        skyPutAwayDao.insertAll(data.skyPutAway.map { SkyPutAway(it.kind, it.recordId, it.putAwayEpochDay) })
 
         /*
          * People, their notes, their entry links, and the per-group sharing defaults.
@@ -900,11 +940,13 @@ class BackupManager @Inject constructor(
         // left alone rather than de-duplicated by (day, label) — two people can be remembered on one
         // date, and the same line written twice is the person's to delete, not this code's to judge.
         data.lifeEvents.forEach { e ->
-            lifeEventDao.insert(LifeEvent(0, e.epochDay, e.label, e.createdAt))
+            lifeEventDao.insert(LifeEvent(0, e.epochDay, e.label, e.createdAt, e.hard))
         }
         // The sky is this phone's: MERGE adds the file's memories into it and keeps its seed. The
         // file's constellations were drawn in another sky, against that sky's positions and that
         // file's record ids, so they are not carried into this one; REPLACE restores them whole.
+        // Nor is what the file had put away, or its colours: the put-away rows name the file's
+        // record ids, which a merge renumbers, so its memories arrive in sight (#455).
 
         /*
          * People take fresh row ids, like every other MERGE insert, and their notes follow through
@@ -986,6 +1028,9 @@ class BackupManager @Inject constructor(
         // v18 adds the sky: `skySeed` and `constellations`, both defaulted, so a v17 file still
         // reads and its sky is derived again from its first record. The bump stops a v17 reader
         // accepting a file whose constellations it would drop.
-        const val CURRENT_VERSION = 18
+        // v19 adds the rest of the sky: `BackupLifeEvent.hard`, `BackupTracker.showInSky`,
+        // `skyPutAway`, `skyColourChoice` and `skyColourUntil`, all defaulted, so a v18 file still
+        // reads. The bump stops a v18 reader accepting a file whose hard marks it would drop.
+        const val CURRENT_VERSION = 19
     }
 }

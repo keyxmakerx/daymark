@@ -50,7 +50,8 @@ class ConstellationSchemaTest {
         assertTrue(databaseSource.contains("fun constellationDao()"))
         assertTrue(moduleSource.contains("fun provideConstellationDao("))
         assertTrue(moduleSource.contains("AppDatabase.MIGRATION_21_22,"))
-        assertTrue(databaseSource.contains("version = 22,"))
+        val version = Regex("""version = (\d+),""").find(databaseSource)!!.groupValues[1].toInt()
+        assertTrue("the database is at v$version, before the table", version >= 22)
     }
 
     private fun strip(source: String): String = source

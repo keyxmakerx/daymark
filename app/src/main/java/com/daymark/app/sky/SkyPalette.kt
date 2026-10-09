@@ -183,6 +183,12 @@ object SkyPalette {
     const val BIRTH_RING = 0xB8CCFF
 
     /**
+     * A black hole's middle, as it passes: no light at all. Every other colour a hole has is the
+     * sky's own ([SkyColours.Look.disk]); this one is the same in every sky because it is none.
+     */
+    const val HOLE_SHADOW = 0x000000
+
+    /**
      * The project thread's stub, the one thing on the Sky still drawn in it. Never a star core.
      *
      * Its name is misleading and the measurement says so: `#8E887A` is **5.70:1** on the night

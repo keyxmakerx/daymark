@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -74,6 +75,7 @@ import com.daymark.app.sky.SkyListItem
 import com.daymark.app.sky.SkyOpening
 import com.daymark.app.sky.SkyOptions
 import com.daymark.app.sky.SkyPalette
+import com.daymark.app.sky.SkyTrackers
 import com.daymark.app.sky.SkyTwinkle
 import com.daymark.app.ui.theme.moodColors
 import com.daymark.app.ui.theme.moodLabels
@@ -95,7 +97,16 @@ import java.util.Locale
  *
  * Each time the sky opens, its stars twinkle in from a trickle to a burst, then the camera flies to
  * the newest one; a newest star the person has not watched arrive is born in front of them first.
- * Any tap skips all of it, and with motion off there is none: the sky opens still, on today.
+ * Any tap skips all of it, and with motion off there is none: the sky opens still, on today. The
+ * newest star here is [SkyLayout.openingStar]: never one put away, and never a life event the
+ * person marked as hard. A sky grown anew by "Reset my sky" opens again from the start.
+ *
+ * ## Putting away and bringing back
+ *
+ * "Put away" on a star's card hides its memories from the sky; with motion on, a black hole forms
+ * beside them, takes them in and closes. The list keeps them under "Put away", where "Bring back"
+ * returns them, and on the way back to the sky a white hole sends them home. Neither event leaves
+ * anything behind ([SkyHoleEvent]).
  *
  * ## What this screen refuses to say
  *
@@ -115,6 +126,7 @@ fun SkyScreen(
     onBack: () -> Unit,
     onOpenRecord: (SkyKind, Long) -> Unit,
     onOpenLifeEvents: () -> Unit,
+    onOpenTracker: (Long) -> Unit,
     viewModel: SkyViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -140,6 +152,15 @@ fun SkyScreen(
     val picked = remember { mutableStateListOf<Int>() }
     var naming by remember { mutableStateOf(false) }
     var bornJustNow by remember { mutableStateOf(NO_SELECTION) }
+    var nebulaCard by rememberSaveable { mutableStateOf(NO_SELECTION) }
+    var trackerCard by rememberSaveable { mutableStateOf(NO_CONSTELLATION) }
+    var resetting by rememberSaveable { mutableStateOf(false) }
+    var seenSeed by rememberSaveable { mutableStateOf<Long?>(null) }
+    var note by remember { mutableStateOf<String?>(null) }
+    var event by remember { mutableStateOf<SkyHoleEvent?>(null) }
+    // Memories brought back from the list, sent home by a white hole on the way back to the sky.
+    val returning = remember { mutableStateListOf<Pair<SkyKind, Long>>() }
+    val density = LocalDensity.current.density
 
     val options = SkyOptions(motionEnabled = motionEnabled, highContrast = highContrast)
     val camera = remember { SkyCamera() }
@@ -169,6 +190,10 @@ fun SkyScreen(
     val layout = state.layout
     val positions = remember(layout, todayEpochDay) { layout.positionsOn(todayEpochDay) }
     val moodLabel: (Int) -> String = { labels.forLevel(it) }
+    val placed = remember(state.trackers, layout, positions, state.seed) {
+        SkyTrackers.place(state.trackers, layout, positions[0], positions[1], state.seed)
+    }
+    val coloursOpen = SkyPresentation.coloursOpen(state.colourUntil, todayEpochDay)
 
     // A star is addressed by its index into the packed arrays, and a new read produces new arrays —
     // so a selection held across a change would point at a different star and put someone else's
@@ -178,6 +203,36 @@ fun SkyScreen(
     LaunchedEffect(layout) {
         if (opened) selected = NO_SELECTION
         picked.clear()
+        nebulaCard = NO_SELECTION
+    }
+
+    // A sky grown anew ("Reset my sky") opens again from the start, as a new sky does.
+    LaunchedEffect(state.loaded, state.seed) {
+        if (!state.loaded) return@LaunchedEffect
+        val before = seenSeed
+        seenSeed = state.seed
+        if (before != null && before != state.seed && opened) {
+            selected = NO_SELECTION
+            camera.fitAll(motion = false)
+            opening.restart(play = motionEnabled)
+            opened = false
+        }
+    }
+
+    // A black or white hole's clock, a frame at a time, for as long as it lasts and no longer.
+    LaunchedEffect(event) {
+        val e = event ?: return@LaunchedEffect
+        val start = withFrameMillis { it }
+        while (e.seconds < e.duration) {
+            withFrameMillis { e.seconds = (it - start) / 1000f }
+        }
+        event = null
+    }
+
+    LaunchedEffect(note) {
+        if (note == null) return@LaunchedEffect
+        delay(NOTE_MILLIS)
+        note = null
     }
 
     fun activate(index: Int) {
@@ -189,13 +244,13 @@ fun SkyScreen(
     }
 
     fun newestIdentity(): Long {
-        val n = layout.newest
+        val n = layout.openingStar
         return Sky.identityOf(layout.kindAt(n), SkyTwinkle.identityIdAt(layout, n))
     }
 
     /** The newest star, close enough to be a place: where the opening ends, and Today. */
     fun goToday(motion: Boolean) {
-        val n = layout.newest
+        val n = layout.openingStar
         if (n < 0 || !camera.ready) return
         val zoom = SkyPresentation.zoomForSpan(SkyPresentation.TODAY_SPAN, camera.fitPx, camera.viewportWidth)
         camera.flyTo(positions[0][n], positions[1][n], zoom, motion)
@@ -204,10 +259,10 @@ fun SkyScreen(
     fun skipOpening() {
         if (opened) return
         opening.finish()
-        if (layout.newest >= 0) {
+        if (layout.openingStar >= 0) {
             goToday(motion = false)
             viewModel.markBorn(newestIdentity())
-            selected = layout.newest
+            selected = layout.openingStar
         }
         opened = true
     }
@@ -215,7 +270,7 @@ fun SkyScreen(
     // The opening. Keyed on `opened`, so skipping it cancels this where it stands.
     LaunchedEffect(state.loaded, opened, camera.ready) {
         if (!state.loaded || opened || !camera.ready) return@LaunchedEffect
-        val newest = layout.newest
+        val newest = layout.openingStar
         if (newest < 0) {
             opening.finish()
             opened = true
@@ -283,8 +338,10 @@ fun SkyScreen(
     fun showConstellation(c: SkyViewModel.ShownConstellation) {
         sheet = SkySheet.NONE
         selected = NO_SELECTION
+        nebulaCard = NO_SELECTION
+        trackerCard = NO_CONSTELLATION
         cardId = c.id
-        val kept = c.resolved.filter { it >= 0 }
+        val kept = c.inSight.filter { it >= 0 }
         if (kept.isEmpty() || !camera.ready) return
         val left = kept.minOf { positions[0][it] }
         val right = kept.maxOf { positions[0][it] }
@@ -300,6 +357,68 @@ fun SkyScreen(
         camera.flyTo((left + right) / 2f, (top + bottom) / 2f, zoom, motionEnabled)
     }
 
+    /** Where a hole forms beside a memory: a little way off on the screen, whatever the zoom. */
+    fun holeBeside(x: Float, y: Float, scalePx: Float): Pair<Float, Float> {
+        val away = HOLE_OFFSET_DP * density / scalePx.coerceAtLeast(1e-3f)
+        return (x + away) to (y - away * 0.6f)
+    }
+
+    /** Puts star [index]'s memories away: with motion on, a black hole takes them in first. */
+    fun putAway(index: Int) {
+        if (index !in 0 until layout.starCount) return
+        if (motionEnabled && camera.ready) {
+            val (hx, hy) = holeBeside(positions[0][index], positions[1][index], camera.scalePx)
+            event = SkyHoleEvent(
+                inward = true,
+                x = hx,
+                y = hy,
+                memories = listOf(layout.kindAt(index) to SkyTwinkle.identityIdAt(layout, index)),
+            )
+        }
+        viewModel.putAway(layout, index)
+        selected = NO_SELECTION
+        note = SkyPresentation.PUT_AWAY_NOTE
+    }
+
+    fun bringBack(index: Int) {
+        returning.add(layout.kindAt(index) to SkyTwinkle.identityIdAt(layout, index))
+        viewModel.bringBack(layout, index)
+    }
+
+    fun bringAllBack() {
+        for (i in 0 until layout.starCount) {
+            if (layout.isPutAway(i)) returning.add(layout.kindAt(i) to SkyTwinkle.identityIdAt(layout, i))
+        }
+        viewModel.bringAllBack()
+    }
+
+    // Back from the list with memories brought back: the camera finds them, and with motion on a
+    // white hole sends them home. With motion off they are simply where they were.
+    LaunchedEffect(showList, camera.ready) {
+        if (showList || !camera.ready || returning.isEmpty()) return@LaunchedEffect
+        val memories = returning.toList()
+        returning.clear()
+        if (!motionEnabled) return@LaunchedEffect
+        val home = memories.map { layout.indexOf(it.first, it.second) }.filter { it >= 0 }
+        if (home.isEmpty()) return@LaunchedEffect
+        val left = home.minOf { positions[0][it] }
+        val right = home.maxOf { positions[0][it] }
+        val top = home.minOf { positions[1][it] }
+        val bottom = home.maxOf { positions[1][it] }
+        val zoom = SkyPresentation.zoomToFrame(
+            right - left,
+            bottom - top,
+            camera.fitPx,
+            camera.viewportWidth,
+            camera.viewportHeight,
+        )
+        val cx = (left + right) / 2f
+        val cy = (top + bottom) / 2f
+        camera.flyTo(cx, cy, zoom, motion = false)
+        val (hx, hy) = holeBeside(cx, cy, SkyPresentation.scalePx(camera.fitPx, zoom))
+        event = SkyHoleEvent(inward = false, x = hx, y = hy, memories = memories)
+    }
+
     fun tapStar(index: Int) {
         if (drawing) {
             // A star joins once in a row; tapping the last one again, or empty sky, adds nothing.
@@ -310,11 +429,25 @@ fun SkyScreen(
         if (index != bornJustNow) bornJustNow = NO_SELECTION
         selected = index
         cardId = NO_CONSTELLATION
+        nebulaCard = NO_SELECTION
+        trackerCard = NO_CONSTELLATION
         sheet = SkySheet.NONE
+    }
+
+    fun tapObject(nebula: Int, tracker: Long) {
+        if (drawing) return
+        selected = NO_SELECTION
+        cardId = NO_CONSTELLATION
+        sheet = SkySheet.NONE
+        nebulaCard = nebula
+        trackerCard = tracker
     }
 
     val card = state.constellations.firstOrNull { it.id == cardId }
     val photo = state.constellations.firstOrNull { it.id == photoId }
+
+    val nebula = state.nebulae.getOrNull(nebulaCard)
+    val tracker = placed.firstOrNull { it.trackerId == trackerCard }
 
     BackHandler(enabled = photo != null || sheet != SkySheet.NONE || drawing) {
         when {
@@ -359,7 +492,8 @@ fun SkyScreen(
             } else {
                 SkyControls(
                     showingList = showList,
-                    hasStars = layout.starCount > 0,
+                    hasStars = layout.shownCount > 0,
+                    colours = coloursOpen && layout.shownCount > 0,
                     motionEnabled = motionEnabled,
                     highContrast = highContrast,
                     onConstellations = {
@@ -371,11 +505,15 @@ fun SkyScreen(
                         sheet = SkySheet.NONE
                         cardId = NO_CONSTELLATION
                         goToday(motionEnabled)
-                        selected = layout.newest
+                        selected = layout.openingStar
                     },
                     onKey = {
                         skipOpening()
                         sheet = if (sheet == SkySheet.KEY) SkySheet.NONE else SkySheet.KEY
+                    },
+                    onColours = {
+                        skipOpening()
+                        sheet = if (sheet == SkySheet.COLOURS) SkySheet.NONE else SkySheet.COLOURS
                     },
                     onMotion = { motionEnabled = it },
                     // One tap, because §7.1 asks for one: the low-vision presentation is every
@@ -402,6 +540,8 @@ fun SkyScreen(
                     moodLabel = moodLabel,
                     locale = locale,
                     onActivate = { index -> activate(index) },
+                    onBringBack = { index -> bringBack(index) },
+                    onBringAllBack = { bringAllBack() },
                 )
 
                 else -> {
@@ -416,7 +556,14 @@ fun SkyScreen(
                         selectedStar = if (drawing) NO_SELECTION else selected,
                         constellations = state.constellations,
                         picked = picked,
+                        look = state.look,
+                        seed = state.seed,
+                        nebulae = state.nebulae,
+                        trackers = placed,
+                        event = event,
                         onStarTapped = { index -> tapStar(index) },
+                        onTrackerTapped = { index -> tapObject(NO_SELECTION, placed[index].trackerId) },
+                        onNebulaTapped = { index -> tapObject(index, NO_CONSTELLATION) },
                         onSkipOpening = { skipOpening() },
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -428,13 +575,19 @@ fun SkyScreen(
                             color = SkyNightInk,
                             modifier = Modifier.align(Alignment.Center).padding(32.dp),
                         )
+                        SkyLayout.Emptiness.ALL_PUT_AWAY -> Text(
+                            text = SkyLayout.ALL_PUT_AWAY_LINE,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = SkyNightInk,
+                            modifier = Modifier.align(Alignment.Center).padding(32.dp),
+                        )
                         // The whole of the Sky's onboarding: the person's first mark, named once.
                         // No walkthrough, no carousel, no "3 of 5", and no congratulation — naming,
                         // not praise (§5.1). Its detail says the same, so it waits until none is
                         // open.
                         SkyLayout.Emptiness.FIRST_LIGHT -> if (selected == NO_SELECTION && !opening.playing) {
                             Text(
-                                text = layout.kindAt(0).introduction,
+                                text = layout.kindAt(layout.firstShown).introduction,
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = SkyNightInk,
                                 modifier = Modifier.align(Alignment.BottomStart).padding(24.dp),
@@ -452,7 +605,7 @@ fun SkyScreen(
                             name = card.name,
                             summary = SkyPresentation.constellationSummary(
                                 card.madeEpochDay,
-                                card.resolved.filter { it >= 0 }.map { layout.epochDay[it] },
+                                card.inSight.filter { it >= 0 }.map { layout.epochDay[it] },
                                 locale,
                             ),
                             onPhoto = { photoId = card.id },
@@ -467,21 +620,80 @@ fun SkyScreen(
                             moodLevel = layout.moodLevel[selected],
                             equalisedRamp = ramp,
                             onOpen = { activate(selected) },
+                            onPutAway = { putAway(selected) },
                             onDismiss = { selected = NO_SELECTION },
                             modifier = Modifier.align(Alignment.BottomCenter),
                         )
+                        tracker != null -> SkyObjectCard(
+                            title = tracker.look.title,
+                            text = SkyPresentation.trackerDescription(tracker.look),
+                            onDismiss = { trackerCard = NO_CONSTELLATION },
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                        ) {
+                            OutlinedButton(onClick = { onOpenTracker(tracker.trackerId) }) { Text("Open tracker") }
+                            TextButton(
+                                onClick = {
+                                    viewModel.takeTrackerOut(tracker.trackerId)
+                                    trackerCard = NO_CONSTELLATION
+                                },
+                            ) { Text("Take it out of my sky") }
+                        }
+                        nebula != null -> SkyObjectCard(
+                            title = "Nebula",
+                            text = SkyPresentation.nebulaDescription(
+                                nebula.entries,
+                                nebula.firstDay,
+                                nebula.lastDay,
+                                locale,
+                            ),
+                            onDismiss = { nebulaCard = NO_SELECTION },
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                        )
+                        note != null -> Surface(
+                            color = MaterialTheme.colorScheme.surface,
+                            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                        ) {
+                            Text(
+                                text = note.orEmpty(),
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                            )
+                        }
                     }
 
                     when (sheet) {
                         SkySheet.NONE -> Unit
                         SkySheet.KEY -> SkySheetFrame(title = "Key", onClose = { sheet = SkySheet.NONE }) {
-                            for (entry in SkyKey.entries(layout, state.constellations.size)) {
+                            val key = SkyKey.entries(layout, state.constellations.size, state.nebulae.size, placed.size)
+                            for (entry in key) {
                                 Text(
                                     text = entry.title,
                                     style = MaterialTheme.typography.titleSmall,
                                     modifier = Modifier.padding(top = 12.dp).semantics { heading() },
                                 )
                                 Text(text = entry.text, style = MaterialTheme.typography.bodyMedium)
+                            }
+                            TextButton(onClick = { resetting = true }, modifier = Modifier.padding(top = 12.dp)) {
+                                Text("Reset my sky")
+                            }
+                        }
+                        SkySheet.COLOURS -> SkySheetFrame(title = "Colours", onClose = { sheet = SkySheet.NONE }) {
+                            Text(
+                                text = SkyPresentation.colourWindow(state.colourUntil, locale),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Button(onClick = { viewModel.tryOtherColours() }, modifier = Modifier.fillMaxWidth()) {
+                                Text("Try other colours")
+                            }
+                            OutlinedButton(
+                                onClick = { viewModel.firstColours() },
+                                enabled = state.colourChoice != 0,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text("Back to the first ones")
+                            }
+                            TextButton(onClick = { resetting = true }, modifier = Modifier.padding(top = 8.dp)) {
+                                Text("Reset my sky")
                             }
                         }
                         SkySheet.CONSTELLATIONS -> SkySheetFrame(
@@ -496,7 +708,7 @@ fun SkyScreen(
                                     constellation = c,
                                     detail = SkyPresentation.constellationRow(
                                         c.madeEpochDay,
-                                        c.resolved.count { it >= 0 },
+                                        c.inSight.count { it >= 0 },
                                         locale,
                                     ),
                                     onClick = { showConstellation(c) },
@@ -543,6 +755,26 @@ fun SkyScreen(
         )
     }
 
+    if (resetting) {
+        AlertDialog(
+            onDismissRequest = { resetting = false },
+            title = { Text("Reset your sky?") },
+            text = { Text(SkyPresentation.RESET_TEXT) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        resetting = false
+                        sheet = SkySheet.NONE
+                        viewModel.resetSky()
+                    },
+                ) { Text("Reset my sky") }
+            },
+            dismissButton = {
+                TextButton(onClick = { resetting = false }) { Text("Keep this sky") }
+            },
+        )
+    }
+
     val removing = state.constellations.firstOrNull { it.id == removingId }
     if (removing != null) {
         AlertDialog(
@@ -574,11 +806,17 @@ private const val DRAW_FROM_WIDTHS = 6f
 /** The pause between the camera arriving and a new star starting to be born. */
 private const val BIRTH_PAUSE_MILLIS = 300L
 
+/** How long "Put away" stays said after a memory is put away. */
+private const val NOTE_MILLIS = 4_000L
+
+/** How far from a memory a black or white hole forms, on the screen. */
+private const val HOLE_OFFSET_DP = 46f
+
 private const val CONSTELLATION_NOTE =
     "Tap your own stars one after another, then give it a name. Over the years its stars drift " +
         "apart and it falls out of the sky, but See it as you drew it always shows it as it was."
 
-private enum class SkySheet { NONE, CONSTELLATIONS, KEY }
+private enum class SkySheet { NONE, CONSTELLATIONS, KEY, COLOURS }
 
 /**
  * The sky's own controls, on an ordinary surface rather than on the night ground.
@@ -591,11 +829,14 @@ private enum class SkySheet { NONE, CONSTELLATIONS, KEY }
 private fun SkyControls(
     showingList: Boolean,
     hasStars: Boolean,
+    /** Whether the colours can still be changed, which is when "Colours" is offered at all. */
+    colours: Boolean,
     motionEnabled: Boolean,
     highContrast: Boolean,
     onConstellations: () -> Unit,
     onToday: () -> Unit,
     onKey: () -> Unit,
+    onColours: () -> Unit,
     onMotion: (Boolean) -> Unit,
     onQuietSky: (Boolean) -> Unit,
     onLifeEvents: () -> Unit,
@@ -619,6 +860,7 @@ private fun SkyControls(
                     TextButton(onClick = onToday) { Text("Today") }
                     TextButton(onClick = onKey) { Text("Key") }
                 }
+                if (colours) TextButton(onClick = onColours) { Text("Colours") }
                 FilterChip(
                     selected = motionEnabled,
                     onClick = { onMotion(!motionEnabled) },
@@ -876,6 +1118,9 @@ private fun SkyPhotoOverlay(
  * strip beside it.
  *
  * The word is already in [text]; the dot is beside it and never instead of it.
+ *
+ * "Put away" is on every star's detail, hard days included: it hides the memory from the sky and
+ * nowhere else, and the list brings it back (`DECISIONS.md` §D11).
  */
 @Composable
 private fun SkyStarDetail(
@@ -887,46 +1132,82 @@ private fun SkyStarDetail(
     /** The person's mood ramp, already through [SkyPalette.equalisedRamp]. Levels 1..5. */
     equalisedRamp: IntArray,
     onOpen: () -> Unit,
+    onPutAway: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(color = MaterialTheme.colorScheme.surface, modifier = modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val moodIndex = moodLevel - SkyGlyph.MOOD_MIN
-            if (moodIndex in equalisedRamp.indices) {
-                // Decorative: the mood is already a word in the text beside it, so a screen reader
-                // that also announced the dot would say it twice. Four kinds carry no mood at all
-                // and get no dot rather than a grey one — an uncoloured star is not a lesser star.
-                Spacer(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(skyColor(equalisedRamp[moodIndex]))
-                        .clearAndSetSemantics {},
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                if (note != null) {
-                    Text(
-                        text = note,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Column(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 4.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val moodIndex = moodLevel - SkyGlyph.MOOD_MIN
+                if (moodIndex in equalisedRamp.indices) {
+                    // Decorative: the mood is already a word in the text beside it, so a screen reader
+                    // that also announced the dot would say it twice. Four kinds carry no mood at all
+                    // and get no dot rather than a grey one — an uncoloured star is not a lesser star.
+                    Spacer(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(skyColor(equalisedRamp[moodIndex]))
+                            .clearAndSetSemantics {},
                     )
+                    Spacer(modifier = Modifier.width(10.dp))
                 }
-                Text(text = text, style = MaterialTheme.typography.bodyMedium)
+                Column(modifier = Modifier.weight(1f)) {
+                    if (note != null) {
+                        Text(
+                            text = note,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Text(text = text, style = MaterialTheme.typography.bodyMedium)
+                }
             }
-            // A project step is the one kind that goes nowhere, and it gets no button rather than a
-            // disabled one: a control that is present and refuses is worse than one that was never
-            // offered. See SkyPresentation.hasAction for why a life event still counts as going
-            // somewhere.
-            if (SkyPresentation.hasAction(kind)) {
-                TextButton(onClick = onOpen) { Text("Open it") }
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // A project step is the one kind that goes nowhere, and it gets no button rather than a
+                // disabled one: a control that is present and refuses is worse than one that was never
+                // offered. See SkyPresentation.hasAction for why a life event still counts as going
+                // somewhere.
+                if (SkyPresentation.hasAction(kind)) {
+                    TextButton(onClick = onOpen) { Text("Open it") }
+                }
+                TextButton(onClick = onPutAway) { Text("Put away") }
+                TextButton(onClick = onDismiss) { Text("Close") }
             }
-            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    }
+}
+
+/**
+ * Something in the sky that is not a memory, picked: a nebula or a tracker's object. What it is,
+ * in a line, and what can be done with it.
+ */
+@Composable
+private fun SkyObjectCard(
+    title: String,
+    text: String,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    actions: @Composable () -> Unit = {},
+) {
+    Surface(color = MaterialTheme.colorScheme.surface, modifier = modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)) {
+            Text(text = title, style = MaterialTheme.typography.titleMedium)
+            Text(text = text, style = MaterialTheme.typography.bodyMedium)
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                actions()
+                TextButton(onClick = onDismiss) { Text("Close") }
+            }
         }
     }
 }
@@ -940,6 +1221,9 @@ private fun SkyStarDetail(
  * comment exactly as the sky does. Absence is not remarked on in any modality.
  *
  * No summary, no overview sentence, no "your year in words". The list is the data.
+ *
+ * Memories put away come last, under their own heading, folded until opened: each says only the day
+ * it was put away, and each can be brought back, or all of them at once.
  */
 @Composable
 private fun SkyList(
@@ -947,6 +1231,8 @@ private fun SkyList(
     moodLabel: (Int) -> String,
     locale: Locale,
     onActivate: (Int) -> Unit,
+    onBringBack: (Int) -> Unit,
+    onBringAllBack: () -> Unit,
 ) {
     if (layout.starCount == 0) {
         Text(
@@ -959,6 +1245,7 @@ private fun SkyList(
     // Named `rows` and not `items`: `items` is also LazyListScope's own function, and a local
     // shadowing it inside the builder reads as a bug even when it is not one.
     val rows = remember(layout) { Sky.list(layout) }
+    var putAwayOpen by rememberSaveable { mutableStateOf(false) }
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         items(rows.size) { position ->
             when (val item = rows[position]) {
@@ -984,6 +1271,47 @@ private fun SkyList(
                             )
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                     )
+                }
+                is SkyListItem.PutAwayHeading -> Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClickLabel = if (putAwayOpen) "Hide" else "Show") {
+                                putAwayOpen = !putAwayOpen
+                            }
+                            .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Put away",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f).semantics { heading() },
+                        )
+                        Text(
+                            text = if (putAwayOpen) "Hide" else "Show",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    if (putAwayOpen) {
+                        TextButton(onClick = onBringAllBack, modifier = Modifier.padding(horizontal = 8.dp)) {
+                            Text("Bring them all back")
+                        }
+                    }
+                }
+                is SkyListItem.PutAway -> if (putAwayOpen) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = SkyPresentation.putAwayRow(item.putAwayEpochDay, locale),
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f).padding(vertical = 12.dp),
+                        )
+                        TextButton(onClick = { onBringBack(item.index) }) { Text("Bring back") }
+                    }
                 }
             }
         }

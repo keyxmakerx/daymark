@@ -4,9 +4,11 @@ import com.daymark.app.sky.Sky
 import com.daymark.app.sky.SkyCalendar
 import com.daymark.app.sky.SkyDetail
 import com.daymark.app.sky.SkyGlyph
+import com.daymark.app.sky.SkyKey
 import com.daymark.app.sky.SkyKind
 import com.daymark.app.sky.SkyLayout
 import com.daymark.app.sky.SkyListItem
+import com.daymark.app.sky.SkyTrackers
 import java.time.LocalDate
 import java.time.Month
 import java.time.format.DateTimeFormatter
@@ -148,6 +150,17 @@ object SkyPresentation {
      */
     fun constellationAlpha(reveal: Float, screenWidthsAcross: Float): Float =
         smoothstep(0.85f, 1f, reveal) * (1f - smoothstep(40f, 160f, screenWidthsAcross))
+
+    /**
+     * How strongly nebulae are drawn at this zoom: whole far out, fading as the sky is followed in,
+     * so the stars inside one stay clear close up. Never gone: a week with a lot of writing is
+     * still one when looked at closely.
+     */
+    fun nebulaAlpha(screenWidthsAcross: Float): Float =
+        1f - NEBULA_CLOSE_FADE * smoothstep(12f, 80f, screenWidthsAcross)
+
+    /** How much of a nebula's gas is faded away close up. */
+    const val NEBULA_CLOSE_FADE = 0.7f
 
     private fun smoothstep(from: Float, to: Float, x: Float): Float {
         val u = ((x - from) / (to - from)).coerceIn(0f, 1f)
@@ -301,10 +314,13 @@ object SkyPresentation {
         tapXPx: Float,
         tapYPx: Float,
         maxDistancePx: Float,
+        /** Stars that cannot be tapped because they are not in sight: put away. */
+        hidden: BooleanArray? = null,
     ): Int {
         var best = -1
         var bestDistanceSquared = maxDistancePx * maxDistancePx
         for (i in xs.indices) {
+            if (hidden != null && hidden[i]) continue
             val dx = toScreen(xs[i], bounds.left, scalePx, panXPx) - tapXPx
             val dy = toScreen(ys[i], bounds.top, scalePx, panYPx) - tapYPx
             val distanceSquared = dx * dx + dy * dy
@@ -312,6 +328,21 @@ object SkyPresentation {
                 bestDistanceSquared = distanceSquared
                 best = i
             }
+        }
+        return best
+    }
+
+    /**
+     * Which of some round objects a tap at ([x], [y]) in the sky's units falls inside, or -1: the
+     * smallest one, so a tracker's object can still be reached where it sits in a nebula's gas.
+     */
+    fun objectAt(xs: FloatArray, ys: FloatArray, radii: FloatArray, x: Float, y: Float): Int {
+        var best = -1
+        for (i in xs.indices) {
+            val dx = xs[i] - x
+            val dy = ys[i] - y
+            if (dx * dx + dy * dy > radii[i] * radii[i]) continue
+            if (best < 0 || radii[i] < radii[best]) best = i
         }
         return best
     }
@@ -333,11 +364,11 @@ object SkyPresentation {
      * "January to December" is a property of a calendar, and not a count of anything they did.
      */
     fun canvasDescription(layout: SkyLayout, locale: Locale): String {
-        if (layout.starCount == 0) return SkyLayout.EMPTY_LINE
-        // The arrays are in time order, so the ends are the span. No scan, and no min/max that
-        // could quietly become a "busiest year".
-        val firstYear = SkyCalendar.civilOf(layout.epochDay[0]).year
-        val lastYear = SkyCalendar.civilOf(layout.epochDay[layout.starCount - 1]).year
+        if (layout.shownCount == 0) return SkyLayout.EMPTY_LINE
+        // The arrays are in time order, so the ends in sight are the span. No min/max that could
+        // quietly become a "busiest year", and no year that only a put-away memory is in.
+        val firstYear = SkyCalendar.civilOf(layout.epochDay[layout.firstShown]).year
+        val lastYear = SkyCalendar.civilOf(layout.epochDay[layout.lastShown]).year
         return if (firstYear == lastYear) {
             "Your sky, $firstYear."
         } else {
@@ -379,20 +410,85 @@ object SkyPresentation {
         return parts.toString()
     }
 
-    /** [starDescription] for a star already in a laid-out sky. */
+    /**
+     * [starDescription] for a star already in a laid-out sky. A life event the person marked as hard
+     * is named as the supernova it is, with the Key's own words for what that means.
+     */
     fun starDescription(
         layout: SkyLayout,
         index: Int,
         moodLabel: (Int) -> String,
         locale: Locale,
-    ): String = starDescription(
+    ): String = if (layout.isSupernova(index)) {
+        supernovaDescription(layout.epochDay[index], locale)
+    } else {
+        starDescription(
         kind = layout.kindAt(index),
         epochDay = layout.epochDay[index],
         moodLevel = layout.moodLevel[index],
-        recordCount = layout.recordCountAt(index),
-        moodLabel = moodLabel,
-        locale = locale,
-    )
+            recordCount = layout.recordCountAt(index),
+            moodLabel = moodLabel,
+            locale = locale,
+        )
+    }
+
+    /** A supernova's card. It names the day and what the person did, and nothing about the day. */
+    fun supernovaDescription(epochDay: Long, locale: Locale): String =
+        "Supernova, ${dateLabel(epochDay, locale)}. ${SkyKey.SUPERNOVA}"
+
+    /**
+     * A put-away memory's row in the list: that it is put away and the day it was, and never its
+     * own date, kind or mood (`DECISIONS.md` §D11).
+     */
+    fun putAwayRow(putAwayEpochDay: Long, locale: Locale): String =
+        "Put away on ${dateLabel(putAwayEpochDay, locale)}"
+
+    /** What the sky says once a memory has gone, so motion off is not a memory vanishing unexplained. */
+    const val PUT_AWAY_NOTE = "Put away. You can bring it back from the list."
+
+    /** A nebula's card: what made it, counted only as a description of what is in front of them. */
+    fun nebulaDescription(entries: Int, firstDay: Long, lastDay: Long, locale: Locale): String {
+        val counted = if (entries == 1) "1 journal entry" else "$entries journal entries"
+        return "Weeks with a lot of writing: $counted, ${dayRange(firstDay, lastDay, locale)}."
+    }
+
+    /** A tracker's object's card: its look, and what each star in it is. Never a count or a rate. */
+    fun trackerDescription(look: SkyTrackers.Look): String =
+        "${look.title}. Each time you log it is one star here."
+
+    /**
+     * The colours' window, said at the start and every time: "You can change these colours until
+     * 2 November. After that they stay, as part of your sky."
+     */
+    fun colourWindow(untilEpochDay: Long, locale: Locale): String =
+        "You can change these colours until ${dayAndMonth(untilEpochDay, locale)}. After that they " +
+            "stay, as part of your sky."
+
+    /** Whether the colours can still be changed on [todayEpochDay]: through the window's last day. */
+    fun coloursOpen(untilEpochDay: Long, todayEpochDay: Long): Boolean =
+        untilEpochDay > 0L && todayEpochDay <= untilEpochDay
+
+    /** What "Reset my sky" does, said before it is done. */
+    const val RESET_TEXT = "Your sky grows again from a new seed, with a new shape and new colours, " +
+        "and 30 days to choose colours again. Every memory, name and constellation stays."
+
+    /** "3 to 19 May", "28 April to 9 May", or with years when they differ. */
+    fun dayRange(from: Long, to: Long, locale: Locale): String {
+        if (from == to) return dayAndMonth(from, locale)
+        val a = LocalDate.ofEpochDay(from)
+        val b = LocalDate.ofEpochDay(to)
+        val monthB = b.month.getDisplayName(TextStyle.FULL, locale)
+        return when {
+            a.year != b.year -> "${dateLabel(from, locale)} to ${dateLabel(to, locale)}"
+            a.month == b.month -> "${a.dayOfMonth} to ${b.dayOfMonth} $monthB"
+            else -> "${dayAndMonth(from, locale)} to ${b.dayOfMonth} $monthB"
+        }
+    }
+
+    private fun dayAndMonth(epochDay: Long, locale: Locale): String {
+        val date = LocalDate.ofEpochDay(epochDay)
+        return "${date.dayOfMonth} ${date.month.getDisplayName(TextStyle.FULL, locale)}"
+    }
 
     /**
      * A month heading in the text equivalent — "March 2024, 6 items".

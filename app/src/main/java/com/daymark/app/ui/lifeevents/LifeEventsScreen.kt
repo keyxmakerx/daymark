@@ -1,5 +1,6 @@
 package com.daymark.app.ui.lifeevents
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -55,9 +56,9 @@ import java.time.format.FormatStyle
  * "Life events" — the marks the person has placed on their own history, and the one place they are
  * made.
  *
- * The screen is deliberately small: a list, an add button, a delete. `docs/SKY.md` §2.2 is the
- * design, `data/entity/LifeEvent.kt` is the record, and the three things this screen does not do
- * matter more than what it does:
+ * The screen is deliberately small: a list, an add button, a delete, and on tapping a row, "Mark as
+ * hard". `docs/SKY.md` §2.2 is the design, `data/entity/LifeEvent.kt` is the record, and the three
+ * things this screen does not do matter more than what it does:
  *
  * - **It never suggests one.** No "you haven't added an event in a while", no "something seems to
  *   have changed around March — want to mark it?". The app does not read someone's logging and
@@ -66,6 +67,9 @@ import java.time.format.FormatStyle
  * - **It never asks how it felt.** No mood, no valence, no good/bad. A life event is not rated.
  * - **It never asks what kind of thing it was.** No category chips, no dropdown. A taxonomy is the
  *   software deciding what counts as a life.
+ *
+ * "Mark as hard" is not a rating either. It is offered only when the person opens a row, never
+ * proposed, and its one effect is the supernova in their sky (`DECISIONS.md` §D11).
  *
  * The empty state says what the screen is for and asks for nothing. There is no count, no "0
  * events", and nothing that reads as an unfilled slot.
@@ -80,6 +84,7 @@ fun LifeEventsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var adding by remember { mutableStateOf(false) }
+    var marking by remember { mutableStateOf<LifeEvent?>(null) }
 
     Scaffold(
         topBar = {
@@ -147,7 +152,7 @@ fun LifeEventsScreen(
                                     "${formatEpochDay(event.epochDay)}. You'll get a moment to undo it.",
                                 swipeLabel = "Delete life event",
                             ) {
-                                LifeEventRow(event)
+                                LifeEventRow(event, onClick = { marking = event })
                             }
                             if (index < events.lastIndex) {
                                 HorizontalDivider(
@@ -162,6 +167,24 @@ fun LifeEventsScreen(
         }
     }
 
+    val target = marking
+    if (target != null) {
+        AlertDialog(
+            onDismissRequest = { marking = null },
+            title = { Text(target.label) },
+            text = { Text(if (target.hard) UNMARK_TEXT else MARK_TEXT) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.setHard(target, !target.hard)
+                        marking = null
+                    },
+                ) { Text(if (target.hard) "Unmark as hard" else "Mark as hard") }
+            },
+            dismissButton = { TextButton(onClick = { marking = null }) { Text("Cancel") } },
+        )
+    }
+
     if (adding) {
         AddLifeEventDialog(
             onDismiss = { adding = false },
@@ -174,10 +197,11 @@ fun LifeEventsScreen(
 }
 
 @Composable
-private fun LifeEventRow(event: LifeEvent) {
+private fun LifeEventRow(event: LifeEvent, onClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClickLabel = if (event.hard) "Unmark as hard" else "Mark as hard", onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         Text(event.label, style = MaterialTheme.typography.bodyLarge)
@@ -186,8 +210,23 @@ private fun LifeEventRow(event: LifeEvent) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (event.hard) {
+            Text(
+                "Marked as hard",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
+
+/** What marking a life event as hard does, said before it is done. */
+private const val MARK_TEXT =
+    "Your sky draws it as a supernova, which marks that day and nothing more. Only you can mark " +
+        "it, and you can unmark it whenever you like."
+
+/** What unmarking it does. */
+private const val UNMARK_TEXT = "Your sky draws it as an ordinary life event again."
 
 /**
  * The add dialog: a date and a line, and no third field.

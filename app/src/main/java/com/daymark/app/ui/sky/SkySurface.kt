@@ -1,5 +1,6 @@
 package com.daymark.app.ui.sky
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -18,6 +19,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -26,12 +28,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.PointMode
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -45,6 +53,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,21 +62,29 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.daymark.app.sky.Sky
 import com.daymark.app.sky.SkyAge
+import com.daymark.app.sky.SkyColours
 import com.daymark.app.sky.SkyConstellation
 import com.daymark.app.sky.SkyDetail
 import com.daymark.app.sky.SkyGlyph
+import com.daymark.app.sky.SkyHoles
 import com.daymark.app.sky.SkyKind
 import com.daymark.app.sky.SkyLayout
+import com.daymark.app.sky.SkyNebula
 import com.daymark.app.sky.SkyOpening
 import com.daymark.app.sky.SkyOptions
 import com.daymark.app.sky.SkyPalette
+import com.daymark.app.sky.SkyRandom
+import com.daymark.app.sky.SkyTrackers
 import com.daymark.app.sky.SkyTwinkle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -88,11 +105,20 @@ import kotlin.math.sqrt
  *
  * ## What is drawn
  *
- * Every star is a memory, on a night ground with nothing else on it: no background stars, no field.
- * Stars are drawn where they are today, drift included. Far out each is a point of light; leaning
- * in, kind marks resolve ([SkyDetail.drawsGlyphs]); right in, each one is drawn as a sun of its own
- * ([SkyPresentation.sunRadius]). Constellations the person drew are lines between their stars and a
- * name beside the topmost one, the only words on the canvas, and every one of them the person's.
+ * Every star is a memory. Behind them is the sky's own space: its deepest tone and three soft
+ * glows of colour anchored to the sky, and gas around weeks with a lot of writing
+ * ([SkyNebula]), all in the sky's colours ([SkyColours]), which are blind to data. There are no
+ * background stars and no field. Stars are drawn where they are today, drift included. Far out each
+ * is a point of light; leaning in, kind marks resolve ([SkyDetail.drawsGlyphs]); right in, each one
+ * is drawn as a sun of its own ([SkyPresentation.sunRadius]). A life event the person marked as
+ * hard has a supernova's shell round it, dim, marking that day and nothing more. Trackers the
+ * person shows are objects of their own beside the memories ([SkyTrackers]). Constellations the
+ * person drew are lines between their stars and a name beside the topmost one, the only words on
+ * the canvas, and every one of them the person's.
+ *
+ * A memory put away is not drawn and cannot be tapped; while a black or white hole plays
+ * ([SkyHoleEvent]), the memories it moves are drawn by it instead. The quiet sky draws the plain
+ * night ground and no gas, glow or shell, the same rule that takes the stars' halos away.
  *
  * ## What is not drawn, and why
  *
@@ -149,13 +175,40 @@ internal fun SkySurface(
     constellations: List<SkyViewModel.ShownConstellation>,
     /** The stars joined so far in a constellation being drawn, in order; empty when not drawing. */
     picked: List<Int>,
+    /** The sky's colours ([SkyColours.of]), and the [seed] that places its glows. */
+    look: SkyColours.Look,
+    seed: Long,
+    nebulae: List<SkyNebula.Nebula>,
+    /** The trackers the person shows, placed beside today's stars ([SkyTrackers.place]). */
+    trackers: List<SkyTrackers.Placed>,
+    /** A black or white hole as it plays, or null. */
+    event: SkyHoleEvent?,
     onStarTapped: (Int) -> Unit,
+    onTrackerTapped: (Int) -> Unit,
+    onNebulaTapped: (Int) -> Unit,
     onSkipOpening: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val xs = positions[0]
     val ys = positions[1]
     val bounds = remember(positions, layout) { SkyPresentation.boundsOf(xs, ys, layout.height) }
+    val glows = remember(seed, layout.height) { SkyColours.glows(seed, layout.height) }
+    val extents = remember(nebulae, positions) { nebulae.map { SkyNebula.extent(it, xs, ys) } }
+    // Each nebula's gas, folded once off the main thread: years of busy weeks are dozens of them.
+    val gas by produceState(initialValue = emptyList<ImageBitmap>(), nebulae, look, seed) {
+        value = withContext(Dispatchers.Default) {
+            nebulae.map { nebula ->
+                val pixels = SkyNebula.texture(GAS_PX, look.nebulae[nebula.look], SkyRandom.mix(seed, nebula.firstDay))
+                Bitmap.createBitmap(pixels, GAS_PX, GAS_PX, Bitmap.Config.ARGB_8888).asImageBitmap()
+            }
+        }
+    }
+    // What a hole is moving, as stars of today's layout, and every star the ordinary pass skips:
+    // those put away, and those a hole is drawing.
+    val moving = remember(layout, event) { event?.indicesIn(layout) ?: IntArray(0) }
+    val hidden = remember(layout, moving) {
+        BooleanArray(layout.starCount) { !layout.isShown(it) }.also { h -> for (i in moving) if (i >= 0) h[i] = true }
+    }
     var viewport by remember { mutableStateOf(IntSize.Zero) }
     LaunchedEffect(viewport, bounds) {
         camera.measure(viewport.width.toFloat(), viewport.height.toFloat(), bounds)
@@ -179,7 +232,7 @@ internal fun SkySurface(
         }
     }
     val lineStrengths = remember(constellations, layout, todayEpochDay) {
-        constellations.map { SkyConstellation.lineAlphas(it.points, it.resolved, layout, todayEpochDay) }
+        constellations.map { SkyConstellation.lineAlphas(it.points, it.inSight, layout, todayEpochDay) }
     }
     val measurer = rememberTextMeasurer()
     val names = remember(constellations, measurer) {
@@ -189,7 +242,12 @@ internal fun SkySurface(
 
     val skipping by rememberUpdatedState(opening.playing)
     val tapped by rememberUpdatedState(onStarTapped)
+    val trackerTapped by rememberUpdatedState(onTrackerTapped)
+    val nebulaTapped by rememberUpdatedState(onNebulaTapped)
     val skip by rememberUpdatedState(onSkipOpening)
+    val tappable by rememberUpdatedState(hidden)
+    val objects by rememberUpdatedState(trackers)
+    val gases by rememberUpdatedState(extents)
 
     val gestures = Modifier
         .pointerInput(camera) {
@@ -205,21 +263,53 @@ internal fun SkySurface(
                     if (skipping) {
                         skip()
                     } else {
-                        tapped(
+                        val scale = camera.scalePx
+                        val skyX = SkyPresentation.fromScreen(offset.x, camera.bounds.left, scale, camera.panX())
+                        val skyY = SkyPresentation.fromScreen(offset.y, camera.bounds.top, scale, camera.panY())
+                        // The platform minimum, applied to the target and not to the drawn size: a
+                        // star drawn at 1.9 dp is still a 48 dp target (§7.1), and so is a tracker.
+                        val reachPx = SkyGlyph.TOUCH_TARGET_DP.dp.toPx() / 2f
+                        val reach = reachPx / scale
+                        val tracker = SkyPresentation.objectAt(
+                            FloatArray(objects.size) { objects[it].x },
+                            FloatArray(objects.size) { objects[it].y },
+                            FloatArray(objects.size) { max(objects[it].radius, reach) },
+                            skyX,
+                            skyY,
+                        )
+                        val star = if (tracker >= 0) {
+                            -1
+                        } else {
                             SkyPresentation.nearestStar(
                                 xs = xs,
                                 ys = ys,
                                 bounds = camera.bounds,
-                                scalePx = camera.scalePx,
+                                scalePx = scale,
                                 panXPx = camera.panX(),
                                 panYPx = camera.panY(),
                                 tapXPx = offset.x,
                                 tapYPx = offset.y,
-                                // The platform minimum, applied to the target and not to the drawn
-                                // size: a star drawn at 1.9 dp is still a 48 dp target (§7.1).
-                                maxDistancePx = SkyGlyph.TOUCH_TARGET_DP.dp.toPx() / 2f,
-                            ),
-                        )
+                                maxDistancePx = reachPx,
+                                hidden = tappable,
+                            )
+                        }
+                        // A star wins over the gas round it; the gas is reached between stars.
+                        val nebula = if (tracker >= 0 || star >= 0) {
+                            -1
+                        } else {
+                            SkyPresentation.objectAt(
+                                FloatArray(gases.size) { gases[it].x },
+                                FloatArray(gases.size) { gases[it].y },
+                                FloatArray(gases.size) { gases[it].radius },
+                                skyX,
+                                skyY,
+                            )
+                        }
+                        when {
+                            tracker >= 0 -> trackerTapped(tracker)
+                            nebula >= 0 -> nebulaTapped(nebula)
+                            else -> tapped(star)
+                        }
                     }
                 },
             )
@@ -250,6 +340,19 @@ internal fun SkySurface(
             // Enough margin that a glyph whose centre has left the screen still draws its rays.
             val margin = 16.dp.toPx()
             val sunFrom = SUN_FROM_DP.dp.toPx()
+            // Everything that is not a star comes in with the opening, behind the stars.
+            val backdrop = smooth(0.1f, 0.9f, reveal)
+            val seconds = elapsedMillis / 1000f
+
+            if (!options.highContrast) {
+                drawSpace(look, glows, origin, scale, pan)
+                val gasAlpha = SkyPresentation.nebulaAlpha(across) * backdrop
+                for ((n, extent) in extents.withIndex()) {
+                    val image = gas.getOrNull(n) ?: continue
+                    drawGas(image, extent, nebulae[n].turn, origin, scale, pan, gasAlpha)
+                }
+            }
+            for (t in trackers) drawTracker(t, origin, scale, pan, seconds, backdrop)
 
             if (born in 0 until layout.starCount && birth > 0f && birth < 1f) {
                 drawBirth(
@@ -264,6 +367,7 @@ internal fun SkySurface(
 
             // Array order is time order, so newer stars still land on top of older ones.
             for (i in 0 until layout.starCount) {
+                if (hidden[i]) continue
                 val kind = layout.kindAt(i)
                 val sun = SkyPresentation.sunRadius(kind, scale)
                 val cx = SkyPresentation.toScreen(xs[i], origin.x, scale, pan.x)
@@ -272,6 +376,9 @@ internal fun SkySurface(
                 val arrival =
                     if (i == born) SkyOpening.bornBrightness(birth) else SkyOpening.brightness(reveal, moments[i])
                 if (arrival <= 0f) continue
+                if (layout.isSupernova(i)) {
+                    drawSupernova(Offset(cx, cy), SUPERNOVA_DP.dp.toPx(), look, arrival, seconds, options.highContrast)
+                }
                 drawStar(
                     sprites = sprites,
                     kind = kind,
@@ -296,6 +403,46 @@ internal fun SkySurface(
                 drawConstellations(constellations, lineStrengths, names, xs, ys, origin, scale, pan, strength)
             }
             if (picked.isNotEmpty()) drawPicked(picked, xs, ys, origin, scale, pan)
+
+            val e = event
+            if (e != null) {
+                val hole = Offset(
+                    SkyPresentation.toScreen(e.x, origin.x, scale, pan.x),
+                    SkyPresentation.toScreen(e.y, origin.y, scale, pan.y),
+                )
+                val formed = SkyHoles.holeAt(e.seconds, moving.size)
+                if (e.inward) {
+                    drawBlackHole(hole, HOLE_DP.dp.toPx(), formed, look)
+                } else {
+                    drawWhiteHole(hole, HOLE_DP.dp.toPx(), formed, look)
+                }
+                for ((order, i) in moving.withIndex()) {
+                    if (i !in 0 until layout.starCount) continue
+                    val p = SkyHoles.travelAt(e.seconds, order)
+                    val light = if (e.inward) SkyHoles.inwardLight(p) else SkyHoles.outwardLight(p)
+                    if (light <= 0f) continue
+                    val share = if (e.inward) SkyHoles.inwardRadius(p) else SkyHoles.outwardShare(p)
+                    val turn = if (e.inward) SkyHoles.inwardTurn(p) else SkyHoles.outwardTurn(p)
+                    val dx = SkyPresentation.toScreen(xs[i], origin.x, scale, pan.x) - hole.x
+                    val dy = SkyPresentation.toScreen(ys[i], origin.y, scale, pan.y) - hole.y
+                    val c = cos(turn)
+                    val s = sin(turn)
+                    drawStar(
+                        sprites = sprites,
+                        kind = layout.kindAt(i),
+                        id = SkyTwinkle.identityIdAt(layout, i),
+                        ageYears = SkyAge.ageYears(layout.epochDay[i], todayEpochDay),
+                        moodLevel = layout.moodLevel[i],
+                        centre = Offset(hole.x + (dx * c - dy * s) * share, hole.y + (dx * s + dy * c) * share),
+                        detail = detail,
+                        options = options,
+                        elapsedMillis = elapsedMillis,
+                        selected = false,
+                        arrival = light,
+                        sunPx = 0f,
+                    )
+                }
+            }
         }
 
         // The way back to the whole sky. It appears only once there is somewhere to come back
@@ -335,6 +482,14 @@ internal class SkyOpeningState(playing: Boolean) {
     fun finish() {
         playing = false
         reveal = 1f
+        birth = 1f
+        bornIndex = -1
+    }
+
+    /** From the start again, for a sky grown anew: playing, or with motion off, already over. */
+    fun restart(play: Boolean) {
+        playing = play
+        reveal = if (play) 0f else 1f
         birth = 1f
         bornIndex = -1
     }
@@ -474,8 +629,216 @@ private class PhotoFrame(
     }
 }
 
+/**
+ * A black or white hole as it plays (`DECISIONS.md` §D11): where it is, in the sky's units, which
+ * memories it moves, in the order they move, and how far into it the clock is. The memories are
+ * named by kind and record id rather than by index, so the layout that arrives as they are put
+ * away or brought back finds the same stars. The screen runs its clock; the surface draws it.
+ */
+@Stable
+internal class SkyHoleEvent(
+    /** A black hole taking memories in when true; a white hole sending them home when false. */
+    val inward: Boolean,
+    val x: Float,
+    val y: Float,
+    val memories: List<Pair<SkyKind, Long>>,
+) {
+    /** Seconds since it began, written a frame at a time while it plays. */
+    var seconds by mutableFloatStateOf(0f)
+
+    /** How long it lasts ([SkyHoles.duration]). */
+    val duration: Float get() = SkyHoles.duration(memories.size)
+
+    /** Each memory as a star of [layout], -1 for one that is gone. */
+    fun indicesIn(layout: SkyLayout): IntArray = IntArray(memories.size) { layout.indexOf(memories[it].first, memories[it].second) }
+}
+
 /** How far out a sun's corona reaches, as a multiple of its radius. */
 private const val CORONA = 2.4f
+
+/** How many pixels across a nebula's gas is folded at, before it is stretched over its stars. */
+private const val GAS_PX = 112
+
+/** How far a supernova's shell reaches round its star, on the screen. */
+private const val SUPERNOVA_DP = 16f
+
+/** How big a black or white hole is, on the screen. */
+private const val HOLE_DP = 11f
+
+/** A tracker smaller than this on the screen is drawn as one soft point, not its grains. */
+private const val TRACKER_GRAINS_FROM_DP = 6f
+
+/**
+ * The space behind the stars: the sky's deepest tone, then three soft glows of colour anchored to
+ * the sky ([SkyColours.glows]). Every tone is near black, so the stars keep their contrast.
+ */
+private fun DrawScope.drawSpace(
+    look: SkyColours.Look,
+    glows: List<SkyColours.Glow>,
+    origin: Offset,
+    scale: Float,
+    pan: Offset,
+) {
+    drawRect(skyColor(look.space[0]))
+    for (g in glows) {
+        val centre = Offset(
+            SkyPresentation.toScreen(g.x, origin.x, scale, pan.x),
+            SkyPresentation.toScreen(g.y, origin.y, scale, pan.y),
+        )
+        // The accent is the one tone that is not near black, so it is the faintest by far.
+        drawGlow(centre, g.radius * scale, skyColor(look.space[g.tone]), if (g.tone == 3) 0.07f else 0.6f)
+    }
+}
+
+/** A nebula's gas, stretched over its stars and turned its own way. Added, the way light is. */
+private fun DrawScope.drawGas(
+    image: ImageBitmap,
+    extent: SkyNebula.Extent,
+    turn: Float,
+    origin: Offset,
+    scale: Float,
+    pan: Offset,
+    alpha: Float,
+) {
+    if (alpha <= 0f) return
+    val cx = SkyPresentation.toScreen(extent.x, origin.x, scale, pan.x)
+    val cy = SkyPresentation.toScreen(extent.y, origin.y, scale, pan.y)
+    val half = extent.radius * scale
+    if (!SkyPresentation.isOnScreen(cx, cy, size.width, size.height, half)) return
+    val side = (half * 2f).roundToInt().coerceAtLeast(1)
+    rotate(degrees = turn * 180f / PI.toFloat(), pivot = Offset(cx, cy)) {
+        drawImage(
+            image = image,
+            srcOffset = IntOffset.Zero,
+            srcSize = IntSize(image.width, image.height),
+            dstOffset = IntOffset((cx - half).roundToInt(), (cy - half).roundToInt()),
+            dstSize = IntSize(side, side),
+            alpha = alpha.coerceIn(0f, 1f),
+            blendMode = BlendMode.Plus,
+        )
+    }
+}
+
+/**
+ * A tracker's object: one grain for each time it was logged, spread by order, its total light the
+ * same however many there are ([SkyTrackers.grainAlpha]). Too small on the screen to tell grains
+ * apart, it is one soft point.
+ */
+private fun DrawScope.drawTracker(
+    placed: SkyTrackers.Placed,
+    origin: Offset,
+    scale: Float,
+    pan: Offset,
+    seconds: Float,
+    strength: Float,
+) {
+    if (strength <= 0f) return
+    val centre = Offset(
+        SkyPresentation.toScreen(placed.x, origin.x, scale, pan.x),
+        SkyPresentation.toScreen(placed.y, origin.y, scale, pan.y),
+    )
+    val radius = placed.radius * scale
+    if (!SkyPresentation.isOnScreen(centre.x, centre.y, size.width, size.height, radius + 8.dp.toPx())) return
+    if (radius < TRACKER_GRAINS_FROM_DP.dp.toPx()) {
+        drawGlow(centre, max(radius * 1.6f, 3.dp.toPx()), SkyNightInk, 0.45f * strength)
+        return
+    }
+    val grain = FloatArray(2)
+    val points = ArrayList<Offset>(SkyTrackers.grains(placed.logs))
+    for (k in 0 until SkyTrackers.grains(placed.logs)) {
+        SkyTrackers.grain(placed, k, seconds, grain)
+        points.add(Offset(centre.x + grain[0] * scale, centre.y + grain[1] * scale))
+    }
+    drawPoints(
+        points = points,
+        pointMode = PointMode.Points,
+        color = SkyNightInk,
+        strokeWidth = 1.4.dp.toPx(),
+        cap = StrokeCap.Round,
+        alpha = (SkyTrackers.grainAlpha(placed.logs) * strength).coerceIn(0f, 1f),
+        blendMode = BlendMode.Plus,
+    )
+}
+
+/**
+ * A supernova: a dim shell round a life event the person marked as hard, and a soft heart that
+ * breathes slowly while motion is on. It marks the day and nothing more, so it is never the
+ * brightest thing near it. In the quiet sky it is a thin ring, with no glow.
+ */
+private fun DrawScope.drawSupernova(
+    centre: Offset,
+    radius: Float,
+    look: SkyColours.Look,
+    arrival: Float,
+    seconds: Float,
+    quiet: Boolean,
+) {
+    val strength = arrival.coerceIn(0f, 1f)
+    val shell = skyColor(look.supernova[0])
+    if (quiet) {
+        drawCircle(shell, radius = radius, center = centre, style = Stroke(width = 1.dp.toPx()), alpha = 0.8f * strength)
+        return
+    }
+    drawCircle(
+        brush = Brush.radialGradient(
+            0f to shell.copy(alpha = 0f),
+            0.62f to shell.copy(alpha = 0f),
+            0.82f to shell.copy(alpha = 0.26f * strength),
+            1f to shell.copy(alpha = 0f),
+            center = centre,
+            radius = radius,
+        ),
+        radius = radius,
+        center = centre,
+        blendMode = BlendMode.Plus,
+    )
+    val breath = 0.8f + 0.2f * sin(seconds * 2f * PI.toFloat() / SUPERNOVA_BREATH_SECONDS)
+    drawGlow(centre, radius * 0.5f, skyColor(look.supernova[1]), 0.22f * breath * strength)
+    drawGlow(centre, radius * 0.22f, skyColor(look.supernova[2]), 0.18f * breath * strength)
+}
+
+/** How slowly a supernova's heart breathes, in seconds. */
+private const val SUPERNOVA_BREATH_SECONDS = 4.2f
+
+/**
+ * A black hole, while it forms, takes memories in and closes: its far disk, the shadow in front of
+ * it, the ring of light round the shadow, and the near disk over all of it. At [strength] 0 there
+ * is nothing at all, which is how it closes and is gone.
+ */
+private fun DrawScope.drawBlackHole(centre: Offset, radius: Float, strength: Float, look: SkyColours.Look) {
+    if (strength <= 0f) return
+    val hot = skyColor(look.disk[0])
+    val warm = skyColor(look.disk[1])
+    val r = radius * strength
+    val diskSize = Size(r * 5.2f, r * 5.2f)
+    val diskAt = Offset(centre.x - r * 2.6f, centre.y - r * 2.6f)
+    fun disk(start: Float) {
+        withTransform({
+            rotate(degrees = DISK_TILT, pivot = centre)
+            scale(scaleX = 1f, scaleY = DISK_OPEN, pivot = centre)
+        }) {
+            drawArc(warm, start, 180f, false, diskAt, diskSize, alpha = 0.35f * strength, style = Stroke(width = r * 0.9f), blendMode = BlendMode.Plus)
+            drawArc(hot, start, 180f, false, diskAt, diskSize, alpha = 0.5f * strength, style = Stroke(width = r * 0.25f), blendMode = BlendMode.Plus)
+        }
+    }
+    disk(180f)
+    drawCircle(skyColor(SkyPalette.HOLE_SHADOW), radius = r, center = centre, alpha = strength)
+    drawCircle(hot, radius = r * 1.18f, center = centre, style = Stroke(width = 1.2.dp.toPx()), alpha = 0.7f * strength)
+    disk(0f)
+}
+
+/** How a black hole's disk is turned, in degrees, and how open it is seen, 0 edge-on to 1 face-on. */
+private const val DISK_TILT = -16f
+private const val DISK_OPEN = 0.3f
+
+/** A white hole, while it sends memories home: soft light from one point, and a thin ring round it. */
+private fun DrawScope.drawWhiteHole(centre: Offset, radius: Float, strength: Float, look: SkyColours.Look) {
+    if (strength <= 0f) return
+    val light = skyColor(look.whiteHole)
+    drawGlow(centre, radius * 3f * strength, light, 0.35f * strength)
+    drawGlow(centre, radius * strength, light, 0.8f * strength)
+    drawCircle(light, radius = radius * 1.4f * strength, center = centre, style = Stroke(width = 1.dp.toPx()), alpha = 0.5f * strength)
+}
 
 /** A star starts to be drawn as a sun once its disc would be this big, and is fully one by [SUN_FULL_DP]. */
 private const val SUN_FROM_DP = 2.5f
@@ -517,8 +880,8 @@ private fun DrawScope.drawConstellations(
         val alphas = lineStrengths[n]
         var shown = 0
         for (i in 0 until c.points.size - 1) {
-            val a = c.resolved[i]
-            val b = c.resolved[i + 1]
+            val a = c.inSight[i]
+            val b = c.inSight[i + 1]
             if (a < 0 || b < 0 || alphas[i] <= 0f) continue
             val ax = SkyPresentation.toScreen(xs[a], origin.x, scale, pan.x)
             val ay = SkyPresentation.toScreen(ys[a], origin.y, scale, pan.y)
@@ -544,7 +907,7 @@ private fun DrawScope.drawConstellations(
 
         var topX = 0f
         var topY = Float.MAX_VALUE
-        for (s in c.resolved) {
+        for (s in c.inSight) {
             if (s < 0) continue
             val sy = SkyPresentation.toScreen(ys[s], origin.y, scale, pan.y)
             if (sy < topY) {
