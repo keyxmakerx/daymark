@@ -351,14 +351,20 @@ Settled with it (2026-09-26, on #186 and #189):
 
 ## D11. Every star in the sky is a memory, and nothing in it is a reward or a verdict
 
-The maintainer approved a redesign of the Sky on 2026-10-03. Not built: #449, which holds the design.
-`docs/prototypes/sky-phone.html` shows it. Until it ships, `docs/SKY.md` describes the sky the app
-draws; where the two disagree, this decision governs the build.
+The maintainer approved a redesign of the Sky on 2026-10-03; `docs/prototypes/sky-phone.html` shows
+it and `docs/SKY.md` describes what is built. Built: every star a memory, the three forms, bands and
+clusters, the opening and a new star's birth, zoom down to suns, constellations and their photo, and
+the Key. Not built: the supernova, black and white holes, dark matter, the other objects, changing
+the colours, "Reset my sky" and tracker objects, #449. Where the prototype and this decision
+disagree, this decision governs the build.
 
 **Decision.**
 - **Every star is one memory.** There are no decorative stars; the space behind them is colour, gas
   and shadow. This reverses `docs/SKY.md` M1. A sparse stretch still never reads as a void, because
-  time runs along a river measured in memories, not days.
+  time runs along a guide measured in memories, not days.
+- **Not every sky has a river.** The seed picks the sky's form: a river on one of six courses, a run
+  of galaxies (spiral, barred, elliptical, ring or irregular, each its own size), or an open sky with
+  no line to follow. No form is the default, and skies come in different sizes.
 - **Shape follows how the record was kept, and no shape is a reward.** Steady months can form a band,
   rarely, and at most two in a sky; on-and-off weeks gather into clusters. No card says "in a row".
 - **A life event can be marked as hard, by the person only.** It is never asked, suggested or
@@ -372,13 +378,13 @@ draws; where the two disagree, this decision governs the build.
   every constellation falls out of the live sky. Each is kept as a photo of the day it was drawn,
   which is the only way the sky goes back in time. A memory put away keeps its point only in that
   photo; a deleted one leaves nothing anywhere.
-- **No two skies are alike.** A seed of the person's own shapes the river, the patterns, where
+- **No two skies are alike.** A seed of the person's own shapes the form, the patterns, where
   everything sits and every colour. Colours can be changed for 30 days from first opening the sky,
   then settle. "Reset my sky" regrows it without touching memories or constellations. A backup
   carries the seed, the colours and that date.
 - **Trackers appear only if the person chooses.** Each tracker has a "Show in my sky" switch. A shown
-  tracker is an object of its own beside the river, never on it, and more logs make it denser, never
-  brighter.
+  tracker is an object of its own beside the memories, never among them, and more logs make it
+  denser, never brighter.
 - **The Key stays, and leads with "red only means old".** It lists only what is in that person's
   sky.
 - **Any tap skips the opening.** With reduced motion, the sky opens still, on today.
@@ -387,7 +393,8 @@ draws; where the two disagree, this decision governs the build.
   for a place.
 
 **Why.** It is the maintainer's design. The safety review of 2026-10-03 added the parts about
-rewards, the supernova, the black hole closing, skipping the opening and the Key's first line.
+rewards, the supernova, the black hole closing, skipping the opening and the Key's first line. The
+maintainer added the forms on 2026-10-04: a river in every sky would make them all alike.
 
 ---
 
