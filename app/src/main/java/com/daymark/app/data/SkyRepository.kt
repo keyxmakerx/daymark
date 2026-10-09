@@ -5,9 +5,12 @@ import com.daymark.app.data.dao.EntryDao
 import com.daymark.app.data.dao.GoalDao
 import com.daymark.app.data.dao.GoalStepDao
 import com.daymark.app.data.dao.JournalDao
+import com.daymark.app.data.dao.ConstellationDao
 import com.daymark.app.data.dao.LifeEventDao
+import com.daymark.app.data.entity.Constellation
 import com.daymark.app.data.dao.ThoughtRecordDao
 import com.daymark.app.sky.Sky
+import com.daymark.app.sky.SkyConstellation
 import com.daymark.app.sky.SkyKind
 import com.daymark.app.sky.SkyRecord
 import com.daymark.app.sky.SkySeed
@@ -65,6 +68,7 @@ class SkyRepository @Inject constructor(
     private val goalStepDao: GoalStepDao,
     private val goalDao: GoalDao,
     private val lifeEventDao: LifeEventDao,
+    private val constellationDao: ConstellationDao,
     private val prefs: SharedPreferences,
 ) {
 
@@ -126,13 +130,14 @@ class SkyRepository @Inject constructor(
     }
 
     /**
-     * The decorative field's seed: derived once from the person's first record, then never again.
+     * The sky's seed: derived once from the person's first record, then never again. It decides the
+     * sky's form, its size and where every star sits (`sky/SkyForm.kt`).
      *
      * The awkward property `SkySeed` describes is the reason this is a function with a side effect
-     * rather than a value computed from [records]. A field re-derived from the current history
-     * would redraw the whole background every time anything was logged, and a place whose walls
-     * move is not a place. Worse, it would move on a *deletion* — and deletion on this surface
-     * "leaves no shape" (§2.1), which a changed background plainly is.
+     * rather than a value computed from [records]. A seed re-derived from the current history would
+     * move every star each time anything was logged, and a place whose walls move is not a place.
+     * Worse, it would move on a *deletion* — and deletion on this surface "leaves no shape" (§2.1),
+     * which a changed sky plainly is.
      *
      * So: the first time there is anything to derive from, the value is written to prefs and every
      * later call reads it back. Deleting that first record afterwards changes nothing, because
@@ -141,7 +146,7 @@ class SkyRepository @Inject constructor(
      * Before there is any history at all, [SkySeed.EMPTY_SKY] is returned and **not** persisted, so
      * the person's real first record still gets to set it.
      */
-    fun fieldSeed(records: List<SkyRecord>): Long {
+    fun skySeed(records: List<SkyRecord>): Long {
         val stored = prefs.getLong(KEY_FIELD_SEED, 0L)
         if (stored != 0L) return stored
         // The same ordering [Sky.layout] uses, so "first record" means one thing across the app and
@@ -157,11 +162,58 @@ class SkyRepository @Inject constructor(
         return stable
     }
 
+    /** The seed as stored, for a backup: 0 when none has been derived yet. */
+    fun storedSeed(): Long = prefs.getLong(KEY_FIELD_SEED, 0L)
+
+    /**
+     * A restored backup's seed, so the restored sky is the same sky. A file with no seed (0, from
+     * before backups carried one) clears it instead, and [skySeed] derives it again from the
+     * restored first record, which is what derived it in the first place.
+     */
+    fun restoreSeed(seed: Long) {
+        prefs.edit().apply { if (seed == 0L) remove(KEY_FIELD_SEED) else putLong(KEY_FIELD_SEED, seed) }.apply()
+    }
+
+    /**
+     * The newest star the person has already watched being born, as its identity
+     * ([Sky.identityOf]); 0 before the first. The opening plays a birth only for a newest star that
+     * is not this one, so each new star is born once and never again.
+     */
+    fun bornIdentity(): Long = prefs.getLong(KEY_BORN, 0L)
+
+    fun markBorn(identity: Long) {
+        prefs.edit().putLong(KEY_BORN, identity).apply()
+    }
+
+    /** The constellations the person has drawn, oldest first. */
+    fun observeConstellations(): Flow<List<Constellation>> = constellationDao.observeConstellations()
+
+    /** Keeps a constellation the person has just drawn and named. Fewer than two points keeps nothing. */
+    suspend fun addConstellation(
+        name: String,
+        madeEpochDay: Long,
+        points: List<SkyConstellation.Point>,
+        nowMillis: Long,
+    ): Long? {
+        if (points.size < SkyConstellation.MIN_POINTS) return null
+        return constellationDao.insert(
+            Constellation(
+                name = SkyConstellation.cleanName(name),
+                madeEpochDay = madeEpochDay,
+                points = SkyConstellation.encode(points.take(SkyConstellation.MAX_POINTS)),
+                createdAt = nowMillis,
+            ),
+        )
+    }
+
+    suspend fun removeConstellation(id: Long) = constellationDao.delete(id)
+
     private fun epochDayOf(epochMillis: Long, zone: ZoneId): Long =
         Instant.ofEpochMilli(epochMillis).atZone(zone).toLocalDate().toEpochDay()
 
     private companion object {
         const val KEY_FIELD_SEED = "sky_field_seed"
+        const val KEY_BORN = "sky_born_identity"
     }
 }
 

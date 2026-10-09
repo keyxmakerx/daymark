@@ -13,6 +13,8 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.time.format.TextStyle
 import java.util.Locale
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Everything the Sky's renderer would otherwise decide in a `Canvas` block where no test can reach
@@ -33,22 +35,17 @@ import java.util.Locale
 object SkyPresentation {
 
     // -------------------------------------------------------------------------------------------
-    // Zoom. One parameter, a plain scale factor over the normalised field — there are no month rows
-    // to count any more, and having two zoom numbers would let the level shown disagree with the
-    // level drawn.
+    // Zoom. One parameter, a plain scale factor over the whole sky: at 1 all of it fits the screen.
     // -------------------------------------------------------------------------------------------
 
     /**
-     * Where the Sky opens: the whole field in the viewport, which is [SkyDetail.FAR].
-     *
-     * §4 calls it "the view you leave open", and it is also the honest first frame — the shape of a
-     * sky, with nothing singled out. It is deliberately not "today, close up": the Sky has no start
-     * (§4.2), and now that position carries no time at all there is no "the present" to open on.
+     * The whole sky in the viewport, which is [SkyDetail.FAR]. The opening ends somewhere closer,
+     * on the newest star; this is where "Fit the whole sky" goes back to.
      */
     const val DEFAULT_ZOOM = 1f
 
     /**
-     * The zoom-out stop: the field exactly fills the viewport and never shrinks inside it.
+     * The zoom-out stop: the sky exactly fits the viewport and never shrinks inside it.
      *
      * Letting it shrink would put a border of nothing around the sky, and a hard edge with empty
      * space beyond it is the one shape §1 spends four pages ruling out.
@@ -56,14 +53,11 @@ object SkyPresentation {
     const val MIN_ZOOM = 1f
 
     /**
-     * The zoom-in stop.
-     *
-     * At 32 the viewport holds about a thousandth of the field, which separates all but the very
-     * closest pairs — overlap is accepted and resolved by zoom, never by moving a star
-     * (`docs/SKY.md` §3.1). Past this there is nothing further to resolve and the surface only
-     * gets emptier, which on this surface reads as absence.
+     * The zoom-in stop: far enough in that a star stops being a point of light and is drawn as a
+     * sun of its own (`DECISIONS.md` §D11). Overlap is accepted and resolved by zoom, never by
+     * moving a star (`docs/SKY.md` §3.1), and long before this every pair is apart.
      */
-    const val MAX_ZOOM = 32f
+    const val MAX_ZOOM = 400f
 
     /**
      * What "maximum contrast" is, arithmetically.
@@ -90,25 +84,121 @@ object SkyPresentation {
 
     fun clampZoom(zoom: Float): Float = zoom.coerceIn(MIN_ZOOM, MAX_ZOOM)
 
-    fun detailFor(zoom: Float): SkyDetail = SkyDetail.forZoom(clampZoom(zoom))
+    /**
+     * The narrowest stretch of sky one screen width can show, in the sky's own units. A memory's
+     * step along the sky's guide is 0.005, so at the closest a single star fills much of the screen
+     * and is drawn as a sun ([sunRadius]).
+     */
+    const val CLOSEST_SPAN = 0.004f
 
     /**
-     * How wide the whole field is drawn, in pixels.
-     *
-     * At [MIN_ZOOM] it is exactly the viewport, so a sky with five stars in it spreads across the
-     * screen and a sky with fifteen thousand is dense — **without any star's position changing**.
-     * That is the whole benefit of normalised coordinates, and it is why the layout has no idea how
-     * big anything is.
+     * How much sky is across the screen on Today, and where the opening ends: about eight
+     * memories' steps, so the newest star is a place with its neighbours round it.
      */
-    fun contentWidthPx(viewportWidthPx: Float, zoom: Float): Float =
-        viewportWidthPx * clampZoom(zoom)
+    const val TODAY_SPAN = 0.04f
 
-    /** How tall the whole field is drawn, in pixels. The counterpart of [contentWidthPx]. */
-    fun contentHeightPx(viewportHeightPx: Float, zoom: Float): Float =
-        viewportHeightPx * clampZoom(zoom)
+    /**
+     * How far in this viewport can zoom: until [CLOSEST_SPAN] fills its width. Measured against the
+     * screen rather than as a fixed factor, so a tall sky, which fits the screen narrower, can still
+     * be followed in as far as a short one.
+     */
+    fun zoomLimit(fitPx: Float, viewportWidthPx: Float): Float =
+        if (fitPx <= 0f) MIN_ZOOM else max(MIN_ZOOM, viewportWidthPx / CLOSEST_SPAN / fitPx)
+
+    /** The zoom that puts [span] of the sky across a viewport [viewportWidthPx] wide. */
+    fun zoomForSpan(span: Float, fitPx: Float, viewportWidthPx: Float): Float =
+        if (fitPx <= 0f) MIN_ZOOM else viewportWidthPx / span / fitPx
+
+    /**
+     * The zoom that frames a constellation [width] by [height] in a little under half the screen
+     * each way, with a floor so two stars drawn close together are not flown into as suns.
+     */
+    fun zoomToFrame(
+        width: Float,
+        height: Float,
+        fitPx: Float,
+        viewportWidthPx: Float,
+        viewportHeightPx: Float,
+    ): Float {
+        if (fitPx <= 0f) return MIN_ZOOM
+        val scale = min(
+            viewportWidthPx * FRAME / max(width, FRAME_MIN_SPAN),
+            viewportHeightPx * FRAME / max(height, FRAME_MIN_SPAN),
+        )
+        return scale / fitPx
+    }
+
+    private const val FRAME = 0.45f
+    private const val FRAME_MIN_SPAN = 0.012f
+
+    /**
+     * A star's radius as a sun, in pixels at [scalePx]. Real size in the sky's own units, so it
+     * grows with zoom like a place does; a life event is a bigger star, as the person's own marks
+     * are (`DECISIONS.md` §D11). Drawn only once it is bigger than the star's point of light.
+     */
+    fun sunRadius(kind: SkyKind, scalePx: Float): Float =
+        scalePx * if (kind == SkyKind.LIFE_EVENT) SUN_RADIUS * 1.7f else SUN_RADIUS
+
+    private const val SUN_RADIUS = 0.00012f
+
+    /**
+     * How strongly constellation lines and names are drawn: not until the opening has nearly
+     * finished, and fading away as the sky is followed in past a few dozen screens across, where
+     * a constellation is too big to read as one.
+     */
+    fun constellationAlpha(reveal: Float, screenWidthsAcross: Float): Float =
+        smoothstep(0.85f, 1f, reveal) * (1f - smoothstep(40f, 160f, screenWidthsAcross))
+
+    private fun smoothstep(from: Float, to: Float, x: Float): Float {
+        val u = ((x - from) / (to - from)).coerceIn(0f, 1f)
+        return u * u * (3f - 2f * u)
+    }
+
+    /**
+     * How much detail to draw, from how many screen widths the sky's full width would span. A tall
+     * sky fits the screen narrower than a short one, so detail follows what is on screen rather
+     * than the zoom factor alone.
+     */
+    fun detailFor(screenWidthsAcross: Float): SkyDetail = SkyDetail.forZoom(clampZoom(screenWidthsAcross))
+
+    /**
+     * The sky's extent in its own units: the world it was laid out in (one wide, [height] tall),
+     * and wherever a star has drifted to beyond it, with a little room round the edge.
+     */
+    class Bounds(val left: Float, val top: Float, val right: Float, val bottom: Float) {
+        val width: Float get() = right - left
+        val height: Float get() = bottom - top
+    }
+
+    fun boundsOf(xs: FloatArray, ys: FloatArray, height: Float): Bounds {
+        var left = 0f
+        var top = 0f
+        var right = 1f
+        var bottom = height.coerceAtLeast(1f)
+        for (i in xs.indices) {
+            if (xs[i] < left) left = xs[i]
+            if (xs[i] > right) right = xs[i]
+            if (ys[i] < top) top = ys[i]
+            if (ys[i] > bottom) bottom = ys[i]
+        }
+        val pad = 0.03f
+        return Bounds(left - pad, top - pad, right + pad, bottom + pad)
+    }
+
+    /** Pixels per unit of the sky at zoom 1: the whole of [bounds] fits the viewport. */
+    fun fitPx(viewportWidthPx: Float, viewportHeightPx: Float, bounds: Bounds): Float =
+        minOf(viewportWidthPx / bounds.width, viewportHeightPx / bounds.height)
+
+    /**
+     * Pixels per unit of the sky at [zoom].
+     *
+     * At [MIN_ZOOM] it is exactly the fit, so a sky with five stars in it spreads across the screen
+     * and a sky with fifteen thousand is dense, **without any star's position changing**.
+     */
+    fun scalePx(fitPx: Float, zoom: Float): Float = fitPx * clampZoom(zoom)
 
     // -------------------------------------------------------------------------------------------
-    // Pan. `pan` is where the content's top-left corner sits on screen, so screen = content + pan.
+    // Pan. `pan` is where the sky's top-left corner sits on screen, so screen = content + pan.
     // -------------------------------------------------------------------------------------------
 
     /**
@@ -133,9 +223,9 @@ object SkyPresentation {
      * with no landmarks and no labels there is nothing to navigate back by. A pinch has to be a
      * magnifying glass held over a place.
      *
-     * The arithmetic, on one axis. Screen is `content * u + pan`, so the normalised point under the
-     * focus is `u = (focus - pan) / content`. Holding it under the focus after the zoom means
-     * `focus = u * content' + pan'`, and since both content sizes are the viewport times their zoom,
+     * The arithmetic, on one axis. Screen is `content * u + pan`, so the point under the focus is
+     * `u = (focus - pan) / content`. Holding it under the focus after the zoom means
+     * `focus = u * content' + pan'`, and since both content sizes are the fit times their zoom,
      * `content' / content` is just `to / from`:
      *
      *     pan' = focus - (focus - pan) * (to / from)
@@ -153,11 +243,17 @@ object SkyPresentation {
     fun panForZoomAbout(focusPx: Float, panPx: Float, from: Float, to: Float): Float =
         if (from <= 0f) panPx else focusPx - (focusPx - panPx) * (to / from)
 
-    fun screenX(layout: SkyLayout, index: Int, contentWidthPx: Float, panXPx: Float): Float =
-        layout.x[index] * contentWidthPx + panXPx
+    /** Where a point of the sky is on screen, on one axis: [origin] is the sky's edge on that axis. */
+    fun toScreen(coordinate: Float, origin: Float, scalePx: Float, panPx: Float): Float =
+        (coordinate - origin) * scalePx + panPx
 
-    fun screenY(layout: SkyLayout, index: Int, contentHeightPx: Float, panYPx: Float): Float =
-        layout.y[index] * contentHeightPx + panYPx
+    /** The point of the sky on screen at [screenPx], on one axis. The inverse of [toScreen]. */
+    fun fromScreen(screenPx: Float, origin: Float, scalePx: Float, panPx: Float): Float =
+        (screenPx - panPx) / scalePx + origin
+
+    /** The pan that puts [coordinate] at the middle of a viewport [viewportPx] across. */
+    fun panToCentre(coordinate: Float, origin: Float, scalePx: Float, viewportPx: Float): Float =
+        viewportPx / 2f - (coordinate - origin) * scalePx
 
     /**
      * Whether a star is close enough to the viewport to be worth drawing.
@@ -191,14 +287,15 @@ object SkyPresentation {
      * accepts it, and a star nudged away from a neighbour would be a star whose position depended
      * on other records.
      *
-     * Ties go to the lower index, which is the earlier record: the arrays are in time order, so two
-     * stars exactly equidistant resolve the same way on every device and every open.
+     * [xs] and [ys] are where the stars are now, drift included. Ties go to the lower index, which
+     * is the earlier record: the arrays are in time order, so two stars exactly equidistant resolve
+     * the same way on every device and every open.
      */
     fun nearestStar(
-        layout: SkyLayout,
-        indices: IntRange,
-        contentWidthPx: Float,
-        contentHeightPx: Float,
+        xs: FloatArray,
+        ys: FloatArray,
+        bounds: Bounds,
+        scalePx: Float,
         panXPx: Float,
         panYPx: Float,
         tapXPx: Float,
@@ -207,9 +304,9 @@ object SkyPresentation {
     ): Int {
         var best = -1
         var bestDistanceSquared = maxDistancePx * maxDistancePx
-        for (i in indices) {
-            val dx = screenX(layout, i, contentWidthPx, panXPx) - tapXPx
-            val dy = screenY(layout, i, contentHeightPx, panYPx) - tapYPx
+        for (i in xs.indices) {
+            val dx = toScreen(xs[i], bounds.left, scalePx, panXPx) - tapXPx
+            val dy = toScreen(ys[i], bounds.top, scalePx, panYPx) - tapYPx
             val distanceSquared = dx * dx + dy * dy
             if (distanceSquared < bestDistanceSquared) {
                 bestDistanceSquared = distanceSquared
@@ -316,6 +413,35 @@ object SkyPresentation {
     // (`docs/SKY.md` §3.1) the top of the viewport is not a date and no part of the screen is: a
     // label there would be a claim about where you are that is not true.
     // The way to reach a particular date is the text list, which keeps its month headings.
+
+    /**
+     * A constellation's card: when it was drawn, and the memories it joins. A count of the stars
+     * the person chose to join, never of anything they did.
+     */
+    fun constellationSummary(madeEpochDay: Long, starDays: List<Long>, locale: Locale): String {
+        val drawn = "Drawn ${dateLabel(madeEpochDay, locale)}."
+        if (starDays.isEmpty()) return drawn
+        val first = starDays.min()
+        val last = starDays.max()
+        val span = if (first == last) {
+            "all from ${dateLabel(first, locale)}"
+        } else {
+            "${dateLabel(first, locale)} to ${dateLabel(last, locale)}"
+        }
+        val memories = if (starDays.size == 1) "1 memory" else "${starDays.size} memories"
+        return "$drawn $memories, $span."
+    }
+
+    /** A constellation's row in the list. */
+    fun constellationRow(madeEpochDay: Long, stars: Int, locale: Locale): String =
+        "Drawn ${dateLabel(madeEpochDay, locale)} · " + if (stars == 1) "1 star" else "$stars stars"
+
+    /** What the draw bar says as the person joins stars. */
+    fun drawingPrompt(joined: Int): String = when (joined) {
+        0 -> "Tap a star to start"
+        1 -> "1 star. Tap the next one"
+        else -> "$joined stars joined"
+    }
 
     fun dateLabel(epochDay: Long, locale: Locale): String =
         LocalDate.ofEpochDay(epochDay)

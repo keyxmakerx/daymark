@@ -12,70 +12,48 @@ package com.daymark.app.sky
  * been built, and it is built here rather than in the Compose layer because every rule below is one
  * a unit test has to be able to execute.
  *
- * ## There is no timeline, and that is the point
+ * ## One guide, measured in memories
  *
- * There are no month rows and no axis of any kind (`docs/SKY.md` §3.1). A star is scattered across
- * one open field, and *when* it is from is carried entirely by its colour and its brightness —
- * [SkyAge]'s redshift and fade.
- *
- * That became possible only once colour carried time, and it is worth doing for one reason: a row
- * per month draws a hard month as a visibly empty band, which is the exact reading this whole
- * surface exists to prevent. The uniform field ([SkyField]) existed mostly to soften that band.
- * **When position encodes nothing, there is no region that can be empty**, and the problem is gone
- * at the root instead of masked.
- *
- * Two costs come with it and both are accepted knowingly rather than engineered around: you cannot
- * find a date by looking, and two records from the same day are nowhere near each other. The text
- * list ([list]) is how a particular day is reached, which makes it matter more than it did before,
- * not less.
+ * Every star lies along one guide, in time order, and distance along it is counted in memories,
+ * never days ([SkyForm]; `DECISIONS.md` §D11, #449). The guide is a river in some skies, a run of
+ * galaxies in others and an open sky in the rest. A month with forty memories takes forty places
+ * along it and a month with two takes two, so a hard stretch takes almost no room and is never
+ * drawn as an empty reach. That is how the rule below is kept now that there is no decorative
+ * field: a quiet stretch has nowhere to show up as a gap.
  *
  * ## Determinism, which is the feature and not a property of it
  *
- * The same history draws the same sky, byte for byte, on every device and every open. Three things
- * make that true and each one is testable:
+ * The same history draws the same sky, byte for byte, on every device and every open:
  *
  *  1. **Nothing here reads a clock or a random source.** There is no `now`, no `Math.random()`, no
  *     `java.util.Random`. [SkyRandom] is a hash, written out.
- *  2. **A star's position is a hash of that star's own identity** — its kind and its anchor record
- *     id — and of nothing else. Not of its index, not of how many stars exist, not of the date, not
- *     of the mood, not of the viewport. So inserting a record in 2019 moves nothing, and adding
- *     today's check-in does not reflow the past. **A star never moves** is the property the whole
- *     surface rests on, and it is why the placement is a hash rather than a seeded stream.
+ *  2. **The sky's form is the seed's**, and a star's own scatter is a hash of its identity (its
+ *     kind and anchor record id). Where it sits along its guide is its count, so
+ *     appending newer records moves nothing already drawn; a record with an older date shifts the
+ *     later stars one place along.
  *  3. **The order records arrive in does not matter.** The layout sorts, so a `Flow` that emits
  *     rows in a different order produces the same arrays.
  *
- * A one-record difference produces a different sky, because that record is a star that the other
- * sky does not have. Both halves are asserted in `SkyTest`.
- *
- * The `seed` [layout] takes is the sky's own seed ([SkySeed]): derived once from the person's first
- * record, persisted, and never re-derived. It seeds the cluster warp ([SkyWarp]) and nothing else.
- * It is a constant of the sky and never a property of a record, so point 2 still holds exactly —
- * within one person's sky the seed cannot change, and nothing they log afterwards can move a star.
+ * The `seed` [layout] takes is the sky's own seed ([SkySeed]): derived once, persisted, and never
+ * re-derived. It decides the sky's form and size, its stream length and its clusters' shapes.
  *
  * ## The rule the layout is shaped around
  *
  * > Every period has stars. Nothing is empty, and a hard stretch is never a void.
  *
- * Logging drops when things are hard — energy, self-monitoring capacity, and shame about what the
- * record would say all push the same way — so a surface that draws data quantity draws an inverted
- * map of suffering and hands it to the person as a portrait. §1 of the design sets out the argument
- * in full. Four mechanisms make it structural rather than advisory, and three of the four live in
- * this file:
+ * Logging drops when things are hard, so a surface that draws data quantity draws an inverted map
+ * of suffering and hands it to the person as a portrait. `docs/SKY.md` §1 sets out the argument.
  *
  *  - **A day with nothing logged draws nothing.** No faint speck, no dimmed cell, no placeholder.
- *    A record produces a star and the absence of a record produces the absence of a star, with no
- *    branch anywhere that emits a marker for an empty date. This is why the layout iterates
- *    *records* and never iterates *dates*: there is no loop here that could visit an empty day, so
- *    there is nowhere for a placeholder to be added later by someone being helpful.
- *  - **No ruler, and now not even an axis.** No per-day cell geometry, no rows, no gridlines, no
- *    tick marks, and no region of the field that belongs to any stretch of time. There is no
- *    direction in which a gap in someone's history could show up as a gap on the surface.
+ *    The layout iterates *records* and never *dates*, so there is no loop here that could visit an
+ *    empty day and nowhere for a placeholder to be added later.
+ *  - **No ruler.** No per-day geometry, no axis and no gridlines. The guide is counted in memories,
+ *    so no reach of it belongs to a stretch of time with nothing in it.
  *  - **Equal presence.** [SkyGlyph] holds core radius and core alpha constant across every mood and
  *    every kind, and [SkyPalette] equalises the ramp's contrast so that constancy means what it
  *    says. The layout carries a mood level and never a rank.
- *
- * The fourth, the uniform decorative field, is [SkyField] — separate so its generator cannot see
- * data even by accident. [SkyWarp] is separate for the same reason and keeps the same discipline.
+ *  - **No shape is the good one.** A band, a cluster, a stream and a single star are placed with
+ *    the same care, and nothing here describes one as kept up or broken (§D11).
  *
  * ## What it never says
  *
@@ -125,25 +103,11 @@ object Sky {
     // Placement.
     // -------------------------------------------------------------------------------------------
 
-    /**
-     * Kinds are spaced [KIND_SALT] apart in the mixer's *input*, and the two axis salts below are
-     * smaller than that gap, so no (kind, axis) pair can land on another's hash input.
-     */
+    /** Kinds are spaced this far apart in the mixer's *input*, so no two kinds share an identity. */
     private const val KIND_SALT = 0x2F1B3C5DL
 
-    /**
-     * The two axes are drawn from two separately mixed hashes, and the salt goes into the mixer's
-     * **input** rather than onto its output.
-     *
-     * This is a real trap and not a style preference; `SkyTwinkle`'s header describes the same one.
-     * Salting afterwards — `mix(kind, id) xor SALT` — looks equivalent and is not, because
-     * [SkyRandom.unit] keeps only the top 24 bits of the hash: a salt whose own top 24 bits are
-     * zero changes nothing at all, and one whose top 24 bits are set produces exactly `1 - x`. The
-     * layout did that until 2026-09-16 and every star in the app sat on the anti-diagonal, at a
-     * measured Pearson correlation of -1.0. `SkyTest`'s decorrelation test is the guard.
-     */
-    private const val X_SALT = 0x0A17C3E5L
-    private const val Y_SALT = 0x1B29D4F6L
+    /** Goes into the mixer's input, never onto its output; `SkyTwinkle`'s header says why. */
+    private const val IDENTITY_SALT = 0x0A17C3E5L
 
     // -------------------------------------------------------------------------------------------
 
@@ -154,26 +118,16 @@ object Sky {
      * are laid out as two stars rather than silently merged, because quietly dropping one of a
      * person's records is the worse failure.
      *
-     * [seed] is the sky's persisted seed ([SkySeed]). It seeds the cluster warp and nothing else —
-     * it decides how the sky clumps, never which stars exist or which one is where relative to the
-     * others.
+     * [seed] is the sky's persisted seed ([SkySeed]). It decides the sky's form and how its
+     * stretches are drawn, never which stars exist.
      *
-     * Placement, stated once:
+     * Placement is [SkyForm.place]: star `i`, in time order, takes the `i`th place along the seed's guide,
+     * scattered by a hash of its own identity and by the rhythm of the days around it. Mood never
+     * reaches it.
      *
-     * ```
-     * hx = hash(kind, anchor id, X_SALT)   in [0, 1)
-     * hy = hash(kind, anchor id, Y_SALT)   in [0, 1)
-     * x  = SkyWarp.warpedX(hx, hy, seed)
-     * y  = SkyWarp.warpedY(hx, hy, seed)
-     * ```
-     *
-     * Nothing else is consulted. The date does not appear, and neither does the record's place in
-     * the list, the size of the list, or the mood.
-     *
-     * **Overlap is accepted and never resolved.** Two stars that hash near each other stay near each
-     * other: nudging one away would make its position depend on the other records in the sky, which
-     * is exactly the property being protected. Zoom separates them, a tap takes the nearest, and the
-     * list reaches anything.
+     * **Overlap is accepted and never resolved.** Two stars that land near each other stay near each
+     * other: nudging one away would make its position depend on its neighbours. Zoom separates them,
+     * a tap takes the nearest, and the list reaches anything.
      */
     fun layout(records: List<SkyRecord>, seed: Long): SkyLayout {
         if (records.isEmpty()) return SkyLayout.EMPTY
@@ -182,8 +136,7 @@ object Sky {
             compareBy<SkyRecord> { it.epochDay }.thenBy { it.kind.ordinal }.thenBy { it.id },
         )
 
-        val starX = ArrayList<Float>(sorted.size)
-        val starY = ArrayList<Float>(sorted.size)
+        val starIdentity = ArrayList<Long>(sorted.size)
         val starKind = ArrayList<Int>(sorted.size)
         val starMood = ArrayList<Int>(sorted.size)
         val starDay = ArrayList<Long>(sorted.size)
@@ -221,10 +174,7 @@ object Sky {
                         idCursor++
                     }
 
-                    val hx = unwarpedX(kind, anchorId)
-                    val hy = unwarpedY(kind, anchorId)
-                    starX.add(SkyWarp.warpedX(hx, hy, seed))
-                    starY.add(SkyWarp.warpedY(hx, hy, seed))
+                    starIdentity.add(identityOf(kind, anchorId))
                     starKind.add(kind.ordinal)
                     starMood.add(moodOf(sorted, from, to))
                     starDay.add(day)
@@ -235,47 +185,32 @@ object Sky {
         }
         idStart.add(idCursor)
 
-        val starCount = starX.size
+        val starCount = starIdentity.size
+        val days = LongArray(starCount) { starDay[it] }
+        val placed = SkyForm.place(days, LongArray(starCount) { starIdentity[it] }, seed)
         return SkyLayout(
-            x = FloatArray(starCount) { starX[it] },
-            y = FloatArray(starCount) { starY[it] },
+            x = placed.x,
+            y = placed.y,
             kindOrdinal = IntArray(starCount) { starKind[it] },
             moodLevel = IntArray(starCount) { starMood[it] },
-            epochDay = LongArray(starCount) { starDay[it] },
+            epochDay = days,
             idStart = IntArray(starCount + 1) { idStart[it] },
             recordIds = ids,
+            driftX = placed.driftX,
+            driftY = placed.driftY,
+            shape = placed.shape,
+            height = placed.height,
+            form = placed.form,
         )
     }
 
     /**
-     * Where a star's own identity puts it, before the sky's lumps are applied. `[0, 1)`.
-     *
-     * Public because this pair **is** the rule "a star's position is a hash of its own identity and
-     * nothing else", and a rule that cannot be evaluated on its own is a rule that gets tested
-     * through three layers of warp and grid. The two axes being independent draws is asserted
-     * directly on these; the version before 2026-09-16 returned `y = 1 - x` and nothing noticed,
-     * because there was nowhere to look at the two numbers side by side.
-     *
-     * The renderer has no use for them — it draws [SkyLayout.x] and [SkyLayout.y], which are these
-     * warped — and nothing else in the app should call them.
+     * A star's identity for its own scatter: its kind and anchor record id, and nothing else, so
+     * the same star is scattered the same way in every sky that holds it.
      */
-    fun unwarpedX(kind: SkyKind, anchorId: Long): Float = axis(kind, anchorId, X_SALT)
+    fun identityOf(kind: SkyKind, anchorId: Long): Long =
+        SkyRandom.mix(kind.ordinal.toLong() * KIND_SALT + IDENTITY_SALT, anchorId)
 
-    /** The other axis. See [unwarpedX]. */
-    fun unwarpedY(kind: SkyKind, anchorId: Long): Float = axis(kind, anchorId, Y_SALT)
-
-    /** One axis of a star's unwarped position, in `[0, 1)`. Kind and anchor id, and nothing else. */
-    private fun axis(kind: SkyKind, anchorId: Long, salt: Long): Float =
-        SkyRandom.unit(SkyRandom.mix(kind.ordinal.toLong() * KIND_SALT + salt, anchorId))
-
-    /**
-     * How many drawn positions each kind gets on one day.
-     *
-     * Starts at one per record — the ordinary case, reached without a single iteration of the loop
-     * — and gives up positions from whichever kind currently has the most until the day fits under
-     * [MAX_STARS_PER_DAY]. Ties go to the lowest ordinal so the result does not depend on iteration
-     * order. Never reduces a kind below one, so a kind that happened at all always has a star.
-     */
     private fun drawnPerKind(sorted: List<SkyRecord>, from: Int, to: Int): IntArray {
         val counts = IntArray(SkyKind.entries.size)
         for (i in from until to) counts[sorted[i].kind.ordinal]++
@@ -468,9 +403,9 @@ data class SkyRecord(
  * nothing whatever about where it is.
  */
 class SkyLayout(
-    /** `[0, 1)` across the field. */
+    /** `0..1` across the sky, where the star was placed. Add [driftX] × age for where it is now. */
     val x: FloatArray,
-    /** `[0, 1)` down the field. */
+    /** `0..`[height] down the sky, in the same units as [x]. */
     val y: FloatArray,
     /** [SkyKind.ordinal]. An ordinal and not a [SkyKind] so the array is primitive. */
     val kindOrdinal: IntArray,
@@ -479,16 +414,52 @@ class SkyLayout(
     /**
      * The local date each star was recorded on, ascending.
      *
-     * Kept although position no longer uses it, because **age is what colour is computed from**:
-     * [SkyAge.ageYears] turns this and the caller's idea of today into the redshift and the fade,
-     * which is now the only thing on the surface that says when a star is from.
+     * Age is computed from it: [SkyAge.ageYears] turns this and the caller's idea of today into the
+     * redshift, the fade and the drift. Placement reads it only through the rhythm of which days
+     * have something on them ([SkyForm.Rhythm]).
      */
     val epochDay: LongArray,
     /** `starCount + 1` boundaries into [recordIds]. */
     val idStart: IntArray,
     /** Every record id, grouped by star. A star normally owns one; see [Sky.MAX_STARS_PER_DAY]. */
     val recordIds: LongArray,
+    /** How far a star drifts per year of age, across. Decoration, never a relayout ([SkyForm]). */
+    val driftX: FloatArray = FloatArray(x.size),
+    /** How far a star drifts per year of age, down. */
+    val driftY: FloatArray = FloatArray(x.size),
+    /** [SkyForm.SHAPE_SINGLE], `SHAPE_BAND`, `SHAPE_CLUSTER` or `SHAPE_STREAM`, from dates alone. */
+    val shape: IntArray = IntArray(x.size),
+    /** How far down the sky reaches, in the units of [x]. At least [SkyForm.MIN_HEIGHT]. */
+    val height: Float = SkyForm.MIN_HEIGHT,
+    /** River, galaxies or open sky, from the seed; null in an empty sky. The Key names it. */
+    val form: SkyForm.Form? = null,
 ) {
+
+    /** Where star [index] is on [onEpochDay]: its place plus its drift for its age that day. */
+    fun xOn(index: Int, onEpochDay: Long): Float = x[index] + driftX[index] * yearsOld(index, onEpochDay)
+
+    fun yOn(index: Int, onEpochDay: Long): Float = y[index] + driftY[index] * yearsOld(index, onEpochDay)
+
+    private fun yearsOld(index: Int, onEpochDay: Long): Float =
+        ((onEpochDay - epochDay[index]).coerceAtLeast(0L)).toFloat() / SkyAge.DAYS_PER_YEAR
+
+    /** Every star's position on [onEpochDay], as two arrays, for drawing a frame. */
+    fun positionsOn(onEpochDay: Long): Array<FloatArray> = arrayOf(
+        FloatArray(starCount) { xOn(it, onEpochDay) },
+        FloatArray(starCount) { yOn(it, onEpochDay) },
+    )
+
+    /** The newest star: where the opening flies to. -1 in an empty sky. */
+    val newest: Int get() = starCount - 1
+
+    /** The index of the star that holds record [recordId] of [kind], or -1 when there is none. */
+    fun indexOf(kind: SkyKind, recordId: Long): Int {
+        for (i in 0 until starCount) {
+            if (kindOrdinal[i] != kind.ordinal) continue
+            for (r in idStart[i] until idStart[i + 1]) if (recordIds[r] == recordId) return i
+        }
+        return -1
+    }
 
     val starCount: Int get() = x.size
 

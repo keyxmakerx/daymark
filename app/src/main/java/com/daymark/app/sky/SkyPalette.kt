@@ -165,6 +165,23 @@ object SkyPalette {
      */
     const val NIGHT_INK = 0xEBE5D8
 
+    /** The white-hot middle of a star drawn as a sun, close in. Its rim is the star's own tint. */
+    const val SUN_CORE = 0xFFFBF2
+
+    /** The lines of a constellation the person drew: a cool, quiet blue, under the stars. */
+    const val CONSTELLATION_LINE = 0xC9D6FF
+
+    /** A constellation's name, beside its topmost star. */
+    const val CONSTELLATION_NAME = 0xE8E6F0
+
+    /** A star being born: its cloud warms from rose to blue as it collapses. */
+    const val BIRTH_CLOUD_FROM = 0xD9738F
+    const val BIRTH_CLOUD_TO = 0x8CA6FF
+
+    /** A star being born: the core that warms before it ignites, and the ring of light after. */
+    const val BIRTH_CORE = 0xFFE0C2
+    const val BIRTH_RING = 0xB8CCFF
+
     /**
      * The project thread's stub, the one thing on the Sky still drawn in it. Never a star core.
      *

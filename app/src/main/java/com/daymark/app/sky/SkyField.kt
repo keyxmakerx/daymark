@@ -59,9 +59,9 @@ object SkyField {
      * The field's alpha range, against [SkyPalette.NIGHT_INK].
      *
      * Deliberately far below anything a data star is drawn at. The field is the single biggest
-     * obstacle to finding real stars for someone with low vision (§7.1), which is why the renderer
-     * must be able to switch it off entirely — see [SkyOptions.fieldEnabled]. A field bright enough
-     * to be mistaken for data is not a kinder sky, it is a noisier one.
+     * obstacle to finding real stars for someone with low vision (§7.1), which is why the Sky itself
+     * no longer draws one (`DECISIONS.md` §D11: no background stars). A field bright enough to be
+     * mistaken for data is not a kinder sky, it is a noisier one.
      */
     const val ALPHA_MIN = 0.05f
     const val ALPHA_MAX = 0.16f

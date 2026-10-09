@@ -12,17 +12,17 @@ import org.junit.Test
  * 1. **It is the person's.** The same history draws the same sky, bit for bit, and a history that
  *    differs by one record draws a different one. [fingerprint] is the whole layout as a string, so
  *    "the same sky" means every coordinate, not a summary of them.
- * 2. **Nothing moves.** A star's position is fixed by its own identity — its kind and its anchor
- *    record id — so inserting a thousand records elsewhere leaves it exactly where it was. The date
- *    is not an input either (`docs/SKY.md` §3.1), so a star does not even know when it is from.
- * 3. **The field has no regions.** There are no month rows and no axis. Nothing about the sky maps
- *    a stretch of time onto a patch of screen, so there is no patch that a hard month could empty.
- *    The absence assertions here are paired with a demonstration that their detector can see a
- *    mark when there is one to see, because an assertion that nothing was found is worthless from
- *    a detector that never finds anything.
- * 4. **It looks like a sky.** The scatter is warped into clumps by [SkyWarp], and the two axes are
- *    independent draws — the version of this file before 2026-09-16 salted the hash *after* the
- *    mixer, and every star in the app sat on the line `y = 1 - x` at a correlation of -1.0.
+ * 2. **Appending moves nothing.** Every star lies along one guide, counted in memories
+ *    ([SkyForm]), so a newer record lands further along and nothing already drawn moves. A record
+ *    with an older date shifts the later stars one place along, and nothing before it. Each of
+ *    these is checked in a sky of every form: river, galaxies and open sky.
+ * 3. **A quiet stretch takes no room.** The guide is measured in memories, never days, so a long
+ *    gap takes exactly the room a short one does: none. The absence assertions here are paired with
+ *    a demonstration that their detector can see a mark when there is one to see.
+ * 4. **It looks like a sky.** No form is every sky's, every form is far from an even scatter, and a
+ *    star's own scatter is
+ *    drawn from independent hashes of its identity, never a hash salted after the mixer — the
+ *    version of this placement before 2026-09-16 did that and put every star on `y = 1 - x`.
  * 5. **It is bounded.** Ten years of daily use is a fixed, small amount of work and a fixed, small
  *    amount of memory, and no day can produce an unbounded pile of overlapping marks.
  */
@@ -35,6 +35,18 @@ class SkyTest {
     private val seed = 0x5B1E5EEDL
 
     private fun layout(records: List<SkyRecord>): SkyLayout = Sky.layout(records, seed)
+
+    /** The first seed of each form, so a property is checked in a river, galaxies and an open sky. */
+    private val everyForm: List<Long> by lazy {
+        val found = LinkedHashMap<SkyForm.Form, Long>()
+        var s = 1L
+        while (found.size < SkyForm.Form.entries.size && s < 1_000L) {
+            found.getOrPut(SkyForm.formOf(s)) { s }
+            s++
+        }
+        assertEquals("a form no seed reaches", SkyForm.Form.entries.size, found.size)
+        found.values.toList()
+    }
 
     // -------------------------------------------------------------------------------------------
     // Helpers.
@@ -136,20 +148,6 @@ class SkyTest {
         return variance / mean
     }
 
-    /**
-     * How many of [bands] horizontal strips of the field hold no star at all.
-     *
-     * This is the shape the month rows produced and the shape the scatter exists to make
-     * impossible: a band right across the surface with nothing in it, which reads as a stretch of
-     * someone's life that is missing. Strips and not cells, because a cell that happens to be empty
-     * is sky and a band that is empty is a hole.
-     */
-    private fun emptyBands(values: FloatArray, bands: Int = 12): Int {
-        val counts = IntArray(bands)
-        for (v in values) counts[(v * bands).toInt().coerceIn(0, bands - 1)]++
-        return counts.count { it == 0 }
-    }
-
     // -------------------------------------------------------------------------------------------
     // 1. It is the person's.
     // -------------------------------------------------------------------------------------------
@@ -182,13 +180,14 @@ class SkyTest {
         val b = dailyCheckIns(start, 60, firstId = 5_000L)
         assertNotEquals(fingerprint(layout(a)), fingerprint(layout(b)))
 
-        // "Visibly different", not different in the last bit: most stars must actually have moved.
+        // Different within the stretch, not in the last bit: the river is the seed's, so the same
+        // seed keeps the course, and each star's own identity moves it within its stretch.
         val la = layout(a)
         val lb = layout(b)
         assertEquals(la.starCount, lb.starCount)
         var moved = 0
         for (i in 0 until la.starCount) {
-            if (Math.abs(la.x[i] - lb.x[i]) > 0.02f || Math.abs(la.y[i] - lb.y[i]) > 0.02f) moved++
+            if (Math.abs(la.x[i] - lb.x[i]) > 0.005f || Math.abs(la.y[i] - lb.y[i]) > 0.005f) moved++
         }
         assertTrue(
             "only $moved of ${la.starCount} stars differ between two histories",
@@ -248,82 +247,67 @@ class SkyTest {
     // -------------------------------------------------------------------------------------------
 
     @Test
-    fun `a star does not move when a thousand unrelated records are added`() {
+    fun `appending a thousand newer records moves nothing already drawn`() {
         val original = dailyCheckIns(start, 30)
-        val before = layout(original)
-        val watched = indexOfRecord(before, SkyKind.CHECK_IN, 15L)
-        assertTrue("the watched record is not in the layout", watched >= 0)
-
-        // A thousand records: half of them *after* the watched star — "adding today's check-in must
-        // not reflow 2019" — and half of them *before* it, which is the case a backup restore or a
-        // late-arriving sync produces. Both directions matter, and only the second catches a layout
-        // that draws its jitter from a stream: a stream is unmoved by anything appended after the
-        // star it has already placed, so an insertion-only test would pass on a design where every
-        // star's position depends on how many came before it.
-        val later = (0 until 500).map {
-            SkyRecord(SkyKind.CHECK_IN, id = 10_000L + it, epochDay = start + 60 + it, moodLevel = 3)
+        val later = (0 until 1_000).map {
+            SkyRecord(SkyKind.CHECK_IN, id = 10_000L + it, epochDay = start + 60 + it / 2, moodLevel = 3)
         }
-        val earlier = (0 until 500).map {
-            SkyRecord(SkyKind.JOURNAL, id = 20_000L + it, epochDay = start - 500 + it)
-        }
-        val after = layout(earlier + original + later)
-        val moved = indexOfRecord(after, SkyKind.CHECK_IN, 15L)
-        assertTrue(moved >= 0)
-
-        assertEquals("x moved", before.x[watched], after.x[moved], 0f)
-        assertEquals("y moved", before.y[watched], after.y[moved], 0f)
-        // Not just the watched one: every star of the original history is exactly where it was.
-        for (record in original) {
-            val was = indexOfRecord(before, record.kind, record.id)
-            val now = indexOfRecord(after, record.kind, record.id)
-            assertEquals("record ${record.id} x", before.x[was], after.x[now], 0f)
-            assertEquals("record ${record.id} y", before.y[was], after.y[now], 0f)
+        for (seed in everyForm) {
+            val before = Sky.layout(original, seed)
+            val after = Sky.layout(original + later, seed)
+            assertEquals(original.size + later.size, after.starCount)
+            for (record in original) {
+                val was = indexOfRecord(before, record.kind, record.id)
+                val now = indexOfRecord(after, record.kind, record.id)
+                assertEquals("${after.form} record ${record.id} x", before.x[was], after.x[now], 0f)
+                assertEquals("${after.form} record ${record.id} y", before.y[was], after.y[now], 0f)
+            }
         }
     }
 
     @Test
-    fun `a star is in the same place alone as it is in a crowd`() {
-        // The index and the count are not inputs. A star laid out by itself and the same star laid
-        // out among five thousand others is the same star in the same place — which is what makes
-        // "adding a record reflows nothing" true at the root rather than in the common case.
-        val lonely = SkyRecord(SkyKind.PRACTICE, id = 77L, epochDay = start + 900, moodLevel = 4)
-        val alone = layout(listOf(lonely))
-
-        val crowd = dailyCheckIns(start, 2_000) +
-            (0 until 3_000).map { SkyRecord(SkyKind.JOURNAL, 50_000L + it, start + it / 2) } +
-            lonely
-        val among = layout(crowd)
-
-        val here = indexOfRecord(among, SkyKind.PRACTICE, 77L)
-        assertTrue(here >= 0)
-        assertEquals(5_001, among.starCount)
-        assertEquals("x", alone.x[0], among.x[here], 0f)
-        assertEquals("y", alone.y[0], among.y[here], 0f)
-        // The detector: the crowd really does contain other stars in other places, so the equality
-        // above is not two readings of an array with one entry in it.
-        assertNotEquals(alone.x[0], among.x[0])
+    fun `an older record shifts later stars along and moves nothing before it`() {
+        // Two stretches with a gap between them, and a late arrival dated inside the second: a
+        // restore, a sync, or a back-dated entry. It joins that stretch, so that stretch and every
+        // star after it may move; the first stretch must not.
+        val original = dailyCheckIns(start, 20) + dailyCheckIns(start + 30, 20, firstId = 100L)
+        val late = SkyRecord(SkyKind.JOURNAL, id = 9_000L, epochDay = start + 35)
+        for (seed in everyForm) {
+            val before = Sky.layout(original, seed)
+            val after = Sky.layout(original + late, seed)
+            var moved = 0
+            for (record in original) {
+                val was = indexOfRecord(before, record.kind, record.id)
+                val now = indexOfRecord(after, record.kind, record.id)
+                if (record.epochDay < start + 30) {
+                    assertEquals("${after.form} record ${record.id} x", before.x[was], after.x[now], 0f)
+                    assertEquals("${after.form} record ${record.id} y", before.y[was], after.y[now], 0f)
+                } else if (before.x[was] != after.x[now] || before.y[was] != after.y[now]) {
+                    moved++
+                }
+            }
+            // The detector: the later stars really did shift, so the equalities above are not a
+            // layout that ignores the late record altogether.
+            assertTrue("${after.form}: nothing after the late record moved", moved > 0)
+        }
     }
 
     @Test
-    fun `the date decides nothing about where a star is`() {
-        // Position is the record's kind and id, and the date is not in it (`docs/SKY.md` §3.1) —
-        // which is the whole reason a hard month cannot be drawn as an empty band. The same six
-        // records, moved eleven years and three days, land on exactly the same coordinates.
-        val records = SkyKind.entries.mapIndexed { i, kind ->
-            SkyRecord(kind, id = 31L + i, epochDay = start + i, moodLevel = SkyGlyph.MOOD_NONE)
-        }
+    fun `moving every date by the same amount moves nothing`() {
+        // Placement reads dates only through which days have something on them, relative to each
+        // other. The same history eleven years and three days later is the same sky.
+        val records = dailyCheckIns(start, 20) +
+            SkyKind.entries.mapIndexed { i, kind -> SkyRecord(kind, id = 300L + i, epochDay = start + 40 + i * 3) }
         val shifted = records.map { it.copy(epochDay = it.epochDay + 4_018) }
 
         val a = layout(records)
         val b = layout(shifted)
         assertEquals(records.size, a.starCount)
-        assertEquals(records.size, b.starCount)
         for (i in 0 until a.starCount) {
             assertEquals("star $i x", a.x[i], b.x[i], 0f)
             assertEquals("star $i y", a.y[i], b.y[i], 0f)
         }
-        // The detector: the dates really did change, so the equality above is a fact about the
-        // placement and not about two identical inputs.
+        // The detector: the dates really did change.
         for (i in 0 until a.starCount) assertNotEquals(a.epochDay[i], b.epochDay[i])
     }
 
@@ -373,54 +357,33 @@ class SkyTest {
     }
 
     /**
-     * The property the month rows were deleted to buy, measured.
-     *
-     * A year of daily use with one whole month missing must leave no hole. Under the old layout the
-     * missing month was a row, and a row with nothing in it was a visibly empty band across the
-     * screen; under scatter there is no band to be empty, because the month never occupied a region
-     * in the first place.
+     * The property the sky is measured in memories to buy: a long silence takes no more room than a
+     * short one. Two histories, identical but for how long the gap in the middle is, lay out
+     * identically, because the gap is never a reach of anything.
      */
     @Test
-    fun `a whole month missing leaves no hole in the field`() {
-        val year = (0 until 365).map {
-            SkyRecord(SkyKind.CHECK_IN, id = 1L + it, epochDay = start + it, moodLevel = 1 + it % 5)
+    fun `a long gap takes no more room than a short one`() {
+        fun history(gapDays: Int): List<SkyRecord> =
+            dailyCheckIns(start, 30) +
+                (0 until 30).map {
+                    SkyRecord(SkyKind.CHECK_IN, id = 500L + it, epochDay = start + 30 + gapDays + it, moodLevel = 3)
+                }
+        for (seed in everyForm) {
+            val weeks = Sky.layout(history(21), seed)
+            val months = Sky.layout(history(120), seed)
+            assertEquals(60, weeks.starCount)
+            assertEquals(60, months.starCount)
+            for (i in 0 until weeks.starCount) {
+                assertEquals("${weeks.form} star $i x", weeks.x[i], months.x[i], 0f)
+                assertEquals("${weeks.form} star $i y", weeks.y[i], months.y[i], 0f)
+            }
+            // The detector: one more memory before the second stretch DOES take room, and the stars
+            // after it move. A layout that ignored the guide would not notice either difference.
+            val oneMore = Sky.layout(history(21) + SkyRecord(SkyKind.JOURNAL, 9_999L, start + 40), seed)
+            val firstAfter = indexOfRecord(oneMore, SkyKind.CHECK_IN, 529L)
+            val wasAt = indexOfRecord(weeks, SkyKind.CHECK_IN, 529L)
+            assertTrue(oneMore.x[firstAfter] != weeks.x[wasAt] || oneMore.y[firstAfter] != weeks.y[wasAt])
         }
-        val june = SkyCalendar.epochMonth(SkyCalendar.epochDayOf(2020, 6, 1))
-        val withoutJune = year.filterNot { SkyCalendar.epochMonth(it.epochDay) == june }
-        assertEquals("June was not actually removed", 30, year.size - withoutJune.size)
-
-        val full = layout(year)
-        val holed = layout(withoutJune)
-
-        // Every surviving star is exactly where it was, so nothing closed over the gap either.
-        for (record in withoutJune) {
-            val was = indexOfRecord(full, record.kind, record.id)
-            val now = indexOfRecord(holed, record.kind, record.id)
-            assertEquals(full.x[was], holed.x[now], 0f)
-            assertEquals(full.y[was], holed.y[now], 0f)
-        }
-
-        // And no band of the field emptied, in either direction. A year with a month cut out of it
-        // still covers the whole sky, because the month was never a place.
-        assertEquals("a horizontal band of the field emptied", 0, emptyBands(holed.y))
-        assertEquals("a vertical band of the field emptied", 0, emptyBands(holed.x))
-        assertEquals(0, emptyBands(full.y))
-        assertEquals(0, emptyBands(full.x))
-
-        // The detector, and the thing this replaced. A sky with a row per month — y decided by the
-        // date — loses a whole band the moment a month goes, and the same measurement says so.
-        fun bandedY(records: List<SkyRecord>): FloatArray {
-            val months = records.map { SkyCalendar.epochMonth(it.epochDay) }
-            val firstMonth = months.min()
-            val rows = months.max() - firstMonth + 1
-            return FloatArray(records.size) { i -> (months[i] - firstMonth + 0.5f) / rows }
-        }
-        assertEquals("the detector fires on a full year of rows", 0, emptyBands(bandedY(year)))
-        assertEquals(
-            "the detector cannot see an empty month row",
-            1,
-            emptyBands(bandedY(withoutJune)),
-        )
     }
 
     @Test
@@ -447,22 +410,22 @@ class SkyTest {
     // -------------------------------------------------------------------------------------------
 
     @Test
-    fun `every star is inside the field`() {
+    fun `every star is inside the sky`() {
         val history = dailyCheckIns(start, 800) +
             (0 until 300).map { SkyRecord(SkyKind.PROJECT_STEP, 4_000L + it, start + it * 2) }
-        val laid = layout(history)
-        for (i in 0 until laid.starCount) {
-            assertTrue("x = ${laid.x[i]}", laid.x[i] >= 0f && laid.x[i] < 1f)
-            assertTrue("y = ${laid.y[i]}", laid.y[i] >= 0f && laid.y[i] < 1f)
+        for (seed in listOf(seed, 1L, 2L, 3L, 4L, 5L, 6L, 7L) + everyForm) {
+            val laid = Sky.layout(history, seed)
+            for (i in 0 until laid.starCount) {
+                assertTrue("x = ${laid.x[i]}", laid.x[i] >= 0f && laid.x[i] <= 1f)
+                assertTrue("y = ${laid.y[i]}", laid.y[i] >= 0f && laid.y[i] <= laid.height)
+            }
         }
     }
 
     @Test
     fun `the correlation detector can see a correlation`() {
         // Run first, so the decorrelation assertion below is entitled to its silence. This is the
-        // exact shape the old layout had — `between(hash xor Y_SALT, ...)` with a salt whose top 24
-        // bits are all ones gave `y = 1 - x`, measured at -1.0 and drawn as a diagonal line of
-        // stars for as long as it existed.
+        // exact shape of the pre-2026-09-16 bug: a salt applied after the mixer gave `y = 1 - x`.
         val xs = FloatArray(500) { SkyRandom.unit(SkyRandom.mix(1L, it.toLong())) }
         val mirrored = FloatArray(500) { 1f - xs[it] }
         assertEquals(-1.0, pearson(xs, mirrored), 1e-6)
@@ -470,59 +433,54 @@ class SkyTest {
     }
 
     @Test
-    fun `the two axes are drawn independently`() {
-        // Every kind, so a salt collision between an axis and a kind would show up here too.
-        val records = ArrayList<SkyRecord>()
-        var id = 1L
-        for (kind in SkyKind.entries) {
-            for (n in 0 until 1_000) {
-                records.add(SkyRecord(kind, id++, start + n, moodLevel = 1 + n % 5))
-            }
-        }
-
-        // Measured on the identity hash, which is where the rule lives and where it was broken.
-        val hx = FloatArray(records.size) { Sky.unwarpedX(records[it].kind, records[it].id) }
-        val hy = FloatArray(records.size) { Sky.unwarpedY(records[it].kind, records[it].id) }
-        val hashR = pearson(hx, hy)
-        println("  x/y correlation of the placement hash over ${records.size} stars: r = ${"%.4f".format(hashR)}")
-        // 6,000 samples put the standard error near 0.013, so 0.05 is roughly four of them: wide
-        // enough that this is not a coin toss, narrow enough that it catches anything structural.
-        assertTrue("the axes are correlated at r = $hashR", Math.abs(hashR) < 0.05)
-
-        // And on what is actually drawn. The bound is wider on purpose: SkyWarp deliberately puts
-        // structure into the field, and with only LUMPS² lattice values that structure carries a
-        // small correlation of its own, which varies with the seed and measures under 0.09 across
-        // the seeds sampled. It is still an order of magnitude away from the -1.0 the pre-2026-09-16
-        // placement produced, which is the failure this guards.
-        val laid = layout(records)
-        assertEquals(6_000, laid.starCount)
-        val drawnR = pearson(laid.x, laid.y)
-        println("  x/y correlation as drawn: r = ${"%.4f".format(drawnR)}")
-        assertTrue("the drawn axes are correlated at r = $drawnR", Math.abs(drawnR) < 0.15)
-
-        // Both axes have to use their whole range, or a correlation near zero could still be two
-        // stars' worth of variation around a single point.
-        assertTrue(laid.x.min() < 0.05f && laid.x.max() > 0.95f)
-        assertTrue(laid.y.min() < 0.05f && laid.y.max() > 0.95f)
+    fun `a star's own scatter is drawn from independent hashes`() {
+        val ids = LongArray(6_000) { Sky.identityOf(SkyKind.entries[it % SkyKind.entries.size], it.toLong()) }
+        val a = FloatArray(ids.size) { SkyForm.unit(ids[it], 6) }
+        val b = FloatArray(ids.size) { SkyForm.unit(ids[it], 7) }
+        val r = pearson(a, b)
+        // 6,000 samples put the standard error near 0.013, so 0.05 is roughly four of them.
+        assertTrue("two scatter draws are correlated at r = $r", Math.abs(r) < 0.05)
     }
 
     @Test
     fun `the sky clumps rather than spreading evenly`() {
-        val records = (0 until 6_000).map {
+        // On-and-off days, so every shape is in it: runs, streams, singles and a band.
+        val records = (0 until 6_000).filter { (it / 7) % 3 != 2 || it % 4 == 0 }.map {
             SkyRecord(SkyKind.CHECK_IN, id = 1L + it, epochDay = start + it / 3, moodLevel = 3)
         }
-        val laid = layout(records)
-        val clumped = clumpIndex(laid.x, laid.y)
 
-        // The detector: the same measurement on an unwarped scatter of the same size, which is what
-        // the placement hash produces before SkyWarp touches it.
-        val flatX = FloatArray(6_000) { SkyRandom.unit(SkyRandom.mix(0x11L, it.toLong())) }
-        val flatY = FloatArray(6_000) { SkyRandom.unit(SkyRandom.mix(0x22L, it.toLong())) }
+        // The detector: the same measurement on an even scatter of the same size.
+        val flatX = FloatArray(records.size) { SkyRandom.unit(SkyRandom.mix(0x11L, it.toLong())) }
+        val flatY = FloatArray(records.size) { SkyRandom.unit(SkyRandom.mix(0x22L, it.toLong())) }
         val flat = clumpIndex(flatX, flatY)
-
-        println("  clump index: warped ${"%.2f".format(clumped)}, unwarped ${"%.2f".format(flat)}")
         assertTrue("an even scatter measured as clumped at $flat", flat < 1.6)
-        assertTrue("the sky did not clump: $clumped", clumped > flat * 1.5)
+
+        for (seed in everyForm) {
+            val laid = Sky.layout(records, seed)
+            val clumped = clumpIndex(laid.x, FloatArray(laid.starCount) { laid.y[it] / laid.height })
+            println("  clump index: ${laid.form} ${"%.2f".format(clumped)}, even ${"%.2f".format(flat)}")
+            assertTrue("${laid.form} did not clump: $clumped", clumped > flat * 1.5)
+        }
+    }
+
+    @Test
+    fun `a river is one form among three, and skies come in different sizes`() {
+        val counts = IntArray(SkyForm.Form.entries.size)
+        var smallest = Float.MAX_VALUE
+        var largest = 0f
+        for (s in 0L until 3_000L) {
+            counts[SkyForm.formOf(s).ordinal]++
+            val size = SkyForm.sizeOf(s)
+            smallest = minOf(smallest, size)
+            largest = maxOf(largest, size)
+        }
+        for (form in SkyForm.Form.entries) {
+            val share = counts[form.ordinal] / 3_000.0
+            println("  ${form.name}: ${"%.1f".format(share * 100)}% of skies")
+            assertTrue("$form is in ${"%.3f".format(share)} of skies", share in 0.2..0.5)
+        }
+        assertTrue("the smallest sky is $smallest", smallest < 0.75f)
+        assertTrue("the largest sky is $largest", largest > 1.3f)
     }
 
     // -------------------------------------------------------------------------------------------

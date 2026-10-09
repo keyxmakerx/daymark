@@ -15,6 +15,7 @@ import com.daymark.app.data.entity.EntryPersonCrossRef
 import com.daymark.app.data.entity.Goal
 import com.daymark.app.data.entity.GoalStep
 import com.daymark.app.data.entity.JournalEntry
+import com.daymark.app.data.entity.Constellation
 import com.daymark.app.data.entity.LifeEvent
 import com.daymark.app.data.entity.AssessmentResult
 import com.daymark.app.data.entity.MoodEntry
@@ -192,6 +193,21 @@ data class BackupLifeEvent(
 )
 
 /**
+ * One `sky_constellations` row: a constellation the person drew and named. Added in v18.
+ *
+ * All five columns. [points] is carried verbatim (`sky/SkyConstellation.kt` encodes it): which
+ * memory each point joins, by kind and record id, and where its star was the day it was drawn.
+ */
+@Serializable
+data class BackupConstellation(
+    val id: Long,
+    val name: String,
+    val madeEpochDay: Long,
+    val points: String,
+    val createdAt: Long = 0,
+)
+
+/**
  * One `people` row — a person or a community. Added in v17, alongside the table.
  *
  * All seven columns, [sharedOverride] included, and that one is the reason this class has a note.
@@ -331,6 +347,13 @@ data class BackupData(
     val personNotes: List<BackupPersonNote> = emptyList(),
     val entryPeople: List<BackupEntryPerson> = emptyList(),
     val personGroupShares: List<BackupPersonGroupShare> = emptyList(),
+    /**
+     * The sky's seed and the constellations drawn in it. Added in v18, defaulted so a v17 file
+     * still reads. The seed decides the sky's form and where every star sits, so a restore that
+     * dropped it would hand the person a different sky; 0 means the file has none.
+     */
+    val skySeed: Long = 0L,
+    val constellations: List<BackupConstellation> = emptyList(),
 )
 
 /**
@@ -431,6 +454,9 @@ class BackupManager @Inject constructor(
     private val thoughtRecordDao: com.daymark.app.data.dao.ThoughtRecordDao,
     private val safetyPlanDao: com.daymark.app.data.dao.SafetyPlanDao,
     private val lifeEventDao: com.daymark.app.data.dao.LifeEventDao,
+    // The sky's seed lives in its repository's preferences; the constellations in their own table.
+    private val skyRepository: com.daymark.app.data.SkyRepository,
+    private val constellationDao: com.daymark.app.data.dao.ConstellationDao,
     private val personDao: com.daymark.app.data.dao.PersonDao,
     private val personNoteDao: com.daymark.app.data.dao.PersonNoteDao,
     // The entry -> person link, through its own DAO rather than EntryDao. That separation is the
@@ -535,6 +561,10 @@ class BackupManager @Inject constructor(
             personGroupShares = personDao.getAllGroupShares().map {
                 BackupPersonGroupShare(it.groupKey, it.shared)
             },
+            skySeed = skyRepository.storedSeed(),
+            constellations = constellationDao.getAll().map {
+                BackupConstellation(it.id, it.name, it.madeEpochDay, it.points, it.createdAt)
+            },
         )
         return json.encodeToString(data)
     }
@@ -584,7 +614,20 @@ class BackupManager @Inject constructor(
             // restore — left every delete standing and put nothing in their place: an empty
             // journal, and the entries only in the file that had just failed to load. The deletes
             // now roll back with the inserts, so a failed restore leaves what was already there.
-            ImportMode.REPLACE -> database.withTransaction { importReplace(data) }
+            //
+            // The sky's seed is a preference, outside the transaction, so it is set first and put
+            // back if the restore fails: the restored memories are then drawn in the sky they were
+            // drawn in, and a failed restore leaves the sky as it was.
+            ImportMode.REPLACE -> {
+                val seedBefore = skyRepository.storedSeed()
+                skyRepository.restoreSeed(data.skySeed)
+                try {
+                    database.withTransaction { importReplace(data) }
+                } catch (e: Throwable) {
+                    skyRepository.restoreSeed(seedBefore)
+                    throw e
+                }
+            }
             ImportMode.MERGE -> importMerge(data)
         }
         // Re-arm alarms for whatever reminder set we now hold.
@@ -668,6 +711,12 @@ class BackupManager @Inject constructor(
         lifeEventDao.deleteAll()
         data.lifeEvents.forEach {
             lifeEventDao.insert(LifeEvent(it.id, it.epochDay, it.label, it.createdAt))
+        }
+        // The constellations drawn in the restored sky, with the file's ids. Their points name
+        // records by the ids restored above, which REPLACE keeps. The seed is set in importFromJson.
+        constellationDao.deleteAll()
+        data.constellations.forEach {
+            constellationDao.insert(Constellation(it.id, it.name, it.madeEpochDay, it.points, it.createdAt))
         }
 
         /*
@@ -853,6 +902,9 @@ class BackupManager @Inject constructor(
         data.lifeEvents.forEach { e ->
             lifeEventDao.insert(LifeEvent(0, e.epochDay, e.label, e.createdAt))
         }
+        // The sky is this phone's: MERGE adds the file's memories into it and keeps its seed. The
+        // file's constellations were drawn in another sky, against that sky's positions and that
+        // file's record ids, so they are not carried into this one; REPLACE restores them whole.
 
         /*
          * People take fresh row ids, like every other MERGE insert, and their notes follow through
@@ -931,6 +983,9 @@ class BackupManager @Inject constructor(
         // in it. The bump is what stops a file written by this build from claiming to be v16: a v16
         // reader would accept it and drop every person, every note about them and every link — the
         // same silent loss v15 was bumped for with `lifeEvents` and v16 with `reachedAt`.
-        const val CURRENT_VERSION = 17
+        // v18 adds the sky: `skySeed` and `constellations`, both defaulted, so a v17 file still
+        // reads and its sky is derived again from its first record. The bump stops a v17 reader
+        // accepting a file whose constellations it would drop.
+        const val CURRENT_VERSION = 18
     }
 }

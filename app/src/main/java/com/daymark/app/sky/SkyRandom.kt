@@ -109,11 +109,10 @@ class SkyStream(seed: Long) {
  * different histories get visibly different skies with no seed involved at all, and that is the
  * part of the uniqueness that matters.
  *
- * The decorative field ([SkyField]) and the cluster warp ([SkyWarp]) are the parts that need a
- * seed, and they need one with an awkward property: derived from the person, but **never changing
- * afterwards**. A seed re-derived from the whole history would redraw the entire background every
- * time the person logged anything — and, since 2026-09-16, would move every star with it, because
- * the warp is seeded from the same value. A place whose walls move is not a place
+ * The sky's form ([SkyForm]: river, galaxies or open sky, its size and its course) is the part
+ * that needs a seed, and it needs one with an awkward property: derived from the person, but
+ * **never changing afterwards**. A seed re-derived from the whole history would move every star
+ * each time the person logged anything. A place whose walls move is not a place
  * (`docs/SKY.md` §3.1).
  *
  * So [forFirstRecord] is a *one-time* derivation: the caller computes it once, when the first
