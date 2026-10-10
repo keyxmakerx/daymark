@@ -28,7 +28,7 @@ import org.junit.Test
  *    key made from this PIN" and that only a recovery code opens them if it is forgotten. That
  *    describes a wrap which IS BUILT AND IS NOT ARMED, so the sentence is false today. Writing it
  *    early would tell somebody their journal needs their PIN when it does not, and — far worse —
- *    that a forgotten PIN costs them their entries when it does not.
+ *    send them looking for a recovery code they were never shown.
  *  - **Dropping the photos clause.** Entry photos are ordinary JPEGs in `filesDir/entry_photos` and
  *    nothing in the at-rest work touched them. "Encrypted", said over a journal whose pictures are
  *    sitting in the open, is the same inference-vs-truth gap this row exists to close.
@@ -53,8 +53,8 @@ class LockDisclosureSourceTest {
             "Not encrypted on this device. Daymark tries again each time you open it."
 
         const val PIN_COPY =
-            "The PIN guards the screen. It is not what your entries are encrypted with, so " +
-                "forgetting it does not lose them."
+            "The PIN guards the screen. There is no reset: if you forget it and cannot unlock " +
+                "with biometrics, the way back is to reinstall Daymark and restore your latest backup."
 
         /**
          * Phrasings that would say the PIN is what holds the key. Every one of them is true of the

@@ -33,10 +33,12 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
-      # Decode the release keystore from secrets when present, then build. Without a
-      # keystore the build falls back to debug signing (so forks without secrets still
-      # build). The keystore gating is done in shell — the `secrets` context is not
-      # allowed inside a GitHub `if:` conditional.
+      # A release is signed with the release key or it is not published (#224). The app's build
+      # falls back to the committed testing key when no keystore is given, which keeps build.yml
+      # green on forks; here that fallback would publish an APK that cannot update a real install
+      # and that anyone can re-sign, so a missing secret stops the job before it builds. The
+      # check is done in shell because the `secrets` context is not allowed inside `if:`, and it
+      # names which secret is missing, never what any of them holds.
       # Only the `foss` (flagship, network-free) flavor is published here. The opt-in `sync`
       # flavor (docs/COMPANION_PHONE.md) is not feature-complete and will get its own
       # release path once it is.
@@ -47,10 +49,16 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
-            export KEYSTORE_FILE="$RUNNER_TEMP/release.keystore"
+          missing=""
+          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::refusing to release — these signing secrets are not set:$missing. Add them under Settings → Secrets and variables → Actions, then push the tag again."
+            exit 1
           fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+          export KEYSTORE_FILE="$RUNNER_TEMP/release.keystore"
           ./gradlew assembleFossRelease --stacktrace
 
       # Defense in depth: re-verify here too, not just in build.yml's PR checks — a tag can be
@@ -79,8 +87,45 @@ jobs:
             exit 1
           fi
 
+      # Secrets that are set but wrong (a keystore of the testing key, say) still build. So the
+      # finished APK's signer is compared against the committed testing key and refused if they
+      # match, or if it is any Android debug certificate (#224).
+      - name: Verify the published APK is not signed with a testing key
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT}}"
+          APKSIGNER="$(find "$SDK_ROOT/build-tools" -maxdepth 2 -name apksigner -type f | sort -V | tail -1)"
+          APK=app/build/outputs/apk/foss/release/app-foss-release.apk
+          CERTS=$("$APKSIGNER" verify --print-certs "$APK")
+          SIGNER=$(echo "$CERTS" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr -d ':' | tr 'A-F' 'a-f')
+          TESTING=$(keytool -exportcert -keystore app/ci-signing/ci-debug.keystore -storepass daymark-ci-public -alias daymark-ci | sha256sum | cut -d' ' -f1)
+          # Guard against a vacuous pass, as above: no digest means nothing was compared.
+          if [ -z "$SIGNER" ] || [ -z "$TESTING" ]; then
+            echo "::error::could not read a signing certificate digest - the comparison below would pass vacuously"
+            exit 1
+          fi
+          if [ "$SIGNER" = "$TESTING" ] || echo "$CERTS" | grep -q "CN=Android Debug"; then
+            echo "::error::refusing to publish — the release APK is signed with a testing key, not the release key"
+            exit 1
+          fi
+          echo "Signed with the release key: $SIGNER"
+
+      # The fingerprint of the exact file uploaded, taken after every check has passed (#226).
+      - name: Compute the APK's SHA-256
+        run: |
+          cd app/build/outputs/apk/foss/release
+          sha256sum app-foss-release.apk > app-foss-release.apk.sha256
+          DIGEST=$(cut -d' ' -f1 app-foss-release.apk.sha256)
+          {
+            echo "**SHA-256 of app-foss-release.apk:** \`$DIGEST\`"
+            echo
+            echo "Check a download with \`sha256sum app-foss-release.apk\`; the two must match exactly."
+          } > "$RUNNER_TEMP/release-notes.md"
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          files: app/build/outputs/apk/foss/release/app-foss-release.apk
+          files: |
+            app/build/outputs/apk/foss/release/app-foss-release.apk
+            app/build/outputs/apk/foss/release/app-foss-release.apk.sha256
+          body_path: ${{ runner.temp }}/release-notes.md
           generate_release_notes: true

@@ -73,7 +73,7 @@ log is ever sent anywhere by it.
   `EncryptedSharedPreferences` store. It is never stored in plaintext. A PIN chosen now is 6–12
   digits; one set by an older version keeps working at whatever length it has.
 - **The PIN guards the screen, not the file.** It is checked against that hash and then discarded;
-  no key is made from it. So forgetting it does not destroy your entries.
+  no key is made from it, so the entries themselves are intact after a forgotten PIN.
 - **But the lock screen has no way past a forgotten PIN except biometric unlock.** Without biometrics,
   the way back today is to reinstall Daymark, which erases the app's storage, and then restore a
   backup (#146). A written-down recovery code is designed and built, but not switched on (#109).
