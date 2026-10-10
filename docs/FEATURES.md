@@ -83,7 +83,8 @@ has the rules for changing any of this.
 
 Suggestion cards are chosen by fixed rules over the person's own data
 ([ARCHITECTURE.md](ARCHITECTURE.md) §5): an offer to take a moment after a hard day, a self-check
-that is due, what tends to go with their mood, a month that differs from the last, and On this day.
+that is due, what tends to go with their mood, and On this day. No card sets one stretch of time against
+another (#203).
 Every card has a menu:
 
 - *Not right now*: gone for this visit only. Nothing is stored.
@@ -116,8 +117,8 @@ entries are stars in the Sky (§4), and reach the PDF report only when the perso
 
 ## 3. Insights
 
-- One tab with a **Week / Month / Year** switch. Always shown: the number of entries, the average
-  mood, "Days with an entry: 12 of the last 30" (days need not be in a row, and the card is absent
+- One tab with a **Week / Month / Year** switch. Always shown: the number of entries,
+  "Days with an entry: 12 of the last 30" (days need not be in a row, and the card is absent
   at zero), mood over the last 30 days, mood distribution, and average mood by activity.
 - **Week** is the last seven days and **Month** a calendar, both of plain days: every day is the
   same square with its number in ink, and each entry that day is a dot under the number in its own
@@ -127,14 +128,14 @@ entries are stars in the Sky (§4), and reach the PDF report only when the perso
   September: Good, Meh"), or "nothing recorded". Tapping a day opens its entries. **Year** is either a
   night-card of stars or a grid of coloured squares (Year in Pixels, also under More), and leads to
   **Review my year**.
-- **What goes with your mood** ranks activities that appear in at least 5 entries into "Lifts you
-  up" and "Weighs you down", and lists trackers that have values on at least 14 days with a mood.
+- **What goes with your mood** ranks activities that appear in at least 5 entries into "Logged
+  alongside higher moods" and "Logged alongside lower moods", both in ink, and lists trackers that have values on at least 14 days with a mood.
   It is computed on the phone and always labelled "association, not cause". People and communities
   never reach it (§11.2).
-- **By day of week**, **by time of day**, and **this week, month or year against the last**.
-- **In review** (a short recap written by fixed rules) and **Logging consistency** (a heatmap of
-  entries per day). Both read as grades, and "Days with an entry" is the one figure for how often
-  someone logs (#203). Not built: removing both, with nothing in their place: #354.
+- **By day of week** and **by time of day**.
+- Nothing on the tab grades what it shows: no average mood as a headline, no period set against
+  the one before it, no recap and no grid of how consistently someone logs. "Days with an entry"
+  is the one figure for how often someone logs (#203).
 - Suggestion cards sit at the top (§1.5).
 - **Review my year** is a full-screen walk-through: an introduction, one page per quarter, and a
   finale with at most two facts, the mood chosen most often (in the person's own word for it) and
@@ -343,9 +344,6 @@ More → Sleep check-ins:
   appliance, positional therapy, medication, other), then compare average sleep, efficiency, quality
   and mood before and since. It shows what changed, not why, and is not a measure of whether a
   treatment works.
-- **Sleep setup.** Saved answers about a bed partner, pets, where the phone lies, background noise
-  and sleep position. Nothing reads them, and nothing will: the sensing they were for is ruled out
-  (#212). Not built: removing the screen and its answers: #356.
 - **The breathing check** (§10).
 
 The rules:
@@ -520,7 +518,7 @@ decisions rather than a reading of the current moment: #162.
   about them, group sharing defaults, custom mood names and colours, and photos embedded in the
   file.
 - **Not in a backup:** the reception ledger, by design (§13.2); suggestion settings (#191); the
-  crisis resource, the sleep setup answers and the latest sleep self-check results; app settings and
+  crisis resource and the latest sleep self-check results; app settings and
   the PIN.
 - **Restore** (Settings → Restore backup) either replaces everything or merges the file alongside
   what is there, with fresh ids. An older backup still reads. A backup from a newer version of the
@@ -534,12 +532,17 @@ decisions rather than a reading of the current moment: #162.
   inference about the person. It carries no tick: a finished project step says "done". Every word is
   printed in dark ink or the soft ink, at least 5.77:1 on the white page. The dialog opens with "A report is a copy. Once handed over, it cannot
   be taken back." — the report's own fixed copy, not a second wording — then offers a date range (90
-  days by default), check-in notes (off by default), charts (on), and the journal for that range,
-  all of it or none, off by default. With check-in notes off, side 2 says "Check-in notes were
+  days by default), check-in notes (off by default), charts (on), and "Choose journal entries to
+  include", off by default. With check-in notes off, side 2 says "Check-in notes were
   switched off for this export." and neither of its tables has a note column; the daily check-ins
-  keep their activity tags under a head of their own. A screen for choosing journal entries one at a
-  time exists (`ui/export/JournalPickerScreen.kt`), but nothing opens it yet. Not built: a preview
-  before exporting: #198.
+  keep their activity tags under a head of their own. "Next" leads to one flow
+  (`ui/export/ReportExportScreen.kt`). With journal entries switched on, it opens the picker first
+  (`ui/export/JournalPickerScreen.kt`): every entry in the range starts unticked, entries are picked
+  one at a time or the whole range is taken as a separate choice, and the report says which (#303).
+  Then the report's pages are shown as the clinician will see them, drawn from the very file that
+  Save then copies to the place the person picks, so what was checked is what is saved (#198). Back
+  returns to the picker or to Settings. The file is made in the app's own cache and deleted when the
+  flow ends.
 - Every export is a plain, unencrypted file, made by the person's own act. Not built: encrypted
   backups and exports: #236.
 
@@ -558,7 +561,7 @@ mood opens a new entry with it chosen; nothing is saved until the person saves.
   be opened and offers to leave them or to start a new journal. It never removes them on its own.
   How it works: [ARCHITECTURE.md](ARCHITECTURE.md) §4.
 - **Not covered:** photos (#239); the settings file, which also holds custom mood names, the crisis
-  resource, the sleep setup answers and the latest sleep self-check results; and exports (§14).
+  resource and the latest sleep self-check results; and exports (§14).
 - **The app lock** is an optional PIN of 6 to 12 digits, offered during first-run setup. A PIN set
   by an older version keeps working at its length. Only a PBKDF2 hash is kept, in an encrypted
   preference store. After five wrong tries the app makes the person wait, longer each time, up to

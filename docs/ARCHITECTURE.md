@@ -105,8 +105,8 @@ Rules the code and tests hold:
 ### 3.2 Outside the database
 
 - **Preferences** (`daymark_settings`): app settings, custom mood names and colours, suggestion
-  controls, the crisis resource, the sleep setup answers and the latest sleep self-check result per
-  screener. These are not in the encrypted database.
+  controls, the crisis resource and the latest sleep self-check result per screener. The old sleep
+  setup's five answers are deleted from here on launch (`data/RetiredSleepSetup.kt`, #356). These are not in the encrypted database.
 - **The secure store** (`EncryptedSharedPreferences`): the PIN hash and the wrapped data key.
 - **Photos**: JPEGs in `filesDir/entry_photos`, written by `data/PhotoStore.kt`, which also guards
   against path traversal. Not encrypted by the app: #239.
@@ -182,11 +182,9 @@ model.
 |---|---|---|---|
 | `support_offer` | 100 | Home | A mood of Awful or Bad today |
 | `prompt_log_today` | 85 | Home | Nothing logged today; drawn as Home's check-in row, not a card |
-| `month_up` | 58 | Home, Insights | This month's average at least 8% above last month's |
 | `checkin_due` | 54 | Home, Insights | A PHQ-9, GAD-7 or WHO-5 check-in is due |
 | `on_this_day` | 44 | Home | Entries on this date in earlier years; drawn by the memories card |
 | `lift_factor` | 40 and up | Home, Insights | An activity that goes with better moods; offers to make a goal |
-| `month_down` | 40 | Insights only | This month's average at least 15% below, worded gently |
 | `drag_factor` | 35 and up | Insights only | An activity that goes with lower moods |
 
 Home shows only the top card; More for you shows the rest; Insights has its own strip. The "what
@@ -197,7 +195,7 @@ nothing; the only write is a control the person taps.
 **Suggestion controls** (what the person sees: [FEATURES.md](FEATURES.md) §1.5) are pure rules in
 `stats/SuggestionControls.kt`, stored by `data/SuggestionControlsStore.kt`. They apply per group, so
 a switch reads as plain English: support offers, self-check reminders, what goes with your mood,
-month-to-month changes, and On this day. "Show less" subtracts a fixed 12 from the rank, at most
+and On this day. "Show less" subtracts a fixed 12 from the rank, at most
 three times. Turning a group on clears the switch, the snooze and the damping together, so nothing
 can be on and still invisible. A group exists only if its switch visibly does something, and a unit
 test asserts that every dismissible kind has one. On this day draws its own card, so its screen

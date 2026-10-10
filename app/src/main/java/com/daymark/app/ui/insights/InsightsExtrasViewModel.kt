@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import java.time.DayOfWeek
-import java.time.LocalDate
 import javax.inject.Inject
 
 /** A named factor (activity or tracker) and how it relates to mood, ready for display. */
@@ -32,16 +31,10 @@ data class InsightsExtrasState(
     val trackerCorrelations: List<TrackerCorrelationRow> = emptyList(),
     val dayOfWeek: Map<DayOfWeek, Double> = emptyMap(),
     val timeOfDay: Map<MoodPatterns.TimeBucket, Double> = emptyMap(),
-    val weekCompare: MoodPatterns.PeriodComparison? = null,
-    val monthCompare: MoodPatterns.PeriodComparison? = null,
-    val yearCompare: MoodPatterns.PeriodComparison? = null,
-    /** Entries logged per day (for the consistency heatmap). */
-    val entriesByDay: Map<LocalDate, Int> = emptyMap(),
-    val review: String = "",
 )
 
 /**
- * Computes the richer Insights sections (correlations, weekday/time patterns, period comparisons)
+ * Computes the richer Insights sections (correlations, weekday/time patterns)
  * from data already stored locally. All outputs are associations, never causes — the UI labels
  * them as such and the min-sample gates below avoid showing noise from too little data.
  */
@@ -100,50 +93,12 @@ class InsightsExtrasViewModel @Inject constructor(
             entries.map { DateUtils.toLocalDateTime(it.entry.dateTime).hour to it.entry.moodLevel },
         )
 
-        // --- Period comparisons (current window vs the one before it) ---
-        val today = LocalDate.now()
-        fun compareWindow(days: Long): MoodPatterns.PeriodComparison {
-            val curStart = today.minusDays(days - 1)
-            val prevStart = today.minusDays(days * 2 - 1)
-            val cur = ArrayList<Int>()
-            val prev = ArrayList<Int>()
-            for (e in entries) {
-                val d = DateUtils.toLocalDate(e.entry.dateTime)
-                when {
-                    !d.isBefore(curStart) && !d.isAfter(today) -> cur.add(e.entry.moodLevel)
-                    !d.isBefore(prevStart) && d.isBefore(curStart) -> prev.add(e.entry.moodLevel)
-                }
-            }
-            return MoodPatterns.periodCompare(cur, prev)
-        }
-
-        // --- Consistency heatmap + period review ---
-        val entriesByDay = entries.groupingBy { DateUtils.toLocalDate(it.entry.dateTime) }.eachCount()
-        val daysWithEntry = com.daymark.app.stats.MoodStats
-            .daysWithEntryInLast30(entriesByDay.keys, today)
-        val upRows = rows(up)
-        val review = com.daymark.app.stats.PeriodReview.build(
-            com.daymark.app.stats.PeriodReview.Inputs(
-                totalEntries = entries.size,
-                avgMood = entries.map { it.entry.moodLevel }.average(),
-                bestDay = dow.maxByOrNull { it.value }?.key,
-                worstDay = dow.minByOrNull { it.value }?.key,
-                topFactorUp = upRows.firstOrNull()?.name,
-                daysWithEntryLast30 = daysWithEntry,
-            ),
-        )
-
         return InsightsExtrasState(
-            topUp = upRows,
+            topUp = rows(up),
             topDown = rows(down),
             trackerCorrelations = trackerCorrs,
             dayOfWeek = dow,
             timeOfDay = tod,
-            weekCompare = compareWindow(7),
-            monthCompare = compareWindow(30),
-            yearCompare = compareWindow(365),
-            entriesByDay = entriesByDay,
-            review = review,
         )
     }
 

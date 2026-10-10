@@ -56,7 +56,6 @@ class SuggestionControlsTest {
                 loggedToday = false,
                 topLift = Signals.FactorLift("Walk", 0.9, 12),
                 topDrag = Signals.FactorLift("Late night", -0.8, 11),
-                monthDeltaPct = 20.0,
                 dueCheckin = "WHO-5",
                 onThisDayNote = "a note",
             ),
@@ -65,18 +64,44 @@ class SuggestionControlsTest {
             .map { it.kind }
             .filter { SuggestionControls.groupKeyOf(it) == null }
         assertEquals(emptyList<String>(), ungrouped)
-        // The month-down rule can't co-occur with month-up, so cover it separately.
-        val down = Signals.build(
+        // A second, quieter day: logged today with nothing due, so the check runs over a
+        // different mix of cards.
+        val logged = Signals.build(
             Signals.Inputs(
                 totalEntries = 40, avgMood = 3.0, moodTodayLevel = 3, loggedToday = true,
-                topLift = null, topDrag = null,
-                monthDeltaPct = -30.0, dueCheckin = null,
+                topLift = null, topDrag = Signals.FactorLift("Late night", -0.8, 11),
+                dueCheckin = null,
                 onThisDayNote = null,
             ),
         )
-        down.controllable().forEach {
+        assertTrue(logged.controllable().isNotEmpty())
+        logged.controllable().forEach {
             assertTrue(it.kind, SuggestionControls.groupKeyOf(it.kind) != null)
         }
+    }
+
+    /**
+     * A kind no rule emits any more, such as the month cards (#360), belongs to no group and passes
+     * through the filter untouched rather than failing; and a state stored under the old group's
+     * key changes nothing.
+     */
+    @Test
+    fun aRetiredKindOrGroupIsIgnored() {
+        assertNull(SuggestionControls.groupKeyOf("month_up"))
+        assertNull(SuggestionControls.groupKeyOf("month_down"))
+        assertTrue(SuggestionControls.GROUPS.none { it.key == "periods" })
+        val orphan = Signals.Signal(
+            kind = "month_up",
+            category = Signals.Category.Insight,
+            score = 10.0,
+            title = "t",
+            body = "b",
+            action = null,
+            dismissible = true,
+            surfaces = setOf(Signals.Surface.Insights),
+        )
+        val controls = SuggestionControls.Controls(mapOf("periods" to SuggestionControls.State(off = true)))
+        assertEquals(listOf(orphan), SuggestionControls.filter(listOf(orphan), controls, 0L))
     }
 
     @Test
