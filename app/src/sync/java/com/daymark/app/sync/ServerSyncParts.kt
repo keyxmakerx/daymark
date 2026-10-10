@@ -3,6 +3,7 @@ package com.daymark.app.sync
 import android.os.SystemClock
 import com.daymark.synccrypto.ClinicianCode
 import com.daymark.synccrypto.ClinicianInvites
+import com.daymark.synccrypto.ClinicianItems
 import com.daymark.synccrypto.ClinicianPairing
 import com.daymark.synccrypto.HttpsTransport
 import com.daymark.synccrypto.PhoneClock
@@ -46,6 +47,9 @@ class ServerSyncParts @Inject constructor() {
 
     /** The owner's side of pairing with a clinician (#174). */
     val clinicianPairing: ClinicianPairing by lazy { ClinicianPairing(sodium, transport, PhoneClocks) }
+
+    /** What clinicians send the owner, fetched and opened (#177). */
+    val clinicianItems: ClinicianItems by lazy { ClinicianItems(sodium, transport, PhoneClocks) }
 
     /** Wall time, for when a clinician's keys were recorded. */
     val clock: PhoneClock get() = PhoneClocks

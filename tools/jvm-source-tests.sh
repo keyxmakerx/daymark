@@ -97,6 +97,7 @@ com.daymark.app.ui.HairlineFillSourceTest
 com.daymark.app.export.ReportInkSourceTest
 com.daymark.app.ui.settings.ServerSyncSeamSourceTest
 com.daymark.app.ui.settings.CliniciansScreenSourceTest
+com.daymark.app.ui.settings.InboxScreenSourceTest
 com.daymark.app.notifications.NotificationPrivacySourceTest"
 SOURCES="$REPO/app/src/test/java/com/daymark/app/data/PeopleSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/TimedOfferSchemaTest.kt
@@ -115,6 +116,7 @@ $REPO/app/src/test/java/com/daymark/app/ui/HairlineFillSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/export/ReportInkSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/settings/ServerSyncSeamSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/settings/CliniciansScreenSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/ui/settings/InboxScreenSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/notifications/NotificationPrivacySourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/backup/RepoFile.kt
 $REPO/app/src/test/java/com/daymark/app/ui/SourceText.kt"

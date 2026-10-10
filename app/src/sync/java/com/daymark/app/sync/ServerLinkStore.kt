@@ -23,6 +23,8 @@ import javax.inject.Singleton
  * - THE OWNER'S PUBLIC PAIRING KEYS, which opening the sync key also yields: what approving a
  *   clinician seals back to them (#174). Public, but kept sealed with the rest, and forgotten with the
  *   link, since only the passphrase that opened them can show they are the owner's.
+ * - THE OWNER'S PRIVATE BOX KEY, which opens the game plans and assignments clinicians seal to the
+ *   owner (#177). Secret, so kept exactly as the sync key is, and forgotten with the link.
  * - THE LINEAGE: the name of this phone's copies on the server, made once for this phone and kept on
  *   its own, so pairing again sends to the same one.
  *
@@ -73,8 +75,21 @@ class ServerLinkStore @Inject constructor(
     @Synchronized
     fun forgetLink() {
         // commit(), not apply(): a phone told it was disconnected must not find the pairing again.
-        securePrefs.edit().remove(LINK).remove(OWNER_KEYS).commit()
+        securePrefs.edit().remove(LINK).remove(OWNER_KEYS).remove(OWNER_BOX_SECRET).commit()
     }
+
+    /**
+     * Keeps the private half of the owner's box key, which opens what clinicians seal to them (#177).
+     * Kept as the sync key is kept, and forgotten with the link. The caller still owns [secret], and wipes it.
+     */
+    @Synchronized
+    fun keepOwnerBoxSecret(secret: ByteArray) {
+        sealToPrefs(OWNER_BOX_SECRET, OWNER_BOX_SECRET_AAD, secret)
+    }
+
+    /** A copy of the owner's private box key, which the caller wipes; null until the passphrase has opened it here. */
+    @Synchronized
+    fun ownerBoxSecret(): ByteArray? = openFromPrefs(OWNER_BOX_SECRET, OWNER_BOX_SECRET_AAD)?.takeIf { it.size == BOX_SECRET_BYTES }
 
     /** Keeps the owner's public pairing keys, which the passphrase opened with the sync key. */
     @Synchronized
@@ -123,8 +138,11 @@ class ServerLinkStore @Inject constructor(
         const val LINK = "server_link_v1"
         const val LINEAGE = "server_lineage_v1"
         const val OWNER_KEYS = "server_owner_keys_v1"
+        const val OWNER_BOX_SECRET = "server_owner_box_secret_v1"
+        const val BOX_SECRET_BYTES = 32
         val LINK_AAD = "daymark.server-link.v1".toByteArray(Charsets.US_ASCII)
         val LINEAGE_AAD = "daymark.server-lineage.v1".toByteArray(Charsets.US_ASCII)
         val OWNER_KEYS_AAD = "daymark.server-owner-keys.v1".toByteArray(Charsets.US_ASCII)
+        val OWNER_BOX_SECRET_AAD = "daymark.server-owner-box-secret.v1".toByteArray(Charsets.US_ASCII)
     }
 }

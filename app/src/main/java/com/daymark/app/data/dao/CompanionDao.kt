@@ -65,6 +65,10 @@ interface CompanionDao {
     @Query("SELECT MAX(version) FROM game_plans WHERE lineageId = :lineageId")
     suspend fun highestAcceptedGamePlanVersion(lineageId: String): Long?
 
+    /** Who signed the accepted versions of [lineageId]: empty when none is accepted (#177). */
+    @Query("SELECT DISTINCT authorFingerprint FROM game_plans WHERE lineageId = :lineageId")
+    suspend fun gamePlanAuthors(lineageId: String): List<String>
+
     // --- Assignments ---
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
@@ -73,6 +77,23 @@ interface CompanionDao {
     /** The highest version of [lineageId] already accepted, or null if none is. */
     @Query("SELECT MAX(version) FROM assignments WHERE lineageId = :lineageId")
     suspend fun highestAcceptedAssignmentVersion(lineageId: String): Long?
+
+    /** Who signed the accepted versions of [lineageId] (#177). */
+    @Query("SELECT DISTINCT authorFingerprint FROM assignments WHERE lineageId = :lineageId")
+    suspend fun assignmentAuthors(lineageId: String): List<String>
+
+    // --- Reading what was accepted (#177) ---
+
+    /** The newest accepted version of every plan, newest issued first. */
+    @Query("SELECT * FROM game_plans g WHERE version = (SELECT MAX(version) FROM game_plans WHERE lineageId = g.lineageId) ORDER BY issuedAt DESC")
+    suspend fun latestGamePlans(): List<GamePlan>
+
+    @Query("SELECT * FROM game_plan_items WHERE lineageId = :lineageId AND version = :version ORDER BY position")
+    suspend fun gamePlanItems(lineageId: String, version: Long): List<GamePlanItem>
+
+    /** The newest accepted version of every assignment, newest issued first. */
+    @Query("SELECT * FROM assignments a WHERE version = (SELECT MAX(version) FROM assignments WHERE lineageId = a.lineageId) ORDER BY issuedAt DESC")
+    suspend fun latestAssignments(): List<AcceptedAssignment>
 
     // --- Erasing ---
 

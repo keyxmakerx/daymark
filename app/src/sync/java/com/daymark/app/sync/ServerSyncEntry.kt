@@ -25,12 +25,17 @@ object ServerSyncEntry : ServerSyncDoor {
 
     @Composable
     override fun Screen(onBack: () -> Unit) {
-        // The Clinicians screens (#174) open from inside this one, so they share its door and its route.
-        var clinicians by rememberSaveable { mutableStateOf(false) }
-        if (clinicians) {
-            CliniciansScreen(onBack = { clinicians = false })
-        } else {
-            ServerSyncScreen(onBack = onBack, onClinicians = { clinicians = true })
+        // The Clinicians screens (#174) and the inbox (#177) open from inside this one, so they share
+        // its door and its route.
+        var page by rememberSaveable { mutableStateOf(SYNC) }
+        when (page) {
+            CLINICIANS -> CliniciansScreen(onBack = { page = SYNC })
+            INBOX -> InboxScreen(onBack = { page = SYNC })
+            else -> ServerSyncScreen(onBack = onBack, onClinicians = { page = CLINICIANS }, onInbox = { page = INBOX })
         }
     }
+
+    private const val SYNC = "sync"
+    private const val CLINICIANS = "clinicians"
+    private const val INBOX = "inbox"
 }

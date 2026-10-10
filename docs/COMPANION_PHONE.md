@@ -52,7 +52,7 @@ libsodium and no emulator; the `sync` flavour wires it to the Android binding
 | Base64: RFC 4648 §5, URL-safe, no padding | everywhere | `SyncCrypto.kt` (plain `java.util.Base64`, because lazysodium's own helper is standard base64) | Yes |
 | CPace (CPACE-RISTRETTO255-SHA512) | `pairing/cpace.ts` | `CpaceCrypto.kt` | Yes |
 | Pairing channel identifier and envelopes | `pairing/relay.ts`, `pairing/envelope.ts`, `pairing/payloads.ts` | `CpaceCrypto.kt` (`channelIdentifier`), `PairingEnvelope.kt`, `PairingPayloads.kt`, pinned to the web's bytes in `OwnerPairingVectorTest.kt` and `PairingPayloadsTest.kt` | The identifier, envelopes, payloads, the owner's run (`ClinicianPairing.kt`), invitations (`ClinicianInvites.kt`) and the ceremony (`ClinicianCeremony.kt`): yes. Its screens: yes (`CliniciansScreen.kt`) |
-| Assignment and game-plan opening: seal-open, unpad (an envelope that opens to `{` was sealed unpadded before #315 and is read as it is), then verify against the pinned clinician key, context and recipient fingerprint | `assignments/crypto.ts`, `therapist/gamePlan.ts` | — | No: #177 |
+| Assignment and game-plan opening: seal-open, unpad (an envelope that opens to `{` was sealed unpadded before #315 and is read as it is), then verify against the pinned clinician key, context and recipient fingerprint | `assignments/crypto.ts`, `therapist/gamePlan.ts` | `ClinicianItems.kt`, opening the web's own sealed items in `ClinicianItemsTest.kt`; the signed author must also be the pinned key's fingerprint | Yes |
 | Share sealing, format 2: padded, and signed over the transcript, the encrypted body and the sealed key, at the version the share is published as and with the time it was sealed | `share/sharecrypto.ts` | — | No: #174 |
 
 The owner's key pair is derived from the master (subkeys 3 and 4), so the phone stores no separate
@@ -176,7 +176,17 @@ accept or decline.
   Whether it should is #386.
 - **Settings** apply only for the allowlisted keys (`visibleSelfChecks`, `reminderTime`,
   `reminderCadence`, `theme`), never PIN, lock, encryption or network settings.
-- Not built: opening and verifying items, the inbox, and anything that writes these tables: #177.
+- **The inbox is built** (`InboxScreen.kt`, `InboxViewModel.kt`; Settings → Sync with your server →
+  From your clinicians). Only a tap checks. Each approved clinician's `gameplans` and `assignments`
+  channels are listed and fetched with the relationship's sign-in key as a signed header; the grant is
+  read from `grants` and believed only under the owner's own signature, for the pinned clinician. A
+  plan or suggestion is written into these tables only from Accept, or for a suggestion
+  `shouldAutoApply` allows; a version at or below one accepted is not offered again, and a lineage
+  already accepted from another clinician is refused. Decline is kept on the phone, sealed, and
+  sends nothing. An item that fails a check is shown and can only be dismissed. Opening needs the
+  owner's private box key, which the phone keeps sealed by its keystore once the passphrase has
+  opened the key, and wipes from memory after each check. `InboxScreenSourceTest` holds these.
+  Settings are never applied here, because the app has none of the allowlisted keys yet.
   The owner's console on the web keeps an accept or a decline in its lane (SYNC_PROTOCOL.md §1.4);
   the phone taking it in is #346.
 
@@ -211,7 +221,7 @@ reproducible build (#229); the offline app's listing never carries it (#194). No
 2. Snapshot push and pull, signed: **Built** (#432, #168). Choosing automatically: #344.
 3. The schema version with the game-plan, progress, assignment and result tables, and the assignment
    checks. **Built** (v19).
-4. Inbound assignments and game plans, with the acceptance inbox: #177.
+4. Inbound assignments and game plans, with the acceptance inbox. **Built.**
 5. The owner's half of pairing from the phone: **Built** (Clinicians). Grants and shares from the phone, and
    the connections screen: #174.
 6. The anti-rollback watermark (#179), the audit anchor (#182), the heartbeat (#185), signed
