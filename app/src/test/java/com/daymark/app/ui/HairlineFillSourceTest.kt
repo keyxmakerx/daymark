@@ -29,9 +29,8 @@ import org.junit.Test
  *
  * Words drawn by a composable of our own called on the fill, which draw wherever they are defined;
  * a fill reaching a ground through a parameter or another file; and the colour Material picks when a
- * `Surface` on the fill names none. That last one lands on the full ink in both paper schemes,
- * because Material matches the fill's value to `primaryContainer`, which is the hairline too, before
- * `surfaceVariant`; the safety plan's lines rely on it. The screens are checked by hand in both themes.
+ * `Surface` on the fill names none. So the safety plan's chip names its `contentColor`, the full ink,
+ * and a test below holds it to that. The screens are checked by hand in both themes.
  */
 class HairlineFillSourceTest {
 
@@ -352,5 +351,26 @@ class HairlineFillSourceTest {
             "Surface(color = MaterialTheme.colorScheme.surfaceVariant) { Text(\"onSurfaceVariant\", color = MaterialTheme.colorScheme.onSurface) }",
         )
         for (shape in notSoftWords) assertEquals("the check rules on this:\n$shape", 0, scan(shape).found.size)
+    }
+
+    @Test
+    fun `the safety plan's chip names the full ink for its lines rather than leaving it to Material`() {
+        val safety = repoFile(SAFETY).readText()
+        val chip = safety.indexOf("private fun RemovableChip")
+        assertTrue("RemovableChip is not in the safety plan", chip >= 0)
+        val surface = safety.indexOf("Surface(", chip)
+        val args = safety.substring(surface, closing(safety, surface + "Surface".length))
+        assertTrue(
+            "the chip no longer names the full ink as its content colour",
+            Regex("""contentColor\s*=\s*MaterialTheme\.colorScheme\.onSurface\b(?!Variant)""").containsMatchIn(args),
+        )
+
+        // Positive control: with the line taken out the same match fails.
+        val planted = args.replace(Regex("""contentColor\s*=[^\n]*\n"""), "")
+        assertTrue("nothing was planted", planted != args)
+        assertTrue(
+            "the check cannot see a chip with no content colour",
+            !Regex("""contentColor\s*=\s*MaterialTheme\.colorScheme\.onSurface\b(?!Variant)""").containsMatchIn(planted),
+        )
     }
 }

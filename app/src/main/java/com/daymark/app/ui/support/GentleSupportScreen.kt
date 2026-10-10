@@ -18,7 +18,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
+import com.daymark.app.ui.components.DaymarkSwitch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -73,7 +73,7 @@ fun GentleSupportScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text("Offer gentle support", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-                    Switch(checked = enabled, onCheckedChange = viewModel::setEnabled)
+                    DaymarkSwitch(checked = enabled, onCheckedChange = viewModel::setEnabled)
                 }
             }
 

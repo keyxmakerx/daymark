@@ -26,6 +26,12 @@ private val LightPaperColors = lightColorScheme(
     onSecondaryContainer = InkText,
     tertiary = InkFaint,
     onTertiary = InkText,
+    // The time picker's chosen AM or PM half is tertiaryContainer, and a snackbar's action ("Undo") is
+    // inversePrimary on inverseSurface. Material fills either one a scheme leaves unset with its own
+    // pink or lavender (#430).
+    tertiaryContainer = Hairline,
+    onTertiaryContainer = InkText,
+    inversePrimary = InkAccentDark,
     background = PaperBg,
     onBackground = InkText,
     surface = PaperSheet,
@@ -64,6 +70,9 @@ private val DarkPaperColors = darkColorScheme(
     onSecondaryContainer = InkTextDark,
     tertiary = InkFaintDark,
     onTertiary = InkTextDark,
+    tertiaryContainer = HairlineDark,
+    onTertiaryContainer = InkTextDark,
+    inversePrimary = InkAccent,
     background = PaperBgDark,
     onBackground = InkTextDark,
     surface = PaperSheetDark,

@@ -255,6 +255,9 @@ private fun RemovableChip(text: String, onRemove: () -> Unit) {
     Surface(
         shape = RoundedCornerShape(percent = 50),
         color = MaterialTheme.colorScheme.surfaceVariant,
+        // The lines are words on the hairline fill, so they take the full ink by name and not by the
+        // accident of which container role Material matches the fill to (#430).
+        contentColor = MaterialTheme.colorScheme.onSurface,
         border = BorderStroke(HairlineWidth, MaterialTheme.colorScheme.outline),
     ) {
         Row(

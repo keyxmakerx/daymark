@@ -21,7 +21,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Switch
+import com.daymark.app.ui.components.DaymarkSwitch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.AlertDialog
@@ -193,7 +193,7 @@ fun SettingsScreen(
                 )
             },
             trailingContent = {
-                Switch(
+                DaymarkSwitch(
                     checked = state.lockEnabled,
                     onCheckedChange = { enabled ->
                         if (enabled) showPinDialog = true else viewModel.disableLock()
@@ -206,7 +206,7 @@ fun SettingsScreen(
                 headlineContent = { Text("Unlock with biometrics") },
                 supportingContent = { Text("Confirm your fingerprint/face to turn this on") },
                 trailingContent = {
-                    Switch(
+                    DaymarkSwitch(
                         checked = state.biometricEnabled,
                         onCheckedChange = { enable ->
                             if (!enable) {
@@ -314,7 +314,7 @@ fun SettingsScreen(
             headlineContent = { Text("Dynamic color") },
             supportingContent = { Text("Use wallpaper-based colors (Android 12+)") },
             trailingContent = {
-                Switch(checked = state.dynamicColor, onCheckedChange = viewModel::setDynamicColor)
+                DaymarkSwitch(checked = state.dynamicColor, onCheckedChange = viewModel::setDynamicColor)
             },
         )
 
@@ -502,7 +502,7 @@ private fun PdfOptionsDialog(
 private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Text(label, modifier = Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onChange)
+        DaymarkSwitch(checked = checked, onCheckedChange = onChange)
     }
 }
 

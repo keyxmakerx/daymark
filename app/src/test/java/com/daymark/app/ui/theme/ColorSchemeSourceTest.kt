@@ -416,4 +416,118 @@ class ColorSchemeSourceTest {
         assertNotEquals("nothing was planted", css, planted)
         assertEquals("the web parser cannot see a changed --c-clay-day", other, webValue(planted, "--c-clay-day"))
     }
+
+    /** The roles Material fills with its own pink or lavender when a scheme leaves them unset (#430). */
+    private val PAINTED_ROLES = listOf("inversePrimary", "tertiaryContainer", "onTertiaryContainer")
+
+    private fun unsetRoles(themeCode: String, roles: List<String>): List<String> {
+        val all = assignments(themeCode)
+        return listOf("lightColorScheme", "darkColorScheme").flatMap { call ->
+            val set = all.filter { it.call == call }.map { it.role }
+            roles.filter { role -> set.count { it == role } != 1 }.map { role -> "$call: $role" }
+        }
+    }
+
+    @Test
+    fun `both schemes set the roles Material would paint lavender or pink`() {
+        val unset = unsetRoles(theme, PAINTED_ROLES)
+        assertTrue(
+            "The Undo action (inversePrimary) and the time picker's AM or PM (tertiaryContainer) take " +
+                "Material's own colours when unset (#430). Not set exactly once:\n" + unset.joinToString("\n"),
+            unset.isEmpty(),
+        )
+        // Positive control: the light scheme without inversePrimary is seen.
+        val planted = themeSource.replaceFirst(Regex("""\n[ \t]*inversePrimary\s*=\s*\w+,"""), "")
+        assertNotEquals("nothing was planted", themeSource, planted)
+        assertTrue(unsetRoles(withoutComments(planted), PAINTED_ROLES).contains("lightColorScheme: inversePrimary"))
+    }
+
+    @Test
+    fun `an Undo and a chosen AM or PM are legible`() {
+        val decls = declarations(colors)
+        val all = assignments(theme)
+        for (call in listOf("lightColorScheme", "darkColorScheme")) {
+            val landed = all.filter { it.call == call }.mapNotNull { a -> land(a.expression, decls).rgb?.let { a.role to it } }.toMap()
+            val undo = contrast(landed.getValue("inversePrimary"), landed.getValue("inverseSurface"))
+            assertTrue("$call: Undo on the snackbar measures ${"%.2f".format(undo)}:1", undo >= WORDS_FLOOR)
+            val half = contrast(landed.getValue("onTertiaryContainer"), landed.getValue("tertiaryContainer"))
+            assertTrue("$call: the chosen AM or PM measures ${"%.2f".format(half)}:1", half >= WORDS_FLOOR)
+        }
+    }
+
+    /** What a mark needs against what it sits on (WCAG 2, non-text contrast). */
+    private val MARK_FLOOR = 3.0
+
+    private val SWITCH = "app/src/main/java/com/daymark/app/ui/components/DaymarkSwitch.kt"
+
+    /** The scheme role each `unchecked…Color` of the switch is given, or null where one is not. */
+    private fun switchRoles(source: String): Map<String, String?> {
+        val code = withoutComments(source)
+        return listOf("uncheckedTrackColor", "uncheckedThumbColor", "uncheckedBorderColor").associateWith { name ->
+            Regex("""\b$name\s*=\s*MaterialTheme\.colorScheme\.(\w+)""").find(code)?.groupValues?.get(1)
+        }
+    }
+
+    /** Every pair of an off switch's parts, or part and ground, under [MARK_FLOOR], a line each. */
+    private fun faintSwitch(source: String): List<String> {
+        val roles = switchRoles(source)
+        val decls = declarations(colors)
+        val all = assignments(theme)
+        val found = ArrayList<String>()
+        for (call in listOf("lightColorScheme", "darkColorScheme")) {
+            val landed = all.filter { it.call == call }.associate { it.role to land(it.expression, decls).rgb }
+            fun rgb(part: String): String? = roles[part]?.let { landed[it] }
+            val track = rgb("uncheckedTrackColor")
+            val pairs = listOf(
+                "thumb on track" to (rgb("uncheckedThumbColor") to track),
+                "outline on page" to (rgb("uncheckedBorderColor") to landed["background"]),
+                "outline on card" to (rgb("uncheckedBorderColor") to landed["surface"]),
+            )
+            for ((what, pair) in pairs) {
+                val (a, b) = pair
+                if (a == null || b == null) {
+                    found += "$call: $what cannot be measured, a part lands on no colour"
+                } else if (contrast(a, b) < MARK_FLOOR) {
+                    found += "$call: $what #$a on #$b measures ${"%.2f".format(contrast(a, b))}:1"
+                }
+            }
+        }
+        return found
+    }
+
+    @Test
+    fun `an off switch can be seen in both themes`() {
+        val found = faintSwitch(repoFile(SWITCH).readText())
+        assertTrue(
+            "An off switch's thumb and outline must be 3:1 against the track and the ground (#436):\n" +
+                found.joinToString("\n"),
+            found.isEmpty(),
+        )
+    }
+
+    @Test
+    fun `the check sees a switch whose outline is the track or the page`() {
+        val source = repoFile(SWITCH).readText()
+        assertEquals(3, switchRoles(source).values.filterNotNull().size)
+        // Material's own: the outline is the hairline, 1.0 to 1.2 against the page.
+        val hairline = source.replace(Regex("""(uncheckedBorderColor\s*=\s*MaterialTheme\.colorScheme\.)\w+"""), "$1outline")
+        assertNotEquals("nothing was planted", source, hairline)
+        assertTrue("the check cannot see the hairline outline", faintSwitch(hairline).any { it.contains("outline on") })
+        // A thumb the colour of its track.
+        val flat = source.replace(Regex("""(uncheckedThumbColor\s*=\s*MaterialTheme\.colorScheme\.)\w+"""), "$1surfaceVariant")
+        assertNotEquals("nothing was planted", source, flat)
+        assertTrue("the check cannot see a thumb the colour of its track", faintSwitch(flat).any { it.contains("thumb on track") })
+    }
+
+    @Test
+    fun `every switch in the app is the shared one`() {
+        val ui = repoFile(SWITCH).parentFile.parentFile
+        val bare = Regex("""(?<![\w.])Switch\s*\(""")
+        val files = ui.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
+        assertTrue("the walk found too few files: ${files.size}", files.size >= 100)
+        assertTrue("the shared switch is not used anywhere", files.any { it.name != "DaymarkSwitch.kt" && "DaymarkSwitch(" in it.readText() })
+        val found = files.filter { it.name != "DaymarkSwitch.kt" && bare.containsMatchIn(withoutComments(it.readText())) }.map { it.name }
+        assertTrue("These draw Material's own switch, off state and all (#436): $found", found.isEmpty())
+        assertTrue("the check cannot see a bare Switch", bare.containsMatchIn("Switch(checked = x, onCheckedChange = y)"))
+    }
 }
