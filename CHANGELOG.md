@@ -30,6 +30,9 @@ a new phone?", done on one phone.
 
 ### Added
 - **Settings ▸ About shows the version**, so a bug report can say which build it came from (#221).
+- **A backup carries the crisis line you set**, and a restore brings it back. "Merge" never
+  replaces a line you changed on this phone, and no restore ever puts the default back over yours
+  (#370).
 - **Each release lists its APK's SHA-256**, in the notes and as a `.sha256` file beside it (#226).
 
 ### Fixed

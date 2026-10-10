@@ -67,8 +67,8 @@ Use a backup:
 If you've already started logging on the new phone and want to keep those entries too, choose
 **Merge** instead.
 
-A backup doesn't carry your settings, suggestion choices, crisis line or sleep setup, so set those
-again on the new phone.
+A backup carries the crisis line you set, from version 0.4.0. It doesn't carry your settings,
+suggestion choices or sleep setup, so set those again on the new phone.
 
 ---
 

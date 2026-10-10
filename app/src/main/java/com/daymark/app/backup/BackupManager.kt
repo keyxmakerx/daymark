@@ -354,7 +354,17 @@ data class BackupData(
      */
     val skySeed: Long = 0L,
     val constellations: List<BackupConstellation> = emptyList(),
+    /**
+     * The crisis line the person set themselves. Added in v19, defaulted so a v18 file still reads.
+     * Null means the file has none of the person's own — an older file, or a phone that still showed
+     * the default — and a restore then leaves this phone's line as it is (#370).
+     */
+    val crisisLine: BackupCrisisLine? = null,
 )
+
+/** The person's own crisis line: its name and how to reach it (`data/CrisisStore.kt`). Added in v19. */
+@Serializable
+data class BackupCrisisLine(val label: String, val contact: String)
 
 /**
  * The backup's steps rebound to the goal ids an import actually used, dropping any whose goal is
@@ -469,6 +479,9 @@ class BackupManager @Inject constructor(
     // Deliberately the repository and not `OfferRecordDao`: the repository is the seam that decides
     // what may be read out of that table, and a backup path has no business reading rows at all.
     private val offerLedger: com.daymark.app.data.OfferLedgerRepository,
+    // The person's own crisis line, which a backup carries so a new phone's crisis screen does not
+    // fall back to a number that may not work where they are (#370).
+    private val crisisStore: com.daymark.app.data.CrisisStore,
     private val database: com.daymark.app.data.AppDatabase,
 ) {
     /**
@@ -562,6 +575,7 @@ class BackupManager @Inject constructor(
                 BackupPersonGroupShare(it.groupKey, it.shared)
             },
             skySeed = skyRepository.storedSeed(),
+            crisisLine = crisisStore.own()?.let { BackupCrisisLine(it.label, it.contact) },
             constellations = constellationDao.getAll().map {
                 BackupConstellation(it.id, it.name, it.madeEpochDay, it.points, it.createdAt)
             },
@@ -638,6 +652,13 @@ class BackupManager @Inject constructor(
         if (mode == ImportMode.REPLACE) moodCustomization.reset()
         data.moodLabels.forEach { (lvl, label) -> moodCustomization.setLabel(lvl, label) }
         data.moodColors.forEach { (lvl, color) -> moodCustomization.setColor(lvl, color) }
+        // The crisis line. Only a line the person set is ever in a file, so neither path can write
+        // the default over one they chose — on a new phone that may be the line they gave at setup.
+        // REPLACE takes the file's; MERGE takes it only while this phone still shows the default.
+        // A file without one leaves this phone's line as it is. Blank fields are refused by save().
+        data.crisisLine?.let { line ->
+            if (mode == ImportMode.REPLACE || crisisStore.own() == null) crisisStore.save(line.label, line.contact)
+        }
     }
 
     private suspend fun importReplace(data: BackupData) {
@@ -986,6 +1007,8 @@ class BackupManager @Inject constructor(
         // v18 adds the sky: `skySeed` and `constellations`, both defaulted, so a v17 file still
         // reads and its sky is derived again from its first record. The bump stops a v17 reader
         // accepting a file whose constellations it would drop.
-        const val CURRENT_VERSION = 18
+        // v19 adds `crisisLine`, defaulted to none, so a v18 file still reads and leaves the phone's
+        // line alone. The bump stops a v18 reader accepting a file whose crisis line it would drop.
+        const val CURRENT_VERSION = 19
     }
 }
