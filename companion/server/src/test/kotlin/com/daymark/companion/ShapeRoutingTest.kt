@@ -243,6 +243,23 @@ class ShapeRoutingTest {
         assertPages(soloSet)
 
     @Test
+    fun `an API path no route serves is not found, and a page path still gets the owner's page`() {
+        for (case in everyCase) serve(case) {
+            for (path in listOf("/v1/nope", "/v1/invite/x/pairing", "/v1/snapshots/a/b/c/d")) {
+                val res = client.get(path) { header(HttpHeaders.Authorization, "Bearer $OWNER_TOKEN") }
+                assertEquals(HttpStatusCode.NotFound, res.status, "${case.name}: GET $path")
+                assertTrue(res.bodyAsText().startsWith("{"), "${case.name}: GET $path answers JSON, not a page")
+            }
+            // The control: a page path no file serves still gets the owner's page, which the consoles'
+            // own navigation needs, and a real route still answers as itself.
+            val page = client.get("/some/page")
+            assertEquals(HttpStatusCode.OK, page.status)
+            assertTrue(page.bodyAsText().contains(MARKERS.getValue(Pages.OWNER)), "${case.name}: the owner's page")
+            assertEquals(HttpStatusCode.OK, client.get("/v1/config").status)
+        }
+    }
+
+    @Test
     fun `paired - the clinician's page is served, and no spelling reaches the practice page`() = assertPages(pairedSet)
 
     @Test
@@ -497,6 +514,8 @@ class ShapeRoutingTest {
             // The server console (#322): every server is claimed and run by an administrator.
             "GET /v1/admin/status", "POST /v1/admin/claim", "POST /v1/admin/session",
             "POST /v1/admin/session/logout", "GET /v1/admin/overview",
+            // An API path no route serves is not found, in every shape (#390).
+            "GET /v1/{...}",
         )
 
         /** Each route's group, by the first two segments of its path. */
@@ -510,6 +529,7 @@ class ShapeRoutingTest {
             "v1/session" to Group.CLINICIAN, "v1/webauthn" to Group.CLINICIAN, "v1/relations" to Group.CLINICIAN,
             "v1/orgs" to Group.PRACTICE,
             "therapist" to Group.CLINICIAN_PAGE, "portal/invite" to Group.CLINICIAN_PAGE,
+            "v1/{...}" to Group.PROBE,
             "{...}" to Group.STATIC,
         )
 

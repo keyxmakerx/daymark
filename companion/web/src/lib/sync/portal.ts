@@ -83,6 +83,9 @@ export interface OwnerKeyRecord {
   registeredAt: number
 }
 
+/** The wait before a request refused for pace is sent again: past the server's one-second window. */
+export const RATE_LIMIT_RETRY_MS = 1_100
+
 export class PortalClient {
   private readonly base: string
   constructor(
@@ -96,6 +99,8 @@ export class PortalClient {
      * this default. Found by driving the built page in Chromium; a node suite cannot see it.
      */
     private readonly doFetch: FetchLike = fetch.bind(globalThis),
+    /** How a refusal for pace waits before its one retry; a test passes one that returns at once. */
+    private readonly pause: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
   ) {
     this.base = baseUrl.replace(/\/+$/, '')
   }
@@ -104,11 +109,24 @@ export class PortalClient {
     return { Authorization: `Bearer ${this.token}`, ...extra }
   }
 
+  /**
+   * One request as the owner. A refusal for pace ("rate limited", 429) stored and changed nothing,
+   * so it is sent once more after the allowance refills: one click in the console can make several
+   * requests, and a person clicking quickly must not be told something failed (#382). A lockout
+   * ("temporarily locked") lasts minutes and is not retried; it reaches the caller as its 429.
+   */
   private async req(path: string, init: RequestInit = {}): Promise<Response> {
-    return this.doFetch(this.base + path, {
-      ...init,
-      headers: { ...this.headers(), ...(init.headers as Record<string, string>) },
-    })
+    const send = () =>
+      this.doFetch(this.base + path, {
+        ...init,
+        headers: { ...this.headers(), ...(init.headers as Record<string, string>) },
+      })
+    const res = await send()
+    if (res.status !== 429) return res
+    const body = await res.clone().text().catch(() => '')
+    if (!body.includes('rate limited')) return res
+    await this.pause(RATE_LIMIT_RETRY_MS)
+    return send()
   }
 
   /**

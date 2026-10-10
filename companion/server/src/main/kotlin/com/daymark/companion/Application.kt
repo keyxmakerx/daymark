@@ -621,6 +621,12 @@ fun Application.module(
             call.respondRedirect(therapistPath, permanent = false)
         }
 
+        // An API path no route serves is not found (#390). Without this the page fallback below
+        // answered it 200 with the owner's page, so a client calling a route this server does not
+        // have got HTML where it expected JSON, and a status-only monitor read it as healthy. Every
+        // real route is more specific than this tail, so each still answers as it did.
+        get("/v1/{...}") { call.respond(HttpStatusCode.NotFound, ErrorDto("no such route")) }
+
         if (config.basePath == "/") {
             pageRoutes(shape, webRoot, invitePaths, serveTherapist, redirectToTherapist)
         } else {
