@@ -46,7 +46,6 @@ fun SleepScreen(
     onBack: () -> Unit,
     onOpenScreener: (String) -> Unit,
     onLogNight: () -> Unit,
-    onOpenSetup: () -> Unit,
     onOpenTreatments: () -> Unit,
     onOpenBreathing: () -> Unit,
     viewModel: SleepViewModel = hiltViewModel(),
@@ -154,7 +153,6 @@ fun SleepScreen(
             }
             item { NavCard("Breathing check", "Experimental · phone on chest", onOpenBreathing) }
             item { NavCard("Treatments", "Is something helping? Track before & since", onOpenTreatments) }
-            item { NavCard("Sleep setup", "Partner, pets, phone placement", onOpenSetup) }
 
             // ---- Self-checks ----
             item { SectionHeader("Self-checks") }

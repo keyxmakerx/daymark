@@ -105,8 +105,8 @@ Rules the code and tests hold:
 ### 3.2 Outside the database
 
 - **Preferences** (`daymark_settings`): app settings, custom mood names and colours, suggestion
-  controls, the crisis resource, the sleep setup answers and the latest sleep self-check result per
-  screener. These are not in the encrypted database.
+  controls, the crisis resource and the latest sleep self-check result per screener. The old sleep
+  setup's five answers are deleted from here on launch (`data/RetiredSleepSetup.kt`, #356). These are not in the encrypted database.
 - **The secure store** (`EncryptedSharedPreferences`): the PIN hash and the wrapped data key.
 - **Photos**: JPEGs in `filesDir/entry_photos`, written by `data/PhotoStore.kt`, which also guards
   against path traversal. Not encrypted by the app: #239.

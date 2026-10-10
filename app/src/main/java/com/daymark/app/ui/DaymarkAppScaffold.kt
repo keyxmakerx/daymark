@@ -84,7 +84,6 @@ import com.daymark.app.sky.SkyKind
 import com.daymark.app.ui.sleep.BreathingCaptureScreen
 import com.daymark.app.ui.sleep.ScreenerScreen
 import com.daymark.app.ui.sleep.SleepLogScreen
-import com.daymark.app.ui.sleep.SleepProfileScreen
 import com.daymark.app.ui.sleep.SleepScreen
 import com.daymark.app.ui.sleep.TreatmentDetailScreen
 import com.daymark.app.ui.sleep.TreatmentsScreen
@@ -409,7 +408,6 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false, openT
                     onBack = { navController.popBackStack() },
                     onOpenScreener = { key -> navController.navigate(Routes.screener(key)) },
                     onLogNight = { navController.navigate(Routes.SLEEP_LOG) },
-                    onOpenSetup = { navController.navigate(Routes.SLEEP_SETUP) },
                     onOpenTreatments = { navController.navigate(Routes.TREATMENTS) },
                     onOpenBreathing = { navController.navigate(Routes.BREATHING) },
                 )
@@ -449,9 +447,6 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false, openT
             }
             composable(Routes.SLEEP_LOG, enterTransition = sheetEnter, popExitTransition = sheetPopExit) {
                 SleepLogScreen(onDone = { navController.popBackStack() })
-            }
-            composable(Routes.SLEEP_SETUP, enterTransition = zEnter, popExitTransition = zPopExit) {
-                SleepProfileScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.TREATMENTS, enterTransition = zEnter, popExitTransition = zPopExit) {
                 TreatmentsScreen(

@@ -21,6 +21,9 @@ All notable changes to this project are documented here. The format is based on
   swatches carry the same ring as the dots they key.
 
 ### Removed
+- **The sleep setup is gone, and so are its answers.** It asked about a bed partner, pets, noise,
+  where your phone sits and how you sleep, for sleep sensing Daymark will not build, so nothing ever
+  read the answers. They are deleted from your phone the first time the updated app opens (#356).
 - **Insights no longer marks what you logged.** The "Avg mood" card, the "this week against last"
   card with its up and down arrows, the "In review" summary and the "Logging consistency" grid are
   gone. An average of a mood scale reads as a grade, a week set against the last reads as a verdict,

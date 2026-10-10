@@ -344,9 +344,6 @@ More → Sleep check-ins:
   appliance, positional therapy, medication, other), then compare average sleep, efficiency, quality
   and mood before and since. It shows what changed, not why, and is not a measure of whether a
   treatment works.
-- **Sleep setup.** Saved answers about a bed partner, pets, where the phone lies, background noise
-  and sleep position. Nothing reads them, and nothing will: the sensing they were for is ruled out
-  (#212). Not built: removing the screen and its answers: #356.
 - **The breathing check** (§10).
 
 The rules:
@@ -521,7 +518,7 @@ decisions rather than a reading of the current moment: #162.
   about them, group sharing defaults, custom mood names and colours, and photos embedded in the
   file.
 - **Not in a backup:** the reception ledger, by design (§13.2); suggestion settings (#191); the
-  crisis resource, the sleep setup answers and the latest sleep self-check results; app settings and
+  crisis resource and the latest sleep self-check results; app settings and
   the PIN.
 - **Restore** (Settings → Restore backup) either replaces everything or merges the file alongside
   what is there, with fresh ids. An older backup still reads. A backup from a newer version of the
@@ -559,7 +556,7 @@ mood opens a new entry with it chosen; nothing is saved until the person saves.
   be opened and offers to leave them or to start a new journal. It never removes them on its own.
   How it works: [ARCHITECTURE.md](ARCHITECTURE.md) §4.
 - **Not covered:** photos (#239); the settings file, which also holds custom mood names, the crisis
-  resource, the sleep setup answers and the latest sleep self-check results; and exports (§14).
+  resource and the latest sleep self-check results; and exports (§14).
 - **The app lock** is an optional PIN of 6 to 12 digits, offered during first-run setup. A PIN set
   by an older version keeps working at its length. Only a PBKDF2 hash is kept, in an encrypted
   preference store. After five wrong tries the app makes the person wait, longer each time, up to

@@ -393,8 +393,6 @@ Daymark will never tell you that you're fine.
   therapy, a medication, or something else) and compare your own sleep and mood before and since.
   It shows what changed, not why, and it isn't a measure of whether a treatment works. To keep a
   record of the nights you used CPAP, make a **yes / no** tracker (see *Trackers*).
-- **Sleep setup.** A few questions about a bed partner, pets, noise and where your phone sits.
-  Nothing reads your answers, and nothing will: the sleep features they were for won't be built.
 - **Breathing check (experimental).** Lie still with the phone flat on your chest for one to three
   minutes. It uses the phone's motion sensor, not the microphone, and records nothing; it shows an
   estimate of your breathing rate and flags any pauses. It isn't an apnea test.
@@ -427,8 +425,8 @@ file they can't read.
 Not covered, said plainly:
 
 - **Photos** attached to entries, which are ordinary picture files in Daymark's storage.
-- **A few settings kept outside the journal**: your custom mood names and colours, your crisis line,
-  your sleep setup answers and your latest sleep self-check results.
+- **A few settings kept outside the journal**: your custom mood names and colours, your crisis line
+  and your latest sleep self-check results.
 - **Backups, CSV files and PDF reports you make yourself.** They're plain files you asked for and
   put where you chose.
 
@@ -480,7 +478,7 @@ journal, goals and project steps, sleep logs and treatments, trackers, reminders
 thought records, your safety plan, life events, your notes about people, your custom moods, and
 your photos (inside the file).
 
-A backup does not include: your suggestion settings, your crisis line, your sleep setup and sleep
+A backup does not include: your suggestion settings, your crisis line, your sleep
 self-check results, your other settings, or your PIN. It also leaves out Daymark's own record of
 when it asked you things, which never leaves your phone.
 
