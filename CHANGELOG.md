@@ -57,8 +57,10 @@ All notable changes to this project are documented here. The format is based on
   courses, a run of galaxies, or an open sky with no line to follow, and skies come in different
   sizes. Your memories run along it from oldest to newest, counted in memories rather than days, so
   a quiet month takes no room. Steady stretches can form a band, rarely, and on-and-off weeks
-  gather into clusters; none of it is a reward. Older stars drift outward and turn from blue-white
-  to red, and red only means old.
+  gather into clusters; none of it is a reward. Each star is a small bead of light in its own
+  colour, with a thin rim and a twinkle that comes and goes, and every star is as bright as every
+  other whatever the day was. Older stars drift outward and turn from blue to red, and red only
+  means old.
   The sky opens with its stars twinkling in and flies to your newest one; a new star you have not
   seen yet is born in front of you. A tap skips all of it, and with Motion off the sky opens still,
   on today. You can zoom from the whole sky to a single star drawn as a sun. **Today** takes you to

@@ -387,85 +387,96 @@ class SkySurfaceSourceTest {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // 3. The sprite: a white heart, a tight glow, and only then the halo.
+    // 3. The sprite: a bead in the star's own colour, a thin rim, and only then the halo.
     // ---------------------------------------------------------------------------------------------
 
+    /** What every ordinary star burns at, and the landmark's one exception. */
+    private val LIGHT_STATEMENT = "val light = if (landmark) SkyStarLight.LANDMARK_LIGHT else SkyStarLight.LIGHT"
+
+    /** The star's colour: the pure layer's, handed the mood whole, which it ignores. */
+    private val TINT_STATEMENT =
+        "val starTint = SkyGlyph.starTint(kind, id, SkyAge.bucketAgeYears(bucket), $MOOD)"
+
+    /** The bead's size: the pure layer's radius, the landmark's scale and the zoom's growth. */
+    private val CORE_RADIUS_STATEMENT =
+        "val coreRadius = SkyGlyph.coreRadiusDp(kind, $MOOD) * SkyGlyph.coreScale(kind) * " +
+            "growthAt(growth) * pxPerDp"
+
     /**
-     * The core's alpha comes from the pure layer whole, and the inner glow is two fixed constants.
+     * The bead and its rim are lit from the star's colour at one light, and neither names a mood.
      *
-     * `docs/SKY.md` §3.2, quoted in `SkySprite.kt` at the line that draws it: *"The core is the
-     * same near-white for every star. Age tints the glow around it."* Equal presence is exactly
-     * this: whatever the day was, the point at the centre of the mark is the same point.
+     * `docs/SKY.md` §3.4: mood changes a star's character, never its presence. The bead is the
+     * heart of the mark, so equal presence is exactly this: whatever the day was, the bead is the
+     * same size and burns at the same light, and only its age colours it. `SkyStarLightTest` holds
+     * that the stops are a function of colour and light alone; this holds that the renderer hands
+     * them nothing else.
      */
     @Test
-    fun `the core is the pure layer's alpha and the inner glow is two fixed constants`() {
-        val core = "paint.color = CORE_TINT.copy(alpha = SkyGlyph.coreAlpha(kind, $MOOD))"
+    fun `the bead and its rim are the star's colour at one light, and name no mood`() {
+        val bead = gradientOn(sprite, "beadRadius")
         assertTrue(
-            "the core's alpha is no longer SkyGlyph.coreAlpha handed the mood whole. " +
-                "SkyGlyph.coreAlpha returns CORE_ALPHA for every mood and every kind and " +
-                "SkyGlyphTest holds it there; anything multiplied onto it here is a mood reaching " +
-                "the white heart, and the hardest days would have the faintest centres.",
-            squeeze(sprite).contains(core),
+            "the bead's colours no longer come from SkyStarLight.coreStops handed the star's " +
+                "colour and its light",
+            squeeze(bead).contains("colors = SkyStarLight.coreStops(starTint, light)"),
         )
-
-        val tint = squeeze(statementFrom(sprite, "val CORE_TINT ="))
-        assertTrue(
-            "the white heart is no longer a fixed colour: \"$tint\"",
-            Regex("""^val CORE_TINT = Color\(0[xX][0-9a-fA-F]{8}\)$""").matches(tint),
-        )
-
-        val inner = gradientOn(sprite, "innerRadius")
         assertFalse(
-            "the inner glow names a mood. It is the \"then a glow\" in \"a point, then a glow\" " +
-                "and it is the same glow on every star; the halo outside it is the only part a " +
-                "mood may move.",
-            inner.lowercase().contains("mood"),
+            "the bead names a mood. It is the heart of every star and it is the same heart on " +
+                "every day; the halo outside it is the only part a mood may move.",
+            bead.lowercase().contains("mood"),
+        )
+        val rim = gradientOn(sprite, "rimRadius")
+        assertTrue(
+            "the rim's colours no longer come from SkyStarLight.rimStops handed the star's colour " +
+                "and its light",
+            squeeze(rim).contains("SkyStarLight.rimStops(starTint, light)"),
+        )
+        assertFalse("the rim names a mood", rim.lowercase().contains("mood"))
+
+        assertEquals(
+            "the light a star burns at is no longer one number for every ordinary star. A light " +
+                "that varies is a star that reads as a day that counted for more.",
+            LIGHT_STATEMENT,
+            squeeze(statementFrom(sprite, "val light =")),
         )
         assertEquals(
-            "the inner glow's alphas are no longer the two constants and a zero",
-            listOf("0f", "INNER_GLOW_ALPHA", "INNER_GLOW_MID_ALPHA"),
-            alphasIn(inner).sorted(),
+            "the star's colour is no longer SkyGlyph.starTint handed the mood whole",
+            TINT_STATEMENT,
+            squeeze(statementFrom(sprite, "val starTint =")),
         )
-        for (name in listOf("INNER_GLOW_ALPHA", "INNER_GLOW_MID_ALPHA")) {
-            val declared = squeeze(statementFrom(sprite, "const val $name ="))
-            assertTrue(
-                "$name is no longer a plain number: \"$declared\". A constant that becomes a call " +
-                    "is a constant that can take a mood.",
-                Regex("""^const val \w+ = \d+(\.\d+)?f$""").matches(declared),
-            )
-        }
+        assertEquals(
+            "the bead's radius is no longer the pure layer's, scaled only by the landmark and the zoom",
+            CORE_RADIUS_STATEMENT,
+            squeeze(statementFrom(sprite, "val coreRadius =")),
+        )
+        assertFalse(
+            "the bead's radius names a mood past the core radius",
+            statementFrom(sprite, "val beadRadius =").lowercase().contains("mood"),
+        )
     }
 
     @Test
-    fun `the core and inner-glow checks see the halo's alpha spliced into them`() {
-        val coreCall = "SkyGlyph.coreAlpha(kind, $MOOD)"
-        assertTrue("the core alpha call has moved", sprite.contains(coreCall))
-        val dimmedCore = sprite.replace(coreCall, "$coreCall * SkyGlyph.haloPeakAlpha(kind, $MOOD)")
-        assertNotEquals("the planted factor did not change the source", sprite, dimmedCore)
-        assertFalse(
-            "the core check cannot see the halo's alpha multiplied onto the white heart",
-            squeeze(dimmedCore).contains("paint.color = CORE_TINT.copy(alpha = $coreCall)"),
-        )
+    fun `the bead checks see a mood spliced into the bead, the rim, the light and the radius`() {
+        val beadCall = "SkyStarLight.coreStops(starTint, light)"
+        assertTrue("the bead's stops have moved", sprite.contains(beadCall))
+        val moodyBead = sprite.replace(beadCall, "SkyStarLight.coreStops(starTint, light * SkyGlyph.haloPeakAlpha(kind, $MOOD))")
+        assertNotEquals("the planted factor did not change the source", sprite, moodyBead)
+        assertTrue("the bead mood check is blind", gradientOn(moodyBead, "beadRadius").lowercase().contains("mood"))
 
-        val innerAlpha = "alpha = INNER_GLOW_ALPHA"
-        assertTrue("the inner glow's first stop has moved", sprite.contains(innerAlpha))
-        val moodyInner = sprite.replace(innerAlpha, "alpha = SkyGlyph.haloPeakAlpha(kind, $MOOD)")
-        assertNotEquals("the planted alpha did not change the source", sprite, moodyInner)
-        val planted = gradientOn(moodyInner, "innerRadius")
-        assertTrue("the inner-glow mood check is blind", planted.lowercase().contains("mood"))
-        assertNotEquals(
-            "the inner-glow alpha check is blind",
-            listOf("0f", "INNER_GLOW_ALPHA", "INNER_GLOW_MID_ALPHA"),
-            alphasIn(planted).sorted(),
-        )
+        val rimCall = "SkyStarLight.rimStops(starTint, light)"
+        assertTrue("the rim's stops have moved", sprite.contains(rimCall))
+        val moodyRim = sprite.replace(rimCall, "SkyStarLight.rimStops(starTint, light * $MOOD)")
+        assertNotEquals("the planted factor did not change the source", sprite, moodyRim)
+        assertTrue("the rim mood check is blind", gradientOn(moodyRim, "rimRadius").lowercase().contains("mood"))
 
-        val declaration = statementFrom(sprite, "const val INNER_GLOW_ALPHA =")
-        val loosened = declaration.substringBefore("=") + "= SkyGlyph.haloPeakAlpha(kind, $MOOD)"
-        assertNotEquals("the planted declaration did not change", declaration, loosened)
-        assertFalse(
-            "the constant check cannot see a constant turned into a call",
-            Regex("""^const val \w+ = \d+(\.\d+)?f$""").matches(squeeze(loosened)),
-        )
+        val light = statementFrom(sprite, "val light =")
+        val moodyLight = light.substringBefore("=") + "= SkyStarLight.LIGHT * SkyGlyph.haloPeakAlpha(kind, $MOOD)"
+        assertNotEquals("the planted light did not change", light, moodyLight)
+        assertNotEquals("the light check is blind", LIGHT_STATEMENT, squeeze(moodyLight))
+
+        val radius = statementFrom(sprite, "val coreRadius =")
+        val moodyRadius = radius.replace("SkyGlyph.coreRadiusDp(kind, $MOOD)", "SkyGlyph.haloRadiusDp(kind, $MOOD)")
+        assertNotEquals("the planted radius did not change", radius, moodyRadius)
+        assertNotEquals("the radius check is blind", CORE_RADIUS_STATEMENT, squeeze(moodyRadius))
     }
 
     /**
@@ -495,7 +506,7 @@ class SkySurfaceSourceTest {
         assertTrue(
             "the sprite is no longer keyed on the mood, so two days that draw differently could " +
                 "share one bitmap",
-            squeeze(sprite).contains("val key = keyOf(landmark, quiet, $MOOD, bucket, temperature)"),
+            squeeze(sprite).contains("val key = keyOf(landmark, quiet, $MOOD, bucket, temperature, growth)"),
         )
     }
 
@@ -730,8 +741,8 @@ class SkySurfaceSourceTest {
     /**
      * The arguments of the one `RadialGradientShader(...)` in [source] drawn at [radiusName].
      *
-     * The three gradients in `SkySprite.kt` are told apart by the radius they are given — the
-     * halo's, the inner glow's and a prism fringe's — which is a property of the call rather than
+     * The gradients in `SkySprite.kt` are told apart by the radius they are given — the halo's,
+     * the rim's, the bead's and a prism fringe's — which is a property of the call rather than
      * of the comment above it or the order they happen to be written in.
      */
     private fun gradientOn(source: String, radiusName: String): String {

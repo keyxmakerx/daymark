@@ -32,7 +32,8 @@ decides nothing.
 | `sky/Sky.kt` | the six kinds, the layout, the text list |
 | `sky/SkyForm.kt` | the sky's form and guide, and where each star is placed: bands, clusters, streams, drift |
 | `sky/SkyAge.kt` | colour and brightness from age |
-| `sky/SkyGlyph.kt` | core, halo, temperature, the landmark, kind forms, zoom levels (`SkyDetail`), the Sky's switches (`SkyOptions`) |
+| `sky/SkyGlyph.kt` | the bead's size, halo, temperature, the landmark, kind forms, zoom levels (`SkyDetail`), the Sky's switches (`SkyOptions`) |
+| `sky/SkyStarLight.kt` | how the bead and its rim are lit, at one light for every ordinary star |
 | `sky/SkyPalette.kt` | the night colours, contrast, equalising mood colours |
 | `sky/SkyTwinkle.kt` | each star's rhythm |
 | `sky/SkyOpening.kt` | the opening's pace, a new star's birth, every camera journey |
@@ -276,18 +277,20 @@ carries them with the seed, and a merge keeps the sky the phone already has.
 
 ### 3.2 Colour is age, not mood
 
-> **A star's colour is how long ago it was: blue-white when new, through white, gold and amber, to a
-> deep red after five and a half years. Red means old, never bad.**
+> **A star's colour is how long ago it was: blue when new, through white, gold and amber, to a deep
+> red after five and a half years. Red means old, never bad.**
 
-The ramp (`SkyAge`, from the prototype) runs from `#C4DAFF` through `#FFFAEC`, `#FFE296` and
-`#FFAC64` to `#FF6E58`, where it stops. Every star reddens at the same rate, so nobody's worst week is
+The ramp (`SkyAge`, from the approved phone sky) runs from `#9DB8FF` through `#CDDCFF`, `#FFF6EA`,
+`#FFDEA8` and `#FFB476` to `#FF8060`, where it stops. Every star reddens at the same rate, so nobody's worst week is
 their reddest. It is continuous and only ever reddens (`SkyAgeTest`): a step would draw a band, and a
 band invites someone to read meaning into which side of it their month fell on. A record dated after
 today is drawn as new.
 
 - **Each star has its own temperature**, from its identity and fixed forever (icy, white, pale gold
-  or peach), mixed about a third into its age tint so the sky is varied. It means nothing.
-- **The core is the same near-white for every star.** Age tints the glow around it.
+  or peach), which shifts its age tint a little toward blue or gold (red times 0.92 to 1.08 and blue
+  divided by it, in linear light) so the sky is varied. It means nothing.
+- **The bead is the star's own colour.** Age colours the heart of a star, not only the light
+  around it (§3.5).
 - **A life event is white at every age**, with no temperature (§3.4).
 - **Mood is not a colour on the sky.** It appears only as a dot beside the mood word in a star's
   detail, from the person's own palette (theme colours and their overrides; the Sky hardcodes no mood
@@ -335,7 +338,7 @@ days into kinds of act at exactly the zoom where they see a stretch of their lif
 
 | Varies with mood | Fixed at every mood |
 |---|---|
-| Halo radius: 4.8 dp at level 1 to 3.6 dp at level 5; 4.2 dp with no mood | Core radius (1.9 dp), core alpha, core colour |
+| Halo radius: 4.8 dp at level 1 to 3.6 dp at level 5; 4.2 dp with no mood | Bead radius (0.96 dp at the whole sky, growing with zoom alike for every star), the bead's light and colour |
 | Halo peak alpha, `HALO_LIGHT / radius²`, so the product cannot move | Tint and brightness (age), position, twinkle, total light (§0.3 finding 4) |
 
 The spread is small, about 14% either way, so it reads as texture at arm's length. A star with no
@@ -355,33 +358,46 @@ glints. Brightness may follow a mark the person placed, never anything the app m
 ### 3.5 How a star is drawn — a point, then a glow
 
 Each distinct star is rasterised once at the device's pixel density and stamped additively, so glows
-brighten where they overlap, as light does. Three layers: a **hard-edged near-white core**; a **tight
-inner glow** in the tint; and a **soft outer glow** in the tint, fading to exactly nothing. The
-prototype's extra floor under every halo was dropped: multiplied by a wider halo's area, it would
-make hard days emit more light.
+brighten where they overlap, as light does. Three layers: a **crisp bead** in the star's own colour,
+a little darker toward its edge the way a real star's limb is; a **thin rim** of the same light
+outside it, gone within 1.6 dp; and a **soft outer glow** in the tint, fading to exactly nothing,
+whose spread is the mood (§3.4). The bead and the rim are the approved phone sky's
+(`docs/prototypes/sky-phone.html`, carried over in `SkyStarLight`): light is added up in linear
+light and tone-mapped once, so a bright bead stays a colour instead of clipping to white. The bead
+is 0.96 dp across at the whole sky and grows as the zoom to the power 0.3, alike for every star, so
+a closer view shows bigger stars and no star outgrows another. The prototype's extra floor under
+every halo was dropped: multiplied by a wider halo's area, it would make hard days emit more light.
 
-**Brightness is age.** A new star is at full brightness and fades toward a floor of 0.22 with a
-2.1-year time constant: half the fall by about a year and a half, never zero. **Old stars recede but
-never vanish**, so someone who comes back after five years finds everything they left. A life event
-never fades.
+**Every ordinary star burns at one light.** The approved sky also gave each star a random
+magnitude; it is left out, because on this surface a brighter star reads as a day that counted for
+more. Only a life event is brighter (§3.4).
+
+**Brightness is age, a little.** A new star is at full brightness and fades toward a floor of 0.75
+with a 2.1-year time constant: a quarter of the light goes, half of that by about a year and a
+half, and never more. **Old stars recede but never vanish**, so someone who comes back after five
+years finds everything they left, in colour. A life event never fades.
 
 **The ground is near-black `#07070A`, not pure black**, so a glow has something to fade into and an
-OLED panel does not switch pixels off beneath it. The quiet sky (§7.1) draws the core alone.
+OLED panel does not switch pixels off beneath it. The quiet sky (§7.1) draws the bead alone, half a
+dp larger.
 
 ### 3.6 Twinkle
 
 Decoration only. Every value comes from the star's identity and the time, never from its mood or any
 count, so each star has its own beat, forever. Kind matters only in that every life event glints.
 
-- **A breathe**, every star: brightness dips by up to 22% over 3.5 to 8 seconds.
-- **A shimmer**, a third of stars: a faint 5% flicker about every 1.6 seconds.
+- **A flicker**, every star, the approved phone sky's: three sines at different speeds add up to a
+  waver that never quite repeats, the fastest under 2.3 times a second, moving the star's light by
+  at most 24% either way. A slow wave lets each star flicker for a while and then hold still,
+  coming round every one to two and a half minutes, so about half the sky flickers at any moment.
+  It gives back as much light as it takes, so over a few seconds every star is as bright as its age
+  makes it.
 - **A glint**, about a fifth of stars and every life event: once every 7 to 22 seconds, for 280 ms, a
   red and a blue fringe are added either side of the star, like a prism. The star's own tint never
   changes.
 
-The twinkle multiplies age brightness, so no star is twinkled past a younger one. There is no dial,
-only the Motion switch (§7.4). Two `SkyTwinkle` functions have no caller, `scaleAt` (a 2% size
-breathe, which a sub-pixel sprite would only blur) and `glintFringeScale`: #153.
+The twinkle multiplies age brightness. There is no dial, only the Motion switch (§7.4). One
+`SkyTwinkle` function has no caller, `glintFringeScale`: #153.
 
 ### 3.7 The sky's seed
 
@@ -451,7 +467,7 @@ from FAR to a sun by eye.
 | **FAR** | below 2.5 | Every star as point and glow. |
 | **NEAR** | 2.5 to 7 | The same, closer. |
 | **CLOSE** | 7 and in | Kind marks (§3.3) and project stubs as well. |
-| **A sun** | once a star's real size passes 2.5 dp | A white-hot middle, a rim in the star's own colour and a dim corona; kind marks step aside for it. A life event is a bigger sun. |
+| **A sun** | once a star's real size passes 4 dp, past the bead at that zoom | A white-hot middle, a rim in the star's own colour and a dim corona; kind marks step aside for it. A life event is a bigger sun. |
 
 A level depends on how close the view is, never on how many stars are on screen, which would make
 what is drawn depend on how much somebody logged. Constellation lines and names fade out past about
@@ -602,8 +618,8 @@ the Sky or the Sky does not ship.
 ### 7.1 Low vision
 
 - **A star is not text, and its contrast is not held to a floor.** Its brightness is its age; the
-  oldest star at the bottom of its breathe measures 1.53:1. What a star means (kind, date, mood) is
-  written in its detail and in the list.
+  heart of the oldest star at the bottom of its twinkle measures 5.00:1. What a star means (kind,
+  date, mood) is written in its detail and in the list.
 - **Mood colours are equalised, not lifted** (§0.3 finding 1): the shipped ramp and any colour a
   person picks go to exactly 6.5:1. One too dark or saturated to get there by scaling is blended
   toward the ink, visibly changing it; the lesser harm, since the alternative is a mood they cannot
@@ -648,6 +664,7 @@ asserted as arithmetic in `SkyTwinkleTest`:
   sky is a cut.
 - **Only a few stars glint at any moment**, about four in a thousand, and none in the quiet sky.
 - **A glint is under a third of a second.**
+- **No flicker runs faster than three times a second**; the fastest is under 2.3.
 - **Nothing is ever in step with anything else.**
 
 The frame loop runs only while the sky is on screen.
@@ -735,7 +752,7 @@ check is first shown to catch a planted violation (`CLAUDE.md` §5).
 
 | # | Property | Status |
 |---|---|---|
-| **P1** | Mood never changes a star's presence: core and total light are identical at every level | Built: `SkyGlyphTest`; `SkySurfaceSourceTest` pins the renderer to the halo as mood's only sink |
+| **P1** | Mood never changes a star's presence: bead and total light are identical at every level | Built: `SkyGlyphTest`, `SkyStarLightTest`; `SkySurfaceSourceTest` pins the renderer to the halo as mood's only sink |
 | **P2** | Absence has no glyph | Built: `SkyTest` |
 | **P3** | The seed shapes the sky and decides nothing about any one record | Built: `SkyTest` |
 | **P4** | A gap takes no room, in every form | Built: `SkyTest` |

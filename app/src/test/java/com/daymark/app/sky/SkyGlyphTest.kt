@@ -175,7 +175,7 @@ class SkyGlyphTest {
     private val everyMoodLevel = listOf(-3, SkyGlyph.MOOD_NONE, 1, 2, 3, 4, 5, 6, 99)
 
     /** Ages either side of every stop on the redshift, and past the end of it. */
-    private val sampleAges = floatArrayOf(0f, 0.1f, 0.59f, 0.6f, 1.6f, 2.4f, 3.2f, 5.5f, 9f)
+    private val sampleAges = floatArrayOf(0f, 0.1f, 0.39f, 0.4f, 1.3f, 2.4f, 2.6f, 4f, 5.5f, 9f)
 
     private val sampleIds = longArrayOf(1L, 2L, 17L, 4_242L, 900_001L)
 
@@ -194,7 +194,7 @@ class SkyGlyphTest {
             (tint and 0xFF).toFloat(),
             SkyGlyph.starBrightness(kind, ageYears, moodLevel),
             SkyTwinkle.alphaAt(kind, id, 3_700L, SkyOptions()),
-            SkyTwinkle.scaleAt(kind, id, 3_700L, SkyOptions()),
+            SkyTwinkle.alphaAt(kind, id, 61_300L, SkyOptions()),
             SkyGlyph.rayCount(kind).toFloat(),
             SkyGlyph.rayLengthDp(kind),
             SkyGlyph.ringRadiusDp(kind),
@@ -274,18 +274,19 @@ class SkyGlyphTest {
         }
         // Out of range clamps rather than throwing: a sprite cache keyed on an index from an older
         // version must not crash the sky.
-        assertEquals(SkyGlyph.temperatureTint(0), SkyGlyph.temperatureTint(-1))
+        assertEquals(SkyGlyph.temperatureWarmth(0), SkyGlyph.temperatureWarmth(-1), 0f)
         assertEquals(
-            SkyGlyph.temperatureTint(SkyGlyph.TEMPERATURE_COUNT - 1),
-            SkyGlyph.temperatureTint(99),
+            SkyGlyph.temperatureWarmth(SkyGlyph.TEMPERATURE_COUNT - 1),
+            SkyGlyph.temperatureWarmth(99),
+            0f,
         )
     }
 
     @Test
     fun `temperature varies the sky without hiding the redshift`() {
-        // The mix is about a third, and a third is the number that has to be defended: too much and
-        // an icy old star reads younger than a peach new one, which would make colour meaningless
-        // rather than merely decorative.
+        // The warmth is at most 8% either way, and that is the number that has to be defended: too
+        // much and an icy old star reads younger than a peach new one, which would make colour
+        // meaningless rather than merely decorative.
         val idOfTemperature = LongArray(SkyGlyph.TEMPERATURE_COUNT) { -1L }
         var id = 1L
         while (id < 500L && idOfTemperature.any { it < 0L }) {

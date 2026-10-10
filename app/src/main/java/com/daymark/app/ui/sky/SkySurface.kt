@@ -267,7 +267,7 @@ internal fun SkySurface(
                         val skyX = SkyPresentation.fromScreen(offset.x, camera.bounds.left, scale, camera.panX())
                         val skyY = SkyPresentation.fromScreen(offset.y, camera.bounds.top, scale, camera.panY())
                         // The platform minimum, applied to the target and not to the drawn size: a
-                        // star drawn at 1.9 dp is still a 48 dp target (§7.1), and so is a tracker.
+                        // star drawn a few dp across is still a 48 dp target (§7.1), and so is a tracker.
                         val reachPx = SkyGlyph.TOUCH_TARGET_DP.dp.toPx() / 2f
                         val reach = reachPx / scale
                         val tracker = SkyPresentation.objectAt(
@@ -395,6 +395,7 @@ internal fun SkySurface(
                     selected = i == selectedStar,
                     arrival = arrival,
                     sunPx = if (sun >= sunFrom) sun else 0f,
+                    zoom = across,
                 )
             }
 
@@ -440,6 +441,7 @@ internal fun SkySurface(
                         selected = false,
                         arrival = light,
                         sunPx = 0f,
+                        zoom = across,
                     )
                 }
             }
@@ -562,6 +564,7 @@ internal fun SkyConstellationPhoto(
                 selected = false,
                 arrival = shade,
                 sunPx = 0f,
+                zoom = 1f,
             )
         }
 
@@ -595,6 +598,7 @@ internal fun SkyConstellationPhoto(
                 selected = false,
                 arrival = 1f,
                 sunPx = 0f,
+                zoom = 1f,
             )
         }
     }
@@ -840,8 +844,12 @@ private fun DrawScope.drawWhiteHole(centre: Offset, radius: Float, strength: Flo
     drawCircle(light, radius = radius * 1.4f * strength, center = centre, style = Stroke(width = 1.dp.toPx()), alpha = 0.5f * strength)
 }
 
-/** A star starts to be drawn as a sun once its disc would be this big, and is fully one by [SUN_FULL_DP]. */
-private const val SUN_FROM_DP = 2.5f
+/**
+ * A star starts to be drawn as a sun once its disc would be this big, and is fully one by
+ * [SUN_FULL_DP]. Bigger than the bead has grown by the zoom at which a sun reaches it, so a sun
+ * never starts out as a smaller disc inside its own star (#460).
+ */
+private const val SUN_FROM_DP = 4f
 private const val SUN_FULL_DP = 8f
 
 /** How far a new star's birth cloud reaches, on the screen. */
@@ -1045,8 +1053,8 @@ internal val SkyNightFaint: Color = skyColor(SkyPalette.NIGHT_FAINT)
 /**
  * One star: a point, then a glow.
  *
- * `docs/SKY.md` §3.5, *"a point, then a glow"* — a hard-edged near-white core, a tight bright inner
- * glow against it, and a soft faint outer glow spread by the mood. Those three live in the sprite
+ * `docs/SKY.md` §3.5, *"a point, then a glow"* — a crisp bead in the star's own colour, a thin rim
+ * of light against it, and a soft faint outer glow spread by the mood. Those three live in the sprite
  * ([SkySprites]); what happens here is where it goes, how bright it is at this instant, and the
  * prism flash on top.
  *
@@ -1066,10 +1074,12 @@ internal val SkyNightFaint: Color = skyColor(SkyPalette.NIGHT_FAINT)
  *
  * **Sub-pixel, and therefore not scaled.** The sprite is rasterised at the device's real pixel
  * density and stamped at its natural size at a fractional offset, so stars sit where they are
- * rather than snapping to whole pixels as the sky is panned. That rules out [SkyTwinkle.scaleAt]'s
- * 2% breathe, which would need a resample: in `docs/SKY.md` §3.6 the breathe is a dip in
- * brightness, and a 2% resample of a sprite this small costs more in softness than the swell is
- * worth.
+ * rather than snapping to whole pixels as the sky is panned. A bead that grows with the zoom is a
+ * new sprite at the new size ([SkySprites.star]), never this one resampled.
+ *
+ * **Light above the sprite's own is a second stamp.** The top of a twinkle and a star flaring in
+ * as it arrives both ask for more light than the sprite holds. Stamps add, so the remainder is
+ * stamped again on top rather than clipped away.
  *
  * Nothing here varies with how many records the star covers. A folded star is drawn exactly like a
  * single one; a bigger mark for a busier day would rank days by output (§6.2).
@@ -1093,12 +1103,13 @@ private fun DrawScope.drawStar(
     arrival: Float,
     /** Its radius as a sun at this zoom, or 0 while it is still a point of light. */
     sunPx: Float,
+    /** The camera's screen widths across, `1` for the whole sky: how far every bead has grown. */
+    zoom: Float,
 ) {
     if (arrival <= 0f) return
     // How brightly this star burns: its age and its arrival, and then its own beat. All are
     // multipliers on the sprite's own alphas, so the twinkle is a proportion of whatever the star
-    // already was — an old star's breathe is as faint as the old star, and no star can be twinkled
-    // up past a younger one.
+    // already was — an old star's flicker is as faint as the old star.
     val fade = SkyGlyph.starBrightness(kind, ageYears, moodLevel) * arrival
     val brightness = fade * SkyTwinkle.alphaAt(kind, id, elapsedMillis, options)
     // The flare as a star arrives lifts the fade above 1; a stroke or a disc takes it capped.
@@ -1110,6 +1121,7 @@ private fun DrawScope.drawStar(
         ageYears = ageYears,
         moodLevel = moodLevel,
         quiet = options.highContrast,
+        zoom = zoom,
     )
     val topLeft = Offset(centre.x - sprite.halfWidth, centre.y - sprite.halfHeight)
     drawImage(
@@ -1118,6 +1130,14 @@ private fun DrawScope.drawStar(
         alpha = brightness.coerceIn(0f, 1f),
         blendMode = BlendMode.Plus,
     )
+    if (brightness > 1f) {
+        drawImage(
+            image = sprite.image,
+            topLeft = topLeft,
+            alpha = (brightness - 1f).coerceAtMost(1f),
+            blendMode = BlendMode.Plus,
+        )
+    }
 
     drawGlint(
         sprites = sprites,
@@ -1130,7 +1150,8 @@ private fun DrawScope.drawStar(
         fade = fade,
     )
 
-    val coreRadius = (SkyGlyph.coreRadiusDp(kind, moodLevel) * SkyGlyph.coreScale(kind)).dp.toPx()
+    val coreRadius =
+        (SkyGlyph.coreRadiusDp(kind, moodLevel) * SkyGlyph.coreScale(kind) * SkyGlyph.zoomScale(zoom)).dp.toPx()
     val sun = if (sunPx > 0f) smooth(SUN_FROM_DP.dp.toPx(), SUN_FULL_DP.dp.toPx(), sunPx) else 0f
     val ringed = max(coreRadius, sunPx * sun)
 
@@ -1237,7 +1258,7 @@ private fun DrawScope.drawStar(
  * **Every alpha here is multiplied by [fade].** Without that an old star's glint would be drawn at
  * a new star's brightness and the oldest, faintest stars would be the ones flashing hardest — the
  * fade would be undone by the decoration laid over it. [fade] and not the twinkled brightness,
- * because the glint is its own event and should not also be modulated by the breathe it happens to
+ * because the glint is its own event and should not also be modulated by the flicker it happens to
  * land in.
  *
  * [SkyTwinkle.glintEnvelopeAt] returns zero under the motion switch and zero in the quiet sky, so

@@ -26,17 +26,22 @@ package com.daymark.app.sky
  *
  * ## The two curves
  *
- * Both are the ones signed off in `docs/prototypes/your-sky.html`, which opens in a browser and is
- * the thing the maintainer actually looked at. The numbers are transcribed rather than re-derived,
- * so what ships is what was agreed:
+ * The ramp is the approved phone sky's (`docs/prototypes/sky-phone.html`), which is the thing the
+ * maintainer signed off. The numbers are transcribed rather than re-derived, so what ships is what
+ * was agreed (#460):
  *
  * | Age | Tint | Why |
  * |---|---|---|
- * | new | `#C4DAFF` blue-white | a hot, close star |
- * | 7 months | `#FFFAEC` white | |
- * | 1 year 7 months | `#FFE296` gold | |
- * | 3 years 2 months | `#FFAC64` amber | |
- * | 5 years 6 months and beyond | `#FF6E58` deep red | the far end; it stops here and stays |
+ * | new | `#9DB8FF` blue | a hot, close star |
+ * | about 5 months | `#CDDCFF` blue-white | |
+ * | 1 year 4 months | `#FFF6EA` white | |
+ * | 2 years 7 months | `#FFDEA8` gold | |
+ * | 4 years | `#FFB476` amber | |
+ * | 5 years 6 months and beyond | `#FF8060` deep red | the far end; it stops here and stays |
+ *
+ * That sky's last stop, `#F06054` at seven years, is left off: its red-minus-blue warmth is lower
+ * than the stop before it, so the ramp would turn back on itself, and the rule below is that it
+ * never does.
  *
  * [fadeFor] falls from full brightness toward [FADE_FLOOR] with a time constant of [FADE_YEARS].
  * **It never reaches zero and it is never allowed to** — `docs/SKY.md` §3.5: *"Old stars recede but
@@ -45,11 +50,11 @@ package com.daymark.app.sky
  * and someone who comes back after five years must find everything they left. The floor is what
  * makes fading a sense of distance rather than a deletion on a timer.
  *
- * `0.22` and `2.1` years are the prototype's. The shape they give: half the fall has happened by
- * about 1.5 years, three quarters by about 3 years, and the last quarter never quite finishes.
- * That puts the fade's visible action inside the first few years, which is the span an ordinary
- * history covers, and leaves everything older sitting together on the floor instead of trailing
- * off toward nothing.
+ * The approved sky does not fade its stars at all; age is its colour alone. A little recession is
+ * kept here so the far sky still reads as far, but only a quarter of the light goes. A floor near
+ * a fifth draws anything over a year old in grey, and a sky of grey dots is a dull sky (#460).
+ * With [FADE_YEARS] at 2.1, half of that quarter has gone by about a year and a half and the rest
+ * settles in over the next few years.
  */
 object SkyAge {
 
@@ -89,16 +94,16 @@ object SkyAge {
     // -------------------------------------------------------------------------------------------
 
     /** Where each stop of the ramp sits, in years. Ascending, and the first is `0`. */
-    private val STOP_AGE_YEARS = floatArrayOf(0f, 0.6f, 1.6f, 3.2f, 5.5f)
+    private val STOP_AGE_YEARS = floatArrayOf(0f, 0.4f, 1.3f, 2.6f, 4f, 5.5f)
 
     /** The tint at each stop, packed `0xRRGGBB` the way [SkyPalette] packs colour. */
-    private val STOP_TINT = intArrayOf(0xC4DAFF, 0xFFFAEC, 0xFFE296, 0xFFAC64, 0xFF6E58)
+    private val STOP_TINT = intArrayOf(0x9DB8FF, 0xCDDCFF, 0xFFF6EA, 0xFFDEA8, 0xFFB476, 0xFF8060)
 
     /** The tint of a brand-new star. */
-    const val NEWEST_TINT = 0xC4DAFF
+    const val NEWEST_TINT = 0x9DB8FF
 
     /** The far end. Nothing reddens past this, however old it gets. */
-    const val OLDEST_TINT = 0xFF6E58
+    const val OLDEST_TINT = 0xFF8060
 
     /**
      * The tint of a star [ageYears] old, on one continuous ramp.
@@ -152,12 +157,11 @@ object SkyAge {
     /**
      * How faint an old star is allowed to get. **Never zero, and never near it.**
      *
-     * At 0.22 the oldest star on the surface is still a fifth as bright as today's — plainly there,
-     * plainly further away. The number is the prototype's, and the thing it is chosen against is
-     * the reading *"the app is deleting my past"*: anything low enough to be missed at a glance
-     * turns a person's first year into a gap they have to take on trust.
+     * At 0.75 the oldest star on the surface keeps three quarters of today's light: plainly there,
+     * a little further away. What it is chosen against is the reading *"the app is deleting my
+     * past"*, which a faint far sky invites, and a sky that has gone grey (#460).
      */
-    const val FADE_FLOOR = 0.22f
+    const val FADE_FLOOR = 0.75f
 
     /** A brand-new star. The top of the curve, stated so the renderer never assumes it. */
     const val FADE_NEW = 1.0f

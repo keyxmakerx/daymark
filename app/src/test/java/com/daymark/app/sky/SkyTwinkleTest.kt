@@ -66,10 +66,10 @@ class SkyTwinkleTest {
 
     /** Everything a star's rhythm is, as one comparable value. */
     private fun rhythmOf(kind: SkyKind, id: Long): String = listOf(
-        SkyTwinkle.breathePeriodMs(kind, id),
-        SkyTwinkle.breathePhase(kind, id),
-        if (SkyTwinkle.shimmers(kind, id)) 1f else 0f,
-        SkyTwinkle.shimmerPhase(kind, id),
+        SkyTwinkle.flickerSpeed(kind, id),
+        SkyTwinkle.flickerPhase(kind, id),
+        SkyTwinkle.episodeRate(kind, id),
+        SkyTwinkle.episodePhase(kind, id),
         if (SkyTwinkle.glints(kind, id)) 1f else 0f,
         SkyTwinkle.glintPeriodMs(kind, id),
         SkyTwinkle.glintOffsetMs(kind, id),
@@ -115,11 +115,17 @@ class SkyTwinkleTest {
         val rhythms = population.map { rhythmOf(it.first, it.second) }.toSet()
         assertEquals("some stars beat together", population.size, rhythms.size)
 
-        // Periods are spread across the whole range rather than clustered, so even stars that are
+        // Rates are spread across the whole range rather than clustered, so even stars that are
         // briefly in phase drift apart within a cycle or two.
-        val periods = population.map { SkyTwinkle.breathePeriodMs(it.first, it.second) }
-        assertTrue(periods.min() < SkyTwinkle.BREATHE_PERIOD_MIN_MS + 200f)
-        assertTrue(periods.max() > SkyTwinkle.BREATHE_PERIOD_MAX_MS - 200f)
+        val speeds = population.map { SkyTwinkle.flickerSpeed(it.first, it.second) }
+        assertTrue(speeds.min() < 0.02f)
+        assertTrue(speeds.max() > 0.98f)
+        val rates = population.map { SkyTwinkle.episodeRate(it.first, it.second) }
+        assertTrue(rates.min() < SkyTwinkle.EPISODE_RATE_MIN_RAD_PER_S + 0.002f)
+        assertTrue(
+            rates.max() >
+                SkyTwinkle.EPISODE_RATE_MIN_RAD_PER_S + SkyTwinkle.EPISODE_RATE_SPREAD_RAD_PER_S - 0.002f,
+        )
     }
 
     @Test
@@ -176,7 +182,7 @@ class SkyTwinkleTest {
     }
 
     // -------------------------------------------------------------------------------------------
-    // Seven independent draws, not one draw wearing seven hats.
+    // Independent draws, not one draw wearing several hats.
     // -------------------------------------------------------------------------------------------
 
     private fun correlation(xs: List<Double>, ys: List<Double>): Double {
@@ -200,7 +206,7 @@ class SkyTwinkleTest {
         // second property derived by xor-ing a salt onto an already-mixed hash, where SkyRandom.unit
         // keeps only the top 24 bits. A salt with those bits set yields the mirror of the first
         // draw, which is perfectly correlated and looks perfectly random on its own.
-        val xs = population.map { SkyTwinkle.breathePeriodMs(it.first, it.second).toDouble() }
+        val xs = population.map { SkyTwinkle.episodeRate(it.first, it.second).toDouble() }
         val mirrored = xs.map { 1.0 - it }
         assertTrue(
             "the checker cannot see a property that is another one mirrored",
@@ -211,9 +217,10 @@ class SkyTwinkleTest {
     @Test
     fun `every rhythm is its own draw`() {
         val draws = linkedMapOf(
-            "breathe period" to population.map { SkyTwinkle.breathePeriodMs(it.first, it.second).toDouble() },
-            "breathe phase" to population.map { SkyTwinkle.breathePhase(it.first, it.second).toDouble() },
-            "shimmer phase" to population.map { SkyTwinkle.shimmerPhase(it.first, it.second).toDouble() },
+            "flicker speed" to population.map { SkyTwinkle.flickerSpeed(it.first, it.second).toDouble() },
+            "flicker phase" to population.map { SkyTwinkle.flickerPhase(it.first, it.second).toDouble() },
+            "episode rate" to population.map { SkyTwinkle.episodeRate(it.first, it.second).toDouble() },
+            "episode phase" to population.map { SkyTwinkle.episodePhase(it.first, it.second).toDouble() },
             "glint period" to population.map { SkyTwinkle.glintPeriodMs(it.first, it.second).toDouble() },
             "glint offset" to population.map {
                 (SkyTwinkle.glintOffsetMs(it.first, it.second) /
@@ -367,9 +374,9 @@ class SkyTwinkleTest {
                     0f,
                 )
                 assertEquals(
-                    "scale moved with motion off",
+                    "light moved with motion off",
                     1f,
-                    SkyTwinkle.scaleAt(entry.first, entry.second, t, still),
+                    SkyTwinkle.lightAt(entry.first, entry.second, t, still),
                     0f,
                 )
                 assertEquals(
@@ -388,24 +395,26 @@ class SkyTwinkleTest {
     }
 
     @Test
-    fun `the quiet sky keeps its breathe and loses its glints`() {
+    fun `the quiet sky keeps its twinkle and loses its glints`() {
         val glinting = population.first { SkyTwinkle.glints(it.first, it.second) }
         var lit = 0
-        var breathed = false
+        var twinkled = false
         var t = 0L
-        while (t <= 60_000L) {
+        // Long enough for the slowest star's flicker to come round: an episode returns at least
+        // every 160 seconds.
+        while (t <= 200_000L) {
             if (SkyTwinkle.glintEnvelopeAt(glinting.first, glinting.second, t, quiet) > 0f) lit++
-            if (SkyTwinkle.alphaAt(glinting.first, glinting.second, t, quiet) != 1f) breathed = true
+            if (SkyTwinkle.alphaAt(glinting.first, glinting.second, t, quiet) != 1f) twinkled = true
             t += 17L
         }
         assertEquals("a glint survived the high-contrast sky", 0, lit)
-        assertTrue("the quiet sky stopped breathing as well", breathed)
+        assertTrue("the quiet sky stopped twinkling as well", twinkled)
 
         // The control: the same star, over the same instants, does glint in the ordinary sky — so
         // the zero above is the switch working and not a star that never glints anywhere.
         var litOrdinary = 0
         t = 0L
-        while (t <= 60_000L) {
+        while (t <= 200_000L) {
             if (SkyTwinkle.glintEnvelopeAt(glinting.first, glinting.second, t, moving) > 0f) litOrdinary++
             t += 17L
         }
@@ -413,65 +422,111 @@ class SkyTwinkleTest {
     }
 
     // -------------------------------------------------------------------------------------------
-    // Subtle.
+    // Gentle, slow, and centred on the star's own light.
     // -------------------------------------------------------------------------------------------
 
     @Test
-    fun `the twinkle is shallow, in brightness and in size`() {
-        // "It should look like a night sky, not an instrument." A star may lose a fifth of its
-        // brightness at the bottom of its breathe and gain none at the top: the twinkle only ever
-        // takes light away from full, so no star can be twinkled up past another.
-        //
-        // The three depths are bounded here **as numbers**, not against themselves. A version of
-        // this test that only checked the sweep against `1 - BREATHE_DEPTH - SHIMMER_DEPTH` passed
-        // with the depth raised to 0.9 — the bound moved with the mutation, which is this repo's
-        // commonest bug shape written into a test of my own.
-        assertTrue("the breathe is a strobe: ${SkyTwinkle.BREATHE_DEPTH}", SkyTwinkle.BREATHE_DEPTH <= 0.25f)
-        assertTrue("the shimmer is not faint: ${SkyTwinkle.SHIMMER_DEPTH}", SkyTwinkle.SHIMMER_DEPTH <= 0.08f)
-        assertTrue("stars are pulsing in size: ${SkyTwinkle.BREATHE_SCALE}", SkyTwinkle.BREATHE_SCALE <= 0.06f)
+    fun `the twinkle is gentle and slow`() {
+        // "It should look like a night sky, not an instrument." The limits are bounded here **as
+        // numbers**, not against the constants that set them: a version of this kind of test that
+        // checked the sweep against `1 - DEPTH` passed with the depth raised to 0.9, because the
+        // bound moved with the mutation.
+        assertTrue("the flicker is a strobe: ${SkyTwinkle.FLICKER_DEPTH}", SkyTwinkle.FLICKER_DEPTH <= 0.6f)
+        assertTrue("the flicker swings too far: ${SkyTwinkle.FLICKER_SWING}", SkyTwinkle.FLICKER_SWING <= 0.4f)
+        // Three flashes a second is where flicker starts to trouble people. The fastest sine is
+        // computed from the rates themselves, so a faster rate moves this number and fails here.
+        assertTrue(
+            "a star flickers faster than three times a second: ${SkyTwinkle.FLICKER_FASTEST_HZ}",
+            SkyTwinkle.FLICKER_FASTEST_HZ < 3f,
+        )
+        assertTrue("no star flickers at all", SkyTwinkle.FLICKER_FASTEST_HZ > 0.5f)
 
-        val floor = 1f - SkyTwinkle.BREATHE_DEPTH - SkyTwinkle.SHIMMER_DEPTH
         var lowest = 2f
         var highest = -1f
-        var smallest = 2f
-        var largest = -1f
+        var lowestAlpha = 2f
+        var highestAlpha = -1f
         for (entry in population.take(300)) {
             var t = 0L
-            while (t <= 20_000L) {
+            while (t <= 200_000L) {
+                val light = SkyTwinkle.lightAt(entry.first, entry.second, t, moving)
                 val alpha = SkyTwinkle.alphaAt(entry.first, entry.second, t, moving)
-                val scale = SkyTwinkle.scaleAt(entry.first, entry.second, t, moving)
-                lowest = Math.min(lowest, alpha)
-                highest = Math.max(highest, alpha)
-                smallest = Math.min(smallest, scale)
-                largest = Math.max(largest, scale)
+                assertEquals(
+                    "the sprite's alpha is not the light carried into encoded pixels",
+                    Math.pow(light.toDouble(), 1.0 / 2.2).toFloat(),
+                    alpha,
+                    1e-6f,
+                )
+                lowest = Math.min(lowest, light)
+                highest = Math.max(highest, light)
+                lowestAlpha = Math.min(lowestAlpha, alpha)
+                highestAlpha = Math.max(highestAlpha, alpha)
                 t += 53L
             }
         }
-        println("  alpha $lowest..$highest, scale $smallest..$largest")
-        assertTrue("a star fell below three quarters brightness: $lowest", lowest >= 0.7f)
-        assertTrue("a star went darker than the twinkle allows: $lowest", lowest >= floor - 1e-5f)
-        assertTrue("a star went brighter than full: $highest", highest <= 1f + 1e-5f)
-        assertTrue("the breathe does nothing at all", lowest < 0.95f)
-        val half = SkyTwinkle.BREATHE_SCALE / 2f
-        assertTrue("a star grew more than the breathe allows: $largest", largest <= 1f + half + 1e-5f)
-        assertTrue("a star shrank more than the breathe allows: $smallest", smallest >= 1f - half - 1e-5f)
-        assertTrue("the breathe does not move the star at all", largest > smallest)
+        println("  light $lowest..$highest, alpha $lowestAlpha..$highestAlpha")
+        assertTrue("a star lost more than a quarter of its light: $lowest", lowest >= 0.75f)
+        assertTrue("a star gained more than a quarter of its light: $highest", highest <= 1.25f)
+        assertTrue("a sprite dimmed by more than an eighth: $lowestAlpha", lowestAlpha >= 0.875f)
+        assertTrue("a sprite brightened by more than a ninth: $highestAlpha", highestAlpha <= 1.11f)
+        // The control: the sweep saw the flicker do something, both ways.
+        assertTrue("the flicker never dims a star", lowest < 0.85f)
+        assertTrue("the flicker never brightens a star", highest > 1.15f)
+    }
+
+    /** A star's light averaged over ten minutes, at a step that lands on no beat. */
+    private fun meanLight(light: (Long) -> Float): Double {
+        var total = 0.0
+        var samples = 0
+        var t = 0L
+        while (t <= 600_000L) {
+            total += light(t)
+            samples++
+            t += 31L
+        }
+        return total / samples
     }
 
     @Test
-    fun `about a third of stars carry the quick shimmer`() {
-        val shimmering = population.count { SkyTwinkle.shimmers(it.first, it.second) }
-        val share = shimmering.toDouble() / population.size
-        println("  $shimmering of ${population.size} shimmer (${"%.1f".format(share * 100)}%)")
-        assertTrue("almost nothing shimmers: $share", share > 0.25)
-        assertTrue("almost everything shimmers: $share", share < 0.42)
-        // And it is not the breathe phase wearing a second hat, which is how the prototype picks
-        // them: shimmering stars are spread across the whole breathe cycle, not bunched in a third
-        // of it.
-        val phases = population.filter { SkyTwinkle.shimmers(it.first, it.second) }
-            .map { SkyTwinkle.breathePhase(it.first, it.second) }
-        assertTrue("shimmering stars are bunched at the top of the breathe", phases.min() < 1f)
-        assertTrue("shimmering stars are bunched at the bottom of the breathe", phases.max() > 5f)
+    fun `the centring check can fail`() {
+        // Run first. A twinkle that only ever adds light, the shape of a star that "sparkles" on
+        // top of its brightness, must be seen by the checker below.
+        val adding = meanLight { t -> 1f + 0.2f * Math.abs(Math.sin(t / 700.0)).toFloat() }
+        assertTrue("the checker cannot see a twinkle that only adds light: $adding", Math.abs(adding - 1.0) > 0.01)
+    }
+
+    @Test
+    fun `the twinkle gives back as much light as it takes`() {
+        // So over any few seconds a star is as bright as its age makes it, and the twinkle can
+        // never be the reason one star reads as brighter than another.
+        for (entry in population.take(40)) {
+            val mean = meanLight { t -> SkyTwinkle.lightAt(entry.first, entry.second, t, moving) }
+            assertTrue("${entry.first} ${entry.second} averages $mean of its light", Math.abs(mean - 1.0) < 0.01)
+        }
+    }
+
+    @Test
+    fun `a star flickers for a while and then holds still`() {
+        // The slow envelope: at any instant part of the sky is flickering and the rest is still,
+        // and every star takes its turn at both.
+        var t = 0L
+        while (t <= 300_000L) {
+            val flickering = population.count { SkyTwinkle.lightAt(it.first, it.second, t, moving) != 1f }
+            val share = flickering.toDouble() / population.size
+            assertTrue("almost nothing is flickering at ${t}ms: $share", share > 0.25)
+            assertTrue("almost everything is flickering at ${t}ms: $share", share < 0.7)
+            t += 10_007L
+        }
+        for (entry in population.take(100)) {
+            var stillSeen = false
+            var flickerSeen = false
+            t = 0L
+            while (t <= 400_000L) {
+                if (SkyTwinkle.lightAt(entry.first, entry.second, t, moving) == 1f) stillSeen = true else flickerSeen = true
+                t += 97L
+            }
+            assertTrue("${entry.first} ${entry.second} never holds still", stillSeen)
+            assertTrue("${entry.first} ${entry.second} never flickers", flickerSeen)
+        }
     }
 
     // -------------------------------------------------------------------------------------------

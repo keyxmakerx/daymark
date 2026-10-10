@@ -15,7 +15,7 @@ import org.junit.Test
 class SkyAgeTest {
 
     /** Ages worth naming: the stops, either side of each stop, and the far end. */
-    private val stops = floatArrayOf(0f, 0.6f, 1.6f, 3.2f, 5.5f)
+    private val stops = floatArrayOf(0f, 0.4f, 1.3f, 2.6f, 4f, 5.5f)
 
     private fun red(rgb: Int): Int = (rgb shr 16) and 0xFF
 
@@ -184,9 +184,11 @@ class SkyAgeTest {
             previous = here
         }
         assertEquals("the far sky is not on the floor", SkyAge.FADE_FLOOR, SkyAge.fadeFor(40f), 1e-6f)
-        // And it does something on the way: an old star is plainly fainter than a new one.
-        assertTrue(SkyAge.fadeFor(3f) < 0.5f)
-        assertTrue(SkyAge.fadeFor(0.25f) > 0.8f)
+        // And it does something on the way, without going grey: an old star sits a little back
+        // from a new one and keeps most of its light (#460).
+        assertTrue(SkyAge.fadeFor(3f) < 0.85f)
+        assertTrue(SkyAge.fadeFor(0.25f) > 0.95f)
+        assertTrue("the far sky has gone grey", SkyAge.FADE_FLOOR >= 0.7f)
     }
 
     // -------------------------------------------------------------------------------------------
