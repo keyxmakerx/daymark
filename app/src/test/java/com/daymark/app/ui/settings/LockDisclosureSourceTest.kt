@@ -217,18 +217,30 @@ class LockDisclosureSourceTest {
         )
     }
 
-    /** Exports are a plain file the person asked for. They do not belong in a claim about storage. */
+    /**
+     * Exports are a plain file the person asked for. They do not belong in a claim about storage.
+     *
+     * The one exception is the PIN row's way back from a forgotten PIN, which IS restoring a backup
+     * (#146) — so "backup" may appear there, in exactly that sentence, and nowhere else.
+     */
     @Test
     fun `neither row talks about exports`() {
+        val words = listOf("export", "backup", "csv", "pdf")
+        val allowed = mapOf(pinSlice to PIN_COPY)
         for (slice in listOf(atRestSlice, pinSlice)) {
-            for (word in listOf("export", "backup", "csv", "pdf")) {
+            for (word in words) {
                 assertFalse(
                     "a Privacy row mentions \"$word\". A backup is a file the person asked for and " +
                         "put where they chose; folding it into a sentence about what the app does " +
                         "to its own storage either overclaims or turns a row into a lecture.",
-                    literalsIn(slice).any { it.lowercase().contains(word) },
+                    literalsIn(slice).any { it != allowed[slice] && it.lowercase().contains(word) },
                 )
             }
         }
+        // The detector: the exemption is that one sentence, and a planted export claim is still seen.
+        assertTrue(PIN_COPY.contains("backup"))
+        val planted = pinSlice.replace("\"The PIN guards the screen.", "\"Backups are encrypted too. The PIN guards the screen.")
+        assertTrue("the plant did not land", planted != pinSlice)
+        assertTrue(literalsIn(planted).any { it != PIN_COPY && it.lowercase().contains("backup") })
     }
 }
