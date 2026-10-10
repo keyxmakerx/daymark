@@ -116,12 +116,12 @@ package com.daymark.app.sky
  *
  * **What it did not fix, measured and stated rather than hoped over.** A star is drawn *additively*
  * now, and alpha compositing happens in encoded sRGB, so the same glow adds slightly less linear
- * light over a darker ground. The dimmest thing the surface can produce — an oldest star's core at
- * [SkyAge.FADE_FLOOR], at the bottom of its breathe — measures **1.53:1** on `#07070A` where it
- * measured 1.70:1 on `#16150F`. Both are far under [CONTRAST_FLOOR] and both are meant to be:
- * `docs/SKY.md` §3.5 asks for old stars to *"recede but never vanish"*, and that is a decorative
- * floor, not text. It is recorded because "the ground got darker so everything got brighter" is the
- * intuition, and for added light it is false.
+ * light over a darker ground. The dimmest star the surface can produce — the heart of an oldest
+ * star's bead ([SkyStarLight]), at [SkyAge.FADE_FLOOR] and the bottom of its twinkle — measures
+ * **5.00:1** on `#07070A` where it measures 5.46:1 on `#16150F`. That it clears [CONTRAST_FLOOR] is
+ * a side effect, not a rule: a star is not text, and `docs/SKY.md` §3.5 asks only that old stars
+ * *"recede but never vanish"*. It is recorded because "the ground got darker so everything got
+ * brighter" is the intuition, and for added light it is false.
  */
 object SkyPalette {
 
@@ -181,6 +181,12 @@ object SkyPalette {
     /** A star being born: the core that warms before it ignites, and the ring of light after. */
     const val BIRTH_CORE = 0xFFE0C2
     const val BIRTH_RING = 0xB8CCFF
+
+    /**
+     * A black hole's middle, as it passes: no light at all. Every other colour a hole has is the
+     * sky's own ([SkyColours.Look.disk]); this one is the same in every sky because it is none.
+     */
+    const val HOLE_SHADOW = 0x000000
 
     /**
      * The project thread's stub, the one thing on the Sky still drawn in it. Never a star core.

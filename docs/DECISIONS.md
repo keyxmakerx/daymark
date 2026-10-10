@@ -288,7 +288,7 @@ nothing. Where evidence is citable, it is
 psychoeducation for the person, in the app.
 
 **As built:** `export/PdfReportGenerator.kt`, `export/ReportLayout.kt`, `stats/DiscussionPrompts.kt`.
-Seeing the report before export: #198.
+Seeing the report before export: `ui/export/ReportExportScreen.kt` (#198).
 Source: [the August plan §1](https://github.com/keyxmakerx/daymark/blob/968638594f10f6a4424415f8a5c14fd8eb4aaa00/docs/PLAN_2026-08-NEXT.md?plain=1#L9-L58).
 
 ---
@@ -353,9 +353,10 @@ Settled with it (2026-09-26, on #186 and #189):
 
 The maintainer approved a redesign of the Sky on 2026-10-03; `docs/prototypes/sky-phone.html` shows
 it and `docs/SKY.md` describes what is built. Built: every star a memory, the three forms, bands and
-clusters, the opening and a new star's birth, zoom down to suns, constellations and their photo, and
-the Key. Not built: the supernova, black and white holes, dark matter, the other objects, changing
-the colours, "Reset my sky" and tracker objects, #449. Where the prototype and this decision
+clusters, the opening and a new star's birth, zoom down to suns, constellations and their photo, the
+Key, the supernova, putting memories away and bringing them back with black and white holes,
+nebulae, the sky's own colours and changing them, "Reset my sky", and tracker objects. Not built:
+dark matter (#450) and the other objects, #449. Where the prototype and this decision
 disagree, this decision governs the build.
 
 **Decision.**

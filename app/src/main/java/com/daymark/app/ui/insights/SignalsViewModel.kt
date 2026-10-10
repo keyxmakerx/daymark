@@ -8,7 +8,6 @@ import com.daymark.app.data.SuggestionControlsStore
 import com.daymark.app.data.entity.AssessmentResult
 import com.daymark.app.data.entity.EntryWithActivities
 import com.daymark.app.stats.MoodCorrelations
-import com.daymark.app.stats.MoodPatterns
 import com.daymark.app.stats.Signals
 import com.daymark.app.stats.SuggestionControls
 import com.daymark.app.ui.assessments.Assessments
@@ -98,7 +97,7 @@ class SignalsViewModel @Inject constructor(
         if (entries.isEmpty()) {
             return Signals.Inputs(
                 totalEntries = 0, avgMood = null, moodTodayLevel = null, loggedToday = false,
-                topLift = null, topDrag = null, monthDeltaPct = null,
+                topLift = null, topDrag = null,
                 dueCheckin = null, onThisDayNote = null,
             )
         }
@@ -120,29 +119,9 @@ class SignalsViewModel @Inject constructor(
             loggedToday = days.contains(today),
             topLift = topLift,
             topDrag = topDrag,
-            monthDeltaPct = periodDeltaPct(entries, today, 30),
             dueCheckin = dueCheckin(entries.size, assessments, nowMillis),
             onThisDayNote = onThisDayNote(byDay, today),
         )
-    }
-
-    /** Percent change of the last [days]-day average mood vs the [days] days before it, or null. */
-    private fun periodDeltaPct(entries: List<EntryWithActivities>, today: LocalDate, days: Long): Double? {
-        val curStart = today.minusDays(days - 1)
-        val prevStart = today.minusDays(days * 2 - 1)
-        val cur = ArrayList<Int>()
-        val prev = ArrayList<Int>()
-        for (e in entries) {
-            val d = DateUtils.toLocalDate(e.entry.dateTime)
-            when {
-                !d.isBefore(curStart) && !d.isAfter(today) -> cur.add(e.entry.moodLevel)
-                !d.isBefore(prevStart) && d.isBefore(curStart) -> prev.add(e.entry.moodLevel)
-            }
-        }
-        // Gate like every other input: a month card shouldn't fire off a near-empty window.
-        val cmp = MoodPatterns.periodCompare(cur, prev)
-        if (cmp.currentCount < MIN_PERIOD_ENTRIES || cmp.previousCount < MIN_PERIOD_ENTRIES) return null
-        return cmp.deltaPct
     }
 
     /**
@@ -166,7 +145,6 @@ class SignalsViewModel @Inject constructor(
 
     private companion object {
         const val MIN_OCCURRENCES = 5
-        const val MIN_PERIOD_ENTRIES = 5
         const val MIN_ENTRIES_FOR_CHECKIN = 14
         const val WEEK_MS = 7L * 24 * 60 * 60 * 1000
     }

@@ -15,8 +15,7 @@ old one's journal. To bring your entries across:
    backup**. Keep the file on your phone and do not send or upload it. It is not encrypted: every
    entry, journal page, the safety plan, the people and notes, and your photos are in it (#236).
 2. Write down what a backup does not carry: your crisis line if you changed it (**More → Gentle
-   support → Crisis resources**), your sleep setup answers, and your settings. Your PIN does not
-   carry over either.
+   support → Crisis resources**) and your settings. Your PIN does not carry over either.
 3. Install the new build. It arrives as a second app, also called Daymark, and starts empty. The old
    one keeps everything.
 4. In the new one, finish setup, then **Settings → Restore backup**, choose the file, then **Replace
@@ -29,6 +28,12 @@ The same steps apply to the sync build. They are the steps in docs/FAQ.md "How d
 a new phone?", done on one phone.
 
 ### Added
+- **You see the PDF report before it is saved, and choose which journal entries go in it.** After
+  the report's options, **Next** shows every page as your clinician will see it, and nothing is
+  written until you tap **Save PDF**. If you switch on journal entries, you first pick them one at a
+  time, with none ticked to begin with, or take everything in the range as a separate choice. Before,
+  the only choice was all of your journal for the range or none of it, and the file was written
+  before you could look at it (#303, #198).
 - **Settings ▸ About shows the version**, so a bug report can say which build it came from (#221).
 - **A backup carries the crisis line you set**, and a restore brings it back. "Merge" never
   replaces a line you changed on this phone, and no restore ever puts the default back over yours
@@ -56,6 +61,20 @@ a new phone?", done on one phone.
   swatches carry the same ring as the dots they key.
 
 ### Removed
+- **The sleep setup is gone, and so are its answers.** It asked about a bed partner, pets, noise,
+  where your phone sits and how you sleep, for sleep sensing Daymark will not build, so nothing ever
+  read the answers. They are deleted from your phone the first time the updated app opens (#356).
+- **Insights no longer marks what you logged.** The "Avg mood" card, the "this week against last"
+  card with its up and down arrows, the "In review" summary and the "Logging consistency" grid are
+  gone. An average of a mood scale reads as a grade, a week set against the last reads as a verdict,
+  and a grid of empty squares is exactly what a hard stretch looks like. "Days with an entry" stays.
+  The lists under "What goes with your mood" are now headed "Logged alongside higher moods" and
+  "Logged alongside lower moods", in plain ink, because an activity showing up alongside a mood does
+  not mean it caused it (#354, #358, #203).
+- **The "steadier stretch" and "harder stretch lately" cards are gone**, along with their switch
+  under suggestions. Both scored this month against the last by your average mood. Support after a
+  hard day is unchanged: it comes from what you log that day, and the support space is always one
+  tap away (#360).
 - **The old Stats screen**, which nothing opened and which still drew daily averages, is gone.
 - **"Review my year" ends on two plain facts, and no longer offers to save a picture of your
   year.** The last page used to show three numbers: your average mood, your brightest month, and
@@ -87,13 +106,20 @@ a new phone?", done on one phone.
   still contains unlock times restores normally; the badges in it are just not brought back.
 
 ### Added
+- **The owner's browser console receives game plans.** Under Inbox, each plan from a clinician you
+  have paired with is opened and checked against the key you recorded for them, then shown as a
+  proposal you can accept or decline. A plan that fails a check says so and cannot be accepted, and a
+  withdrawn plan is kept as history. Your decision is kept in your own encrypted record; your
+  clinician is not told (#231).
 - **A new sky.** Every star in "Your sky" is one of your memories; the faint background specks are
   gone, and the Field switch with them. Each sky takes a shape of its own from a seed that is yours alone: a river on one of six
   courses, a run of galaxies, or an open sky with no line to follow, and skies come in different
   sizes. Your memories run along it from oldest to newest, counted in memories rather than days, so
   a quiet month takes no room. Steady stretches can form a band, rarely, and on-and-off weeks
-  gather into clusters; none of it is a reward. Older stars drift outward and turn from blue-white
-  to red, and red only means old.
+  gather into clusters; none of it is a reward. Each star is a small bead of light in its own
+  colour, with a thin rim and a twinkle that comes and goes, and every star is as bright as every
+  other whatever the day was. Older stars drift outward and turn from blue to red, and red only
+  means old.
   The sky opens with its stars twinkling in and flies to your newest one; a new star you have not
   seen yet is born in front of you. A tap skips all of it, and with Motion off the sky opens still,
   on today. You can zoom from the whole sky to a single star drawn as a sun. **Today** takes you to
@@ -102,6 +128,20 @@ a new phone?", done on one phone.
   their stars drift apart and the constellation falls out of the sky, but **See it as you drew it**
   always shows it as it was. Constellations are kept in the encrypted database and come back with a
   full restore, along with your sky's seed, so a restored sky is the same sky.
+- **The rest of the sky: its own colours, nebulae, hard days, putting memories away, and
+  trackers.** Each sky has colours of its own, never a green, in the deep tones of its space and the
+  soft glows behind your stars. For 30 days from first opening it, **Colours** lets you try others or
+  go back to the first ones; after that they stay. **Reset my sky**, at the foot of the Key, grows
+  your sky again with a new shape and new colours, and every memory, name and constellation stays.
+  A week with four or more journal entries has a nebula of gas round its stars, and weeks like that
+  one after another share one. On **Life events**, tap one to **Mark as hard**: its star gets a dim
+  supernova's shell, which marks that day and nothing more, and the sky never opens on it. You can
+  unmark it the same way. **Put away** on any star hides it from your sky and nowhere else; with
+  Motion on, a small black hole draws it in and closes. The list keeps what you put away under its
+  own heading, where **Bring back** returns it, and a white hole sends it home. A tracker can be an
+  object of its own beside your memories, a cluster, a belt or a ring, if you switch on **Show in
+  my sky** on its screen; more logs make it denser, never brighter. Backups (format 19) carry all of
+  it; a merge does not yet carry what you put away (#455).
 - **Game plans and suggestions from your clinicians, on your phone** (sync build). Settings → Sync
   with your server → From your clinicians. "Check for new items" is the only time the phone asks;
   each item is opened with your own key and believed only if it is signed by the clinician you
@@ -570,6 +610,11 @@ a new phone?", done on one phone.
   quiet notice that names nobody and counts nothing.
 
 ### Fixed
+- **The Companion answers "not found" for an API address it does not have**, instead of the
+  owner's page with a success code, so a monitor or an older app is not misled (#390).
+- **An owner going too fast is no longer told their token is wrong.** On the clinician channels the
+  server now answers "too many requests", as everywhere else, and the owner console waits a moment
+  and tries once more, so a quick click is not reported as a failure (#382).
 - **Leaving the owner console no longer locks it or forgets the clinicians you added.** Going to
   another route (open a backup, Sync) and coming back finds the console as you left it, with every
   clinician still listed. Locking is still the button, closing the tab, or going idle.

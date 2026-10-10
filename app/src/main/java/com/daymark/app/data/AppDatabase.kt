@@ -45,8 +45,9 @@ import com.daymark.app.data.entity.Treatment
         com.daymark.app.data.entity.InstrumentResult::class,
         com.daymark.app.data.entity.TaskResult::class,
         com.daymark.app.data.entity.Constellation::class,
+        com.daymark.app.data.entity.SkyPutAway::class,
     ],
-    version = 22,
+    version = 23,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -70,6 +71,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun entryPersonDao(): com.daymark.app.data.dao.EntryPersonDao
     abstract fun companionDao(): com.daymark.app.data.dao.CompanionDao
     abstract fun constellationDao(): com.daymark.app.data.dao.ConstellationDao
+    abstract fun skyPutAwayDao(): com.daymark.app.data.dao.SkyPutAwayDao
 
     /** Seeds a sensible set of starter activities on first install. */
     class SeedCallback : Callback() {
@@ -738,6 +740,28 @@ abstract class AppDatabase : RoomDatabase() {
                         "`madeEpochDay` INTEGER NOT NULL, " +
                         "`points` TEXT NOT NULL, " +
                         "`createdAt` INTEGER NOT NULL)",
+                )
+            }
+        }
+
+        /**
+         * v22 -> v23: the sky's second batch (`DECISIONS.md` §D11). A life event the person marked
+         * as hard, each tracker's "Show in my sky", and the memories put away from the sky.
+         *
+         * Nothing is back-filled and nothing is guessed: no life event becomes hard, because only
+         * the person marks one; no tracker shows, because a tracker appears only once the person
+         * switches it on; and nothing is put away.
+         */
+        val MIGRATION_22_23 = object : Migration(22, 23) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `life_events` ADD COLUMN `hard` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `trackers` ADD COLUMN `showInSky` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `sky_put_away` (" +
+                        "`kind` TEXT NOT NULL, " +
+                        "`recordId` INTEGER NOT NULL, " +
+                        "`putAwayEpochDay` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`kind`, `recordId`))",
                 )
             }
         }

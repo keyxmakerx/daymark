@@ -74,8 +74,7 @@ To bring your entries across:
    backup**. Keep the file on your phone and do not send or upload it. It is not encrypted: every
    entry, journal page, the safety plan, the people and notes, and your photos are in it (#236).
 2. Write down what a backup does not carry: your crisis line if you changed it (**More → Gentle
-   support → Crisis resources**), your sleep setup answers, and your settings. Your PIN does not
-   carry over either.
+   support → Crisis resources**) and your settings. Your PIN does not carry over either.
 3. Install the new build. It arrives as a second app, also called Daymark, and starts empty. The old
    one keeps everything.
 4. In the new one, finish setup, then **Settings → Restore backup**, choose the file, then **Replace

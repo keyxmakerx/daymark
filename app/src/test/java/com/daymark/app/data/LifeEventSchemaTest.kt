@@ -63,7 +63,7 @@ class LifeEventSchemaTest {
         assertFalse("KDoc survived stripping", entitySource.contains("/**"))
         assertTrue("the entity declaration was stripped away", entitySource.contains("val epochDay: Long"))
 
-        assertEquals(4, entityFields(entitySource).size)
+        assertEquals(5, entityFields(entitySource).size)
         assertEquals(4, sqlColumns(createTable(databaseSource)).size)
     }
 
@@ -90,8 +90,27 @@ class LifeEventSchemaTest {
             ),
             sqlColumns(createTable(databaseSource)),
         )
-        assertEquals(renderedFromEntity(entitySource), sqlColumns(createTable(databaseSource)))
+        assertEquals(createdInV15(renderedFromEntity(entitySource)), sqlColumns(createTable(databaseSource)))
         assertTrue(createTable(databaseSource).contains("CREATE TABLE IF NOT EXISTS `$TABLE` ("))
+    }
+
+    /** The table as v15 created it: the entity without the one column added since. */
+    private fun createdInV15(columns: List<String>): List<String> = columns.filterNot { it.startsWith("`hard`") }
+
+    /**
+     * `hard` arrived in v23 (`DECISIONS.md` §D11), added off for every row, so no life event is
+     * marked hard by a migration: only the person marks one.
+     */
+    @Test
+    fun `v23 adds hard, off for every life event, as the entity declares it`() {
+        val v23 = Regex("\"([^\"]*)\"").findAll(
+            databaseSource.substringAfter("val MIGRATION_22_23").substringBefore("val DEFAULT_ACTIVITIES"),
+        ).joinToString("") { it.groupValues[1] }
+        assertTrue(v23, v23.contains("ALTER TABLE `$TABLE` ADD COLUMN `hard` INTEGER NOT NULL DEFAULT 0"))
+        assertTrue(entitySource.contains("@ColumnInfo(defaultValue = \"0\") val hard: Boolean = false"))
+        assertTrue("`hard` INTEGER NOT NULL" in renderedFromEntity(entitySource))
+        // The control: a migration that marked every event hard is not what is there.
+        assertFalse(v23.contains("ALTER TABLE `$TABLE` ADD COLUMN `hard` INTEGER NOT NULL DEFAULT 1"))
     }
 
     /**
@@ -105,15 +124,15 @@ class LifeEventSchemaTest {
         val dropped = right - "`createdAt` INTEGER NOT NULL"
         val wrongType = right.map { it.replace("`label` TEXT", "`label` INTEGER") }
         val nullable = right.map { it.replace("`epochDay` INTEGER NOT NULL", "`epochDay` INTEGER") }
-        val reordered = listOf(right[0], right[2], right[1], right[3])
+        val reordered = listOf(right[0], right[2], right[1]) + right.drop(3)
 
         assertNotEquals("a dropped column would pass", dropped, right)
         assertNotEquals("a wrong affinity would pass", wrongType, right)
         assertNotEquals("a lost NOT NULL would pass", nullable, right)
         assertNotEquals("a reordering would pass", reordered, right)
         // And the mutations must be mutations of something real, not of an empty list.
-        assertEquals(4, right.size)
-        assertEquals(3, dropped.size)
+        assertEquals(5, right.size)
+        assertEquals(4, dropped.size)
     }
 
     /**
@@ -239,7 +258,9 @@ class LifeEventSchemaTest {
     @Test
     fun `the entity is a date, a line, and nothing that judges it`() {
         val fields = entityFields(entitySource)
-        assertEquals(listOf("id", "epochDay", "label", "createdAt"), fields)
+        // `hard` is the one exception, and it is the person's own word: they mark a life event as
+        // hard, nothing asks or infers it, and it can be unmarked (`DECISIONS.md` §D11).
+        assertEquals(listOf("id", "epochDay", "label", "createdAt", "hard"), fields)
 
         // The detector: these are the names the fields this table must not have would arrive under,
         // and the check does fire on them.

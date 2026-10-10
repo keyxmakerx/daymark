@@ -78,7 +78,9 @@ ANNOT=$(find_jar org.jetbrains/annotations "annotations-13.0.jar")
 # `ui/SourceText.kt`, which imports nothing from the app, and so do `ColorSchemeSourceTest`, which
 # also reads the web's token sheet as text, `FaintInkSourceTest`, which also imports `java.io.File`,
 # `MonthGridSourceTest`, which imports `repoFile`, the helpers in `ui/SourceText.kt` and JUnit only,
-# and `WeekDaysSourceTest`, which imports the same and `java.util.Locale`.
+# and `WeekDaysSourceTest`, which imports the same and `java.util.Locale`. `InsightsVerdictSourceTest`
+# imports `repoFile`, the helpers in `ui/SourceText.kt` and JUnit only, and so does
+# `ReportPreviewSourceTest`.
 # `DynamicColorSourceTest` and `TickAndGreenSourceTest` import `repoFile`, `codeOnly`, `java.io.File`
 # and JUnit only; `HairlineFillSourceTest` imports `repoFile`, `java.io.File` and JUnit and uses
 # `codeOnly` and `withoutComments` from its own package; `ReportInkSourceTest` imports `repoFile`,
@@ -91,6 +93,8 @@ com.daymark.app.data.MigrationSchemaExportTest
 com.daymark.app.export.ReportCopySourceTest com.daymark.app.ui.settings.ReportExportSourceTest
 com.daymark.app.ui.theme.ColorSchemeSourceTest com.daymark.app.ui.FaintInkSourceTest
 com.daymark.app.ui.insights.MonthGridSourceTest com.daymark.app.ui.WeekDaysSourceTest
+com.daymark.app.ui.insights.InsightsVerdictSourceTest
+com.daymark.app.ui.export.ReportPreviewSourceTest
 com.daymark.app.ui.theme.DynamicColorSourceTest com.daymark.app.ui.insights.MoodLegendSourceTest
 com.daymark.app.ui.components.TickAndGreenSourceTest
 com.daymark.app.ui.HairlineFillSourceTest
@@ -98,7 +102,11 @@ com.daymark.app.export.ReportInkSourceTest
 com.daymark.app.ui.settings.ServerSyncSeamSourceTest
 com.daymark.app.ui.settings.CliniciansScreenSourceTest
 com.daymark.app.ui.settings.InboxScreenSourceTest
-com.daymark.app.notifications.NotificationPrivacySourceTest"
+com.daymark.app.notifications.NotificationPrivacySourceTest
+com.daymark.app.data.LifeEventSchemaTest
+com.daymark.app.data.ConstellationSchemaTest
+com.daymark.app.data.SkyPutAwaySchemaTest
+com.daymark.app.data.SkyProjectionSourceTest"
 SOURCES="$REPO/app/src/test/java/com/daymark/app/data/PeopleSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/TimedOfferSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/CompanionSchemaTest.kt
@@ -110,6 +118,8 @@ $REPO/app/src/test/java/com/daymark/app/ui/theme/ColorSchemeSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/FaintInkSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/insights/MonthGridSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/insights/MoodLegendSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/ui/insights/InsightsVerdictSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/ui/export/ReportPreviewSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/WeekDaysSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/theme/DynamicColorSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/components/TickAndGreenSourceTest.kt
@@ -119,6 +129,10 @@ $REPO/app/src/test/java/com/daymark/app/ui/settings/ServerSyncSeamSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/settings/CliniciansScreenSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/settings/InboxScreenSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/notifications/NotificationPrivacySourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/data/LifeEventSchemaTest.kt
+$REPO/app/src/test/java/com/daymark/app/data/ConstellationSchemaTest.kt
+$REPO/app/src/test/java/com/daymark/app/data/SkyPutAwaySchemaTest.kt
+$REPO/app/src/test/java/com/daymark/app/data/SkyProjectionSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/backup/RepoFile.kt
 $REPO/app/src/test/java/com/daymark/app/ui/SourceText.kt"
 
@@ -134,6 +148,12 @@ $f"
   fi
 done
 
+# `SkyProjectionSourceTest` ties the projection count to `SkyKind`, so `sky/` is compiled in too.
+# Every file there is import-free by design (tools/jvm-tests.sh sky checks it), so none is skipped.
+for f in $(find "$REPO/app/src/main/java/com/daymark/app/sky" -name '*.kt'); do
+  SOURCES="$SOURCES
+$f"
+done
 
 # shellcheck disable=SC2086
 java -cp "$KC:$STDLIB:$GL/kotlin-reflect-$KOTLIN.jar:$GL/kotlin-script-runtime-$KOTLIN.jar:$GL/kotlin-daemon-embeddable-$KOTLIN.jar:$GL/kotlinx-coroutines-core-jvm-1.6.4.jar:$GL/annotations-24.0.1.jar:$GL/trove4j-1.0.20200330.jar" \

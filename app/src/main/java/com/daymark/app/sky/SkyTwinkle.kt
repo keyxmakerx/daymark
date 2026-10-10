@@ -1,7 +1,7 @@
 package com.daymark.app.sky
 
 /**
- * Every star's own rhythm: a slow breathe, a faint shimmer on some, and a rare quarter-second
+ * Every star's own rhythm: a scintillation that comes and goes, and on some a rare quarter-second
  * glint. All decoration, all derived from the star's identity, none of it a reading of anyone.
  *
  * Import-free, like the rest of `sky/`. **No clock and no random source**: every function here is
@@ -29,7 +29,7 @@ package com.daymark.app.sky
  * `docs/SKY.md` §7.4 lists four, and each is a property of this file rather than a promise about
  * the renderer:
  *
- *  - **Everything stops under the motion switch.** [alphaAt] and [scaleAt] return exactly `1`, and
+ *  - **Everything stops under the motion switch.** [lightAt] and [alphaAt] return exactly `1`, and
  *    [glintEnvelopeAt] exactly `0`, whenever `options.motionEnabled` is false. The switch is a
  *    parameter of every time-dependent function, so a renderer cannot forget to consult it without
  *    deleting an argument. Motion carries no meaning, so a still sky loses nothing.
@@ -38,15 +38,21 @@ package com.daymark.app.sky
  *    [GLINT_PERIOD_MAX_MS] cycle — a duty cycle near 2%, so roughly four stars in a thousand are
  *    glinting at any instant. `SkyTwinkleTest` counts them over a realistic population.
  *  - **A glint is under a third of a second.** [GLINT_MS] is 280.
- *  - **Nothing is ever in step with anything else.** Every period and every phase is drawn from its
+ *  - **Nothing is ever in step with anything else.** Every rate and every phase is drawn from its
  *    own salted hash, so two stars share a beat only by a 1-in-16-million coincidence in each of
  *    four independent values.
  *
- * The amplitudes are deliberately small — the breathe moves brightness by at most [BREATHE_DEPTH]
- * and size by [BREATHE_SCALE], the shimmer by [SHIMMER_DEPTH] — because `docs/SKY.md` §3.6 makes
- * twinkle *"decoration only"*: a night sky, not an instrument. A star's tint never changes at all:
- * the glint is a coloured fringe added over the star and taken away again, which is why its colours
- * live here as separate values rather than as a shift applied to [SkyAge.tintFor].
+ * The scintillation is the approved phone sky's (`docs/prototypes/sky-phone.html`, `tw` in its star
+ * shader), number for number (#460). Three sines at different speeds add up to a flicker that never
+ * quite repeats, the way starlight wavers through air, and a slow envelope lets each star flicker
+ * for a while and then hold still. Its limits are numbers, not taste: the fastest sine runs under
+ * 2.3 cycles a second, well under the three a second at which flicker starts to trouble people, and
+ * the light never moves by more than [FLICKER_DEPTH] × [FLICKER_SWING], under a quarter either way.
+ * It is centred on the star's own light and gives back as much as it takes, so over any few
+ * seconds every star is as bright as its age makes it. `docs/SKY.md` §3.6 makes twinkle
+ * *"decoration only"*. A star's tint never changes at all: the glint is a coloured fringe added
+ * over the star and taken away again, which is why its colours live here as separate values rather
+ * than as a shift applied to [SkyAge.tintFor].
  *
  * ## A note on the salts, which is a real trap and not a style preference
  *
@@ -81,10 +87,10 @@ object SkyTwinkle {
      */
     private const val KIND_SALT = 0x7E3A91C5L
 
-    private const val BREATHE_PERIOD_SALT = 0x1F3B5D79L
-    private const val BREATHE_PHASE_SALT = 0x2A4C6E80L
-    private const val SHIMMER_SALT = 0x35576981L
-    private const val SHIMMER_PHASE_SALT = 0x40628A9CL
+    private const val FLICKER_SPEED_SALT = 0x1F3B5D79L
+    private const val FLICKER_PHASE_SALT = 0x2A4C6E80L
+    private const val EPISODE_RATE_SALT = 0x35576981L
+    private const val EPISODE_PHASE_SALT = 0x40628A9CL
     private const val GLINT_SALT = 0x4B6D8FA1L
     private const val GLINT_PERIOD_SALT = 0x5678A0B2L
     private const val GLINT_OFFSET_SALT = 0x6183B1C3L
@@ -93,52 +99,61 @@ object SkyTwinkle {
         SkyRandom.unit(SkyRandom.mix(kind.ordinal.toLong() * KIND_SALT + salt, id))
 
     // -------------------------------------------------------------------------------------------
-    // The slow breathe. Every star has one.
-    // -------------------------------------------------------------------------------------------
-
-    /** Slowest and fastest breathe, in milliseconds per cycle. The prototype's 3.5 to 8 seconds. */
-    const val BREATHE_PERIOD_MIN_MS = 3500f
-    const val BREATHE_PERIOD_MAX_MS = 8000f
-
-    /** How much of a star's brightness the breathe may take away at its lowest. */
-    const val BREATHE_DEPTH = 0.22f
-
-    /** How much a star grows and shrinks with the breathe: ±2%, which reads as air and not as size. */
-    const val BREATHE_SCALE = 0.04f
-
-    /** This star's breathe, in milliseconds per cycle. Fixed for the life of the record. */
-    fun breathePeriodMs(kind: SkyKind, id: Long): Float =
-        BREATHE_PERIOD_MIN_MS +
-            hash(kind, id, BREATHE_PERIOD_SALT) * (BREATHE_PERIOD_MAX_MS - BREATHE_PERIOD_MIN_MS)
-
-    /** Where in its own cycle this star starts, in radians. What keeps the sky out of step. */
-    fun breathePhase(kind: SkyKind, id: Long): Float = hash(kind, id, BREATHE_PHASE_SALT) * TAU_F
-
-    // -------------------------------------------------------------------------------------------
-    // The shimmer. A third of stars carry one as well.
+    // The scintillation. Every star has one.
     // -------------------------------------------------------------------------------------------
 
     /**
-     * How many stars shimmer. A third, as in the prototype.
-     *
-     * Drawn from its own hash rather than from the breathe phase — the prototype reuses the phase
-     * (`phase > 4.2`), which is fine on a canvas of five hundred but puts every shimmering star
-     * into the same third of the breathe cycle. `docs/SKY.md` §7.4 asks that *"nothing is ever in
-     * step with anything else"*, so the two are independent here.
+     * How much of the flicker reaches the star at the height of an episode. The approved sky's
+     * `0.6 + 0.4 × smoothstep(0.6, 2, lum)` at its ordinary star's light, which is [SkyStarLight.LIGHT]
+     * for every star here, so one depth for every star.
      */
-    const val SHIMMER_SHARE = 1f / 3f
+    const val FLICKER_DEPTH = 0.6f
 
-    /** About 1.6 seconds, from the prototype's `sin(t / 260)`. */
-    const val SHIMMER_PERIOD_MS = 1634f
+    /** Each of the three sines' share of the flicker, slowest first. They add up to [FLICKER_SWING]. */
+    private val FLICKER_AMPLITUDE = doubleArrayOf(0.2, 0.12, 0.08)
 
-    /** A quarter of the breathe's depth. Faint on purpose: it is texture, not a second pulse. */
-    const val SHIMMER_DEPTH = 0.05f
+    /** The most the three sines can add up to, either way. */
+    const val FLICKER_SWING = 0.4f
 
-    /** Whether this star carries the faint quick shimmer as well as the breathe. */
-    fun shimmers(kind: SkyKind, id: Long): Boolean = hash(kind, id, SHIMMER_SALT) < SHIMMER_SHARE
+    /**
+     * Each sine's speed for the slowest star, in radians a second, and how much faster the fastest
+     * star runs it. The approved sky's `3.1 + 4s`, `5.7 + 3s` and `9.3 + 5s`.
+     */
+    private val FLICKER_RATE_RAD_PER_S = doubleArrayOf(3.1, 5.7, 9.3)
+    private val FLICKER_RATE_SPREAD_RAD_PER_S = doubleArrayOf(4.0, 3.0, 5.0)
 
-    /** Where in the shimmer's cycle this star starts, in radians. */
-    fun shimmerPhase(kind: SkyKind, id: Long): Float = hash(kind, id, SHIMMER_PHASE_SALT) * TAU_F
+    /** How each sine's starting point is turned from the star's one phase, so the three never line up. */
+    private val FLICKER_PHASE_TURN = doubleArrayOf(1.0, 1.7, 2.3)
+
+    /** The fastest any sine runs, in cycles a second. Under 2.3, and the tests hold it under 3. */
+    val FLICKER_FASTEST_HZ: Float =
+        (FLICKER_RATE_RAD_PER_S.indices.maxOf {
+            FLICKER_RATE_RAD_PER_S[it] + FLICKER_RATE_SPREAD_RAD_PER_S[it]
+        } / TAU).toFloat()
+
+    /**
+     * How slowly a star's flicker comes and goes, in radians a second: the approved sky's
+     * `0.04 + 0.06s`, so an episode comes round every one to two and a half minutes.
+     */
+    const val EPISODE_RATE_MIN_RAD_PER_S = 0.04f
+    const val EPISODE_RATE_SPREAD_RAD_PER_S = 0.06f
+
+    /** Where on the slow wave the flicker starts to show, and where it is fully on. */
+    private const val EPISODE_ON = 0.55
+    private const val EPISODE_FULL = 0.95
+
+    /** Where in the range of flicker speeds this star sits, `0` slowest to `1` fastest. */
+    fun flickerSpeed(kind: SkyKind, id: Long): Float = hash(kind, id, FLICKER_SPEED_SALT)
+
+    /** Where in its flicker this star starts, in radians. */
+    fun flickerPhase(kind: SkyKind, id: Long): Float = hash(kind, id, FLICKER_PHASE_SALT) * TAU_F
+
+    /** How fast this star's episodes come round, in radians a second. Fixed for the life of the record. */
+    fun episodeRate(kind: SkyKind, id: Long): Float =
+        EPISODE_RATE_MIN_RAD_PER_S + hash(kind, id, EPISODE_RATE_SALT) * EPISODE_RATE_SPREAD_RAD_PER_S
+
+    /** Where in its episodes this star starts, in radians. What keeps the sky's flickers out of step. */
+    fun episodePhase(kind: SkyKind, id: Long): Float = hash(kind, id, EPISODE_PHASE_SALT) * TAU_F
 
     // -------------------------------------------------------------------------------------------
     // The glint. About one star in five, plus every landmark.
@@ -180,37 +195,47 @@ object SkyTwinkle {
     // -------------------------------------------------------------------------------------------
 
     /**
-     * The alpha multiplier for this star at this instant, in
-     * `[1 - BREATHE_DEPTH - SHIMMER_DEPTH, 1]`.
+     * How much of its own light this star gives at this instant, between `1 - FLICKER_DEPTH ×
+     * FLICKER_SWING` and `1 + FLICKER_DEPTH × FLICKER_SWING`: the approved sky's `tw`.
      *
-     * Multiplied by [SkyAge.fadeFor] and the glyph's own alpha at the call site — the twinkle is a
-     * proportion of whatever the star's brightness already is, so an old star's breathe is as faint
-     * as the old star, and a star can never be twinkled *up* past a younger one.
+     * Light, not pixels: the approved sky multiplies a star's light by this before it is tone-mapped
+     * and encoded. The renderer can only scale an already-encoded sprite, so it asks for [alphaAt].
      *
      * Returns exactly `1` when motion is off. Not "approximately": a reduced-motion sky is the
      * ordinary sky with time removed, and there is no second design to keep in step.
      */
-    fun alphaAt(kind: SkyKind, id: Long, elapsedMs: Long, options: SkyOptions): Float {
+    fun lightAt(kind: SkyKind, id: Long, elapsedMs: Long, options: SkyOptions): Float {
         if (!options.motionEnabled) return 1f
-        val slow = wave(elapsedMs, breathePeriodMs(kind, id), breathePhase(kind, id))
-        val quick =
-            if (shimmers(kind, id)) wave(elapsedMs, SHIMMER_PERIOD_MS, shimmerPhase(kind, id))
-            else 0.5f
-        return 1f - (BREATHE_DEPTH * (1f - slow) + SHIMMER_DEPTH * (1f - quick))
+        val seconds = elapsedMs / 1000.0
+        val episode = smoothstep(
+            EPISODE_ON,
+            EPISODE_FULL,
+            0.5 + 0.5 * Math.sin(seconds * episodeRate(kind, id) + episodePhase(kind, id)),
+        )
+        if (episode == 0.0) return 1f
+        val speed = flickerSpeed(kind, id)
+        val phase = flickerPhase(kind, id).toDouble()
+        var flicker = 0.0
+        for (i in FLICKER_AMPLITUDE.indices) {
+            val rate = FLICKER_RATE_RAD_PER_S[i] + FLICKER_RATE_SPREAD_RAD_PER_S[i] * speed
+            flicker += FLICKER_AMPLITUDE[i] * Math.sin(seconds * rate + phase * FLICKER_PHASE_TURN[i])
+        }
+        return (1.0 + FLICKER_DEPTH * episode * flicker).toFloat()
     }
 
     /**
-     * The size multiplier for this star at this instant, in
-     * `[1 - BREATHE_SCALE / 2, 1 + BREATHE_SCALE / 2]`.
+     * The alpha multiplier the renderer stamps this star's sprite with at this instant: [lightAt]
+     * carried into encoded pixels, `light^(1/2.2)`. That is exactly what a change of light does to
+     * an encoded pixel wherever the star is faint, which is all of it but the bead's heart, so the
+     * phone flickers as much as the approved sky does and no more. Between about `0.88` and `1.10`.
      *
-     * The star breathes; it does not grow. Two percent either way is under a tenth of a pixel on a
-     * core this size, and it exists to keep the glow from looking pasted on. A bigger swing would
-     * make size mean something, and on this surface size means authorship and nothing else.
+     * Multiplied by [SkyAge.fadeFor] at the call site, so an old star's flicker is a proportion of
+     * the old star's light. Returns exactly `1` when motion is off, as [lightAt] does.
      */
-    fun scaleAt(kind: SkyKind, id: Long, elapsedMs: Long, options: SkyOptions): Float {
-        if (!options.motionEnabled) return 1f
-        val slow = wave(elapsedMs, breathePeriodMs(kind, id), breathePhase(kind, id))
-        return 1f + BREATHE_SCALE * (slow - 0.5f)
+    fun alphaAt(kind: SkyKind, id: Long, elapsedMs: Long, options: SkyOptions): Float {
+        val light = lightAt(kind, id, elapsedMs, options)
+        if (light == 1f) return 1f
+        return Math.pow(light.toDouble(), 1.0 / GAMMA).toFloat()
     }
 
     /**
@@ -278,17 +303,11 @@ object SkyTwinkle {
     private const val TAU_F = 6.2831855f
     private const val TAU = 6.283185307179586
 
-    /**
-     * One cycle of a sine, in `[0, 1]`.
-     *
-     * The elapsed time is reduced to a fraction of a cycle **in `Double`** before it becomes an
-     * angle. A `Float` would be exact only for about the first four hours of an app's life —
-     * `Float` has a 24-bit significand, so past 16.7 million milliseconds it starts rounding whole
-     * milliseconds away and the breathe would visibly judder on a device left awake.
-     */
-    private fun wave(elapsedMs: Long, periodMs: Float, phase: Float): Float {
-        val cycles = elapsedMs.toDouble() / periodMs
-        val angle = TAU * (cycles - Math.floor(cycles)) + phase
-        return (0.5 + 0.5 * Math.sin(angle)).toFloat()
+    private const val GAMMA = 2.2
+
+    /** `0` below [edge0], `1` above [edge1], and a smooth S between: GLSL's `smoothstep`. */
+    private fun smoothstep(edge0: Double, edge1: Double, x: Double): Double {
+        val t = ((x - edge0) / (edge1 - edge0)).coerceIn(0.0, 1.0)
+        return t * t * (3.0 - 2.0 * t)
     }
 }

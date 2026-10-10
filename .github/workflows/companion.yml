@@ -19,6 +19,9 @@ name: Companion
 on:
   push:
     branches: ["**"]
+    # A release tag (the same `v*` tag release.yml publishes the app under) builds, tests and
+    # publishes the image under that version. Path filters are not applied to tag pushes.
+    tags: ["v*"]
     paths:
       - "companion/**"
       - ".github/workflows/companion.yml"
@@ -468,7 +471,7 @@ jobs:
       # main and manual dispatch only. Never on pull_request: that would publish code from a
       # fork under this repository's name, before review.
       - name: Log in to GHCR
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -476,7 +479,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push the tested image to GHCR
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
         run: |
           set -euo pipefail
           # GHCR rejects uppercase in the path, and a GitHub owner may legitimately contain
@@ -505,6 +508,22 @@ jobs:
           # pulled it within the hour. The immutable tag is still published in that case, so a
           # maintainer can still test a branch build; only the pointers everyone else follows are
           # withheld.
+          # THE RELEASE TAG, FROM A `v*` TAG ONLY: `v1.0.0-beta.1` publishes `:1.0.0-beta.1`, the
+          # version an operator pins, writes down and reports. Like `sha-`, it names one build; it
+          # does not move `:latest`, which follows main.
+          version=""
+          case "${{ github.ref }}" in
+            refs/tags/v*)
+              version="${GITHUB_REF_NAME#v}"
+              if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+                echo "::error::tag ${GITHUB_REF_NAME} is not v<major>.<minor>.<patch>[-label]; nothing more is published"
+                exit 1
+              fi
+              docker tag daymark-companion:ci "$image:$version"
+              docker push "$image:$version"
+              ;;
+          esac
+
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             docker tag daymark-companion:ci "$image:main"
             docker tag daymark-companion:ci "$image:latest"
@@ -512,7 +531,7 @@ jobs:
             docker push "$image:latest"
             moving="yes"
           else
-            echo "ref is ${{ github.ref }}, not main — publishing the immutable tag only"
+            echo "ref is ${{ github.ref }}, not main — :main and :latest are not moved"
             moving="no"
           fi
 
@@ -534,6 +553,10 @@ jobs:
             echo "$digest"
             echo '```'
             echo
+            if [ -n "$version" ]; then
+              echo "Released as \`$image:$version\`."
+              echo
+            fi
             if [ "$moving" = "yes" ]; then
               echo "Also tagged \`:main\` and \`:latest\`, which move with every push to main."
               echo

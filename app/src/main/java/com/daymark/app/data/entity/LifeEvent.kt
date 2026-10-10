@@ -1,5 +1,6 @@
 package com.daymark.app.data.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -87,4 +88,11 @@ data class LifeEvent(
      * not the row id alone.
      */
     val createdAt: Long = 0,
+    /**
+     * The person marked it as hard, and only they can: nothing asks, suggests or infers it
+     * (`DECISIONS.md` §D11). In the sky it is a supernova, a marker of that day and nothing more.
+     * It can be unmarked. It is the one thing about a life event that is not neutral, and it is
+     * the person's own word for their own day, which is why it is theirs alone to set.
+     */
+    @ColumnInfo(defaultValue = "0") val hard: Boolean = false,
 )

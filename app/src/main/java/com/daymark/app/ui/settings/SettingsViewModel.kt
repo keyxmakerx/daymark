@@ -8,9 +8,6 @@ import com.daymark.app.backup.BackupManager
 import com.daymark.app.data.JournalEncryptionGate
 import com.daymark.app.data.JournalFileState
 import com.daymark.app.data.SettingsRepository
-import com.daymark.app.export.PdfExportOptions
-import com.daymark.app.export.PdfReportGenerator
-import com.daymark.app.export.ReportDataBuilder
 import com.daymark.app.security.AutoLockController
 import com.daymark.app.security.PinManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -52,8 +49,6 @@ class SettingsViewModel @Inject constructor(
     private val reminderRepository: com.daymark.app.data.ReminderRepository,
     private val pinManager: PinManager,
     private val backupManager: BackupManager,
-    private val reportDataBuilder: ReportDataBuilder,
-    private val pdfReportGenerator: PdfReportGenerator,
     private val autoLock: AutoLockController,
     private val journalEncryption: JournalEncryptionGate,
 ) : ViewModel() {
@@ -138,19 +133,6 @@ class SettingsViewModel @Inject constructor(
                 }
             }.onSuccess { _messages.tryEmit("Backup exported") }
                 .onFailure { _messages.tryEmit("Export failed: ${it.message}") }
-        }
-    }
-
-    fun exportPdfTo(uri: Uri, options: PdfExportOptions) {
-        viewModelScope.launch {
-            runCatching {
-                val data = reportDataBuilder.build(options, System.currentTimeMillis())
-                withContext(Dispatchers.IO) {
-                    context.contentResolver.openOutputStream(uri)?.use { pdfReportGenerator.generate(data, options, it) }
-                        ?: error("Could not open file")
-                }
-            }.onSuccess { _messages.tryEmit("PDF report exported") }
-                .onFailure { _messages.tryEmit("PDF export failed: ${it.message}") }
         }
     }
 

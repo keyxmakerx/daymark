@@ -184,7 +184,7 @@ Pick one to fill in the page, then write in your own words, or ignore them.
 The **Insights** tab turns your entries into summaries. A **Week / Month / Year** switch sits at the
 top.
 
-- **Entries** and **Avg mood** for everything you've logged.
+- **Entries**, the number of entries you've logged.
 - **Days with an entry**, e.g. *12 of the last 30*. The days don't have to be in a row, so missing
   one costs you that day and nothing else. If there are none in the last thirty days, the card isn't
   there.
@@ -197,9 +197,7 @@ top.
 - **What goes with your mood**: activities and trackers that tend to come with higher or lower
   moods. An activity needs to be on at least five entries, and a tracker needs two weeks of values.
   It shows association, not cause.
-- **By day of week**, **by time of day**, and **this week, month or year against the last**.
-- **In review**, a short summary, and **Logging consistency**, a heatmap of how many entries you
-  made each day.
+- **By day of week** and **by time of day**.
 
 You'll need a few entries before there's much to show.
 
@@ -395,8 +393,6 @@ Daymark will never tell you that you're fine.
   therapy, a medication, or something else) and compare your own sleep and mood before and since.
   It shows what changed, not why, and it isn't a measure of whether a treatment works. To keep a
   record of the nights you used CPAP, make a **yes / no** tracker (see *Trackers*).
-- **Sleep setup.** A few questions about a bed partner, pets, noise and where your phone sits.
-  Nothing reads your answers, and nothing will: the sleep features they were for won't be built.
 - **Breathing check (experimental).** Lie still with the phone flat on your chest for one to three
   minutes. It uses the phone's motion sensor, not the microphone, and records nothing; it shows an
   estimate of your breathing rate and flags any pauses. It isn't an apnea test.
@@ -429,8 +425,8 @@ file they can't read.
 Not covered, said plainly:
 
 - **Photos** attached to entries, which are ordinary picture files in Daymark's storage.
-- **A few settings kept outside the journal**: your custom mood names and colours, your crisis line,
-  your sleep setup answers and your latest sleep self-check results.
+- **A few settings kept outside the journal**: your custom mood names and colours, your crisis line
+  and your latest sleep self-check results.
 - **Backups, CSV files and PDF reports you make yourself.** They're plain files you asked for and
   put where you chose.
 
@@ -482,7 +478,7 @@ journal, goals and project steps, sleep logs and treatments, trackers, reminders
 thought records, your safety plan, life events, your notes about people, your custom moods, and
 your photos (inside the file).
 
-A backup does not include: your suggestion settings, your crisis line, your sleep setup and sleep
+A backup does not include: your suggestion settings, your crisis line, your sleep
 self-check results, your other settings, or your PIN. It also leaves out Daymark's own record of
 when it asked you things, which never leaves your phone.
 
@@ -505,8 +501,11 @@ note. Use it for looking at your data; use the JSON backup to restore.
 **Settings → Export a PDF report** makes a printable report you can choose to give a clinician. The
 screen starts by saying what that means: *A report is a copy. Once handed over, it cannot be taken
 back.* Pick a date range (the last 90 days to start with), and whether to include your check-in
-notes, charts and your journal pages from that range. Check-in notes and journal pages are left out
-unless you switch them on, and a report made without notes says so. The report ends with a
+notes, charts and journal entries. Check-in notes and journal entries are left out unless you
+switch them on, and a report made without notes says so. If you switch on journal entries, **Next**
+lists every entry in the range with none ticked: tick the ones to include, or choose **Include
+everything in this range**. Then you see the report's pages exactly as they will be saved, and
+nothing is saved until you tap **Save PDF**. Go back from there to change what goes in. The report ends with a
 fingerprint of the entries it was made from, which could show if they were changed later. It can't
 show that what you logged was accurate.
 

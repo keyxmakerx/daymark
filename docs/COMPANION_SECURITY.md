@@ -109,8 +109,10 @@ signatures stop forgery. Rollback protection is not built (§8).
   character by `components/invariants.tree.test.ts`. The answers are not built: the phone as the
   owner's secret-handling path (#138), a clinician client whose code the server cannot change
   (#319, decided in #222), and a published hash of each release's web bundle (#241).
-- The owner-side check of a game plan exists (`openGamePlan` in `lib/therapist/gamePlan.ts`), but no
-  screen calls it yet (#231).
+- The owner's console checks a game plan before it shows one (`lib/gameplans/planInbox.ts`): it must
+  open with the owner's key, verify against the pinned clinician key and name that key as its author,
+  be filed under the lineage and version it was signed with, and be well formed. One that fails is
+  shown as refused and can never be accepted.
 
 ### T4 — Malicious clinician, or a stolen clinician device
 

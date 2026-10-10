@@ -33,11 +33,11 @@ class CrisisLineBackupTest {
     }
 
     @Test
-    fun `a v18 backup with no crisis line still reads, and carries none`() {
-        val v18 = """{"version": 18, "exportedAt": 1, "entries": [], "activities": [], "refs": []}"""
-        val data = json.decodeFromString(BackupData.serializer(), v18)
+    fun `a v19 backup with no crisis line still reads, and carries none`() {
+        val v19 = """{"version": 19, "exportedAt": 1, "entries": [], "activities": [], "refs": []}"""
+        val data = json.decodeFromString(BackupData.serializer(), v19)
         assertNull(data.crisisLine)
-        assertTrue("CURRENT_VERSION was not bumped past the crisis-line-less format", BackupManager.CURRENT_VERSION >= 19)
+        assertTrue("CURRENT_VERSION was not bumped past the crisis-line-less format", BackupManager.CURRENT_VERSION >= 20)
     }
 
     private val source = repoFile("app/src/main/java/com/daymark/app/backup/BackupManager.kt").readText()

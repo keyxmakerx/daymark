@@ -61,6 +61,11 @@ fun SettingsScreen(
     onShowMessage: (String) -> Unit,
     /** Opens Sync with your server. Only the `sync` flavour draws the row that calls it. */
     onOpenServerSync: () -> Unit,
+    /**
+     * Hands the dialog's choices to the report flow, which asks about journal writing when
+     * [pickWriting] is set and shows the pages before anything is saved (#303, #198).
+     */
+    onExportReport: (options: com.daymark.app.export.PdfExportOptions, pickWriting: Boolean) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
@@ -84,11 +89,6 @@ fun SettingsScreen(
     val csvLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/csv"),
     ) { uri -> uri?.let(viewModel::exportCsvTo) }
-
-    var pdfOptions by remember { mutableStateOf<com.daymark.app.export.PdfExportOptions?>(null) }
-    val pdfLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/pdf"),
-    ) { uri -> val o = pdfOptions; if (uri != null && o != null) viewModel.exportPdfTo(uri, o) }
 
     var showPinDialog by remember { mutableStateOf(false) }
     var showPdfDialog by remember { mutableStateOf(false) }
@@ -368,11 +368,9 @@ fun SettingsScreen(
     if (showPdfDialog) {
         PdfOptionsDialog(
             onDismiss = { showPdfDialog = false },
-            onExport = { options ->
-                pdfOptions = options
+            onExport = { options, pickWriting ->
                 showPdfDialog = false
-                viewModel.prepareForFilePicker()
-                pdfLauncher.launch("daymark-report.pdf")
+                onExportReport(options, pickWriting)
             },
         )
     }
@@ -446,12 +444,14 @@ private fun PinDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
 @Composable
 private fun PdfOptionsDialog(
     onDismiss: () -> Unit,
-    onExport: (com.daymark.app.export.PdfExportOptions) -> Unit,
+    onExport: (com.daymark.app.export.PdfExportOptions, Boolean) -> Unit,
 ) {
     var days by remember { mutableStateOf(90) } // 0 = all time
     // Off until switched on (#336): a check-in note is the person's own words. Charts carry none.
     var notes by remember { mutableStateOf(false) }
     var charts by remember { mutableStateOf(true) }
+    // Off until switched on: the journal is the person's own writing. On, it opens the picker next,
+    // where nothing is ticked to begin with (ui/export/JournalPickerScreen.kt, #303).
     var journal by remember { mutableStateOf(false) }
     val ranges = listOf(30 to "Last 30 days", 90 to "Last 90 days", 365 to "Last 12 months", 0 to "All time")
 
@@ -482,7 +482,7 @@ private fun PdfOptionsDialog(
                 Spacer(Modifier.height(8.dp))
                 ToggleRow("Include check-in notes", notes) { notes = it }
                 ToggleRow("Include charts", charts) { charts = it }
-                ToggleRow("Include all journal entries in range", journal) { journal = it }
+                ToggleRow("Choose journal entries to include", journal) { journal = it }
             }
         },
         confirmButton = {
@@ -497,11 +497,10 @@ private fun PdfOptionsDialog(
                         rangeLabel = label,
                         includeNotes = notes,
                         includeCharts = charts,
-                        includeInTheirWords = journal,
-                        includeAllJournalInRange = journal,
                     ),
+                    journal,
                 )
-            }) { Text("Export") }
+            }) { Text("Next") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )

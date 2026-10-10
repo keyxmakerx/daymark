@@ -31,7 +31,6 @@ log is ever sent anywhere by it.
   - your settings and suggestion choices;
   - your custom mood names and colours;
   - the crisis line you entered;
-  - your sleep setup answers;
   - the latest result of each sleep self-check.
 
   That file is protected by the Android sandbox and the device's own encryption, but **the app does

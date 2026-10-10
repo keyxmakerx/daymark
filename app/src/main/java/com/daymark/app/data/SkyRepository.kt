@@ -7,16 +7,22 @@ import com.daymark.app.data.dao.GoalStepDao
 import com.daymark.app.data.dao.JournalDao
 import com.daymark.app.data.dao.ConstellationDao
 import com.daymark.app.data.dao.LifeEventDao
+import com.daymark.app.data.dao.SkyPutAwayDao
+import com.daymark.app.data.dao.TrackerDao
 import com.daymark.app.data.entity.Constellation
+import com.daymark.app.data.entity.SkyPutAway
 import com.daymark.app.data.dao.ThoughtRecordDao
 import com.daymark.app.sky.Sky
+import com.daymark.app.sky.SkyColours
 import com.daymark.app.sky.SkyConstellation
 import com.daymark.app.sky.SkyKind
 import com.daymark.app.sky.SkyRecord
 import com.daymark.app.sky.SkySeed
+import com.daymark.app.sky.SkyTrackers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import java.security.SecureRandom
 import java.time.Instant
 import java.time.ZoneId
 import javax.inject.Inject
@@ -58,7 +64,9 @@ import javax.inject.Singleton
  *
  * No filter that drops records, no window that limits how far back the sky goes, and no branch that
  * treats one kind as more important than another. Every record of every kind becomes a star, or the
- * surface stops being "everything you did" and starts being a selection somebody made.
+ * surface stops being "everything you did" and starts being a selection somebody made. A memory the
+ * person put away is still here, marked with the day they did it (`DECISIONS.md` §D11): the person
+ * made that selection, `sky/` keeps its place, and the list still shows it to bring back.
  */
 @Singleton
 class SkyRepository @Inject constructor(
@@ -69,6 +77,8 @@ class SkyRepository @Inject constructor(
     private val goalDao: GoalDao,
     private val lifeEventDao: LifeEventDao,
     private val constellationDao: ConstellationDao,
+    private val trackerDao: TrackerDao,
+    private val putAwayDao: SkyPutAwayDao,
     private val prefs: SharedPreferences,
 ) {
 
@@ -123,10 +133,101 @@ class SkyRepository @Inject constructor(
                 }
             },
             lifeEventDao.observeSkyPoints().map { rows ->
-                rows.map { SkyRecord(SkyKind.LIFE_EVENT, it.id, it.epochDay) }
+                rows.map { SkyRecord(SkyKind.LIFE_EVENT, it.id, it.epochDay, hard = it.hard) }
             },
         )
-        return combine(sources) { parts -> parts.flatMap { it } }
+        val records = combine(sources) { parts -> parts.flatMap { it } }
+        return combine(records, putAwayDao.observePutAway()) { all, putAway ->
+            if (putAway.isEmpty()) {
+                all
+            } else {
+                val day = putAway.associate { (it.kind to it.recordId) to it.putAwayEpochDay }
+                all.map { record ->
+                    day[record.kind.key to record.id]?.let { record.copy(putAwayEpochDay = it) } ?: record
+                }
+            }
+        }
+    }
+
+    /**
+     * Puts [records] away from the sky on [todayEpochDay] (`DECISIONS.md` §D11). Hidden, never
+     * deleted: each memory is untouched where it lives, and one already put away keeps its day.
+     */
+    suspend fun putAway(records: List<SkyRecord>, todayEpochDay: Long) {
+        putAwayDao.insertAll(records.map { SkyPutAway(it.kind.key, it.id, todayEpochDay) })
+    }
+
+    /** Brings one memory back to its place in the sky. */
+    suspend fun bringBack(record: SkyRecord) = putAwayDao.delete(record.kind.key, record.id)
+
+    /** Brings every memory back, which also clears any row left by a memory since deleted. */
+    suspend fun bringAllBack() = putAwayDao.deleteAll()
+
+    /**
+     * Each tracker the person shows in their sky, as `sky/` takes it, its first log's day read in
+     * the device's zone the same way every timed record's is.
+     */
+    fun observeTrackerSources(): Flow<List<SkyTrackers.Source>> = trackerDao.observeSkySources().map { rows ->
+        val zone = ZoneId.systemDefault()
+        rows.map { SkyTrackers.Source(it.trackerId, it.logs, epochDayOf(it.firstMillis, zone)) }
+    }
+
+    /** Shows a tracker in the sky, or takes it out: the person's choice, per tracker. */
+    suspend fun setTrackerShown(trackerId: Long, shown: Boolean) = trackerDao.setShowInSky(trackerId, shown)
+
+    /** The person's choice of colours: 0 for the sky's own, one more for each "Try other colours". */
+    fun colourChoice(): Int = prefs.getInt(KEY_COLOUR_CHOICE, 0)
+
+    fun setColourChoice(choice: Int) {
+        prefs.edit().putInt(KEY_COLOUR_CHOICE, choice.coerceAtLeast(0)).apply()
+    }
+
+    /**
+     * The last day the colours can be changed (`DECISIONS.md` §D11), or 0 before the person has
+     * opened a sky with anything in it.
+     */
+    fun colourUntil(): Long = prefs.getLong(KEY_COLOUR_UNTIL, 0L)
+
+    /**
+     * Starts the colours' window on the first open of a sky with stars in it, and returns its last
+     * day. Later opens find it already started and change nothing, so the window is the same 30
+     * days however often the sky is opened.
+     */
+    fun openColourWindow(todayEpochDay: Long): Long {
+        val stored = colourUntil()
+        if (stored != 0L) return stored
+        val until = todayEpochDay + SkyColours.CHANGEABLE_DAYS
+        prefs.edit().putLong(KEY_COLOUR_UNTIL, until).apply()
+        return until
+    }
+
+    /**
+     * "Reset my sky": a new seed, so a new form, new places and new colours, with the colours
+     * window started again on [todayEpochDay]. Memories, constellations and put-away memories are
+     * not touched; only the shape they are drawn in changes.
+     *
+     * The new seed is drawn at random rather than derived, because the derived one is the sky the
+     * person is leaving. It is stored as every seed is, so it stays until the next reset or restore.
+     */
+    fun resetSky(todayEpochDay: Long) {
+        var seed = 0L
+        while (seed == 0L || seed == SkySeed.EMPTY_SKY) seed = SecureRandom().nextLong()
+        prefs.edit()
+            .putLong(KEY_FIELD_SEED, seed)
+            .putInt(KEY_COLOUR_CHOICE, 0)
+            .putLong(KEY_COLOUR_UNTIL, todayEpochDay + SkyColours.CHANGEABLE_DAYS)
+            .apply()
+    }
+
+    /**
+     * A restored backup's colours, so the restored sky looks as it did: the choice, and the
+     * window's last day (0 when the file has none, which starts the window on the next open).
+     */
+    fun restoreColours(choice: Int, untilEpochDay: Long) {
+        prefs.edit()
+            .putInt(KEY_COLOUR_CHOICE, choice.coerceAtLeast(0))
+            .apply { if (untilEpochDay == 0L) remove(KEY_COLOUR_UNTIL) else putLong(KEY_COLOUR_UNTIL, untilEpochDay) }
+            .apply()
     }
 
     /**
@@ -214,6 +315,8 @@ class SkyRepository @Inject constructor(
     private companion object {
         const val KEY_FIELD_SEED = "sky_field_seed"
         const val KEY_BORN = "sky_born_identity"
+        const val KEY_COLOUR_CHOICE = "sky_colour_choice"
+        const val KEY_COLOUR_UNTIL = "sky_colour_until"
     }
 }
 
@@ -243,5 +346,14 @@ data class SkyPoint(val id: Long, val epochMillis: Long)
  */
 data class SkyStampPoint(val id: Long, val epochMillis: Long?)
 
-/** A record that already stores a day rather than a moment. `life_events` is the only one. */
-data class SkyDayPoint(val id: Long, val epochDay: Long)
+/**
+ * A record that already stores a day rather than a moment. `life_events` is the only one, and
+ * [hard] is whether the person marked it as hard.
+ */
+data class SkyDayPoint(val id: Long, val epochDay: Long, val hard: Boolean)
+
+/**
+ * A tracker the person shows in their sky: how many times it was logged and when it first was.
+ * No name, no value and no note, for the same reason as every projection above.
+ */
+data class SkyTrackerPoint(val trackerId: Long, val logs: Int, val firstMillis: Long)

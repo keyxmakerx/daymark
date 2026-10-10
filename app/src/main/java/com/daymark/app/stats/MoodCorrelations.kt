@@ -14,7 +14,7 @@ object MoodCorrelations {
      *
      * [factorDeltas] used to take `List<Pair<Int, List<Long>>>` — a mood level and some ids. An
      * activity id is a `Long`. A tracker id is a `Long`. **A person's id is also a `Long`**, so
-     * that signature accepted a person, and `Signals`, `PeriodReview` and the four-side report all
+     * that signature accepted a person, and `Signals` and the four-side report both
      * inherited it. Nothing passed one. Nothing was going to, today.
      *
      * But `docs/FEATURES.md` §11.2 does not stop at "we will not correlate people with mood": it
@@ -34,7 +34,7 @@ object MoodCorrelations {
      *
      * ## What this does NOT guard
      *
-     * [Signals.FactorLift] and [PeriodReview.Inputs] take factor **names**, not ids, and a person's
+     * [Signals.FactorLift] takes factor **names**, not ids, and a person's
      * name is a `String` like any other. The guard is upstream: a person never becomes a
      * [FactorId], so a person never reaches the code that produces those names. Keep it that way —
      * do not add a person-shaped field to `Signals.Inputs`.

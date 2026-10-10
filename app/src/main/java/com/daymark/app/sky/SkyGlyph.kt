@@ -30,8 +30,9 @@ package com.daymark.app.sky
  *
  * | Fixed for every mood, every kind | Varies with mood |
  * |---|---|
- * | [CORE_RADIUS_DP] | [haloRadiusDp] — how far the light spreads |
+ * | [CORE_RADIUS_DP], and its growth with zoom ([zoomScale]) | [haloRadiusDp] — how far the light spreads |
  * | [CORE_ALPHA] | [haloPeakAlpha] — how concentrated it is |
+ * | the bead and its rim — [SkyStarLight], at one [SkyStarLight.LIGHT] | |
  * | colour — [SkyAge.tintFor], which is age | |
  * | brightness — [SkyAge.fadeFor], which is age | |
  * | [HALO_LIGHT] — total light emitted | |
@@ -77,7 +78,12 @@ object SkyGlyph {
     // The core. One radius, one alpha, for every kind and every mood. This is mechanism M4.
     // ---------------------------------------------------------------------------------------
 
-    const val CORE_RADIUS_DP = 1.9f
+    /**
+     * The bead's radius at the whole-sky view, in dp: the approved phone sky's `0.8 + 0.22 × lum`
+     * for an ordinary star's light ([SkyStarLight.LIGHT]). It grows as the person zooms in, by
+     * [zoomScale], and the growth is the same for every star (#460).
+     */
+    const val CORE_RADIUS_DP = 0.96f
 
     const val CORE_ALPHA = 1.0f
 
@@ -92,6 +98,20 @@ object SkyGlyph {
      */
     @Suppress("UNUSED_PARAMETER")
     fun coreRadiusDp(kind: SkyKind, moodLevel: Int): Float = CORE_RADIUS_DP
+
+    /** How fast the bead grows with zoom: the approved sky's `zoom^0.3`. */
+    const val ZOOM_GROWTH = 0.3f
+
+    /**
+     * How much bigger every bead is drawn at [zoom] (screen widths across, `1` for the whole sky)
+     * than at the whole-sky view: `zoom^0.3`, so about 1.8 times at a week and 3 times at a single
+     * day. Never below `1`, and a function of the zoom alone, so it moves every star together and
+     * changes nothing about one star against another.
+     */
+    fun zoomScale(zoom: Float): Float {
+        if (!(zoom > 1f)) return 1f
+        return Math.pow(zoom.toDouble(), ZOOM_GROWTH.toDouble()).toFloat()
+    }
 
     /** As [coreRadiusDp], and for the same reason. */
     @Suppress("UNUSED_PARAMETER")
@@ -249,24 +269,22 @@ object SkyGlyph {
     // Temperature. A star's own warmth, from its identity — variety that says nothing.
     //
     // `docs/SKY.md` §3.2: "Each star has its own temperature, from its identity and fixed
-    // forever (icy, white, pale gold or peach), mixed about a third into its age tint so the sky
-    // is varied." A real field of stars is not one hue at one distance, and a sky that were would
-    // look printed.
+    // forever." A real field of stars is not one hue at one distance, and a sky that were would
+    // look printed. It is the approved phone sky's: a star's red is multiplied by its warmth and its
+    // blue divided by it, in linear light, between 0.92 and 1.08 (#460). That shifts a star a
+    // little toward blue or toward gold without washing any of the age colour toward white.
     //
     // It is drawn from the hash of the star's own identity, like its position and its rhythm, so
-    // it is FIXED FOREVER AND MEANS NOTHING. There are exactly four and they are close together:
-    // the mix is a third, so an old star stays plainly old whichever one it drew. Anything
-    // stronger and temperature would start to compete with age, which is the one thing colour is
-    // allowed to say.
+    // it is FIXED FOREVER AND MEANS NOTHING. There are exactly four and they are close together, so
+    // an old star stays plainly old whichever one it drew. Anything stronger and temperature would
+    // start to compete with age, which is the one thing colour is allowed to say.
     // ---------------------------------------------------------------------------------------
 
     /** Icy, white, pale gold, peach. */
     const val TEMPERATURE_COUNT = 4
 
-    private val TEMPERATURE_TINT = intArrayOf(0xC8D7FF, 0xFFFFFF, 0xFFEEC8, 0xFFD6BE)
-
-    /** How much of the temperature is mixed into the age tint. The prototype's 0.35. */
-    const val TEMPERATURE_MIX = 0.35f
+    /** Each temperature's warmth: red times this, blue divided by it, in linear light. */
+    private val TEMPERATURE_WARMTH = floatArrayOf(0.92f, 1f, 1.04f, 1.08f)
 
     private const val TEMPERATURE_KIND_SALT = 0x6B2D7F19L
     private const val TEMPERATURE_SALT = 0x11A3C5E7L
@@ -288,16 +306,16 @@ object SkyGlyph {
         }
     }
 
-    /** The tint of a temperature, packed `0xRRGGBB`. Out-of-range indices clamp rather than throw. */
-    fun temperatureTint(index: Int): Int =
-        TEMPERATURE_TINT[index.coerceIn(0, TEMPERATURE_COUNT - 1)]
+    /** A temperature's warmth. Out-of-range indices clamp rather than throw. */
+    fun temperatureWarmth(index: Int): Float =
+        TEMPERATURE_WARMTH[index.coerceIn(0, TEMPERATURE_COUNT - 1)]
 
     // ---------------------------------------------------------------------------------------
     // What a star is actually drawn in. Both of these take a mood and both of them ignore it.
     // ---------------------------------------------------------------------------------------
 
     /**
-     * A star's colour: its age tint, warmed a third of the way toward its own temperature.
+     * A star's colour: its age tint, shifted by its own temperature's warmth.
      *
      * [moodLevel] is accepted and **ignored**, exactly as in [coreRadiusDp], and for exactly the
      * same reason: this is the signature the renderer calls, so this is where the rule *colour is
@@ -305,14 +323,14 @@ object SkyGlyph {
      * and fails the moment the answer moves.
      *
      * A landmark is white at every age and takes no temperature at all — [SkyAge.tintFor] exempts
-     * it from the redshift, and mixing a temperature into white would tint the one star that is
-     * meant to be the sky's plainest.
+     * it from the redshift, and warming white would tint the one star that is meant to be the
+     * sky's plainest.
      */
     @Suppress("UNUSED_PARAMETER")
     fun starTint(kind: SkyKind, id: Long, ageYears: Float, moodLevel: Int): Int {
         val base = SkyAge.tintFor(kind, ageYears)
         if (kind == SkyKind.LIFE_EVENT) return base
-        return mix(base, temperatureTint(temperatureIndex(kind, id)), TEMPERATURE_MIX)
+        return warm(base, temperatureWarmth(temperatureIndex(kind, id)))
     }
 
     /**
@@ -371,16 +389,20 @@ object SkyGlyph {
     fun haloPeakAlpha(kind: SkyKind, moodLevel: Int): Float =
         if (kind == SkyKind.LIFE_EVENT) LANDMARK_HALO_PEAK_ALPHA else haloPeakAlpha(moodLevel)
 
-    /** A straight-line blend of two packed colours, `t` of the way from [from] to [to]. */
-    private fun mix(from: Int, to: Int, t: Float): Int {
-        val r = mixChannel((from shr 16) and 0xFF, (to shr 16) and 0xFF, t)
-        val g = mixChannel((from shr 8) and 0xFF, (to shr 8) and 0xFF, t)
-        val b = mixChannel(from and 0xFF, to and 0xFF, t)
+    /**
+     * [tint] with its red multiplied by [warmth] and its blue divided by it, in linear light, and
+     * encoded back. A channel pushed past full stays at full.
+     */
+    private fun warm(tint: Int, warmth: Float): Int {
+        val r = warmChannel((tint shr 16) and 0xFF, warmth)
+        val g = (tint shr 8) and 0xFF
+        val b = warmChannel(tint and 0xFF, 1f / warmth)
         return (r shl 16) or (g shl 8) or b
     }
 
-    private fun mixChannel(from: Int, to: Int, t: Float): Int {
-        val value = Math.round(from + (to - from) * t)
+    private fun warmChannel(channel: Int, factor: Float): Int {
+        val linear = Math.pow(channel / 255.0, 2.2) * factor
+        val value = Math.round(Math.pow(linear, 1.0 / 2.2) * 255.0).toInt()
         return if (value < 0) 0 else if (value > 255) 255 else value
     }
 

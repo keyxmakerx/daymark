@@ -24,8 +24,8 @@ Daymark's storage taken off the phone can't be read. Settings → *Your entries 
 whether this is true on your phone.
 
 Not encrypted by the app: photos you attach, a few settings kept outside the database (your custom
-mood names and colours, your crisis line, your sleep setup answers and latest sleep self-check
-results), and any file you export.
+mood names and colours, your crisis line and your latest sleep self-check results), and any file
+you export.
 
 If you set a **PIN**, it's never stored as it is, only as a one-way hash inside an encrypted store.
 
@@ -67,8 +67,8 @@ Use a backup:
 If you've already started logging on the new phone and want to keep those entries too, choose
 **Merge** instead.
 
-A backup carries the crisis line you set, from version 0.4.0. It doesn't carry your settings,
-suggestion choices or sleep setup, so set those again on the new phone.
+A backup carries the crisis line you set, from version 0.4.0. It doesn't carry your settings or
+suggestion choices, so set those again on the new phone.
 
 ---
 
