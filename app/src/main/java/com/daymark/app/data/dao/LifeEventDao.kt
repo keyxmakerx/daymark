@@ -35,8 +35,9 @@ interface LifeEventDao {
     fun observeAll(): Flow<List<LifeEvent>>
 
     /**
-     * The Sky's projection, written the way the header above says it has to be: `(id, epochDay)`,
-     * its own `@Query`, and no [LifeEvent.label].
+     * The Sky's projection, written the way the header above says it has to be: `(id, epochDay,
+     * hard)`, its own `@Query`, and no [LifeEvent.label]. [LifeEvent.hard] is the one flag the sky
+     * draws differently, as a supernova, and it is a mark the person set, never a word.
      *
      * A life event is the one star whose text the person composed for the Sky specifically, which
      * makes it the one most tempting to draw a label next to. It is not drawn: the star is a mark,
@@ -47,7 +48,7 @@ interface LifeEventDao {
      * life event is a day and not a moment, so this is the one kind that reaches `SkyRecord`
      * without a zone touching it.
      */
-    @Query("SELECT id, epochDay FROM life_events")
+    @Query("SELECT id, epochDay, hard FROM life_events")
     fun observeSkyPoints(): Flow<List<SkyDayPoint>>
 
     @Insert
@@ -63,6 +64,10 @@ interface LifeEventDao {
 
     @Delete
     suspend fun delete(event: LifeEvent)
+
+    /** Marks or unmarks a life event as hard, which only the person does (`DECISIONS.md` §D11). */
+    @Query("UPDATE life_events SET hard = :hard WHERE id = :id")
+    suspend fun setHard(id: Long, hard: Boolean)
 
     // --- Backup / restore ---
 

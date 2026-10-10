@@ -152,8 +152,11 @@ entries are stars in the Sky (§4), and reach the PDF report only when the perso
 entries, journal pages, thought records (the one practice that keeps its own dated record, #283),
 project steps done, goals marked reached, and life events. A star's colour is its age; mood moves
 only its halo; a missing day is never drawn. A **life event** is a mark on one day in the person's
-own words, added from the Sky's life-events list or with Mark this day (§1.3). Every rule the Sky
-keeps is in [SKY.md](SKY.md).
+own words, added from the Sky's life-events list or with Mark this day (§1.3); tapping one there
+offers **Mark as hard**, which only its supernova in the sky reads. Any star can be **put away**
+from the sky alone and brought back from its list. Each sky has its own colours, which can be
+changed for 30 days, and **Reset my sky** grows it again. Every rule the Sky keeps is in
+[SKY.md](SKY.md).
 
 ## 5. Goals and projects
 
@@ -179,7 +182,9 @@ keeps is in [SKY.md](SKY.md).
 Custom trackers record anything next to mood, as a **scale**, a **number** with a unit, or **yes /
 no**. Each has a history and an average. A tracker with values on at least 14 days that also have a
 mood appears in "What goes with your mood" (§3). Do one thing and Move keep their own trackers
-(Enjoyment, Mastery, Movement minutes), so those show up against mood too.
+(Enjoyment, Mastery, Movement minutes), so those show up against mood too. **Show in my sky**, off
+until the person switches it on, makes a tracker an object of its own in their sky
+([SKY.md](SKY.md) §3.9).
 
 ### 6.1 Check-ins and quick log
 

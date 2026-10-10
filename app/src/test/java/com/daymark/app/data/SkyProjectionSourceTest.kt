@@ -45,6 +45,7 @@ class SkyProjectionSourceTest {
         const val STEP_DAO = "app/src/main/java/com/daymark/app/data/dao/GoalStepDao.kt"
         const val GOAL_DAO = "app/src/main/java/com/daymark/app/data/dao/GoalDao.kt"
         const val LIFE_EVENT_DAO = "app/src/main/java/com/daymark/app/data/dao/LifeEventDao.kt"
+        const val TRACKER_DAO = "app/src/main/java/com/daymark/app/data/dao/TrackerDao.kt"
         const val REPOSITORY = "app/src/main/java/com/daymark/app/data/SkyRepository.kt"
         const val JOURNAL_REPOSITORY = "app/src/main/java/com/daymark/app/data/JournalRepository.kt"
 
@@ -61,12 +62,12 @@ class SkyProjectionSourceTest {
      * normalised: the column names have to survive verbatim or the assertions are inspecting a
      * string this test invented.
      */
-    private fun skyQuery(path: String): String {
+    private fun skyQuery(path: String, name: String = SKY_QUERY): String {
         val text = source(path)
-        val function = text.indexOf(SKY_QUERY)
-        assertTrue("no $SKY_QUERY in $path", function > 0)
+        val function = text.indexOf(name)
+        assertTrue("no $name in $path", function > 0)
         val annotation = text.lastIndexOf("@Query(", function)
-        assertTrue("no @Query above $SKY_QUERY in $path", annotation > 0)
+        assertTrue("no @Query above $name in $path", annotation > 0)
         return flatten(text.substring(annotation, function))
     }
 
@@ -119,6 +120,7 @@ class SkyProjectionSourceTest {
         assertTrue(source(STEP_DAO).contains("interface GoalStepDao"))
         assertTrue(source(GOAL_DAO).contains("interface GoalDao"))
         assertTrue(source(LIFE_EVENT_DAO).contains("interface LifeEventDao"))
+        assertTrue(source(TRACKER_DAO).contains("interface TrackerDao"))
         assertTrue(source(REPOSITORY).contains("class SkyRepository"))
 
         for (path in listOf(ENTRY_DAO, JOURNAL_DAO, THOUGHT_DAO, STEP_DAO, GOAL_DAO, LIFE_EVENT_DAO)) {
@@ -213,12 +215,28 @@ class SkyProjectionSourceTest {
     }
 
     @Test
-    fun `the life-event projection carries no label`() {
+    fun `the life-event projection carries no label, only the day and whether it was hard`() {
         val query = skyQuery(LIFE_EVENT_DAO)
-        assertEquals(2, selectedExpressions(query).size)
+        assertEquals(3, selectedExpressions(query).size)
         assertTrue(query, mentions(query, "life_events"))
         assertTrue(query, mentions(query, "epochDay"))
+        assertTrue(query, mentions(query, "hard"))
         assertSelectsNoText("the life-event projection", query, listOf("label"))
+    }
+
+    /**
+     * Trackers are not a kind of star (`DECISIONS.md` §D11), so their query is not one of the
+     * projections counted below, and it keeps the same rule all the same: a count and a first day,
+     * never the tracker's name, a logged value or a note.
+     */
+    @Test
+    fun `the tracker projection carries no name, value or note, and only trackers switched on`() {
+        val query = skyQuery(TRACKER_DAO, "fun observeSkySources(")
+        assertEquals(3, selectedExpressions(query).size)
+        assertTrue(query, mentions(query, "showInSky = 1"))
+        assertSelectsNoText("the tracker projection", query, listOf("name", "value", "note", "unit"))
+        // The detector: the whole-row read beside it does reach every one of those columns.
+        assertTrue(mentions(source(TRACKER_DAO), "SELECT * FROM trackers"))
     }
 
     // -------------------------------------------------------------------------------------------

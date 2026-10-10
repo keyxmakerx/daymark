@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * The life-events screen's state and its three writes.
+ * The life-events screen's state and its four writes.
  *
  * **The DAO is injected here rather than a repository**, which is not the house pattern — every
  * other view model in `ui/` takes a `a `data/` repository`. `data/LifeEventRepository.kt` was outside
@@ -55,6 +55,14 @@ class LifeEventsViewModel @Inject constructor(
 
     fun delete(event: LifeEvent) {
         viewModelScope.launch { dao.delete(event) }
+    }
+
+    /**
+     * Marks [event] as hard, or unmarks it, from the person's own tap and nowhere else
+     * (`DECISIONS.md` §D11): nothing proposes it, and nothing reads it but the sky's supernova.
+     */
+    fun setHard(event: LifeEvent, hard: Boolean) {
+        viewModelScope.launch { dao.setHard(event.id, hard) }
     }
 
     /**

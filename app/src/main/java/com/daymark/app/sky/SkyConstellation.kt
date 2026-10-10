@@ -85,6 +85,13 @@ object SkyConstellation {
     fun isShown(resolved: IntArray): Boolean = resolved.count { it >= 0 } >= MIN_POINTS
 
     /**
+     * [resolved] as the live sky draws it: a point whose memory is put away is -1 there, so no
+     * line reaches a star that is not drawn. Its photo still has it (`DECISIONS.md` §D11).
+     */
+    fun inSight(resolved: IntArray, layout: SkyLayout): IntArray =
+        IntArray(resolved.size) { val s = resolved[it]; if (s >= 0 && layout.isShown(s)) s else -1 }
+
+    /**
      * How strongly a line is drawn today: 1 while its stars stay about as far apart as when it was
      * drawn, fading out as they drift to between 1.25 and 1.6 times that, and gone beyond.
      */
@@ -134,7 +141,7 @@ object SkyConstellation {
         val own = resolved.filter { it >= 0 }.toSet()
         val out = ArrayList<Int>()
         for (i in 0 until layout.starCount) {
-            if (layout.epochDay[i] > madeEpochDay || i in own) continue
+            if (layout.epochDay[i] > madeEpochDay || i in own || !layout.isShown(i)) continue
             if (distance(layout.xOn(i, madeEpochDay), layout.yOn(i, madeEpochDay), cx, cy) <= reach) out.add(i)
         }
         return out.toIntArray()

@@ -9,12 +9,13 @@ How to read it: each sky takes a form of its own, a river, galaxies or an open s
 run along it from oldest to newest, counted in memories and never in days. A star's colour and
 brightness say how long ago it was; the spread of its glow is the mood recorded with it, if any; up
 close, its form says what kind of act it was; a bigger white star is a life event the person
-marked. The rules are `docs/DECISIONS.md` §D11 and the look is `docs/prototypes/sky-phone.html`,
+marked, and a dim shell round one is a day they marked as hard. Behind the stars are the sky's own
+colours, gas round weeks with a lot of writing, and any trackers the person chose to show. The rules
+are `docs/DECISIONS.md` §D11 and the look is `docs/prototypes/sky-phone.html`,
 which opens in any browser.
 
 This is the single reference for the Sky. Code cites its section numbers. Not built: the sky's other
-objects (nebulae, giant stars, the supernova, black and white holes, dark matter, tracker objects),
-changing its colours and "Reset my sky", #449.
+objects (giant stars, dark matter #450), #449.
 
 ---
 
@@ -31,16 +32,21 @@ decides nothing.
 | `sky/Sky.kt` | the six kinds, the layout, the text list |
 | `sky/SkyForm.kt` | the sky's form and guide, and where each star is placed: bands, clusters, streams, drift |
 | `sky/SkyAge.kt` | colour and brightness from age |
-| `sky/SkyGlyph.kt` | core, halo, temperature, the landmark, kind forms, zoom levels (`SkyDetail`), the Sky's switches (`SkyOptions`) |
+| `sky/SkyGlyph.kt` | the bead's size, halo, temperature, the landmark, kind forms, zoom levels (`SkyDetail`), the Sky's switches (`SkyOptions`) |
+| `sky/SkyStarLight.kt` | how the bead and its rim are lit, at one light for every ordinary star |
 | `sky/SkyPalette.kt` | the night colours, contrast, equalising mood colours |
 | `sky/SkyTwinkle.kt` | each star's rhythm |
 | `sky/SkyOpening.kt` | the opening's pace, a new star's birth, every camera journey |
 | `sky/SkyConstellation.kt` | constellations: names, stored points, fading lines, the photo's neighbours |
 | `sky/SkyKey.kt` | the Key's fixed lines |
+| `sky/SkyColours.kt` | the sky's own colours and the space's glows (§3.8) |
+| `sky/SkyNebula.kt` | nebulae: which weeks, where, and their gas (§3.9) |
+| `sky/SkyTrackers.kt` | tracker objects: their looks, where they sit, their grains (§3.9) |
+| `sky/SkyHoles.kt` | the black and white holes' timing (§2.4) |
 | `sky/SkyRandom.kt`, `sky/SkyCalendar.kt` | the hash and the sky's seed; date arithmetic |
 | `sky/SkyField.kt` | the decorative field the year review still draws (§9); the Sky draws none |
 | `ui/sky/` | `SkyScreen` (controls, sheets, detail strip, list, the opening), `SkySurface` (drawing, gestures, the photo), `SkyCamera` (where the sky is seen from), `SkySprite`, `SkyPresentation` (zoom, hit-testing, every word a screen reader hears), `SkyViewModel` |
-| `data/SkyRepository.kt`, `data/entity/Constellation.kt` | the six projections merged, dates converted, the seed and constellations stored |
+| `data/SkyRepository.kt`, `data/entity/Constellation.kt`, `data/entity/SkyPutAway.kt` | the six projections and the trackers shown, dates converted, the seed, colours, constellations and put-away memories stored |
 
 `tools/jvm-tests.sh sky` and `tools/jvm-tests.sh ui/sky sky` run `sky/` and `SkyPresentation` on a
 plain JVM in seconds; the other Sky tests run in CI.
@@ -86,7 +92,8 @@ One narrow query per kind, returning an id, a time and at most a mood, and **no 
 | Journal | `journal_entries`: id, time | `title`, `body` |
 | Goal reached | `goals`: id, `reachedAt`, where set | the title, `archived` |
 | Project step | `goal_steps`: id, `completedAt`, done steps only | the title |
-| Life event | `life_events`: id, `epochDay` | `label` |
+| Life event | `life_events`: id, `epochDay`, `hard` | `label` |
+| Tracker (not a kind, §3.9) | `trackers` switched on and `tracker_logs`: id, how many logs, the first one's time | the name, every value and note |
 
 - **Goal reached** is `reachedAt`, which the person sets with a reversible switch in the goal editor,
   never derived from progress (`GoalReachedSchemaTest`). `archived` is read neither as reached (a
@@ -96,7 +103,8 @@ One narrow query per kind, returning an id, a time and at most a mood, and **no 
   other practices keep no dated record, so they draw no star.
 
 `SkyRepository` turns each timestamp into a local date **at that boundary**, in the device's zone. A
-life event already stores the day the person chose.
+life event already stores the day the person chose. It also marks each memory the person put away
+with the day they did (§2.4), from `sky_put_away`.
 
 ---
 
@@ -190,6 +198,9 @@ A life event is a few words and a date, written by the person, and nothing else.
   length (#155). A stretch is marked on a day the person picks, and their words can say how long it
   lasted.
 - **The one star allowed to be louder** (§3.4): prominence follows *authorship*, not scoring.
+- **Marked as hard, by the person only.** Tapping a life event's row on its own screen offers
+  **Mark as hard**, and the same again **Unmark as hard**; the row then says "Marked as hard". It is
+  never asked, suggested or inferred, and its one effect is the supernova (§3.9).
 
 ### 2.3 The date a star sits on
 
@@ -197,6 +208,23 @@ The **local date the act was recorded**, from the record's own timestamp. Never 
 "the day it was about": an entry written at 03:00 on the 4th about the 3rd is a star on the 4th. A
 life event's date is the day the person chose. Time of day is nowhere on the Sky (not in position,
 detail or list); drawn, it would map the person's sleep across their whole history.
+
+### 2.4 Putting memories away
+
+**Put away** on a star's detail hides its memories from the sky, and from the sky alone: nothing is
+deleted, the record is unchanged everywhere else, and the star keeps its place. It is not drawn,
+cannot be tapped, and counts in no month, nebula or Key line; the live sky draws no constellation
+line to it, though a constellation's photo still shows it. With Motion on, a black hole forms beside
+it, draws it in on a slow spiral and closes, leaving nothing behind (`SkyHoles`). "Put away. You can
+bring it back from the list." is said either way.
+
+The list keeps put-away memories last, under **Put away**, folded until opened. Each says only the
+day it was put away, with **Bring back**, and **Bring them all back** brings every one. Back in the
+sky, the camera finds them and, with Motion on, a white hole sends them home one after another. A
+sky whose every memory is put away says so, and where to find them, never that nothing is there.
+
+Stored in `sky_put_away`, one row per record, by kind and row id, and carried by a full restore.
+Not built: a merge carrying it, since a merge renumbers records, #455.
 
 ---
 
@@ -249,18 +277,20 @@ carries them with the seed, and a merge keeps the sky the phone already has.
 
 ### 3.2 Colour is age, not mood
 
-> **A star's colour is how long ago it was: blue-white when new, through white, gold and amber, to a
-> deep red after five and a half years. Red means old, never bad.**
+> **A star's colour is how long ago it was: blue when new, through white, gold and amber, to a deep
+> red after five and a half years. Red means old, never bad.**
 
-The ramp (`SkyAge`, from the prototype) runs from `#C4DAFF` through `#FFFAEC`, `#FFE296` and
-`#FFAC64` to `#FF6E58`, where it stops. Every star reddens at the same rate, so nobody's worst week is
+The ramp (`SkyAge`, from the approved phone sky) runs from `#9DB8FF` through `#CDDCFF`, `#FFF6EA`,
+`#FFDEA8` and `#FFB476` to `#FF8060`, where it stops. Every star reddens at the same rate, so nobody's worst week is
 their reddest. It is continuous and only ever reddens (`SkyAgeTest`): a step would draw a band, and a
 band invites someone to read meaning into which side of it their month fell on. A record dated after
 today is drawn as new.
 
 - **Each star has its own temperature**, from its identity and fixed forever (icy, white, pale gold
-  or peach), mixed about a third into its age tint so the sky is varied. It means nothing.
-- **The core is the same near-white for every star.** Age tints the glow around it.
+  or peach), which shifts its age tint a little toward blue or gold (red times 0.92 to 1.08 and blue
+  divided by it, in linear light) so the sky is varied. It means nothing.
+- **The bead is the star's own colour.** Age colours the heart of a star, not only the light
+  around it (§3.5).
 - **A life event is white at every age**, with no temperature (§3.4).
 - **Mood is not a colour on the sky.** It appears only as a dot beside the mood word in a star's
   detail, from the person's own palette (theme colours and their overrides; the Sky hardcodes no mood
@@ -308,7 +338,7 @@ days into kinds of act at exactly the zoom where they see a stretch of their lif
 
 | Varies with mood | Fixed at every mood |
 |---|---|
-| Halo radius: 4.8 dp at level 1 to 3.6 dp at level 5; 4.2 dp with no mood | Core radius (1.9 dp), core alpha, core colour |
+| Halo radius: 4.8 dp at level 1 to 3.6 dp at level 5; 4.2 dp with no mood | Bead radius (0.96 dp at the whole sky, growing with zoom alike for every star), the bead's light and colour |
 | Halo peak alpha, `HALO_LIGHT / radius²`, so the product cannot move | Tint and brightness (age), position, twinkle, total light (§0.3 finding 4) |
 
 The spread is small, about 14% either way, so it reads as texture at arm's length. A star with no
@@ -328,33 +358,46 @@ glints. Brightness may follow a mark the person placed, never anything the app m
 ### 3.5 How a star is drawn — a point, then a glow
 
 Each distinct star is rasterised once at the device's pixel density and stamped additively, so glows
-brighten where they overlap, as light does. Three layers: a **hard-edged near-white core**; a **tight
-inner glow** in the tint; and a **soft outer glow** in the tint, fading to exactly nothing. The
-prototype's extra floor under every halo was dropped: multiplied by a wider halo's area, it would
-make hard days emit more light.
+brighten where they overlap, as light does. Three layers: a **crisp bead** in the star's own colour,
+a little darker toward its edge the way a real star's limb is; a **thin rim** of the same light
+outside it, gone within 1.6 dp; and a **soft outer glow** in the tint, fading to exactly nothing,
+whose spread is the mood (§3.4). The bead and the rim are the approved phone sky's
+(`docs/prototypes/sky-phone.html`, carried over in `SkyStarLight`): light is added up in linear
+light and tone-mapped once, so a bright bead stays a colour instead of clipping to white. The bead
+is 0.96 dp across at the whole sky and grows as the zoom to the power 0.3, alike for every star, so
+a closer view shows bigger stars and no star outgrows another. The prototype's extra floor under
+every halo was dropped: multiplied by a wider halo's area, it would make hard days emit more light.
 
-**Brightness is age.** A new star is at full brightness and fades toward a floor of 0.22 with a
-2.1-year time constant: half the fall by about a year and a half, never zero. **Old stars recede but
-never vanish**, so someone who comes back after five years finds everything they left. A life event
-never fades.
+**Every ordinary star burns at one light.** The approved sky also gave each star a random
+magnitude; it is left out, because on this surface a brighter star reads as a day that counted for
+more. Only a life event is brighter (§3.4).
+
+**Brightness is age, a little.** A new star is at full brightness and fades toward a floor of 0.75
+with a 2.1-year time constant: a quarter of the light goes, half of that by about a year and a
+half, and never more. **Old stars recede but never vanish**, so someone who comes back after five
+years finds everything they left, in colour. A life event never fades.
 
 **The ground is near-black `#07070A`, not pure black**, so a glow has something to fade into and an
-OLED panel does not switch pixels off beneath it. The quiet sky (§7.1) draws the core alone.
+OLED panel does not switch pixels off beneath it. The quiet sky (§7.1) draws the bead alone, half a
+dp larger.
 
 ### 3.6 Twinkle
 
 Decoration only. Every value comes from the star's identity and the time, never from its mood or any
 count, so each star has its own beat, forever. Kind matters only in that every life event glints.
 
-- **A breathe**, every star: brightness dips by up to 22% over 3.5 to 8 seconds.
-- **A shimmer**, a third of stars: a faint 5% flicker about every 1.6 seconds.
+- **A flicker**, every star, the approved phone sky's: three sines at different speeds add up to a
+  waver that never quite repeats, the fastest under 2.3 times a second, moving the star's light by
+  at most 24% either way. A slow wave lets each star flicker for a while and then hold still,
+  coming round every one to two and a half minutes, so about half the sky flickers at any moment.
+  It gives back as much light as it takes, so over a few seconds every star is as bright as its age
+  makes it.
 - **A glint**, about a fifth of stars and every life event: once every 7 to 22 seconds, for 280 ms, a
   red and a blue fringe are added either side of the star, like a prism. The star's own tint never
   changes.
 
-The twinkle multiplies age brightness, so no star is twinkled past a younger one. There is no dial,
-only the Motion switch (§7.4). Two `SkyTwinkle` functions have no caller, `scaleAt` (a 2% size
-breathe, which a sub-pixel sprite would only blur) and `glintFringeScale`: #153.
+The twinkle multiplies age brightness. There is no dial, only the Motion switch (§7.4). One
+`SkyTwinkle` function has no caller, `glintFringeScale`: #153.
 
 ### 3.7 The sky's seed
 
@@ -364,8 +407,50 @@ that record was deleted would be a shape the deletion left (§2.1). It decides t
 course, the size, the clusters' shapes and every star's scatter, and nothing else (P3). A full
 restore carries it, so the restored sky is the same sky.
 
+**Reset my sky** draws a new seed at random instead, because the derived one is the sky being left
+(§3.8).
+
 There is no decorative field and no background star: every star is a memory (§D11). `SkyField`
 still draws the year review's backdrop (§9).
+
+### 3.8 The sky's colours
+
+Each sky has its own colours, from its seed and the person's choice and nothing else
+(`SkyColours`): the deep tones of the space, three soft glows of colour anchored to the sky, the
+nebulae's gas, a supernova's shell and the holes. No mood, count or date reaches them, so no sky
+turns a colour because of how a month went. There is never a green: hues from 45° to 195° are
+turned on round the wheel and out the other side. Every tone of the space is near black, so the
+stars keep their contrast. A star's own colour is never among them: age decides it, the same in
+every sky (§3.2). The quiet sky draws none of it, only the plain night ground.
+
+For 30 days from first opening a sky with anything in it, **Colours** in the bottom bar says until
+when, and offers **Try other colours** and **Back to the first ones**; after that the colours stay,
+as part of the sky. The choice is stored as `sky_colour_choice` and the last day as
+`sky_colour_until`.
+
+**Reset my sky**, at the foot of the Key and of Colours, asks first ("Reset your sky?"), then grows
+the sky again from a new seed: a new form, new places, new colours and 30 more days to choose them.
+Every memory, name, constellation and put-away memory stays; a constellation whose stars now land
+far apart falls out of the live sky, as it would over years, and keeps its photo. The opening plays
+again. A full restore carries the seed, the colour choice and the window's last day; a merge keeps
+the phone's own.
+
+### 3.9 What is in the sky that is not a memory
+
+- **A supernova.** A life event marked as hard (§2.2) has a dim shell round it and a soft heart that
+  breathes slowly while Motion is on. It marks that day and nothing more: what came after stays
+  where it is, the opening and Today never fly to it, and its detail says so.
+- **Nebulae.** A Monday-to-Sunday week with at least four journal entries in sight is a week with a
+  lot of writing, and weeks like that one after another share one nebula of gas round their stars,
+  in the sky's colours (`SkyNebula`). It counts entries and reads nothing else, and a put-away entry
+  does not count. A week without one is an ordinary week. The gas fades as the sky is followed in;
+  a tap on it between stars says which weeks and how many entries.
+- **Trackers.** Only a tracker the person switched on with **Show in my sky** on its own screen
+  (off for every tracker until then), and not archived. Each is an object of its own beside the
+  star nearest its first log's day: a globular cluster, an asteroid belt or a ring, from the seed
+  (`SkyTrackers`). Every log is one grain, spread by order and never by date, and the object's total
+  light stays the same however many there are, so more logs make it denser, never brighter. Tracker
+  logs never shape the rest of the sky. Its card opens the tracker or takes it out of the sky.
 
 ---
 
@@ -382,7 +467,7 @@ from FAR to a sun by eye.
 | **FAR** | below 2.5 | Every star as point and glow. |
 | **NEAR** | 2.5 to 7 | The same, closer. |
 | **CLOSE** | 7 and in | Kind marks (§3.3) and project stubs as well. |
-| **A sun** | once a star's real size passes 2.5 dp | A white-hot middle, a rim in the star's own colour and a dim corona; kind marks step aside for it. A life event is a bigger sun. |
+| **A sun** | once a star's real size passes 4 dp, past the bead at that zoom | A white-hot middle, a rim in the star's own colour and a dim corona; kind marks step aside for it. A life event is a bigger sun. |
 
 A level depends on how close the view is, never on how many stars are on screen, which would make
 what is drawn depend on how much somebody logged. Constellation lines and names fade out past about
@@ -429,7 +514,8 @@ was written.
   and a half seconds, a burst that builds over about three and a half more, then a settle of about
   two. Each star appears at its own moment, a hash of its identity, with a brief soft flare, so the
   opening is the same sky every time.
-- **Then the camera flies to the newest star**, and nowhere else.
+- **Then the camera flies to the newest star**, and nowhere else: never one put away (§2.4) and
+  never a life event marked as hard (§3.9), which Today skips too.
 - **A new star is born in front of the person, once.** When the newest star is one they have not yet
   watched arrive, it waits through the opening; after the camera arrives, a cloud spins in and
   collapses, a core warms, it ignites and a ring of light runs out, over six seconds. Its detail then
@@ -532,8 +618,8 @@ the Sky or the Sky does not ship.
 ### 7.1 Low vision
 
 - **A star is not text, and its contrast is not held to a floor.** Its brightness is its age; the
-  oldest star at the bottom of its breathe measures 1.53:1. What a star means (kind, date, mood) is
-  written in its detail and in the list.
+  heart of the oldest star at the bottom of its twinkle measures 5.00:1. What a star means (kind,
+  date, mood) is written in its detail and in the list.
 - **Mood colours are equalised, not lifted** (§0.3 finding 1): the shipped ramp and any colour a
   person picks go to exactly 6.5:1. One too dark or saturated to get there by scaling is blended
   toward the ink, visibly changing it; the lesser harm, since the alternative is a mood they cannot
@@ -573,10 +659,12 @@ Twinkle, the opening and every journey are decoration and carry no meaning (§3.
 (`ANIMATOR_DURATION_SCALE` of 0, read in `SkyScreen`); the person can move it either way. The rules,
 asserted as arithmetic in `SkyTwinkleTest`:
 
-- **Everything stops under the switch**: no twinkle, no opening, no birth, no frame loop at all,
-  and every journey across the sky is a cut.
+- **Everything stops under the switch**: no twinkle, no opening, no birth, no black or white hole,
+  no supernova breathing, no turning tracker, no frame loop at all, and every journey across the
+  sky is a cut.
 - **Only a few stars glint at any moment**, about four in a thousand, and none in the quiet sky.
 - **A glint is under a third of a second.**
+- **No flicker runs faster than three times a second**; the fastest is under 2.3.
 - **Nothing is ever in step with anything else.**
 
 The frame loop runs only while the sky is on screen.
@@ -590,6 +678,7 @@ One control in the top bar switches between the sky and the list.
 - **One row per star**: its kind's line, date, mood word if any, and how many records it covers if
   folded. A row does what tapping its star does (§4.1).
 - **No summary, no "your year in words".** The list is the data, not a reading of it.
+- **Put-away memories last**, under their own heading, folded until opened (§2.4).
 
 The honest cost: the list is equal in information and not the same object emotionally, since nobody
 sits and looks at a list. It gets the same design attention; pretending it is the same experience
@@ -663,7 +752,7 @@ check is first shown to catch a planted violation (`CLAUDE.md` §5).
 
 | # | Property | Status |
 |---|---|---|
-| **P1** | Mood never changes a star's presence: core and total light are identical at every level | Built: `SkyGlyphTest`; `SkySurfaceSourceTest` pins the renderer to the halo as mood's only sink |
+| **P1** | Mood never changes a star's presence: bead and total light are identical at every level | Built: `SkyGlyphTest`, `SkyStarLightTest`; `SkySurfaceSourceTest` pins the renderer to the halo as mood's only sink |
 | **P2** | Absence has no glyph | Built: `SkyTest` |
 | **P3** | The seed shapes the sky and decides nothing about any one record | Built: `SkyTest` |
 | **P4** | A gap takes no room, in every form | Built: `SkyTest` |

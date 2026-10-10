@@ -469,6 +469,33 @@ class MigrationTest {
     }
 
     @Test
+    fun migrate22To23_nothingIsHardShownOrPutAway() {
+        helper.createDatabase(TEST_DB, 22).use { db ->
+            db.execSQL("INSERT INTO life_events (id, epochDay, label, createdAt) VALUES (1, 19000, 'A day', 0)")
+            db.execSQL(
+                "INSERT INTO trackers (id, name, type, minValue, maxValue, unit, sortOrder, archived) " +
+                    "VALUES (1, 'Walks', 'BOOLEAN', 0, 1, '', 0, 0)",
+            )
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 23, true, AppDatabase.MIGRATION_22_23).use { db ->
+            // Only the person marks a day as hard, shows a tracker or puts a memory away.
+            db.query("SELECT label, hard FROM life_events WHERE id = 1").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("A day", c.getString(0))
+                assertEquals(0, c.getInt(1))
+            }
+            db.query("SELECT showInSky FROM trackers WHERE id = 1").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals(0, c.getInt(0))
+            }
+            db.query("SELECT COUNT(*) FROM sky_put_away").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals(0, c.getInt(0))
+            }
+        }
+    }
+
+    @Test
     fun migrateAll_from3_toLatest() {
         helper.createDatabase(TEST_DB, 3).use { db ->
             db.execSQL(

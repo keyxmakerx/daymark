@@ -399,6 +399,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false, openT
                         skyRecordRoute(kind, id)?.let { navController.navigate(it) }
                     },
                     onOpenLifeEvents = { navController.navigate(Routes.LIFE_EVENTS) },
+                    onOpenTracker = { id -> navController.navigate(Routes.tracker(id)) },
                 )
             }
             composable(Routes.LIFE_EVENTS, enterTransition = zEnter, popExitTransition = zPopExit) {

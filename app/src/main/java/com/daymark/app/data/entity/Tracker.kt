@@ -41,6 +41,12 @@ data class Tracker(
      * the check-ins ease off when unanswered, as §D1a describes.
      */
     @ColumnInfo(defaultValue = "0") val keepAsSet: Boolean = false,
+    /**
+     * Whether this tracker is an object in the person's sky (`DECISIONS.md` §D11). Off until the
+     * person switches it on: a tracker can be about something hard, and nobody should have an
+     * object made of it in their sky unless they chose one.
+     */
+    @ColumnInfo(defaultValue = "0") val showInSky: Boolean = false,
 ) {
     companion object {
         const val SCALE = "SCALE"

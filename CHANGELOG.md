@@ -84,8 +84,10 @@ All notable changes to this project are documented here. The format is based on
   courses, a run of galaxies, or an open sky with no line to follow, and skies come in different
   sizes. Your memories run along it from oldest to newest, counted in memories rather than days, so
   a quiet month takes no room. Steady stretches can form a band, rarely, and on-and-off weeks
-  gather into clusters; none of it is a reward. Older stars drift outward and turn from blue-white
-  to red, and red only means old.
+  gather into clusters; none of it is a reward. Each star is a small bead of light in its own
+  colour, with a thin rim and a twinkle that comes and goes, and every star is as bright as every
+  other whatever the day was. Older stars drift outward and turn from blue to red, and red only
+  means old.
   The sky opens with its stars twinkling in and flies to your newest one; a new star you have not
   seen yet is born in front of you. A tap skips all of it, and with Motion off the sky opens still,
   on today. You can zoom from the whole sky to a single star drawn as a sun. **Today** takes you to
@@ -94,6 +96,20 @@ All notable changes to this project are documented here. The format is based on
   their stars drift apart and the constellation falls out of the sky, but **See it as you drew it**
   always shows it as it was. Constellations are kept in the encrypted database and come back with a
   full restore, along with your sky's seed, so a restored sky is the same sky.
+- **The rest of the sky: its own colours, nebulae, hard days, putting memories away, and
+  trackers.** Each sky has colours of its own, never a green, in the deep tones of its space and the
+  soft glows behind your stars. For 30 days from first opening it, **Colours** lets you try others or
+  go back to the first ones; after that they stay. **Reset my sky**, at the foot of the Key, grows
+  your sky again with a new shape and new colours, and every memory, name and constellation stays.
+  A week with four or more journal entries has a nebula of gas round its stars, and weeks like that
+  one after another share one. On **Life events**, tap one to **Mark as hard**: its star gets a dim
+  supernova's shell, which marks that day and nothing more, and the sky never opens on it. You can
+  unmark it the same way. **Put away** on any star hides it from your sky and nowhere else; with
+  Motion on, a small black hole draws it in and closes. The list keeps what you put away under its
+  own heading, where **Bring back** returns it, and a white hole sends it home. A tracker can be an
+  object of its own beside your memories, a cluster, a belt or a ring, if you switch on **Show in
+  my sky** on its screen; more logs make it denser, never brighter. Backups (format 19) carry all of
+  it; a merge does not yet carry what you put away (#455).
 - **Game plans and suggestions from your clinicians, on your phone** (sync build). Settings → Sync
   with your server → From your clinicians. "Check for new items" is the only time the phone asks;
   each item is opened with your own key and believed only if it is signed by the clinician you

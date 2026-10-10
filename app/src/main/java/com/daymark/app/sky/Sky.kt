@@ -140,6 +140,8 @@ object Sky {
         val starKind = ArrayList<Int>(sorted.size)
         val starMood = ArrayList<Int>(sorted.size)
         val starDay = ArrayList<Long>(sorted.size)
+        val starHard = ArrayList<Boolean>(sorted.size)
+        val starPutAway = ArrayList<Long>(sorted.size)
         val idStart = ArrayList<Int>(sorted.size + 1)
         val ids = LongArray(sorted.size)
         var idCursor = 0
@@ -169,15 +171,24 @@ object Sky {
                     val anchorId = sorted[from].id
 
                     idStart.add(idCursor)
+                    var hard = false
+                    var putAway = SkyRecord.SHOWN
                     for (r in from until to) {
                         ids[idCursor] = sorted[r].id
                         idCursor++
+                        hard = hard || sorted[r].hard
+                        putAway = maxOf(putAway, sorted[r].putAwayEpochDay)
                     }
 
                     starIdentity.add(identityOf(kind, anchorId))
                     starKind.add(kind.ordinal)
                     starMood.add(moodOf(sorted, from, to))
                     starDay.add(day)
+                    // Only a life event can be marked hard; a flag on anything else is ignored.
+                    starHard.add(hard && kind == SkyKind.LIFE_EVENT)
+                    // A folded star is put away when any record in it is: what the person put away
+                    // stays out of sight, even on a day so full that it shares a star.
+                    starPutAway.add(putAway)
                 }
                 kindStart = kindEnd
             }
@@ -201,6 +212,8 @@ object Sky {
             shape = placed.shape,
             height = placed.height,
             form = placed.form,
+            hard = BooleanArray(starCount) { starHard[it] },
+            putAwayOn = LongArray(starCount) { starPutAway[it] },
         )
     }
 
@@ -272,18 +285,32 @@ object Sky {
         while (index < layout.starCount) {
             val month = SkyCalendar.epochMonth(layout.epochDay[index])
             var end = index
+            var shown = 0
             while (end < layout.starCount && SkyCalendar.epochMonth(layout.epochDay[end]) == month) {
+                if (layout.isShown(end)) shown++
                 end++
             }
-            out.add(
-                SkyListItem.MonthHeading(
-                    year = SkyCalendar.yearOfMonth(month),
-                    month = SkyCalendar.monthOfMonth(month),
-                    itemCount = end - index,
-                ),
-            )
-            for (i in index until end) out.add(SkyListItem.Star(i))
+            // A month whose every memory is put away gets no heading: the heading would mark where
+            // they were, and nothing in the sky does (`DECISIONS.md` §D11).
+            if (shown > 0) {
+                out.add(
+                    SkyListItem.MonthHeading(
+                        year = SkyCalendar.yearOfMonth(month),
+                        month = SkyCalendar.monthOfMonth(month),
+                        itemCount = shown,
+                    ),
+                )
+                for (i in index until end) if (layout.isShown(i)) out.add(SkyListItem.Star(i))
+            }
             index = end
+        }
+        // Put-away memories last, under their own heading, in the order they were put away. A row
+        // says only that a memory is put away and when, never its own date, kind or mood.
+        val away = (0 until layout.starCount).filter { layout.isPutAway(it) }
+            .sortedWith(compareBy<Int> { layout.putAwayOn[it] }.thenBy { it })
+        if (away.isNotEmpty()) {
+            out.add(SkyListItem.PutAwayHeading)
+            for (i in away) out.add(SkyListItem.PutAway(i, layout.putAwayOn[i]))
         }
         return out
     }
@@ -384,7 +411,20 @@ data class SkyRecord(
      * (see [SkyGlyph]).
      */
     val moodLevel: Int = SkyGlyph.MOOD_NONE,
-)
+    /**
+     * The person marked this life event as hard. Only they can, and only on a life event: nothing
+     * asks, suggests or infers it (`DECISIONS.md` §D11). Its star becomes a supernova, a marker of
+     * that day and nothing more.
+     */
+    val hard: Boolean = false,
+    /** The day the person put this memory away, or [SHOWN]. Put away is hidden, never deleted. */
+    val putAwayEpochDay: Long = SHOWN,
+) {
+    companion object {
+        /** Not put away. The smallest day there is, so a star's latest put-away day is a `max`. */
+        const val SHOWN = Long.MIN_VALUE
+    }
+}
 
 /**
  * The laid-out sky: packed parallel arrays, one entry per drawn star, in time order.
@@ -433,7 +473,42 @@ class SkyLayout(
     val height: Float = SkyForm.MIN_HEIGHT,
     /** River, galaxies or open sky, from the seed; null in an empty sky. The Key names it. */
     val form: SkyForm.Form? = null,
+    /** A life event the person marked as hard: drawn as a supernova ([isSupernova]). */
+    val hard: BooleanArray = BooleanArray(x.size),
+    /**
+     * The day each star was put away, or [SkyRecord.SHOWN]. A put-away star keeps its place, so
+     * nothing around it moves and bringing it back sends it home; it is simply not drawn, not
+     * tappable, and not listed among the months.
+     */
+    val putAwayOn: LongArray = LongArray(x.size) { SkyRecord.SHOWN },
 ) {
+
+    fun isPutAway(index: Int): Boolean = putAwayOn[index] != SkyRecord.SHOWN
+
+    fun isShown(index: Int): Boolean = !isPutAway(index)
+
+    /** A life event marked as hard, and in sight. */
+    fun isSupernova(index: Int): Boolean = hard[index] && isShown(index)
+
+    /**
+     * Where the opening ends and Today goes: the newest star in sight that is not a supernova,
+     * because the opening never flies to a day the person marked as hard (§D11). -1 when there is
+     * none.
+     */
+    val openingStar: Int
+        get() {
+            for (i in starCount - 1 downTo 0) if (isShown(i) && !hard[i]) return i
+            return -1
+        }
+
+    /** How many stars are in sight. */
+    val shownCount: Int get() = (0 until starCount).count { isShown(it) }
+
+    /** The oldest star in sight, or -1. */
+    val firstShown: Int get() = (0 until starCount).firstOrNull { isShown(it) } ?: -1
+
+    /** The newest star in sight, or -1. */
+    val lastShown: Int get() = (starCount - 1 downTo 0).firstOrNull { isShown(it) } ?: -1
 
     /** Where star [index] is on [onEpochDay]: its place plus its drift for its age that day. */
     fun xOn(index: Int, onEpochDay: Long): Float = x[index] + driftX[index] * yearsOld(index, onEpochDay)
@@ -482,14 +557,21 @@ class SkyLayout(
      */
     val emptiness: Emptiness
         get() = when {
-            starCount == 0 -> Emptiness.NO_RECORDS
-            starCount == 1 -> Emptiness.FIRST_LIGHT
+            shownCount == 0 && starCount > 0 -> Emptiness.ALL_PUT_AWAY
+            shownCount == 0 -> Emptiness.NO_RECORDS
+            shownCount == 1 -> Emptiness.FIRST_LIGHT
             else -> Emptiness.POPULATED
         }
 
     enum class Emptiness {
         /** Nothing logged. Field, one line, no stars. */
         NO_RECORDS,
+
+        /**
+         * Memories, every one of them put away. Not [NO_RECORDS], whose line would tell the person
+         * nothing of theirs is here: [ALL_PUT_AWAY_LINE] says where they are instead.
+         */
+        ALL_PUT_AWAY,
 
         /**
          * Exactly one star.
@@ -527,6 +609,9 @@ class SkyLayout(
          * and not a gap to be filled.
          */
         const val EMPTY_LINE = "This is the sky. Nothing of yours is in it."
+
+        /** A sky whose every memory is put away: where they are, and that they can come back. */
+        const val ALL_PUT_AWAY_LINE = "Everything here is put away. You can bring it back from the list."
     }
 }
 
@@ -541,4 +626,10 @@ sealed class SkyListItem {
 
     /** An index into the [SkyLayout] arrays — the same star, addressed the same way. */
     data class Star(val index: Int) : SkyListItem()
+
+    /** "Put away": the heading over memories the person put away, closed until they open it. */
+    object PutAwayHeading : SkyListItem()
+
+    /** A put-away memory: only that it is put away, and the day it was put away. */
+    data class PutAway(val index: Int, val putAwayEpochDay: Long) : SkyListItem()
 }

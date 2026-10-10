@@ -102,7 +102,11 @@ com.daymark.app.export.ReportInkSourceTest
 com.daymark.app.ui.settings.ServerSyncSeamSourceTest
 com.daymark.app.ui.settings.CliniciansScreenSourceTest
 com.daymark.app.ui.settings.InboxScreenSourceTest
-com.daymark.app.notifications.NotificationPrivacySourceTest"
+com.daymark.app.notifications.NotificationPrivacySourceTest
+com.daymark.app.data.LifeEventSchemaTest
+com.daymark.app.data.ConstellationSchemaTest
+com.daymark.app.data.SkyPutAwaySchemaTest
+com.daymark.app.data.SkyProjectionSourceTest"
 SOURCES="$REPO/app/src/test/java/com/daymark/app/data/PeopleSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/TimedOfferSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/CompanionSchemaTest.kt
@@ -125,6 +129,10 @@ $REPO/app/src/test/java/com/daymark/app/ui/settings/ServerSyncSeamSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/settings/CliniciansScreenSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/settings/InboxScreenSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/notifications/NotificationPrivacySourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/data/LifeEventSchemaTest.kt
+$REPO/app/src/test/java/com/daymark/app/data/ConstellationSchemaTest.kt
+$REPO/app/src/test/java/com/daymark/app/data/SkyPutAwaySchemaTest.kt
+$REPO/app/src/test/java/com/daymark/app/data/SkyProjectionSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/backup/RepoFile.kt
 $REPO/app/src/test/java/com/daymark/app/ui/SourceText.kt"
 
@@ -140,6 +148,12 @@ $f"
   fi
 done
 
+# `SkyProjectionSourceTest` ties the projection count to `SkyKind`, so `sky/` is compiled in too.
+# Every file there is import-free by design (tools/jvm-tests.sh sky checks it), so none is skipped.
+for f in $(find "$REPO/app/src/main/java/com/daymark/app/sky" -name '*.kt'); do
+  SOURCES="$SOURCES
+$f"
+done
 
 # shellcheck disable=SC2086
 java -cp "$KC:$STDLIB:$GL/kotlin-reflect-$KOTLIN.jar:$GL/kotlin-script-runtime-$KOTLIN.jar:$GL/kotlin-daemon-embeddable-$KOTLIN.jar:$GL/kotlinx-coroutines-core-jvm-1.6.4.jar:$GL/annotations-24.0.1.jar:$GL/trove4j-1.0.20200330.jar" \
