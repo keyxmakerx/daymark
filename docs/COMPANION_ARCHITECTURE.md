@@ -207,8 +207,9 @@ server computes codes from it. A startup self-test of the cryptography is not bu
 - **Assignments and game plans (clinician to owner).** The clinician signs the payload, bound to a
   context string and the owner's fingerprint, then seals it to the owner. The owner's console opens
   assignments, verifies them against the pinned clinician key and checks them against the current
-  grant before anything applies. Receiving game plans in the owner's console is not built: #231; the
-  phone's inbox receives both. Game plans never land in the app's `treatments` table; they are the clinician's
+  grant before anything applies. It opens game plans the same way, against the pinned key, and shows
+  each as a proposal the owner accepts or declines (`lib/gameplans/planInbox.ts`); the phone's inbox
+  receives both. Game plans never land in the app's `treatments` table; they are the clinician's
   words, kept separate and read-only.
 
 ## 6. Honest limits

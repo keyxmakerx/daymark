@@ -154,3 +154,44 @@ describe('relRefOf', () => {
     expect(await relRefOf('inbox-token-example')).toBe('PmoLo2aBLjo0CAzUlM2MhtNp2fCKQvpN17Qgod-1w2s')
   })
 })
+
+describe('PortalClient: a refusal for pace (#382)', () => {
+  const paced = () => new Response('{"error":"rate limited"}', { status: 429 })
+  const locked = () => new Response('{"error":"temporarily locked"}', { status: 429 })
+
+  function scripted(answers: Array<() => Response>, log: Recorded[]): typeof fetch {
+    return (async (input: RequestInfo | URL, init?: RequestInit) => {
+      log.push({ url: String(input), init: init ?? {} })
+      return (answers.shift() ?? (() => new Response('none left', { status: 500 })))()
+    }) as unknown as typeof fetch
+  }
+
+  it('waits and sends once more, so a quick click is not told it failed', async () => {
+    const log: Recorded[] = []
+    const waits: number[] = []
+    const client = new PortalClient('https://s.example', 'owner-token', scripted([paced, () => new Response(null, { status: 404 })], log), async (ms) => {
+      waits.push(ms)
+    })
+    expect(await client.getCurrent(inboxToken, 'assignments', 'as-1')).toBeNull()
+    expect(log).toHaveLength(2)
+    expect(waits).toEqual([1_100])
+    // The retry is the same request: the same address and the same owner credential.
+    expect(log[1].url).toBe(log[0].url)
+    expect((log[1].init.headers as Record<string, string>).Authorization).toBe('Bearer owner-token')
+  })
+
+  it('sends once more at most, and a second refusal reaches the caller as its status', async () => {
+    const log: Recorded[] = []
+    const client = new PortalClient('https://s.example', 'owner-token', scripted([paced, paced, paced], log), async () => {})
+    await expect(client.getCurrent(inboxToken, 'assignments', 'as-1')).rejects.toMatchObject({ status: 429 })
+    expect(log).toHaveLength(2)
+  })
+
+  it('does not retry a lockout, which lasts minutes', async () => {
+    const log: Recorded[] = []
+    const client = new PortalClient('https://s.example', 'owner-token', scripted([locked, paced], log), async () => {})
+    await expect(client.getCurrent(inboxToken, 'assignments', 'as-1')).rejects.toMatchObject({ status: 429 })
+    // The control for the test above: the same client does send twice when the first answer is for pace.
+    expect(log).toHaveLength(1)
+  })
+})

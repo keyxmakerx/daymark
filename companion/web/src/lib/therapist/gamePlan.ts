@@ -94,6 +94,19 @@ export function openGamePlan(
   ownerBox: { publicKey: Uint8Array; privateKey: Uint8Array },
   pinnedTherapistSignPub: Uint8Array,
 ): GamePlanPayload {
+  return openGamePlanSigned(blob, ownerBox, pinnedTherapistSignPub).plan
+}
+
+/**
+ * [openGamePlan], with the plan as the clinician signed it, verbatim: what an accept or a decline
+ * carries in the owner's lane (lane/record.ts gamePlanDecision), and how a decision read back finds
+ * its plan again (#231).
+ */
+export function openGamePlanSigned(
+  blob: Uint8Array,
+  ownerBox: { publicKey: Uint8Array; privateKey: Uint8Array },
+  pinnedTherapistSignPub: Uint8Array,
+): { plan: GamePlanPayload; payloadJson: string; sigB64: string } {
   let openedBytes: Uint8Array
   try {
     openedBytes = _sodium.crypto_box_seal_open(blob, ownerBox.publicKey, ownerBox.privateKey)
@@ -115,7 +128,7 @@ export function openGamePlan(
   if (p.context !== GAMEPLAN_CONTEXT) throw new GamePlanOpenError('unexpected game plan context')
   const ownerFp = fingerprint(ownerBox.publicKey)
   if (p.recipientOwnerFp !== ownerFp) throw new GamePlanOpenError('game plan is addressed to a different owner')
-  return p
+  return { plan: p, payloadJson: env.payloadJson, sigB64: env.sigB64 }
 }
 
 /** A new empty plan for an owner, with a fresh lineage. */

@@ -119,6 +119,42 @@ class RelationRateLimitTest {
     }
 
     @Test
+    fun `an owner going too fast is told so with 429, and a wrong token is still 401`() {
+        testApplication {
+            val dir = tmpDir()
+            val cfg = config(dir).copy(rateLimitRps = 2)
+            val (blob, rel, auth) = stores(dir, cfg)
+            application { module(cfg, blob, null, rel, auth) }
+            val answers = (1..10).map {
+                client.get("/v1/rel/$relRef/assignments") {
+                    header("X-Rel-Token", inboxToken)
+                    header(HttpHeaders.Authorization, "Bearer $ownerToken")
+                }
+            }
+            // The allowance is spendable, and a burst past it is refused for its pace, never as a bad token (#382).
+            assertEquals(HttpStatusCode.OK, answers.first().status)
+            val refused = answers.filter { it.status != HttpStatusCode.OK }
+            assertTrue(refused.isNotEmpty(), "ten requests at once must go past an allowance of two a second")
+            for (r in refused) {
+                assertEquals(HttpStatusCode.TooManyRequests, r.status)
+                assertEquals("""{"error":"rate limited"}""", r.bodyAsText())
+            }
+        }
+        // The control: a wrong token, under the allowance, is still a wrong token.
+        testApplication {
+            val dir = tmpDir()
+            val cfg = config(dir)
+            val (blob, rel, auth) = stores(dir, cfg)
+            application { module(cfg, blob, null, rel, auth) }
+            val wrong = client.get("/v1/rel/$relRef/assignments") {
+                header("X-Rel-Token", inboxToken)
+                header(HttpHeaders.Authorization, "Bearer not-$ownerToken")
+            }
+            assertEquals(HttpStatusCode.Unauthorized, wrong.status)
+        }
+    }
+
+    @Test
     fun `a stranger with a bogus inbox token cannot burn the therapist's budget`() = testApplication {
         val dir = tmpDir()
         val cfg = config(dir)

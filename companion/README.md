@@ -20,23 +20,25 @@ topology, the proxy contract, every setting, backup and restore:
   server is needed.
 - **Encrypted sync.** The server stores append-only ciphertext; the browser reads and decrypts it.
   Two writers today: the phone's opt-in `sync` build (Settings → Sync with your server pairs by the
-  server's address and a code shown on the owner's page, then sends an encrypted copy of the
-  journal), and the command-line tool below. The phone does not yet take anything back from the
-  server (#346).
+  server's address and a code shown on the owner's page, then sends and fetches an encrypted copy
+  of the journal), and the command-line tool below. The phone does not yet take in what the web
+  console adds (#346).
 - **Self-checks and a focus task** (Steady Attention) in the browser — non-diagnostic, licence-clean,
   and never uploaded. Results stay on that device.
 - **With `DAYMARK_SETUP_MODE=paired`:** the owner console (invite a clinician and pair with a spoken
   code, grant capabilities, share chosen slices, review what they assign, read the access log) and
   the clinician console (sign-in with a six-digit authenticator code, the shared-data dashboard,
-  assignments, game plans, leaving). **With `practice`**, the practice console as well.
+  assignments, game plans, leaving). **With `practice`**, the practice console as well. The phone's
+  `sync` build invites and approves clinicians too, and receives their game plans and suggestions
+  in an inbox, where nothing is added until the owner accepts it.
 - **Optional email (SMTP)**, off unless configured: invitation links, owner notifications, and
   recovery of the owner's access token, which the decided design replaces with proving the owner's
   own key (#208; not built: #325). Emails carry links and event names, never record content.
 
 Not built, among others: passkey sign-in, decided in #205 with the six-digit code kept as the
-fallback (#326; today the WebAuthn routes answer 501 and the code is the clinician's sign-in), and
-the rest of the phone's side of the Companion: taking data back, the inbox and the heartbeat (issue
-#138). The build state of each feature is in the
+fallback (#326; today the WebAuthn routes answer 501 and the code is the clinician's sign-in),
+and the rest of the phone's side of the
+Companion: taking in the web console's additions (#346) and the heartbeat (#185). The build state of each feature is in the
 documents under [`../docs/`](../docs/), and the open work is in the issues.
 
 ## Quick start (Docker)
@@ -178,6 +180,7 @@ that was tested, not a rebuild of the same source.
 
 ```
 ghcr.io/keyxmakerx/daymark-companion@sha256:<digest>  # immutable AND verifiable — the safest pin
+ghcr.io/keyxmakerx/daymark-companion:1.0.0-beta.1     # a release: published when tag v1.0.0-beta.1 is pushed
 ghcr.io/keyxmakerx/daymark-companion:sha-<commit>     # immutable, but a tag can be force-pushed
 ghcr.io/keyxmakerx/daymark-companion:latest           # moves with main — for auto-updating setups
 ghcr.io/keyxmakerx/daymark-companion:main             # identical to :latest, same image
@@ -197,7 +200,9 @@ earlier release refuses a database a later one changed until the copy is put bac
 for any build is printed in that run's summary on the Actions tab.
 
 Only builds from `main` move `:latest` and `:main`. A manually dispatched build of a branch
-publishes its `sha-` tag and nothing else.
+publishes its `sha-` tag and nothing else. A release tag `v<major>.<minor>.<patch>[-label]`, the same
+tag the app is released under, publishes its `sha-` tag and the version without its `v`, and moves
+nothing.
 
 **One-time setup:** GHCR packages are created private even for a public repository. After the first
 publish, open the package in GitHub → Package settings → change visibility to public. Otherwise

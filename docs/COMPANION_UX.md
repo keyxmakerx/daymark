@@ -48,8 +48,7 @@ been built differently. The old text is
 ## 7. Key flows
 
 Only flows that are built and carry fixed copy are kept here. Not built: limiting a share to a date
-range, leaving out single records and previewing it before it goes: #225; receiving, checking and
-accepting or declining a game plan in the owner console: #231.
+range, leaving out single records and previewing it before it goes: #225.
 
 ### 7.6 Revoking access (owner)
 

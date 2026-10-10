@@ -52,6 +52,11 @@ All notable changes to this project are documented here. The format is based on
   still contains unlock times restores normally; the badges in it are just not brought back.
 
 ### Added
+- **The owner's browser console receives game plans.** Under Inbox, each plan from a clinician you
+  have paired with is opened and checked against the key you recorded for them, then shown as a
+  proposal you can accept or decline. A plan that fails a check says so and cannot be accepted, and a
+  withdrawn plan is kept as history. Your decision is kept in your own encrypted record; your
+  clinician is not told (#231).
 - **A new sky.** Every star in "Your sky" is one of your memories; the faint background specks are
   gone, and the Field switch with them. Each sky takes a shape of its own from a seed that is yours alone: a river on one of six
   courses, a run of galaxies, or an open sky with no line to follow, and skies come in different
@@ -535,6 +540,11 @@ All notable changes to this project are documented here. The format is based on
   quiet notice that names nobody and counts nothing.
 
 ### Fixed
+- **The Companion answers "not found" for an API address it does not have**, instead of the
+  owner's page with a success code, so a monitor or an older app is not misled (#390).
+- **An owner going too fast is no longer told their token is wrong.** On the clinician channels the
+  server now answers "too many requests", as everywhere else, and the owner console waits a moment
+  and tries once more, so a quick click is not reported as a failure (#382).
 - **Leaving the owner console no longer locks it or forgets the clinicians you added.** Going to
   another route (open a backup, Sync) and coming back finds the console as you left it, with every
   clinician still listed. Locking is still the button, closing the tab, or going idle.

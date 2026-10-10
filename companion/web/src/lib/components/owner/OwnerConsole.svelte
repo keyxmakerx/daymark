@@ -4,6 +4,7 @@
   import OwnerUnlock from './OwnerUnlock.svelte'
   import GrantManager from './GrantManager.svelte'
   import AssignmentInbox from './AssignmentInbox.svelte'
+  import PlanInbox from './PlanInbox.svelte'
   import ShareBuilder from './ShareBuilder.svelte'
   import AuditList from './AuditList.svelte'
   import PinnedTherapistPicker from './PinnedTherapistPicker.svelte'
@@ -238,6 +239,7 @@
         <GrantManager {session} therapist={selected} {client} {onGrantChange} />
       {:else if sub === 'inbox'}
         <AssignmentInbox {session} {client} {lane} />
+        <PlanInbox {session} {client} {lane} />
       {:else if sub === 'published-keys'}
         <TherapistKeyIntake therapist={selected} {endpoint} onkeys={keysArrived} />
       {:else if sub === 'share'}

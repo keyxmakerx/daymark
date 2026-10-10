@@ -458,6 +458,11 @@ private suspend fun io.ktor.server.routing.RoutingContext.resolve(
     if (owner == OwnerAuth.Outcome.TooLarge || owner == OwnerAuth.Outcome.LengthRequired) {
         call.refuse(owner); return null
     }
+    // An owner refused for their pace is told so, 429, as on every other owner route (#382). Tried as a
+    // clinician instead, they were answered 401, and the console told them their token was wrong.
+    if (owner == OwnerAuth.Outcome.RateLimited || owner == OwnerAuth.Outcome.Locked) {
+        call.refuse(owner); return null
+    }
     // The owner's side keeps the rule every owner route keeps: a route on the list refuses a phone here too.
     if (owner is OwnerAuth.Outcome.Ok && !call.mayUseRoute(owner.principal, ownerGuard)) return null
     // A signed request is judged by its signature alone, as on every owner route: refused, it is not
