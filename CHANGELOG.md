@@ -52,6 +52,11 @@ All notable changes to this project are documented here. The format is based on
   still contains unlock times restores normally; the badges in it are just not brought back.
 
 ### Added
+- **The owner's browser console receives game plans.** Under Inbox, each plan from a clinician you
+  have paired with is opened and checked against the key you recorded for them, then shown as a
+  proposal you can accept or decline. A plan that fails a check says so and cannot be accepted, and a
+  withdrawn plan is kept as history. Your decision is kept in your own encrypted record; your
+  clinician is not told (#231).
 - **A new sky.** Every star in "Your sky" is one of your memories; the faint background specks are
   gone, and the Field switch with them. Each sky takes a shape of its own from a seed that is yours alone: a river on one of six
   courses, a run of galaxies, or an open sky with no line to follow, and skies come in different

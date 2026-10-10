@@ -179,9 +179,9 @@ publishes it to the `gameplans` channel (`lib/therapist/gamePlan.ts`). An update
 version; withdrawal is a signed tombstone. The server cannot withdraw a plan, or un-withdraw one,
 because it cannot sign.
 
-**Not built: the owner's side** — opening a plan, checking it, showing it as a proposal, and accepting
-or declining it — in the web console (#231) or on the phone (#138). The check itself exists as
-`openGamePlan`, with no production caller. When it is built, these rules hold:
+**The owner's side** in the web console opens a plan, checks it, shows it as a proposal, and keeps the
+owner's accept or decline in the owner's lane, carrying the plan as signed
+(`lib/gameplans/planInbox.ts`, `components/owner/PlanInbox.svelte`). These rules hold:
 
 - **The proposal gate is mandatory.** Nothing takes effect until the owner accepts; it is both the
   integrity boundary and the consent boundary.

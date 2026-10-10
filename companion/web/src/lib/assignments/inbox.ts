@@ -170,10 +170,13 @@ export function canApply(item: InboxItem): boolean {
 
 /** What the inbox needs from the server: the listings and single items. PortalClient has all three. */
 export interface InboxSource {
-  listLineages(inboxToken: string, channel: 'assignments'): Promise<string[]>
-  listVersions(inboxToken: string, channel: 'assignments', lineage: string): Promise<RelMeta[]>
-  getBlob(inboxToken: string, channel: 'assignments', lineage: string, version: number): Promise<Uint8Array>
+  listLineages(inboxToken: string, channel: InboxChannel): Promise<string[]>
+  listVersions(inboxToken: string, channel: InboxChannel, lineage: string): Promise<RelMeta[]>
+  getBlob(inboxToken: string, channel: InboxChannel, lineage: string, version: number): Promise<Uint8Array>
 }
+
+/** The channels a clinician writes to the owner: their assignments, and their game plans (#231). */
+export type InboxChannel = 'assignments' | 'gameplans'
 
 /** A clinician whose items are fetched: the pinned entry's id and name, and its inbox token. */
 export interface InboxSender {
@@ -203,6 +206,8 @@ export async function fetchInbox(
   senders: readonly InboxSender[],
   /** A 429 or a 5xx is asked again, paced, as the lanes are (#433). Tests pass one that does not wait. */
   wait: Wait = pause,
+  /** The clinician's channel to read: assignments, or game plans (#231), fetched alike. */
+  channel: InboxChannel = 'assignments',
 ): Promise<{ blobs: RawAssignmentBlob[]; gone: GoneItem[] }> {
   const blobs: RawAssignmentBlob[] = []
   const gone: GoneItem[] = []
@@ -210,17 +215,17 @@ export async function fetchInbox(
     // Nothing to list (404) or a relationship the server no longer serves (410) is an empty list.
     // Any other failure fails the load: drawn as "No assignments to review", it would be a claim
     // about the clinician that the console does not know to be true.
-    const lineages = await paced(() => source.listLineages(t.inboxToken, 'assignments'), wait).catch((e: unknown) => {
+    const lineages = await paced(() => source.listLineages(t.inboxToken, channel), wait).catch((e: unknown) => {
       if (e instanceof PortalError && (e.status === 404 || e.status === 410)) return [] as string[]
       throw e
     })
     for (const lineage of lineages) {
-      const versions = await paced(() => source.listVersions(t.inboxToken, 'assignments', lineage), wait)
+      const versions = await paced(() => source.listVersions(t.inboxToken, channel, lineage), wait)
       // Only the head of each lineage is surfaced (append-only supersede).
       const head = versions.reduce((a, b) => (b.version > a.version ? b : a), versions[0])
       if (!head) continue
       try {
-        const bytes = await paced(() => source.getBlob(t.inboxToken, 'assignments', lineage, head.version), wait)
+        const bytes = await paced(() => source.getBlob(t.inboxToken, channel, lineage, head.version), wait)
         blobs.push({ therapistId: t.id, lineage, version: head.version, bytes })
       } catch (e) {
         if (!(e instanceof PortalError && e.status === 410)) throw e

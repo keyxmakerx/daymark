@@ -37,7 +37,7 @@ topology, the proxy contract, every setting, backup and restore:
 
 Not built, among others: passkey sign-in, decided in #205 with the six-digit code kept as the
 fallback (#326; today the WebAuthn routes answer 501 and the code is the clinician's sign-in),
-receiving game plans in the owner's browser console (#231), and the rest of the phone's side of the
+and the rest of the phone's side of the
 Companion: taking in the web console's additions (#346) and the heartbeat (#185). The build state of each feature is in the
 documents under [`../docs/`](../docs/), and the open work is in the issues.
 
