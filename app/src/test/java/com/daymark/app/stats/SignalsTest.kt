@@ -100,9 +100,13 @@ class SignalsTest {
      */
     @Test
     fun noCardSetsOnePeriodAgainstAnother() {
-        val graded = Regex("""average|stretch|period before|%""", RegexOption.IGNORE_CASE)
+        // A period graded by its average: the factor cards' "averaged higher" and the support menu's
+        // physical "stretch" are not this, and the pattern is written so it does not take them.
+        val graded = Regex("""average (?:mood )?is|period before|\d+\s*%|(?:steadier|harder) stretch""", RegexOption.IGNORE_CASE)
         assertTrue(graded.containsMatchIn("A steadier stretch. Your average mood is up 22% from the period before."))
         assertTrue(graded.containsMatchIn("A harder stretch lately"))
+        assertTrue(graded.containsMatchIn("Your average is down 30% from the period before."))
+        assertFalse(graded.containsMatchIn("A short, gentle stretch."))
 
         val everything = listOf(
             base(),
