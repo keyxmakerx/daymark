@@ -78,7 +78,8 @@ ANNOT=$(find_jar org.jetbrains/annotations "annotations-13.0.jar")
 # `ui/SourceText.kt`, which imports nothing from the app, and so do `ColorSchemeSourceTest`, which
 # also reads the web's token sheet as text, `FaintInkSourceTest`, which also imports `java.io.File`,
 # `MonthGridSourceTest`, which imports `repoFile`, the helpers in `ui/SourceText.kt` and JUnit only,
-# and `WeekDaysSourceTest`, which imports the same and `java.util.Locale`.
+# and `WeekDaysSourceTest`, which imports the same and `java.util.Locale`. `InsightsVerdictSourceTest`
+# imports `repoFile`, the helpers in `ui/SourceText.kt` and JUnit only.
 # `DynamicColorSourceTest` and `TickAndGreenSourceTest` import `repoFile`, `codeOnly`, `java.io.File`
 # and JUnit only; `HairlineFillSourceTest` imports `repoFile`, `java.io.File` and JUnit and uses
 # `codeOnly` and `withoutComments` from its own package; `ReportInkSourceTest` imports `repoFile`,
@@ -91,6 +92,7 @@ com.daymark.app.data.MigrationSchemaExportTest
 com.daymark.app.export.ReportCopySourceTest com.daymark.app.ui.settings.ReportExportSourceTest
 com.daymark.app.ui.theme.ColorSchemeSourceTest com.daymark.app.ui.FaintInkSourceTest
 com.daymark.app.ui.insights.MonthGridSourceTest com.daymark.app.ui.WeekDaysSourceTest
+com.daymark.app.ui.insights.InsightsVerdictSourceTest
 com.daymark.app.ui.theme.DynamicColorSourceTest com.daymark.app.ui.insights.MoodLegendSourceTest
 com.daymark.app.ui.components.TickAndGreenSourceTest
 com.daymark.app.ui.HairlineFillSourceTest
@@ -110,6 +112,7 @@ $REPO/app/src/test/java/com/daymark/app/ui/theme/ColorSchemeSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/FaintInkSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/insights/MonthGridSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/insights/MoodLegendSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/ui/insights/InsightsVerdictSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/WeekDaysSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/theme/DynamicColorSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/components/TickAndGreenSourceTest.kt

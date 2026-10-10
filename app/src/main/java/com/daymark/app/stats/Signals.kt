@@ -6,7 +6,6 @@ import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import java.util.Locale
 import kotlin.math.abs
-import kotlin.math.roundToInt
 
 /**
  * The "Signals" engine — the small, deterministic rules layer that decides **what's most relevant
@@ -99,8 +98,6 @@ object Signals {
         val topLift: FactorLift?,
         /** Strongest negative association past the sample gate, or null. */
         val topDrag: FactorLift?,
-        /** This period's average mood vs the previous period, as a percent change, or null. */
-        val monthDeltaPct: Double?,
         /** Name of a self-check that's due (e.g. "WHO-5"), or null. */
         val dueCheckin: String?,
         /** A note written about this date a year ago, or null. */
@@ -111,8 +108,6 @@ object Signals {
     // appear when there's enough data to mean something.
     private const val LOW_MOOD_MAX = 2          // <= this today => offer support
     private const val LIFT_MIN_DELTA = 0.4      // min mood-delta for a factor to be worth surfacing
-    private const val MONTH_UP_PCT = 8.0        // >= this => "a steadier stretch", an observation
-    private const val MONTH_DOWN_PCT = -15.0    // <= this => gentle, Insights-only heads-up
 
     /**
      * Builds every eligible signal from [inputs], sorted by [Signal.score] descending (ties broken
@@ -212,41 +207,6 @@ object Signals {
                     surfaces = setOf(Surface.Feed),
                 ),
             )
-        }
-
-        // 8. Month-over-month movement. Up and down are the same kind of statement about the same
-        //    number, so they now carry the same category: the up card was the last Celebration in
-        //    the file, and calling a mood average going up an achievement would have made the
-        //    mirror card a report of failure. A notable dip is still surfaced only on Insights and
-        //    worded gently — never pushed at you on the feed.
-        inputs.monthDeltaPct?.let { pct ->
-            if (pct >= MONTH_UP_PCT) {
-                out.add(
-                    Signal(
-                        kind = "month_up",
-                        category = Category.Insight,
-                        score = 58.0,
-                        title = "A steadier stretch",
-                        body = "Your average mood is up ${pct.roundToInt()}% from the period before.",
-                        action = null,
-                        dismissible = true,
-                        surfaces = setOf(Surface.Feed, Surface.Insights),
-                    ),
-                )
-            } else if (pct <= MONTH_DOWN_PCT) {
-                out.add(
-                    Signal(
-                        kind = "month_down",
-                        category = Category.Insight,
-                        score = 40.0,
-                        title = "A harder stretch lately",
-                        body = "Your average is down ${abs(pct).roundToInt()}% from the period before. That happens — be kind to yourself.",
-                        action = Action.OpenSupport,
-                        dismissible = true,
-                        surfaces = setOf(Surface.Insights),
-                    ),
-                )
-            }
         }
 
         // 9. A negative factor worth knowing -> informational, Insights only (kept off the feed so

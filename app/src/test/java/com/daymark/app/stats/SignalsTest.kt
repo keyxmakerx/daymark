@@ -22,7 +22,6 @@ class SignalsTest {
         loggedToday = true,
         topLift = null,
         topDrag = null,
-        monthDeltaPct = null,
         dueCheckin = null,
         onThisDayNote = null,
     )
@@ -94,17 +93,30 @@ class SignalsTest {
         assertTrue("drag_factor" in Signals.forSurface(signals, Signals.Surface.Insights).kinds())
     }
 
+    /**
+     * No card sets one stretch against another (#360, #203). The two month cards are gone, and no
+     * card's words grade a period by its average: the detector is first shown the deleted cards'
+     * own copy, so it is known to see what it is looking for.
+     */
     @Test
-    fun monthUp_celebrates_monthDown_isGentleAndInsightsOnly() {
-        val up = Signals.build(base().copy(monthDeltaPct = 22.0))
-        assertTrue("month_up" in up.kinds())
-        assertTrue(Signals.Surface.Feed in up.first { it.kind == "month_up" }.surfaces)
+    fun noCardSetsOnePeriodAgainstAnother() {
+        val graded = Regex("""average|stretch|period before|%""", RegexOption.IGNORE_CASE)
+        assertTrue(graded.containsMatchIn("A steadier stretch. Your average mood is up 22% from the period before."))
+        assertTrue(graded.containsMatchIn("A harder stretch lately"))
 
-        val down = Signals.build(base().copy(monthDeltaPct = -30.0))
-        val d = down.first { it.kind == "month_down" }
-        assertEquals(setOf(Signals.Surface.Insights), d.surfaces)
-        // A mild dip trips neither rule.
-        assertFalse("month_down" in Signals.build(base().copy(monthDeltaPct = -5.0)).kinds())
+        val everything = listOf(
+            base(),
+            base().copy(moodTodayLevel = 1, loggedToday = false, dueCheckin = "WHO-5"),
+            base().copy(topLift = Signals.FactorLift("Running", 0.6, 8), onThisDayNote = "a note"),
+            base().copy(topDrag = Signals.FactorLift("Poor sleep", -0.6, 7)),
+        ).flatMap { Signals.build(it) }
+        assertTrue(everything.isNotEmpty())
+        assertTrue("lift_factor" in everything.kinds())
+
+        assertFalse("month_up" in everything.kinds())
+        assertFalse("month_down" in everything.kinds())
+        val prose = everything.flatMap { listOf(it.title, it.body) }
+        assertEquals(emptyList<String>(), prose.filter { graded.containsMatchIn(it) })
     }
 
     /**
@@ -122,8 +134,7 @@ class SignalsTest {
             base(),
             base().copy(moodTodayLevel = 1),
             base().copy(loggedToday = false),
-            base().copy(monthDeltaPct = 30.0),
-            base().copy(monthDeltaPct = -30.0),
+            base().copy(topDrag = Signals.FactorLift("Poor sleep", -0.6, 7)),
             base().copy(dueCheckin = "WHO-5"),
             base().copy(onThisDayNote = "a line from a year ago"),
             base().copy(topLift = Signals.FactorLift("Running", 0.6, 8)),
@@ -136,9 +147,9 @@ class SignalsTest {
         assertFalse("streak_milestone" in everything.kinds())
         assertFalse("achievement_unlocked" in everything.kinds())
         // Category.Celebration no longer exists as a name; this is the behavioural half — the
-        // upward month card is now the same kind of statement as its downward mirror.
-        val up = Signals.build(base().copy(monthDeltaPct = 30.0)).first { it.kind == "month_up" }
-        val down = Signals.build(base().copy(monthDeltaPct = -30.0)).first { it.kind == "month_down" }
+        // upward factor card is the same kind of statement as its downward mirror.
+        val up = everything.first { it.kind == "lift_factor" }
+        val down = everything.first { it.kind == "drag_factor" }
         assertEquals(Signals.Category.Insight, up.category)
         assertEquals(down.category, up.category)
     }
@@ -151,7 +162,7 @@ class SignalsTest {
         assertTrue(breakable.containsMatchIn("You're on a 5-day streak — keep it up"))
 
         val prose = listOf(
-            base().copy(moodTodayLevel = 1, loggedToday = false, monthDeltaPct = 30.0, dueCheckin = "WHO-5"),
+            base().copy(moodTodayLevel = 1, loggedToday = false, dueCheckin = "WHO-5"),
             base().copy(topLift = Signals.FactorLift("Running", 0.6, 8), onThisDayNote = "a note"),
         ).flatMap { Signals.build(it) }.flatMap { listOf(it.title, it.body) }
 
@@ -184,7 +195,7 @@ class SignalsTest {
             base().copy(
                 loggedToday = false,
                 moodTodayLevel = null,
-                monthDeltaPct = 30.0,
+                dueCheckin = "WHO-5",
                 topLift = Signals.FactorLift("Friends", 0.6, 10),
             ),
         )
@@ -196,7 +207,7 @@ class SignalsTest {
 
     @Test
     fun copy_isDeterministic_forSameInputs() {
-        val inputs = base().copy(monthDeltaPct = 12.0)
+        val inputs = base().copy(topLift = Signals.FactorLift("Running", 0.6, 8))
         val a = Signals.build(inputs, Locale.US)
         val b = Signals.build(inputs, Locale.US)
         assertEquals(a.map { it.kind to it.body }, b.map { it.kind to it.body })

@@ -38,22 +38,4 @@ class MoodPatternsTest {
         assertEquals(2.0, map[MoodPatterns.TimeBucket.Afternoon]!!, 1e-9)
         assertEquals(1.0, map[MoodPatterns.TimeBucket.Night]!!, 1e-9)
     }
-
-    @Test
-    fun periodCompare_computesDeltaPct() {
-        val c = MoodPatterns.periodCompare(current = listOf(4, 4, 4), previous = listOf(2, 2))
-        assertEquals(4.0, c.currentAvg!!, 1e-9)
-        assertEquals(2.0, c.previousAvg!!, 1e-9)
-        assertEquals(100.0, c.deltaPct!!, 1e-9)
-        assertEquals(3, c.currentCount)
-        assertEquals(2, c.previousCount)
-    }
-
-    @Test
-    fun periodCompare_handlesEmptyPrevious() {
-        val c = MoodPatterns.periodCompare(current = listOf(3), previous = emptyList())
-        assertEquals(3.0, c.currentAvg!!, 1e-9)
-        assertNull(c.previousAvg)
-        assertNull(c.deltaPct)
-    }
 }

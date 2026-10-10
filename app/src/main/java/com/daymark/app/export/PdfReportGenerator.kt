@@ -47,8 +47,9 @@ import kotlin.math.roundToInt
  * total the document really has. That total is why [generate] renders twice; see there.
  *
  * Deliberate omissions, each of which would be a product-invariant breach:
- *  - **No streaks.** [ReportData] no longer carries one, and [ReportData.periodReview] is not
- *    rendered either — it is second-person copy written for the in-app card, not for a clinician.
+ *  - **No streaks.** Nor a narrative summary: [ReportData] carries neither, as a summary that opens
+ *    with an average mood is a mark on the person, and second-person copy is not written for a
+ *    clinician (#354).
  *  - **No connected trend line.** Short self-report series are dominated by noise; a line between
  *    two check-ins draws an interpolation the data does not contain. Plots are scatter over a
  *    usual-range band, gaps are printed as gaps, and points sit at their real date.

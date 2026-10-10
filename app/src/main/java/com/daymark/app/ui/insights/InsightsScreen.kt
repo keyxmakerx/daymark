@@ -41,7 +41,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -140,14 +139,9 @@ fun InsightsScreen(
         }
 
         // Summary stats
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard("Entries", stats.totalEntries.toString(), Modifier.weight(1f))
-            StatCard(
-                "Avg mood",
-                stats.averageMood?.let { String.format(Locale.getDefault(), "%.1f", it) } ?: "–",
-                Modifier.weight(1f),
-            )
-        }
+        // No average mood here: an all-time mean of the scale reads as a grade (#358, #203). The
+        // distribution below already shows which mood came up most often.
+        StatCard("Entries", stats.totalEntries.toString(), Modifier.fillMaxWidth())
         // One card where there were two streaks, and none at all at zero. The label says what is
         // being counted and the value carries its own denominator, so the number cannot be read as
         // a run that is currently alive. At zero there is nothing honest to draw: "0 of the last
@@ -231,26 +225,8 @@ fun InsightsScreen(
             }
         }
 
-        // --- Period in review + consistency ---
-        if (extras.review.isNotBlank()) {
-            SectionCard("In review") {
-                Text(extras.review, style = MaterialTheme.typography.bodyMedium)
-            }
-        }
-        if (extras.entriesByDay.isNotEmpty()) {
-            SectionCard("Logging consistency") {
-                com.daymark.app.ui.components.ConsistencyHeatmap(extras.entriesByDay)
-            }
-        }
-
         // --- Correlations & patterns (associations, not causes) ---
-        val periodCompare = when (scope) {
-            Scope.Week -> extras.weekCompare
-            Scope.Month -> extras.monthCompare
-            Scope.Year -> extras.yearCompare
-        }
-        periodCompare?.let { PeriodCompareCard(scope.name.lowercase(Locale.getDefault()), it) }
-
+        // No period is set against another, and no view grades how consistently someone logs (#203).
         if (extras.topUp.isNotEmpty() || extras.topDown.isNotEmpty()) {
             SectionCard("What goes with your mood") {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -260,10 +236,10 @@ fun InsightsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (extras.topUp.isNotEmpty()) {
-                        FactorList("Lifts you up", extras.topUp, MaterialTheme.moodColors.forLevel(5))
+                        FactorList("Logged alongside higher moods", extras.topUp)
                     }
                     if (extras.topDown.isNotEmpty()) {
-                        FactorList("Weighs you down", extras.topDown, MaterialTheme.moodColors.forLevel(1))
+                        FactorList("Logged alongside lower moods", extras.topDown)
                     }
                     extras.trackerCorrelations.takeIf { it.isNotEmpty() }?.let { corrs ->
                         Text("Trackers", style = MaterialTheme.typography.labelLarge)
@@ -304,35 +280,15 @@ fun InsightsScreen(
 }
 
 @Composable
-private fun PeriodCompareCard(periodName: String, c: com.daymark.app.stats.MoodPatterns.PeriodComparison) {
-    SectionCard("This $periodName vs last") {
-        val cur = c.currentAvg
-        if (cur == null) {
-            Text("Not enough entries.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            return@SectionCard
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("Avg mood ${String.format(Locale.getDefault(), "%.1f", cur)} (${c.currentCount} entries)")
-            c.deltaPct?.let { pct ->
-                val up = pct >= 0
-                Text(
-                    "${if (up) "▲" else "▼"} ${String.format(Locale.getDefault(), "%.0f", kotlin.math.abs(pct))}%",
-                    color = if (up) MaterialTheme.moodColors.forLevel(5) else MaterialTheme.moodColors.forLevel(2),
-                    fontWeight = FontWeight.SemiBold,
-                )
-            } ?: Text("—", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-@Composable
-private fun FactorList(title: String, rows: List<FactorRow>, accent: Color) {
+// Drawn in ink: the headings describe association, and a mood colour on them would mark one list
+// as the good one (#358).
+private fun FactorList(title: String, rows: List<FactorRow>) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title, style = MaterialTheme.typography.labelLarge, color = accent)
+        Text(title, style = MaterialTheme.typography.labelLarge)
         rows.forEach { r ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("${r.name} (${r.n})")
-                Text(String.format(Locale.getDefault(), "%+.1f", r.delta), color = accent)
+                Text(String.format(Locale.getDefault(), "%+.1f", r.delta))
             }
         }
     }

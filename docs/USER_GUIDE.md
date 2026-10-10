@@ -184,7 +184,7 @@ Pick one to fill in the page, then write in your own words, or ignore them.
 The **Insights** tab turns your entries into summaries. A **Week / Month / Year** switch sits at the
 top.
 
-- **Entries** and **Avg mood** for everything you've logged.
+- **Entries**, the number of entries you've logged.
 - **Days with an entry**, e.g. *12 of the last 30*. The days don't have to be in a row, so missing
   one costs you that day and nothing else. If there are none in the last thirty days, the card isn't
   there.
@@ -197,9 +197,7 @@ top.
 - **What goes with your mood**: activities and trackers that tend to come with higher or lower
   moods. An activity needs to be on at least five entries, and a tracker needs two weeks of values.
   It shows association, not cause.
-- **By day of week**, **by time of day**, and **this week, month or year against the last**.
-- **In review**, a short summary, and **Logging consistency**, a heatmap of how many entries you
-  made each day.
+- **By day of week** and **by time of day**.
 
 You'll need a few entries before there's much to show.
 

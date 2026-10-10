@@ -145,8 +145,6 @@ data class ReportData(
     val activityStats: List<ReportActivityStat>,
     val entries: List<ReportEntry>,
     val journal: List<ReportJournalEntry>,
-    /** A short rules-based narrative summary (derived; not part of the authenticity hash). */
-    val periodReview: String,
     val sha256Hex: String,
     // --- four-side layout (docs/DECISIONS.md §D8) ---
     /** Side 1: one plot per instrument. */
@@ -255,29 +253,6 @@ class ReportDataBuilder @Inject constructor(
         val instrumentSeries = buildInstrumentSeries(options.fromMillis, options.toMillis)
         val gaps = coverageGaps(from, daysInRange, byDay.keys)
 
-        // Rules-based narrative summary (reuses the same pure helpers as the Insights tab).
-        val dow = com.daymark.app.stats.MoodPatterns.byDayOfWeek(
-            ewas.map { DateUtils.toLocalDate(it.entry.dateTime).dayOfWeek to it.entry.moodLevel },
-        )
-        val topUp = com.daymark.app.stats.MoodCorrelations
-            .rankLifts(com.daymark.app.stats.MoodCorrelations.factorDeltas(pairs, 3), 1).first
-            .firstOrNull()?.let { nameById[it.id] }
-        val periodReview = com.daymark.app.stats.PeriodReview.build(
-            com.daymark.app.stats.PeriodReview.Inputs(
-                totalEntries = ewas.size,
-                avgMood = MoodStats.averageMood(levels),
-                bestDay = dow.maxByOrNull { it.value }?.key,
-                worstDay = dow.minByOrNull { it.value }?.key,
-                topFactorUp = topUp,
-                // Zero, always: PeriodReview omits the sentence entirely at zero, so this
-                // suppresses it for the report without touching the shared copy the in-app card
-                // still uses. The reason has not changed with the sentence — a continuity figure
-                // reports adherence to the app rather than anything about the person, and a
-                // clinician reading a printed one has no way to tell those apart.
-                daysWithEntryLast30 = 0,
-            ),
-        )
-
         // Side 4's prompts. Computed here rather than left to default, because the generator's
         // "nothing met the threshold" line asserts to a clinician that a threshold WAS evaluated —
         // and printing that while never calling the rules would be a false assurance, which is worse
@@ -319,7 +294,6 @@ class ReportDataBuilder @Inject constructor(
             activityStats = activityStats,
             entries = reportEntries,
             journal = journal,
-            periodReview = periodReview,
             sha256Hex = sha256Hex(
                 canonicalPayload(
                     options.fromMillis,

@@ -123,7 +123,7 @@ and the disc is filled with the accent only while Home is the current tab.
 
 `MoodFaceIcon` (drawn on a Canvas; outlined, or filled when selected), `MoodDot`, `PaperSurface`, `EntryRow`
 and the day-grouped timeline, `ActivityChip`, `EntryPhoto`, `SwipeToDeleteRow`,
-`ConsistencyHeatmap`, `YearInPixelsGrid`, `YearInStarsGrid`, `PoseFigure` and `ProvenanceBadge`.
+`YearInPixelsGrid`, `YearInStarsGrid`, `PoseFigure` and `ProvenanceBadge`.
 The mood picker's tap target is the whole face and label. Nothing in `ui/components/` draws a
 tick or a green (`TickAndGreenSourceTest`, which also keeps ticks out of the PDF report).
 

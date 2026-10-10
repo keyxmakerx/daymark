@@ -21,6 +21,17 @@ All notable changes to this project are documented here. The format is based on
   swatches carry the same ring as the dots they key.
 
 ### Removed
+- **Insights no longer marks what you logged.** The "Avg mood" card, the "this week against last"
+  card with its up and down arrows, the "In review" summary and the "Logging consistency" grid are
+  gone. An average of a mood scale reads as a grade, a week set against the last reads as a verdict,
+  and a grid of empty squares is exactly what a hard stretch looks like. "Days with an entry" stays.
+  The lists under "What goes with your mood" are now headed "Logged alongside higher moods" and
+  "Logged alongside lower moods", in plain ink, because an activity showing up alongside a mood does
+  not mean it caused it (#354, #358, #203).
+- **The "steadier stretch" and "harder stretch lately" cards are gone**, along with their switch
+  under suggestions. Both scored this month against the last by your average mood. Support after a
+  hard day is unchanged: it comes from what you log that day, and the support space is always one
+  tap away (#360).
 - **The old Stats screen**, which nothing opened and which still drew daily averages, is gone.
 - **"Review my year" ends on two plain facts, and no longer offers to save a picture of your
   year.** The last page used to show three numbers: your average mood, your brightest month, and

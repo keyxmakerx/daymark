@@ -83,7 +83,8 @@ has the rules for changing any of this.
 
 Suggestion cards are chosen by fixed rules over the person's own data
 ([ARCHITECTURE.md](ARCHITECTURE.md) §5): an offer to take a moment after a hard day, a self-check
-that is due, what tends to go with their mood, a month that differs from the last, and On this day.
+that is due, what tends to go with their mood, and On this day. No card sets one stretch of time against
+another (#203).
 Every card has a menu:
 
 - *Not right now*: gone for this visit only. Nothing is stored.
@@ -116,8 +117,8 @@ entries are stars in the Sky (§4), and reach the PDF report only when the perso
 
 ## 3. Insights
 
-- One tab with a **Week / Month / Year** switch. Always shown: the number of entries, the average
-  mood, "Days with an entry: 12 of the last 30" (days need not be in a row, and the card is absent
+- One tab with a **Week / Month / Year** switch. Always shown: the number of entries,
+  "Days with an entry: 12 of the last 30" (days need not be in a row, and the card is absent
   at zero), mood over the last 30 days, mood distribution, and average mood by activity.
 - **Week** is the last seven days and **Month** a calendar, both of plain days: every day is the
   same square with its number in ink, and each entry that day is a dot under the number in its own
@@ -127,14 +128,14 @@ entries are stars in the Sky (§4), and reach the PDF report only when the perso
   September: Good, Meh"), or "nothing recorded". Tapping a day opens its entries. **Year** is either a
   night-card of stars or a grid of coloured squares (Year in Pixels, also under More), and leads to
   **Review my year**.
-- **What goes with your mood** ranks activities that appear in at least 5 entries into "Lifts you
-  up" and "Weighs you down", and lists trackers that have values on at least 14 days with a mood.
+- **What goes with your mood** ranks activities that appear in at least 5 entries into "Logged
+  alongside higher moods" and "Logged alongside lower moods", both in ink, and lists trackers that have values on at least 14 days with a mood.
   It is computed on the phone and always labelled "association, not cause". People and communities
   never reach it (§11.2).
-- **By day of week**, **by time of day**, and **this week, month or year against the last**.
-- **In review** (a short recap written by fixed rules) and **Logging consistency** (a heatmap of
-  entries per day). Both read as grades, and "Days with an entry" is the one figure for how often
-  someone logs (#203). Not built: removing both, with nothing in their place: #354.
+- **By day of week** and **by time of day**.
+- Nothing on the tab grades what it shows: no average mood as a headline, no period set against
+  the one before it, no recap and no grid of how consistently someone logs. "Days with an entry"
+  is the one figure for how often someone logs (#203).
 - Suggestion cards sit at the top (§1.5).
 - **Review my year** is a full-screen walk-through: an introduction, one page per quarter, and a
   finale with at most two facts, the mood chosen most often (in the person's own word for it) and

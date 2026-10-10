@@ -38,6 +38,9 @@ object SuggestionControls {
      *    than being renamed: a group whose kinds no longer exist is a dial that does nothing, and
      *    a control called "Streaks" keeps reward vocabulary on a settings screen after the last
      *    reward has been removed from the product.
+     *  - **"Month-to-month changes"**, which governed `month_up` and `month_down`. Both set one
+     *    month's average mood against the last, a verdict on a period (#360, #203), so they are
+     *    gone and so is their switch. A stored state under its old key is never read.
      */
     val GROUPS: List<Group> = listOf(
         Group(
@@ -57,12 +60,6 @@ object SuggestionControls {
             title = "What goes with your mood",
             subtitle = "association, not cause",
             kinds = setOf("lift_factor", "drag_factor"),
-        ),
-        Group(
-            key = "periods",
-            title = "Month-to-month changes",
-            subtitle = null,
-            kinds = setOf("month_up", "month_down"),
         ),
         Group(
             key = "memories",
