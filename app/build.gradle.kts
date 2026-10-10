@@ -30,13 +30,16 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.daymark.app"
+        // The permanent id, settled in #232 before any public release: Android treats another id as
+        // another app, so it can never change again without stranding every install. The Kotlin
+        // package and `namespace` stay com.daymark.app (#369).
+        applicationId = "io.github.keyxmakerx.daymark"
         minSdk = 26
         // Stays 35, and stays EXPLICIT. AGP 9 defaults targetSdk to compileSdk when unset, so an
         // implicit value would silently become 36 and opt the app into new runtime behaviour.
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
