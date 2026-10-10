@@ -288,7 +288,7 @@ nothing. Where evidence is citable, it is
 psychoeducation for the person, in the app.
 
 **As built:** `export/PdfReportGenerator.kt`, `export/ReportLayout.kt`, `stats/DiscussionPrompts.kt`.
-Seeing the report before export: #198.
+Seeing the report before export: `ui/export/ReportExportScreen.kt` (#198).
 Source: [the August plan §1](https://github.com/keyxmakerx/daymark/blob/968638594f10f6a4424415f8a5c14fd8eb4aaa00/docs/PLAN_2026-08-NEXT.md?plain=1#L9-L58).
 
 ---

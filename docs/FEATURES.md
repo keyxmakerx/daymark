@@ -532,12 +532,17 @@ decisions rather than a reading of the current moment: #162.
   inference about the person. It carries no tick: a finished project step says "done". Every word is
   printed in dark ink or the soft ink, at least 5.77:1 on the white page. The dialog opens with "A report is a copy. Once handed over, it cannot
   be taken back." — the report's own fixed copy, not a second wording — then offers a date range (90
-  days by default), check-in notes (off by default), charts (on), and the journal for that range,
-  all of it or none, off by default. With check-in notes off, side 2 says "Check-in notes were
+  days by default), check-in notes (off by default), charts (on), and "Choose journal entries to
+  include", off by default. With check-in notes off, side 2 says "Check-in notes were
   switched off for this export." and neither of its tables has a note column; the daily check-ins
-  keep their activity tags under a head of their own. A screen for choosing journal entries one at a
-  time exists (`ui/export/JournalPickerScreen.kt`), but nothing opens it yet. Not built: a preview
-  before exporting: #198.
+  keep their activity tags under a head of their own. "Next" leads to one flow
+  (`ui/export/ReportExportScreen.kt`). With journal entries switched on, it opens the picker first
+  (`ui/export/JournalPickerScreen.kt`): every entry in the range starts unticked, entries are picked
+  one at a time or the whole range is taken as a separate choice, and the report says which (#303).
+  Then the report's pages are shown as the clinician will see them, drawn from the very file that
+  Save then copies to the place the person picks, so what was checked is what is saved (#198). Back
+  returns to the picker or to Settings. The file is made in the app's own cache and deleted when the
+  flow ends.
 - Every export is a plain, unencrypted file, made by the person's own act. Not built: encrypted
   backups and exports: #236.
 

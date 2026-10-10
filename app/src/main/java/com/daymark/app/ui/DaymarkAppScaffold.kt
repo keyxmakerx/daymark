@@ -51,6 +51,7 @@ import com.daymark.app.BuildConfig
 import com.daymark.app.R
 import com.daymark.app.flavor.FlavorDoors
 import com.daymark.app.ui.debug.DebugTimingScreen
+import com.daymark.app.ui.export.ReportExportScreen
 import com.daymark.app.ui.activities.ActivitiesScreen
 import com.daymark.app.ui.activities.ActivityLibraryScreen
 import com.daymark.app.ui.calendar.DayDetailScreen
@@ -506,7 +507,46 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false, openT
                     },
                     onShowMessage = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                     onOpenServerSync = { navController.navigate(Routes.SERVER_SYNC) },
+                    onExportReport = { options, pickWriting ->
+                        navController.navigate(Routes.reportExport(options, pickWriting))
+                    },
                     modifier = Modifier.padding(padding),
+                )
+            }
+            composable(
+                Routes.REPORT_EXPORT_PATTERN,
+                arguments = listOf(
+                    navArgument("from") { type = NavType.LongType; defaultValue = 0L },
+                    navArgument("to") { type = NavType.LongType; defaultValue = 0L },
+                    navArgument("label") { type = NavType.StringType; defaultValue = "" },
+                    navArgument("notes") { type = NavType.BoolType; defaultValue = false },
+                    navArgument("charts") { type = NavType.BoolType; defaultValue = true },
+                    navArgument("pick") { type = NavType.BoolType; defaultValue = false },
+                ),
+                enterTransition = zEnter,
+                popExitTransition = zPopExit,
+            ) { entry ->
+                val args = entry.arguments
+                // The journal fields are left at their defaults, which carry no writing: only the
+                // picker inside the flow sets them (ui/export/JournalPickerViewModel.kt).
+                val options = remember(entry) {
+                    com.daymark.app.export.PdfExportOptions(
+                        fromMillis = args?.getLong("from") ?: 0L,
+                        toMillis = args?.getLong("to") ?: 0L,
+                        rangeLabel = args?.getString("label") ?: "",
+                        includeNotes = args?.getBoolean("notes") ?: false,
+                        includeCharts = args?.getBoolean("charts") ?: true,
+                    )
+                }
+                ReportExportScreen(
+                    options = options,
+                    pickWriting = args?.getBoolean("pick") ?: false,
+                    onBack = { navController.popBackStack() },
+                    onSaved = { msg ->
+                        navController.popBackStack()
+                        scope.launch { snackbarHostState.showSnackbar(msg) }
+                    },
+                    onShowMessage = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                 )
             }
             // The sync screen, only where the flavour opens its door: the offline build has none, so

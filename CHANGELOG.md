@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **You see the PDF report before it is saved, and choose which journal entries go in it.** After
+  the report's options, **Next** shows every page as your clinician will see it, and nothing is
+  written until you tap **Save PDF**. If you switch on journal entries, you first pick them one at a
+  time, with none ticked to begin with, or take everything in the range as a separate choice. Before,
+  the only choice was all of your journal for the range or none of it, and the file was written
+  before you could look at it (#303, #198).
+
 ### Changed
 - **On/off switches can be told apart.** Every switch in the app now draws its off state with a
   visible outline and thumb in the soft ink, where before the track was the colour of the page. On

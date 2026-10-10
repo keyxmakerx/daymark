@@ -22,6 +22,19 @@ object Routes {
 
     /** Settings → Suggestions: the on/off/snoozed dial for every suggestion family. */
     const val SUGGESTIONS = "suggestions"
+
+    /**
+     * The PDF report after Settings' dialog: the journal picker when asked for, then the pages
+     * before they are saved (ui/export/ReportExportScreen.kt). Its own destination, so the picker's
+     * ticks and the previewed file end with it.
+     */
+    const val REPORT_EXPORT = "report_export"
+    const val REPORT_EXPORT_PATTERN =
+        "$REPORT_EXPORT?from={from}&to={to}&label={label}&notes={notes}&charts={charts}&pick={pick}"
+    fun reportExport(options: com.daymark.app.export.PdfExportOptions, pickWriting: Boolean) =
+        "$REPORT_EXPORT?from=${options.fromMillis}&to=${options.toMillis}" +
+            "&label=${android.net.Uri.encode(options.rangeLabel)}" +
+            "&notes=${options.includeNotes}&charts=${options.includeCharts}&pick=$pickWriting"
     const val TRACKERS = "trackers"
     const val TRACKER = "tracker"
 
