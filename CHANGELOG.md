@@ -513,6 +513,21 @@ All notable changes to this project are documented here. The format is based on
   quiet notice that names nobody and counts nothing.
 
 ### Fixed
+- **Leaving the owner console no longer locks it or forgets the clinicians you added.** Going to
+  another route (open a backup, Sync) and coming back finds the console as you left it, with every
+  clinician still listed. Locking is still the button, closing the tab, or going idle.
+- **One malformed assignment can no longer stop the whole inbox loading.** An item the browser
+  cannot check is shown as one refused item; the rest still load.
+- **A clinician whose session the server ended is locked out plainly.** The console now locks and
+  shows its usual after-lock line instead of saying the share may have been tampered with. A server
+  that cannot be reached says that nothing was opened and nothing changed.
+- **A share's date range compares sleep nights in the right unit.** A night is a day number; the
+  range is milliseconds. The backup type now says so.
+- **"Portal" is gone from the words on screen.** The pages are consoles. The Sync panel no longer
+  calls the phone "trusted", and the owner page no longer calls itself a viewer. A test now fails
+  on the word.
+- **The recovery screens say "recovery code" throughout, and the sync card's errors no longer say
+  "wrapped key" or "key document".**
 - **Companion — first install** (#380, #381, #393, #443). A bad email setting or unreadable
   secret file stops the server with one line naming the setting; the example environment shows
   only settings that reach the server; the Caddy LAN example starts and refuses unknown hosts, and

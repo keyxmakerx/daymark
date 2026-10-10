@@ -249,7 +249,7 @@ describe('the compact line, by published shape', () => {
     )
     // Word for word the line it replaces, less one clause.
     expect(
-      COMPACT_SUMMARY.replace('A clinician you invited has a separate portal; whoever', 'Whoever'),
+      COMPACT_SUMMARY.replace('A clinician you invited has a separate console; whoever', 'Whoever'),
     ).toBe(COMPACT_SUMMARY_WITHOUT_CLINICIAN_PAGE)
     // Control: the detector sees the clause in the full line before it is asserted absent.
     const PORTAL = /\bportal\b|\bclinician\b/i
@@ -260,7 +260,7 @@ describe('the compact line, by published shape', () => {
   it('follows the same rule as the card, so the line never names a card that is not there', () => {
     for (const shape of [null, ...SHAPE_IDS]) {
       const card = shownAudiences({ published: shape }).some((a) => a.id === 'clinician')
-      expect(/\bportal\b/.test(compactSummary(shape)), String(shape)).toBe(card)
+      expect(/\bclinician\b/.test(compactSummary(shape)), String(shape)).toBe(card)
     }
   })
 })
@@ -973,7 +973,7 @@ describe('the copy', () => {
     const IDENTITY = /(your (therapist|clinician|doctor) is|you have \d+|\d+ (relationship|clinician|therapist)s?\b|logged in as|signed in as)/i
     expect(IDENTITY.test('You have 3 clinicians')).toBe(true)
     expect(IDENTITY.test('Signed in as someone')).toBe(true)
-    expect(IDENTITY.test('A clinician you invited has a separate portal')).toBe(false)
+    expect(IDENTITY.test('A clinician you invited has a separate console')).toBe(false)
 
     const offenders = CORPUS.filter((c) => IDENTITY.test(c.text)).map((c) => `${c.path}: ${c.text}`)
     expect(offenders).toEqual([])
@@ -1029,7 +1029,7 @@ describe('the copy', () => {
     expect(WHY_SO_FEW_CHECKS).toContain('there is no sign-in')
     expect(WHY_SO_FEW_CHECKS).toContain('does not have one yet')
     expect(STORAGE_REFUSED).toContain('again next time')
-    expect(COMPACT_SUMMARY).toContain('separate portal')
+    expect(COMPACT_SUMMARY).toContain('separate console')
     // The disclosure rule, as a checkable fact rather than an assurance: the reader is told which
     // two endpoints were read and that both answer anyone.
     expect(PROBES_ARE_PUBLIC).toContain('/healthz')

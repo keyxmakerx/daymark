@@ -194,7 +194,7 @@ export const SHAPES: readonly DeploymentShape[] = [
     buildState: 'separate-page',
     buildNote:
       'Administering a practice happens on its own page in this build, not on this one — the same ' +
-      'arrangement as the clinician’s portal. Choosing this opens a panel here that says what ' +
+      'arrangement as the clinician console. Choosing this opens a panel here that says what ' +
       'exists, points at that page, and holds no data of its own.',
     primary: 'practice',
   },
@@ -451,7 +451,7 @@ export const PRACTICE_MISSING =
  */
 export const PRACTICE_CONSOLE_ELSEWHERE =
   'A practice is administered on its own page in this build, at practice.html — the same ' +
-  'arrangement as the clinician’s portal and the server console. What that page covers, and which ' +
+  'arrangement as the clinician console and the server console. What that page covers, and which ' +
   'parts of it are still placeholders, is stated there rather than guessed at here.'
 
 /**

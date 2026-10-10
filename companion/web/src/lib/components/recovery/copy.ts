@@ -87,7 +87,7 @@ export const WHERE_THE_KEY_IS =
  * policy somebody could be talked out of.
  */
 export const IF_BOTH_ARE_LOST =
-  'If you lose both your passphrase and this code, nothing opens your data again. Not the server, ' +
+  'If you lose both your passphrase and this recovery code, nothing opens your data again. Not the server, ' +
   'which holds ciphertext and has never held the key. Not whoever runs it. Not the people who ' +
   'wrote this software. Your entries stay on the disk, unreadable, permanently.'
 
@@ -105,7 +105,7 @@ export const NOT_A_PASSWORD_RESET =
 
 /** The code is shown once because nothing keeps it. Stated as a fact about the software. */
 export const SHOWN_ONCE =
-  'The code is shown once. Nothing here writes it down for you: it is not saved, not sent, and not ' +
+  'The recovery code is shown once. Nothing here writes it down for you: it is not saved, not sent, and not ' +
   'put on the clipboard. When this page closes, the only copy is the one you made.'
 
 /**
@@ -156,22 +156,22 @@ export const WRITE_IT_ON_PAPER =
  * the only failure it can produce is the one worth catching.
  */
 export const WHY_TYPE_IT_BACK =
-  'The code is hidden before you are asked for two of its groups, because a box you tick while ' +
+  'The recovery code is hidden before you are asked for two of its groups, because a box you tick while ' +
   'looking at the code proves nothing. Reading two groups off your paper is the cheapest check that ' +
   'the paper exists, that it is legible, and that it says what the screen said.'
 
 /** Shown beside the confirmation when a group does not match. No echo of what was shown or typed. */
 export const CONFIRMATION_MISMATCH =
   'That does not match what was shown. Nothing is wrong with your copy yet — read it again, and if ' +
-  'the paper is not right, show the code once more and rewrite it.'
+  'the paper is not right, show the recovery code once more and rewrite it.'
 
 /** The offer to see it again. Deliberately unpunished and unremarked. */
 export const SHOWING_AGAIN_IS_FINE =
-  'You can show the code again as many times as you need while this page is open. It is not a test.'
+  'You can show the recovery code again as many times as you need while this page is open. It is not a test.'
 
 /** Printing and downloading, and the honest cost of each. */
 export const PRINTING =
-  'Print sends this page to your printer, code included. A printer with a queue on a shared machine ' +
+  'Print sends this page to your printer, recovery code included. A printer with a queue on a shared machine ' +
   'keeps a copy of what it printed, so this is worth doing on a printer you own.'
 
 export const DOWNLOAD_IS_A_PLAINTEXT_COPY =
@@ -184,7 +184,7 @@ export const DOWNLOAD_IS_A_PLAINTEXT_COPY =
    ═══════════════════════════════════════════════════════════════════════════════════════════ */
 
 export const HOW_ENTRY_WORKS =
-  'Type the code one group to a box; a full group moves you on to the next. Case does not matter ' +
+  'Type the recovery code one group to a box; a full group moves you on to the next. Case does not matter ' +
   'and neither do the hyphens. A recovery code never contains the characters 0, O, 1, I or L, so ' +
   'if your paper looks like it has one, it is a digit from 2 to 9 or one of the other letters.'
 
@@ -205,7 +205,7 @@ export const HOW_ENTRY_WORKS =
 export const CHECKSUM_CANNOT_POINT =
   'The last character is a check on the other twenty-nine. It has told us that one of them is wrong ' +
   'and it cannot tell us which: every position has some value that would explain the mismatch, so ' +
-  'naming one would be a guess dressed up as an answer. Read the whole code back against your paper.'
+  'naming one would be a guess dressed up as an answer. Read the whole recovery code back against your paper.'
 
 /**
  * Shown when the code is well-formed but does not open the key the server holds. A code for another
@@ -233,7 +233,7 @@ export const PASSPHRASE_ADVICE =
  */
 export const OLD_CODE_STILL_WORKS =
   'Your recovery code is unchanged and still opens this key. A new passphrase does not invalidate ' +
-  'the paper in your filing cabinet. Replacing the code is a separate act, so that it is one you ' +
+  'the paper in your filing cabinet. Replacing the recovery code is a separate act, so that it is one you ' +
   'take knowingly.'
 
 /**

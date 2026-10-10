@@ -223,7 +223,7 @@
       const cut = result.value.sessionsCut
       // The count is reported as what it is — portal sessions — and never as access ended. The
       // sentence that says so is rendered directly beneath it.
-      outcome = `${result.value.memberId} is no longer a member of this practice. Portal sessions ended: ${cut}.`
+      outcome = `${result.value.memberId} is no longer a member of this practice. Console sessions ended: ${cut}.`
       onchanged?.()
       await read()
     } else {

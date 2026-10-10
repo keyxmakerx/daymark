@@ -192,7 +192,7 @@ describe('(a) the console never implies that membership is access', () => {
   })
 
   it('qualifies the session count where the number appears and nowhere else', () => {
-    expect(SESSIONS_CUT_MEANS).toContain('portal sessions ended')
+    expect(SESSIONS_CUT_MEANS).toContain('console sessions ended')
     expect(SESSIONS_CUT_MEANS).toContain('not a count of grants withdrawn')
     const roster = codeOf('RosterPanel.svelte')
     expect(roster).toContain('outcomeWasRemoval')

@@ -361,7 +361,7 @@ export const SIGN_IN_CONTRACT: readonly ContractClause[] = [
     id: 'session.noVerdicts',
     section: 'session',
     text:
-      'This portal states what a bundle contains. It does not score it, does not rank one period ' +
+      'This console states what a bundle contains. It does not score it, does not rank one period ' +
       "of a person's life against another, and does not tell you what to do about any of it.",
   },
   {

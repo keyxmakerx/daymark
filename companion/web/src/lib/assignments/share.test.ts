@@ -135,3 +135,22 @@ describe('buildShare — seal to pinned therapist, therapist opens', () => {
     expect(() => buildShare(bundle, shareMeta, therapist.x25519.publicKey, ownerSign, tFps.ed25519Fp, pins)).toThrow(ShareUnpinnedError)
   })
 })
+
+describe('buildShareBundle — a range is milliseconds, a sleep night is an epoch day (#385)', () => {
+  const DAY = 86_400_000
+  const data = (): BackupData => ({
+    ...sampleData(),
+    sleepLogs: [100, 101, 102].map((night, i) => ({ id: 40 + i, night, bedTime: 0, wakeTime: 8, sleepLatencyMin: 5, awakeMin: 0, quality: 4, note: '' })),
+  })
+  const sel = { ...emptySelection(), from: 101 * DAY, to: 101 * DAY, types: { checkIns: false, moods: false, journal: false, sleep: true } }
+
+  it('a range covering exactly one night keeps that night and no other', () => {
+    const b = buildShareBundle(data(), sel, meta)
+    expect(b.sleep!.map((s) => s.at)).toEqual([101])
+  })
+
+  it('positive control: comparing the raw day number against the range keeps none', () => {
+    const raw = (data().sleepLogs ?? []).filter((s) => s.night >= sel.from! && s.night <= sel.to!)
+    expect(raw).toHaveLength(0)
+  })
+})

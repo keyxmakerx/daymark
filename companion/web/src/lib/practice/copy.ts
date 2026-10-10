@@ -128,7 +128,7 @@ export const REMOVAL_DOES_NOT_END_A_RELATIONSHIP =
  * that three accesses were closed. They were three browser sessions.
  */
 export const SESSIONS_CUT_MEANS =
-  'That count is portal sessions ended, and nothing else. It is not a count of grants withdrawn, ' +
+  'That count is console sessions ended, and nothing else. It is not a count of grants withdrawn, ' +
   'keys rotated, or anything un-read. It is zero for a seat the person never accepted, because ' +
   'nothing was cut.'
 
@@ -191,7 +191,7 @@ export const AUDIT_IS_A_DIFFERENT_CHAIN =
 
 /** Rendered on the sign-in panel. */
 export const SIGN_IN_IS_THE_PORTAL_CREDENTIAL =
-  'Sign in with the same credential you use for the clinician portal: your member id and a current ' +
+  'Sign in with the same credential you use for the clinician console: your member id and a current ' +
   'code from your authenticator. Your standing is looked up per practice on every request, so a ' +
   'role in one practice is nothing in another.'
 

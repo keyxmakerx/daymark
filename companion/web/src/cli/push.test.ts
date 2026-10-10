@@ -187,7 +187,7 @@ describe('pnpm push refuses a snapshot too large once padded, and sends nothing 
     auth.length = 0
     const run = await push(args([]), env)
     expect(run.status).toBe(1)
-    expect(run.stderr).toContain('push failed: key document fetch failed')
+    expect(run.stderr).toContain('push failed: key fetch failed')
     expect(seen).toEqual(['GET /v1/snapshots/cli-test', 'GET /v1/keydoc'])
     // The token that reached the server is the one from the environment (#384).
     expect(auth).toEqual([`Bearer ${TOKEN}`, `Bearer ${TOKEN}`])

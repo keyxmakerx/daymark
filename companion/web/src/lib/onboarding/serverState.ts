@@ -569,7 +569,7 @@ const STATE_COPY: Record<ServerStateId, StateCopy> = {
       'What arrived is quoted in the rows below.',
     means:
       'Something other than this application may be answering — a page from whatever sits in front ' +
-      'of the server, a sign-in portal on the network, or a different version of the server. Until ' +
+      'of the server, a sign-in page on the network, or a different version of the server. Until ' +
       'that is settled, no reading on this screen can be relied on, including the ones that look ' +
       'ordinary.',
     lookHere: [

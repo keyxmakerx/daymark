@@ -10,6 +10,7 @@
    */
   import { fetchShare, bundleToBackupData, ShareExpiredError, ShareFormatError, ShareOlderError } from '../../therapist/shareClient'
   import type { BackupData } from '../../backup'
+  import { PortalError } from '../../sync/portal'
   import type { UnlockedContext } from '../../therapist/context'
   import Dashboard from '../Dashboard.svelte'
   import NonDiagnosticBanner from './NonDiagnosticBanner.svelte'
@@ -17,6 +18,7 @@
   let {
     ctx,
     onopen,
+    onended,
   }: {
     ctx: UnlockedContext
     /**
@@ -28,6 +30,12 @@
      * on being rendered somewhere else in the portal.
      */
     onopen?: (data: BackupData | null) => void
+    /**
+     * Called when the server answers 401: it has ended this session (its idle limit counts
+     * requests, the page's own timer counts clicks). The parent runs the same lock the idle guard
+     * runs, which wipes the keys and shows the after-lock line (#391).
+     */
+    onended?: () => void
   } = $props()
 
   let data = $state<BackupData | null>(null)
@@ -51,11 +59,17 @@
       // Refuse to render: never expose a possibly-forged bundle.
       data = null
       onopen?.(null)
+      if (e instanceof PortalError && e.status === 401) {
+        onended?.()
+        return
+      }
       error =
         e instanceof ShareExpiredError
           ? 'This share has expired. Ask for a fresh one.'
           : e instanceof ShareFormatError
             ? 'This share was sealed in an older format whose contents cannot be checked, so it stays closed. Ask for a fresh one.'
+            : e instanceof PortalError
+              ? 'The server did not hand over the share, so nothing was opened. Nothing has changed.'
             : e instanceof ShareOlderError
               ? 'This copy was sealed before one you have already opened, so it stays closed. Ask for a fresh one.'
               : 'Refused to open this share — it did not verify against the pinned owner key, or it was tampered with.'

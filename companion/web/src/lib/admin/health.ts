@@ -972,7 +972,7 @@ export const CREDENTIAL_POSTURE =
   'route that authenticates one, so this console presents no credential and holds no authority ' +
   'that whoever opened it did not already have. The three endpoints it reads are unauthenticated ' +
   'and answer anyone who can reach the app. Serve this route where you would serve a shell, not ' +
-  'where you would serve the portal — and note that a chain run pasted in below sits in this ' +
+  'where you would serve the clinician console — and note that a chain run pasted in below sits in this ' +
   'browser tab for as long as the tab is open.'
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════

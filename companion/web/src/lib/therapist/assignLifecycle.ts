@@ -154,7 +154,7 @@ export type LifecycleStep = {
 
 /** What can ever come back to the therapist about this draft, once it is done. */
 export type FeedbackKind =
-  /** No `read.share`. Nothing of any kind reaches this portal, so nothing about this can. */
+  /** No `read.share`. Nothing of any kind reaches this console, so nothing about this can. */
   | 'noShareGranted'
   /** `read.share` is granted, but a curated share has no slot this type could occupy. */
   | 'nothingShareable'
@@ -287,7 +287,7 @@ function feedbackFor(draft: LifecycleDraft): FeedbackKind {
 const FEEDBACK_NOTE: Record<FeedbackKind, string> = {
   noShareGranted:
     'Nothing about this assignment will come back to you. You do not hold “View shared data”, so ' +
-    'no record of any kind reaches this portal — what happened to it is something to ask about.',
+    'no record of any kind reaches this console — what happened to it is something to ask about.',
   nothingShareable:
     'Nothing about this assignment will come back to you. A curated share carries check-ins, ' +
     'moods, journal entries and sleep; there is no slot in it that this could occupy — what ' +
@@ -342,7 +342,7 @@ function scheduledStep(draft: LifecycleDraft): StepBody {
     told: ['Whether the publish itself went through, and the version number it was written at.'],
     notTold: [
       'Whether their device has fetched it. There is no read receipt on this channel.',
-      'When it will be fetched. This portal cannot reach their device — the device pulls, on its own schedule.',
+      'When it will be fetched. This console cannot reach their device — the device pulls, on its own schedule.',
     ],
     ownerCan: ['Nothing. It is not on their device.'],
   }
@@ -361,7 +361,7 @@ function deliveredStep(ctx: StepContext): StepBody {
       `pinned for you, and ${arrival}`,
     told: [],
     notTold: [
-      'That it arrived. Delivery is not acknowledged back to this portal in any form.',
+      'That it arrived. Delivery is not acknowledged back to this console in any form.',
       'That it was refused, if the permission changed. The refusal is applied on their device and is not reported back.',
     ],
     ownerCan: ['Open it.', 'Leave it unopened for as long as they like.'],
@@ -437,7 +437,7 @@ function completedStep(draft: LifecycleDraft, ctx: StepContext): StepBody {
       'Anything unless they build the share. Whether one is built, what range it covers, which ' +
         'record types it carries and which individual records are removed first are theirs to ' +
         'choose, every time.',
-      'Anything once a share expires. The portal refuses to open an expired share, and what you ' +
+      'Anything once a share expires. The console refuses to open an expired share, and what you ' +
         'read in it is no longer readable here.',
     )
     if (plural) {
@@ -455,7 +455,7 @@ function completedStep(draft: LifecycleDraft, ctx: StepContext): StepBody {
     )
   } else {
     notTold.push(
-      'Anything. You do not hold “View shared data”, so no record of any kind reaches this portal.',
+      'Anything. You do not hold “View shared data”, so no record of any kind reaches this console.',
       'Whether it was done at all. If that matters, it is a conversation with them, not a lookup.',
     )
   }
@@ -500,7 +500,7 @@ function noResponseStep(): StepBody {
       `theirs, they are usually ordinary, and they are never owed to you.`,
     told: [],
     notTold: [
-      'That it has not been opened. No lifecycle state is reported back to this portal in this build.',
+      'That it has not been opened. No lifecycle state is reported back to this console in this build.',
       'Anything to act on here. If it matters, it is a conversation, not a signal.',
     ],
     ownerCan: ['Leave it, indefinitely.', 'Open it much later and act on it then.'],
@@ -515,7 +515,7 @@ function overdueStep(): StepBody {
       `property of the date.`,
     told: [],
     notTold: [
-      'That the date passed. This portal is sent no lifecycle state, so a due date is yours to keep track of.',
+      'That the date passed. This console is sent no lifecycle state, so a due date is yours to keep track of.',
       'Whether it was done late. A run arriving in a later share carries its own date and no relation to this assignment.',
     ],
     ownerCan: ['Do it after the date.', 'Ignore the date entirely.'],

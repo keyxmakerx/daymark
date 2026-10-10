@@ -387,7 +387,7 @@ describe('(c) one term for each thing, wherever a person reads it', () => {
     expect(READ_BY_A_PERSON.some((s) => s.includes("Deriving the key — this takes a few seconds Open the key"))).toBe(true)
     expect(READ_BY_A_PERSON.length).toBeGreaterThan(120)
     expect(READ_BY_A_PERSON).toContain(HOLDS_NO_KEY)
-    expect(READ_BY_A_PERSON).toContain('the server sent a key document this client cannot read')
+    expect(READ_BY_A_PERSON).toContain('the server sent key settings this client cannot read')
     expect(READ_BY_A_PERSON.some((s) => s.includes('Any one of them opens the same key.'))).toBe(true)
     expect(READ_BY_A_PERSON).toContain('Where your key is')
   })

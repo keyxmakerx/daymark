@@ -169,7 +169,7 @@
   <p class="warn-banner">
     <strong>Lower-assurance path.</strong> Decrypting in the browser is convenient but the
     page is served by the server it talks to; a malicious server could tamper with it. Your
-    phone (the future Sync flavor) is the trusted, secret-handling path. Use a passphrase
+    phone (the future Sync flavor) remains the path that handles your secrets. Use a passphrase
     you are comfortable entering here.
   </p>
 
