@@ -73,7 +73,7 @@ export const USE_PASSPHRASE_INSTEAD = 'Use my passphrase instead'
  * who has used that screen will reasonably expect it to.
  */
 export const CODE_OPENS_THIS_SESSION =
-  'Using the code here opens the key for this session and changes nothing else. To set a new ' +
+  'Using the recovery code here opens the key for this session and changes nothing else. To set a new ' +
   'passphrase, use the Recovery code screen.'
 
 /** The verb. Not "generate", and not "sign in" — nothing is created and no account is entered. */

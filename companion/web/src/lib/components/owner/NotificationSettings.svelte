@@ -77,7 +77,7 @@
       <h4>Notifications</h4>
       <p class="hint">
         Optional, off by default. Requires the operator to have configured outbound SMTP. Emails carry
-        only an event type and a link to the portal — never record content. This also enables
+        only an event type and a link to the console — never record content. This also enables
         <strong>access-token recovery</strong>: if you lose your owner access token, a link to reset it
         can be sent here.
       </p>

@@ -672,7 +672,7 @@ it('the paired loop: pair, grant, seal a share, read it, and send an assignment 
     await clinician.locator('#f-totpCode').fill(await nextTotp(totpSecret))
     await clinician.locator('#f-readingPassphrase').fill(READING_PASSPHRASE)
     await clinician.locator('#f-inboxToken').fill(inboxToken)
-    await clinician.getByRole('button', { name: 'Unlock portal' }).click()
+    await clinician.getByRole('button', { name: 'Unlock console' }).click()
     await portalTab('Shared data').waitFor({ timeout: 60_000 })
   })
 

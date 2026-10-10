@@ -258,6 +258,11 @@
   const readingConfiguration = $derived(
     shouldReadConfiguration({ session: sessionShape, stored }),
   )
+  const ownerShown = $derived(source === 'owner')
+  let ownerOpened = $state(false)
+  $effect(() => {
+    if (ownerShown) ownerOpened = true
+  })
   const trustSurface = $derived(trustPostureFor(source, readingConfiguration))
 
   function load(text: string, name: string) {
@@ -415,10 +420,20 @@
                 wrong answer.
               -->
               <PracticePlaceholder {published} />
-            {:else}
-              <!-- The records the person opened on the file or sync tab, so the share builder has
-                   something to seal. Handed null, it could never seal anything. -->
-              <OwnerConsole {data} />
+            {/if}
+
+            <!--
+              The owner console stays mounted once it has been opened, and is hidden, not removed,
+              when another route is chosen. Its unlocked session and every clinician added in it
+              live inside the component, so unmounting it on a route change locked the console and
+              lost the clinicians, whose inbox tokens were shown once (#383). The session stays in
+              memory only; locking is still the button, closing the tab, or going idle.
+
+              It is handed the records the person opened on the file or sync tab, so the share
+              builder has something to seal. Handed null, it could never seal anything.
+            -->
+            {#if ownerOpened}
+              <div hidden={!ownerShown}><OwnerConsole {data} /></div>
             {/if}
 
             {#if error}

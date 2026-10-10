@@ -606,7 +606,7 @@ const FIXED_COPY: { path: string; label: string; sentences: string[] }[] = [
     path: 'src/lib/components/SyncPanel.svelte',
     label: 'lower-assurance banner (sync)',
     sentences: [
-      'Lower-assurance path. Decrypting in the browser is convenient but the page is served by the server it talks to; a malicious server could tamper with it. Your phone (the future Sync flavor) is the trusted, secret-handling path. Use a passphrase you are comfortable entering here.',
+      'Lower-assurance path. Decrypting in the browser is convenient but the page is served by the server it talks to; a malicious server could tamper with it. Your phone (the future Sync flavor) remains the path that handles your secrets. Use a passphrase you are comfortable entering here.',
     ],
   },
   {

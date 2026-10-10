@@ -102,8 +102,22 @@ export function evaluateBlob(raw: RawAssignmentBlob, therapist: PinnedTherapist,
     }
   }
 
-  const check = validateAssignment(assignment, therapist.grant)
-  const preview = describeAssignment(assignment)
+  // An item this browser cannot check, however it is malformed, is one refused item and never
+  // stops the rest of the inbox from loading (#387).
+  let check: AssignmentCheck
+  let preview: string
+  try {
+    check = validateAssignment(assignment, therapist.grant)
+    preview = describeAssignment(assignment)
+  } catch {
+    return {
+      ...base,
+      verdict: 'REJECTED',
+      requiresAccept: false,
+      preview: 'Could not check this item — refused.',
+      errors: ['assignment is malformed and could not be checked'],
+    }
+  }
 
   if (!check.ok) {
     return {

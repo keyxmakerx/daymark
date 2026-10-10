@@ -10,6 +10,8 @@ import {
   initAssignmentCrypto, newSignKeyPair, newBoxKeyPair, sealAssignment, fingerprint,
   type BoxKeyPair, type SignKeyPair,
 } from './crypto'
+import { validateAssignment } from './validate'
+import { describeAssignment } from './describe'
 import { emptyGrant, setCapability } from './grant'
 import type { Assignment, Grant } from './types'
 
@@ -272,3 +274,30 @@ describe('fetching the inbox item by item (#339)', () => {
   })
 })
 
+describe('inbox — one malformed item (#387)', () => {
+  const g = () => setCapability(emptyGrant(therapistFp), 'assign.questionnaire', true, 'propose')
+  const malformed = [
+    ['a null payload', assignment({ lineageId: 'l', payload: null as unknown as Assignment['payload'] })],
+    [
+      'a null bundle entry',
+      assignment({ type: 'largeAssessment', capability: 'assign.questionnaire', payload: { bundle: [null] } as unknown as Assignment['payload'] }),
+    ],
+  ] as const
+
+  for (const [what, a] of malformed) {
+    it(`${what} is one refused item and the valid one still loads`, () => {
+      const items = buildInbox([blob(assignment({ lineageId: 'l', version: 0, issuedAt: 50 })), blob(a)], [pinned(g())], owner)
+      expect(items).toHaveLength(2)
+      expect(items.filter((i) => i.verdict === 'VERIFIED')).toHaveLength(1)
+      const refused = items.find((i) => i.verdict !== 'VERIFIED')!
+      expect(refused.verdict).toBe('REJECTED')
+      expect(canApply(refused)).toBe(false)
+    })
+  }
+
+  it('validateAssignment itself refuses a null payload without throwing, and a throwing check would escape (positive control)', () => {
+    const a = assignment({ payload: null as unknown as Assignment['payload'] })
+    expect(validateAssignment(a, g()).ok).toBe(false)
+    expect(() => describeAssignment(a)).toThrow() // the unguarded preview read throws: the try in evaluateBlob is what contains it
+  })
+})
