@@ -18,7 +18,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
+import com.daymark.app.ui.components.DaymarkSwitch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -101,7 +101,7 @@ private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-            Switch(checked = checked, onCheckedChange = onChange)
+            DaymarkSwitch(checked = checked, onCheckedChange = onChange)
         }
     }
 }

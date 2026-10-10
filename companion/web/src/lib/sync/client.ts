@@ -198,26 +198,26 @@ function isWrappedKey(x: unknown): x is RecoverableDataKey {
 export function parseKeyDocument(headers: Headers, body: string): KeyDocument {
   const kind = headers.get('X-Key-Document')
   const etag = headers.get('ETag')
-  if (!etag) throw new SyncError('the server sent a key document without an ETag')
+  if (!etag) throw new SyncError('the server sent a key without an ETag')
   let parsed: unknown
   try {
     parsed = JSON.parse(body)
   } catch {
-    throw new SyncError('the server sent a key document that is not JSON')
+    throw new SyncError('the server sent a key that is not JSON')
   }
   if (kind === 'keyparams') {
-    if (!isKeyParams(parsed)) throw new SyncError('the server sent a key document this client cannot read')
+    if (!isKeyParams(parsed)) throw new SyncError('the server sent key settings this client cannot read')
     return { kind: 'keyparams', params: parsed, etag }
   }
   if (kind === 'wrapped') {
     const version = headers.get('X-Key-Document-Version') ?? ''
     if (!/^[1-9][0-9]{0,15}$/.test(version) || !Number.isSafeInteger(Number(version))) {
-      throw new SyncError('the server sent a wrapped key without a version')
+      throw new SyncError('the server sent a locked key without a version')
     }
-    if (!isWrappedKey(parsed)) throw new SyncError('the server sent a wrapped key this client cannot read')
+    if (!isWrappedKey(parsed)) throw new SyncError('the server sent a locked key this client cannot read')
     return { kind: 'wrapped', wrapped: parsed, version: Number(version), etag }
   }
-  throw new SyncError('the server sent a key document of a kind this client does not know')
+  throw new SyncError('the server sent a key of a kind this client does not know')
 }
 
 /**
@@ -323,7 +323,7 @@ export class SyncClient {
   async getKeyDocument(): Promise<KeyDocument> {
     const res = await this.req('/v1/keydoc')
     if (res.status === 404) return { kind: 'none' }
-    if (!res.ok) throw new SyncError('key document fetch failed', res.status)
+    if (!res.ok) throw new SyncError('key fetch failed', res.status)
     return parseKeyDocument(res.headers, await res.text())
   }
 
@@ -345,7 +345,7 @@ export class SyncClient {
     if (res.status === 201) return 'created'
     if (res.status === 412) return 'moved'
     if (res.status === 428) throw new SyncError(CREATE_NAMED_NO_STATE, 428)
-    throw new SyncError('key document store failed', res.status)
+    throw new SyncError('key store failed', res.status)
   }
 
   /**
@@ -354,7 +354,7 @@ export class SyncClient {
    * the server's 409, another device having written first.
    */
   async putKeyDocumentVersion(version: number, wrapped: RecoverableDataKey): Promise<'written' | 'moved'> {
-    if (!Number.isSafeInteger(version) || version < 2) throw new RangeError(`a new version of the wrapped key is 2 or more, not ${version}`)
+    if (!Number.isSafeInteger(version) || version < 2) throw new RangeError(`a new version of the locked key is 2 or more, not ${version}`)
     const res = await this.req(`/v1/keydoc/${version}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -362,7 +362,7 @@ export class SyncClient {
     })
     if (res.status === 201) return 'written'
     if (res.status === 409) return 'moved'
-    throw new SyncError('key document store failed', res.status)
+    throw new SyncError('key store failed', res.status)
   }
 
   /**

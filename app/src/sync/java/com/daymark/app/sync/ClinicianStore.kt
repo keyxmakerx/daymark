@@ -59,10 +59,37 @@ class ClinicianStore @Inject constructor(
         }
     }
 
+    /**
+     * The inbox items the owner declined (#177), each as its clinician, channel, lineage and version, so
+     * a declined version is not offered again. A newer version is a new proposal. Sealed like the rest.
+     */
+    @Synchronized
+    fun declined(): Set<String> {
+        val encoded = securePrefs.getString(DECLINED, null) ?: return emptySet()
+        val sealed = try {
+            Base64.getDecoder().decode(encoded)
+        } catch (_: IllegalArgumentException) {
+            return emptySet()
+        }
+        val bytes = keystore.open(sealed, DECLINED_AAD) ?: return emptySet()
+        return String(bytes, Charsets.UTF_8).split('\n').filter { it.isNotEmpty() }.toSet()
+    }
+
+    @Synchronized
+    fun decline(key: String) {
+        require('\n' !in key) { "not a key" }
+        val next = (declined() + key).toList().takeLast(MAX_DECLINED).joinToString("\n")
+        val sealed = keystore.seal(next.toByteArray(Charsets.UTF_8), DECLINED_AAD)
+        check(securePrefs.edit().putString(DECLINED, Base64.getEncoder().encodeToString(sealed)).commit()) { "not kept" }
+    }
+
     private companion object {
         /** The keystore alias the clinicians are sealed under, and nothing else. */
         const val ALIAS = "daymark_clinicians_v1"
         const val KEY = "clinicians_v1"
         val AAD = "daymark.clinicians.v1".toByteArray(Charsets.US_ASCII)
+        const val DECLINED = "clinician_items_declined_v1"
+        val DECLINED_AAD = "daymark.clinician-items-declined.v1".toByteArray(Charsets.US_ASCII)
+        const val MAX_DECLINED = 2000
     }
 }

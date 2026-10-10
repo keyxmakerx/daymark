@@ -428,7 +428,7 @@
       the id the failing field points at, so the alert is also read as that field's description.
     -->
     {#if error}<div id={errorId}><Callout tone="critical">{error}</Callout></div>{/if}
-    <button class="primary" type="submit" disabled={busy}>{busy ? 'Unlocking…' : 'Unlock portal'}</button>
+    <button class="primary" type="submit" disabled={busy}>{busy ? 'Unlocking…' : 'Unlock console'}</button>
   </form>
 
   {#if records.length > 0}

@@ -236,6 +236,32 @@ describe('no word a person reads says "therapist"', () => {
 })
 
 /**
+ * "Portal" was the old name for the console a clinician uses (#310, #392). It may stay only inside
+ * a value that is stored, sent or routed; every other string is a word a person reads.
+ */
+const PORTAL = /\bportal\b/i
+const PORTAL_IDENTIFIERS = new Set(['/portal/invite', 'portal'])  // 'portal': a CSS class name
+
+describe('no word a person reads says "portal"', () => {
+  it('the detector sees the word in a planted sentence, and lets an identifier through', () => {
+    const planted = svelteStrings('<p>Your portal is a different page.</p><a href="/portal/invite">x</a>')
+    expect(planted.filter((s) => PORTAL.test(s) && !PORTAL_IDENTIFIERS.has(s))).toEqual(['Your portal is a different page.'])
+  })
+
+  it('in any component, module or entry page', () => {
+    const offenders: string[] = []
+    for (const [path, strings] of VISIBLE)
+      for (const s of strings) if (PORTAL.test(s) && !PORTAL_IDENTIFIERS.has(s)) offenders.push(`${path}: ${s}`)
+    expect(offenders).toEqual([])
+  })
+
+  it('every identifier allowed to keep the word is still in use', () => {
+    const everything = new Set([...VISIBLE.values()].flat())
+    for (const v of PORTAL_IDENTIFIERS) expect(everything.has(v), v).toBe(true)
+  })
+})
+
+/**
  * The new wording, pinned where it renders. Each line is a substring of one string a person
  * reads in that file, so rewording it back — or anywhere near back — fails here and names it.
  */

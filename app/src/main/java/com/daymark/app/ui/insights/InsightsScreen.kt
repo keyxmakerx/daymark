@@ -165,7 +165,7 @@ fun InsightsScreen(
         when (scope) {
             Scope.Week -> PaperSurface(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(14.dp)) {
-                    Text("This week", style = MaterialTheme.typography.titleMedium)
+                    Text("Last seven days", style = MaterialTheme.typography.titleMedium)
                     WeekDays(stats.week, onDayClick, modifier = Modifier.padding(top = 12.dp))
                     MoodLegend(modifier = Modifier.padding(top = 14.dp))
                 }
@@ -610,7 +610,8 @@ private fun MoodLegend(modifier: Modifier = Modifier) {
     Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
         Mood.ascending.forEach { mood ->
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(11.dp).clip(RoundedCornerShape(3.dp)).background(MaterialTheme.moodColors.forLevel(mood.level)))
+                // The key to the dots looks like them: the same ring (#427).
+                MoodDot(mood.level)
                 Text(" ${MaterialTheme.moodLabels.forLevel(mood.level)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

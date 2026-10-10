@@ -40,7 +40,6 @@ import com.daymark.app.goals.GoalKind
 import com.daymark.app.goals.GoalReached
 import com.daymark.app.ui.components.PaperSurface
 import com.daymark.app.ui.theme.HairlineWidth
-import com.daymark.app.ui.theme.moodColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -134,7 +133,7 @@ private fun GoalCard(ui: GoalProgressUi, onClick: () -> Unit, modifier: Modifier
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    ProgressBar(fraction = ui.fraction, met = ui.isMet)
+                    ProgressBar(fraction = ui.fraction)
                 }
             }
         }
@@ -142,8 +141,10 @@ private fun GoalCard(ui: GoalProgressUi, onClick: () -> Unit, modifier: Modifier
 }
 
 @Composable
-private fun ProgressBar(fraction: Float, met: Boolean) {
-    val fill = if (met) MaterialTheme.moodColors.good else MaterialTheme.colorScheme.primary
+private fun ProgressBar(fraction: Float) {
+    // One ink, met or not: the words ("3 of 3 done") say where a goal stands. A mood colour is the
+    // value a person logged, and a met goal is not a success to be drawn in green (#428).
+    val fill = MaterialTheme.colorScheme.primary
     Box(
         modifier = Modifier
             .padding(top = 6.dp)

@@ -33,6 +33,9 @@ export function emptySelection(): ShareSelection {
   return { types: { checkIns: false, moods: false, journal: false, sleep: false }, includeOwnWords: false, excludeIds: [] }
 }
 
+/** A sleep log's `night` is an epoch day; a share's range is epoch milliseconds, so a night is compared at the start of its UTC day. */
+const MS_PER_DAY = 86_400_000
+
 function inRange(at: number, sel: ShareSelection): boolean {
   if (sel.from !== undefined && at < sel.from) return false
   if (sel.to !== undefined && at > sel.to) return false
@@ -84,7 +87,7 @@ export function buildShareBundle(data: BackupData, sel: ShareSelection, meta: Sh
 
   const sleep = sel.types.sleep
     ? (data.sleepLogs ?? [])
-        .filter((sLog) => inRange(sLog.night, sel) && !excluded.has(sLog.id))
+        .filter((sLog) => inRange(sLog.night * MS_PER_DAY, sel) && !excluded.has(sLog.id))
         .map((sLog) => ({ at: sLog.night, bedTime: sLog.bedTime, wakeTime: sLog.wakeTime, quality: sLog.quality }))
     : undefined
   if (sleep) recordTypes.push('sleep')

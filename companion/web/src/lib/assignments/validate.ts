@@ -24,6 +24,10 @@ function taskExists(id: string): boolean {
   return id === ATTENTION_TASK.taskId
 }
 
+function isObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+}
+
 export function validateAssignment(a: Assignment, grant: Grant): AssignmentCheck {
   const errors: string[] = []
   const fail = (m: string) => errors.push(m)
@@ -40,8 +44,9 @@ export function validateAssignment(a: Assignment, grant: Grant): AssignmentCheck
   // 3. Author must match the therapist this grant is for (defense in depth; signature is verified separately).
   if (a.authorFingerprint !== grant.therapistFingerprint) fail('assignment author does not match the granted clinician')
 
-  // 4. Payload bounds.
-  const p = a.payload as Record<string, unknown>
+  // 4. Payload bounds. A payload that is not an object reads as an empty one, so the check for
+  //    its type refuses it like any payload that lacks the field; it is never read through (#387).
+  const p: Record<string, unknown> = isObject(a.payload) ? a.payload : {}
   switch (a.type) {
     case 'questionnaire':
       if (typeof p.instrumentId !== 'string' || !instrumentExists(p.instrumentId)) fail(`unknown or non-catalog instrument "${p.instrumentId}"`)
@@ -53,8 +58,9 @@ export function validateAssignment(a: Assignment, grant: Grant): AssignmentCheck
       const bundle = p.bundle as Array<{ kind: string; id: string }> | undefined
       if (!Array.isArray(bundle) || bundle.length === 0) fail('largeAssessment bundle is empty')
       else for (const it of bundle) {
-        const ok = it.kind === 'questionnaire' ? instrumentExists(it.id) : it.kind === 'task' ? taskExists(it.id) : false
-        if (!ok) fail(`bundle references an unknown ${it.kind} "${it.id}"`)
+        const e: Partial<{ kind: string; id: string }> = isObject(it) ? it : {}
+        const ok = e.kind === 'questionnaire' ? instrumentExists(String(e.id)) : e.kind === 'task' ? taskExists(String(e.id)) : false
+        if (!ok) fail(`bundle references an unknown ${e.kind} "${e.id}"`)
       }
       break
     }

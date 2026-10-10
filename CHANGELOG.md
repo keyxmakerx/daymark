@@ -6,7 +6,22 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+- **On/off switches can be told apart.** Every switch in the app now draws its off state with a
+  visible outline and thumb in the soft ink, where before the track was the colour of the page. On
+  is unchanged: a dark track with a light thumb. The "Undo" on a deleted entry and the chosen AM or
+  PM in a time picker now use the app's own paper colours instead of Material's lavender and pink.
+  The safety plan's lines name their ink rather than relying on Material to pick it.
+- **A goal's bar looks the same met or not.** It used to turn the "Good" mood colour once the week's
+  target was reached, which borrowed a person's own mood colour as a reward. The words
+  ("3 of 3 done") say where the goal stands.
+- **No check marks remain.** Saving a journal entry or a thought record is a "Save" text button, and
+  an activity already in your list says "Added" in words.
+- **Insights → Week is titled "Last seven days"**, which is what it shows, and the mood legend's
+  swatches carry the same ring as the dots they key.
+
 ### Removed
+- **The old Stats screen**, which nothing opened and which still drew daily averages, is gone.
 - **"Review my year" ends on two plain facts, and no longer offers to save a picture of your
   year.** The last page used to show three numbers: your average mood, your brightest month, and
   your longest streak. Each was a way of marking a year of your life out of something — an average
@@ -66,6 +81,13 @@ All notable changes to this project are documented here. The format is based on
   object of its own beside your memories, a cluster, a belt or a ring, if you switch on **Show in
   my sky** on its screen; more logs make it denser, never brighter. Backups (format 19) carry all of
   it; a merge does not yet carry what you put away (#455).
+- **Game plans and suggestions from your clinicians, on your phone** (sync build). Settings → Sync
+  with your server → From your clinicians. "Check for new items" is the only time the phone asks;
+  each item is opened with your own key and believed only if it is signed by the clinician you
+  approved, sent to you, and filed where it was signed. Nothing reaches your journal until you tap
+  Accept, except a suggestion you set to apply on its own. Decline tells nobody. An item that fails
+  a check is shown with what happened to it, never silently dropped. A phone that opened its key
+  before this update asks for the passphrase once more.
 - **Your own log, and a Connect button, on the sync card** (web). Connect checks the server address
   and access token without a passphrase, so a first visit to an empty server no longer reads as an
   error. Below your phones, "Your own log" lists phones paired and disconnected and addresses paused
@@ -527,6 +549,21 @@ All notable changes to this project are documented here. The format is based on
   quiet notice that names nobody and counts nothing.
 
 ### Fixed
+- **Leaving the owner console no longer locks it or forgets the clinicians you added.** Going to
+  another route (open a backup, Sync) and coming back finds the console as you left it, with every
+  clinician still listed. Locking is still the button, closing the tab, or going idle.
+- **One malformed assignment can no longer stop the whole inbox loading.** An item the browser
+  cannot check is shown as one refused item; the rest still load.
+- **A clinician whose session the server ended is locked out plainly.** The console now locks and
+  shows its usual after-lock line instead of saying the share may have been tampered with. A server
+  that cannot be reached says that nothing was opened and nothing changed.
+- **A share's date range compares sleep nights in the right unit.** A night is a day number; the
+  range is milliseconds. The backup type now says so.
+- **"Portal" is gone from the words on screen.** The pages are consoles. The Sync panel no longer
+  calls the phone "trusted", and the owner page no longer calls itself a viewer. A test now fails
+  on the word.
+- **The recovery screens say "recovery code" throughout, and the sync card's errors no longer say
+  "wrapped key" or "key document".**
 - **Companion — first install** (#380, #381, #393, #443). A bad email setting or unreadable
   secret file stops the server with one line naming the setting; the example environment shows
   only settings that reach the server; the Caddy LAN example starts and refuses unknown hosts, and

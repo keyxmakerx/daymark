@@ -121,7 +121,7 @@ export const AUDIENCES: readonly Audience[] = [
     question: 'I am a clinician someone invited',
     who:
       'You were invited by the person whose data it is, and you hold the key they pinned for you. ' +
-      'Your portal is a different page from this one.',
+      'Your console is a different page from this one.',
     href: './therapist.html',
     page: 'clinician',
     linkLabel: 'the clinician console',
@@ -754,7 +754,7 @@ export const ORIENTATION_LEDE =
  * The claim is scoped to entries, in the same words as the footer and the page description.
  */
 export const WHAT_THIS_PAGE_IS =
-  'This page is a viewer. It runs in your browser, holds no account of you, and has nothing of ' +
+  'This page is your console. It pairs with clinicians, grants access and shares, runs in your browser, holds no account of you, and has nothing of ' +
   'yours until you give it something. A backup you open is read in this browser and gone when ' +
   'you close the tab. Your entries leave this browser only when you sync or share them — and ' +
   'where anything is sent is an address you type, so check it before you paste a token or an ' +
@@ -810,7 +810,7 @@ export const WHY_SO_FEW_CHECKS =
 
 /** The compact line a returning reader gets in place of the panel. */
 export const COMPACT_SUMMARY =
-  'Your own data is on this page. A clinician you invited has a separate portal; whoever runs ' +
+  'Your own data is on this page. A clinician you invited has a separate console; whoever runs ' +
   'the server has a separate console.'
 
 /**

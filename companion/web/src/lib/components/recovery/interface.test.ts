@@ -345,7 +345,7 @@ describe('(c) a positioned error is positioned, and an unpositioned one says so'
     // to guess ("NO CORRECTION, ONLY DETECTION"); this is that refusal, said to a person.
     expect(copy.CHECKSUM_CANNOT_POINT).toContain('cannot tell us which')
     expect(copy.CHECKSUM_CANNOT_POINT).toContain('guess')
-    expect(copy.CHECKSUM_CANNOT_POINT).toContain('Read the whole code back')
+    expect(copy.CHECKSUM_CANNOT_POINT).toContain('Read the whole recovery code back')
     expect(codeOf('groups.ts')).toContain('CHECKSUM_CANNOT_POINT')
   })
 

@@ -91,12 +91,13 @@ com.daymark.app.data.MigrationSchemaExportTest
 com.daymark.app.export.ReportCopySourceTest com.daymark.app.ui.settings.ReportExportSourceTest
 com.daymark.app.ui.theme.ColorSchemeSourceTest com.daymark.app.ui.FaintInkSourceTest
 com.daymark.app.ui.insights.MonthGridSourceTest com.daymark.app.ui.WeekDaysSourceTest
-com.daymark.app.ui.theme.DynamicColorSourceTest
+com.daymark.app.ui.theme.DynamicColorSourceTest com.daymark.app.ui.insights.MoodLegendSourceTest
 com.daymark.app.ui.components.TickAndGreenSourceTest
 com.daymark.app.ui.HairlineFillSourceTest
 com.daymark.app.export.ReportInkSourceTest
 com.daymark.app.ui.settings.ServerSyncSeamSourceTest
 com.daymark.app.ui.settings.CliniciansScreenSourceTest
+com.daymark.app.ui.settings.InboxScreenSourceTest
 com.daymark.app.notifications.NotificationPrivacySourceTest
 com.daymark.app.data.LifeEventSchemaTest
 com.daymark.app.data.ConstellationSchemaTest
@@ -112,6 +113,7 @@ $REPO/app/src/test/java/com/daymark/app/ui/settings/ReportExportSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/theme/ColorSchemeSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/FaintInkSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/insights/MonthGridSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/ui/insights/MoodLegendSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/WeekDaysSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/theme/DynamicColorSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/components/TickAndGreenSourceTest.kt
@@ -119,6 +121,7 @@ $REPO/app/src/test/java/com/daymark/app/ui/HairlineFillSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/export/ReportInkSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/settings/ServerSyncSeamSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/settings/CliniciansScreenSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/ui/settings/InboxScreenSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/notifications/NotificationPrivacySourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/LifeEventSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/ConstellationSchemaTest.kt

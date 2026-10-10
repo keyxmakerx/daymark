@@ -16,7 +16,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
+import com.daymark.app.ui.components.DaymarkSwitch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -144,7 +144,7 @@ private fun GroupBlock(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Switch(
+            DaymarkSwitch(
                 checked = groupDefault,
                 onCheckedChange = onSetGroupDefault,
                 modifier = Modifier.semantics {
@@ -225,7 +225,7 @@ private fun PersonSharingRow(
                 }
             }
         }
-        Switch(
+        DaymarkSwitch(
             checked = row.resolved,
             onCheckedChange = onSetOverride,
             modifier = Modifier.semantics {

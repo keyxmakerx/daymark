@@ -646,7 +646,7 @@ describe('(h) a slot of a kind this client does not open is skipped, and still h
     const passphraseSlot = d.slots.find((s) => s.kind === 'passphrase')!
     delete passphraseSlot.ctB64
     const headers = new Headers({ 'X-Key-Document': 'wrapped', 'X-Key-Document-Version': '1', ETag: '"e"' })
-    expect(() => parseKeyDocument(headers, JSON.stringify(d))).toThrow('the server sent a wrapped key this client cannot read')
+    expect(() => parseKeyDocument(headers, JSON.stringify(d))).toThrow('the server sent a locked key this client cannot read')
     // Positive control: the same document with its lock reads.
     expect(parseKeyDocument(headers, text).kind).toBe('wrapped')
   })

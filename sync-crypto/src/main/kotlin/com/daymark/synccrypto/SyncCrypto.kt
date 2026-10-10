@@ -95,7 +95,13 @@ class SyncCrypto(private val sodium: LazySodium) {
      * (subkeys 3 and 4): not secret, and all a pairing approval needs, so the private halves are
      * wiped as soon as the public ones exist.
      */
-    class OwnerKeys(val syncKey: ByteArray, val manifestSeed: ByteArray, val ownerPublic: PairingPayloads.OwnerKeys)
+    class OwnerKeys(
+        val syncKey: ByteArray,
+        val manifestSeed: ByteArray,
+        val ownerPublic: PairingPayloads.OwnerKeys,
+        /** The private half of the owner's box key (subkey 3), which opens what clinicians seal to them (#177). The caller wipes it. */
+        val ownerBoxSecret: ByteArray,
+    )
 
     data class ManifestEntry(val version: Long, val hash: String)
     data class Manifest(val lineage: String, val head: Long, val entries: List<ManifestEntry>)
@@ -279,11 +285,13 @@ class SyncCrypto(private val sodium: LazySodium) {
         try {
             val identity = ownerIdentityFromMaster(master)
             val ownerPublic = PairingPayloads.ownerKeysOf(identity)
+            val boxSecret = identity.boxSecretKey.copyOf()
             identity.wipe()
             return OwnerKeys(
                 syncKey = deriveSubkey(master, SUBKEY_SYNC, AEAD.XCHACHA20POLY1305_IETF_KEYBYTES),
                 manifestSeed = deriveSubkey(master, SUBKEY_MANIFEST, Sign.SEEDBYTES),
                 ownerPublic = ownerPublic,
+                ownerBoxSecret = boxSecret,
             )
         } finally {
             master.fill(0)

@@ -108,7 +108,7 @@ clinician does not learn it.
 
 What is not built:
 
-- The phone receives nothing yet, so nothing an owner accepts reaches the app: #177.
+- An accept or decline on the web console does not reach the phone, which has its own inbox: #346.
 - Results of a self-check taken in the Companion stay on that device; they reach a clinician only
   once they are saved into the encrypted snapshot and shared: #237.
 

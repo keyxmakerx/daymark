@@ -96,7 +96,7 @@
     }}
   >
     <label class="field" for="practice-member-id">
-      <span class="field-label">Your member id — the id you sign in to the portal with</span>
+      <span class="field-label">Your member id — the id you sign in to the clinician console with</span>
       <input
         id="practice-member-id"
         class="text-input"

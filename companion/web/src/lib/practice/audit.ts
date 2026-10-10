@@ -89,7 +89,7 @@ const META_LABEL: Record<string, string> = {
   role: 'Role',
   from: 'Role before',
   to: 'Role after',
-  sessionsCut: 'Portal sessions ended',
+  sessionsCut: 'Console sessions ended',
   ip: 'Source address',
 }
 

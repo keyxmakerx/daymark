@@ -15,7 +15,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Switch
+import com.daymark.app.ui.components.DaymarkSwitch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -140,7 +140,7 @@ fun TrackerCheckInsCard(tracker: Tracker, onChange: (Tracker) -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Switch(checked = tracker.quickLog, onCheckedChange = { choose(tracker.copy(quickLog = it)) })
+                DaymarkSwitch(checked = tracker.quickLog, onCheckedChange = { choose(tracker.copy(quickLog = it)) })
             }
         }
     }

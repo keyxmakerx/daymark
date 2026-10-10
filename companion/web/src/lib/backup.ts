@@ -49,6 +49,7 @@ export interface BackupGoal {
 
 export interface BackupSleepLog {
   id: number
+  /** Epoch DAYS (not milliseconds): the night's date, counted from 1970-01-01 UTC. */
   night: number
   bedTime: number
   wakeTime: number

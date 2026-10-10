@@ -5,13 +5,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.daymark.app.data.entity.Tracker
+import com.daymark.app.ui.components.DaymarkSwitch
 import com.daymark.app.ui.components.PaperSurface
 
 /**
@@ -31,7 +31,10 @@ fun TrackerSkyCard(tracker: Tracker, onChange: (Tracker) -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Switch(checked = tracker.showInSky, onCheckedChange = { onChange(tracker.copy(showInSky = it)) })
+            DaymarkSwitch(
+                checked = tracker.showInSky,
+                onCheckedChange = { onChange(tracker.copy(showInSky = it)) },
+            )
         }
     }
 }

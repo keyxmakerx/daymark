@@ -285,7 +285,7 @@
       {:else if tab === 'record'}
         {#if shared}<ClientRecordScreen data={shared} {now} />{:else}{@render needShare()}{/if}
       {:else if tab === 'shared'}
-        <SharedDataView {ctx} onopen={(d) => (shared = d)} />
+        <SharedDataView {ctx} onopen={(d) => (shared = d)} onended={lock} />
       {/if}
     {/if}
   </section>
