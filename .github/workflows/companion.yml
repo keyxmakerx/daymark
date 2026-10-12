@@ -188,8 +188,18 @@ jobs:
         run: pnpm test:integration
 
   docker:
-    name: Docker — image + both compose topologies
-    runs-on: ubuntu-latest
+    name: Docker — image + both compose topologies (${{ matrix.arch }})
+    # Each architecture is built and tested on its own hardware, never emulated: a Raspberry Pi
+    # or an arm64 NAS runs exactly the image that booted and passed every probe below on arm64.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     needs: [web, server] # only spin up the builder once the checks above pass
     permissions:
       contents: read
@@ -208,8 +218,8 @@ jobs:
           push: false
           load: true
           tags: daymark-companion:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=companion-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=companion-${{ matrix.arch }}
 
       - name: Run container and smoke-test
         run: |
@@ -465,11 +475,14 @@ jobs:
       # pass first — the image serves /healthz and /readyz under the real hardening, both
       # compose topologies boot, egress is dead, the no-egress override really removes the
       # host binding. Only then does it become something anyone can `docker pull`. A publish
-      # job that merely `needs:` this one would have to rebuild, and a rebuilt image is not
-      # the artefact that was tested.
+      # job that rebuilt the image would publish something that was never tested.
       #
-      # main and manual dispatch only. Never on pull_request: that would publish code from a
-      # fork under this repository's name, before review.
+      # Each architecture pushes only its own tested image, as `sha-<commit>-<arch>`. The
+      # `publish` job below joins the two into the tags people pull, by digest, without
+      # rebuilding anything.
+      #
+      # main, release tags and manual dispatch only. Never on pull_request: that would publish
+      # code from a fork under this repository's name, before review.
       - name: Log in to GHCR
         if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
         uses: docker/login-action@v3
@@ -478,7 +491,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push the tested image to GHCR
+      - name: Push this architecture's tested image to GHCR
         if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
         run: |
           set -euo pipefail
@@ -487,27 +500,45 @@ jobs:
           owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           image="ghcr.io/$owner/daymark-companion"
           sha="${{ github.sha }}"
+          tag="$image:sha-${sha:0:12}-${{ matrix.arch }}"
+          docker tag daymark-companion:ci "$tag"
+          docker push "$tag"
+
+  publish:
+    name: Publish — one image for amd64 and arm64
+    runs-on: ubuntu-latest
+    needs: [docker] # both architectures built, booted and probed
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag the tested images for both architectures
+        run: |
+          set -euo pipefail
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          image="ghcr.io/$owner/daymark-companion"
+          sha="${{ github.sha }}"
           short="sha-${sha:0:12}"
+          # The two images the docker job tested, one per architecture. `imagetools create`
+          # writes a manifest list that points at them by digest: nothing is rebuilt, so what
+          # anyone pulls, on either architecture, is byte for byte what was tested.
+          sources=("$image:$short-amd64" "$image:$short-arm64")
 
           # THE IMMUTABLE TAG, ALWAYS. `sha-<commit>` can never become a different build under
           # anyone, so it is safe to publish from any ref a maintainer chooses to dispatch.
-          docker tag daymark-companion:ci "$image:$short"
-          docker push "$image:$short"
+          tags=("-t" "$image:$short")
 
-          # THE MOVING TAGS, FROM main ONLY.
-          #
-          # `main` and `latest` both mean "whatever is current", which is what an auto-updating
-          # deployment (Cosmos, Watchtower, a Portainer stack with a pull policy) needs to watch.
-          # They are the same image; `latest` exists because it is what every tool assumes when no
-          # tag is given, and its absence is a confusing failure rather than a safe default.
-          #
-          # The ref guard is separate from the step's `if:` on purpose. That condition allows a
-          # `workflow_dispatch` from ANY branch, which is right for the immutable tag above and
-          # wrong here: dispatching from a feature branch would have moved `main` — and would now
-          # move `latest` — onto code that never merged, and anything auto-updating would have
-          # pulled it within the hour. The immutable tag is still published in that case, so a
-          # maintainer can still test a branch build; only the pointers everyone else follows are
-          # withheld.
           # THE RELEASE TAG, FROM A `v*` TAG ONLY: `v1.0.0-beta.1` publishes `:1.0.0-beta.1`, the
           # version an operator pins, writes down and reports. Like `sha-`, it names one build; it
           # does not move `:latest`, which follows main.
@@ -519,29 +550,48 @@ jobs:
                 echo "::error::tag ${GITHUB_REF_NAME} is not v<major>.<minor>.<patch>[-label]; nothing more is published"
                 exit 1
               fi
-              docker tag daymark-companion:ci "$image:$version"
-              docker push "$image:$version"
+              tags+=("-t" "$image:$version")
               ;;
           esac
 
+          # THE MOVING TAGS, FROM main ONLY.
+          #
+          # `main` and `latest` both mean "whatever is current", which is what an auto-updating
+          # deployment (Cosmos, Watchtower, a Portainer stack with a pull policy) needs to watch.
+          # They are the same image; `latest` exists because it is what every tool assumes when no
+          # tag is given, and its absence is a confusing failure rather than a safe default.
+          #
+          # The ref guard is separate from the job's `if:` on purpose. That condition allows a
+          # `workflow_dispatch` from ANY branch, which is right for the immutable tag above and
+          # wrong here: dispatching from a feature branch would move `latest` onto code that never
+          # merged, and anything auto-updating would pull it within the hour. The immutable tag is
+          # still published in that case, so a maintainer can still test a branch build; only the
+          # pointers everyone else follows are withheld.
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            docker tag daymark-companion:ci "$image:main"
-            docker tag daymark-companion:ci "$image:latest"
-            docker push "$image:main"
-            docker push "$image:latest"
+            tags+=("-t" "$image:main" "-t" "$image:latest")
             moving="yes"
           else
             echo "ref is ${{ github.ref }}, not main — :main and :latest are not moved"
             moving="no"
           fi
 
+          docker buildx imagetools create "${tags[@]}" "${sources[@]}"
+
+          # The published list must carry exactly the two tested architectures. A list missing
+          # one would pull as "no matching manifest" on that hardware, which is the failure this
+          # job exists to remove.
+          platforms=$(docker buildx imagetools inspect "$image:$short" --raw \
+            | python3 -c 'import sys,json; m=json.load(sys.stdin); print(" ".join(sorted(p["platform"]["os"]+"/"+p["platform"]["architecture"] for p in m.get("manifests",[]) if p.get("platform",{}).get("os")!="unknown")))')
+          if [ "$platforms" != "linux/amd64 linux/arm64" ]; then
+            echo "::error::published list carries [$platforms], not linux/amd64 and linux/arm64"
+            exit 1
+          fi
+
           # The digest is the only reference that is both immutable AND verifiable — a tag can be
-          # force-pushed, a digest cannot. It also closes a real gap: this repo pins its base
-          # images by digest but has never published one of its own, so "is the running image the
-          # one CI tested?" was unanswerable. Now it is.
-          digest=$(docker inspect --format='{{index .RepoDigests 0}}' "$image:$short" 2>/dev/null || true)
+          # force-pushed, a digest cannot. It answers "is the running image the one CI tested?"
+          digest=$(docker buildx imagetools inspect "$image:$short" | awk '$1 == "Digest:" { print $2; exit }')
           if [ -z "$digest" ]; then
-            echo "::error::pushed but could not read back a RepoDigest — do not treat this image as pinned"
+            echo "::error::pushed but could not read back a digest — do not treat this image as pinned"
             exit 1
           fi
 
@@ -550,8 +600,10 @@ jobs:
             echo
             echo '```'
             echo "$image:$short"
-            echo "$digest"
+            echo "$image@$digest"
             echo '```'
+            echo
+            echo "For linux/amd64 and linux/arm64, each built and tested on its own hardware."
             echo
             if [ -n "$version" ]; then
               echo "Released as \`$image:$version\`."
@@ -567,4 +619,4 @@ jobs:
               echo "Moving tags withheld: this build is not from \`main\`."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "published $digest"
+          echo "published $image@$digest"

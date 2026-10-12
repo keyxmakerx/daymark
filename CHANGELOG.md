@@ -7,6 +7,9 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **The Companion's Docker image runs on arm64 as well as amd64.** A Raspberry Pi, an arm64 NAS or an
+  Apple-silicon machine can pull the published image instead of building it. Each architecture is
+  built and tested on its own hardware, and the published tags point at exactly those tested images.
 - **You see the PDF report before it is saved, and choose which journal entries go in it.** After
   the report's options, **Next** shows every page as your clinician will see it, and nothing is
   written until you tap **Save PDF**. If you switch on journal entries, you first pick them one at a
