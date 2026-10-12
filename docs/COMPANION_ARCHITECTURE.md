@@ -37,7 +37,7 @@ is a side effect.
   the owner's access token (#258): on a server with no key a first visit makes one; where the server
   already serves what the passphrase needs (SYNC_PROTOCOL.md §1.2), the key the passphrase opens is
   locked under a new recovery code after the passphrase is tried on the newest snapshot; either secret
-  then opens it from any device. Replacing a recovery code is not built: #407. Lose both and the
+  then opens it from any device. Replacing a recovery code makes a new version of the locked key with a new recovery lock, and a replaced code still opens copies made before it (#407). Lose both and the
   sentence above stands.
 - **One copy, on one disk.** The server keeps what it is sent and copies it nowhere. The phone keeps
   its own local copy, which stays the primary one.

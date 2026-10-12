@@ -218,7 +218,7 @@ nothing that decrypts a record or authors content.
   not the maintainer, not the operator — can get it back. That is what makes it safe and what makes it
   unforgiving. A recovery code locks the master in the browser (`lib/recovery/`), and the server
   keeps the lock, so the recovery code opens the master on any device that has the owner's access
-  token (#258). Replacing a recovery code is not built: #407. The format has room for more slots, though a passkey is not one, because it
+  token (#258). A recovery code can be replaced from the console, which stores the next version of the key with the new recovery lock (#407). The format has room for more slots, though a passkey is not one, because it
   only signs in (#205). A lost clinician key means a fresh invitation and re-pairing.
 - **The wrapped key supersedes the key parameters by presence (#258).** The first version is created
   against the state its writer read. For a first run that is no key document of either kind; for an

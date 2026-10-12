@@ -298,8 +298,40 @@ export const READ_FAILED = 'What this server holds could not be read, so nothing
  * other tab is named by its label, exactly as RecoveryPanel.svelte draws it.
  */
 export const ALREADY_LOCKED_HERE =
-  'This server already holds your key, locked under a passphrase and a recovery code, so there is ' +
-  'nothing to make here. To use the recovery code you already have, go to the Use a code tab.'
+  'This server already holds your key, locked under a passphrase and a recovery code. To use the ' +
+  'recovery code you already have, go to the Use a code tab. To replace it with a new one, open the ' +
+  'key below.'
+
+/* ── Replacing the recovery code (#407). ── */
+
+export const REPLACE_CODE_TITLE = 'Replace your recovery code'
+
+export const REPLACE_CODE_LEDE =
+  'To make a new recovery code, open the key first, with your passphrase or with your current ' +
+  'recovery code. The new recovery code is shown once, like the first, and replaces the recovery ' +
+  'lock this server holds. Your passphrase lock is kept.'
+
+/** What a replacement does not do: the master does not move, so older copies keep their lock. */
+export const REPLACE_CODE_NOT_REVOKED =
+  'A replaced recovery code stops opening what this server hands out. It still opens copies made ' +
+  'before, such as backups of this server.'
+
+export const REPLACE_CODE_ACTION = 'Make a new recovery code'
+export const REPLACE_CODE_VIA_PASSPHRASE = 'Open with my passphrase'
+export const REPLACE_CODE_VIA_CODE = 'Open with my current recovery code'
+
+export const PASSPHRASE_DOES_NOT_OPEN_THIS =
+  'That passphrase does not open the key this server holds. Nothing has changed. Check what you typed ' +
+  'and try again.'
+
+export const REPLACE_CODE_MOVED =
+  'What the server holds changed while the key was open here, so the new recovery code was not ' +
+  'stored. Open the key again.'
+
+export const REPLACE_CODE_DID_NOT_MATCH =
+  'The server accepted the new lock, but what it handed back did not open to the same key with the ' +
+  'new recovery code, so the new recovery code is not shown. Read what this server holds again to ' +
+  'see where things stand.'
 
 /** After the code is confirmed written down: where the key now is. Not a verdict, not a tick. */
 export const KEY_STORED_HERE =
@@ -339,15 +371,6 @@ export interface PlaceholderNote {
  * ages into a lie without anybody editing it.
  */
 export const PLACEHOLDERS: PlaceholderNote[] = [
-  {
-    id: 'rotation',
-    title: 'Replacing a code you no longer trust',
-    body:
-      'A code that has been photographed, emailed to yourself or left in a moving box is a live key ' +
-      'to everything, and the answer is a new one that drops the old. The server takes a new version ' +
-      'of the locked key, and the function that makes one exists; nothing on this screen makes one yet.',
-    specifiedAt: 'src/lib/recovery/dataKey.ts rotateRecoveryCode(); docs/SYNC_PROTOCOL.md §2, PUT /v1/keydoc/{version}; #407',
-  },
   {
     id: 'devices',
     title: 'Doing any of this from the phone',
@@ -524,5 +547,6 @@ export const READS_AGAIN: ReadonlySet<string> = new Set([
   REPLACE_FAILED,
   READ_BACK_DID_NOT_MATCH,
   READ_BACK_FAILED,
+  REPLACE_CODE_DID_NOT_MATCH,
   SETUP_FAILED,
 ])

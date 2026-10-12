@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **You can replace your recovery code.** On the Recovery code tab, when your server already holds
+  your key, open it with your passphrase or your current recovery code and make a new one. The new
+  recovery code is shown once and checked as written down, like the first; your passphrase is
+  unchanged. A replaced recovery code stops opening what this server hands out, and still opens
+  copies made before, such as backups of the server, and the screen says exactly that. If the
+  server takes the new version but what it hands back cannot be checked, the new recovery code is
+  shown anyway, with a button to read again, so no recovery lock is left that nobody holds a code for.
 - **You see the PDF report before it is saved, and choose which journal entries go in it.** After
   the report's options, **Next** shows every page as your clinician will see it, and nothing is
   written until you tap **Save PDF**. If you switch on journal entries, you first pick them one at a

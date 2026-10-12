@@ -418,7 +418,7 @@ read is compared byte for byte with the document sent. The recovery code is show
 server may hold its lock, and checked as written down. A new passphrase set with the recovery code is
 `PUT /v1/keydoc/{n+1}`, read back and opened to the same master; `409` reads again; a version whose
 answer was lost or whose read-back cannot be read is compared by a later read with the version sent.
-Replacing a recovery code is not built: #407.
+Replacing a recovery code writes the next version the same way, with the new recovery lock replacing the old and the passphrase lock kept; a replaced code stops opening what the server hands out, and still opens versions stored before it (#407).
 
 Sync is single-writer and last-snapshot-wins: the newest full snapshot is authoritative, and rows are
 never merged, because the app's schema has no per-row ids or timestamps. That is settled (#200): the

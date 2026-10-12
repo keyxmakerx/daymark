@@ -146,7 +146,9 @@ The words: key; lock, locked under (never copy, slot or key parameters); passphr
 (bare "code" only in a tab's name); access token; this server. Tabs by their labels (*Get a code*,
 *Use a code*). A wait on the key derivation ends *"— this takes a few seconds"*. **Print this page**
 prints the recovery code in dark ink on white whatever the screen's theme. Replacing a recovery code
-is not built: #407.
+opens the key first (passphrase or current recovery code), then shows the new code once and checks it
+as written down; it says a replaced code still opens copies made before, never that the old code
+no longer works (#407).
 
 ### 7.11 The person's own month (owner)
 
