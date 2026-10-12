@@ -38,6 +38,9 @@ a new phone?", done on one phone.
 - **A backup carries the crisis line you set**, and a restore brings it back. "Merge" never
   replaces a line you changed on this phone, and no restore ever puts the default back over yours
   (#370).
+- **One tag releases the app and the Companion image under the same version.** The release stops if
+  the tag is not the app's own version, and a tag with a label such as `-beta.1` is published as a
+  pre-release.
 - **Each release lists its APK's SHA-256**, in the notes and as a `.sha256` file beside it (#226).
 
 ### Fixed

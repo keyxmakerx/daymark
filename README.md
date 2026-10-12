@@ -7,7 +7,7 @@ also keeps a free-form journal, shows your history as a sky of stars and as plai
 sleep, and holds your goals and your own safety plan. It is stored locally and encrypted, with no
 accounts, no servers and no tracking. Because there is no backend, it is free for everyone.
 
-> **Status.** The Android app is at version 0.4.0, the first beta: built, usable and sideloadable. The optional,
+> **Status.** The Android app is at version 0.4.0-beta.1, the first beta: built, usable and sideloadable. The optional,
 > self-hosted **Companion** is built too: a server plus web consoles that let a person share a chosen,
 > encrypted view with a clinician. In the opt-in `sync` build the phone pairs with a Companion and sends it an encrypted copy of the
 > journal; the phone does not yet take anything back, so the Companion's pages are where its data is read. Everything open is tracked on GitHub; start at the

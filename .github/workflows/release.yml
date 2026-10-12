@@ -33,6 +33,24 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
+      # One `v*` tag releases the APK here and the Companion image in companion.yml, which publishes
+      # the image as the tag minus its `v`. The APK carries its own versionName from
+      # app/build.gradle.kts, so the tag must equal it, or the release page, the image and Settings ▸
+      # About would each name a different version. A tag with a label (`-beta.1`) is published as
+      # a pre-release.
+      - name: Check the tag matches the app's version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          app=$(sed -n 's/^ *versionName = "\(.*\)"$/\1/p' app/build.gradle.kts)
+          if [ -z "$app" ]; then
+            echo "::error::could not read versionName from app/build.gradle.kts"
+            exit 1
+          fi
+          if [ "${GITHUB_REF_NAME#v}" != "$app" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match the app's versionName $app; tag v$app instead"
+            exit 1
+          fi
+
       # A release is signed with the release key or it is not published (#224). The app's build
       # falls back to the committed testing key when no keystore is given, which keeps build.yml
       # green on forks; here that fallback would publish an APK that cannot update a real install
@@ -129,3 +147,4 @@ jobs:
             app/build/outputs/apk/foss/release/app-foss-release.apk.sha256
           body_path: ${{ runner.temp }}/release-notes.md
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
