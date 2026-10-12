@@ -55,6 +55,7 @@
  * module can use the vocabulary without pulling a component graph into a node test.
  */
 
+import { forClinician } from './clinicianBands'
 import type { BackupData, BackupAssessment } from '../backup'
 import { MOODS } from '../mood'
 import { getInstrument } from '../instruments'
@@ -320,7 +321,7 @@ export function deriveExceptions(input: TodayInput): Exception[] {
       kind: 'bandChange',
       tone: 'info',
       headline: `${titleFor(key)}: the band label changed between the two most recent runs`,
-      detail: `Previous run: ${from}. Most recent run: ${to}.`,
+      detail: `Previous run: ${forClinician(from)}. Most recent run: ${forClinician(to)}.`,
       at: latest.dateTime,
     })
   }

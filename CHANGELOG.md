@@ -578,6 +578,11 @@ All notable changes to this project are documented here. The format is based on
   quiet notice that names nobody and counts nothing.
 
 ### Fixed
+- **A clinician no longer reads the person's own second-person band words.** The self-checks'
+  bands say "your own usual" because the person takes them. On the clinician's Record page,
+  Calendar, Today strip and dashboard they now read "this person's own usual". Only the display
+  changes: a result recorded under the old words is still placed on its lane, and the person's own
+  screens keep "your".
 - **The Companion answers "not found" for an API address it does not have**, instead of the
   owner's page with a success code, so a monitor or an older app is not misled (#390).
 - **An owner going too fast is no longer told their token is wrong.** On the clinician channels the
