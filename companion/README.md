@@ -180,7 +180,7 @@ that was tested, not a rebuild of the same source.
 
 ```
 ghcr.io/keyxmakerx/daymark-companion@sha256:<digest>  # immutable AND verifiable — the safest pin
-ghcr.io/keyxmakerx/daymark-companion:1.0.0-beta.1     # a release: published when tag v1.0.0-beta.1 is pushed
+ghcr.io/keyxmakerx/daymark-companion:0.4.0-beta.1     # a release: published when tag v0.4.0-beta.1 is pushed
 ghcr.io/keyxmakerx/daymark-companion:sha-<commit>     # immutable, but a tag can be force-pushed
 ghcr.io/keyxmakerx/daymark-companion:latest           # moves with main — for auto-updating setups
 ghcr.io/keyxmakerx/daymark-companion:main             # identical to :latest, same image
