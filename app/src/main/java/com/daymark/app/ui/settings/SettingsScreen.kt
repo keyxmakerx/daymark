@@ -154,10 +154,12 @@ fun SettingsScreen(
          * the app does to its own storage would either overclaim or turn a settings row into a
          * lecture. The export rows say it where it belongs.
          *
-         * WHY THE PIN ROW NO LONGER CLAIMS ANYTHING ABOUT THE FILE. It says what the PIN does — it
-         * guards the screen — and then the thing a person actually needs to know, which is that
-         * forgetting it does not lose their entries. The key is held by the phone, not made from
-         * the PIN.
+         * WHY THE PIN ROW SAYS WHAT A FORGOTTEN PIN COSTS. It says what the PIN does — it guards
+         * the screen — and then what a person goes through if they forget it, which is the same
+         * thing docs/FAQ.md and PRIVACY.md say (#146). The key is held by the phone, not made from
+         * the PIN, so the entries are intact; but the lock screen offers no way past a forgotten
+         * PIN except biometrics, so without them the way back is a reinstall and a backup.
+         * "Forgetting it does not lose them" was true of the cryptography and false of the person.
          *
          * WHAT COMES NEXT, AND WHAT THIS ROW WILL HAVE TO SAY THEN. Issue #109 also specifies a PIN
          * wrap and a written-down recovery code, at which point the key stops being available to the
@@ -188,8 +190,9 @@ fun SettingsScreen(
             headlineContent = { Text("App lock (PIN)") },
             supportingContent = {
                 Text(
-                    "The PIN guards the screen. It is not what your entries are encrypted with, " +
-                        "so forgetting it does not lose them.",
+                    "The PIN guards the screen. There is no reset: if you forget it and cannot " +
+                        "unlock with biometrics, the way back is to reinstall Daymark and restore " +
+                        "your latest backup.",
                 )
             },
             trailingContent = {
@@ -323,6 +326,12 @@ fun SettingsScreen(
         ListItem(
             headlineContent = { Text("Daymark") },
             supportingContent = { Text("Open-source mood tracker · all data stays on your device") },
+        )
+        // The version a bug report asks for (#221). VERSION_NAME carries "-sync" in the sync build,
+        // which a report needs too.
+        ListItem(
+            headlineContent = { Text("Version") },
+            supportingContent = { Text(BuildConfig.VERSION_NAME) },
         )
 
         // DEBUG BUILDS ONLY, and this is one of three checks rather than the only one.
