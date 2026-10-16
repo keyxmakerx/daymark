@@ -58,6 +58,7 @@
   import NonDiagnosticBanner from './NonDiagnosticBanner.svelte'
   import type { BackupData } from '../../backup'
   import { buildClientRecord, bandLanes } from '../../therapist/clientRecord'
+  import { forClinician } from '../../therapist/clinicianBands'
   import type {
     AxisAbsence,
     InstrumentRecord,
@@ -194,7 +195,7 @@
             exception, because the phone writes instrument keys this catalog does not carry.
           -->
           {#if record.axisDerived}
-            <p class="derived-note">{record.axis.framing}</p>
+            <p class="derived-note">{forClinician(record.axis.framing)}</p>
           {/if}
           <!--
             Redundant with the table below, by design — see the header note. The runs are announced
@@ -203,7 +204,7 @@
           <div class="trend" aria-hidden="true">
             {#each bandLanes(record) as lane (lane.step.index)}
               <div class="lane">
-                <p class="lane-name">{lane.step.label}</p>
+                <p class="lane-name">{forClinician(lane.step.label)}</p>
                 <div class="lane-track">
                   <span class="lane-rail"></span>
                   <span class="lane-marks">
@@ -256,7 +257,7 @@
                 {#if point.label === null}
                   <span class="absent">{NOT_RECORDED}</span>
                 {:else}
-                  {point.label}
+                  {forClinician(point.label)}
                 {/if}
                 {#if point.placement.kind === 'derived'}
                   <span class="qualifier">{DERIVED_NOTE}</span>
@@ -276,7 +277,7 @@
 
         {#snippet footer()}
           {#if record.axis !== null}
-            {record.axis.framing}
+            {forClinician(record.axis.framing)}
           {:else}
             This tool's runs are listed as the file recorded them. Nothing here is a score, a
             threshold, or a clinical reading.

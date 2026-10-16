@@ -520,10 +520,11 @@ decisions rather than a reading of the current moment: #162.
 - **Backup** (Settings → Export backup) writes one JSON file: entries with their activities and
   people, the journal, goals and project steps, sleep logs, treatments, trackers and their values,
   reminders, check-in scores, thought records, the safety plan, life events, people and the notes
-  about them, group sharing defaults, custom mood names and colours, and photos embedded in the
-  file.
+  about them, group sharing defaults, custom mood names and colours, the crisis line the person
+  set (#370), and photos embedded in the file. "Replace all" takes the file's crisis line; "Merge"
+  takes it only while the phone still shows the default; a file without one leaves the phone's.
 - **Not in a backup:** the reception ledger, by design (§13.2); suggestion settings (#191); the
-  crisis resource and the latest sleep self-check results; app settings and
+  latest sleep self-check results; app settings and
   the PIN.
 - **Restore** (Settings → Restore backup) either replaces everything or merges the file alongside
   what is there, with fresh ids. An older backup still reads. A backup from a newer version of the

@@ -180,7 +180,7 @@ that was tested, not a rebuild of the same source.
 
 ```
 ghcr.io/keyxmakerx/daymark-companion@sha256:<digest>  # immutable AND verifiable — the safest pin
-ghcr.io/keyxmakerx/daymark-companion:1.0.0-beta.1     # a release: published when tag v1.0.0-beta.1 is pushed
+ghcr.io/keyxmakerx/daymark-companion:0.4.0-beta.1     # a release: published when tag v0.4.0-beta.1 is pushed
 ghcr.io/keyxmakerx/daymark-companion:sha-<commit>     # immutable, but a tag can be force-pushed
 ghcr.io/keyxmakerx/daymark-companion:latest           # moves with main — for auto-updating setups
 ghcr.io/keyxmakerx/daymark-companion:main             # identical to :latest, same image
@@ -220,8 +220,9 @@ export DAYMARK_IMAGE=ghcr.io/keyxmakerx/daymark-companion:latest
 docker compose pull && docker compose up -d
 ```
 
-Building it yourself stays fully supported and is the default. The image is **linux/amd64 only**;
-an arm64 host (a Pi, an Apple-silicon machine) needs a local build.
+Building it yourself stays fully supported and is the default. The image runs on **linux/amd64 and
+linux/arm64** (a Raspberry Pi 4 or 5 on a 64-bit OS, an arm64 NAS, an Apple-silicon machine); each
+architecture is built and put through every check above on its own hardware before it is published.
 
 ## Local development
 

@@ -4,6 +4,7 @@
   import { MOODS, moodWord, ownMoodColours, ownMoodFill } from '../mood'
   import Sparkline from '../charts/Sparkline.svelte'
   import JournalReader from './JournalReader.svelte'
+  import { forClinician } from '../therapist/clinicianBands'
   import MonthCalendar from './calendar/MonthCalendar.svelte'
 
   /*
@@ -188,8 +189,8 @@
         {/if}
         {#each assessments as a (a.key)}
           <div class="assess">
-            <div class="ah"><span class="ak">{a.key}</span><span class="ab faint">latest: {a.latestBand}</span></div>
-            <svg viewBox="0 0 200 34" class="trend" role="img" aria-label={`${a.key}: ${a.points.length} results, latest ${a.latestBand}`}>
+            <div class="ah"><span class="ak">{a.key}</span><span class="ab faint">latest: {ownData ? a.latestBand : forClinician(a.latestBand)}</span></div>
+            <svg viewBox="0 0 200 34" class="trend" role="img" aria-label={`${a.key}: ${a.points.length} results, latest ${ownData ? a.latestBand : forClinician(a.latestBand)}`}>
               <path d={assessPath(a.points)} class="line" />
             </svg>
           </div>

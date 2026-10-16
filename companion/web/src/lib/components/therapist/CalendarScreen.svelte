@@ -57,6 +57,7 @@
    * anywhere on this screen, and the ribbon's own data shape refuses to carry one.
    */
   import type { BackupData } from '../../backup'
+  import { forClinician } from '../../therapist/clinicianBands'
   import {
     EVENT_KINDS,
     KIND_LABEL,
@@ -238,7 +239,7 @@
                 {#if measure}
                   <div class="measure">
                     <span class="u-label">{measure.label}</span>
-                    <span class="u-mono value">{measure.value}</span>
+                    <span class="u-mono value">{forClinician(measure.value)}</span>
                     {#if measure.tier}
                       <ProvenanceBadge tier={measure.tier} />
                     {:else}

@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### If you are testing Daymark today, read this first
+The app has its permanent id now, `io.github.keyxmakerx.daymark` (#369). Android treats it as a
+different app from the one you have, so this build installs beside it, empty, and cannot read the
+old one's journal. To bring your entries across:
+
+1. Before installing the new build, open the Daymark you use now and go to **Settings → Export
+   backup**. Keep the file on your phone and do not send or upload it. It is not encrypted: every
+   entry, journal page, the safety plan, the people and notes, and your photos are in it (#236).
+2. Write down what a backup does not carry: your crisis line if you changed it (**More → Gentle
+   support → Crisis resources**) and your settings. Your PIN does not carry over either.
+3. Install the new build. It arrives as a second app, also called Daymark, and starts empty. The old
+   one keeps everything.
+4. In the new one, finish setup, then **Settings → Restore backup**, choose the file, then **Replace
+   all**. Check that your entries, journal, photos, goals and reminders are there.
+5. Re-enter your crisis line, set your PIN again, allow notifications when asked, and put the
+   home-screen widget back.
+6. Only then uninstall the old Daymark, and delete the backup file or keep it somewhere private.
+
+The same steps apply to the sync build. They are the steps in docs/FAQ.md "How do I move my data to
+a new phone?", done on one phone.
+
 ### Added
 - **You can replace your recovery code.** On the Recovery code tab, when your server already holds
   your key, open it with your passphrase or your current recovery code and make a new one. The new
@@ -14,12 +35,29 @@ All notable changes to this project are documented here. The format is based on
   copies made before, such as backups of the server, and the screen says exactly that. If the
   server takes the new version but what it hands back cannot be checked, the new recovery code is
   shown anyway, with a button to read again, so no recovery lock is left that nobody holds a code for.
+- **The Companion's Docker image runs on arm64 as well as amd64.** A Raspberry Pi, an arm64 NAS or an
+  Apple-silicon machine can pull the published image instead of building it. Each architecture is
+  built and tested on its own hardware, and the published tags point at exactly those tested images.
 - **You see the PDF report before it is saved, and choose which journal entries go in it.** After
   the report's options, **Next** shows every page as your clinician will see it, and nothing is
   written until you tap **Save PDF**. If you switch on journal entries, you first pick them one at a
   time, with none ticked to begin with, or take everything in the range as a separate choice. Before,
   the only choice was all of your journal for the range or none of it, and the file was written
   before you could look at it (#303, #198).
+- **Settings ▸ About shows the version**, so a bug report can say which build it came from (#221).
+- **A backup carries the crisis line you set**, and a restore brings it back. "Merge" never
+  replaces a line you changed on this phone, and no restore ever puts the default back over yours
+  (#370).
+- **One tag releases the app and the Companion image under the same version.** The release stops if
+  the tag is not the app's own version, and a tag with a label such as `-beta.1` is published as a
+  pre-release.
+- **Each release lists its APK's SHA-256**, in the notes and as a `.sha256` file beside it (#226).
+
+### Fixed
+- **A release can no longer be signed with the testing key.** The release stops before building
+  when a signing secret is missing, and refuses to publish an APK signed with a debug key (#224).
+- **Settings tells the truth about a forgotten PIN**: without biometrics the way back is to
+  reinstall and restore a backup, as the FAQ and privacy statement already said (#146).
 
 ### Changed
 - **On/off switches can be told apart.** Every switch in the app now draws its off state with a
@@ -585,6 +623,11 @@ All notable changes to this project are documented here. The format is based on
   quiet notice that names nobody and counts nothing.
 
 ### Fixed
+- **A clinician no longer reads the person's own second-person band words.** The self-checks'
+  bands say "your own usual" because the person takes them. On the clinician's Record page,
+  Calendar, Today strip and dashboard they now read "this person's own usual". Only the display
+  changes: a result recorded under the old words is still placed on its lane, and the person's own
+  screens keep "your".
 - **The Companion answers "not found" for an API address it does not have**, instead of the
   owner's page with a success code, so a monitor or an older app is not misled (#390).
 - **An owner going too fast is no longer told their token is wrong.** On the clinician channels the
