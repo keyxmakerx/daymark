@@ -28,6 +28,9 @@ The same steps apply to the sync build. They are the steps in docs/FAQ.md "How d
 a new phone?", done on one phone.
 
 ### Added
+- **The Companion's Docker image runs on arm64 as well as amd64.** A Raspberry Pi, an arm64 NAS or an
+  Apple-silicon machine can pull the published image instead of building it. Each architecture is
+  built and tested on its own hardware, and the published tags point at exactly those tested images.
 - **You see the PDF report before it is saved, and choose which journal entries go in it.** After
   the report's options, **Next** shows every page as your clinician will see it, and nothing is
   written until you tap **Save PDF**. If you switch on journal entries, you first pick them one at a
