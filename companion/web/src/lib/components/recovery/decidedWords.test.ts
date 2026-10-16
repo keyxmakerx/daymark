@@ -80,7 +80,9 @@ const CHANGED: [name: string, actual: string, decided: string][] = [
   ['TOKEN_NOT_ACCEPTED', copy.TOKEN_NOT_ACCEPTED, 'This server did not accept that access token, so nothing was read.'],
   ['READ_FAILED', copy.READ_FAILED, 'What this server holds could not be read, so nothing has changed.'],
   ['ALREADY_LOCKED_HERE', copy.ALREADY_LOCKED_HERE,
-    'This server already holds your key, locked under a passphrase and a recovery code, so there is nothing to make here. To use the recovery code you already have, go to the Use a code tab.'],
+    'This server already holds your key, locked under a passphrase and a recovery code. To use the recovery code you already have, go to the Use a code tab. To replace it with a new one, open the key below.'],
+  ['REPLACE_CODE_NOT_REVOKED', copy.REPLACE_CODE_NOT_REVOKED,
+    'A replaced recovery code stops opening what this server hands out. It still opens copies made before, such as backups of this server.'],
   ['KEY_STORED_HERE', copy.KEY_STORED_HERE,
     'Your key is on your server now, locked under your passphrase and under the recovery code you wrote down.'],
   ['NOTHING_TO_OPEN', copy.NOTHING_TO_OPEN,
@@ -496,7 +498,7 @@ describe('(d) a read button under every message that asks for a read', () => {
     // The button's own label names the action and asks for nothing.
     const asking = [...new Set(READ_BY_A_PERSON.filter((s) => s !== copy.READ_ACTION && ASKS.test(s)))].sort()
     expect(asking).toEqual([...copy.READS_AGAIN].sort())
-    expect(copy.READS_AGAIN.size).toBe(5)
+    expect(copy.READS_AGAIN.size).toBe(6)
     // KEY_CHANGED_ON_SERVER asks for none: what the server holds was read again, and is below it.
     expect(copy.READS_AGAIN.has(copy.KEY_CHANGED_ON_SERVER)).toBe(false)
     expect(ASKS.test(copy.KEY_CHANGED_ON_SERVER)).toBe(false)
@@ -512,7 +514,8 @@ describe('(d) a read button under every message that asks for a read', () => {
   })
 
   it('"Get a code": its one message area sits directly above the read button', () => {
-    expect(getCode.match(/\{error\}/g)).toHaveLength(1)
+    // Two message areas: the start step's, and the replace form's own, which asks for no read.
+    expect(getCode.match(/\{error\}/g)).toHaveLength(2)
     const UNDER = /\{#if error\}\s*<Callout tone="critical">\s*<p class="para">\{error\}<\/p>\s*<\/Callout>\s*\{\/if\}\s*<div class="actions">\s*<button type="button" class="primary" onclick=\{read\}[^>]*>\s*\{busy \? READ_BUSY : READ_ACTION\}/
     expect(getCode).toMatch(UNDER)
     // The arrangement this replaced, message under the button, is seen.
@@ -559,5 +562,36 @@ describe('(d) a read button under every message that asks for a read', () => {
   it('the passphrase-change sentence is a callout’s body, never its heading', () => {
     expect(useCode).toMatch(/<Callout tone="warn">\s*<p class="para">\{PASSPHRASE_CHANGE_IS_NOT_A_REVOCATION\}<\/p>/)
     expect(titlesOf(read('lib/components/recovery/UseCodeFlow.svelte'))).not.toContain('What the old passphrase still opens')
+  })
+})
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   (e) Replacing the recovery code (#407): nothing claims the old code stopped working.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+describe('(e) a replaced recovery code is described as it is', () => {
+  const REPLACE_SENTENCES = [
+    copy.REPLACE_CODE_LEDE,
+    copy.REPLACE_CODE_NOT_REVOKED,
+    copy.REPLACE_CODE_MOVED,
+    copy.REPLACE_CODE_DID_NOT_MATCH,
+    copy.PASSPHRASE_DOES_NOT_OPEN_THIS,
+  ]
+  const FALSE_CLAIM = /no longer works?|stops? working|is now useless|cannot (?:be used|open) anything|revoked/i
+
+  it('positive control: the detector sees the false claim when it is planted', () => {
+    expect(FALSE_CLAIM.test('Your old code no longer works.')).toBe(true)
+  })
+
+  it('no replacement sentence says the old code stopped working, and one says what it still opens', () => {
+    expect(REPLACE_SENTENCES.filter((s) => FALSE_CLAIM.test(s))).toEqual([])
+    expect(copy.REPLACE_CODE_NOT_REVOKED).toContain('still opens copies made before')
+    expect(copy.REPLACE_CODE_NOT_REVOKED).toContain('stops opening what this server hands out')
+  })
+
+  it('every replacement sentence uses "recovery code", never a bare "code"', () => {
+    const BARE = /(?<!recovery )\bcode\b/i
+    expect(BARE.test('the new code')).toBe(true)
+    expect(REPLACE_SENTENCES.filter((s) => BARE.test(s))).toEqual([])
   })
 })

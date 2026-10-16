@@ -28,6 +28,13 @@ The same steps apply to the sync build. They are the steps in docs/FAQ.md "How d
 a new phone?", done on one phone.
 
 ### Added
+- **You can replace your recovery code.** On the Recovery code tab, when your server already holds
+  your key, open it with your passphrase or your current recovery code and make a new one. The new
+  recovery code is shown once and checked as written down, like the first; your passphrase is
+  unchanged. A replaced recovery code stops opening what this server hands out, and still opens
+  copies made before, such as backups of the server, and the screen says exactly that. If the
+  server takes the new version but what it hands back cannot be checked, the new recovery code is
+  shown anyway, with a button to read again, so no recovery lock is left that nobody holds a code for.
 - **The Companion's Docker image runs on arm64 as well as amd64.** A Raspberry Pi, an arm64 NAS or an
   Apple-silicon machine can pull the published image instead of building it. Each architecture is
   built and tested on its own hardware, and the published tags point at exactly those tested images.

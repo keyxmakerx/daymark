@@ -416,15 +416,13 @@ describe('(d) where the key is, said before either flow, and nothing unbuilt dra
     const ids = copy.PLACEHOLDERS.map((p) => p.id)
     expect(ids).not.toContain('storage')
     expect(ids).not.toContain('enrolment')
-    // Replacing a code is still not built: the server takes a new version, and nothing here makes
-    // one. Its note says so rather than saying there is nowhere to publish it.
-    const rotation = copy.PLACEHOLDERS.find((p) => p.id === 'rotation')!
-    expect(rotation.body).toContain('nothing on this screen makes one yet')
-    expect(rotation.body).not.toMatch(/somewhere to publish/)
+    // Replacing a code is built (#407): its placeholder went with it, and the screen is where it was.
+    expect(ids).not.toContain('rotation')
+    expect(codeOf('NewCodeFlow.svelte')).toContain('replaceRecoveryCodeOnServer')
   })
 
   it('every placeholder names itself, its subject and where the real thing is specified', () => {
-    expect(copy.PLACEHOLDERS.length).toBeGreaterThanOrEqual(3)
+    expect(copy.PLACEHOLDERS.length).toBeGreaterThanOrEqual(2)
     const ids = copy.PLACEHOLDERS.map((p) => p.id)
     expect(new Set(ids).size).toBe(ids.length)
     for (const note of copy.PLACEHOLDERS) {
@@ -440,9 +438,8 @@ describe('(d) where the key is, said before either flow, and nothing unbuilt dra
     expect(codeOf('Placeholder.svelte')).toContain('{PLACEHOLDER_WORD}')
     expect(proseOf('Placeholder.svelte')).toContain('{PLACEHOLDER_WORD}')
     // Rendered through the shared component, so a placeholder cannot be added without the marker.
-    for (const file of ['RecoveryPanel.svelte', 'NewCodeFlow.svelte']) {
-      expect(codeOf(file), file).toContain('<Placeholder')
-    }
+    expect(codeOf('RecoveryPanel.svelte')).toContain('<Placeholder')
+    expect(codeOf('NewCodeFlow.svelte')).not.toContain('<Placeholder')
     expect(codeOf('RecoveryPanel.svelte')).toContain('{#each notBuilt as note')
   })
 
@@ -576,10 +573,9 @@ describe('(e) the register is flat, adult and non-diagnostic', () => {
   })
 
   it('says what is not built as placeholders at the foot, rather than letting the panel look finished', () => {
-    // Replacing a code, the phone, and a split: each still unbuilt, each said where a reader of the
-    // panel will find it.
+    // The phone and a split: each still unbuilt, each said where a reader of the panel will find it.
     expect(codeOf('RecoveryPanel.svelte')).toContain('const notBuilt = PLACEHOLDERS')
-    expect(copy.PLACEHOLDERS.map((p) => p.id)).toEqual(['rotation', 'devices', 'split'])
+    expect(copy.PLACEHOLDERS.map((p) => p.id)).toEqual(['devices', 'split'])
   })
 })
 

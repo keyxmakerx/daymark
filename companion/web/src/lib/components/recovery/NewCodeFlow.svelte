@@ -12,8 +12,9 @@
    *   setup    the server holds no locked key: the set-up form the owner console's door uses too
    *            (KeySetup.svelte). With nothing on the server it makes the key; with key parameters it
    *            locks the key the passphrase already opens, after proving the passphrase.
-   *   locked   the server already holds a locked key, so there is no new code to make here.
-   *            Replacing a code is not built, and says so as a placeholder.
+   *   locked   the server already holds a locked key. The key is opened with the passphrase or the
+   *            current recovery code, and a new recovery code replaces the old lock (#407); the
+   *            code then goes through the same showing and confirm steps as the first.
    *   showing  the code, large, in six numbered groups, with print and download beside it. The server
    *            has taken the key, read it back and opened it before this step is reached, so the code
    *            on screen is the one attached to the key the server holds.
@@ -47,7 +48,8 @@
   import CodeSheet from './CodeSheet.svelte'
   import WriteDownCheck from './WriteDownCheck.svelte'
   import KeySetup from './KeySetup.svelte'
-  import Placeholder from './Placeholder.svelte'
+  import GroupEntry from './GroupEntry.svelte'
+  import { emptyGroups, firstGroupProblem, groupsToTyped, type GroupProblem } from './groups'
   import type { KeyDocument } from '../../sync/client'
   import type { EnrolmentCheck, ServerKeyPorts } from '../../recovery/serverKey'
   import type { RecoverableDataKey } from '../../recovery/dataKey'
@@ -61,7 +63,17 @@
     IF_BOTH_ARE_LOST,
     KEY_CHANGED_ON_SERVER,
     KEY_STORED_HERE,
-    PLACEHOLDERS,
+    CODE_DOES_NOT_OPEN_THIS,
+    HOW_ENTRY_WORKS,
+    PASSPHRASE_DOES_NOT_OPEN_THIS,
+    REPLACE_CODE_ACTION,
+    REPLACE_CODE_DID_NOT_MATCH,
+    REPLACE_CODE_LEDE,
+    REPLACE_CODE_MOVED,
+    REPLACE_CODE_NOT_REVOKED,
+    REPLACE_CODE_TITLE,
+    REPLACE_CODE_VIA_CODE,
+    REPLACE_CODE_VIA_PASSPHRASE,
     PRINTING,
     READ_ACTION,
     READ_BACK_DID_NOT_MATCH,
@@ -110,7 +122,66 @@
   let unread = $state.raw<RecoverableDataKey | null>(null)
   let checking = $state(false)
 
-  const rotation = PLACEHOLDERS.find((p) => p.id === 'rotation')!
+  /* Replacing the recovery code (#407): how the key is opened first, and what was typed. The secrets
+     typed here are dropped as soon as they have been used. */
+  let via = $state<'passphrase' | 'code'>('passphrase')
+  let typedPassphrase = $state('')
+  let groups = $state(emptyGroups())
+  let problem = $state<GroupProblem | null>(null)
+  /** True once a replacement was sent: it picks the words for a read-back that does not match. */
+  let replacing = $state(false)
+
+  async function replaceCode() {
+    error = ''
+    notice = ''
+    problem = null
+    if (!held || held.kind !== 'wrapped' || !ports) return
+    if (via === 'passphrase' && !typedPassphrase) {
+      error = PASSPHRASE_DOES_NOT_OPEN_THIS
+      return
+    }
+    if (via === 'code') {
+      const found = firstGroupProblem(groups)
+      if (found) {
+        problem = found
+        return
+      }
+    }
+    busy = true
+    let master: Uint8Array | null = null
+    const { unwrapWithPassphrase, unwrapWithRecoveryCode, zeroizeDataKey } = await import('../../recovery/dataKey')
+    try {
+      try {
+        master =
+          via === 'passphrase'
+            ? await unwrapWithPassphrase(held.wrapped, typedPassphrase)
+            : await unwrapWithRecoveryCode(held.wrapped, groupsToTyped(groups))
+      } catch {
+        error = via === 'passphrase' ? PASSPHRASE_DOES_NOT_OPEN_THIS : CODE_DOES_NOT_OPEN_THIS
+        return
+      }
+      typedPassphrase = ''
+      groups = emptyGroups()
+      const { replaceRecoveryCodeOnServer } = await import('../../recovery/serverKey')
+      const out = await replaceRecoveryCodeOnServer(ports, held, master)
+      if (out.kind === 'moved') {
+        held = out.now
+        notice = REPLACE_CODE_MOVED
+        step = out.now.kind === 'wrapped' ? 'locked' : 'setup'
+      } else {
+        replacing = true
+        code = out.recoveryCode
+        // Whether the version is the one the server serves is not known: the code is shown all the same.
+        if (out.kind !== 'written') unread = out.sent
+        step = 'showing'
+      }
+    } catch {
+      error = READ_FAILED
+    } finally {
+      zeroizeDataKey(master)
+      busy = false
+    }
+  }
 
   /** Read what the server holds, with the sync card's address and token. Nothing is written here. */
   async function read() {
@@ -186,7 +257,7 @@
       } else if (out.kind === 'other') {
         code = null
         unread = null
-        keyLost(READ_BACK_DID_NOT_MATCH)
+        keyLost(replacing ? REPLACE_CODE_DID_NOT_MATCH : READ_BACK_DID_NOT_MATCH)
       }
     } finally {
       checking = false
@@ -281,9 +352,47 @@
       <div class="stack">
         {#if notice}<p class="para" role="status">{notice}</p>{/if}
         <p class="para">{ALREADY_LOCKED_HERE}</p>
-        <Placeholder title={rotation.title} specifiedAt={rotation.specifiedAt}>
-          <p class="para">{rotation.body}</p>
-        </Placeholder>
+        <h3 class="sub">{REPLACE_CODE_TITLE}</h3>
+        <p class="para">{REPLACE_CODE_LEDE}</p>
+        <p class="para muted-para">{REPLACE_CODE_NOT_REVOKED}</p>
+
+        <div class="actions" role="group" aria-label="How to open the key">
+          <button type="button" aria-pressed={via === 'passphrase'} onclick={() => (via = 'passphrase')} disabled={busy}>{REPLACE_CODE_VIA_PASSPHRASE}</button>
+          <button type="button" aria-pressed={via === 'code'} onclick={() => (via = 'code')} disabled={busy}>{REPLACE_CODE_VIA_CODE}</button>
+        </div>
+
+        {#if via === 'passphrase'}
+          <label class="field">
+            <span>Passphrase</span>
+            <input type="password" autocomplete="current-password" bind:value={typedPassphrase} disabled={busy} />
+          </label>
+        {:else}
+          <p class="para">{HOW_ENTRY_WORKS}</p>
+          <GroupEntry
+            {groups}
+            onchange={(next) => { groups = next; problem = null; error = '' }}
+            problemGroup={problem?.group ?? null}
+            describedBy="replace-code-message"
+            disabled={busy}
+            legend="The six groups of your current recovery code"
+          />
+        {/if}
+
+        <div id="replace-code-message" role="status" aria-live="polite">
+          {#if problem}
+            <Callout tone="warn" title={problem.message}>
+              {#if problem.detail}<p class="para">{problem.detail}</p>{/if}
+            </Callout>
+          {:else if error}
+            <Callout tone="warn"><p class="para">{error}</p></Callout>
+          {/if}
+        </div>
+
+        <div class="actions">
+          <button type="button" class="primary" onclick={replaceCode} disabled={busy}>
+            {busy ? 'Deriving the key — this takes a few seconds' : REPLACE_CODE_ACTION}
+          </button>
+        </div>
       </div>
     </Card>
   {/if}
@@ -376,6 +485,19 @@
     font-size: 0.9rem;
     line-height: 1.55;
     color: var(--ink-text);
+  }
+
+  .sub {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    max-width: 24rem;
+    font-size: 0.9rem;
   }
 
   .muted-para,

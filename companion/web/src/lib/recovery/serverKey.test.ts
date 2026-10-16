@@ -47,6 +47,7 @@ import {
   confirmStored,
   enrolmentCheck,
   replacePassphraseOnServer,
+  replaceRecoveryCodeOnServer,
   serverKeyPorts,
   setUp,
   type ServerKeyPorts,
@@ -412,6 +413,61 @@ describe('(d) a new passphrase, stored as the next version', () => {
     expect(await replacePassphraseOnServer(s.ports, held, made.dataKey, '', '')).toEqual({ kind: 'refused', fault: 'noPassphrase' })
     expect(spy.log).toEqual([])
   })
+})
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   (e) A new recovery code after the key was opened (#407).
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+describe('(e) a new recovery code, stored as the next version', () => {
+  let made: Awaited<ReturnType<typeof createRecoverableDataKey>>
+  const heldOf = () => ({ kind: 'wrapped' as const, wrapped: made.blob, version: 1, etag: '"v1"' })
+
+  beforeAll(async () => {
+    made = await createRecoverableDataKey(PASS)
+  }, 60_000)
+
+  it('writes version 2: the new code opens what the server serves, the old one no longer does, the passphrase still does', async () => {
+    const s = fakeServer({ wrapped: [made.blob] })
+    spy.log.length = 0
+    const out = await replaceRecoveryCodeOnServer(s.ports, heldOf(), made.dataKey)
+    expect(out.kind).toBe('written')
+    if (out.kind !== 'written') return
+    expect(spy.log).toEqual(['replace 2', 'read'])
+    // The new code is not the old one (a mutation derived from the values, never a literal).
+    expect(out.recoveryCode.canonical).not.toBe(made.recoveryCode.canonical)
+    const served = s.state.wrapped[s.state.wrapped.length - 1]!
+    expect(b64(await unwrapWithRecoveryCode(served, out.recoveryCode.canonical))).toBe(b64(made.dataKey))
+    await expect(unwrapWithRecoveryCode(served, made.recoveryCode.canonical)).rejects.toThrow()
+    expect(b64(await unwrapWithPassphrase(served, PASS))).toBe(b64(made.dataKey))
+    // Positive control for "no longer opens": the old code does open the version it came from, so a
+    // copy made before (a backup) still opens, which is why the screen never says it stopped working.
+    expect(b64(await unwrapWithRecoveryCode(made.blob, made.recoveryCode.canonical))).toBe(b64(made.dataKey))
+  }, 180_000)
+
+  it('a version another device wrote first (409) hands back what is there and stores nothing', async () => {
+    const s = fakeServer({ wrapped: [made.blob, made.blob] })
+    const out = await replaceRecoveryCodeOnServer(s.ports, heldOf(), made.dataKey)
+    expect(out.kind).toBe('moved')
+    expect(s.state.wrapped).toHaveLength(2)
+  }, 60_000)
+
+  it('a read-back that opens with the new code to another master is "unchecked", and the code is still handed back', async () => {
+    const other = await createRecoverableDataKey(PASS)
+    const s = fakeServer({ wrapped: [made.blob] })
+    s.state.readBackAs = { kind: 'wrapped', wrapped: other.blob, version: 2, etag: '"v2"' }
+    const out = await replaceRecoveryCodeOnServer(s.ports, heldOf(), made.dataKey)
+    expect(out.kind).toBe('unchecked')
+    expect(out.kind === 'unchecked' && out.recoveryCode.display.length).toBeGreaterThan(0)
+  }, 120_000)
+
+  it('an answer that was lost leaves the code with the person, because the version may be on the server', async () => {
+    const s = fakeServer({ wrapped: [made.blob] })
+    s.state.replaceFails = 'lost'
+    const out = await replaceRecoveryCodeOnServer(s.ports, heldOf(), made.dataKey)
+    expect(out.kind).toBe('unread')
+    expect(out.kind === 'unread' && out.recoveryCode.display.length).toBeGreaterThan(0)
+  }, 60_000)
 })
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════

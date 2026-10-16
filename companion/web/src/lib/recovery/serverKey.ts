@@ -53,6 +53,7 @@ import type { LaneKey } from '../lane/lane'
 import {
   createRecoverableDataKey,
   replacePassphrase,
+  rotateRecoveryCode,
   unwrapWithPassphrase,
   unwrapWithRecoveryCode,
   zeroizeDataKey,
@@ -390,6 +391,67 @@ export async function replacePassphraseOnServer(
   const opened = await unwrapWithPassphrase(back.wrapped, passphrase).catch(() => null)
   try {
     return opened && same(opened, master) ? { kind: 'written' } : { kind: 'unchecked', sent: next }
+  } finally {
+    zeroizeDataKey(opened)
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   A new recovery code, after the key has been opened (#407).
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+export type ReplaceCodeResult =
+  /**
+   * Stored as the next version, read back, and opened with the new code to the same master. The new
+   * code is here once, for the screen to show.
+   */
+  | { kind: 'written'; recoveryCode: RecoveryCode }
+  /** The server's 409: another device wrote a version first. Nothing from here was stored. */
+  | { kind: 'moved'; now: KeyDocument }
+  /**
+   * The version was taken, and what the server handed back did not open to the same master with the
+   * new code. The code is here to be shown all the same: the lock it opens may be the one the server
+   * holds, and a lock nobody holds the code for is what this screen exists to clear. `sent` is for
+   * confirmStored() to compare a later read against.
+   */
+  | { kind: 'unchecked'; recoveryCode: RecoveryCode; sent: RecoverableDataKey }
+  /** The version may be on the server and could not be read back. The code and `sent` are as above. */
+  | { kind: 'unread'; recoveryCode: RecoveryCode; sent: RecoverableDataKey }
+
+/**
+ * Make a new recovery code for the open master and store it as the next version (dataKey.ts
+ * rotateRecoveryCode(): the new recovery lock replaces the old one, the passphrase lock is kept, and
+ * the master does not move). The caller keeps the master it opened, and wipes it; this does not.
+ *
+ * A replaced code stops opening what this server hands out. It still opens copies made before, such
+ * as backups of the server, because the master does not move; the screen says exactly that and never
+ * that the old code no longer works.
+ */
+export async function replaceRecoveryCodeOnServer(
+  ports: ServerKeyPorts,
+  held: Extract<KeyDocument, { kind: 'wrapped' }>,
+  master: Uint8Array,
+): Promise<ReplaceCodeResult> {
+  const { blob: next, recoveryCode } = await rotateRecoveryCode(held.wrapped, master)
+  let taken: 'written' | 'moved'
+  try {
+    taken = await ports.replace(held.version + 1, next)
+  } catch {
+    // No answer this module can trust: the version may be on the server, so the code is kept.
+    return { kind: 'unread', recoveryCode, sent: next }
+  }
+  if (taken === 'moved') return { kind: 'moved', now: await ports.read() }
+  let back: KeyDocument
+  try {
+    back = await ports.read()
+  } catch {
+    return { kind: 'unread', recoveryCode, sent: next }
+  }
+  if (back.kind !== 'wrapped') return { kind: 'unchecked', recoveryCode, sent: next }
+  // Opening is not enough: a lock made under this same code over another master opens too.
+  const opened = await unwrapWithRecoveryCode(back.wrapped, recoveryCode.display).catch(() => null)
+  try {
+    return opened && same(opened, master) ? { kind: 'written', recoveryCode } : { kind: 'unchecked', recoveryCode, sent: next }
   } finally {
     zeroizeDataKey(opened)
   }
