@@ -20,6 +20,15 @@ val keystoreProps = Properties().apply {
 val releaseStorePath: String? =
     keystoreProps.getProperty("storeFile") ?: System.getenv("KEYSTORE_FILE")
 
+// The version a release is published under comes from the release's own tag: release.yml passes it
+// as -PreleaseVersion, so whatever tag the maintainer types is what Settings ▸ About shows. Without
+// it (every ordinary build) the app is the version below. versionCode is derived from the same
+// numbers, major*10000 + minor*100 + patch, so a later release always installs over an earlier one.
+val appVersionName: String = (findProperty("releaseVersion") as String?)?.takeIf { it.isNotBlank() } ?: "0.4.1"
+val appVersionCode: Int = Regex("""^(\d+)\.(\d+)\.(\d+)""").find(appVersionName)
+    ?.destructured?.let { (major, minor, patch) -> major.toInt() * 10000 + minor.toInt() * 100 + patch.toInt() }
+    ?: error("version $appVersionName is not <major>.<minor>.<patch>[-label]")
+
 android {
     namespace = "com.daymark.app"
     // 36, not 35: AGP 9.0 flips the AarMetadata default so a consumer must compile against the
@@ -38,8 +47,8 @@ android {
         // Stays 35, and stays EXPLICIT. AGP 9 defaults targetSdk to compileSdk when unset, so an
         // implicit value would silently become 36 and opt the app into new runtime behaviour.
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.4.1"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

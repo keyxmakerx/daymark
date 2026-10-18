@@ -19,9 +19,10 @@ name: Companion
 on:
   push:
     branches: ["**"]
-    # A release tag (the same `v*` tag release.yml publishes the app under) builds, tests and
-    # publishes the image under that version. Path filters are not applied to tag pushes.
-    tags: ["v*"]
+    # A release tag (the same version tag release.yml publishes the app under, with or without its
+    # `v`) builds, tests and publishes the image under that version. Path filters are not applied
+    # to tag pushes.
+    tags: ["v*", "[0-9]*"]
     paths:
       - "companion/**"
       - ".github/workflows/companion.yml"
@@ -484,7 +485,7 @@ jobs:
       # main, release tags and manual dispatch only. Never on pull_request: that would publish
       # code from a fork under this repository's name, before review.
       - name: Log in to GHCR
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')))
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -492,7 +493,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push this architecture's tested image to GHCR
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')))
         run: |
           set -euo pipefail
           # GHCR rejects uppercase in the path, and a GitHub owner may legitimately contain
@@ -508,7 +509,7 @@ jobs:
     name: Publish — one image for amd64 and arm64
     runs-on: ubuntu-latest
     needs: [docker] # both architectures built, booted and probed
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')))
     permissions:
       contents: read
       packages: write
@@ -539,15 +540,15 @@ jobs:
           # anyone, so it is safe to publish from any ref a maintainer chooses to dispatch.
           tags=("-t" "$image:$short")
 
-          # THE RELEASE TAG, FROM A `v*` TAG ONLY: `v0.4.1` publishes `:0.4.1`, the
+          # THE RELEASE TAG, FROM A VERSION TAG ONLY: `v0.4.1` or `0.4.1` publishes `:0.4.1`, the
           # version an operator pins, writes down and reports. Like `sha-`, it names one build; it
           # does not move `:latest`, which follows main.
           version=""
           case "${{ github.ref }}" in
-            refs/tags/v*)
+            refs/tags/*)
               version="${GITHUB_REF_NAME#v}"
               if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
-                echo "::error::tag ${GITHUB_REF_NAME} is not v<major>.<minor>.<patch>[-label]; nothing more is published"
+                echo "::error::tag ${GITHUB_REF_NAME} is not [v]<major>.<minor>.<patch>[-label]; nothing more is published"
                 exit 1
               fi
               tags+=("-t" "$image:$version")
