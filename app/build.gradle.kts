@@ -39,7 +39,7 @@ android {
         // implicit value would silently become 36 and opt the app into new runtime behaviour.
         targetSdk = 35
         versionCode = 4
-        versionName = "0.4.0-beta.1"
+        versionName = "0.4.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

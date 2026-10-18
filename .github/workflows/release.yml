@@ -36,8 +36,8 @@ jobs:
       # One `v*` tag releases the APK here and the Companion image in companion.yml, which publishes
       # the image as the tag minus its `v`. The APK carries its own versionName from
       # app/build.gradle.kts, so the tag must equal it, or the release page, the image and Settings ▸
-      # About would each name a different version. A tag with a label (`-beta.1`) is published as
-      # a pre-release.
+      # About would each name a different version. A 0.x tag, or one with a label (`-beta.1`), is
+      # published as a pre-release: before 1.0 every release is a beta.
       - name: Check the tag matches the app's version
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
@@ -147,4 +147,4 @@ jobs:
             app/build/outputs/apk/foss/release/app-foss-release.apk.sha256
           body_path: ${{ runner.temp }}/release-notes.md
           generate_release_notes: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(github.ref_name, '-') || startsWith(github.ref_name, 'v0.') }}
