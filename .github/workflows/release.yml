@@ -2,7 +2,8 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
+    # Any version tag, typed with or without its "v": `v0.4.1` and `0.4.1` both release 0.4.1.
+    tags: ["v*", "[0-9]*"]
   workflow_dispatch:
 
 permissions:
@@ -33,23 +34,27 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
-      # One `v*` tag releases the APK here and the Companion image in companion.yml, which publishes
-      # the image as the tag minus its `v`. The APK carries its own versionName from
-      # app/build.gradle.kts, so the tag must equal it, or the release page, the image and Settings ▸
-      # About would each name a different version. A 0.x tag, or one with a label (`-beta.1`), is
-      # published as a pre-release: before 1.0 every release is a beta.
-      - name: Check the tag matches the app's version
-        if: startsWith(github.ref, 'refs/tags/v')
+      # One version tag releases the APK here and the Companion image in companion.yml, both
+      # under the tag minus any leading `v`. The version comes from the tag and nothing else: it is
+      # handed to the build below, so the release page, the image and Settings ▸ About always name
+      # the same version. A 0.x version, or one with a label (`-beta.1`), is published as a
+      # pre-release: before 1.0 every release is a beta.
+      - name: Read the version from the tag
+        id: version
         run: |
-          app=$(sed -n 's/^ *versionName = "\(.*\)"$/\1/p' app/build.gradle.kts)
-          if [ -z "$app" ]; then
-            echo "::error::could not read versionName from app/build.gradle.kts"
+          version="${GITHUB_REF_NAME#v}"
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
+            echo "not a tag push; the app keeps the version in app/build.gradle.kts"
+            echo "value=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::tag ${GITHUB_REF_NAME} is not a version like 0.4.1 or v0.4.1-beta.1; nothing is published"
             exit 1
           fi
-          if [ "${GITHUB_REF_NAME#v}" != "$app" ]; then
-            echo "::error::tag ${GITHUB_REF_NAME} does not match the app's versionName $app; tag v$app instead"
-            exit 1
-          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          case "$version" in 0.*|*-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;; *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;; esac
+          echo "Releasing version $version"
 
       # A release is signed with the release key or it is not published (#224). The app's build
       # falls back to the committed testing key when no keystore is given, which keeps build.yml
@@ -77,7 +82,7 @@ jobs:
           fi
           echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
           export KEYSTORE_FILE="$RUNNER_TEMP/release.keystore"
-          ./gradlew assembleFossRelease --stacktrace
+          ./gradlew assembleFossRelease --stacktrace -PreleaseVersion="${{ steps.version.outputs.value }}"
 
       # Defense in depth: re-verify here too, not just in build.yml's PR checks — a tag can be
       # pushed against a commit/ref that never ran those checks.
@@ -147,4 +152,4 @@ jobs:
             app/build/outputs/apk/foss/release/app-foss-release.apk.sha256
           body_path: ${{ runner.temp }}/release-notes.md
           generate_release_notes: true
-          prerelease: ${{ contains(github.ref_name, '-') || startsWith(github.ref_name, 'v0.') }}
+          prerelease: ${{ steps.version.outputs.prerelease == 'true' }}
