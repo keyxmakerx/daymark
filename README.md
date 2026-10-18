@@ -7,7 +7,7 @@ also keeps a free-form journal, shows your history as a sky of stars and as plai
 sleep, and holds your goals and your own safety plan. It is stored locally and encrypted, with no
 accounts, no servers and no tracking. Because there is no backend, it is free for everyone.
 
-> **Status.** The Android app is at version 0.4.0-beta.1, the first beta: built, usable and sideloadable. The optional,
+> **Status.** The Android app is at version 0.4.1, the first beta: built, usable and sideloadable. The optional,
 > self-hosted **Companion** is built too: a server plus web consoles that let a person share a chosen,
 > encrypted view with a clinician. In the opt-in `sync` build the phone pairs with a Companion and sends it an encrypted copy of the
 > journal; the phone does not yet take anything back, so the Companion's pages are where its data is read. Everything open is tracked on GitHub; start at the
@@ -66,7 +66,7 @@ Pre-built APKs are attached to each [GitHub release](https://github.com/keyxmake
 Daymark is not on the Play Store, so Android shows an "unknown app" warning when you sideload it.
 That is expected for any app installed that way.
 
-**If you installed a build from before 0.4.0**, its id was `com.daymark.app`; from 0.4.0 it is
+**If you installed a build from before 0.4.1**, its id was `com.daymark.app`; from 0.4.1 it is
 `io.github.keyxmakerx.daymark` for good (#369). The new build installs as a second, empty Daymark.
 To bring your entries across:
 

@@ -539,7 +539,7 @@ jobs:
           # anyone, so it is safe to publish from any ref a maintainer chooses to dispatch.
           tags=("-t" "$image:$short")
 
-          # THE RELEASE TAG, FROM A `v*` TAG ONLY: `v0.4.0-beta.1` publishes `:0.4.0-beta.1`, the
+          # THE RELEASE TAG, FROM A `v*` TAG ONLY: `v0.4.1` publishes `:0.4.1`, the
           # version an operator pins, writes down and reports. Like `sha-`, it names one build; it
           # does not move `:latest`, which follows main.
           version=""
