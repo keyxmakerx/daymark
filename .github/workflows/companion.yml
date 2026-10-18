@@ -590,7 +590,10 @@ jobs:
 
           # The digest is the only reference that is both immutable AND verifiable — a tag can be
           # force-pushed, a digest cannot. It answers "is the running image the one CI tested?"
-          digest=$(docker buildx imagetools inspect "$image:$short" | awk '$1 == "Digest:" { print $2; exit }')
+          # awk reads to the end rather than exiting at the first match: under pipefail, an early
+          # exit can close the pipe while docker is still writing, and docker then fails the step
+          # after a good push, but only when the timing is unlucky.
+          digest=$(docker buildx imagetools inspect "$image:$short" | awk '$1 == "Digest:" && !d { d = $2 } END { print d }')
           if [ -z "$digest" ]; then
             echo "::error::pushed but could not read back a digest — do not treat this image as pinned"
             exit 1
