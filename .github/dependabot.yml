@@ -81,7 +81,7 @@ updates:
       # --- Room: constraint LIFTED -------------------------------------------------------------
       # There was a `>=2.7.0` bound here because 2.7 empties androidx.room:room-ktx into
       # room-runtime ("the artifact is now blank. Please remove it from your dependency list")
-      # and this repo declared it. That work is DONE: the project is on Room 2.8.4, room-ktx is
+      # and this repo declared it. That work is DONE: the project is on Room 2.8.5, room-ktx is
       # no longer declared, and schema export runs through the Room Gradle plugin with a CI guard
       # on app/schemas. So Room updates flow normally again. Recorded rather than silently deleted,
       # so nobody re-adds the bound from the old docs.
@@ -112,6 +112,11 @@ updates:
         versions: [">=2.11.0"]
       - dependency-name: "androidx.hilt:*"
         versions: [">=1.4.0"]
+      # Compose BOM 2026.09.00 maps to Compose 1.12.x, whose runtime-saveable and ui artifacts
+      # fail CheckAarMetadata the same way (PR #469). The BOM is the only Compose coordinate
+      # the catalog versions, so bounding it holds every Compose artifact.
+      - dependency-name: "androidx.compose:compose-bom"
+        versions: [">=2026.09.00"]
       # Not in the failure list itself, but androidx.navigationevent:1.0.0 was — and it arrives with
       # navigation 2.9.x. Bounded conservatively rather than risk a second red main to find out;
       # over-blocking costs a skipped update, under-blocking costs a broken default branch.
