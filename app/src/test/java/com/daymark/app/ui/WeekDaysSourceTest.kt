@@ -58,7 +58,7 @@ class WeekDaysSourceTest {
         val INSIGHTS_WEEK = listOf("WeekDays", "WeekdayHeader", "DayRow", "DayCell", "MoodDots")
 
         /** The Home composables the strip passes through. */
-        val HOME_WEEK = listOf("GlanceRow", "WeekGlance")
+        val HOME_WEEK = listOf("GlanceRow", "WeekGlance", "EmptyDayStub")
 
         /**
          * A day reduced to one number or one mood, two colours mixed into one, or the 30-day trend of

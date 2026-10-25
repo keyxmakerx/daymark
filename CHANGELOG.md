@@ -57,6 +57,9 @@ a new phone?", done on one phone.
 - **Each release lists its APK's SHA-256**, in the notes and as a `.sha256` file beside it (#226).
 
 ### Fixed
+- **Home's week strip no longer looks like an empty button.** Each day carries its weekday's
+  initial, and a day with no entry shows a faint stub, so a week with one entry reads as seven days
+  rather than a lone dot (#398).
 - **A release can no longer be signed with the testing key.** The release stops before building
   when a signing secret is missing, and refuses to publish an APK signed with a debug key (#224).
 - **Settings tells the truth about a forgotten PIN**: without biometrics the way back is to

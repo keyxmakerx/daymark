@@ -8,13 +8,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -28,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -40,6 +42,7 @@ import com.daymark.app.model.Mood
 import com.daymark.app.stats.Greeting
 import com.daymark.app.stats.Signals
 import com.daymark.app.ui.calendar.CalendarDays
+import com.daymark.app.ui.components.MOOD_DOT_MARK_DP
 import com.daymark.app.ui.components.CompactEntryRow
 import com.daymark.app.ui.components.MoodDot
 import com.daymark.app.ui.components.MoodFaceIcon
@@ -273,12 +276,18 @@ private fun GlancePill(text: String, modifier: Modifier = Modifier) {
  * At most [CalendarDays.STRIP_MAX_DOTS] a day, in one column: three ringed dots and their gaps take
  * 28 dp of the strip's 30. A fuller day keeps the newest entry of each mood it holds, up to three
  * moods ([CalendarDays.dots]); the day's own view lists every entry, so there is no count and no
- * "+n". A day with no entry is the same slot with no dots: no faint stub and no mark of any kind.
- * Whether an empty day should carry one is #398.
+ * "+n".
+ *
+ * Every slot carries its weekday's initial underneath, today's in the full ink, and a day with no
+ * entry holds a faint stub in the hairline colour (#398). Without both, a week with one entry in it
+ * is a single dot in an empty card, which reads as a button with nothing written on it rather than
+ * as seven days. The stub is the same for every empty day and never a mood colour: a gap is not a
+ * failure, it is only a day.
  *
  * A screen reader hears each day as the month says it ([CalendarDays.description]), in words for
  * exactly the dots drawn: "3 September: Good, Meh", "3 September: nothing recorded", and
- * "26 September, today: …".
+ * "26 September, today: …". The initial is cleared from its tree, since the day's words already
+ * name it.
  */
 @Composable
 private fun WeekGlance(
@@ -291,8 +300,7 @@ private fun WeekGlance(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(WeekGlanceHeight + 20.dp)
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             week.days.forEach { date ->
@@ -308,20 +316,49 @@ private fun WeekGlance(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxHeight()
                         .semantics { contentDescription = description },
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(StripDotGap, Alignment.CenterVertically),
                 ) {
-                    CalendarDays.dots(moods, cap = CalendarDays.STRIP_MAX_DOTS).forEach { level -> MoodDot(level) }
+                    Column(
+                        modifier = Modifier.fillMaxWidth().height(WeekGlanceHeight),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(StripDotGap, Alignment.CenterVertically),
+                    ) {
+                        val dots = CalendarDays.dots(moods, cap = CalendarDays.STRIP_MAX_DOTS)
+                        if (dots.isEmpty()) EmptyDayStub()
+                        dots.forEach { level -> MoodDot(level) }
+                    }
+                    Text(
+                        text = date.dayOfWeek.getDisplayName(java.time.format.TextStyle.NARROW, Locale.getDefault()),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (date == today) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().clearAndSetSemantics {},
+                    )
                 }
             }
         }
     }
 }
 
+/** A day with no entry on Home's week strip: a short faint dash, the same for every such day (#398). */
+@Composable
+private fun EmptyDayStub() {
+    Box(
+        Modifier
+            .size(width = MOOD_DOT_MARK_DP.dp, height = EmptyDayStubHeight)
+            .clip(RoundedCornerShape(50))
+            .background(MaterialTheme.colorScheme.outlineVariant),
+    )
+}
+
 private val WeekGlanceHeight = 30.dp
 private val StripDotGap = 2.dp
+private val EmptyDayStubHeight = 2.dp
 
 /**
  * Today's entries — or a single quiet line when there aren't any yet. Kept as its own sheet so the
