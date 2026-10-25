@@ -79,6 +79,13 @@ entry with its activities and people. The swipe on its own never deletes anythin
 delete button also asks, and says there is no undo behind it. [ARCHITECTURE.md](ARCHITECTURE.md) §6
 has the rules for changing any of this.
 
+Leaving an editor never loses writing silently (#486). In the entry and goal editors the back arrow
+and the system Back gesture both ask "Save your changes?" when something changed, with **Save**
+(when the form can be saved) and **Leave without saving**. In the journal and thought-record editors
+both save, as the arrow always did. The bin in the journal, thought-record and goal editors asks
+before deleting. Turning the phone no longer brings back the PIN screen, and an app the system
+restarted in the background starts locked.
+
 ### 1.5 Suggestions
 
 Suggestion cards are chosen by fixed rules over the person's own data

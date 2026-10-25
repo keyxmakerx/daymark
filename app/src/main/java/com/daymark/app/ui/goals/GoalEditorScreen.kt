@@ -31,7 +31,10 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import com.daymark.app.ui.components.DaymarkSwitch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import com.daymark.app.ui.components.ConfirmDeleteDialog
+import com.daymark.app.ui.components.UnsavedChangesDialog
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,19 +62,39 @@ fun GoalEditorScreen(
     LaunchedEffect(state.saved) {
         if (state.saved) onDone()
     }
+    // The back arrow and the system Back gesture are one way out, and both ask before a change is
+    // lost; the bin asks before a goal and its steps go (#486).
+    var confirmingLeave by rememberSaveable { mutableStateOf(false) }
+    var confirmingDelete by rememberSaveable { mutableStateOf(false) }
+    fun leave() { if (viewModel.hasUnsavedChanges()) confirmingLeave = true else onDone() }
+    BackHandler(enabled = !confirmingLeave) { leave() }
+    if (confirmingLeave) {
+        UnsavedChangesDialog(
+            onSave = if (state.canSave) ({ confirmingLeave = false; viewModel.save() }) else null,
+            onDiscard = { confirmingLeave = false; onDone() },
+            onKeepEditing = { confirmingLeave = false },
+        )
+    }
+    if (confirmingDelete) {
+        ConfirmDeleteDialog(
+            what = "goal",
+            onDelete = { confirmingDelete = false; viewModel.delete() },
+            onKeep = { confirmingDelete = false },
+        )
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(if (state.isEditing) "Edit goal" else "New goal") },
                 navigationIcon = {
-                    IconButton(onClick = onDone) {
+                    IconButton(onClick = { leave() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
                     if (state.isEditing) {
-                        IconButton(onClick = viewModel::delete) {
+                        IconButton(onClick = { confirmingDelete = true }) {
                             Icon(Icons.Filled.Delete, contentDescription = "Delete")
                         }
                     }

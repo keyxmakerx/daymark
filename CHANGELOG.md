@@ -63,6 +63,11 @@ a new phone?", done on one phone.
 - **Each release lists its APK's SHA-256**, in the notes and as a `.sha256` file beside it (#226).
 
 ### Fixed
+- **Back no longer throws away what you wrote.** In a check-in or a goal, the back arrow and the
+  Back gesture both ask "Save your changes?" when something changed. In the journal and a thought
+  record, the Back gesture now saves, as the arrow always did; it used to discard. The bin in the
+  journal, thought records and goals asks before deleting. Turning the phone no longer sends you
+  back to the PIN screen (#486).
 - **Reminders no longer stop without a word.** Every reminder is re-armed whenever the app starts,
   and a reminder is re-armed before its notification is shown, so one that failed to show still
   comes tomorrow. On phones that don't allow exact alarms (Android 14 by default), reminders, Try

@@ -27,9 +27,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import com.daymark.app.ui.components.ConfirmDeleteDialog
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -46,6 +49,16 @@ fun ThoughtRecordEditorScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     LaunchedEffect(state.saved) { if (state.saved) onDone() }
+    // System Back saves, as the back arrow does (#486).
+    BackHandler { viewModel.save() }
+    var confirmingDelete by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    if (confirmingDelete) {
+        ConfirmDeleteDialog(
+            what = "thought record",
+            onDelete = { confirmingDelete = false; viewModel.delete() },
+            onKeep = { confirmingDelete = false },
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -58,7 +71,7 @@ fun ThoughtRecordEditorScreen(
                 },
                 actions = {
                     if (state.isEditing) {
-                        IconButton(onClick = viewModel::delete) {
+                        IconButton(onClick = { confirmingDelete = true }) {
                             Icon(Icons.Filled.Delete, contentDescription = "Delete")
                         }
                     }

@@ -25,7 +25,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import com.daymark.app.ui.components.ConfirmDeleteDialog
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -48,6 +50,17 @@ fun JournalEditorScreen(
     LaunchedEffect(state.saved) {
         if (state.saved) onDone()
     }
+    // The system Back gesture does what the back arrow does, which is save: it used to discard
+    // while the arrow kept, so the same intent lost writing one way and not the other (#486).
+    BackHandler { viewModel.save() }
+    var confirmingDelete by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    if (confirmingDelete) {
+        ConfirmDeleteDialog(
+            what = "journal entry",
+            onDelete = { confirmingDelete = false; viewModel.delete() },
+            onKeep = { confirmingDelete = false },
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -60,7 +73,7 @@ fun JournalEditorScreen(
                 },
                 actions = {
                     if (state.isEditing) {
-                        IconButton(onClick = viewModel::delete) {
+                        IconButton(onClick = { confirmingDelete = true }) {
                             Icon(Icons.Filled.Delete, contentDescription = "Delete")
                         }
                     }
