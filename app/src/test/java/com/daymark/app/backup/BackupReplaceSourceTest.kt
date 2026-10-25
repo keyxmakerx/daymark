@@ -92,7 +92,7 @@ class BackupReplaceSourceTest {
         // And the body-level half of the count must actually match something, or extending it was
         // inert and this suite is back to reading constructor parameters alone.
         assertTrue("goalStepDao is not counted as a door", collaborators(code).contains("goalStepDao"))
-        assertTrue("replace path not sliced", replacePath(code).length in 500..6000)
+        assertTrue("replace path not sliced", replacePath(code).length in 500..8000)
         assertFalse("replace path swallowed the merge", replacePath(code).contains("activityIdMap"))
     }
 

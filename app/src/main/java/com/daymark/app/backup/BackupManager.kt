@@ -684,6 +684,10 @@ class BackupManager @Inject constructor(
             // The sky's seed and colours are preferences, outside the transaction, so they are set
             // first and put back if the restore fails: the restored memories are then drawn in the
             // sky they were drawn in, and a failed restore leaves the sky as it was.
+            //
+            // Photos are files, also outside the transaction, so the backup's are written to a
+            // staging area first and swapped in only once the database has committed. A restore
+            // that fails part-way used to have emptied the photo folder already (#487).
             ImportMode.REPLACE -> {
                 val seedBefore = skyRepository.storedSeed()
                 val choiceBefore = skyRepository.colourChoice()
@@ -691,19 +695,28 @@ class BackupManager @Inject constructor(
                 skyRepository.restoreSeed(data.skySeed)
                 skyRepository.restoreColours(data.skyColourChoice, data.skyColourUntil)
                 try {
+                    photoStore.beginStagedRestore()
+                    data.photos.forEach { (name, b64) ->
+                        runCatching { photoStore.writeBytes(name, decodeBase64(b64), staged = true) }
+                    }
                     database.withTransaction { importReplace(data) }
+                    photoStore.commitStagedRestore()
                 } catch (e: Throwable) {
+                    photoStore.discardStagedRestore()
                     skyRepository.restoreSeed(seedBefore)
                     skyRepository.restoreColours(choiceBefore, untilBefore)
+                    rearm()
                     throw e
                 }
             }
-            ImportMode.MERGE -> importMerge(data)
+            ImportMode.MERGE -> try {
+                importMerge(data)
+            } catch (e: Throwable) {
+                rearm()
+                throw e
+            }
         }
-        // Re-arm alarms for whatever reminder set we now hold.
-        reminderRepository.rescheduleAll()
-        // And each tracker's check-ins and quick-log notification, as the restored rows say.
-        trackerCheckIns.refreshAll()
+        rearm()
         // Restore mood label/colour overrides. REPLACE starts clean; MERGE overlays.
         if (mode == ImportMode.REPLACE) moodCustomization.reset()
         data.moodLabels.forEach { (lvl, label) -> moodCustomization.setLabel(lvl, label) }
@@ -720,6 +733,17 @@ class BackupManager @Inject constructor(
         data.remindersKeepAsSet?.let { keep ->
             if (mode == ImportMode.REPLACE || !settings.remindersKeepAnswered) reminderScheduler.setKeepAsSet(keep)
         }
+    }
+
+    /**
+     * Re-arms every reminder and tracker check-in for whatever the database now holds: the restored
+     * rows after a success, the person's own after a failure, which rolled back the rows but not
+     * the alarms importReplace had cancelled (#487). Each half is tried on its own, so one that
+     * cannot run never stops the other.
+     */
+    private suspend fun rearm() {
+        runCatching { reminderRepository.rescheduleAll() }
+        runCatching { trackerCheckIns.refreshAll() }
     }
 
     private suspend fun importReplace(data: BackupData) {
@@ -740,9 +764,8 @@ class BackupManager @Inject constructor(
         sleepLogDao.deleteAll()
         treatmentDao.deleteAll()
 
-        // Restore photos under their original filenames (entries reference them by name).
-        photoStore.clearAll()
-        data.photos.forEach { (name, b64) -> runCatching { photoStore.writeBytes(name, decodeBase64(b64)) } }
+        // Photos are restored under their original filenames (entries reference them by name),
+        // staged by importFromJson and swapped in only after this transaction commits.
 
         activityDao.insertAll(
             data.activities.map { ActivityEntity(it.id, it.name, it.iconKey, it.sortOrder, it.archived) },

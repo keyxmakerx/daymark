@@ -36,6 +36,13 @@ class PhotoStore @Inject constructor(
     private val dir: File by lazy { File(context.filesDir, DIR).apply { mkdirs() } }
 
     /**
+     * Where a replace-all restore writes the backup's photos before the database commits. The
+     * person's photos stay where they are until the restore has succeeded, so a restore that fails
+     * part-way leaves them untouched (#487).
+     */
+    private val staging: File get() = File(context.filesDir, STAGING_DIR)
+
+    /**
      * Resolves a stored photo name to a file, or **null** if the name is not one we could have
      * written.
      *
@@ -113,13 +120,37 @@ class PhotoStore @Inject constructor(
      * as one, and writing it through would only be preserving something unusable — with whatever it
      * actually contains left sitting in the photo directory.
      */
-    fun writeBytes(relPath: String, bytes: ByteArray) {
+    fun writeBytes(relPath: String, bytes: ByteArray, staged: Boolean = false) {
         if (!isSafeName(relPath)) return
         val orientation = runCatching {
             bytes.inputStream().use { ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, DEFAULT_ORIENTATION) }
         }.getOrDefault(DEFAULT_ORIENTATION)
         val bitmap = decodeDownsampled { bytes.inputStream() } ?: return
-        writeStripped(bitmap, orientation, File(dir, relPath))
+        val target = if (staged) staging.apply { mkdirs() } else dir
+        writeStripped(bitmap, orientation, File(target, relPath))
+    }
+
+    /** Empties the staging area, before a restore writes into it with `writeBytes(staged = true)`. */
+    fun beginStagedRestore() {
+        runCatching { staging.deleteRecursively() }
+    }
+
+    /**
+     * The restore succeeded: the staged photos replace every stored one. A rename within the app's
+     * own files directory, one step per file, and never a byte copy: every staged file was already
+     * decoded and re-encoded on its way in (`PhotoStoreSourceTest`).
+     */
+    fun commitStagedRestore() {
+        clearAll()
+        staging.listFiles()?.forEach { f ->
+            if (isSafeName(f.name)) f.renameTo(File(dir, f.name))
+        }
+        runCatching { staging.deleteRecursively() }
+    }
+
+    /** The restore failed: the staged photos go and the stored ones are as they were. */
+    fun discardStagedRestore() {
+        runCatching { staging.deleteRecursively() }
     }
 
     /** True if a stored photo with this filename already exists. */
@@ -218,6 +249,7 @@ class PhotoStore @Inject constructor(
 
     companion object {
         const val DIR = "entry_photos"
+        private const val STAGING_DIR = "entry_photos_restoring"
         /** What an unreadable or absent orientation tag counts as: don't turn the picture. */
         private const val DEFAULT_ORIENTATION = ImageStrip.ORIENTATION_UNDEFINED
 

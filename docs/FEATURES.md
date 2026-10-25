@@ -553,12 +553,17 @@ decisions rather than a reading of the current moment: #162.
   about them, group sharing defaults, custom mood names and colours, the crisis line the person
   set (#370), and photos embedded in the file. "Replace all" takes the file's crisis line; "Merge"
   takes it only while the phone still shows the default; a file without one leaves the phone's.
+  The crisis line's number travels with it (#482), and so does the reminders' answer to "ease off
+  or keep", on the same terms (#484).
 - **Not in a backup:** the reception ledger, by design (§13.2); suggestion settings (#191); the
   latest sleep self-check results; app settings and
   the PIN.
 - **Restore** (Settings → Restore backup) either replaces everything or merges the file alongside
   what is there, with fresh ids. An older backup still reads. A backup from a newer version of the
-  app is refused.
+  app is refused. A replace that fails part-way leaves what was there: the database rolls back in
+  one transaction, the file's photos are written to a staging folder and swapped in only after it
+  commits, and every reminder and tracker check-in is re-armed whether the restore succeeded or
+  not (#487).
 - **CSV** (Settings → Export as CSV): date, time, mood, activities and note for every entry.
 - **PDF report** (Settings → Export a PDF report, "A printable copy to hand to a clinician. Not
   encrypted.") has four sides, each with one job ([DECISIONS.md](DECISIONS.md) §D8): the glance, the
