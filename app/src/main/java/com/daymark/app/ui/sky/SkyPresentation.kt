@@ -56,11 +56,12 @@ object SkyPresentation {
     const val MIN_ZOOM = 1f
 
     /**
-     * The zoom-in stop: far enough in that a star stops being a point of light and is drawn as a
-     * sun of its own (`DECISIONS.md` §D11). Overlap is accepted and resolved by zoom, never by
-     * moving a star (`docs/SKY.md` §3.1), and long before this every pair is apart.
+     * The zoom-in stop for any shape of sky: past the deepest [zoomLimit] a tall sky of many years
+     * can need, so it is [CLOSEST_SPAN] that stops the view and never this. Overlap is accepted and
+     * resolved by zoom, never by moving a star (`docs/SKY.md` §3.1), and long before this every
+     * pair is apart.
      */
-    const val MAX_ZOOM = 400f
+    const val MAX_ZOOM = 20_000f
 
     /**
      * What "maximum contrast" is, arithmetically.
@@ -88,11 +89,12 @@ object SkyPresentation {
     fun clampZoom(zoom: Float): Float = zoom.coerceIn(MIN_ZOOM, MAX_ZOOM)
 
     /**
-     * The narrowest stretch of sky one screen width can show, in the sky's own units. A memory's
-     * step along the sky's guide is 0.005, so at the closest a single star fills much of the screen
-     * and is drawn as a sun ([sunRadius]).
+     * The narrowest stretch of sky one screen width can show, in the sky's own units: a tenth of a
+     * memory's step along the sky's guide, so at the closest one star is a sun more than half the
+     * screen across ([sunRadius]), close enough to watch its surface move, and its neighbours are
+     * out of sight.
      */
-    const val CLOSEST_SPAN = 0.004f
+    const val CLOSEST_SPAN = 0.0004f
 
     /**
      * How much sky is across the screen on Today, and where the opening ends: about eight

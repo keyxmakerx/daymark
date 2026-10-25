@@ -137,7 +137,7 @@ object SkyAge {
      * The tint of a star of this [kind] and this age.
      *
      * A **landmark is exempt**: `docs/SKY.md` §3.4 says a life event alone is bigger, brighter,
-     * spiked, never redshifted and never faded, because it is a mark the person placed in order to
+     * never redshifted and never faded, because it is a mark the person placed in order to
      * find it again, and something placed to be found must not recede. It is drawn in
      * [LANDMARK_TINT], the sky's own white, at every age.
      *
