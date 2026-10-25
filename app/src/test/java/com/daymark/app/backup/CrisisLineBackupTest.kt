@@ -78,7 +78,7 @@ class CrisisLineBackupTest {
     @Test
     fun `the slices are real`() {
         assertTrue(exportBody(source).length in 1000..9000)
-        assertTrue(restoreTail(source).contains("ImportMode.MERGE -> importMerge(data)"))
+        assertTrue(restoreTail(source).contains("ImportMode.MERGE -> try {\n                importMerge(data)"))
         assertFalse("the tail ran into importReplace", restoreTail(source).contains("deleteAllEntries"))
     }
 
