@@ -479,6 +479,60 @@ class SkySurfaceSourceTest {
         assertNotEquals("the radius check is blind", CORE_RADIUS_STATEMENT, squeeze(moodyRadius))
     }
 
+    /** The bloom's strength: the zoom's share of it, and nothing about the star. */
+    private val BLOOM_STATEMENT = "val bloom = SkyStarLight.bloomAlphas(SkyStarLight.bloomShare(zoomAt(growth)))"
+
+    /** The rays' strength: the zoom's, none for a landmark or the quiet sky. */
+    private val RAYS_STATEMENT = "val rays = if (landmark || quiet) 0 else rayLevel(zoom)"
+
+    /**
+     * The bloom and the four rays are the same on every ordinary star, and neither names a mood.
+     *
+     * They are what makes a far star read as a star rather than a speck (#474), so they are
+     * presence: a mood reaching either would make one day's star louder than another's, the
+     * ranking `docs/SKY.md` §3.4 refuses. Their strength is a function of the zoom alone, which
+     * `SkyStarLightTest` holds; this holds that the renderer hands them nothing else.
+     */
+    @Test
+    fun `the bloom and the rays are the zoom's alone, and name no mood`() {
+        assertEquals(
+            "the bloom's strength is no longer the zoom's share of it and nothing else",
+            BLOOM_STATEMENT,
+            squeeze(statementFrom(sprite, "val bloom =")),
+        )
+        val bloom = gradientOn(sprite, "bloomRadius")
+        assertTrue("the bloom is no longer drawn from its own alphas", squeeze(bloom).contains("colors = bloom.map"))
+        assertFalse("the bloom names a mood", bloom.lowercase().contains("mood"))
+        assertEquals(
+            "the rays' strength is no longer the zoom's and nothing else",
+            RAYS_STATEMENT,
+            squeeze(statementFrom(sprite, "val rays =")),
+        )
+        assertTrue(
+            "the rays are no longer drawn from SkyStarLight.rayAlphas at the cached strength",
+            squeeze(sprite).contains("SkyStarLight.rayAlphas(rays / RAY_LEVELS.toFloat())"),
+        )
+    }
+
+    @Test
+    fun `the bloom and ray checks see a mood spliced into either`() {
+        val bloomCall = "SkyStarLight.bloomShare(zoomAt(growth))"
+        assertTrue("the bloom's share has moved", sprite.contains(bloomCall))
+        val moodyBloom = sprite.replace(bloomCall, "SkyStarLight.bloomShare(zoomAt(growth)) * SkyGlyph.haloPeakAlpha(kind, $MOOD)")
+        assertNotEquals("the planted factor did not change the source", sprite, moodyBloom)
+        assertNotEquals("the bloom check is blind", BLOOM_STATEMENT, squeeze(statementFrom(moodyBloom, "val bloom =")))
+
+        val bloomColours = "colors = bloom.map { tint.copy(alpha = it) }"
+        assertTrue("the bloom's colours have moved", sprite.contains(bloomColours))
+        val moodyColours = sprite.replace(bloomColours, "colors = bloom.map { tint.copy(alpha = it * $MOOD) }")
+        assertTrue("the bloom mood check is blind", gradientOn(moodyColours, "bloomRadius").lowercase().contains("mood"))
+
+        val rays = statementFrom(sprite, "val rays =")
+        val moodyRays = rays.replace("rayLevel(zoom)", "rayLevel(zoom * $MOOD)")
+        assertNotEquals("the planted ray strength did not change", rays, moodyRays)
+        assertNotEquals("the ray check is blind", RAYS_STATEMENT, squeeze(moodyRays))
+    }
+
     /**
      * The other half, so none of the absences above is an absence everywhere.
      *
@@ -506,7 +560,7 @@ class SkySurfaceSourceTest {
         assertTrue(
             "the sprite is no longer keyed on the mood, so two days that draw differently could " +
                 "share one bitmap",
-            squeeze(sprite).contains("val key = keyOf(landmark, quiet, $MOOD, bucket, temperature, growth)"),
+            squeeze(sprite).contains("val key = keyOf(landmark, quiet, $MOOD, bucket, temperature, growth, rays)"),
         )
     }
 

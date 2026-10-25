@@ -63,6 +63,11 @@ a new phone?", done on one phone.
   reinstall and restore a backup, as the FAQ and privacy statement already said (#146).
 
 ### Changed
+- **Zoomed out, stars read as stars rather than specks.** Every ordinary star is drawn larger far
+  out, with a soft glow of its own colour around it and four faint rays, the same on every star.
+  The rays fade away as you zoom in, before a goal's own cross-rays appear; a life event keeps
+  longer white rays at every zoom, so it is still the one bright star. Up close a star looks as it
+  did (#474).
 - **On/off switches can be told apart.** Every switch in the app now draws its off state with a
   visible outline and thumb in the soft ink, where before the track was the colour of the page. On
   is unchanged: a dark track with a light thumb. The "Undo" on a deleted entry and the chosen AM or

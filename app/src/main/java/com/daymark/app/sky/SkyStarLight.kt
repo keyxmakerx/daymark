@@ -1,7 +1,8 @@
 package com.daymark.app.sky
 
 /**
- * How a point of light is lit: the bead at a star's heart and the thin rim of light around it.
+ * How a point of light is lit: the bead at a star's heart, the thin rim of light around it, and,
+ * while the star is small on the screen, the bloom and the four rays that make it read as a star.
  *
  * This is the approved phone sky's star (`docs/prototypes/sky-phone.html`, its star shader), carried
  * over number for number. There a star is a small crisp disc in its own age colour, a little
@@ -98,6 +99,103 @@ object SkyStarLight {
         }
         stops[RIM_STOP_DP.size - 1] = stops[RIM_STOP_DP.size - 2] and 0x00FFFFFF
         return stops
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // The bloom: a point of light spreading in the eye.
+    // -------------------------------------------------------------------------------------------
+
+    /**
+     * The bloom's alpha at the star's centre, at full strength, in the star's own tint.
+     *
+     * Far out a bead is a few pixels across, and a few pixels with nothing round them read as a
+     * speck rather than as a light (#474). The bloom is the soft light a bright point spreads in the
+     * eye: it falls away as `e^(-d / BLOOM_FALL_DP)` and is gone by [BLOOM_REACH_DP]. It is the same
+     * for every ordinary star and takes no mood, so it adds presence to the sky without making one
+     * star louder than another, and the halo is still the only thing a mood moves.
+     */
+    const val BLOOM_PEAK = 0.45f
+
+    /** How fast the bloom falls, in dp: `e^(-d / 2.2)`. */
+    const val BLOOM_FALL_DP = 2.2f
+
+    /** How far from the star's centre the bloom reaches, in dp. Nothing is drawn beyond it. */
+    const val BLOOM_REACH_DP = 12f
+
+    /** Where the bloom's stops sit, in dp from the centre. The last is [BLOOM_REACH_DP]. */
+    val BLOOM_STOP_DP = floatArrayOf(0f, 1f, 2f, 3f, 4.5f, 6f, 8f, 10f, BLOOM_REACH_DP)
+
+    /** How much of the bloom is left once the view is close: the bead has grown and carries the star. */
+    const val BLOOM_CLOSE_SHARE = 0.4f
+
+    /** By how many screen widths across the bloom has eased down to [BLOOM_CLOSE_SHARE]. */
+    const val BLOOM_EASED_BY = 30f
+
+    /**
+     * How strong the bloom is at [zoom], screen widths across: whole until the view leaves
+     * [SkyDetail.FAR], easing down to [BLOOM_CLOSE_SHARE] by [BLOOM_EASED_BY], and never off.
+     * A function of how close the view is and nothing else, so it moves every star together.
+     */
+    fun bloomShare(zoom: Float): Float {
+        val t = ((zoom - SkyDetail.NEAR_ZOOM) / (BLOOM_EASED_BY - SkyDetail.NEAR_ZOOM)).coerceIn(0f, 1f)
+        return 1f - (1f - BLOOM_CLOSE_SHARE) * t * t * (3f - 2f * t)
+    }
+
+    /**
+     * The bloom's alphas at [BLOOM_STOP_DP], at [share] of its strength. Tapered to exactly `0` at
+     * [BLOOM_REACH_DP], so the bloom ends on nothing rather than on an edge.
+     */
+    fun bloomAlphas(share: Float): FloatArray = FloatArray(BLOOM_STOP_DP.size) { i ->
+        val d = BLOOM_STOP_DP[i]
+        val u = d / BLOOM_REACH_DP
+        val taper = (1f - u * u) * (1f - u * u)
+        BLOOM_PEAK * share.coerceIn(0f, 1f) * Math.exp((-d / BLOOM_FALL_DP).toDouble()).toFloat() * taper
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // The rays: four faint points, far out only.
+    // -------------------------------------------------------------------------------------------
+
+    /**
+     * The rays' alpha where they cross the star, at full strength, in the star's own tint.
+     *
+     * Four faint rays are what makes a point a few pixels across read as a star rather than a dot
+     * (#474). Every ordinary star carries the same four, still, in its own colour, and nothing about
+     * them comes from mood or from anything the app measured, so they are the texture of the sky and
+     * not a mark on any one day. They belong to the far views only: they are whole until
+     * [RAY_FULL_UNTIL] and gone by [SkyDetail.CLOSE_ZOOM], where a goal's cross-rays resolve and
+     * have to be its own. A landmark's rays are longer, white, and drawn at every zoom
+     * (`docs/SKY.md` §3.4), so it is still the one bright star.
+     */
+    const val RAY_PEAK = 0.45f
+
+    /** How far each ray reaches from the star's centre, in dp. */
+    const val RAY_ARM_DP = 6f
+
+    /** How thick each ray is, in dp. */
+    const val RAY_THICKNESS_DP = 0.7f
+
+    /** Up to how many screen widths across the rays are whole. */
+    const val RAY_FULL_UNTIL = 3f
+
+    /** Where each ray's stops sit, as fractions of its length from one tip to the other. */
+    val RAY_STOP_POSITION = floatArrayOf(0f, 0.15f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.85f, 1f)
+
+    /**
+     * How strong the rays are at [zoom], screen widths across: whole until [RAY_FULL_UNTIL],
+     * falling evenly to nothing at [SkyDetail.CLOSE_ZOOM]. A function of how close the view is and
+     * nothing else.
+     */
+    fun rayShare(zoom: Float): Float =
+        1f - ((zoom - RAY_FULL_UNTIL) / (SkyDetail.CLOSE_ZOOM - RAY_FULL_UNTIL)).coerceIn(0f, 1f)
+
+    /**
+     * A ray's alphas at [RAY_STOP_POSITION], at [share] of its strength: brightest where it crosses
+     * the star and falling as the square of the way out, to exactly `0` at both tips.
+     */
+    fun rayAlphas(share: Float): FloatArray = FloatArray(RAY_STOP_POSITION.size) { i ->
+        val out = 1f - Math.abs(RAY_STOP_POSITION[i] - 0.5f) * 2f
+        RAY_PEAK * share.coerceIn(0f, 1f) * out * out
     }
 
     /** One channel of a packed `0xRRGGBB` colour, `0..255`, in linear light. */

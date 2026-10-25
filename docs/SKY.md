@@ -338,7 +338,7 @@ days into kinds of act at exactly the zoom where they see a stretch of their lif
 
 | Varies with mood | Fixed at every mood |
 |---|---|
-| Halo radius: 4.8 dp at level 1 to 3.6 dp at level 5; 4.2 dp with no mood | Bead radius (0.96 dp at the whole sky, growing with zoom alike for every star), the bead's light and colour |
+| Halo radius: 4.8 dp at level 1 to 3.6 dp at level 5; 4.2 dp with no mood | Bead radius (1.4 dp at the whole sky, growing with zoom alike for every star), the bead's light and colour, the bloom and the rays |
 | Halo peak alpha, `HALO_LIGHT / radius²`, so the product cannot move | Tint and brightness (age), position, twinkle, total light (§0.3 finding 4) |
 
 The spread is small, about 14% either way, so it reads as texture at arm's length. A star with no
@@ -352,8 +352,8 @@ a bigger star for a busier day ranks days by output (§6.2).
 
 **Prominence follows authorship, not value. A landmark is the one bright star.** A life event is
 placed to be found again, so it alone is bigger (core × 1.9), brighter (the one halo that emits more
-light), spiked (four soft white spikes at every zoom), never redshifted, never faded, and always
-glints. Brightness may follow a mark the person placed, never anything the app measured.
+light), spiked (four soft white spikes, 12 dp long, at every zoom; an ordinary star's rays are half
+as long, in its own colour, and only far out), never redshifted, never faded, and always glints. Brightness may follow a mark the person placed, never anything the app measured.
 
 ### 3.5 How a star is drawn — a point, then a glow
 
@@ -364,9 +364,18 @@ outside it, gone within 1.6 dp; and a **soft outer glow** in the tint, fading to
 whose spread is the mood (§3.4). The bead and the rim are the approved phone sky's
 (`docs/prototypes/sky-phone.html`, carried over in `SkyStarLight`): light is added up in linear
 light and tone-mapped once, so a bright bead stays a colour instead of clipping to white. The bead
-is 0.96 dp across at the whole sky and grows as the zoom to the power 0.3, alike for every star, so
-a closer view shows bigger stars and no star outgrows another. The prototype's extra floor under
-every halo was dropped: multiplied by a wider halo's area, it would make hard days emit more light.
+is 1.4 dp in radius at the whole sky and grows as the zoom to the power 0.2, alike for every star,
+so a closer view shows bigger stars and no star outgrows another; by forty screen widths across it
+is the approved sky's size again (#474). The prototype's extra floor under every halo was dropped:
+multiplied by a wider halo's area, it would make hard days emit more light.
+
+**Far out, a bloom and four rays.** At the whole sky a bead is a few pixels and reads as a speck, so
+every star also gets a **bloom**, its own light spreading round it in its tint, 0.45 at the centre
+and falling by e every 2.2 dp, gone by 12 dp: whole until the view leaves FAR, easing to 40% by
+thirty screen widths across. And **four faint rays** in its tint, 6 dp long, whole until three
+screen widths across and gone by CLOSE, where a goal's cross-rays resolve and have to be its own.
+Both are the same on every ordinary star and take no mood; the rays never turn or pulse on their
+own, and the quiet sky draws neither (#474).
 
 **Every ordinary star burns at one light.** The approved sky also gave each star a random
 magnitude; it is left out, because on this surface a brighter star reads as a day that counted for
@@ -464,8 +473,8 @@ from FAR to a sun by eye.
 
 | Level | Screen widths across the sky | Drawn |
 |---|---|---|
-| **FAR** | below 2.5 | Every star as point and glow. |
-| **NEAR** | 2.5 to 7 | The same, closer. |
+| **FAR** | below 2.5 | Every star as point and glow, with its bloom whole and four faint rays (§3.5). |
+| **NEAR** | 2.5 to 7 | The same, closer; the rays fade out from 3 and are gone by 7. |
 | **CLOSE** | 7 and in | Kind marks (§3.3) and project stubs as well. |
 | **A sun** | once a star's real size passes 4 dp, past the bead at that zoom | A white-hot middle, a rim in the star's own colour and a dim corona; kind marks step aside for it. A life event is a bigger sun. |
 

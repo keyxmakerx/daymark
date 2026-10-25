@@ -169,4 +169,77 @@ class SkyStarLightTest {
         val opaque = (0xFF shl 24) or (light[0] shl 16) or (light[1] shl 8) or light[2]
         assertNotEquals("the packing check cannot see an opaque stop", 255, intArrayOf(red(opaque), green(opaque), blue(opaque)).max())
     }
+
+    // -------------------------------------------------------------------------------------------
+    // The bloom and the rays: what makes a far star read as a star (#474).
+    // -------------------------------------------------------------------------------------------
+
+    /** Zooms from the whole sky to the closest view, finely enough to see any step. */
+    private val zooms: List<Float> = List(4000) { 1f + it * 0.1f }
+
+    @Test
+    fun `the bloom is whole far out, eases as the view closes in, and never goes`() {
+        assertEquals(1f, SkyStarLight.bloomShare(1f), 0f)
+        assertEquals("the bloom eases before the view leaves FAR", 1f, SkyStarLight.bloomShare(SkyDetail.NEAR_ZOOM), 0f)
+        assertEquals(SkyStarLight.BLOOM_CLOSE_SHARE, SkyStarLight.bloomShare(SkyStarLight.BLOOM_EASED_BY), 1e-6f)
+        assertEquals(SkyStarLight.BLOOM_CLOSE_SHARE, SkyStarLight.bloomShare(400f), 1e-6f)
+        assertTrue("the bloom is gone at the closest view", SkyStarLight.bloomShare(400f) > 0f)
+        var previous = 2f
+        for (zoom in zooms) {
+            val share = SkyStarLight.bloomShare(zoom)
+            assertTrue("the bloom grows as the view closes in, at $zoom", share <= previous)
+            assertTrue("the bloom has gone at $zoom", share >= SkyStarLight.BLOOM_CLOSE_SHARE - 1e-6f)
+            previous = share
+        }
+        // The control: the easing is real, so the checks above are not passing over a constant.
+        assertTrue("the bloom never eases", SkyStarLight.bloomShare(10f) < 1f && SkyStarLight.bloomShare(10f) > SkyStarLight.BLOOM_CLOSE_SHARE)
+    }
+
+    @Test
+    fun `the bloom falls away from the star and ends on nothing`() {
+        assertEquals(SkyStarLight.BLOOM_REACH_DP, SkyStarLight.BLOOM_STOP_DP.last(), 0f)
+        for (share in floatArrayOf(SkyStarLight.BLOOM_CLOSE_SHARE, 0.7f, 1f)) {
+            val alphas = SkyStarLight.bloomAlphas(share)
+            assertEquals(SkyStarLight.BLOOM_STOP_DP.size, alphas.size)
+            assertEquals("the bloom does not start at its peak", SkyStarLight.BLOOM_PEAK * share, alphas[0], 1e-6f)
+            assertEquals("the bloom does not end on nothing", 0f, alphas.last(), 0f)
+            for (i in 1 until alphas.size) assertTrue("the bloom brightens outward at stop $i", alphas[i] < alphas[i - 1])
+        }
+        // Visible where a far star needs it: a few dp out, on a phone, it is still a glow.
+        val atThree = SkyStarLight.bloomAlphas(1f)[SkyStarLight.BLOOM_STOP_DP.indexOfFirst { it == 3f }]
+        assertTrue("the bloom is too faint to see three dp out: $atThree", atThree > 0.08f)
+    }
+
+    @Test
+    fun `the rays are whole far out and gone by the time kind marks appear`() {
+        assertEquals(1f, SkyStarLight.rayShare(1f), 0f)
+        assertEquals(1f, SkyStarLight.rayShare(SkyStarLight.RAY_FULL_UNTIL), 0f)
+        assertEquals("a goal's cross-rays would sit on top of the rays", 0f, SkyStarLight.rayShare(SkyDetail.CLOSE_ZOOM), 0f)
+        var previous = 2f
+        for (zoom in zooms) {
+            val share = SkyStarLight.rayShare(zoom)
+            assertTrue("the rays grow as the view closes in, at $zoom", share <= previous)
+            if (SkyDetail.forZoom(zoom) == SkyDetail.CLOSE) assertEquals("rays at CLOSE, $zoom", 0f, share, 0f)
+            previous = share
+        }
+        // The control: just short of CLOSE the rays are still there, so "none at CLOSE" is a
+        // statement about CLOSE and not about a function that is zero everywhere.
+        assertTrue("the rays are never drawn", SkyStarLight.rayShare(SkyDetail.CLOSE_ZOOM - 0.5f) > 0f)
+    }
+
+    @Test
+    fun `a ray is brightest across the star and ends on nothing at both tips`() {
+        val alphas = SkyStarLight.rayAlphas(1f)
+        assertEquals(SkyStarLight.RAY_STOP_POSITION.size, alphas.size)
+        assertEquals(0f, alphas.first(), 0f)
+        assertEquals(0f, alphas.last(), 0f)
+        val middle = SkyStarLight.RAY_STOP_POSITION.indexOfFirst { it == 0.5f }
+        assertEquals("a ray does not cross the star at its peak", SkyStarLight.RAY_PEAK, alphas[middle], 1e-6f)
+        for (i in alphas.indices) {
+            assertEquals("a ray is lopsided at stop $i", alphas[i], alphas[alphas.size - 1 - i], 1e-6f)
+            if (i in 1..middle) assertTrue("a ray dims toward the star at stop $i", alphas[i] > alphas[i - 1])
+        }
+        assertEquals("half the strength is not half the light", SkyStarLight.RAY_PEAK / 2f, SkyStarLight.rayAlphas(0.5f)[middle], 1e-6f)
+        assertTrue("a ray reaches past the bloom, so its tips would end on bare ground", SkyStarLight.RAY_ARM_DP < SkyStarLight.BLOOM_REACH_DP)
+    }
 }

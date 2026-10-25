@@ -79,11 +79,13 @@ object SkyGlyph {
     // ---------------------------------------------------------------------------------------
 
     /**
-     * The bead's radius at the whole-sky view, in dp: the approved phone sky's `0.8 + 0.22 × lum`
-     * for an ordinary star's light ([SkyStarLight.LIGHT]). It grows as the person zooms in, by
-     * [zoomScale], and the growth is the same for every star (#460).
+     * The bead's radius at the whole-sky view, in dp. It grows as the person zooms in, by
+     * [zoomScale], and the growth is the same for every star (#460). Larger at the whole sky than
+     * the approved phone sky's `0.8 + 0.22 × lum`, because that sky was approved forty screen widths
+     * in, and at the whole sky its bead was a few pixels and read as a speck; with the slower
+     * growth of [ZOOM_GROWTH] the two agree again by forty across (#474).
      */
-    const val CORE_RADIUS_DP = 0.96f
+    const val CORE_RADIUS_DP = 1.4f
 
     const val CORE_ALPHA = 1.0f
 
@@ -99,12 +101,12 @@ object SkyGlyph {
     @Suppress("UNUSED_PARAMETER")
     fun coreRadiusDp(kind: SkyKind, moodLevel: Int): Float = CORE_RADIUS_DP
 
-    /** How fast the bead grows with zoom: the approved sky's `zoom^0.3`. */
-    const val ZOOM_GROWTH = 0.3f
+    /** How fast the bead grows with zoom: `zoom^0.2`, from a larger start than the approved sky's. */
+    const val ZOOM_GROWTH = 0.2f
 
     /**
      * How much bigger every bead is drawn at [zoom] (screen widths across, `1` for the whole sky)
-     * than at the whole-sky view: `zoom^0.3`, so about 1.8 times at a week and 3 times at a single
+     * than at the whole-sky view: `zoom^0.2`, so about 1.5 times at a week and twice at a single
      * day. Never below `1`, and a function of the zoom alone, so it moves every star together and
      * changes nothing about one star against another.
      */
