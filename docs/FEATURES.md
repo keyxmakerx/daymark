@@ -293,10 +293,19 @@ recommending, never setting, how often the support space is offered: #172.
   with "Use a different number" on the crisis screen. Onboarding asks about it straight after the
   welcome ("If things get hard"): the line is shown with **This one is right**, **Use a different
   line** and **Not now**. It is never guessed from the phone's region or location, and a blank name
-  or number is never saved. The screen says Daymark cannot call for anyone
-  and is not a crisis service, and to call the local emergency number in immediate danger.
-- **Always reachable.** Last in every support menu, never dismissible, untouched by suggestion
-  settings.
+  or contact is never saved. Someone who set Daymark up before onboarding asked is asked once, on
+  Home, with the same three answers; any answer ends it (#482).
+- **Call and Text.** The line has a number of its own, apart from the free-text contact, and once
+  the person has confirmed the line (kept it when asked, or typed their own) the crisis screen shows
+  **Call** and, where the line takes texts, **Text**. Each opens the phone's own dialer or messages
+  app with the number filled in (`ACTION_DIAL`, `ACTION_SENDTO`), which needs no permission: Daymark
+  never places a call or sends a message, and the person presses call themselves. Until the line is
+  confirmed it is shown as text with **This one is right**. A backup carries the number with the
+  line, and an older backup without one restores the line as text.
+  The screen says Daymark never places a call and is not a crisis service, and to call the local
+  emergency number in immediate danger.
+- **Always reachable.** First on More ("If things feel like too much"), never behind an opt-in;
+  last in every support menu, never dismissible, untouched by suggestion settings.
 - **Tiered, not a cliff.** The support menu offers ways to cope first, then the person's own plan
   and the people in it, then the crisis resource, which is always one tap away. The handoff is warm,
   never an abrupt list of numbers.

@@ -385,6 +385,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false, openT
                     onThoughtRecords = { navController.navigate(Routes.THOUGHT_RECORDS) },
                     onMovement = { navController.navigate(Routes.MOVEMENT) },
                     onSafetyPlan = { navController.navigate(Routes.SAFETY_PLAN) },
+                    onCrisis = { navController.navigate(Routes.CRISIS) },
                     onSettings = { navController.navigate(Routes.SETTINGS) },
                     modifier = Modifier.padding(padding),
                 )

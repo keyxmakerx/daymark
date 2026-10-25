@@ -1,6 +1,5 @@
 package com.daymark.app.ui.support
 
-import com.daymark.app.ui.components.SentenceCaps
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,11 +10,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,6 +37,7 @@ fun CrisisResourcesScreen(
     viewModel: CrisisViewModel = hiltViewModel(),
 ) {
     val resource by viewModel.resource.collectAsStateWithLifecycle()
+    val confirmed by viewModel.confirmed.collectAsStateWithLifecycle()
     var editing by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -66,6 +66,19 @@ fun CrisisResourcesScreen(
                     Text(resource.contact, style = MaterialTheme.typography.headlineSmall)
                 }
             }
+            if (confirmed) {
+                CrisisCallButtons(resource)
+            } else {
+                // A line nobody has confirmed is shown as text and asked about, never handed over as
+                // a one-tap call: the default is a US number (#482).
+                Text(
+                    "Is this the right line where you live?",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Button(onClick = viewModel::confirm, modifier = Modifier.fillMaxWidth()) {
+                    Text("This one is right")
+                }
+            }
             Text(
                 "If you're in immediate danger, call your local emergency number.",
                 style = MaterialTheme.typography.bodyMedium,
@@ -73,8 +86,9 @@ fun CrisisResourcesScreen(
             )
             TextButton(onClick = { editing = true }) { Text("Use a different number") }
             Text(
-                "Daymark can't call for you and isn't a crisis service — these are resources kept on " +
-                    "your device so they're always here.",
+                "Daymark never places a call: Call opens your phone with the number filled in, and you " +
+                    "press call. It isn't a crisis service — this line is kept on your device so it's " +
+                    "always here.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -82,22 +96,19 @@ fun CrisisResourcesScreen(
     }
 
     if (editing) {
-        var label by remember { mutableStateOf(resource.label) }
-        var contact by remember { mutableStateOf(resource.contact) }
+        val draft = rememberCrisisLineDraft(resource)
         AlertDialog(
             onDismissRequest = { editing = false },
             title = { Text("Crisis resource") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(value = label, onValueChange = { label = it }, label = { Text("Name") }, keyboardOptions = SentenceCaps, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(value = contact, onValueChange = { contact = it }, label = { Text("How to reach them") }, modifier = Modifier.fillMaxWidth())
-                }
-            },
+            text = { CrisisLineFields(draft) },
             // The crisis screen always shows a line, so blank fields are never saved.
             confirmButton = {
                 TextButton(
-                    onClick = { viewModel.save(label, contact); editing = false },
-                    enabled = label.isNotBlank() && contact.isNotBlank(),
+                    onClick = {
+                        viewModel.save(draft.label, draft.contact, draft.number, draft.takesTexts)
+                        editing = false
+                    },
+                    enabled = draft.complete,
                 ) { Text("Save") }
             },
             dismissButton = { TextButton(onClick = { editing = false }) { Text("Cancel") } },

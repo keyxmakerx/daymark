@@ -81,8 +81,10 @@ fun HomeScreen(
     onDeleteEntry: (EntryWithActivities) -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
     signalsViewModel: SignalsViewModel = hiltViewModel(),
+    checksViewModel: HomeChecksViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val crisisCheck by checksViewModel.crisisCheck.collectAsStateWithLifecycle()
     val signals by signalsViewModel.signals.collectAsStateWithLifecycle()
 
     // Hoisted so the card slot is only emitted when something is actually visible — dismissing the
@@ -119,6 +121,18 @@ fun HomeScreen(
 
         item(key = "check-in") {
             CheckInCard(onQuickCheckIn = onQuickCheckIn, modifier = Modifier.animateItem())
+        }
+
+        crisisCheck?.let { line ->
+            item(key = "crisis-check") {
+                CrisisLineCheck(
+                    current = line,
+                    onKeep = checksViewModel::keepCrisisLine,
+                    onSave = checksViewModel::saveCrisisLine,
+                    onSkip = checksViewModel::skipCrisisLine,
+                    modifier = Modifier.animateItem(),
+                )
+            }
         }
 
         if (state.totalEntries == 0) {

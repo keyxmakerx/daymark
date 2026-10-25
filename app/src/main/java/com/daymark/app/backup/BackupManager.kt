@@ -390,9 +390,18 @@ data class BackupData(
     val crisisLine: BackupCrisisLine? = null,
 )
 
-/** The person's own crisis line: its name and how to reach it (`data/CrisisStore.kt`). Added in v20. */
+/**
+ * The person's own crisis line: its name and how to reach it (`data/CrisisStore.kt`). Added in v20.
+ * [number] and [takesTexts] came later (#482) and are defaulted, so a file without them still reads
+ * and restores the line as text, with no Call button until a number is added.
+ */
 @Serializable
-data class BackupCrisisLine(val label: String, val contact: String)
+data class BackupCrisisLine(
+    val label: String,
+    val contact: String,
+    val number: String? = null,
+    val takesTexts: Boolean = false,
+)
 
 /**
  * The backup's steps rebound to the goal ids an import actually used, dropping any whose goal is
@@ -605,7 +614,7 @@ class BackupManager @Inject constructor(
                 BackupPersonGroupShare(it.groupKey, it.shared)
             },
             skySeed = skyRepository.storedSeed(),
-            crisisLine = crisisStore.own()?.let { BackupCrisisLine(it.label, it.contact) },
+            crisisLine = crisisStore.own()?.let { BackupCrisisLine(it.label, it.contact, it.number, it.takesTexts) },
             constellations = constellationDao.getAll().map {
                 BackupConstellation(it.id, it.name, it.madeEpochDay, it.points, it.createdAt)
             },
@@ -694,7 +703,7 @@ class BackupManager @Inject constructor(
         // REPLACE takes the file's; MERGE takes it only while this phone still shows the default.
         // A file without one leaves this phone's line as it is. Blank fields are refused by save().
         data.crisisLine?.let { line ->
-            if (mode == ImportMode.REPLACE || crisisStore.own() == null) crisisStore.save(line.label, line.contact)
+            if (mode == ImportMode.REPLACE || crisisStore.own() == null) crisisStore.save(line.label, line.contact, line.number, line.takesTexts)
         }
     }
 

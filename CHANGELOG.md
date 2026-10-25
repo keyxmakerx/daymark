@@ -28,6 +28,12 @@ The same steps apply to the sync build. They are the steps in docs/FAQ.md "How d
 a new phone?", done on one phone.
 
 ### Added
+- **You can call your crisis line from the app.** Once you've said the line is right for you, the
+  crisis screen has a **Call** button, and **Text** where the line takes texts. Each opens your
+  phone's own dialer or messages app with the number filled in; Daymark never places a call. The
+  line now has a number field of its own, and a backup carries it. If you set Daymark up before
+  onboarding asked about the crisis line, Home asks you once. **More** now starts with **If things
+  feel like too much**, which always leads to the crisis screen (#482).
 - **You can replace your recovery code.** On the Recovery code tab, when your server already holds
   your key, open it with your passphrase or your current recovery code and make a new one. The new
   recovery code is shown once and checked as written down, like the first; your passphrase is

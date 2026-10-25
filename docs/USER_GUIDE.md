@@ -371,6 +371,11 @@ Change it to your local line with **Use a different number**, or under **More â†
 Crisis resources**. It's stored on your phone, so it works offline. If you're in immediate danger,
 call your local emergency number.
 
+Once you've said the line is right for you, the screen has a **Call** button, and a **Text** button
+if the line takes texts. They open your phone's own dialer or messages app with the number filled
+in; you still press call yourself. Daymark never places a call. The crisis screen is always the
+first row on **More**: **If things feel like too much**.
+
 ---
 
 ## Sleep check-ins

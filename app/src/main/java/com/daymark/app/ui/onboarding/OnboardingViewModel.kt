@@ -32,10 +32,16 @@ class OnboardingViewModel @Inject constructor(
     fun crisisLine(): CrisisStore.Resource = crisisStore.get()
 
     /** Saves the person's own crisis line. Blank fields are never saved: the crisis screen must always show one. */
-    fun saveCrisisLine(label: String, contact: String) {
+    fun saveCrisisLine(label: String, contact: String, number: String?, takesTexts: Boolean) {
         if (label.isBlank() || contact.isBlank()) return
-        crisisStore.save(label, contact)
+        crisisStore.save(label, contact, number, takesTexts)
     }
+
+    /** "This one is right": the line is confirmed, so its Call button appears (#482). */
+    fun confirmCrisisLine() = crisisStore.confirm()
+
+    /** "Not now": answered, so Home never asks again; the line stays as text until confirmed. */
+    fun skipCrisisLine() = crisisStore.markChecked()
 
     /** False, changing nothing, for a PIN `PinPolicy` does not accept. See SettingsViewModel. */
     fun setPin(pin: String): Boolean {
