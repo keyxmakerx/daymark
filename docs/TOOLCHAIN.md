@@ -15,7 +15,7 @@ points back here.
   - compileSdk 36, with targetSdk held at 35 and set explicitly;
   - Kotlin 2.0.21 with KSP 2.0.21-1.0.28 (KSP1);
   - Hilt/Dagger 2.52;
-  - Compose BOM 2026.06.01 and Room 2.8.4.
+  - Compose BOM 2026.06.01 and Room 2.8.5.
 - **JVM targets:** `:app` compiles for JVM 17. `:sync-crypto` builds on a JDK 21 toolchain, which is
   what allows lazysodium 5.2.0 (the `-java` and `-android` artifacts stay on the same version) with
   jna 5.17.0.
@@ -24,11 +24,11 @@ points back here.
 
 ```
 AGP 8.13.0 ┬──────────► Hilt/Dagger < 2.59   (2.59+ hard-requires AGP 9)
- (last 8.x)└──────────► androidx core/activity/lifecycle/androidx.hilt/navigation held
+ (last 8.x)└──────────► androidx core/activity/lifecycle/androidx.hilt/navigation/Compose BOM held
                         (their new versions need compileSdk 37, which needs AGP 9.2)
 
 Kotlin 2.0.21 ── locked to ──► KSP 2.0.21-1.0.28 ──► Hilt annotation processing
-Room 2.8.4 ──► needs kotlinx-serialization-core 1.9.0 on the ksp* configurations only (below)
+Room 2.8.5 ──► needs kotlinx-serialization-core 1.9.0 on the ksp* configurations only (below)
 ```
 
 ## Each constraint, and what unblocks it
@@ -38,7 +38,7 @@ Room 2.8.4 ──► needs kotlinx-serialization-core 1.9.0 on the ksp* configur
 | **AGP** | `< 9.0.0` | AGP 9 enables built-in Kotlin by default and needs Gradle 9.1 or later. The Gradle part is already done (the wrapper is 9.3.1). Nothing in this repo uses the legacy variant API that AGP 9 removes. | Move B (#230) |
 | **Hilt / Dagger** | `< 2.59` | Dagger 2.59 makes AGP 9 a hard requirement for anyone applying the Hilt Gradle plugin, which this repo does. Hilt currency and AGP 9 are **one decision**. | Move B |
 | **Kotlin / KSP** | no major or minor bumps | They are version-locked (KSP publishes as `<kotlin>-<ksp>`), and Dependabot bumps them in *separate* pull requests, so a Kotlin-only bump cannot build. Kotlin 2.4.0 also changed module naming, and KSP 2.3.9 and earlier then emit invalid identifiers for **`internal`** Hilt provider methods (`google/ksp#2964`), which this repo has. | One hand-made change moving Kotlin and KSP together onto KSP 2.3.10 or later, with Hilt re-verified |
-| **androidx core / activity / lifecycle / androidx.hilt / navigation** | core `<1.19.0`, activity `<1.13.0`, lifecycle `<2.11.0`, androidx.hilt `<1.4.0`, navigation `<2.9.0` | These moved to an AGP 9.1 and compileSdk 37 floor. Bumping them once turned `main` red (`CheckAarMetadata`, 17 issues). The trap: `androidx.hilt` versions separately from `com.google.dagger`, so it looks unrelated. It is not. | **Move C**, not Move B (below) |
+| **androidx core / activity / lifecycle / androidx.hilt / navigation / Compose BOM** | core `<1.19.0`, activity `<1.13.0`, lifecycle `<2.11.0`, androidx.hilt `<1.4.0`, navigation `<2.9.0`, Compose BOM `<2026.09.00` | These moved to an AGP 9.1 and compileSdk 37 floor. Bumping them once turned `main` red (`CheckAarMetadata`, 17 issues). The trap: `androidx.hilt` versions separately from `com.google.dagger`, so it looks unrelated. It is not. | **Move C**, not Move B (below) |
 | **lazysodium** | none now | 5.2.0's `lazysodium-java` is JVM-21-only. `:sync-crypto` now builds on JDK 21, so 5.2.0 is in. The two artifacts must stay on the same version: `SyncCrypto` compiles against the java copy of the shared types and runs against the android copy. The ignore rule in `dependabot.yml` still blocks everything from 5.2.0 up, which is now wrong: #223. | — |
 
 **GitHub Actions updates are deliberately unconstrained.** Those bumps do not fail, and an action's
