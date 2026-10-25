@@ -82,9 +82,11 @@ object SkyGlyph {
      * The heart's radius at the whole-sky view, in dp: where its light has fallen to a third
      * ([SkyStarLight.HEART_FALL]). It grows as the person zooms in, by [zoomScale], and the growth is
      * the same for every star (#460). Small, because a star is a point: what gives it presence far
-     * out is how bright the heart burns and the soft wing round it, never a bigger disc (#474).
+     * out is how bright the heart burns and the soft wing round it, never a bigger disc (#474). Small
+     * enough that the stars of one day, which sit close, stay separate points at the whole sky
+     * rather than running together into one smear.
      */
-    const val CORE_RADIUS_DP = 0.85f
+    const val CORE_RADIUS_DP = 0.7f
 
     const val CORE_ALPHA = 1.0f
 
@@ -189,20 +191,25 @@ object SkyGlyph {
     /**
      * Where each stop of the outer glow sits, as a fraction of [outerGlowRadiusDp].
      *
-     * The prototype's five stops. Front-loaded — more than half the fall happens in the first fifth
-     * of the radius — because that is what reads as a glow around a point rather than as a disc
-     * with soft edges.
+     * The prototype's five stops. Front-loaded, because that is what reads as a glow around a point
+     * rather than as a disc with soft edges.
      */
     val HALO_STOP_POSITION = floatArrayOf(0f, 0.18f, 0.45f, 0.75f, 1f)
 
     /**
-     * What each stop is worth, as a fraction of [haloPeakAlpha].
+     * What each stop is worth, as a fraction of [haloPeakAlpha]: three quarters of the fall in the
+     * first fifth of the radius, and under a fiftieth of the peak left halfway out.
+     *
+     * The halo is added in linear light and shown through the screen's gamma, which lifts a faint
+     * light far more than a bright one, so any weight left in its outer half shows as a grey disc
+     * the size of the whole glow, the same on every star, and a sky of them reads as stickers rather
+     * than light (#474). That is why these fall faster than the prototype's `0.5, 0.34, 0.12, 0.035`.
      *
      * The last is exactly zero, which is the *"to exactly nothing"* in `docs/SKY.md` §3.5 and is
      * the property the flat disc did not have. Nothing here is a function of mood: mood picks the
      * peak and the radius, and the shape of the fall is the same for every star on the surface.
      */
-    val HALO_STOP_WEIGHT = floatArrayOf(0.5f, 0.34f, 0.12f, 0.035f, 0f)
+    val HALO_STOP_WEIGHT = floatArrayOf(0.5f, 0.12f, 0.02f, 0.004f, 0f)
 
     /**
      * The halo's weight at [u], a fraction of [outerGlowRadiusDp] from the centre: the stops above,
@@ -247,12 +254,12 @@ object SkyGlyph {
      * This is [HALO_LIGHT]'s claim made checkable against the shape that is now drawn rather than
      * against the one that used to be. `peak x radius²` was the right invariant for a flat disc and
      * says nothing on its own about a gradient — so the profile is integrated, and the answer comes
-     * out **1.161 for every mood level** and 4.636 for a landmark. The flat number across the ramp
+     * out **0.330 for every mood level** and 1.316 for a landmark. The flat number across the ramp
      * is the whole of mechanism M4 on this surface; the landmark's is `docs/SKY.md` §3.4's *"a
      * landmark is the one bright star"*, and it is allowed to be louder because a person placed
      * it by hand.
      *
-     * The profile itself passes 0.0831 of the light a flat disc of the same peak and radius would,
+     * The profile itself passes 0.0236 of the light a flat disc of the same peak and radius would,
      * which is the price of the edge going to nothing, and it is paid equally by every star.
      */
     fun haloEmittedLight(kind: SkyKind, moodLevel: Int): Float {

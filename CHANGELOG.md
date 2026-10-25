@@ -63,15 +63,16 @@ a new phone?", done on one phone.
   reinstall and restore a backup, as the FAQ and privacy statement already said (#146).
 
 ### Changed
-- **Stars look like stars.** Each one is a point of light: a white-hot heart in its own colour,
-  paled toward white, with a soft wing of light round it the way a star's light spreads in the eye,
-  and no rays, spikes or hard edge. A life event is still the one bright star: brighter, with a
-  wider wing (#474).
-- **The sky has depth behind its stars.** Behind them is a dark space in your sky's own colours,
-  with lanes of dust and, as you zoom in, faint clouds of gas lit by the stars nearest them. Each
-  layer moves a little less than the stars as you pan and zoom, so the sky reads as deep. It draws
-  no stars of its own: every star is still a memory. On phones older than Android 13 the space is
-  the soft glows of colour it was before (#474).
+- **Stars look like stars.** Each one is a sharp point of light: a white-hot heart in its own
+  colour, paled toward white, with a tight wing of light round it the way a star's light spreads in
+  the eye, and no rays, spikes, hard edge or grey disc round it. A life event is still the one
+  bright star: brighter, with a wider wing (#474).
+- **The sky has depth behind its stars.** Behind them is space close to black, touched with your
+  sky's own colours, with lanes of dust and clouds of gas, there from the whole sky and gathering as
+  you zoom in, lit by the stars nearest them. Each layer moves a little less than the stars as you
+  pan and zoom, so the sky reads as deep. It draws no stars of its own: every star is still a
+  memory. On phones older than Android 13 the space is the soft glows of colour it was before
+  (#474).
 - **Zoomed right in, a star is a sun.** You can zoom ten times closer than before, and a star there
   is a sphere in its own colour, with a slowly boiling surface, a few dark spots, a darker edge and
   a corona of streamers round it. A life event is a giant sun. While Motion is off, nothing moves

@@ -78,7 +78,7 @@ two seconds. Every other number in §8 is a budget; measuring them on a real pho
    so the product is fixed by construction and not by a table someone has to keep balanced. Mood
    redistributes light; it never changes the amount. Holding the peak and widening the halo was
    tried and rejected: hard days then emit *more* light, an inverted ranking rather than none. With
-   the halo now a radial fade the check is an integral, 1.161 at every mood.
+   the halo now a radial fade the check is an integral, 0.330 at every mood.
 
 ### 0.4 What the Sky reads
 
@@ -339,7 +339,7 @@ days into kinds of act at exactly the zoom where they see a stretch of their lif
 
 | Varies with mood | Fixed at every mood |
 |---|---|
-| Halo radius: 4.8 dp at level 1 to 3.6 dp at level 5; 4.2 dp with no mood | The heart's radius (0.85 dp at the whole sky, growing with zoom alike for every star), its light and colour, and the wing round it |
+| Halo radius: 4.8 dp at level 1 to 3.6 dp at level 5; 4.2 dp with no mood | The heart's radius (0.7 dp at the whole sky, growing with zoom alike for every star), its light and colour, and the wing round it |
 | Halo peak alpha, `HALO_LIGHT / radius²`, so the product cannot move | Tint and brightness (age), position, twinkle, total light (§0.3 finding 4) |
 
 The spread is small, about 14% either way, so it reads as texture at arm's length. A star with no
@@ -363,13 +363,15 @@ Each distinct star is worked out pixel by pixel once, at the device's pixel dens
 and stamped additively, so glows brighten where they overlap, as light does. It is lit the way a
 real star looks to the eye: a **white-hot heart**, its own colour paled a third of the way to white,
 falling away smoothly from the middle; a **soft wing** of the same light round it, the way a star's
-light spreads in the eye, falling slowly from a 1.2 dp shoulder; and a **faint outer glow** in the
+light spreads in the eye, falling slowly from a 0.9 dp shoulder; and a **faint outer glow** in the
 tint, fading to exactly nothing, whose spread is the mood (§3.4). Light is added up in linear light
 and tone-mapped once, by channel and by the brightest channel and met between the two, so a bright
 heart is white-hot in the middle and keeps its colour round it instead of clipping. A star is round:
-no ray, no spike, no bloom and no edge (#474). The heart is 0.85 dp in radius at the whole sky and
-grows as the zoom to the power 0.2, alike for every star, so a closer view shows bigger stars and no
-star outgrows another (#460). The prototype's extra floor under every halo was dropped: multiplied
+no ray, no spike, no bloom and no edge (#474). The glow falls steeply, three quarters of the way in
+its first fifth, because every star wears one and the screen's gamma lifts faint light: a glow whose
+outer half shows is the same grey disc on every star, and a sky of them reads as stickers. The heart
+is 0.7 dp in radius at the whole sky and grows as the zoom to the power 0.2, alike for every star, so
+a closer view shows bigger stars and no star outgrows another (#460). The prototype's extra floor under every halo was dropped: multiplied
 by a wider halo's area, it would make hard days emit more light.
 
 **Every ordinary star burns at one light.** The approved sky also gave each star a random
@@ -429,9 +431,12 @@ every sky (§3.2). The quiet sky draws none of it, only the plain night ground.
 
 **The space behind the stars** is a shader (`SkyShaders.SPACE`) in those colours, drawn at a
 quarter of the screen's resolution because nothing in it is sharp. It has three layers, each
-further behind the stars than the next: broad, dark changes of colour furthest back; long lanes of
-dust nearer, dimming what is behind them; and, nearest, gas that begins to gather once the view is
-past about one and a half screen widths across and is whole by about eighteen. Each layer grows
+further behind the stars than the next: furthest back, space close to black, its broad changes of
+tone too faint to read as shapes and greyed toward their own brightness, because a deep layer in
+strong colour is a wash over the whole screen and reads as wallpaper rather than night; long lanes
+of dust nearer, dimming what is behind them; and, nearest, gas, already there at four fifths of its
+strength at the whole sky, because it is the one part of the space with detail in it, and whole
+once the view is past about eighteen screen widths across. Each layer grows
 less and slides less than the stars as the view moves, by how far back it is, so the sky reads as
 deep rather than as paint. The gas is lit along its edges and shadowed in its thick parts, so it
 reads as a volume, and it is lit by the eight stars nearest the middle of the screen, each in its

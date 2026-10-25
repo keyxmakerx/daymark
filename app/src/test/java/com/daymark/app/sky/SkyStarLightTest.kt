@@ -146,6 +146,40 @@ class SkyStarLightTest {
         }
     }
 
+    @Test
+    fun `far out a star is a point of light, not a disc it wears`() {
+        // Every star wears its halo, so a halo that shows far from the middle is the same grey disc
+        // on every star, and a sky of them reads as stickers rather than light (#474). What is
+        // checked is what the screen shows, after the tone map and the gamma, because the gamma is
+        // what lifted the old halo's faint outer half into a disc: halfway to the end of the glow,
+        // at every mood, a star adds at most [FAINT] levels of 255, while a heart's width out it
+        // still burns.
+        for (tint in tints) {
+            for (mood in SkyGlyph.MOOD_NONE..SkyGlyph.MOOD_MAX) {
+                val star = shape(tint, mood)
+                val halfway = shownAt(star, star.haloRadiusPx / 2f).max()
+                println("  ${Integer.toHexString(tint)} at mood $mood: ${halfway} halfway out")
+                assertTrue("${Integer.toHexString(tint)} at mood $mood shows $halfway of 255 halfway out", halfway <= FAINT)
+                assertTrue("the heart no longer shows", shownAt(star, star.beadPx).max() > 128)
+            }
+        }
+        // The control: the star as it was, with the prototype's halo weights and a 1.2 dp wing, is
+        // seen as a disc.
+        val star = shape(tints.first(), SkyGlyph.MOOD_MAX)
+        val old = SkyStarLight.Shape(
+            tint = star.tint,
+            light = star.light,
+            beadPx = star.beadPx,
+            wingPx = 1.2f * density,
+            haloRadiusPx = star.haloRadiusPx,
+            haloPeak = star.haloPeak * PROTOTYPE_HALFWAY / SkyGlyph.haloWeightAt(0.5f),
+            quiet = false,
+        )
+        val seen = shownAt(old, old.haloRadiusPx / 2f).max()
+        println("  the star as it was: $seen halfway out")
+        assertTrue("the check cannot see the old disc: $seen", seen > FAINT)
+    }
+
     /**
      * Whether every pixel the same distance from the middle shows the same light, to within a step
      * of rounding: a round star. A ray, a spike or a square edge is light at one angle and not at
@@ -341,5 +375,13 @@ class SkyStarLightTest {
         // The control: the ordinary star, which does have light past its bead, fails the same check.
         val ordinary = shape(SkyAge.NEWEST_TINT)
         assertTrue("an ordinary star has nothing past its bead, so the check proves nothing", shownAt(ordinary, ordinary.beadPx + 3f).max() > 0)
+    }
+
+    private companion object {
+        /** The most a star may add halfway to the end of its glow, of 255. The star as it was added 29. */
+        const val FAINT = 16
+
+        /** The prototype's halo weight halfway out, `0.12` falling to `0.035` between 0.45 and 0.75. */
+        const val PROTOTYPE_HALFWAY = 0.1058f
     }
 }

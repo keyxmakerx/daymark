@@ -490,8 +490,8 @@ class SkyGlyphTest {
         }
         assertEquals("the widest and the tightest halo emit different light",
             emitted.min().toDouble(), emitted.max().toDouble(), 1e-3)
-        assertEquals("the profile area moved; SkyGlyph's header quotes 0.0831",
-            0.0831, SkyGlyph.PROFILE_AREA.toDouble(), 1e-4)
+        assertEquals("the profile area moved; SkyGlyph's header quotes 0.0236",
+            0.0236, SkyGlyph.PROFILE_AREA.toDouble(), 1e-4)
 
         // Positive control. Every level emitting the same number would also be true of a function
         // that ignored its argument, so the radius and the peak really do move underneath it.

@@ -54,10 +54,13 @@ object SkyStarLight {
     const val HEART_REACH = 3.5f
 
     /** The wing's light at the middle, over the star's own. */
-    const val WING_PEAK = 0.45f
+    const val WING_PEAK = 0.3f
 
-    /** The wing's width at the whole sky, in dp: the Moffat profile's `α`. It does not grow with zoom. */
-    const val WING_DP = 1.2f
+    /**
+     * The wing's width at the whole sky, in dp: the Moffat profile's `α`. It does not grow with zoom.
+     * Tight, so the wing is a star's own light spreading and not a glow it wears.
+     */
+    const val WING_DP = 0.9f
 
     /** How steeply the wing falls: `(1 + (r/α)²)^-2.3`. */
     const val WING_FALL = 2.3f

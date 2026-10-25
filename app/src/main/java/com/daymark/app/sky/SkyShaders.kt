@@ -292,13 +292,16 @@ half4 main(float2 p) {
     float t = uSeconds;
     float zoomIn = log2(max(uAcross, 1.0));
 
-    // 1. Deep space: broad, dark changes of colour, furthest back.
+    // 1. Deep space, furthest back: close to black, with broad changes of tone too faint to read
+    //    as shapes. Held low and greyed toward its own brightness, because a deep layer in strong
+    //    colour is a wash over the whole screen, and a wash reads as wallpaper rather than night.
     float2 w1 = at(p, 0.25) + uSeed;
     float b1 = fbm(w1 * 1.3 + float2(3.1, 1.7), 4.0);
     float b2 = fbm(w1 * 2.9 + float2(9.2, 4.4) + float2(t * 0.0015, 0.0), 4.0);
-    float3 c = mix(uSpace0, uSpace1, smoothstep(0.3, 0.62, b1));
-    c = mix(c, uSpace2, smoothstep(0.55, 0.85, b1) * 0.7);
-    c += uAccent * 0.1 * smoothstep(0.5, 0.92, b2);
+    float3 c = mix(uSpace0, uSpace1, smoothstep(0.3, 0.75, b1) * 0.6);
+    c = mix(c, uSpace2, smoothstep(0.65, 0.9, b1) * 0.25);
+    c += uAccent * 0.03 * smoothstep(0.6, 0.95, b2);
+    c = mix(float3(dot(c, float3(0.3, 0.4, 0.3))), c, 0.6);
 
     // 2. Dust, nearer: long dark lanes that dim the glow behind them.
     float2 w2 = at(p, 0.06) + uSeed * 1.7;
@@ -307,9 +310,10 @@ half4 main(float2 p) {
     float dust = smoothstep(0.52, 0.72, lane);
     c *= 1.0 - 0.55 * dust;
 
-    // 3. Gas, nearest: it gathers as the view closes in, lit along its edges and shadowed in its
-    //    thick parts, so it reads as a volume and not as paint.
-    float gasShow = smoothstep(0.6, 4.2, zoomIn) * uShow;
+    // 3. Gas, nearest: there from the whole sky, gathering as the view closes in, lit along its
+    //    edges and shadowed in its thick parts, so it reads as a volume and not as paint. It is
+    //    the one place the space has detail, so it is never taken away entirely.
+    float gasShow = mix(0.8, 1.0, smoothstep(0.6, 4.2, zoomIn)) * uShow;
     if (gasShow > 0.0) {
         // Two levels of cloud at once, a size apart, crossing over as the view closes in: finer
         // clouds come in as the coarser ones grow past the screen, so there is always gas to see

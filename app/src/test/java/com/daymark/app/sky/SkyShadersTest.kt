@@ -166,8 +166,10 @@ class SkyShadersTest {
                 }
                 val space = look.space.map { linearOf(it) }
                 for (s in steps) for (u in steps) {
-                    val base = mix(mix(space[0], space[1], s), space[2], u * 0.7f)
-                    val c = FloatArray(3) { base[it] + space[3][it] * 0.1f }
+                    val base = mix(mix(space[0], space[1], s * 0.6f), space[2], u * 0.25f)
+                    val lit = FloatArray(3) { base[it] + space[3][it] * 0.03f }
+                    val grey = lit[0] * 0.3f + lit[1] * 0.4f + lit[2] * 0.3f
+                    val c = mix(floatArrayOf(grey, grey, grey), lit, 0.6f)
                     checked++
                     if (isGreen(if (clamp) neverGreen(c) else c)) green++
                 }
