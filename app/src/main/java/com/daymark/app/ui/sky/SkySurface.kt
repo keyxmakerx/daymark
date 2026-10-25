@@ -1289,6 +1289,15 @@ private fun DrawScope.drawStar(
         elapsedMillis = elapsedMillis,
         fade = shine,
     )
+    drawShimmer(
+        sprites = sprites,
+        kind = kind,
+        id = id,
+        centre = centre,
+        options = options,
+        elapsedMillis = elapsedMillis,
+        fade = shine * (1f - sun),
+    )
 
     val coreRadius =
         (SkyGlyph.coreRadiusDp(kind, moodLevel) * SkyGlyph.coreScale(kind) * SkyGlyph.zoomScale(zoom)).dp.toPx()
@@ -1455,6 +1464,37 @@ private fun DrawScope.drawGlint(
         image = sprite.image,
         topLeft = Offset(centre.x - sprite.halfWidth, centre.y - sprite.halfHeight),
         alpha = flareAlpha,
+        blendMode = BlendMode.Plus,
+    )
+}
+
+/**
+ * The shimmer: red light, then blue, added over a bright star while it flickers, the way starlight
+ * breaks into colour through air ([SkyTwinkle.shimmerRedAt]).
+ *
+ * It stamps the glint's own fringe sprites, centred on the star and added, so the star's colour
+ * underneath is still exactly its age and only light is laid over it. Multiplied by [fade], the
+ * star's age, its magnitude and how far it is from being a sun: an old or faint star shimmers no
+ * harder than it shines, and a sun close in does not shimmer at all.
+ */
+private fun DrawScope.drawShimmer(
+    sprites: SkySprites,
+    kind: SkyKind,
+    id: Long,
+    centre: Offset,
+    options: SkyOptions,
+    elapsedMillis: Long,
+    fade: Float,
+) {
+    val red = SkyTwinkle.shimmerRedAt(kind, id, elapsedMillis, options)
+    val blue = SkyTwinkle.shimmerBlueAt(kind, id, elapsedMillis, options)
+    val amount = max(red, blue)
+    if (amount <= 0f) return
+    val half = sprites.fringe(red > 0f, kind == SkyKind.LIFE_EVENT)
+    drawImage(
+        image = half.image,
+        topLeft = Offset(centre.x - half.halfWidth, centre.y - half.halfHeight),
+        alpha = (SkyTwinkle.SHIMMER_ALPHA * amount * fade).coerceIn(0f, 1f),
         blendMode = BlendMode.Plus,
     )
 }

@@ -71,6 +71,10 @@ a new phone?", done on one phone.
   few burn bright, and each keeps its own brightness forever; nothing about a day, its mood or how
   much was written changes it, and the Key says so. Even the faintest, oldest star stays plainly
   visible. A life event is still the brightest, and the quiet sky draws every star alike (#474).
+- **The brighter stars flash red and blue as they twinkle**, the way starlight breaks into colour
+  through air: quick and faint, only while a star is flickering, never green, and never changing
+  what colour the star is. The faint stars keep a plain flicker. It stops with Motion off and in
+  the quiet sky (#474).
 - **The sky has depth behind its stars.** Behind them is space close to black, touched with your
   sky's own colours, with lanes of dust and clouds of gas, there from the whole sky and gathering as
   you zoom in, lit by the stars nearest them. Each layer moves a little less than the stars as you

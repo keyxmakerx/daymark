@@ -362,6 +362,22 @@ class SkySurfaceSourceTest {
         }
     }
 
+    /**
+     * The shimmer's colour is laid over the star at the star's own shine, so a faint or old star
+     * shimmers no harder than it burns, and taken off a sun, which is too close to twinkle.
+     */
+    @Test
+    fun `a star's shimmer is no louder than the star, and leaves a sun alone`() {
+        fun fadeOf(call: String): String =
+            call.substringAfter("fade =").let { it.substring(0, it.lastIndexOf(")")) }.trim().trimEnd(',')
+        val call = squeeze(statementFrom(surface, "    drawShimmer("))
+        assertTrue("the shimmer is no longer drawn with every star", call.startsWith("drawShimmer("))
+        assertEquals("the shimmer's strength is no longer the star's shine away from a sun", "shine * (1f - sun)", fadeOf(call))
+        // The control: the glint, drawn just before it, gives a different argument through the
+        // same extraction, so the check reads the argument and not a fixed string.
+        assertEquals("shine", fadeOf(squeeze(statementFrom(surface, "    drawGlint("))))
+    }
+
     @Test
     fun `the brightness check sees a mood spliced into the expression`() {
         val statement = statementFrom(surface, "val brightness =")

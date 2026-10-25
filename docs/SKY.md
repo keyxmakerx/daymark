@@ -396,7 +396,8 @@ crisp bead a dp larger and a little darker toward its edge.
 ### 3.6 Twinkle
 
 Decoration only. Every value comes from the star's identity and the time, never from its mood or any
-count, so each star has its own beat, forever. Kind matters only in that every life event glints.
+count, so each star has its own beat, forever. Kind matters only in that every life event glints
+and shimmers.
 
 - **A flicker**, every star, the approved phone sky's: three sines at different speeds add up to a
   waver that never quite repeats, the fastest under 2.3 times a second, moving the star's light by
@@ -407,6 +408,12 @@ count, so each star has its own beat, forever. Kind matters only in that every l
 - **A glint**, about a fifth of stars and every life event: once every 7 to 22 seconds, for 280 ms, a
   red and a blue fringe are added either side of the star, like a prism. The star's own tint never
   changes.
+- **A shimmer**, the brighter stars (the full and bright magnitudes, about three in ten) and every
+  life event, while they flicker: red light, then blue, added over the star on its fastest flicker
+  sine, so each colour comes round under 2.3 times a second, at a fifth of a fringe's strength at
+  most, the way starlight breaks into colour through air. Never both at once, never green, added
+  rather than blended, so the star's own tint never changes; it fades out as a star becomes a sun.
+  The faint stars keep a plain flicker.
 
 The twinkle multiplies a star's brightness, its age and its magnitude, at one depth for every star,
 so a faint star wavers as much as a bright one. There is no dial, only the Motion switch (§7.4). One
@@ -704,6 +711,7 @@ asserted as arithmetic in `SkyTwinkleTest`:
   sky is a cut.
 - **Only a few stars glint at any moment**, about four in a thousand, and none in the quiet sky.
 - **A glint is under a third of a second.**
+- **A shimmer is faint and only while a star flickers**, never in the quiet sky.
 - **No flicker runs faster than three times a second**; the fastest is under 2.3.
 - **Nothing is ever in step with anything else.**
 
