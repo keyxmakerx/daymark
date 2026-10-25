@@ -68,6 +68,9 @@ a new phone?", done on one phone.
   The rays fade away as you zoom in, before a goal's own cross-rays appear; a life event keeps
   longer white rays at every zoom, so it is still the one bright star. Up close a star looks as it
   did (#474).
+- **A young sky fills the screen.** "Fit the whole sky" frames the stars you have, not all the space
+  your sky will grow into, so a few weeks of memories spread across the screen instead of sitting in
+  one corner. The view widens as your sky grows, and no star moves (#476).
 - **On/off switches can be told apart.** Every switch in the app now draws its off state with a
   visible outline and thumb in the soft ink, where before the track was the colour of the page. On
   is unchanged: a dark track with a light thumb. The "Undo" on a deleted entry and the chosen AM or

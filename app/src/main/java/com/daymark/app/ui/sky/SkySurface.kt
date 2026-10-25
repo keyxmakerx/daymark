@@ -191,7 +191,9 @@ internal fun SkySurface(
 ) {
     val xs = positions[0]
     val ys = positions[1]
-    val bounds = remember(positions, layout) { SkyPresentation.boundsOf(xs, ys, layout.height) }
+    val bounds = remember(positions, layout, trackers) {
+        SkyPresentation.boundsOf(xs, ys, layout.height, trackers)
+    }
     val glows = remember(seed, layout.height) { SkyColours.glows(seed, layout.height) }
     val extents = remember(nebulae, positions) { nebulae.map { SkyNebula.extent(it, xs, ys) } }
     // Each nebula's gas, folded once off the main thread: years of busy weeks are dozens of them.

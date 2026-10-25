@@ -466,7 +466,10 @@ the phone's own.
 ## 4. Zoom and focus
 
 Zoom runs continuously from the whole sky, exactly filling the screen and never less, to a single
-star drawn as a sun. The closest view puts 0.004 of the sky's width across the screen, less than one
+star drawn as a sun. The whole sky is what is in it so far, its stars and tracker objects with a
+margin, never framed tighter than a quarter of the world's width: a young sky spreads across the
+screen rather than sitting in one corner of the world it will grow into, and the view widens as it
+grows without any star moving (#476). The closest view puts 0.004 of the sky's width across the screen, less than one
 memory's step along the guide (`SkyPresentation.CLOSEST_SPAN`), and is measured against the screen,
 so a tall sky can be followed in as far as a short one. Nothing reflows, so a star can be followed
 from FAR to a sun by eye.
