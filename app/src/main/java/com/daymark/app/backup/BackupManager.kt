@@ -388,6 +388,12 @@ data class BackupData(
      * showed the default — and a restore then leaves this phone's line as it is (#370).
      */
     val crisisLine: BackupCrisisLine? = null,
+    /**
+     * The reminders' "Keep reminding me at these times", as each tracker's `keepAsSet` already
+     * travels with it (#484). Null when the file predates it, or the person never answered; a
+     * restore then leaves this phone's answer as it is.
+     */
+    val remindersKeepAsSet: Boolean? = null,
 )
 
 /**
@@ -520,6 +526,9 @@ class BackupManager @Inject constructor(
     // The person's own crisis line, which a backup carries so a new phone's crisis screen does not
     // fall back to a number that may not work where they are (#370).
     private val crisisStore: com.daymark.app.data.CrisisStore,
+    // The reminders' keep-or-ease answer, which lives in settings rather than in a row (#484).
+    private val settings: com.daymark.app.data.SettingsRepository,
+    private val reminderScheduler: com.daymark.app.notifications.ReminderScheduler,
     private val database: com.daymark.app.data.AppDatabase,
 ) {
     /**
@@ -614,6 +623,7 @@ class BackupManager @Inject constructor(
                 BackupPersonGroupShare(it.groupKey, it.shared)
             },
             skySeed = skyRepository.storedSeed(),
+            remindersKeepAsSet = settings.remindersKeepAsSet.takeIf { settings.remindersKeepAnswered },
             crisisLine = crisisStore.own()?.let { BackupCrisisLine(it.label, it.contact, it.number, it.takesTexts) },
             constellations = constellationDao.getAll().map {
                 BackupConstellation(it.id, it.name, it.madeEpochDay, it.points, it.createdAt)
@@ -704,6 +714,11 @@ class BackupManager @Inject constructor(
         // A file without one leaves this phone's line as it is. Blank fields are refused by save().
         data.crisisLine?.let { line ->
             if (mode == ImportMode.REPLACE || crisisStore.own() == null) crisisStore.save(line.label, line.contact, line.number, line.takesTexts)
+        }
+        // The reminders' keep-or-ease answer, on the same terms: REPLACE takes the file's, MERGE
+        // only while this phone has none, and a file without one changes nothing.
+        data.remindersKeepAsSet?.let { keep ->
+            if (mode == ImportMode.REPLACE || !settings.remindersKeepAnswered) reminderScheduler.setKeepAsSet(keep)
         }
     }
 

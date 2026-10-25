@@ -56,7 +56,10 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.daymark.app.data.CrisisStore
 import com.daymark.app.notifications.NotificationPermission
-import com.daymark.app.ui.components.KeepTimesChoice
+import com.daymark.app.ui.components.EASE_DETAIL
+import com.daymark.app.ui.components.EASE_TITLE
+import com.daymark.app.ui.components.KEEP_DETAIL
+import com.daymark.app.ui.components.KEEP_TITLE
 import com.daymark.app.ui.components.PaperSurface
 import com.daymark.app.ui.components.MoodFaceIcon
 import com.daymark.app.util.DateUtils
@@ -217,10 +220,19 @@ private fun Welcome() {
 @Composable
 private fun ReminderStep(onEnable: (Int, Int, Boolean) -> Unit, onSkip: () -> Unit) {
     val tpState = rememberTimePickerState(initialHour = 21, initialMinute = 0, is24Hour = false)
-    // Unanswered until the person picks; the reminder waits for the answer.
+    // The answer the person pressed, held across the permission prompt. Each answer is itself the
+    // way to switch the reminder on, so there is no button that waits, greyed out, for it (#484).
     var keep by remember { mutableStateOf<Boolean?>(null) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         keep?.let { onEnable(tpState.hour, tpState.minute, it) }
+    }
+    fun enable(answer: Boolean) {
+        keep = answer
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            onEnable(tpState.hour, tpState.minute, answer)
+        }
     }
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Text("A gentle daily nudge", style = MaterialTheme.typography.headlineSmall)
@@ -233,21 +245,18 @@ private fun ReminderStep(onEnable: (Int, Int, Boolean) -> Unit, onSkip: () -> Un
         Spacer(20.dp)
         TimePicker(state = tpState)
         Spacer(8.dp)
-        Text("If reminders go unanswered", style = MaterialTheme.typography.titleSmall, modifier = Modifier.fillMaxWidth())
-        KeepTimesChoice(keep = keep, onChange = { keep = it })
-        Spacer(16.dp)
-        Button(
-            onClick = {
-                val answer = keep ?: return@Button
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    permission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                } else {
-                    onEnable(tpState.hour, tpState.minute, answer)
-                }
-            },
-            enabled = keep != null,
+        Text(
+            "Switch it on, and choose what happens if reminders go unanswered:",
+            style = MaterialTheme.typography.titleSmall,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("Enable reminder") }
+        )
+        Spacer(8.dp)
+        Button(onClick = { enable(true) }, modifier = Modifier.fillMaxWidth()) { Text(KEEP_TITLE) }
+        Text(KEEP_DETAIL, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(8.dp)
+        Button(onClick = { enable(false) }, modifier = Modifier.fillMaxWidth()) { Text(EASE_TITLE) }
+        Text(EASE_DETAIL, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(8.dp)
         TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth()) { Text("Not now") }
     }
 }

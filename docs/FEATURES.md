@@ -450,12 +450,19 @@ times and has no page, so offer once. Not built: #156.
 
 - Settings → Reminders holds as many as the person likes, each with a time, an optional label and
   an on/off switch. First-run setup offers one. Android 13 and later ask for notification permission
-  the first time. Reminders fire at the exact time where Android allows it, and are re-armed after a
-  restart.
+  the first time. Reminders fire at the exact time where Android allows it; where it does not (the
+  exact-alarm permission is off by default on Android 14), they fall back to an alarm Doze still
+  lets fire, as do Try later and tracker check-ins. Every reminder is re-armed whenever the app
+  starts and after a restart, and a fired reminder is re-armed before its notification is shown,
+  so nothing that goes wrong showing it can stop tomorrow's (#484). Re-arming sets the next time the
+  person chose and leaves the engine's easing as it was.
 - A reminder's notification, or its **Log now** action, opens a fresh entry. Its line is one of the
   fixed, human-written openers (§13.3), in turn.
 - **Try later** sends one more nudge for that reminder an hour later. **Stop asking** switches that
-  reminder off; switching it back on in Settings → Reminders undoes it (#195).
+  reminder off; switching it back on in Settings → Reminders undoes it (#195). Home then says, in
+  one quiet line, that the reminder is off and that it was switched off from a notification, with a
+  link to Settings → Reminders and **Hide this**. It never offers to turn the reminder back on
+  (§D1b), and it goes once the reminder is on again (#484).
 - **The rules engine decides which firings are posted** (`stats/CheckInEngine.kt`,
   [DECISIONS.md](DECISIONS.md) §D1, §D1a). The alarms always fire at the times the person set; the
   engine only lets some of them through. While reminders are answered, every one is posted. Every
@@ -469,7 +476,12 @@ times and has no page, so offer once. Not built: #156.
   own state is kept in the app's preferences (`data/CheckInStateStore.kt`).
 - **Easing off is the person's choice.** Setting the first reminder, in onboarding or in Settings →
   Reminders, asks *"Ease off if I'm not answering"* or *"Keep reminding me at these times"*, with
-  nothing chosen until the person picks. Kept, reminders come at every time set, never fewer and
+  nothing chosen until the person picks. In onboarding the two answers are the buttons that switch
+  the reminder on. "Keep" says it suits medication, forgetting, or wanting a steady record. Anyone
+  whose reminder or tracker check-ins were set up before the question existed is asked once on
+  Home, for the reminder and each such tracker; until they answer, and after **Not now**, nothing
+  changes. A tracker restored from a backup under a new id is asked once more. A backup carries the
+  reminders' answer, as it carries each tracker's (#484). Kept, reminders come at every time set, never fewer and
   never more, and no longer wait is tried. Settings → Reminders shows the answer and changes it;
   a change starts the engine over from the person's schedule (§D1a).
 

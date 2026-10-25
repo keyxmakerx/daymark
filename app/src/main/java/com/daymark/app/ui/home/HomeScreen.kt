@@ -79,12 +79,15 @@ fun HomeScreen(
     onOpenForYou: () -> Unit = {},
     onOpenHistory: () -> Unit = {},
     onDeleteEntry: (EntryWithActivities) -> Unit = {},
+    onOpenReminders: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
     signalsViewModel: SignalsViewModel = hiltViewModel(),
     checksViewModel: HomeChecksViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val crisisCheck by checksViewModel.crisisCheck.collectAsStateWithLifecycle()
+    val keepQuestions by checksViewModel.keepQuestions.collectAsStateWithLifecycle()
+    val stoppedReminders by checksViewModel.stoppedReminders.collectAsStateWithLifecycle()
     val signals by signalsViewModel.signals.collectAsStateWithLifecycle()
 
     // Hoisted so the card slot is only emitted when something is actually visible — dismissing the
@@ -130,6 +133,28 @@ fun HomeScreen(
                     onKeep = checksViewModel::keepCrisisLine,
                     onSave = checksViewModel::saveCrisisLine,
                     onSkip = checksViewModel::skipCrisisLine,
+                    modifier = Modifier.animateItem(),
+                )
+            }
+        }
+
+        if (keepQuestions.isNotEmpty()) {
+            item(key = "keep-check") {
+                KeepRemindingCheck(
+                    questions = keepQuestions,
+                    onSave = checksViewModel::answerKeep,
+                    onSkip = { checksViewModel.skipKeep(keepQuestions) },
+                    modifier = Modifier.animateItem(),
+                )
+            }
+        }
+
+        stoppedReminders.forEach { reminder ->
+            item(key = "stopped-${reminder.id}") {
+                StoppedReminderLine(
+                    reminder = reminder,
+                    onOpenReminders = onOpenReminders,
+                    onHide = { checksViewModel.hideStopped(reminder) },
                     modifier = Modifier.animateItem(),
                 )
             }

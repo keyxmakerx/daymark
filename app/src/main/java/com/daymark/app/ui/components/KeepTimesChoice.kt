@@ -32,13 +32,13 @@ fun KeepTimesChoice(keep: Boolean?, onChange: (Boolean) -> Unit, modifier: Modif
     Column(modifier.selectableGroup()) {
         Option(
             title = EASE_TITLE,
-            detail = "Fewer check-ins until you answer again. Daymark tells you each time, with a way to put it back.",
+            detail = EASE_DETAIL,
             selected = keep == false,
             onSelect = { onChange(false) },
         )
         Option(
             title = KEEP_TITLE,
-            detail = "Always at the times you set, never fewer. For something like medication.",
+            detail = KEEP_DETAIL,
             selected = keep == true,
             onSelect = { onChange(true) },
         )
@@ -58,8 +58,16 @@ fun KeepTimesDialog(onAnswer: (Boolean) -> Unit, onDismiss: () -> Unit) {
 }
 
 private const val QUESTION = "What if these go unanswered?"
-private const val EASE_TITLE = "Ease off if I'm not answering"
-private const val KEEP_TITLE = "Keep reminding me at these times"
+const val EASE_TITLE = "Ease off if I'm not answering"
+const val KEEP_TITLE = "Keep reminding me at these times"
+const val EASE_DETAIL = "Fewer check-ins until you answer again. Daymark tells you each time, with a way to put it back."
+
+/**
+ * Not only medication: someone who forgets, or who wants a record with no gaps the app made, is
+ * exactly who easing off would fail (#484, §D1a).
+ */
+const val KEEP_DETAIL =
+    "Always at the times you set, never fewer. For medication, if you tend to forget, or if you want a steady record."
 
 @Composable
 private fun Option(title: String, detail: String, selected: Boolean, onSelect: () -> Unit) {

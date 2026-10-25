@@ -11,7 +11,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** Posts a reminder's notification, then re-arms its alarm for the next day. Also fires a "Try later" nudge. */
+/**
+ * Re-arms a reminder's alarm for the next day, then posts its notification. Also fires a "Try
+ * later" nudge. Re-arming comes first and on its own: whatever showing the notification does, the
+ * reminder still comes tomorrow (#484).
+ */
 @AndroidEntryPoint
 class ReminderReceiver : BroadcastReceiver() {
 
@@ -28,10 +32,10 @@ class ReminderReceiver : BroadcastReceiver() {
             try {
                 val later = intent.getBooleanExtra(ReminderScheduler.EXTRA_LATER, false)
                 repository.get(reminderId)?.takeIf { it.enabled }?.let { reminder ->
-                    scheduler.showNotification(reminder, later = later)
                     // Re-arm the daily alarm (exact alarms are one-shot). A "Try later" nudge is a
                     // one-off alarm of its own, so the daily one is still armed.
-                    if (!later) scheduler.schedule(reminder)
+                    if (!later) runCatching { scheduler.schedule(reminder) }
+                    scheduler.showNotification(reminder, later = later)
                 }
             } catch (_: RuntimeException) {
                 // The journal is encrypted at rest, and a phone whose keystore has lost the key

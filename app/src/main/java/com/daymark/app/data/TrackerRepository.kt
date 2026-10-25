@@ -4,6 +4,7 @@ import com.daymark.app.data.dao.TrackerDao
 import com.daymark.app.data.dao.TrackerLogDao
 import com.daymark.app.data.entity.Tracker
 import com.daymark.app.data.entity.TrackerLog
+import com.daymark.app.data.entity.rhythmChoice
 import com.daymark.app.notifications.TrackerCheckInScheduler
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.withLock
@@ -15,6 +16,7 @@ class TrackerRepository @Inject constructor(
     private val trackerDao: TrackerDao,
     private val trackerLogDao: TrackerLogDao,
     private val checkIns: TrackerCheckInScheduler,
+    private val settings: SettingsRepository,
 ) {
     fun observeActive(): Flow<List<Tracker>> = trackerDao.observeActive()
 
@@ -57,9 +59,18 @@ class TrackerRepository @Inject constructor(
     suspend fun update(tracker: Tracker) {
         val before = trackerDao.getById(tracker.id)
         trackerDao.update(tracker)
+        // Turning check-ins on asks the question, and changing the answer is answering it (#484).
+        if (before != null && (before.keepAsSet != tracker.keepAsSet || (!before.rhythmChoice.asks && tracker.rhythmChoice.asks))) {
+            markKeepAnswered(tracker.id)
+        }
         if (before != null && before.keepAsSet != tracker.keepAsSet) checkIns.easingChanged(tracker.id)
         checkIns.refresh(tracker)
         checkIns.redrawWidget()
+    }
+
+    /** Records that the person answered "ease off or keep" for [trackerId], so Home never asks it. */
+    fun markKeepAnswered(trackerId: Long) {
+        settings.trackersKeepAnswered = settings.trackersKeepAnswered + trackerId
     }
 
     /** An archived tracker asks nothing and shows nothing until it is brought back. */

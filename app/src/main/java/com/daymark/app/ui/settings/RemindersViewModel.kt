@@ -22,10 +22,14 @@ class RemindersViewModel @Inject constructor(
     settings: SettingsRepository,
 ) : ViewModel() {
 
-    private val _keepAsSet = MutableStateFlow(settings.remindersKeepAsSet)
+    private val _keepAsSet = MutableStateFlow(settings.remindersKeepAsSet.takeIf { settings.remindersKeepAnswered })
 
-    /** Whether the reminders keep to the person's times rather than easing off (`KeepTimesChoice`). */
-    val keepAsSet: StateFlow<Boolean> = _keepAsSet.asStateFlow()
+    /**
+     * Whether the reminders keep to the person's times rather than easing off (`KeepTimesChoice`),
+     * or null while the question has never been answered: nothing is shown as chosen that the
+     * person did not choose (#484).
+     */
+    val keepAsSet: StateFlow<Boolean?> = _keepAsSet.asStateFlow()
 
     fun setKeepAsSet(keep: Boolean) {
         scheduler.setKeepAsSet(keep)

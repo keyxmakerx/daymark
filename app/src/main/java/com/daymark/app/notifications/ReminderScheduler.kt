@@ -78,8 +78,10 @@ class ReminderScheduler @Inject constructor(
         try {
             alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
         } catch (_: SecurityException) {
-            // Falls back to inexact if the exact-alarm permission is unavailable.
-            alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAt, pending)
+            // Without the exact-alarm permission (denied by default on Android 14), inexact — but
+            // one Doze lets fire. A plain set() can be held back for hours while the phone is idle,
+            // which on an evening reminder means not at all (#484).
+            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
         }
     }
 
@@ -256,6 +258,8 @@ class ReminderScheduler @Inject constructor(
      * applies.
      */
     fun setKeepAsSet(keep: Boolean, nowMillis: Long = System.currentTimeMillis()) {
+        // Answered, even when the answer is the value already stored: that is the point of asking.
+        settings.remindersKeepAnswered = true
         if (settings.remindersKeepAsSet == keep) return
         settings.remindersKeepAsSet = keep
         checkInState.restart(nowMillis)
@@ -276,7 +280,7 @@ class ReminderScheduler @Inject constructor(
         try {
             alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nowMillis + TRY_LATER_MILLIS, pending)
         } catch (_: SecurityException) {
-            alarmManager.set(AlarmManager.RTC_WAKEUP, nowMillis + TRY_LATER_MILLIS, pending)
+            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nowMillis + TRY_LATER_MILLIS, pending)
         }
         NotificationManagerCompat.from(context).cancel(notificationId(reminderId))
     }

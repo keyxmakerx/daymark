@@ -287,6 +287,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false, openT
                     onOpenForYou = { navController.navigate(Routes.FOR_YOU) },
                     onOpenHistory = { navController.navigate(Routes.HISTORY) },
                     onDeleteEntry = deleteEntryWithUndo,
+                    onOpenReminders = { navController.navigate(Routes.REMINDERS) },
                     modifier = Modifier.padding(padding),
                 )
             }

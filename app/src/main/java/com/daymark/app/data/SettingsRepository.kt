@@ -44,6 +44,34 @@ class SettingsRepository @Inject constructor(
         get() = prefs.getBoolean(KEY_REMINDERS_KEEP_AS_SET, false)
         set(value) = prefs.edit().putBoolean(KEY_REMINDERS_KEEP_AS_SET, value).apply()
 
+    /**
+     * Whether the person has answered [remindersKeepAsSet]'s question. False for everyone who set a
+     * reminder before the question existed, and for them alone Home asks it once (#484); until they
+     * answer, nothing changes. Written by `ReminderScheduler.setKeepAsSet`, which every answer goes
+     * through.
+     */
+    var remindersKeepAnswered: Boolean
+        get() = prefs.getBoolean(KEY_REMINDERS_KEEP_ANSWERED, false)
+        set(value) = prefs.edit().putBoolean(KEY_REMINDERS_KEEP_ANSWERED, value).apply()
+
+    /**
+     * Trackers whose "ease off or keep" question the person has answered, by id. A tracker whose
+     * check-ins were switched on before the question existed is not in it, and Home asks once.
+     * Ids are this phone's: a tracker restored under a new id is asked once more.
+     */
+    var trackersKeepAnswered: Set<Long>
+        get() = prefs.getStringSet(KEY_TRACKERS_KEEP_ANSWERED, emptySet()).orEmpty().mapNotNull { it.toLongOrNull() }.toSet()
+        set(value) = prefs.edit().putStringSet(KEY_TRACKERS_KEEP_ANSWERED, value.map { it.toString() }.toSet()).apply()
+
+    /**
+     * Reminders the person switched off with **Stop asking** on a notification, by id. Home states
+     * that each is off, and where to turn it back on, until it is on again or the person hides the
+     * line (#484). Home never turns one back on and never asks to (§D1b).
+     */
+    var stoppedReminderIds: Set<Long>
+        get() = prefs.getStringSet(KEY_STOPPED_REMINDERS, emptySet()).orEmpty().mapNotNull { it.toLongOrNull() }.toSet()
+        set(value) = prefs.edit().putStringSet(KEY_STOPPED_REMINDERS, value.map { it.toString() }.toSet()).apply()
+
     // --- App lock ---
     var lockEnabled: Boolean
         get() = prefs.getBoolean(KEY_LOCK_ENABLED, false)
@@ -121,6 +149,9 @@ class SettingsRepository @Inject constructor(
         private const val KEY_REMINDER_MINUTE = "reminder_minute"
         private const val KEY_LEGACY_REMINDER_MIGRATED = "legacy_reminder_migrated"
         private const val KEY_REMINDERS_KEEP_AS_SET = "reminders_keep_as_set"
+        private const val KEY_REMINDERS_KEEP_ANSWERED = "reminders_keep_answered"
+        private const val KEY_TRACKERS_KEEP_ANSWERED = "trackers_keep_answered"
+        private const val KEY_STOPPED_REMINDERS = "stopped_reminder_ids"
         private const val KEY_LOCK_ENABLED = "lock_enabled"
         private const val KEY_PIN_HASH = "pin_hash"
         private const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"

@@ -63,6 +63,15 @@ a new phone?", done on one phone.
 - **Each release lists its APK's SHA-256**, in the notes and as a `.sha256` file beside it (#226).
 
 ### Fixed
+- **Reminders no longer stop without a word.** Every reminder is re-armed whenever the app starts,
+  and a reminder is re-armed before its notification is shown, so one that failed to show still
+  comes tomorrow. On phones that don't allow exact alarms (Android 14 by default), reminders, Try
+  later and tracker check-ins now use an alarm battery saving lets through. After **Stop asking**,
+  Home says the reminder is off and links to Settings → Reminders (#484).
+- **You're asked whether reminders should ease off.** If your daily reminder or a tracker's
+  check-ins were set up before Daymark asked, Home asks once; until you answer, nothing changes. In
+  setup the two answers now switch the reminder on themselves, and "Keep reminding me" says it also
+  suits forgetting or wanting a steady record. A backup carries the reminders' answer (#484).
 - **A mixed day still offers a moment.** The "Want to take a moment?" card reads the lowest mood you
   logged today. An Awful morning followed by a Good evening used to average to Meh, and the card
   stayed away on exactly that kind of day (#482).
