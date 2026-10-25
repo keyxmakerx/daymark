@@ -180,6 +180,8 @@ your home network still needs a certificate the phone trusts:
   address on your home network, and set `DAYMARK_PUBLIC_BASE_URL` to `https://` and that hostname.
   Some routers refuse a public DNS answer that points at a home-network address; if the name does not
   resolve at home, add it to the router's own DNS instead.
+- **A Tailscale (or similar) name with the certificate it issues**, for a server reachable only on
+  your tailnet. Tailscale's certificates come from a public authority, so the phone trusts them.
 - **Not a certificate authority of your own.** The Android app trusts only the certificate
   authorities Android ships with, so a certificate from one you made is refused, however it was
   installed on the phone.
@@ -420,7 +422,9 @@ newer audit-chain head will see the chain fall behind it (COMPANION_SECURITY.md 
 2. Build from source with `git pull` then `docker compose up -d --build`; or run the image CI
    published: set `DAYMARK_IMAGE` to `ghcr.io/…/daymark-companion@sha256:…`, then `docker compose pull`
    and `docker compose up -d`. Pin a digest, never `:latest`, in production: a moving tag lets a
-   registry swap the code that holds people's keys.
+   registry swap the code that holds people's keys. The published image runs on linux/amd64 and
+   linux/arm64, and each release also has a version tag such as `:0.4.2`; pin the digest it resolves
+   to (companion/README.md, Published image).
 3. Watch it come up: `docker compose ps` should reach `healthy`; then run the checks in
    COMPANION_OBSERVABILITY.md §6.4. If it restarts instead, `docker compose logs companion | grep
    'Refusing to start'` names the setting to change (§5.3), or the database that could not be

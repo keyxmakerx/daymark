@@ -14,8 +14,9 @@ old one's journal. To bring your entries across:
 1. Before installing the new build, open the Daymark you use now and go to **Settings → Export
    backup**. Keep the file on your phone and do not send or upload it. It is not encrypted: every
    entry, journal page, the safety plan, the people and notes, and your photos are in it (#236).
-2. Write down what a backup does not carry: your crisis line if you changed it (**More → Gentle
-   support → Crisis resources**) and your settings. Your PIN does not carry over either.
+2. Write down what a backup does not carry: your settings. Your PIN does not carry over either.
+   A build from before 0.4.1 also leaves out your crisis line, so if you changed it (**More →
+   Gentle support → Crisis resources**), write that down too.
 3. Install the new build. It arrives as a second app, also called Daymark, and starts empty. The old
    one keeps everything.
 4. In the new one, finish setup, then **Settings → Restore backup**, choose the file, then **Replace

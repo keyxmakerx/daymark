@@ -6,8 +6,11 @@ accept byte-identical data, and the web tests are what it is checked against. Th
 [SYNC_PROTOCOL.md](SYNC_PROTOCOL.md) and [COMPANION_PAIRING.md](COMPANION_PAIRING.md) §13.
 
 Built today: the `sync` flavour, the Kotlin port of the sync and pairing cryptography and its tests,
-and Settings → Sync with your server, which pairs the phone and sends an encrypted copy of the journal
-(§2). The `foss` build still talks to nothing. Not built: pull and the rest of the phone's half, #138.
+and Settings → Sync with your server, which pairs the phone, sends and fetches an encrypted copy of
+the journal (§2), receives game plans and suggestions in an inbox (§3), and runs the owner's half of
+pairing with a clinician (§4). The `foss` build still talks to nothing. Not built: taking in the web
+console's lane (#346), grants and shares from the phone (#174), and refusing an older copy (#179);
+the rest of the phone's half is under #138.
 
 ## 0. The default build stays offline
 
@@ -39,7 +42,7 @@ libsodium and no emulator; the `sync` flavour wires it to the Android binding
 | Wrapped-key slots: Argon2id per slot, XChaCha20-Poly1305 under the AAD `daymark.datakey.v1\|kind`; a passphrase opens the first passphrase slot, a code each recovery slot in turn | `recovery/dataKey.ts` | `SyncCrypto.kt` | Opening: yes. Writing: only in the tests |
 | Reading a typed recovery code: JavaScript's `\s`, `-` and U+2010–U+2015 dropped, full Unicode upper case, the mod-31 check symbol checked before any derivation | `recovery/recoveryCode.ts` | `RecoveryCode.kt` | Reading: yes. Generating: no |
 | Subkeys, context `dmsync01`: 1 sync key, 2 manifest seed | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
-| Subkeys 3 and 4: the owner's X25519 and Ed25519 seeds | `owner/identity.ts` | `SyncCrypto.kt` (`ownerIdentityFromMaster`), with the web's vector in `OwnerPairingVectorTest.kt` | Deriving: yes. Used by pairing: #174 |
+| Subkeys 3 and 4: the owner's X25519 and Ed25519 seeds | `owner/identity.ts` | `SyncCrypto.kt` (`ownerIdentityFromMaster`), with the web's vector in `OwnerPairingVectorTest.kt` | Yes: deriving, and used by the phone's pairing (`ClinicianPairing.kt`) |
 | Snapshot envelope `DMS1 \| 0x01 \| nonce \| ciphertext`, AAD `daymark.snapshot.v1\|lineage\|version`: read, never written | `sync/crypto.ts` | `SyncCrypto.kt` | Yes |
 | Padding before encryption: a `u32` big-endian length, the plaintext, then zeros up to the standard size (#214) | `lib/padding.ts`, with the vector in `lib/padding.test.ts` | `Padding.kt` | Yes |
 | Padded snapshot envelope, format 2, the only format written: `pad(plaintext)` under the AAD `daymark.snapshot.v2\|lineage\|version`; format 1 still read (#214) | `sync/crypto.ts`, with the vector in `sync/crypto.test.ts` | `SyncCrypto.kt` | Yes |
@@ -143,7 +146,7 @@ refusing anything that would change or remove a row; check each decision's signe
 does (#177), trusting the record no further than "the owner's console added this"; keep the later of
 two decisions about one item (by `createdAt`, then `id`) and both in its history; and list every id it
 has taken in as `laneRecordsTakenIn` in the snapshot it uploads. The phone never writes a lane, nor a
-snapshot under a `lane_` name. Not built: taking records in, #346; asking before replacing, #344. Refusing an older
+snapshot under a `lane_` name. Not built: taking records in, #346; refusing to send over a copy this phone has not seen, and choosing automatically, #344. Refusing an older
 snapshot presented as the newest needs a signed manifest and a watermark kept on the device: #179.
 
 Neither the server nor anyone else can reset the app PIN or the sync passphrase. The owner's email
@@ -173,9 +176,10 @@ accept or decline.
   the owner's mark per item, keyed by `(lineageId, itemRef)`. `assignments` holds accepted ones the
   same way. `instrument_results` and `task_results` keep scores and bands, never an answer. "Replace
   all current data" empties all six and restores nothing: the backup file carries none of them.
-  Whether it should is #386.
-- **Settings** apply only for the allowlisted keys (`visibleSelfChecks`, `reminderTime`,
-  `reminderCadence`, `theme`), never PIN, lock, encryption or network settings.
+  By decision (#386) it should; not built yet: #478.
+- **Settings** would apply only for the allowlisted keys (`visibleSelfChecks`, `reminderTime`,
+  `reminderCadence`, `theme`), never PIN, lock, encryption or network settings. The app has none of
+  those keys yet, so no setting applies today.
 - **The inbox is built** (`InboxScreen.kt`, `InboxViewModel.kt`; Settings → Sync with your server →
   From your clinicians). Only a tap checks. Each approved clinician's `gameplans` and `assignments`
   channels are listed and fetched with the relationship's sign-in key as a signed header; the grant is
@@ -198,8 +202,11 @@ COMPANION_PAIRING.md §13; the phone's obligations, including the rule that it r
 notification per invitation** when a reply does not open (issue #112) and nothing else, are in
 COMPANION_PAIRING.md §14.
 
-It also gains a screen listing its connections: who, since when, their key fingerprints, what they
-can see in plain words, and Revoke. Not built: #174. The phone as the anchor for the audit chain's
+Its Clinicians screen (Settings → Sync with your server → Clinicians) lists the clinicians added on
+this phone and each invitation's state. A clinician added on the phone is kept on the phone; the
+browser console, where grants and shares are made, does not see them. Clinicians needs a server set
+up as `paired` or `practice`. Not built: since when, key fingerprints, what each can see in plain
+words, Revoke, and grants and shares from the phone: #174. The phone as the anchor for the audit chain's
 head: #182. A heartbeat between phone and server: #185. Signing requests and pairing are built on both sides
 (§2), and so are sending and getting a copy back; the camera scanner is #432.
 
