@@ -129,8 +129,9 @@ jobs:
           CERTS=$("$APKSIGNER" verify --print-certs "$APK")
           # The certificate lines name no secret, and printing them makes a refusal readable.
           echo "$CERTS"
-          # apksigner labels the signer "Signer #1", or "Signer (minSdkVersion=…)" under v3.1.
-          SIGNER=$(echo "$CERTS" | sed -n 's/^Signer[^:]* certificate SHA-256 digest: //p' | head -1 | tr -d ': \r' | tr 'A-F' 'a-f')
+          # The label before the digest varies by apksigner version and scheme ("Signer #1",
+          # "V2 Signer:", "Signer (minSdkVersion=…)"), so only the source stamp's line is set aside.
+          SIGNER=$(echo "$CERTS" | grep -iv 'source stamp' | sed -n 's/^.*certificate SHA-256 digest: //p' | head -1 | tr -d ': \r' | tr 'A-F' 'a-f')
           TESTING=$(keytool -exportcert -keystore app/ci-signing/ci-debug.keystore -storepass daymark-ci-public -alias daymark-ci | sha256sum | cut -d' ' -f1)
           # Guard against a vacuous pass, as above: no digest means nothing was compared.
           if [ -z "$SIGNER" ] || [ -z "$TESTING" ]; then
