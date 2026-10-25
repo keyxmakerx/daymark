@@ -70,7 +70,7 @@ Pre-built APKs are attached to each [GitHub release](https://github.com/keyxmake
 Daymark is not on the Play Store, so Android shows an "unknown app" warning when you sideload it.
 That is expected for any app installed that way.
 
-**If you installed a build from before 0.4.1**, its id was `com.daymark.app`; from 0.4.1 it is
+**If you installed a test build from before the 0.4 beta**, its id was `com.daymark.app`; from 0.4.0 it is
 `io.github.keyxmakerx.daymark` for good (#369). The new build installs as a second, empty Daymark.
 To bring your entries across:
 
@@ -78,7 +78,7 @@ To bring your entries across:
    backup**. Keep the file on your phone and do not send or upload it. It is not encrypted: every
    entry, journal page, the safety plan, the people and notes, and your photos are in it (#236).
 2. Write down what a backup does not carry: your settings. Your PIN does not carry over either.
-   A build from before 0.4.1 also leaves out your crisis line, so if you changed it (**More →
+   A build from before the 0.4 beta also leaves out your crisis line, so if you changed it (**More →
    Gentle support → Crisis resources**), write that down too.
 3. Install the new build. It arrives as a second app, also called Daymark, and starts empty. The old
    one keeps everything.
