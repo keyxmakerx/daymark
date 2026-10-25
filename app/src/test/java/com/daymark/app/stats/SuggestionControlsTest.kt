@@ -52,10 +52,8 @@ class SuggestionControlsTest {
             Signals.Inputs(
                 totalEntries = 40,
                 avgMood = 3.4,
-                moodTodayLevel = 1,
+                lowestMoodToday = 1,
                 loggedToday = false,
-                topLift = Signals.FactorLift("Walk", 0.9, 12),
-                topDrag = Signals.FactorLift("Late night", -0.8, 11),
                 dueCheckin = "WHO-5",
                 onThisDayNote = "a note",
             ),
@@ -68,10 +66,9 @@ class SuggestionControlsTest {
         // different mix of cards.
         val logged = Signals.build(
             Signals.Inputs(
-                totalEntries = 40, avgMood = 3.0, moodTodayLevel = 3, loggedToday = true,
-                topLift = null, topDrag = Signals.FactorLift("Late night", -0.8, 11),
+                totalEntries = 40, avgMood = 3.0, lowestMoodToday = 3, loggedToday = true,
                 dueCheckin = null,
-                onThisDayNote = null,
+                onThisDayNote = "a line from a year ago",
             ),
         )
         assertTrue(logged.controllable().isNotEmpty())
@@ -81,15 +78,20 @@ class SuggestionControlsTest {
     }
 
     /**
-     * A kind no rule emits any more, such as the month cards (#360), belongs to no group and passes
-     * through the filter untouched rather than failing; and a state stored under the old group's
-     * key changes nothing.
+     * A kind no rule emits any more, such as the month cards (#360) or the mood-and-activity cards
+     * (#483), belongs to no group and passes through the filter untouched rather than failing; and
+     * a state stored under the old group's key, as a restored backup may carry, changes nothing.
      */
     @Test
     fun aRetiredKindOrGroupIsIgnored() {
+        // The control: the lookup does find a kind that is still grouped.
+        assertEquals("self_checks", SuggestionControls.groupKeyOf("checkin_due"))
         assertNull(SuggestionControls.groupKeyOf("month_up"))
         assertNull(SuggestionControls.groupKeyOf("month_down"))
+        assertNull(SuggestionControls.groupKeyOf("lift_factor"))
+        assertNull(SuggestionControls.groupKeyOf("drag_factor"))
         assertTrue(SuggestionControls.GROUPS.none { it.key == "periods" })
+        assertTrue(SuggestionControls.GROUPS.none { it.key == "patterns" })
         val orphan = Signals.Signal(
             kind = "month_up",
             category = Signals.Category.Insight,
@@ -100,7 +102,12 @@ class SuggestionControlsTest {
             dismissible = true,
             surfaces = setOf(Signals.Surface.Insights),
         )
-        val controls = SuggestionControls.Controls(mapOf("periods" to SuggestionControls.State(off = true)))
+        val controls = SuggestionControls.Controls(
+            mapOf(
+                "periods" to SuggestionControls.State(off = true),
+                "patterns" to SuggestionControls.State(off = true),
+            ),
+        )
         assertEquals(listOf(orphan), SuggestionControls.filter(listOf(orphan), controls, 0L))
     }
 
@@ -110,23 +117,21 @@ class SuggestionControlsTest {
         assertNull(SuggestionControls.groupKeyOf("prompt_log_today"))
     }
 
+    /**
+     * Turning a group off drops every kind it covers and nothing else. Every group today covers
+     * one kind ("milestones" and "patterns" covered two, and both went with their signals), so
+     * the property is asserted over every group in turn rather than one that happens to be wide.
+     */
     @Test
     fun turnOffDropsEveryKindInTheGroup() {
-        // Was the "milestones" group, which covered two kinds. That group is gone with the signals
-        // it governed, so the two-kinds-one-switch property is asserted over "patterns" instead.
-        val controls = SuggestionControls.Controls(
-            mapOf("patterns" to SuggestionControls.State(off = true)),
-        )
-        val out = SuggestionControls.filter(
-            listOf(
-                signal("lift_factor", 58.0),
-                signal("drag_factor", 46.0),
-                signal("checkin_due", 54.0),
-            ),
-            controls,
-            now,
-        )
-        assertEquals(listOf("checkin_due"), out.map { it.kind })
+        val all = SuggestionControls.GROUPS.flatMap { g -> g.kinds.map { signal(it, 50.0) } }
+        assertTrue(all.size >= 2)
+        SuggestionControls.GROUPS.forEach { group ->
+            val controls = SuggestionControls.Controls(mapOf(group.key to SuggestionControls.State(off = true)))
+            val out = SuggestionControls.filter(all, controls, now).map { it.kind }.toSet()
+            assertTrue(group.key, out.none { it in group.kinds })
+            assertEquals(group.key, all.map { it.kind }.toSet() - group.kinds, out)
+        }
     }
 
     /**
@@ -242,7 +247,7 @@ class SuggestionControlsTest {
         val allOff = SuggestionControls.Controls(
             SuggestionControls.GROUPS.associate { it.key to SuggestionControls.State(off = true) },
         )
-        val menu = Signals.supportMenu(topLift = null)
+        val menu = Signals.supportMenu()
         assertEquals(menu.size, SuggestionControls.filter(menu, allOff, now).size)
     }
 

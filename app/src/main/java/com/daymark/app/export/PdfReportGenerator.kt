@@ -991,7 +991,7 @@ private class PageCtx(
             noteBox(listOf(paint(8f, SOFT) to Copy.NOT_RECORDED_YET))
         }
 
-        if (data.activityStats.isNotEmpty()) activityTable(data)
+        if (options.includeActivityTable && data.activityStats.isNotEmpty()) activityTable(data)
 
         coverage(data)
     }

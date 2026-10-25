@@ -57,6 +57,9 @@ a new phone?", done on one phone.
 - **Each release lists its APK's SHA-256**, in the notes and as a `.sha256` file beside it (#226).
 
 ### Fixed
+- **A mixed day still offers a moment.** The "Want to take a moment?" card reads the lowest mood you
+  logged today. An Awful morning followed by a Good evening used to average to Meh, and the card
+  stayed away on exactly that kind of day (#482).
 - **Home's week strip no longer looks like an empty button.** Each day carries its weekday's
   initial, and a day with no entry shows a faint stub, so a week with one entry reads as seven days
   rather than a lone dot (#398).
@@ -80,6 +83,16 @@ a new phone?", done on one phone.
   swatches carry the same ring as the dots they key.
 
 ### Removed
+- **Nothing ranks your activities by mood, and nothing names one on a hard day.** The cards
+  "'X' goes with your better days … make it a gentle goal?" and "'X' tends to go with lower days"
+  are gone, with their switch under Settings → Suggestions, and so are the Insights lists of what was
+  "logged alongside higher or lower moods" and their `r=` numbers. A pattern like that cannot tell
+  what caused what, and a wrong one is easy to blame yourself for. **Average mood by activity** stays
+  on Insights, listed by name. In the PDF report it is now a switch, "Include mood beside each
+  activity", off until you turn it on, and listed by name. On Take a moment, "Do one small thing"
+  offers a shower, a warm drink or stepping outside instead of a random one of your activities,
+  and "Move a little" no longer names an activity. Logging how a Do one thing step felt says
+  "Logged." (#483).
 - **The sleep setup is gone, and so are its answers.** It asked about a bed partner, pets, noise,
   where your phone sits and how you sleep, for sleep sensing Daymark will not build, so nothing ever
   read the answers. They are deleted from your phone the first time the updated app opens (#356).

@@ -57,7 +57,8 @@ class StatsViewModel @Inject constructor(
         val levels = entries.map { it.entry.moodLevel }
         val days = entries.map { DateUtils.toLocalDate(it.entry.dateTime) }.toSet()
 
-        // Per-activity average mood, with names + counts.
+        // Per-activity average mood, with names + counts: the eight logged most often, listed by
+        // name. Never chosen or ordered by mood, which would rank activities best-first (§D6, #483).
         val pairs = entries.map { it.entry.moodLevel to it.activities.map { a -> MoodCorrelations.FactorId.ofActivity(a.id) } }
         val averages = MoodStats.activityAverages(pairs)
         val nameById = entries.flatMap { it.activities }.associate { MoodCorrelations.FactorId.ofActivity(it.id) to it.name }
@@ -65,8 +66,9 @@ class StatsViewModel @Inject constructor(
         pairs.forEach { (_, ids) -> ids.distinct().forEach { counts[it] = (counts[it] ?: 0) + 1 } }
         val topActivities = averages.entries
             .mapNotNull { (id, avg) -> nameById[id]?.let { ActivityStat(it, avg, counts[id] ?: 0) } }
-            .sortedByDescending { it.averageMood }
+            .sortedWith(compareByDescending<ActivityStat> { it.count }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.name })
             .take(8)
+            .sortedWith(compareBy<ActivityStat, String>(String.CASE_INSENSITIVE_ORDER) { it.name })
 
         // 30-day trend (daily average).
         val today = LocalDate.now()

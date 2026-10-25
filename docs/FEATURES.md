@@ -83,8 +83,8 @@ has the rules for changing any of this.
 
 Suggestion cards are chosen by fixed rules over the person's own data
 ([ARCHITECTURE.md](ARCHITECTURE.md) §5): an offer to take a moment after a hard day, a self-check
-that is due, what tends to go with their mood, and On this day. No card sets one stretch of time against
-another (#203).
+that is due, and On this day. No card sets one stretch of time against another (#203), and no card
+pairs an activity with a mood or names one of the person's activities (#483, [DECISIONS.md](DECISIONS.md) §D6).
 Every card has a menu:
 
 - *Not right now*: gone for this visit only. Nothing is stored.
@@ -128,10 +128,10 @@ entries are stars in the Sky (§4), and reach the PDF report only when the perso
   September: Good, Meh"), or "nothing recorded". Tapping a day opens its entries. **Year** is either a
   night-card of stars or a grid of coloured squares (Year in Pixels, also under More), and leads to
   **Review my year**.
-- **What goes with your mood** ranks activities that appear in at least 5 entries into "Logged
-  alongside higher moods" and "Logged alongside lower moods", both in ink, and lists trackers that have values on at least 14 days with a mood.
-  It is computed on the phone and always labelled "association, not cause". People and communities
-  never reach it (§11.2).
+- **Average mood by activity** sets each of the eight most-logged activities beside the average
+  mood of the entries that carry it, listed by name and never best-first. Nothing ranks activities
+  or trackers by mood, and no `r` is shown: the person reads the table and draws their own
+  conclusion ([DECISIONS.md](DECISIONS.md) §D6, #483). People and communities never reach it (§11.2).
 - **By day of week** and **by time of day**.
 - Nothing on the tab grades what it shows: no average mood as a headline, no period set against
   the one before it, no recap and no grid of how consistently someone logs. "Days with an entry"
@@ -180,9 +180,8 @@ changed for 30 days, and **Reset my sky** grows it again. Every rule the Sky kee
 ## 6. Trackers
 
 Custom trackers record anything next to mood, as a **scale**, a **number** with a unit, or **yes /
-no**. Each has a history and an average. A tracker with values on at least 14 days that also have a
-mood appears in "What goes with your mood" (§3). Do one thing and Move keep their own trackers
-(Enjoyment, Mastery, Movement minutes), so those show up against mood too. **Show in my sky**, off
+no**. Each has a history and an average. Do one thing and Move keep their own trackers
+(Enjoyment, Mastery, Movement minutes). **Show in my sky**, off
 until the person switches it on, makes a tracker an object of its own in their sky
 ([SKY.md](SKY.md) §3.9).
 
@@ -243,7 +242,10 @@ All under More. None of them is treatment.
 
 A calm screen for a hard moment. It opens with an acknowledgement, then offers a menu: move a
 little, breathe, untangle a thought, write it out, do one small thing, the person's safety plan
-(only once one has something in it, §8), crisis resources, and "Not right now".
+(only once one has something in it, §8), crisis resources, and "Not right now". The menu is the same
+for everyone. "Do one small thing" offers three steps from the Do one thing list (a shower, a warm
+drink, stepping outside), and "Move a little" offers a short stretch; neither ever names one of the
+person's own activities (#483).
 
 It is reached from the "Want to take a moment?" suggestion after a low-mood entry that day, and
 through **Gentle support** (More → Gentle support), which can preview it and is otherwise off until
@@ -538,8 +540,9 @@ decisions rather than a reading of the current moment: #162.
   inference about the person. It carries no tick: a finished project step says "done". Every word is
   printed in dark ink or the soft ink, at least 5.77:1 on the white page. The dialog opens with "A report is a copy. Once handed over, it cannot
   be taken back." — the report's own fixed copy, not a second wording — then offers a date range (90
-  days by default), check-in notes (off by default), charts (on), and "Choose journal entries to
-  include", off by default. With check-in notes off, side 2 says "Check-in notes were
+  days by default), check-in notes (off by default), charts (on), "Include mood beside each
+  activity" (off by default; when on, side 2 lists each activity's average mood by name, never
+  best-first, #483), and "Choose journal entries to include", off by default. With check-in notes off, side 2 says "Check-in notes were
   switched off for this export." and neither of its tables has a note column; the daily check-ins
   keep their activity tags under a head of their own. "Next" leads to one flow
   (`ui/export/ReportExportScreen.kt`). With journal entries switched on, it opens the picker first

@@ -194,9 +194,6 @@ top.
   squares, and leads to **Review my year**, a short walk through the year, quarter by quarter. In
   the calendar and the grid, a day with no entry is left plain.
 - **Mood over the last 30 days**, **mood distribution** and **average mood by activity**.
-- **What goes with your mood**: activities and trackers that tend to come with higher or lower
-  moods. An activity needs to be on at least five entries, and a tracker needs two weeks of values.
-  It shows association, not cause.
 - **By day of week** and **by time of day**.
 
 You'll need a few entries before there's much to show.
@@ -246,8 +243,7 @@ anything.
 
 **More → Trackers** lets you track anything next to your mood: a **scale** (like energy from 1 to
 5), a **number** with a unit (like glasses of water), or **yes / no** (like "took my meds"). Tap a
-tracker to log a value and see its history. After a couple of weeks, trackers appear in Insights
-under *What goes with your mood*. Do one thing and Move keep their own trackers for you.
+tracker to log a value and see its history. Do one thing and Move keep their own trackers for you.
 
 ---
 

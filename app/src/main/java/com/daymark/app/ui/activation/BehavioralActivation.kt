@@ -30,4 +30,13 @@ object BehavioralActivation {
         Suggestion("Take a shower", "Mastery"),
         Suggestion("Reply to one message", "Mastery"),
     )
+
+    /**
+     * The three Take a moment offers under "Do one small thing", taken from [SUGGESTIONS] so the
+     * two screens never disagree. Fixed and the same for everyone: on a hard evening it never
+     * names one of the person's own activities, which could be work, shopping or a drink (#483).
+     */
+    val SMALL_STEPS: List<String> =
+        listOf("Take a shower", "Make a warm drink", "Step outside for fresh air")
+            .filter { name -> SUGGESTIONS.any { it.name == name } }
 }

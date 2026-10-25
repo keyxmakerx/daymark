@@ -2,7 +2,6 @@ package com.daymark.app.ui.support
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.daymark.app.data.ActivityRepository
 import com.daymark.app.data.SafetyPlanRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -13,14 +12,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SupportViewModel @Inject constructor(
-    activityRepository: ActivityRepository,
     safetyPlanRepository: SafetyPlanRepository,
 ) : ViewModel() {
-
-    /** One of the user's own activities, suggested for a tiny behavioral-activation step. */
-    val suggestedActivity: StateFlow<String?> = activityRepository.observeActive()
-        .map { list -> list.randomOrNull()?.name }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /**
      * Whether the person has actually written a safety plan.

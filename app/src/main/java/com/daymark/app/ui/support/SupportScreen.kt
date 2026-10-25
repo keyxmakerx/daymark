@@ -60,7 +60,6 @@ fun SupportScreen(
     viewModel: SupportViewModel = hiltViewModel(),
     signalsViewModel: SignalsViewModel = hiltViewModel(),
 ) {
-    val activity by viewModel.suggestedActivity.collectAsStateWithLifecycle()
     val hasSafetyPlan by viewModel.hasSafetyPlan.collectAsStateWithLifecycle()
     val supportSignals by signalsViewModel.supportSignals.collectAsStateWithLifecycle()
     var shown by remember { mutableStateOf(false) }
@@ -98,8 +97,8 @@ fun SupportScreen(
                     supportClick(signal.action, onTalk, onBreathe, onReframe, onMove, onCrisis, onClose),
                 )
             }
-            // A tiny behavioural-activation step using one of the user's own activities.
-            SmallThingOption(mainOptions.size, activity, onClose)
+            // A tiny behavioural-activation step from the fixed Do one thing list (#483).
+            SmallThingOption(mainOptions.size, onClose)
             // The safety plan sits quietly in the list, and only when one has been written — a row
             // that leads to a blank page is the opposite of what the plan is for.
             var next = mainOptions.size + 1
@@ -153,9 +152,12 @@ private fun FloatingOption(index: Int, title: String, subtitle: String, onClick:
     }
 }
 
-/** "Do one small thing" — expands in place to a personalized behavioral-activation nudge. */
+/**
+ * "Do one small thing" — expands in place to three fixed steps from the Do one thing list. Never
+ * one of the person's own activities: a random one could read "Maybe a little Work?" (#483).
+ */
 @Composable
-private fun SmallThingOption(index: Int, activity: String?, onDone: () -> Unit) {
+private fun SmallThingOption(index: Int, onDone: () -> Unit) {
     val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
     val transition = rememberInfiniteTransition(label = "float$index")
@@ -179,10 +181,12 @@ private fun SmallThingOption(index: Int, activity: String?, onDone: () -> Unit) 
             AnimatedVisibility(visible = expanded, enter = fadeIn() + expandVertically()) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        activity?.let { "Maybe a little $it? Just a few minutes — no pressure." }
-                            ?: "Something small and kind for yourself — a glass of water, a window open, a stretch.",
+                        "One of these, for a few minutes. No pressure.",
                         style = MaterialTheme.typography.bodyLarge,
                     )
+                    com.daymark.app.ui.activation.BehavioralActivation.SMALL_STEPS.forEach { step ->
+                        Text("· $step", style = MaterialTheme.typography.bodyLarge)
+                    }
                     Button(
                         onClick = { Haptics.pulse(context); onDone() },
                         modifier = Modifier.fillMaxWidth(),

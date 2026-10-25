@@ -37,7 +37,7 @@ class BehavioralActivationViewModel @Inject constructor(
             val m = trackerRepository.findOrCreateScale(BehavioralActivation.MASTERY_TRACKER)
             trackerRepository.log(e, enjoyment.toDouble(), now)
             trackerRepository.log(m, mastery.toDouble(), now)
-            _messages.tryEmit("Logged — nice work")
+            _messages.tryEmit("Logged.")
         }
     }
 }

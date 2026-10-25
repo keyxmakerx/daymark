@@ -11,6 +11,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
+import kotlin.math.roundToInt
 
 class SignalsTest {
 
@@ -18,10 +19,8 @@ class SignalsTest {
     private fun base() = Signals.Inputs(
         totalEntries = 20,
         avgMood = 3.4,
-        moodTodayLevel = 3,
+        lowestMoodToday = 3,
         loggedToday = true,
-        topLift = null,
-        topDrag = null,
         dueCheckin = null,
         onThisDayNote = null,
     )
@@ -45,7 +44,7 @@ class SignalsTest {
 
     @Test
     fun lowMoodToday_offersSupport_atTopOfFeed() {
-        val signals = Signals.build(base().copy(moodTodayLevel = 1))
+        val signals = Signals.build(base().copy(lowestMoodToday = 1))
         val offer = signals.first { it.kind == "support_offer" }
         assertEquals(Signals.Category.Support, offer.category)
         assertTrue(Signals.Surface.Feed in offer.surfaces)
@@ -57,40 +56,75 @@ class SignalsTest {
 
     @Test
     fun notLoggedToday_promptsCheckIn() {
-        val signals = Signals.build(base().copy(loggedToday = false, moodTodayLevel = null))
+        val signals = Signals.build(base().copy(loggedToday = false, lowestMoodToday = null))
         assertTrue("prompt_log_today" in signals.kinds())
         val prompt = signals.first { it.kind == "prompt_log_today" }
         assertFalse(prompt.dismissible)
         assertEquals(Signals.Action.LogToday, prompt.action)
     }
 
+    /**
+     * A mixed day still gets the offer (#482). An Awful morning and a Good evening averaged to 2.5,
+     * which rounds to Meh, and the card used to stay away on exactly that day. The control is the
+     * old average itself, computed here, so this test shows the case it exists for; and a day with
+     * nothing below Meh still gets no card, so the gate has not simply been opened.
+     */
     @Test
-    fun liftFactor_gatedByMinimumDelta() {
-        val weak = Signals.build(base().copy(topLift = Signals.FactorLift("Tea", 0.2, 6)))
-        assertFalse("lift_factor" in weak.kinds())
+    fun aMixedDayWithOneLowEntryStillOffersSupport() {
+        val awfulThenGood = listOf(1, 4)
+        assertEquals(3, awfulThenGood.average().roundToInt())
+        assertFalse("support_offer" in Signals.build(base().copy(lowestMoodToday = 3)).kinds())
 
-        val strong = Signals.build(base().copy(topLift = Signals.FactorLift("Exercise", 0.7, 9)))
-        val lift = strong.first { it.kind == "lift_factor" }
-        assertEquals(Signals.Action.CreateGoalFromFactor("Exercise"), lift.action)
-        assertTrue("Exercise" in lift.title)
+        assertEquals(1, Signals.lowestMoodToday(awfulThenGood))
+        val mixed = Signals.build(base().copy(lowestMoodToday = Signals.lowestMoodToday(awfulThenGood)))
+        assertTrue("support_offer" in mixed.kinds())
+
+        val steady = Signals.build(base().copy(lowestMoodToday = Signals.lowestMoodToday(listOf(3, 5))))
+        assertFalse("support_offer" in steady.kinds())
+        assertNull(Signals.lowestMoodToday(emptyList()))
     }
 
+    /**
+     * No rule can see an activity, so no card can name one (§D6, #483). Asserted on the shape of
+     * [Signals.Inputs], whose fields are listed here as literals: a new field fails this test and
+     * forces the question of what it carries. The control is a planted class with the field the
+     * deleted rules read, which the same reader must see.
+     */
     @Test
-    fun strongerLift_scoresHigher() {
-        val mild = Signals.build(base().copy(topLift = Signals.FactorLift("Walk", 0.5, 8)))
-            .first { it.kind == "lift_factor" }.score
-        val big = Signals.build(base().copy(topLift = Signals.FactorLift("Walk", 0.9, 8)))
-            .first { it.kind == "lift_factor" }.score
-        assertTrue(big > mild)
+    fun theRulesAreGivenNoActivity() {
+        fun fieldsOf(c: Class<*>) = c.declaredFields.filterNot { java.lang.reflect.Modifier.isStatic(it.modifiers) }.map { it.name }.toSet()
+        data class Planted(val totalEntries: Int, val topLift: String?)
+        assertTrue("topLift" in fieldsOf(Planted::class.java))
+
+        assertEquals(
+            setOf("totalEntries", "avgMood", "lowestMoodToday", "loggedToday", "dueCheckin", "onThisDayNote"),
+            fieldsOf(Signals.Inputs::class.java),
+        )
     }
 
+    /**
+     * And no card's words name one, over every input this suite can reach and the support menu.
+     * The detector is first shown the lines that used to appear, so it is known to see them.
+     */
     @Test
-    fun dragFactor_isInsightsOnly_neverOnFeed() {
-        val signals = Signals.build(base().copy(topDrag = Signals.FactorLift("Poor sleep", -0.6, 7)))
-        val drag = signals.first { it.kind == "drag_factor" }
-        assertEquals(setOf(Signals.Surface.Insights), drag.surfaces)
-        assertFalse("drag_factor" in Signals.forSurface(signals, Signals.Surface.Feed).kinds())
-        assertTrue("drag_factor" in Signals.forSurface(signals, Signals.Surface.Insights).kinds())
+    fun noCardNamesAnActivity() {
+        val named = Regex("""goes with your better days|go with lower days|maybe a little|make it a (?:gentle )?goal|"[^"]+"""", RegexOption.IGNORE_CASE)
+        assertTrue(named.containsMatchIn("\"Walk\" goes with your better days"))
+        assertTrue(named.containsMatchIn("\"Medication\" tends to go with lower days"))
+        assertTrue(named.containsMatchIn("Maybe a little Work? Just a few minutes — no pressure."))
+        assertTrue(named.containsMatchIn("A short, gentle stretch or a few minutes of \"Running\" — no pressure."))
+        assertFalse(named.containsMatchIn("A short, gentle stretch."))
+
+        val prose = (
+            listOf(
+                base(),
+                base().copy(lowestMoodToday = 1, loggedToday = false, dueCheckin = "WHO-5"),
+                base().copy(onThisDayNote = "a line from a year ago"),
+            ).flatMap { Signals.build(it) } + Signals.supportMenu()
+        ).filter { it.kind != "on_this_day" } // the person's own words, quoted back as written
+            .flatMap { listOf(it.title, it.body) }
+        assertTrue(prose.isNotEmpty())
+        assertEquals(emptyList<String>(), prose.filter { named.containsMatchIn(it) })
     }
 
     /**
@@ -100,8 +134,8 @@ class SignalsTest {
      */
     @Test
     fun noCardSetsOnePeriodAgainstAnother() {
-        // A period graded by its average: the factor cards' "averaged higher" and the support menu's
-        // physical "stretch" are not this, and the pattern is written so it does not take them.
+        // A period graded by its average: the support menu's physical "stretch" is not this, and
+        // the pattern is written so it does not take it.
         val graded = Regex("""average (?:mood )?is|period before|\d+\s*%|(?:steadier|harder) stretch""", RegexOption.IGNORE_CASE)
         assertTrue(graded.containsMatchIn("A steadier stretch. Your average mood is up 22% from the period before."))
         assertTrue(graded.containsMatchIn("A harder stretch lately"))
@@ -110,12 +144,11 @@ class SignalsTest {
 
         val everything = listOf(
             base(),
-            base().copy(moodTodayLevel = 1, loggedToday = false, dueCheckin = "WHO-5"),
-            base().copy(topLift = Signals.FactorLift("Running", 0.6, 8), onThisDayNote = "a note"),
-            base().copy(topDrag = Signals.FactorLift("Poor sleep", -0.6, 7)),
+            base().copy(lowestMoodToday = 1, loggedToday = false, dueCheckin = "WHO-5"),
+            base().copy(onThisDayNote = "a note"),
         ).flatMap { Signals.build(it) }
         assertTrue(everything.isNotEmpty())
-        assertTrue("lift_factor" in everything.kinds())
+        assertTrue("checkin_due" in everything.kinds())
 
         assertFalse("month_up" in everything.kinds())
         assertFalse("month_down" in everything.kinds())
@@ -136,12 +169,10 @@ class SignalsTest {
     fun noCardIsEverACelebration_andTheTwoRewardRulesAreGone() {
         val everything = listOf(
             base(),
-            base().copy(moodTodayLevel = 1),
+            base().copy(lowestMoodToday = 1),
             base().copy(loggedToday = false),
-            base().copy(topDrag = Signals.FactorLift("Poor sleep", -0.6, 7)),
             base().copy(dueCheckin = "WHO-5"),
             base().copy(onThisDayNote = "a line from a year ago"),
-            base().copy(topLift = Signals.FactorLift("Running", 0.6, 8)),
         ).flatMap { Signals.build(it) }
 
         // The control: the collection under test is populated, and the membership test works.
@@ -150,12 +181,6 @@ class SignalsTest {
 
         assertFalse("streak_milestone" in everything.kinds())
         assertFalse("achievement_unlocked" in everything.kinds())
-        // Category.Celebration no longer exists as a name; this is the behavioural half — the
-        // upward factor card is the same kind of statement as its downward mirror.
-        val up = everything.first { it.kind == "lift_factor" }
-        val down = everything.first { it.kind == "drag_factor" }
-        assertEquals(Signals.Category.Insight, up.category)
-        assertEquals(down.category, up.category)
     }
 
     /** No card anywhere describes a run of consecutive days, whatever words it uses for one. */
@@ -166,8 +191,8 @@ class SignalsTest {
         assertTrue(breakable.containsMatchIn("You're on a 5-day streak — keep it up"))
 
         val prose = listOf(
-            base().copy(moodTodayLevel = 1, loggedToday = false, dueCheckin = "WHO-5"),
-            base().copy(topLift = Signals.FactorLift("Running", 0.6, 8), onThisDayNote = "a note"),
+            base().copy(lowestMoodToday = 1, loggedToday = false, dueCheckin = "WHO-5"),
+            base().copy(onThisDayNote = "a note"),
         ).flatMap { Signals.build(it) }.flatMap { listOf(it.title, it.body) }
 
         assertTrue(prose.isNotEmpty())
@@ -183,14 +208,11 @@ class SignalsTest {
     }
 
     @Test
-    fun forSurface_supportMenu_isContextual_andCrisisAlwaysLast() {
-        val withLift = Signals.build(base().copy(topLift = Signals.FactorLift("Running", 0.6, 8)))
-        val support = Signals.forSurface(withLift, Signals.Surface.Support)
+    fun forSurface_supportMenu_crisisAlwaysLast() {
+        val support = Signals.forSurface(Signals.build(base()), Signals.Surface.Support)
         assertTrue(support.all { Signals.Surface.Support in it.surfaces })
         // Crisis resource is present and is the lowest-scoring (listed last).
         assertEquals("support_crisis", support.last().kind)
-        // The movement option mentions the contextual lift.
-        assertTrue("Running" in support.first { it.kind == "support_move" }.body)
     }
 
     @Test
@@ -198,9 +220,8 @@ class SignalsTest {
         val signals = Signals.build(
             base().copy(
                 loggedToday = false,
-                moodTodayLevel = null,
+                lowestMoodToday = null,
                 dueCheckin = "WHO-5",
-                topLift = Signals.FactorLift("Friends", 0.6, 10),
             ),
         )
         val feedTop2 = Signals.forSurface(signals, Signals.Surface.Feed, limit = 2)
@@ -211,30 +232,22 @@ class SignalsTest {
 
     @Test
     fun copy_isDeterministic_forSameInputs() {
-        val inputs = base().copy(topLift = Signals.FactorLift("Running", 0.6, 8))
+        val inputs = base().copy(dueCheckin = "WHO-5", onThisDayNote = "a note")
         val a = Signals.build(inputs, Locale.US)
         val b = Signals.build(inputs, Locale.US)
         assertEquals(a.map { it.kind to it.body }, b.map { it.kind to it.body })
     }
 
     @Test
-    fun supportMenu_alwaysAvailable_evenWithNoLift() {
-        val menu = Signals.supportMenu(null)
+    fun supportMenu_alwaysAvailable_andTheSameForEveryone() {
+        val menu = Signals.supportMenu()
         assertTrue(menu.isNotEmpty())
         assertTrue(menu.all { Signals.Surface.Support in it.surfaces })
         // Crisis resources are present and listed last (lowest score).
         assertEquals("support_crisis", menu.minByOrNull { it.score }!!.kind)
-        // With no known lift, the move option uses generic (un-quoted) copy.
-        assertFalse("\"" in menu.first { it.kind == "support_move" }.body)
-    }
-
-    @Test
-    fun supportMenu_personalisesAndPrioritisesMove_whenMovementIsALift() {
-        val menu = Signals.supportMenu(Signals.FactorLift("Running", 0.6, 8))
-        val move = menu.first { it.kind == "support_move" }
-        assertTrue("Running" in move.body)
-        // Move now ranks above breathing.
-        assertTrue(move.score > menu.first { it.kind == "support_breathe" }.score)
+        // Move a little has its own plain words, whatever has been logged.
+        assertEquals("A short, gentle stretch.", menu.first { it.kind == "support_move" }.body)
+        assertEquals(menu, Signals.forSurface(Signals.build(base()), Signals.Surface.Support))
     }
 }
 

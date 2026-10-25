@@ -30,11 +30,12 @@ object Routes {
      */
     const val REPORT_EXPORT = "report_export"
     const val REPORT_EXPORT_PATTERN =
-        "$REPORT_EXPORT?from={from}&to={to}&label={label}&notes={notes}&charts={charts}&pick={pick}"
+        "$REPORT_EXPORT?from={from}&to={to}&label={label}&notes={notes}&charts={charts}&activities={activities}&pick={pick}"
     fun reportExport(options: com.daymark.app.export.PdfExportOptions, pickWriting: Boolean) =
         "$REPORT_EXPORT?from=${options.fromMillis}&to=${options.toMillis}" +
             "&label=${android.net.Uri.encode(options.rangeLabel)}" +
-            "&notes=${options.includeNotes}&charts=${options.includeCharts}&pick=$pickWriting"
+            "&notes=${options.includeNotes}&charts=${options.includeCharts}" +
+            "&activities=${options.includeActivityTable}&pick=$pickWriting"
     const val TRACKERS = "trackers"
     const val TRACKER = "tracker"
 

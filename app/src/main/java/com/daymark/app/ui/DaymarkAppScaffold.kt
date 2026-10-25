@@ -522,6 +522,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false, openT
                     navArgument("label") { type = NavType.StringType; defaultValue = "" },
                     navArgument("notes") { type = NavType.BoolType; defaultValue = false },
                     navArgument("charts") { type = NavType.BoolType; defaultValue = true },
+                    navArgument("activities") { type = NavType.BoolType; defaultValue = false },
                     navArgument("pick") { type = NavType.BoolType; defaultValue = false },
                 ),
                 enterTransition = zEnter,
@@ -537,6 +538,7 @@ fun DaymarkAppScaffold(initialMood: Int = -1, openEditor: Boolean = false, openT
                         rangeLabel = args?.getString("label") ?: "",
                         includeNotes = args?.getBoolean("notes") ?: false,
                         includeCharts = args?.getBoolean("charts") ?: true,
+                        includeActivityTable = args?.getBoolean("activities") ?: false,
                     )
                 }
                 ReportExportScreen(
@@ -721,7 +723,6 @@ private fun skyRecordRoute(kind: SkyKind, id: Long): String? = when (kind) {
 
 /** Maps a [Signals.Action] (from a "For you" card) to a navigation route. */
 private fun signalActionRoute(action: Signals.Action): String = when (action) {
-    is Signals.Action.CreateGoalFromFactor -> Routes.goal()
     is Signals.Action.TakeCheckin -> Assessments.ALL.firstOrNull { it.title.startsWith(action.name) }
         ?.let { Routes.assessment(it.key) } ?: Routes.ASSESSMENTS
     Signals.Action.OpenSupport -> Routes.SUPPORT

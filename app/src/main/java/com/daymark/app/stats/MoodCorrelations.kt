@@ -34,10 +34,10 @@ object MoodCorrelations {
      *
      * ## What this does NOT guard
      *
-     * [Signals.FactorLift] takes factor **names**, not ids, and a person's
-     * name is a `String` like any other. The guard is upstream: a person never becomes a
-     * [FactorId], so a person never reaches the code that produces those names. Keep it that way —
-     * do not add a person-shaped field to `Signals.Inputs`.
+     * Anything downstream that turns an id back into a name holds a `String` like any other, and a
+     * person's name is a `String` too. The guard is upstream: a person never becomes a [FactorId],
+     * so a person never reaches the code that produces those names. Keep it that way. (`Signals`
+     * takes no factor at all since #483, so no card can name one.)
      */
     @JvmInline
     value class FactorId private constructor(val raw: Long) {

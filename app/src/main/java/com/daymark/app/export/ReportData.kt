@@ -230,7 +230,7 @@ class ReportDataBuilder @Inject constructor(
         val levels = ewas.map { it.entry.moodLevel }
         val days = ewas.map { DateUtils.toLocalDate(it.entry.dateTime) }.toSet()
 
-        // Per-activity average mood with names + counts.
+        // Per-activity average mood with names + counts, listed by name and never best-first (#483).
         val pairs = ewas.map { it.entry.moodLevel to it.activities.map { a -> MoodCorrelations.FactorId.ofActivity(a.id) } }
         val averages = MoodStats.activityAverages(pairs)
         val nameById = ewas.flatMap { it.activities }.associate { MoodCorrelations.FactorId.ofActivity(it.id) to it.name }
@@ -238,7 +238,7 @@ class ReportDataBuilder @Inject constructor(
         pairs.forEach { (_, ids) -> ids.distinct().forEach { counts[it] = (counts[it] ?: 0) + 1 } }
         val activityStats = averages.entries
             .mapNotNull { (id, avg) -> nameById[id]?.let { ReportActivityStat(it, avg, counts[id] ?: 0) } }
-            .sortedByDescending { it.averageMood }
+            .sortedWith(compareBy<ReportActivityStat, String>(String.CASE_INSENSITIVE_ORDER) { it.name })
 
         // Daily trend across the range.
         val from = DateUtils.toLocalDate(options.fromMillis)
