@@ -30,6 +30,10 @@ a lighter "wash" in light mode and a darker one in dark mode.
   its average: Insights → Month draws one dot per entry on plain paper, with the day number in ink
   (`ui/calendar/CalendarDays.kt`, `MonthGridSourceTest`), and Insights → Week and Home's week strip
   draw a day the same way (`WeekDaysSourceTest`).
+- Home's week strip names each day with its weekday's initial, today's in the full ink, and a day
+  with no entry holds a faint stub in the hairline colour (`outlineVariant`), never a mood colour
+  (#398). An empty day is a day, not a gap and not a failure; without the stub and the initials a
+  week with one entry reads as a lone dot on a blank button.
 - **A mood dot always has its ring.** A person can make a mood any colour, so a dot on its own can
   all but vanish into the sheet (Meh 2.32:1, Good 2.67:1 on the light sheet). Every mood dot is
   `ui/components/MoodDot.kt`: the 6 dp colour inside a 1 dp ring of the soft ink
