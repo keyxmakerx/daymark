@@ -20,13 +20,13 @@ package com.daymark.app.sky
  * Import-free, like the rest of `sky/`: a colour and a few sizes in, packed pixels out, and a
  * plain-JVM test can check every one.
  *
- * **Every ordinary star is lit the same.** [LIGHT] is one number for every star of every kind,
- * age and mood. The approved sky also gave each star a random magnitude, which made some much
- * brighter than others for no reason. It is left out on purpose: on this surface a brighter star is
- * read as a day that counted for more, and `SkyGlyph`'s header is the argument for why no day's
- * mark may be louder than another's. Age still sets the colour and [SkyAge.fadeFor] still lets old
- * stars sit back a little. The landmark is the one exception, at [LANDMARK_LIGHT], because a
- * person placed it by hand.
+ * **Every ordinary star is rasterised at one light.** [LIGHT] is one number for every star of
+ * every kind, age and mood. The renderer stamps each sprite with the star's own magnitude
+ * (`SkyGlyph.magnitudeAlpha`), drawn from its identity and meaning nothing, so a few stars burn
+ * brighter than the rest the way a real sky's do while nothing about a day makes its star louder
+ * (`DECISIONS.md` §D11). Age still sets the colour and [SkyAge.fadeFor] still lets old stars sit
+ * back a little. The landmark is the one exception, at [LANDMARK_LIGHT], because a person placed
+ * it by hand, and it outshines the brightest magnitude.
  *
  * **The mood reaches the halo and nothing else.** [Shape] takes the halo's radius and peak, which
  * are the two numbers `SkyGlyph` lets a mood move, and every other number in it is the same on
@@ -35,7 +35,10 @@ package com.daymark.app.sky
  */
 object SkyStarLight {
 
-    /** An ordinary star's light: the approved sky's average star. The same for every one of them. */
+    /**
+     * An ordinary star's light: the approved sky's average star. The same for every one of them;
+     * its magnitude is applied when it is stamped.
+     */
     const val LIGHT = 0.73f
 
     /** A life event's light. Brighter, for the reason [SkyGlyph.LANDMARK_CORE_SCALE] gives. */

@@ -180,6 +180,38 @@ class SkyStarLightTest {
         assertTrue("the check cannot see the old disc: $seen", seen > FAINT)
     }
 
+    @Test
+    fun `the faintest, oldest star at the bottom of its twinkle is still plainly there`() {
+        // A star's own magnitude makes some faint, and age and the twinkle dim them further. Old
+        // stars recede but never vanish (`docs/SKY.md` §3.5), so the heart of the faintest star,
+        // at the oldest age, at the bottom of its flicker, still stands well clear of the ground.
+        val faintest = (0 until SkyGlyph.MAGNITUDE_COUNT).minOf { SkyGlyph.magnitudeLight(it) }
+        val magnitude = Math.pow(faintest.toDouble(), 1 / 2.2).toFloat()
+        val twinkle = Math.pow(1.0 - SkyTwinkle.FLICKER_DEPTH * SkyTwinkle.FLICKER_SWING, 1 / 2.2).toFloat()
+        val alpha = magnitude * SkyAge.fadeFor(100f) * twinkle
+        val star = shape(SkyAge.OLDEST_TINT)
+        val heart = shownAt(star, 0f)
+        val ground = intArrayOf(7, 7, 10)
+        val shown = IntArray(3) { minOf(255, ground[it] + Math.round(heart[it] * alpha)) }
+        val ratio = (luminance(shown) + 0.05) / (luminance(ground) + 0.05)
+        println("  the faintest, oldest heart: ${shown.toList()} on the ground, ${"%.2f".format(ratio)}:1")
+        assertTrue("the faintest, oldest star's heart is lost: ${"%.2f".format(ratio)}:1", ratio >= 3.0)
+        // The control: the same star with the faintest magnitude taken off is brighter still, so
+        // the magnitude is really in the sum.
+        val full = IntArray(3) { minOf(255, ground[it] + Math.round(heart[it] * alpha / magnitude)) }
+        val fullRatio = (luminance(full) + 0.05) / (luminance(ground) + 0.05)
+        println("  the same star at full magnitude: ${full.toList()}, ${"%.2f".format(fullRatio)}:1")
+        assertTrue(luminance(full) > luminance(shown))
+    }
+
+    private fun luminance(rgb: IntArray): Double {
+        fun channel(v: Int): Double {
+            val c = v / 255.0
+            return if (c <= 0.03928) c / 12.92 else Math.pow((c + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2])
+    }
+
     /**
      * Whether every pixel the same distance from the middle shows the same light, to within a step
      * of rounding: a round star. A ray, a spike or a square edge is light at one angle and not at

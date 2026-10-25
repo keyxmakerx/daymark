@@ -32,8 +32,8 @@ decides nothing.
 | `sky/Sky.kt` | the six kinds, the layout, the text list |
 | `sky/SkyForm.kt` | the sky's form and guide, and where each star is placed: bands, clusters, streams, drift |
 | `sky/SkyAge.kt` | colour and brightness from age |
-| `sky/SkyGlyph.kt` | the bead's size, halo, temperature, the landmark, kind forms, zoom levels (`SkyDetail`), the Sky's switches (`SkyOptions`) |
-| `sky/SkyStarLight.kt` | how a star is lit, pixel by pixel: its heart, its wing and its glow, at one light for every ordinary star (§3.5) |
+| `sky/SkyGlyph.kt` | the bead's size, halo, temperature, magnitude, the landmark, kind forms, zoom levels (`SkyDetail`), the Sky's switches (`SkyOptions`) |
+| `sky/SkyStarLight.kt` | how a star is lit, pixel by pixel: its heart, its wing and its glow, at one light for every ordinary star before its magnitude (§3.5) |
 | `sky/SkyShaders.kt` | the space behind the stars and a star close in drawn as a sun, as shader source, and the stars that light the gas (§3.8, §4) |
 | `sky/SkyPalette.kt` | the night colours, contrast, equalising mood colours |
 | `sky/SkyTwinkle.kt` | each star's rhythm |
@@ -340,7 +340,7 @@ days into kinds of act at exactly the zoom where they see a stretch of their lif
 | Varies with mood | Fixed at every mood |
 |---|---|
 | Halo radius: 4.8 dp at level 1 to 3.6 dp at level 5; 4.2 dp with no mood | The heart's radius (0.7 dp at the whole sky, growing with zoom alike for every star), its light and colour, and the wing round it |
-| Halo peak alpha, `HALO_LIGHT / radius²`, so the product cannot move | Tint and brightness (age), position, twinkle, total light (§0.3 finding 4) |
+| Halo peak alpha, `HALO_LIGHT / radius²`, so the product cannot move | Tint and brightness (age, and each star's own magnitude), position, twinkle, total light (§0.3 finding 4) |
 
 The spread is small, about 14% either way, so it reads as texture at arm's length. A star with no
 mood sits in the middle, not at the bad end. Mood is drawn at all because handing a person their own
@@ -374,9 +374,15 @@ is 0.7 dp in radius at the whole sky and grows as the zoom to the power 0.2, ali
 a closer view shows bigger stars and no star outgrows another (#460). The prototype's extra floor under every halo was dropped: multiplied
 by a wider halo's area, it would make hard days emit more light.
 
-**Every ordinary star burns at one light.** The approved sky also gave each star a random
-magnitude; it is left out, because on this surface a brighter star reads as a day that counted for
-more. Only a life event is brighter (§3.4).
+**Stars differ in brightness, and it means nothing.** As in a real sky, a few stars burn brighter
+than the rest: each ordinary star draws one of four magnitudes from its own identity, 0.4, 0.65, 1
+and 2 times the ordinary light, for 35%, 35%, 22% and 8% of stars, and keeps it forever
+(`SkyGlyph.magnitudeAlpha`). No mood, count or date reaches it, so it says nothing about a day, and
+the Key says so in words ([§D11](DECISIONS.md)). It eases to the ordinary light as a star becomes a
+sun (§4), since close enough to see a sphere no star is faint. The faintest is as faint as it can
+be while the oldest such star, at the bottom of its twinkle, still shows its heart at 3:1 (§7.1). A
+life event has no magnitude and outshines the brightest (§3.4); the quiet sky draws every star at
+one light.
 
 **Brightness is age, a little.** A new star is at full brightness and fades toward a floor of 0.75
 with a 2.1-year time constant: a quarter of the light goes, half of that by about a year and a
@@ -402,7 +408,8 @@ count, so each star has its own beat, forever. Kind matters only in that every l
   red and a blue fringe are added either side of the star, like a prism. The star's own tint never
   changes.
 
-The twinkle multiplies age brightness. There is no dial, only the Motion switch (§7.4). One
+The twinkle multiplies a star's brightness, its age and its magnitude, at one depth for every star,
+so a faint star wavers as much as a bright one. There is no dial, only the Motion switch (§7.4). One
 `SkyTwinkle` function has no caller, `glintFringeScale`: #153.
 
 ### 3.7 The sky's seed
@@ -648,14 +655,16 @@ the Sky or the Sky does not ship.
 
 ### 7.1 Low vision
 
-- **A star is not text, and its contrast is not held to a floor.** Its brightness is its age; the
-  heart of the oldest star at the bottom of its twinkle measures 5.00:1. What a star means (kind,
-  date, mood) is written in its detail and in the list.
+- **A star is not text, and its contrast is not held to a text floor.** Its brightness is its age
+  and its own magnitude; the heart of the oldest star at the bottom of its twinkle measures 6.01:1,
+  and of the faintest such star 3.14:1, the 3:1 of a graphic (`SkyStarLightTest`). What a star means
+  (kind, date, mood) is written in its detail and in the list.
 - **Mood colours are equalised, not lifted** (§0.3 finding 1): the shipped ramp and any colour a
   person picks go to exactly 6.5:1. One too dark or saturated to get there by scaling is blended
   toward the ink, visibly changing it; the lesser harm, since the alternative is a mood they cannot
   see. Swept over 5,832 colours, every one reaches the 4.5:1 floor.
-- **The quiet sky**, one tap on the surface: the core alone and slightly larger, no glows or glints,
+- **The quiet sky**, one tap on the surface: the core alone and slightly larger, every star at one
+  light, no glows or glints,
   thicker strokes, mood dots at 10.0:1. It
   defaults to the platform's high-contrast text setting and stays independently switchable, because
   that signal is coarse.
@@ -795,9 +804,9 @@ check is first shown to catch a planted violation (`CLAUDE.md` §5).
 | **P10** | The list skips empty months | Built: `SkyTest` |
 | **P11** | No aggregate count is rendered | Built: the only count is a month heading's (`SkyPresentationTest`) |
 | **P12** | Deletion is complete | Built: `SkyTest`, against a layout computed as if the record never existed |
-| **P13** | Old stars never vanish | Built: `SkyAgeTest` |
+| **P13** | Old stars never vanish | Built: `SkyAgeTest`; `SkyStarLightTest` for the faintest magnitude |
 | **P14** | Twinkle is identity and time only, and stops under the switch | Built: `SkyTwinkleTest` |
-| **P15** | Only a mark the person placed is louder | Built: `SkyGlyphTest` |
+| **P15** | Only a mark the person placed is louder; other stars differ by identity alone | Built: `SkyGlyphTest` |
 | **P16** | A constellation's lines fade as its stars drift, and a deleted memory leaves nothing | Built: `SkyConstellationTest` |
 | **P17** | The opening is the same every time, and arrives at every star | Built: `SkyOpeningTest` |
 | **P18** | The Key lists only what is in the sky, and leads with "red only means old" | Built: `SkyKeyTest` |

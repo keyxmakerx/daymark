@@ -1194,11 +1194,13 @@ internal val SkyNightFaint: Color = skyColor(SkyPalette.NIGHT_FAINT)
  * **Everything that decides how a star looks is asked for, never computed here.** Colour is
  * [SkyGlyph.starTint], which is age and the star's own temperature. Brightness is
  * [SkyGlyph.starBrightness], which is age, times how far the star has arrived ([SkyOpening]),
- * multiplied by [SkyTwinkle.alphaAt], which is the star's own rhythm. Halo geometry is
+ * times [SkyGlyph.magnitudeAlpha], which is the star's own magnitude, multiplied by
+ * [SkyTwinkle.alphaAt], which is the star's own rhythm. Halo geometry is
  * [SkyGlyph.haloRadiusDp] and [SkyGlyph.haloPeakAlpha]; the core's scale is
- * [SkyGlyph.coreScale]. Every one of those takes a mood level and all but the halo ignore
- * it, so the rule *mood moves the halo's spread and nothing else* is defended at the signature
- * rather than trusted here.
+ * [SkyGlyph.coreScale]. The magnitude and the rhythm cannot be handed a mood at all, and every
+ * other one of those takes a mood level and all but the halo ignore it, so the rule
+ * *mood moves the halo's spread and nothing else* is defended at the signature rather than
+ * trusted here.
  *
  * **Additive, not painted over.** The sprite is stamped with [BlendMode.Plus], so two stars whose
  * glows overlap get brighter where they meet, the way light does. On the near-black ground
@@ -1242,11 +1244,14 @@ private fun DrawScope.drawStar(
     shading: SkyShading?,
 ) {
     if (arrival <= 0f) return
-    // How brightly this star burns: its age and its arrival, and then its own beat. All are
-    // multipliers on the sprite's own alphas, so the twinkle is a proportion of whatever the star
-    // already was — an old star's flicker is as faint as the old star.
+    val sun = if (sunPx > 0f) smooth(SUN_FROM_DP.dp.toPx(), SUN_FULL_DP.dp.toPx(), sunPx) else 0f
+    // How brightly this star burns: its age and its arrival, then its own magnitude, then its own
+    // beat. All are multipliers on the sprite's own alphas, so the twinkle is a proportion of
+    // whatever the star already was — an old star's flicker is as faint as the old star. The
+    // magnitude is from the star's identity alone and means nothing (§3.5).
     val fade = SkyGlyph.starBrightness(kind, ageYears, moodLevel) * arrival
-    val brightness = fade * SkyTwinkle.alphaAt(kind, id, elapsedMillis, options)
+    val shine = fade * SkyGlyph.magnitudeAlpha(kind, id, options.highContrast, sun)
+    val brightness = shine * SkyTwinkle.alphaAt(kind, id, elapsedMillis, options)
     // The flare as a star arrives lifts the fade above 1; a stroke or a disc takes it capped.
     val ink = fade.coerceIn(0f, 1f)
 
@@ -1282,12 +1287,11 @@ private fun DrawScope.drawStar(
         centre = centre,
         options = options,
         elapsedMillis = elapsedMillis,
-        fade = fade,
+        fade = shine,
     )
 
     val coreRadius =
         (SkyGlyph.coreRadiusDp(kind, moodLevel) * SkyGlyph.coreScale(kind) * SkyGlyph.zoomScale(zoom)).dp.toPx()
-    val sun = if (sunPx > 0f) smooth(SUN_FROM_DP.dp.toPx(), SUN_FULL_DP.dp.toPx(), sunPx) else 0f
     val ringed = max(coreRadius, sunPx * sun)
 
     // Kind is carried by form, and form only resolves once the person has leaned in to one day.
@@ -1405,9 +1409,10 @@ private fun DrawScope.drawStar(
  * which is what makes that true — an additive fringe leaves the star underneath exactly the colour
  * it was.
  *
- * **Every alpha here is multiplied by [fade].** Without that an old star's glint would be drawn at
- * a new star's brightness and the oldest, faintest stars would be the ones flashing hardest — the
- * fade would be undone by the decoration laid over it. [fade] and not the twinkled brightness,
+ * **Every alpha here is multiplied by [fade]**, the star's age and its own magnitude. Without that
+ * an old or faint star's glint would be drawn at a bright new star's strength and the faintest
+ * stars would be the ones flashing hardest — the fade would be undone by the decoration laid over
+ * it. [fade] and not the twinkled brightness,
  * because the glint is its own event and should not also be modulated by the flicker it happens to
  * land in.
  *

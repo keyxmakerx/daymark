@@ -104,8 +104,9 @@ object SkyTwinkle {
 
     /**
      * How much of the flicker reaches the star at the height of an episode. The approved sky's
-     * `0.6 + 0.4 × smoothstep(0.6, 2, lum)` at its ordinary star's light, which is [SkyStarLight.LIGHT]
-     * for every star here, so one depth for every star.
+     * `0.6 + 0.4 × smoothstep(0.6, 2, lum)` at its ordinary star's light, [SkyStarLight.LIGHT]. One
+     * depth for every star whatever its magnitude (`SkyGlyph.magnitudeAlpha`): the twinkle is a
+     * share of a star's own light, so a faint star wavers as much as a bright one, never more.
      */
     const val FLICKER_DEPTH = 0.6f
 

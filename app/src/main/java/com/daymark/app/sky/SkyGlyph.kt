@@ -34,7 +34,7 @@ package com.daymark.app.sky
  * | [CORE_ALPHA] | [haloPeakAlpha] — how concentrated it is |
  * | the bead and its rim — [SkyStarLight], at one [SkyStarLight.LIGHT] | |
  * | colour — [SkyAge.tintFor], which is age | |
- * | brightness — [SkyAge.fadeFor], which is age | |
+ * | brightness — [SkyAge.fadeFor], which is age, and [magnitudeAlpha], which is identity | |
  * | [HALO_LIGHT] — total light emitted | |
  *
  * So a hard day is a soft wide warm star and a good day is a tight crisp one. **Neither is
@@ -71,6 +71,11 @@ package com.daymark.app.sky
  * three folded records ([SkyLayout.recordCountAt]) is drawn at exactly the same size as one holding
  * a single record — a bigger star for a busier day would rank days by output, which is the
  * productivity reading of a journal and is what §6.2 forbids.
+ *
+ * Stars do differ in brightness, as a real sky's do, but by [magnitudeAlpha] alone, which is drawn
+ * from the star's identity and nothing else: no mood, count or date reaches it, so nothing about a
+ * day can be read off how brightly its star burns, and the Key says in words that it means nothing
+ * (`DECISIONS.md` §D11).
  */
 object SkyGlyph {
 
@@ -332,6 +337,74 @@ object SkyGlyph {
     /** A temperature's warmth. Out-of-range indices clamp rather than throw. */
     fun temperatureWarmth(index: Int): Float =
         TEMPERATURE_WARMTH[index.coerceIn(0, TEMPERATURE_COUNT - 1)]
+
+    // ---------------------------------------------------------------------------------------
+    // Magnitude. A star's own brightness, from its identity — variety that says nothing.
+    //
+    // `docs/SKY.md` §3.5: a real sky has a few bright stars and many faint ones, and a sky in
+    // which every star burns alike reads as a pattern of dots rather than as a sky (#474). So
+    // each ordinary star draws one of four brightnesses from the hash of its own identity, like
+    // its temperature, its place and its rhythm, and it is FIXED FOREVER AND MEANS NOTHING. No
+    // mood, count or date reaches it, and kind only as the ordinal mixed into the hash, so the
+    // shares are the same for every kind. The Key says in words that brightness means nothing.
+    //
+    // The landmark stays the one bright star: it has no magnitude, and the brightest ordinary
+    // star's light is under its own. The quiet sky draws every star at one light, because it is
+    // for someone who needs to find every star plainly.
+    // ---------------------------------------------------------------------------------------
+
+    /** Faint, soft, full, bright. */
+    const val MAGNITUDE_COUNT = 4
+
+    /**
+     * Each magnitude's light, over [SkyStarLight.LIGHT], faintest first. The faintest is as faint
+     * as it can be while the oldest such star, at the bottom of its twinkle, still shows its heart
+     * at 3:1 on the ground (`SkyStarLightTest`): old stars recede but never vanish.
+     */
+    private val MAGNITUDE_LIGHT = floatArrayOf(0.4f, 0.65f, 1f, 2f)
+
+    /** How many stars draw each, faintest first: most of them faint, a few bright, as a real sky. */
+    private val MAGNITUDE_SHARE = floatArrayOf(0.35f, 0.35f, 0.22f, 0.08f)
+
+    private const val MAGNITUDE_KIND_SALT = 0x3C91E5A7L
+    private const val MAGNITUDE_SALT = 0x5D2B6F83L
+
+    /** The encoding a sprite's pixels are in, which an alpha on them works through. */
+    private const val GAMMA = 2.2
+
+    /** Which magnitude this star drew, `0..MAGNITUDE_COUNT - 1`, faintest first. */
+    fun magnitudeIndex(kind: SkyKind, id: Long): Int {
+        val seed = kind.ordinal.toLong() * MAGNITUDE_KIND_SALT + MAGNITUDE_SALT
+        val h = SkyRandom.unit(SkyRandom.mix(seed, id))
+        var below = 0f
+        for (i in 0 until MAGNITUDE_COUNT - 1) {
+            below += MAGNITUDE_SHARE[i]
+            if (h < below) return i
+        }
+        return MAGNITUDE_COUNT - 1
+    }
+
+    /** A magnitude's light, over [SkyStarLight.LIGHT]. Out-of-range indices clamp rather than throw. */
+    fun magnitudeLight(index: Int): Float = MAGNITUDE_LIGHT[index.coerceIn(0, MAGNITUDE_COUNT - 1)]
+
+    /** The share of stars that draw a magnitude. */
+    fun magnitudeShare(index: Int): Float = MAGNITUDE_SHARE[index.coerceIn(0, MAGNITUDE_COUNT - 1)]
+
+    /**
+     * What the renderer stamps this star's sprite with for its magnitude: the light carried into
+     * encoded pixels, `light^(1/2.2)`, the way [SkyTwinkle.alphaAt] carries the twinkle. About
+     * 0.66 for the faintest to 1.37 for the brightest; above 1 is the second stamp the renderer
+     * already makes for light above the sprite's own.
+     *
+     * Exactly 1 for a landmark and in the [quiet] sky, and rising to 1 as the star becomes a sun
+     * ([sun] from 0 to 1): close enough to see a sphere is close enough that no star is faint any
+     * more, and a sun's light is its age alone.
+     */
+    fun magnitudeAlpha(kind: SkyKind, id: Long, quiet: Boolean, sun: Float): Float {
+        if (quiet || kind == SkyKind.LIFE_EVENT) return 1f
+        val alpha = Math.pow(magnitudeLight(magnitudeIndex(kind, id)).toDouble(), 1.0 / GAMMA).toFloat()
+        return alpha + (1f - alpha) * sun.coerceIn(0f, 1f)
+    }
 
     // ---------------------------------------------------------------------------------------
     // What a star is actually drawn in. Both of these take a mood and both of them ignore it.

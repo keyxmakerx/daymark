@@ -67,6 +67,10 @@ a new phone?", done on one phone.
   colour, paled toward white, with a tight wing of light round it the way a star's light spreads in
   the eye, and no rays, spikes, hard edge or grey disc round it. A life event is still the one
   bright star: brighter, with a wider wing (#474).
+- **Stars differ in brightness, the way a real sky's do, and it means nothing.** Most are faint, a
+  few burn bright, and each keeps its own brightness forever; nothing about a day, its mood or how
+  much was written changes it, and the Key says so. Even the faintest, oldest star stays plainly
+  visible. A life event is still the brightest, and the quiet sky draws every star alike (#474).
 - **The sky has depth behind its stars.** Behind them is space close to black, touched with your
   sky's own colours, with lanes of dust and clouds of gas, there from the whole sky and gathering as
   you zoom in, lit by the stars nearest them. Each layer moves a little less than the stars as you

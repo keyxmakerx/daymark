@@ -664,7 +664,13 @@ fun SkyScreen(
                     when (sheet) {
                         SkySheet.NONE -> Unit
                         SkySheet.KEY -> SkySheetFrame(title = "Key", onClose = { sheet = SkySheet.NONE }) {
-                            val key = SkyKey.entries(layout, state.constellations.size, state.nebulae.size, placed.size)
+                            val key = SkyKey.entries(
+                                layout,
+                                state.constellations.size,
+                                state.nebulae.size,
+                                placed.size,
+                                quiet = highContrast,
+                            )
                             for (entry in key) {
                                 Text(
                                     text = entry.title,

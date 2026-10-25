@@ -304,14 +304,14 @@ class SkySurfaceSourceTest {
     // ---------------------------------------------------------------------------------------------
 
     /**
-     * `val brightness = fade * SkyTwinkle.alphaAt(...)` — two factors, and the mood is in neither.
+     * `val shine = fade * SkyGlyph.magnitudeAlpha(...)` and `val brightness = shine *
+     * SkyTwinkle.alphaAt(...)` — two factors each, and the mood is in none of them.
      *
-     * Pinned as *"exactly two top-level factors, one of them the age fade and one of them the
-     * star's own beat"* rather than as the literal line, so wrapping it, renaming nothing and
-     * reordering the twinkle's arguments all still pass, and a third factor does not.
+     * Pinned as *"exactly two top-level factors"* each time rather than as the literal lines, so
+     * wrapping them and reordering the arguments all still pass, and a third factor does not.
      */
     @Test
-    fun `a star's brightness is its age fade and its own beat, and nothing else`() {
+    fun `a star's brightness is its age fade, its own magnitude and its own beat, and nothing else`() {
         val fade = squeeze(statementFrom(surface, "val fade ="))
         assertTrue(
             "the age fade is no longer read from the pure layer: \"$fade\". SkyGlyph.starBrightness " +
@@ -320,33 +320,45 @@ class SkySurfaceSourceTest {
             fade.startsWith("val fade = SkyGlyph.starBrightness("),
         )
 
+        // The star's own magnitude: its identity's, never the day's.
+        val shine = statementFrom(surface, "val shine =")
+        val shineFactors = topLevelSplit(shine.substringAfter("="), '*').map { squeeze(it) }
+        assertEquals("the shine is no longer the age fade and the magnitude: \"${squeeze(shine)}\"", 2, shineFactors.size)
+        assertEquals("the shine's first factor is no longer the age fade", "fade", shineFactors[0])
+        assertTrue(
+            "the shine's second factor is no longer the star's own magnitude: \"${shineFactors[1]}\"",
+            shineFactors[1].startsWith("SkyGlyph.magnitudeAlpha("),
+        )
+
         val statement = statementFrom(surface, "val brightness =")
         val factors = topLevelSplit(statement.substringAfter("="), '*').map { squeeze(it) }
 
         assertEquals(
             "a star's brightness is no longer exactly two things: \"${squeeze(statement)}\". Total " +
-                "emitted light is a function of age alone — a third factor here is how a mood " +
-                "reaches the amount of light rather than its distribution, and the person would see " +
-                "every hard day drawn faintest.",
+                "emitted light is a function of age and the star's identity alone — a third factor " +
+                "here is how a mood reaches the amount of light rather than its distribution, and " +
+                "the person would see every hard day drawn faintest.",
             2,
             factors.size,
         )
-        assertEquals("the first factor is no longer the age fade", "fade", factors[0])
+        assertEquals("the first factor is no longer the age fade and the magnitude", "shine", factors[0])
         assertTrue(
             "the second factor is no longer the star's own beat: \"${factors[1]}\"",
             factors[1].startsWith("SkyTwinkle.alphaAt("),
         )
-        assertFalse(
-            "the brightness expression names a mood. It may not: mood redistributes a star's fixed " +
-                "light between width and centre, and never changes the amount.",
-            statement.lowercase().contains("mood"),
-        )
-        for (operator in listOf('+', '-')) {
-            assertEquals(
-                "the brightness expression now adds or subtracts a term: \"${squeeze(statement)}\"",
-                1,
-                topLevelSplit(statement.substringAfter("="), operator).size,
+        for (expression in listOf(shine, statement)) {
+            assertFalse(
+                "a brightness expression names a mood. It may not: mood redistributes a star's " +
+                    "fixed light between width and centre, and never changes the amount.",
+                expression.lowercase().contains("mood"),
             )
+            for (operator in listOf('+', '-')) {
+                assertEquals(
+                    "a brightness expression now adds or subtracts a term: \"${squeeze(expression)}\"",
+                    1,
+                    topLevelSplit(expression.substringAfter("="), operator).size,
+                )
+            }
         }
     }
 
@@ -365,12 +377,12 @@ class SkySurfaceSourceTest {
         )
         assertTrue("the mood check cannot see the planted mood", dimmed.lowercase().contains("mood"))
 
-        // And the quieter shape: the fade replaced by something the mood does move.
-        val haloed = statement.replace("fade *", "SkyGlyph.haloPeakAlpha(kind, $MOOD) *")
+        // And the quieter shape: the shine replaced by something the mood does move.
+        val haloed = statement.replace("shine *", "SkyGlyph.haloPeakAlpha(kind, $MOOD) *")
         assertNotEquals("the planted replacement did not change the statement", statement, haloed)
         assertNotEquals(
-            "the first-factor check cannot see the age fade swapped for the halo's alpha",
-            "fade",
+            "the first-factor check cannot see the shine swapped for the halo's alpha",
+            "shine",
             topLevelSplit(haloed.substringAfter("="), '*').map { squeeze(it) }.first(),
         )
 
