@@ -17,7 +17,12 @@ diagnosis or treatment.
 
 ## Getting started
 
-1. Install Daymark (see the [FAQ](FAQ.md) if you get an "unknown app" warning).
+1. Install Daymark. On your phone, open the project's
+   [releases page](https://github.com/keyxmakerx/daymark/releases), and under the newest release's
+   **Assets** tap `app-foss-release.apk` to download it. Open the downloaded file. Android asks
+   whether your browser or file app may install apps: allow it for this one install, then tap
+   **Install**. A warning that the app is unknown is normal for anything not from the Play Store
+   (see the [FAQ](FAQ.md)). Later versions install the same way, over the top, keeping your data.
 2. The first time you open it, a short setup offers a daily reminder, shows the crisis line Daymark
    will offer you in a hard moment (988 in the US to start) so you can change it, and offers a PIN.
    All of it is optional, and all of it can be changed later.

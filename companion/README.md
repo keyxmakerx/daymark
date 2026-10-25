@@ -53,6 +53,20 @@ docker compose up -d --build
 # then open http://localhost:8080
 ```
 
+Then, before anyone else can reach the address:
+
+1. **Claim the server console.** A new server prints a one-time setup code to its log:
+   `docker compose logs companion | grep 'Setup code'`. Open `http://localhost:8080/admin.html`, enter
+   the code, choose a name, and add the key it shows to an authenticator app. Whoever enters the code
+   first is the administrator; a new code is printed each hour until the server is claimed.
+2. **Put your reverse proxy in front** so the server is reached over `https://` at `DAYMARK_DOMAIN`
+   (docs/alternatives/ has worked configurations). A phone pairs only over https.
+3. **Open the owner's page** at that address, under **Connect to your sync server** type the access
+   token from `secrets/auth_token`, and press **Connect**. From there you pair your phone.
+
+The full first-install checklist, with health checks and backups, is
+[COMPANION_DEPLOYMENT.md](../docs/COMPANION_DEPLOYMENT.md) §9.
+
 Set `DAYMARK_SETUP_MODE` in `.env` to what this machine is for: `solo` for one person and their own
 backup (the example's value), `paired` if clinicians you invite will use it, `practice` if a clinic
 runs it. Each switches on only what it needs: in `solo` every clinician, pairing and practice route

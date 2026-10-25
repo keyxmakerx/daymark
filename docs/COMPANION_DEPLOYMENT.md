@@ -254,7 +254,7 @@ read from a file named by `NAME_FILE`, which wins.
 | `DAYMARK_TOTP_LOCKOUT_FAILS`, `_SECONDS` | `5`, `300` | Bad sign-in codes before a credential is locked, and for how long, for clinicians and server administrators alike; also the backoff for wrong invitation secrets |
 | `DAYMARK_INVITE_TTL_SECONDS` | `259200` (72 h) | Invitation lifetime |
 | `DAYMARK_SESSION_IDLE_SECONDS`, `_ABSOLUTE_SECONDS` | `900`, `28800` | Clinician and server-administrator session lifetimes on the server. The clinician console also drops its keys after 15 minutes without activity, and at the server's absolute expiry or 8 hours after sign-in, whichever is sooner, as its sign-in contract says: a shorter value here applies, a longer one does not extend what the page holds |
-| `DAYMARK_ADMIN_RESET` | off | `1` or `true`: for a server that has lost every administrator. Each start with it on prints a new setup code to the log and writes one audit row, and that code makes one more administrator (§9). Turn it off again once you are signed in |
+| `DAYMARK_ADMIN_RESET` | off | Set in `.env`, which compose passes through. `1` or `true`: for a server that has lost every administrator. Each start with it on prints a new setup code to the log and writes one audit row, and that code makes one more administrator (§9). Turn it off again once you are signed in |
 | `DAYMARK_COOKIE_INSECURE` | off | Plain-HTTP testing only: drops `Secure` from the session cookie. Refused at start with an `https` public address (§5.3) |
 | `DAYMARK_ACCESS_LOG_RETENTION_DAYS` | `90` | Audit-log retention (COMPANION_SECURITY.md §9) |
 | `DAYMARK_ACCESS_LOG_SOURCE_IP` | off | Records the client address in audit entries |
@@ -579,8 +579,9 @@ check that a real email arrives (#207).
    `admin.html`, enter the code, choose a name, add the key it shows to an authenticator app and
    type the six digits. The code works once and for an hour; a new one is printed each hour and at
    each start until the server is claimed, and never after. Do this before anyone else can reach
-   the address: whoever enters the code first is the administrator. Lost every administrator? Start
-   once with `DAYMARK_ADMIN_RESET=1` (§5.1).
+   the address: whoever enters the code first is the administrator. Lost every administrator? Set
+   `DAYMARK_ADMIN_RESET=1` in `.env`, run `docker compose up -d`, read the new code from the log the
+   same way, and remove the line again once you are signed in (§5.1).
 6. Run the checks in COMPANION_OBSERVABILITY.md §6.4, including the lockout-isolation test.
 7. Schedule backups (§6.2) and keep them off the host, encrypted.
 

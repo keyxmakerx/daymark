@@ -138,6 +138,11 @@ services:
       # practice, off for solo) or the server refuses to start and names both settings.
       DAYMARK_THERAPIST_AUTH: "${DAYMARK_THERAPIST_AUTH:-}"
 
+      # For a server that has lost every administrator (#322): `1` or `true` in .env prints a new
+      # setup code at each start and writes one audit row. Empty unless .env sets it, because a
+      # setting this block does not name never reaches the container.
+      DAYMARK_ADMIN_RESET: "${DAYMARK_ADMIN_RESET:-}"
+
       DAYMARK_AUTH_TOKEN_FILE: "/run/secrets/companion_auth_token"
 
       # App-layer limits (Config.kt defaults, stated explicitly so they are auditable).
