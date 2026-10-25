@@ -1,13 +1,12 @@
 package com.daymark.app.ui.sky
 
+import android.graphics.Bitmap
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Canvas
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.LinearGradientShader
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.RadialGradientShader
+import androidx.compose.ui.graphics.asImageBitmap
 import com.daymark.app.sky.SkyAge
 import com.daymark.app.sky.SkyGlyph
 import com.daymark.app.sky.SkyKind
@@ -15,33 +14,31 @@ import com.daymark.app.sky.SkyStarLight
 import com.daymark.app.sky.SkyTwinkle
 import kotlin.math.ceil
 import kotlin.math.ln
-import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /**
- * Stars, drawn once into small bitmaps and then stamped.
+ * Stars, worked out once into small bitmaps and then stamped.
  *
- * `docs/SKY.md` §3.5 asks for *"a point, then a glow"*: a crisp bead of light in the star's own
- * colour, a thin rim of light around it, and a soft faint outer glow whose spread is the mood. That
- * is three radial gradients per star, and a sky has thousands of stars — so each distinct star is
- * rasterised once and every star that looks the same reuses it. The bead and the rim are the
- * approved phone sky's star (`docs/prototypes/sky-phone.html`), worked out at a handful of radii by
- * [SkyStarLight] (#460).
+ * `docs/SKY.md` §3.5 asks for *"a point, then a glow"*: a white-hot heart falling away into the
+ * star's own colour, a soft wing round it the way a real star's light spreads in the eye, and a
+ * faint outer glow whose spread is the mood. [SkyStarLight] works that light out pixel by pixel, and
+ * a sky has thousands of stars, so each distinct star is worked out once and every star that looks
+ * the same reuses it. A star is round: nothing about it has a ray, a spike or an edge (#474).
  *
  * **This file decides nothing that carries meaning.** Colour comes from [SkyGlyph.starTint], which
- * is age and temperature; the bead's and the rim's light from [SkyStarLight], at one light for
- * every ordinary star; brightness from [SkyGlyph.starBrightness], which is age; halo geometry and
- * the fade's stops from [SkyGlyph]; rhythm from [SkyTwinkle]. What is here is rasterisation.
- * There is no Android SDK in this authoring environment, so a rule that lives in this file is a
- * rule nobody can execute until CI — which is exactly why none of them do.
+ * is age and temperature; the light from [SkyStarLight], at one light for every ordinary star;
+ * brightness from [SkyGlyph.starBrightness], which is age; the halo's spread and peak from
+ * [SkyGlyph]; rhythm from [SkyTwinkle]. What is here is rasterisation. There is no Android SDK in
+ * this authoring environment, so a rule that lives in this file is a rule nobody can execute until
+ * CI — which is exactly why none of them do.
  *
  * ## The cache key, and the one place it had to be normalised
  *
  * A sprite is keyed on **(mood level, [SkyAge.ageBucket], [SkyGlyph.temperatureIndex])** — those
  * three are the whole of what a star's appearance is a function of — plus what changes the
  * sprite's *shape* rather than its colour: whether it is a landmark, whether the quiet sky is on,
- * and how far the bead has grown with the zoom ([SkyGlyph.zoomScale]), in steps of [GROWTH_STEP].
+ * and how far the heart has grown with the zoom ([SkyGlyph.zoomScale]), in steps of [GROWTH_STEP].
  * The zoom is the same for every star on screen, so it adds no variety between them. Nothing about
  * the record's identity beyond its temperature enters, and nothing about how much was logged
  * enters at all.
@@ -134,7 +131,6 @@ internal class SkySprites(private val pxPerDp: Float) {
         growth: Int,
     ): Sprite {
         val starTint = SkyGlyph.starTint(kind, id, SkyAge.bucketAgeYears(bucket), moodLevel)
-        val tint = skyColor(starTint)
         // One light for every ordinary star, whatever its kind, age or mood: `SkyStarLight`'s
         // header is why. The landmark is brighter because a person placed it.
         val light = if (landmark) SkyStarLight.LANDMARK_LIGHT else SkyStarLight.LIGHT
@@ -142,100 +138,28 @@ internal class SkySprites(private val pxPerDp: Float) {
             SkyGlyph.coreScale(kind) * growthAt(growth) * pxPerDp
         // The quiet sky is the bead and nothing else. §7.1: a soft gradient around a small mark is
         // the first thing to disappear for someone with low vision, and leaving it in only fuzzes
-        // the edge of the thing they are trying to find. The bead grows by half a dp to pay back
-        // some of the presence the rim and the glow were carrying.
+        // the edge of the thing they are trying to find. The bead grows by a dp to pay back some
+        // of the presence the wing and the glow were carrying.
         val beadRadius = if (quiet) coreRadius + QUIET_CORE_GROWTH_DP * pxPerDp else coreRadius
-        val rimRadius = beadRadius + SkyStarLight.RIM_REACH_DP * pxPerDp
+        val wing = (if (landmark) SkyStarLight.LANDMARK_WING_DP else SkyStarLight.WING_DP) * pxPerDp
+        // The outer glow: the one place a mood is spent. Its spread and its peak are SkyGlyph's,
+        // and the shape of its fall is the same at every mood, so only its scale moves.
         val outerRadius = SkyGlyph.outerGlowRadiusDp(kind, moodLevel) * pxPerDp
+        val haloPeak = SkyGlyph.haloPeakAlpha(kind, moodLevel)
 
-        val radius = if (quiet) beadRadius else max(outerRadius, rimRadius)
-        val size = ceil(radius * 2f).toInt() + 2
-        val image = ImageBitmap(size, size)
-        val canvas = Canvas(image)
-        val centre = Offset(size / 2f, size / 2f)
-        val paint = Paint().apply { isAntiAlias = true }
-
-        if (!quiet) {
-            if (landmark) spikes(canvas, paint, centre, radius)
-
-            // The outer glow: soft, faint, and spread by the mood. The stops are SkyGlyph's, as
-            // fractions of the outer radius and of the star's own peak alpha — so the shape of the
-            // fall is identical at every mood and only its scale moves. The prototype's `peak +
-            // 0.3` floor is deliberately not carried over; SkyGlyph's halo section says why.
-            paint.shader = RadialGradientShader(
-                center = centre,
-                radius = outerRadius,
-                colors = List(SkyGlyph.HALO_STOP_WEIGHT.size) {
-                    tint.copy(alpha = SkyGlyph.haloStopAlpha(kind, moodLevel, it))
-                },
-                colorStops = SkyGlyph.HALO_STOP_POSITION.toList(),
-            )
-            canvas.drawCircle(centre, outerRadius, paint)
-
-            // The rim: a thin ring of the star's own light against the bead's edge, gone by
-            // `RIM_REACH_DP`. Nothing inside the bead, so the bead's light is not counted twice.
-            // Added rather than painted over, as the sky adds every star.
-            val edge = beadRadius / rimRadius
-            paint.blendMode = BlendMode.Plus
-            paint.shader = RadialGradientShader(
-                center = centre,
-                radius = rimRadius,
-                colors = listOf(Color.Transparent, Color.Transparent) +
-                    SkyStarLight.rimStops(starTint, light).map { Color(it) },
-                colorStops = listOf(0f, edge) + SkyStarLight.RIM_STOP_DP.map {
-                    (beadRadius + it * pxPerDp) / rimRadius
-                },
-            )
-            canvas.drawCircle(centre, rimRadius, paint)
-        }
-
-        // The bead: crisp, in the star's own colour, a little darker toward its edge the way a
-        // real star's limb is. Its colour is the age tint, so age reads at the heart of the star
-        // and not only in a haze around it; its light is the same for every ordinary star, so
-        // equal presence holds at the heart too.
-        paint.blendMode = BlendMode.Plus
-        paint.shader = RadialGradientShader(
-            center = centre,
-            radius = beadRadius,
-            colors = SkyStarLight.coreStops(starTint, light).map { Color(it) },
-            colorStops = SkyStarLight.CORE_STOP_POSITION.toList(),
+        val raster = SkyStarLight.raster(
+            SkyStarLight.Shape(
+                tint = starTint,
+                light = light,
+                beadPx = beadRadius,
+                wingPx = wing,
+                haloRadiusPx = outerRadius,
+                haloPeak = haloPeak,
+                quiet = quiet,
+            ),
         )
-        canvas.drawCircle(centre, beadRadius, paint)
-        return Sprite(image)
-    }
-
-    /**
-     * The four soft spikes on a landmark, the way a bright star flares in the eye.
-     *
-     * Not a kind mark. `SkyDetail.drawsGlyphs` holds kind marks back until the person has leaned
-     * in to one day; a landmark's spikes are part of its *light*, and `docs/SKY.md` §3.4 gives it
-     * that light because the person placed the mark by hand — prominence follows authorship. They
-     * are white for the same reason its bead is: a landmark is never redshifted.
-     */
-    private fun spikes(canvas: Canvas, paint: Paint, centre: Offset, radius: Float) {
-        val half = SPIKE_THICKNESS_DP * pxPerDp / 2f
-        val colors = listOf(
-            SPIKE_TINT.copy(alpha = 0f),
-            SPIKE_TINT.copy(alpha = SPIKE_ALPHA),
-            SPIKE_TINT.copy(alpha = 0f),
-        )
-        val stops = listOf(0f, 0.5f, 1f)
-        paint.shader = LinearGradientShader(
-            from = Offset(centre.x - radius, centre.y),
-            to = Offset(centre.x + radius, centre.y),
-            colors = colors,
-            colorStops = stops,
-        )
-        // The four-float overload, which is a member of the Canvas interface — the Rect one is an
-        // extension and would need its own import.
-        canvas.drawRect(centre.x - radius, centre.y - half, centre.x + radius, centre.y + half, paint)
-        paint.shader = LinearGradientShader(
-            from = Offset(centre.x, centre.y - radius),
-            to = Offset(centre.x, centre.y + radius),
-            colors = colors,
-            colorStops = stops,
-        )
-        canvas.drawRect(centre.x - half, centre.y - radius, centre.x + half, centre.y + radius, paint)
+        val image = Bitmap.createBitmap(raster.pixels, raster.size, raster.size, Bitmap.Config.ARGB_8888)
+        return Sprite(image.asImageBitmap())
     }
 
     private fun rasteriseFringe(tint: Int, scale: Float): Sprite {
@@ -295,21 +219,18 @@ internal class SkySprites(private val pxPerDp: Float) {
 
     private companion object {
 
-        /** How much the bead grows when the rim and the glow are dropped for the quiet sky. */
-        const val QUIET_CORE_GROWTH_DP = 0.5f
+        /** How much the bead grows when the wing and the glow are dropped for the quiet sky. */
+        const val QUIET_CORE_GROWTH_DP = 1f
 
         /**
-         * How finely the bead's growth with zoom is cached: one sprite size per 5%, too small a
+         * How finely the heart's growth with zoom is cached: one sprite size per 5%, too small a
          * step to see a star jump as the person zooms, and few enough that a pinch does not
          * rasterise the sky afresh on every frame.
          */
         const val GROWTH_STEP = 1.05f
 
-        /** Enough steps for the largest growth, `400^0.3` at the closest zoom, with room over. */
-        const val MAX_GROWTH_STEP = 40
-
-        const val SPIKE_THICKNESS_DP = 1.2f
-        const val SPIKE_ALPHA = 0.6f
+        /** Enough steps for the largest growth, `MAX_ZOOM^0.2` at the closest zoom, with room over. */
+        const val MAX_GROWTH_STEP = 44
 
         /** How far past the core a prism fringe spreads, before [SkyGlyph.GLOW_SPREAD]. */
         const val FRINGE_SPREAD_DP = 1.6f
@@ -320,15 +241,12 @@ internal class SkySprites(private val pxPerDp: Float) {
          * The key space is six moods by twenty-nine age buckets by four temperatures at each
          * growth step, so the true worst case is far above this and a sky pulled all the way out
          * can approach it. Every star on screen shares one growth step, so zooming replaces the
-         * set rather than multiplying it. At roughly
-         * 9 KB a sprite this cap is about 4 MB, and overrunning it costs one frame's rasterisation
-         * rather than any correctness. It is a leak stop with a known rough edge: a viewport that
-         * genuinely holds more than this many distinct stars will rebuild them every frame. That is
-         * the number to watch if this surface ever stutters pulled out to five years.
+         * set rather than multiplying it. A sprite is as wide as its glow, about 14 dp, so at
+         * roughly 8 KB a sprite this cap is about 4 MB, and overrunning it costs one frame's
+         * rasterisation rather than any correctness. It is a leak stop with a known rough edge: a
+         * viewport that genuinely holds more than this many distinct stars will rebuild them every
+         * frame. That is the number to watch if this surface ever stutters pulled out to five years.
          */
         const val MAX_CACHED_SPRITES = 512
-
-        /** A landmark's spikes: near-white, like the landmark itself. */
-        val SPIKE_TINT = Color(0xFFFFFDF7)
     }
 }

@@ -386,6 +386,9 @@ disagree, this decision governs the build.
 - **Trackers appear only if the person chooses.** Each tracker has a "Show in my sky" switch. A shown
   tracker is an object of its own beside the memories, never among them, and more logs make it
   denser, never brighter.
+- **Stars differ in brightness, and it means nothing.** Each star keeps a brightness drawn from its
+  own identity, as in a real sky; no mood, count or date reaches it. The Key says so second, a life
+  event stays the brightest, and the quiet sky draws every star alike.
 - **The Key stays, and leads with "red only means old".** It lists only what is in that person's
   sky.
 - **Any tap skips the opening.** With reduced motion, the sky opens still, on today.
@@ -395,7 +398,9 @@ disagree, this decision governs the build.
 
 **Why.** It is the maintainer's design. The safety review of 2026-10-03 added the parts about
 rewards, the supernova, the black hole closing, skipping the opening and the Key's first line. The
-maintainer added the forms on 2026-10-04: a river in every sky would make them all alike.
+maintainer added the forms on 2026-10-04: a river in every sky would make them all alike. The
+maintainer chose varied brightness on 2026-10-25: a sky in which every star burns alike reads as a
+pattern of dots rather than a sky, and brightness drawn from identity ranks no day.
 
 ---
 

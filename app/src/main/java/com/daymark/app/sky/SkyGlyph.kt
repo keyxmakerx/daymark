@@ -34,7 +34,7 @@ package com.daymark.app.sky
  * | [CORE_ALPHA] | [haloPeakAlpha] — how concentrated it is |
  * | the bead and its rim — [SkyStarLight], at one [SkyStarLight.LIGHT] | |
  * | colour — [SkyAge.tintFor], which is age | |
- * | brightness — [SkyAge.fadeFor], which is age | |
+ * | brightness — [SkyAge.fadeFor], which is age, and [magnitudeAlpha], which is identity | |
  * | [HALO_LIGHT] — total light emitted | |
  *
  * So a hard day is a soft wide warm star and a good day is a tight crisp one. **Neither is
@@ -71,6 +71,11 @@ package com.daymark.app.sky
  * three folded records ([SkyLayout.recordCountAt]) is drawn at exactly the same size as one holding
  * a single record — a bigger star for a busier day would rank days by output, which is the
  * productivity reading of a journal and is what §6.2 forbids.
+ *
+ * Stars do differ in brightness, as a real sky's do, but by [magnitudeAlpha] alone, which is drawn
+ * from the star's identity and nothing else: no mood, count or date reaches it, so nothing about a
+ * day can be read off how brightly its star burns, and the Key says in words that it means nothing
+ * (`DECISIONS.md` §D11).
  */
 object SkyGlyph {
 
@@ -79,11 +84,14 @@ object SkyGlyph {
     // ---------------------------------------------------------------------------------------
 
     /**
-     * The bead's radius at the whole-sky view, in dp: the approved phone sky's `0.8 + 0.22 × lum`
-     * for an ordinary star's light ([SkyStarLight.LIGHT]). It grows as the person zooms in, by
-     * [zoomScale], and the growth is the same for every star (#460).
+     * The heart's radius at the whole-sky view, in dp: where its light has fallen to a third
+     * ([SkyStarLight.HEART_FALL]). It grows as the person zooms in, by [zoomScale], and the growth is
+     * the same for every star (#460). Small, because a star is a point: what gives it presence far
+     * out is how bright the heart burns and the soft wing round it, never a bigger disc (#474). Small
+     * enough that the stars of one day, which sit close, stay separate points at the whole sky
+     * rather than running together into one smear.
      */
-    const val CORE_RADIUS_DP = 0.96f
+    const val CORE_RADIUS_DP = 0.7f
 
     const val CORE_ALPHA = 1.0f
 
@@ -99,12 +107,12 @@ object SkyGlyph {
     @Suppress("UNUSED_PARAMETER")
     fun coreRadiusDp(kind: SkyKind, moodLevel: Int): Float = CORE_RADIUS_DP
 
-    /** How fast the bead grows with zoom: the approved sky's `zoom^0.3`. */
-    const val ZOOM_GROWTH = 0.3f
+    /** How fast the heart grows with zoom: `zoom^0.2`, the same for every star. */
+    const val ZOOM_GROWTH = 0.2f
 
     /**
      * How much bigger every bead is drawn at [zoom] (screen widths across, `1` for the whole sky)
-     * than at the whole-sky view: `zoom^0.3`, so about 1.8 times at a week and 3 times at a single
+     * than at the whole-sky view: `zoom^0.2`, so about 1.5 times at a week and twice at a single
      * day. Never below `1`, and a function of the zoom alone, so it moves every star together and
      * changes nothing about one star against another.
      */
@@ -188,38 +196,58 @@ object SkyGlyph {
     /**
      * Where each stop of the outer glow sits, as a fraction of [outerGlowRadiusDp].
      *
-     * The prototype's five stops. Front-loaded — more than half the fall happens in the first fifth
-     * of the radius — because that is what reads as a glow around a point rather than as a disc
-     * with soft edges.
+     * The prototype's five stops. Front-loaded, because that is what reads as a glow around a point
+     * rather than as a disc with soft edges.
      */
     val HALO_STOP_POSITION = floatArrayOf(0f, 0.18f, 0.45f, 0.75f, 1f)
 
     /**
-     * What each stop is worth, as a fraction of [haloPeakAlpha].
+     * What each stop is worth, as a fraction of [haloPeakAlpha]: three quarters of the fall in the
+     * first fifth of the radius, and under a fiftieth of the peak left halfway out.
+     *
+     * The halo is added in linear light and shown through the screen's gamma, which lifts a faint
+     * light far more than a bright one, so any weight left in its outer half shows as a grey disc
+     * the size of the whole glow, the same on every star, and a sky of them reads as stickers rather
+     * than light (#474). That is why these fall faster than the prototype's `0.5, 0.34, 0.12, 0.035`.
      *
      * The last is exactly zero, which is the *"to exactly nothing"* in `docs/SKY.md` §3.5 and is
      * the property the flat disc did not have. Nothing here is a function of mood: mood picks the
      * peak and the radius, and the shape of the fall is the same for every star on the surface.
      */
-    val HALO_STOP_WEIGHT = floatArrayOf(0.5f, 0.34f, 0.12f, 0.035f, 0f)
+    val HALO_STOP_WEIGHT = floatArrayOf(0.5f, 0.12f, 0.02f, 0.004f, 0f)
+
+    /**
+     * The halo's weight at [u], a fraction of [outerGlowRadiusDp] from the centre: the stops above,
+     * straight between them, and exactly `0` from the last stop out. The same shape for every star.
+     */
+    fun haloWeightAt(u: Float): Float {
+        if (!(u >= 0f)) return HALO_STOP_WEIGHT[0]
+        for (i in 0 until HALO_STOP_POSITION.size - 1) {
+            val from = HALO_STOP_POSITION[i]
+            val to = HALO_STOP_POSITION[i + 1]
+            if (u < to) {
+                return HALO_STOP_WEIGHT[i] + (HALO_STOP_WEIGHT[i + 1] - HALO_STOP_WEIGHT[i]) * (u - from) / (to - from)
+            }
+        }
+        return 0f
+    }
 
     /** How far past [haloRadiusDp] the light carries before the fade reaches zero. */
     const val GLOW_SPREAD = 1.25f
 
     private const val OUTER_GLOW_SCALE = 1.3f
-    private const val OUTER_GLOW_SCALE_LANDMARK = 2.2f
 
     /**
      * The radius the outer glow actually fades out over — wider than [haloRadiusDp], because the
      * halo radius is where the light is *concentrated* and the fade has to end somewhere past it.
      *
-     * A landmark's glow reaches further still, for the same reason its peak is higher: it is the
-     * one mark the person placed by hand.
+     * A landmark's glow reaches further because its halo is wider ([LANDMARK_HALO_RADIUS_DP]), and
+     * no further than that: the rest of its extra light is in its wider wing
+     * ([SkyStarLight.LANDMARK_WING_DP]), which reads as a brilliant star rather than as a haze
+     * round one (#474).
      */
-    fun outerGlowRadiusDp(kind: SkyKind, moodLevel: Int): Float {
-        val scale = if (kind == SkyKind.LIFE_EVENT) OUTER_GLOW_SCALE_LANDMARK else OUTER_GLOW_SCALE
-        return haloRadiusDp(kind, moodLevel) * GLOW_SPREAD * scale
-    }
+    fun outerGlowRadiusDp(kind: SkyKind, moodLevel: Int): Float =
+        haloRadiusDp(kind, moodLevel) * GLOW_SPREAD * OUTER_GLOW_SCALE
 
     /** The alpha of stop [index] of this star's outer glow. */
     fun haloStopAlpha(kind: SkyKind, moodLevel: Int, index: Int): Float =
@@ -231,12 +259,12 @@ object SkyGlyph {
      * This is [HALO_LIGHT]'s claim made checkable against the shape that is now drawn rather than
      * against the one that used to be. `peak x radius²` was the right invariant for a flat disc and
      * says nothing on its own about a gradient — so the profile is integrated, and the answer comes
-     * out **1.161 for every mood level** and 13.278 for a landmark. The flat number across the ramp
+     * out **0.330 for every mood level** and 1.316 for a landmark. The flat number across the ramp
      * is the whole of mechanism M4 on this surface; the landmark's is `docs/SKY.md` §3.4's *"a
      * landmark is the one bright star"*, and it is allowed to be louder because a person placed
      * it by hand.
      *
-     * The profile itself passes 0.0831 of the light a flat disc of the same peak and radius would,
+     * The profile itself passes 0.0236 of the light a flat disc of the same peak and radius would,
      * which is the price of the edge going to nothing, and it is paid equally by every star.
      */
     fun haloEmittedLight(kind: SkyKind, moodLevel: Int): Float {
@@ -311,6 +339,74 @@ object SkyGlyph {
         TEMPERATURE_WARMTH[index.coerceIn(0, TEMPERATURE_COUNT - 1)]
 
     // ---------------------------------------------------------------------------------------
+    // Magnitude. A star's own brightness, from its identity — variety that says nothing.
+    //
+    // `docs/SKY.md` §3.5: a real sky has a few bright stars and many faint ones, and a sky in
+    // which every star burns alike reads as a pattern of dots rather than as a sky (#474). So
+    // each ordinary star draws one of four brightnesses from the hash of its own identity, like
+    // its temperature, its place and its rhythm, and it is FIXED FOREVER AND MEANS NOTHING. No
+    // mood, count or date reaches it, and kind only as the ordinal mixed into the hash, so the
+    // shares are the same for every kind. The Key says in words that brightness means nothing.
+    //
+    // The landmark stays the one bright star: it has no magnitude, and the brightest ordinary
+    // star's light is under its own. The quiet sky draws every star at one light, because it is
+    // for someone who needs to find every star plainly.
+    // ---------------------------------------------------------------------------------------
+
+    /** Faint, soft, full, bright. */
+    const val MAGNITUDE_COUNT = 4
+
+    /**
+     * Each magnitude's light, over [SkyStarLight.LIGHT], faintest first. The faintest is as faint
+     * as it can be while the oldest such star, at the bottom of its twinkle, still shows its heart
+     * at 3:1 on the ground (`SkyStarLightTest`): old stars recede but never vanish.
+     */
+    private val MAGNITUDE_LIGHT = floatArrayOf(0.4f, 0.65f, 1f, 2f)
+
+    /** How many stars draw each, faintest first: most of them faint, a few bright, as a real sky. */
+    private val MAGNITUDE_SHARE = floatArrayOf(0.35f, 0.35f, 0.22f, 0.08f)
+
+    private const val MAGNITUDE_KIND_SALT = 0x3C91E5A7L
+    private const val MAGNITUDE_SALT = 0x5D2B6F83L
+
+    /** The encoding a sprite's pixels are in, which an alpha on them works through. */
+    private const val GAMMA = 2.2
+
+    /** Which magnitude this star drew, `0..MAGNITUDE_COUNT - 1`, faintest first. */
+    fun magnitudeIndex(kind: SkyKind, id: Long): Int {
+        val seed = kind.ordinal.toLong() * MAGNITUDE_KIND_SALT + MAGNITUDE_SALT
+        val h = SkyRandom.unit(SkyRandom.mix(seed, id))
+        var below = 0f
+        for (i in 0 until MAGNITUDE_COUNT - 1) {
+            below += MAGNITUDE_SHARE[i]
+            if (h < below) return i
+        }
+        return MAGNITUDE_COUNT - 1
+    }
+
+    /** A magnitude's light, over [SkyStarLight.LIGHT]. Out-of-range indices clamp rather than throw. */
+    fun magnitudeLight(index: Int): Float = MAGNITUDE_LIGHT[index.coerceIn(0, MAGNITUDE_COUNT - 1)]
+
+    /** The share of stars that draw a magnitude. */
+    fun magnitudeShare(index: Int): Float = MAGNITUDE_SHARE[index.coerceIn(0, MAGNITUDE_COUNT - 1)]
+
+    /**
+     * What the renderer stamps this star's sprite with for its magnitude: the light carried into
+     * encoded pixels, `light^(1/2.2)`, the way [SkyTwinkle.alphaAt] carries the twinkle. About
+     * 0.66 for the faintest to 1.37 for the brightest; above 1 is the second stamp the renderer
+     * already makes for light above the sprite's own.
+     *
+     * Exactly 1 for a landmark and in the [quiet] sky, and rising to 1 as the star becomes a sun
+     * ([sun] from 0 to 1): close enough to see a sphere is close enough that no star is faint any
+     * more, and a sun's light is its age alone.
+     */
+    fun magnitudeAlpha(kind: SkyKind, id: Long, quiet: Boolean, sun: Float): Float {
+        if (quiet || kind == SkyKind.LIFE_EVENT) return 1f
+        val alpha = Math.pow(magnitudeLight(magnitudeIndex(kind, id)).toDouble(), 1.0 / GAMMA).toFloat()
+        return alpha + (1f - alpha) * sun.coerceIn(0f, 1f)
+    }
+
+    // ---------------------------------------------------------------------------------------
     // What a star is actually drawn in. Both of these take a mood and both of them ignore it.
     // ---------------------------------------------------------------------------------------
 
@@ -354,8 +450,8 @@ object SkyGlyph {
      *
      * `docs/SKY.md` §3.4: *"A landmark is the one bright star. A life event is placed to be found
      * again, so it alone is bigger (core × 1.9), brighter (the one halo that emits more light),
-     * spiked (four soft white spikes at every zoom), never redshifted, never faded, and always
-     * glints. Brightness may follow a mark the person placed, never anything the app measured."*
+     * never redshifted, never faded, and always glints. Brightness may follow a mark the person
+     * placed, never anything the app measured."*
      *
      * So this is a scale on [CORE_RADIUS_DP] and not a second core radius, and it is a function of
      * kind alone — a life event's core does not know what mood or what date it is, and no other

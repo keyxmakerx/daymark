@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
@@ -26,22 +27,27 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.PointMode
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -53,6 +59,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -74,6 +81,7 @@ import com.daymark.app.sky.SkyOpening
 import com.daymark.app.sky.SkyOptions
 import com.daymark.app.sky.SkyPalette
 import com.daymark.app.sky.SkyRandom
+import com.daymark.app.sky.SkyShaders
 import com.daymark.app.sky.SkyTrackers
 import com.daymark.app.sky.SkyTwinkle
 import kotlinx.coroutines.Dispatchers
@@ -105,12 +113,16 @@ import kotlin.math.sqrt
  *
  * ## What is drawn
  *
- * Every star is a memory. Behind them is the sky's own space: its deepest tone and three soft
- * glows of colour anchored to the sky, and gas around weeks with a lot of writing
- * ([SkyNebula]), all in the sky's colours ([SkyColours]), which are blind to data. There are no
- * background stars and no field. Stars are drawn where they are today, drift included. Far out each
- * is a point of light; leaning in, kind marks resolve ([SkyDetail.drawsGlyphs]); right in, each one
- * is drawn as a sun of its own ([SkyPresentation.sunRadius]). A life event the person marked as
+ * Every star is a memory. Behind them is the sky's own space ([SkyShaders.SPACE]): deep colour,
+ * dust, and gas that gathers as the view closes in, each layer further back than the stars so it
+ * moves less as the sky does, lit by the stars nearest the middle of the screen; and, around weeks
+ * with a lot of writing, the gas of a nebula ([SkyNebula]). All of it is in the sky's colours
+ * ([SkyColours]), which are blind to data. There are no background stars and no field. Stars are
+ * drawn where they are today, drift included. Far out each is a point of light; leaning in, kind
+ * marks resolve ([SkyDetail.drawsGlyphs]); right in, each one is drawn as the sun it is
+ * ([SkyPresentation.sunRadius], [SkyShaders.SUN]). Below Android 13, where a shader cannot be
+ * written ([SkyShading]), the space is its deepest tone and three soft glows of colour anchored to
+ * the sky, and a sun is a simple disc. A life event the person marked as
  * hard has a supernova's shell round it, dim, marking that day and nothing more. Trackers the
  * person shows are objects of their own beside the memories ([SkyTrackers]). Constellations the
  * person drew are lines between their stars and a name beside the topmost one, the only words on
@@ -191,7 +203,9 @@ internal fun SkySurface(
 ) {
     val xs = positions[0]
     val ys = positions[1]
-    val bounds = remember(positions, layout) { SkyPresentation.boundsOf(xs, ys, layout.height) }
+    val bounds = remember(positions, layout, trackers) {
+        SkyPresentation.boundsOf(xs, ys, layout.height, trackers)
+    }
     val glows = remember(seed, layout.height) { SkyColours.glows(seed, layout.height) }
     val extents = remember(nebulae, positions) { nebulae.map { SkyNebula.extent(it, xs, ys) } }
     // Each nebula's gas, folded once off the main thread: years of busy weeks are dozens of them.
@@ -222,7 +236,11 @@ internal fun SkySurface(
 
     // The frame loop. See this file's header for the things that stop it running when nobody is
     // looking at it.
-    val elapsedMillis by rememberSkyElapsedMillis(options.motionEnabled)
+    val clock = rememberSkyElapsedMillis(options.motionEnabled)
+    val elapsedMillis by clock
+
+    // The space and the suns, where the device can draw them; null where it cannot.
+    val shading = remember { SkyShading.create() }
 
     // Each star's moment in the opening, from its own identity, so the opening is the same sky
     // every time and never a random one.
@@ -320,6 +338,21 @@ internal fun SkySurface(
             .fillMaxSize()
             .onSizeChanged { viewport = it },
     ) {
+        if (shading != null && !options.highContrast) {
+            SkySpace(
+                shading = shading,
+                sky = layout,
+                xs = xs,
+                ys = ys,
+                hidden = hidden,
+                camera = camera,
+                look = look,
+                seed = seed,
+                todayEpochDay = todayEpochDay,
+                opening = opening,
+                clock = clock,
+            )
+        }
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
@@ -345,7 +378,7 @@ internal fun SkySurface(
             val seconds = elapsedMillis / 1000f
 
             if (!options.highContrast) {
-                drawSpace(look, glows, origin, scale, pan)
+                if (shading == null) drawSpace(look, glows, origin, scale, pan)
                 val gasAlpha = SkyPresentation.nebulaAlpha(across) * backdrop
                 for ((n, extent) in extents.withIndex()) {
                     val image = gas.getOrNull(n) ?: continue
@@ -372,7 +405,7 @@ internal fun SkySurface(
                 val sun = SkyPresentation.sunRadius(kind, scale)
                 val cx = SkyPresentation.toScreen(xs[i], origin.x, scale, pan.x)
                 val cy = SkyPresentation.toScreen(ys[i], origin.y, scale, pan.y)
-                if (!SkyPresentation.isOnScreen(cx, cy, w, h, margin + sun * CORONA)) continue
+                if (!SkyPresentation.isOnScreen(cx, cy, w, h, margin + sun * SkyShaders.SUN_REACH)) continue
                 val arrival =
                     if (i == born) SkyOpening.bornBrightness(birth) else SkyOpening.brightness(reveal, moments[i])
                 if (arrival <= 0f) continue
@@ -396,6 +429,7 @@ internal fun SkySurface(
                     arrival = arrival,
                     sunPx = if (sun >= sunFrom) sun else 0f,
                     zoom = across,
+                    shading = shading,
                 )
             }
 
@@ -442,6 +476,7 @@ internal fun SkySurface(
                         arrival = light,
                         sunPx = 0f,
                         zoom = across,
+                        shading = shading,
                     )
                 }
             }
@@ -461,6 +496,104 @@ internal fun SkySurface(
         }
     }
 }
+
+/**
+ * The space behind the stars ([SkyShading.drawSpace]), drawn into a layer [SkyShaders.SPACE_DOWN]
+ * times smaller than the screen each way and stretched over it. Nothing in the space is sharper than
+ * that, and it costs a sixteenth of the screen to draw.
+ *
+ * The layer is kept between frames and drawn again only when what it shows changes: the camera, the
+ * opening, or the slow clock the gas drifts on, which it reads [SPACE_TICK_MILLIS] at a time, so a
+ * twinkling sky at rest does not redraw its space sixty times a second. With Motion off the clock
+ * is still and so is the gas.
+ *
+ * The gas is lit by the stars nearest the middle of the screen ([SkyShaders.gasLights]), each in
+ * its own colour and at its own age's light, handed over exactly as the stars themselves are drawn.
+ */
+@Composable
+private fun SkySpace(
+    shading: SkyShading,
+    sky: SkyLayout,
+    xs: FloatArray,
+    ys: FloatArray,
+    hidden: BooleanArray,
+    camera: SkyCamera,
+    look: SkyColours.Look,
+    seed: Long,
+    todayEpochDay: Long,
+    opening: SkyOpeningState,
+    clock: State<Long>,
+) {
+    val down = SkyShaders.SPACE_DOWN
+    val spaceSeed = remember(seed) { SkyShaders.spaceSeed(seed) }
+    val tick by remember(clock) { derivedStateOf { clock.value / SPACE_TICK_MILLIS } }
+    val chosen = remember { IntArray(SkyShaders.LIGHTS) }
+    val weights = remember { FloatArray(SkyShaders.LIGHTS) }
+    val lights = remember { FloatArray(SkyShaders.LIGHTS * 4) }
+    val tints = remember { IntArray(SkyShaders.LIGHTS) }
+    Spacer(
+        Modifier
+            .layout { measurable, constraints ->
+                val width = constraints.maxWidth
+                val height = constraints.maxHeight
+                val small = measurable.measure(
+                    Constraints.fixed((width + down - 1) / down, (height + down - 1) / down),
+                )
+                layout(width, height) { small.place(0, 0) }
+            }
+            .graphicsLayer {
+                scaleX = down.toFloat()
+                scaleY = down.toFloat()
+                transformOrigin = TransformOrigin(0f, 0f)
+                // Its own layer, at its own small size, kept until what it shows changes.
+                compositingStrategy = CompositingStrategy.Offscreen
+            }
+            .drawBehind {
+                if (!camera.ready || sky.starCount == 0) return@drawBehind
+                val scale = camera.scalePx
+                val left = camera.bounds.left
+                val top = camera.bounds.top
+                val panX = camera.panX()
+                val panY = camera.panY()
+                val centreX = SkyPresentation.fromScreen(camera.viewportWidth / 2f, left, scale, panX)
+                val centreY = SkyPresentation.fromScreen(camera.viewportHeight / 2f, top, scale, panY)
+                val count = SkyShaders.gasLights(xs, ys, hidden, centreX, centreY, chosen, weights)
+                for (k in 0 until count) {
+                    val i = chosen[k]
+                    val kind = sky.kindAt(i)
+                    val ageYears = SkyAge.ageYears(sky.epochDay[i], todayEpochDay)
+                    lights[k * 4] = SkyPresentation.toScreen(xs[i], left, scale, panX) / down
+                    lights[k * 4 + 1] = SkyPresentation.toScreen(ys[i], top, scale, panY) / down
+                    lights[k * 4 + 2] = SkyShaders.gasLightReach(scale / down, size.width)
+                    lights[k * 4 + 3] = weights[k] * SkyGlyph.starBrightness(kind, ageYears, sky.moodLevel[i])
+                    tints[k] = SkyGlyph.starTint(
+                        kind,
+                        SkyTwinkle.identityIdAt(sky, i),
+                        SkyAge.bucketAgeYears(SkyAge.ageBucket(ageYears)),
+                        sky.moodLevel[i],
+                    )
+                }
+                shading.drawSpace(
+                    scope = this,
+                    centreX = centreX,
+                    centreY = centreY,
+                    scale = scale / down,
+                    across = camera.screenWidthsAcross,
+                    seed = spaceSeed,
+                    space = look.space,
+                    gas = look.nebulae[0],
+                    seconds = tick * SPACE_TICK_MILLIS / 1000f,
+                    show = smooth(0.1f, 0.9f, opening.reveal),
+                    lights = lights,
+                    lightTints = tints,
+                    lightCount = count,
+                )
+            },
+    )
+}
+
+/** How often the space's slow clock moves on, in milliseconds. Its gas drifts far slower than that. */
+private const val SPACE_TICK_MILLIS = 250L
 
 /**
  * The opening as it plays: how far through the stars it is, and the birth of a new star after it.
@@ -565,6 +698,7 @@ internal fun SkyConstellationPhoto(
                 arrival = shade,
                 sunPx = 0f,
                 zoom = 1f,
+                shading = null,
             )
         }
 
@@ -599,6 +733,7 @@ internal fun SkyConstellationPhoto(
                 arrival = 1f,
                 sunPx = 0f,
                 zoom = 1f,
+                shading = null,
             )
         }
     }
@@ -657,9 +792,6 @@ internal class SkyHoleEvent(
     fun indicesIn(layout: SkyLayout): IntArray = IntArray(memories.size) { layout.indexOf(memories[it].first, memories[it].second) }
 }
 
-/** How far out a sun's corona reaches, as a multiple of its radius. */
-private const val CORONA = 2.4f
-
 /** How many pixels across a nebula's gas is folded at, before it is stretched over its stars. */
 private const val GAS_PX = 112
 
@@ -673,8 +805,9 @@ private const val HOLE_DP = 11f
 private const val TRACKER_GRAINS_FROM_DP = 6f
 
 /**
- * The space behind the stars: the sky's deepest tone, then three soft glows of colour anchored to
- * the sky ([SkyColours.glows]). Every tone is near black, so the stars keep their contrast.
+ * The space behind the stars where its shader cannot run: the sky's deepest tone, then three soft
+ * glows of colour anchored to the sky ([SkyColours.glows]). Every tone is near black, so the stars
+ * keep their contrast.
  */
 private fun DrawScope.drawSpace(
     look: SkyColours.Look,
@@ -1016,13 +1149,13 @@ private fun DrawScope.drawGlow(centre: Offset, radius: Float, colour: Color, alp
 }
 
 /**
- * A star close in, drawn as the sun it is: a white-hot middle, a rim in the star's own colour, and
- * a dim soft corona round it. [strength] is the star's own light, so an old star's sun is as quiet
- * as the old star.
+ * A star close in, where the sun's shader cannot run: a white-hot middle, a rim in the star's own
+ * colour, and a dim soft corona round it. [strength] is the star's own light, so an old star's sun
+ * is as quiet as the old star.
  */
 private fun DrawScope.drawSun(centre: Offset, radius: Float, colour: Color, strength: Float) {
     if (strength <= 0f) return
-    drawGlow(centre, radius * CORONA, colour, 0.3f * strength)
+    drawGlow(centre, radius * SkyShaders.SUN_REACH, colour, 0.3f * strength)
     val core = skyColor(SkyPalette.SUN_CORE)
     drawCircle(
         brush = Brush.radialGradient(
@@ -1053,19 +1186,21 @@ internal val SkyNightFaint: Color = skyColor(SkyPalette.NIGHT_FAINT)
 /**
  * One star: a point, then a glow.
  *
- * `docs/SKY.md` §3.5, *"a point, then a glow"* — a crisp bead in the star's own colour, a thin rim
- * of light against it, and a soft faint outer glow spread by the mood. Those three live in the sprite
- * ([SkySprites]); what happens here is where it goes, how bright it is at this instant, and the
- * prism flash on top.
+ * `docs/SKY.md` §3.5, *"a point, then a glow"* — a white-hot heart falling away into the star's own
+ * colour, a soft wing of light round it, and a faint outer glow spread by the mood. Those three live
+ * in the sprite ([SkySprites], lit by `SkyStarLight`); what happens here is where it goes, how
+ * bright it is at this instant, the prism flash on top, and, right in, the sun it becomes.
  *
  * **Everything that decides how a star looks is asked for, never computed here.** Colour is
  * [SkyGlyph.starTint], which is age and the star's own temperature. Brightness is
  * [SkyGlyph.starBrightness], which is age, times how far the star has arrived ([SkyOpening]),
- * multiplied by [SkyTwinkle.alphaAt], which is the star's own rhythm. Halo geometry is
+ * times [SkyGlyph.magnitudeAlpha], which is the star's own magnitude, multiplied by
+ * [SkyTwinkle.alphaAt], which is the star's own rhythm. Halo geometry is
  * [SkyGlyph.haloRadiusDp] and [SkyGlyph.haloPeakAlpha]; the core's scale is
- * [SkyGlyph.coreScale]. Every one of those takes a mood level and all but the halo ignore
- * it, so the rule *mood moves the halo's spread and nothing else* is defended at the signature
- * rather than trusted here.
+ * [SkyGlyph.coreScale]. The magnitude and the rhythm cannot be handed a mood at all, and every
+ * other one of those takes a mood level and all but the halo ignore it, so the rule
+ * *mood moves the halo's spread and nothing else* is defended at the signature rather than
+ * trusted here.
  *
  * **Additive, not painted over.** The sprite is stamped with [BlendMode.Plus], so two stars whose
  * glows overlap get brighter where they meet, the way light does. On the near-black ground
@@ -1105,13 +1240,18 @@ private fun DrawScope.drawStar(
     sunPx: Float,
     /** The camera's screen widths across, `1` for the whole sky: how far every bead has grown. */
     zoom: Float,
+    /** The sun's shader, or null to draw a simple disc. */
+    shading: SkyShading?,
 ) {
     if (arrival <= 0f) return
-    // How brightly this star burns: its age and its arrival, and then its own beat. All are
-    // multipliers on the sprite's own alphas, so the twinkle is a proportion of whatever the star
-    // already was — an old star's flicker is as faint as the old star.
+    val sun = if (sunPx > 0f) smooth(SUN_FROM_DP.dp.toPx(), SUN_FULL_DP.dp.toPx(), sunPx) else 0f
+    // How brightly this star burns: its age and its arrival, then its own magnitude, then its own
+    // beat. All are multipliers on the sprite's own alphas, so the twinkle is a proportion of
+    // whatever the star already was — an old star's flicker is as faint as the old star. The
+    // magnitude is from the star's identity alone and means nothing (§3.5).
     val fade = SkyGlyph.starBrightness(kind, ageYears, moodLevel) * arrival
-    val brightness = fade * SkyTwinkle.alphaAt(kind, id, elapsedMillis, options)
+    val shine = fade * SkyGlyph.magnitudeAlpha(kind, id, options.highContrast, sun)
+    val brightness = shine * SkyTwinkle.alphaAt(kind, id, elapsedMillis, options)
     // The flare as a star arrives lifts the fade above 1; a stroke or a disc takes it capped.
     val ink = fade.coerceIn(0f, 1f)
 
@@ -1147,12 +1287,20 @@ private fun DrawScope.drawStar(
         centre = centre,
         options = options,
         elapsedMillis = elapsedMillis,
-        fade = fade,
+        fade = shine,
+    )
+    drawShimmer(
+        sprites = sprites,
+        kind = kind,
+        id = id,
+        centre = centre,
+        options = options,
+        elapsedMillis = elapsedMillis,
+        fade = shine * (1f - sun),
     )
 
     val coreRadius =
         (SkyGlyph.coreRadiusDp(kind, moodLevel) * SkyGlyph.coreScale(kind) * SkyGlyph.zoomScale(zoom)).dp.toPx()
-    val sun = if (sunPx > 0f) smooth(SUN_FROM_DP.dp.toPx(), SUN_FULL_DP.dp.toPx(), sunPx) else 0f
     val ringed = max(coreRadius, sunPx * sun)
 
     // Kind is carried by form, and form only resolves once the person has leaned in to one day.
@@ -1168,11 +1316,26 @@ private fun DrawScope.drawStar(
     // The same tint the sprite was rasterised in, which means the same QUANTISED age: a stroke
     // drawn from the exact age and a core drawn from the bucket would be two slightly different
     // colours on one star, and the seam is visible on a glyph sitting against its own glow.
-    val colour = skyColor(
-        SkyGlyph.starTint(kind, id, SkyAge.bucketAgeYears(SkyAge.ageBucket(ageYears)), moodLevel),
-    )
-    // Right in, the point of light becomes a sun, and the kind marks step aside for it.
-    if (sun > 0f) drawSun(centre, sunPx, colour, ink * sun)
+    val tint = SkyGlyph.starTint(kind, id, SkyAge.bucketAgeYears(SkyAge.ageBucket(ageYears)), moodLevel)
+    val colour = skyColor(tint)
+    // Right in, the point of light becomes a sun, and the kind marks step aside for it. Its light
+    // is the star's own, so an old star's sun is as quiet as the old star.
+    if (sun > 0f) {
+        if (shading != null) {
+            shading.drawSun(
+                scope = this,
+                centre = centre,
+                radius = sunPx,
+                tint = tint,
+                light = ink * sun,
+                seconds = elapsedMillis / 1000f,
+                seed = SkyShaders.sunSeed(Sky.identityOf(kind, id)),
+                giant = kind == SkyKind.LIFE_EVENT,
+            )
+        } else {
+            drawSun(centre, sunPx, colour, ink * sun)
+        }
+    }
     val marks = ink * (1f - sun)
     if (!glyphs || marks <= 0f) {
         if (selected) drawSelection(centre, ringed)
@@ -1255,9 +1418,10 @@ private fun DrawScope.drawStar(
  * which is what makes that true — an additive fringe leaves the star underneath exactly the colour
  * it was.
  *
- * **Every alpha here is multiplied by [fade].** Without that an old star's glint would be drawn at
- * a new star's brightness and the oldest, faintest stars would be the ones flashing hardest — the
- * fade would be undone by the decoration laid over it. [fade] and not the twinkled brightness,
+ * **Every alpha here is multiplied by [fade]**, the star's age and its own magnitude. Without that
+ * an old or faint star's glint would be drawn at a bright new star's strength and the faintest
+ * stars would be the ones flashing hardest — the fade would be undone by the decoration laid over
+ * it. [fade] and not the twinkled brightness,
  * because the glint is its own event and should not also be modulated by the flicker it happens to
  * land in.
  *
@@ -1300,6 +1464,37 @@ private fun DrawScope.drawGlint(
         image = sprite.image,
         topLeft = Offset(centre.x - sprite.halfWidth, centre.y - sprite.halfHeight),
         alpha = flareAlpha,
+        blendMode = BlendMode.Plus,
+    )
+}
+
+/**
+ * The shimmer: red light, then blue, added over a bright star while it flickers, the way starlight
+ * breaks into colour through air ([SkyTwinkle.shimmerRedAt]).
+ *
+ * It stamps the glint's own fringe sprites, centred on the star and added, so the star's colour
+ * underneath is still exactly its age and only light is laid over it. Multiplied by [fade], the
+ * star's age, its magnitude and how far it is from being a sun: an old or faint star shimmers no
+ * harder than it shines, and a sun close in does not shimmer at all.
+ */
+private fun DrawScope.drawShimmer(
+    sprites: SkySprites,
+    kind: SkyKind,
+    id: Long,
+    centre: Offset,
+    options: SkyOptions,
+    elapsedMillis: Long,
+    fade: Float,
+) {
+    val red = SkyTwinkle.shimmerRedAt(kind, id, elapsedMillis, options)
+    val blue = SkyTwinkle.shimmerBlueAt(kind, id, elapsedMillis, options)
+    val amount = max(red, blue)
+    if (amount <= 0f) return
+    val half = sprites.fringe(red > 0f, kind == SkyKind.LIFE_EVENT)
+    drawImage(
+        image = half.image,
+        topLeft = Offset(centre.x - half.halfWidth, centre.y - half.halfHeight),
+        alpha = (SkyTwinkle.SHIMMER_ALPHA * amount * fade).coerceIn(0f, 1f),
         blendMode = BlendMode.Plus,
     )
 }

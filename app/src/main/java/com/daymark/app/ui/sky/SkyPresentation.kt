@@ -41,8 +41,9 @@ object SkyPresentation {
     // -------------------------------------------------------------------------------------------
 
     /**
-     * The whole sky in the viewport, which is [SkyDetail.FAR]. The opening ends somewhere closer,
-     * on the newest star; this is where "Fit the whole sky" goes back to.
+     * The whole sky in the viewport ([boundsOf]): [SkyDetail.FAR] for a grown sky, and as close as
+     * [SkyDetail.NEAR] for a young one. The opening ends somewhere closer, on the newest star; this
+     * is where "Fit the whole sky" goes back to.
      */
     const val DEFAULT_ZOOM = 1f
 
@@ -55,11 +56,12 @@ object SkyPresentation {
     const val MIN_ZOOM = 1f
 
     /**
-     * The zoom-in stop: far enough in that a star stops being a point of light and is drawn as a
-     * sun of its own (`DECISIONS.md` §D11). Overlap is accepted and resolved by zoom, never by
-     * moving a star (`docs/SKY.md` §3.1), and long before this every pair is apart.
+     * The zoom-in stop for any shape of sky: past the deepest [zoomLimit] a tall sky of many years
+     * can need, so it is [CLOSEST_SPAN] that stops the view and never this. Overlap is accepted and
+     * resolved by zoom, never by moving a star (`docs/SKY.md` §3.1), and long before this every
+     * pair is apart.
      */
-    const val MAX_ZOOM = 400f
+    const val MAX_ZOOM = 20_000f
 
     /**
      * What "maximum contrast" is, arithmetically.
@@ -87,11 +89,12 @@ object SkyPresentation {
     fun clampZoom(zoom: Float): Float = zoom.coerceIn(MIN_ZOOM, MAX_ZOOM)
 
     /**
-     * The narrowest stretch of sky one screen width can show, in the sky's own units. A memory's
-     * step along the sky's guide is 0.005, so at the closest a single star fills much of the screen
-     * and is drawn as a sun ([sunRadius]).
+     * The narrowest stretch of sky one screen width can show, in the sky's own units: a tenth of a
+     * memory's step along the sky's guide, so at the closest one star is a sun more than half the
+     * screen across ([sunRadius]), close enough to watch its surface move, and its neighbours are
+     * out of sight.
      */
-    const val CLOSEST_SPAN = 0.004f
+    const val CLOSEST_SPAN = 0.0004f
 
     /**
      * How much sky is across the screen on Today, and where the opening ends: about eight
@@ -175,28 +178,63 @@ object SkyPresentation {
     fun detailFor(screenWidthsAcross: Float): SkyDetail = SkyDetail.forZoom(clampZoom(screenWidthsAcross))
 
     /**
-     * The sky's extent in its own units: the world it was laid out in (one wide, [height] tall),
-     * and wherever a star has drifted to beyond it, with a little room round the edge.
+     * The sky's extent in its own units: what is in it so far, the stars and the tracker objects,
+     * with a little room round the edge. This is what "Fit the whole sky" shows.
      */
     class Bounds(val left: Float, val top: Float, val right: Float, val bottom: Float) {
         val width: Float get() = right - left
         val height: Float get() = bottom - top
     }
 
-    fun boundsOf(xs: FloatArray, ys: FloatArray, height: Float): Bounds {
-        var left = 0f
-        var top = 0f
-        var right = 1f
-        var bottom = height.coerceAtLeast(1f)
-        for (i in xs.indices) {
-            if (xs[i] < left) left = xs[i]
-            if (xs[i] > right) right = xs[i]
-            if (ys[i] < top) top = ys[i]
-            if (ys[i] > bottom) bottom = ys[i]
+    /**
+     * The narrowest a sky is framed, on either axis, in the sky's own units: a quarter of the world
+     * it is laid out in. A first star is then a star in a sky, not a sun filling the screen.
+     */
+    const val SMALLEST_SKY = 0.25f
+
+    /**
+     * The extent of the stars at [xs], [ys] and of every tracker object in [objects], padded, and
+     * widened about its middle to at least [SMALLEST_SKY] each way.
+     *
+     * Not the world the sky is laid out in: a few weeks of memories fill a corner of that world, and
+     * framed whole they sat small in one corner of an empty screen (#476). Framed by what is there, a
+     * young sky spreads across the screen and the view widens as it grows, and no star moves to do
+     * it. A sky with nothing in it yet is its world, one wide and [height] tall.
+     */
+    fun boundsOf(
+        xs: FloatArray,
+        ys: FloatArray,
+        height: Float,
+        objects: List<SkyTrackers.Placed> = emptyList(),
+    ): Bounds {
+        if (xs.isEmpty() && objects.isEmpty()) {
+            return Bounds(-PAD, -PAD, 1f + PAD, height.coerceAtLeast(1f) + PAD)
         }
-        val pad = 0.03f
-        return Bounds(left - pad, top - pad, right + pad, bottom + pad)
+        var left = Float.POSITIVE_INFINITY
+        var top = Float.POSITIVE_INFINITY
+        var right = Float.NEGATIVE_INFINITY
+        var bottom = Float.NEGATIVE_INFINITY
+        for (i in xs.indices) {
+            left = min(left, xs[i])
+            right = max(right, xs[i])
+            top = min(top, ys[i])
+            bottom = max(bottom, ys[i])
+        }
+        for (o in objects) {
+            left = min(left, o.x - o.radius)
+            right = max(right, o.x + o.radius)
+            top = min(top, o.y - o.radius)
+            bottom = max(bottom, o.y + o.radius)
+        }
+        val wide = max(right - left + 2f * PAD, SMALLEST_SKY) / 2f
+        val tall = max(bottom - top + 2f * PAD, SMALLEST_SKY) / 2f
+        val midX = (left + right) / 2f
+        val midY = (top + bottom) / 2f
+        return Bounds(midX - wide, midY - tall, midX + wide, midY + tall)
     }
+
+    /** The room left round the sky's content at the whole-sky view, in the sky's units. */
+    private const val PAD = 0.03f
 
     /** Pixels per unit of the sky at zoom 1: the whole of [bounds] fits the viewport. */
     fun fitPx(viewportWidthPx: Float, viewportHeightPx: Float, bounds: Bounds): Float =
