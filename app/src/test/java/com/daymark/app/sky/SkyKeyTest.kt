@@ -26,6 +26,22 @@ class SkyKeyTest {
     }
 
     @Test
+    fun `the Key says brightness means nothing, second, and only where stars differ`() {
+        val layout = Sky.layout(everyOtherDay(10), 7L)
+        val key = SkyKey.entries(layout, constellations = 0)
+        assertEquals("Brightness", key[1].title)
+        assertTrue(key[1].text.startsWith("It means nothing."))
+        // The quiet sky draws every star at one light, and so does a sky of life events alone,
+        // which have no magnitude: there the line would describe what is not there.
+        assertFalse("Brightness" in SkyKey.entries(layout, constellations = 0, quiet = true).map { it.title })
+        val events = Sky.layout((0 until 4).map { SkyRecord(SkyKind.LIFE_EVENT, 1L + it, start + it * 30) }, 7L)
+        val eventTitles = SkyKey.entries(events, constellations = 0).map { it.title }
+        assertFalse("Brightness" in eventTitles)
+        // The control: the life events' sky does have a Key, so the line is left out, not the Key.
+        assertTrue("Life events" in eventTitles)
+    }
+
+    @Test
     fun `an empty sky has an empty Key`() {
         assertEquals(emptyList<SkyKey.Entry>(), SkyKey.entries(SkyLayout.EMPTY, constellations = 3))
     }

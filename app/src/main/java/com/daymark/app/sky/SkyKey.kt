@@ -22,10 +22,30 @@ object SkyKey {
     const val COLOUR = "Colour is age. New memories are blue-white; older ones turn white, gold, " +
         "then red, and drift outward. Red only means old, never bad."
 
-    fun entries(layout: SkyLayout, constellations: Int, nebulae: Int = 0, trackers: Int = 0): List<Entry> {
+    /**
+     * Brightness, second, because it is the next thing someone reads meaning into: it has none.
+     * Left out of the quiet sky, which draws every star at one light, so it never describes
+     * something that sky does not show.
+     */
+    const val BRIGHTNESS = "It means nothing. As in a real sky, a few stars burn brighter than " +
+        "the rest; how bright one is says nothing about its day."
+
+    fun entries(
+        layout: SkyLayout,
+        constellations: Int,
+        nebulae: Int = 0,
+        trackers: Int = 0,
+        quiet: Boolean = false,
+    ): List<Entry> {
         if (layout.shownCount == 0) return emptyList()
         val out = ArrayList<Entry>()
         out.add(Entry("Colour", COLOUR))
+        // Only an ordinary star has a magnitude (`SkyGlyph.magnitudeAlpha`); a sky of life events
+        // alone, or the quiet sky, shows every star at one light.
+        val varied = !quiet && (0 until layout.starCount).any {
+            layout.isShown(it) && layout.kindAt(it) != SkyKind.LIFE_EVENT
+        }
+        if (varied) out.add(Entry("Brightness", BRIGHTNESS))
         when (layout.form) {
             SkyForm.Form.RIVER -> out.add(
                 Entry(

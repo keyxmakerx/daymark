@@ -9,6 +9,7 @@ import com.daymark.app.sky.SkyLayout
 import com.daymark.app.sky.SkyListItem
 import com.daymark.app.sky.SkyPalette
 import com.daymark.app.sky.SkyRecord
+import com.daymark.app.sky.SkyTrackers
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -233,13 +234,42 @@ class SkyPresentationTest {
     }
 
     @Test
-    fun `the sky's extent holds its world and every star that drifted beyond it`() {
-        val b = SkyPresentation.boundsOf(floatArrayOf(0.5f, 1.2f), floatArrayOf(0.2f, -0.1f), height = 2f)
-        assertTrue(b.left < 0f && b.top < -0.1f && b.right > 1.2f && b.bottom > 2f)
-        // The detector: with nothing outside the world, the extent is the world and a margin.
-        val plain = SkyPresentation.boundsOf(floatArrayOf(0.5f), floatArrayOf(0.5f), height = 1f)
-        assertEquals(1.06f, plain.width, 0.001f)
-        assertEquals(1.06f, plain.height, 0.001f)
+    fun `the whole sky is what is in it, not the world it is laid out in`() {
+        // A few weeks of stars in one corner of a world two tall: framed by the stars, with a
+        // margin, and nothing of the empty world round them (#476).
+        val xs = floatArrayOf(0.55f, 0.9f, 0.7f)
+        val ys = floatArrayOf(0.3f, 0.6f, 0.45f)
+        val b = SkyPresentation.boundsOf(xs, ys, height = 2f)
+        assertEquals(0.55f - 0.03f, b.left, 1e-5f)
+        assertEquals(0.9f + 0.03f, b.right, 1e-5f)
+        assertEquals(0.3f - 0.03f, b.top, 1e-5f)
+        assertEquals(0.6f + 0.03f, b.bottom, 1e-5f)
+        for (i in xs.indices) assertTrue("star $i is outside the whole sky", xs[i] > b.left && xs[i] < b.right && ys[i] > b.top && ys[i] < b.bottom)
+        // The control: one more star far out in the world widens the frame to take it in.
+        val wider = SkyPresentation.boundsOf(xs + 0.05f, ys + 1.8f, height = 2f)
+        assertTrue("a star far out is left out of the whole sky", wider.left < 0.05f && wider.bottom > 1.8f)
+    }
+
+    @Test
+    fun `the whole sky takes in every tracker object and is never framed tighter than its floor`() {
+        val placed = SkyTrackers.Placed(1L, SkyTrackers.Look.entries.first(), 3, x = 1.2f, y = 0.5f, radius = 0.1f, tilt = 0f, open = 1f, spin = 0f)
+        val b = SkyPresentation.boundsOf(floatArrayOf(0.5f, 0.8f), floatArrayOf(0.5f, 0.5f), height = 1f, objects = listOf(placed))
+        assertTrue("a tracker object is cut off at the whole sky", b.right >= 1.2f + 0.1f)
+        // One star alone is a star in a sky, framed at the floor about itself, not a sun.
+        val one = SkyPresentation.boundsOf(floatArrayOf(0.4f), floatArrayOf(0.7f), height = 1f)
+        assertEquals(SkyPresentation.SMALLEST_SKY, one.width, 1e-5f)
+        assertEquals(SkyPresentation.SMALLEST_SKY, one.height, 1e-5f)
+        assertEquals(0.4f, (one.left + one.right) / 2f, 1e-5f)
+        assertEquals(0.7f, (one.top + one.bottom) / 2f, 1e-5f)
+        val fit = SkyPresentation.fitPx(1080f, 2340f, one)
+        assertTrue(
+            "a first star's whole sky is close enough for kind marks",
+            SkyPresentation.detailFor(fit * SkyPresentation.DEFAULT_ZOOM / 1080f) != SkyDetail.CLOSE,
+        )
+        // A sky with nothing in it yet is its world.
+        val empty = SkyPresentation.boundsOf(FloatArray(0), FloatArray(0), height = 1f)
+        assertEquals(1.06f, empty.width, 0.001f)
+        assertEquals(1.06f, empty.height, 0.001f)
     }
 
     @Test
