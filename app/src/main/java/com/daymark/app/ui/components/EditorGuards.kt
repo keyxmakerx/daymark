@@ -20,7 +20,7 @@ fun UnsavedChangesDialog(
     AlertDialog(
         onDismissRequest = onKeepEditing,
         title = { Text("Save your changes?") },
-        text = { Text("You haven't saved this yet. Leaving without saving loses what you changed.") },
+        text = { Text("Leaving without saving loses what you changed.") },
         confirmButton = {
             if (onSave != null) {
                 TextButton(onClick = onSave) { Text("Save") }

@@ -208,7 +208,7 @@ fun KeepRemindingCheck(
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("What if these go unanswered?", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Daymark hasn't asked you this yet. Until you answer, nothing changes.",
+                "Daymark didn't ask this when you set it up. Until you answer, nothing changes.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
