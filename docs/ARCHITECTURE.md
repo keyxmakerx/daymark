@@ -195,8 +195,7 @@ nothing; the only write is a control the person taps.
 
 **Suggestion controls** (what the person sees: [FEATURES.md](FEATURES.md) §1.5) are pure rules in
 `stats/SuggestionControls.kt`, stored by `data/SuggestionControlsStore.kt`. They apply per group, so
-a switch reads as plain English: support offers, self-check reminders, what goes with your mood,
-and On this day. "Show less" subtracts a fixed 12 from the rank, at most
+a switch reads as plain English: support offers, self-check reminders and On this day. "Show less" subtracts a fixed 12 from the rank, at most
 three times. Turning a group on clears the switch, the snooze and the damping together, so nothing
 can be on and still invisible. A group exists only if its switch visibly does something, and a unit
 test asserts that every dismissible kind has one. On this day draws its own card, so its screen
