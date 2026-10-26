@@ -114,8 +114,8 @@ release keystore as one line of base64, from `base64 -w0 daymark-release.keystor
 1. Move what is under *Unreleased* in `CHANGELOG.md` into a section named for the version and date,
    and merge it to `main`.
 2. Create a GitHub release with a new tag such as `0.4.3` (a leading `v` is fine). The version comes
-   from the tag; no file needs changing. Every 0.x version, or one with a label such as `-beta.1`, is
-   published as a pre-release.
+   from the tag; no file needs changing. A version with a label such as `-beta.1` is always
+   published as a pre-release; any other is a full release unless "Set as a pre-release" is ticked.
 3. Watch Actions → Release. It stops before building if a signing secret is missing, and refuses an
    APK that declares `INTERNET` or is signed with the testing key. When it passes, the release has
    `app-foss-release.apk` and its `.sha256` attached, and the SHA-256 in its notes.

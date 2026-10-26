@@ -245,6 +245,6 @@ It does **not** run the instrumented tests or Android lint (#220).
 `v0.4.2`), or by hand from Actions naming an existing tag. The version comes from the tag. It stops
 before building if a signing secret is missing, refuses an APK that declares `INTERNET` or is signed
 with the committed testing key, and publishes the signed `foss` APK with its SHA-256 (in the notes
-and as a `.sha256` file). Every 0.x or labelled version is a pre-release. CONTRIBUTING.md
+and as a `.sha256` file). A labelled version (`-beta.1`) is always a pre-release; any other keeps the box ticked on the release page. CONTRIBUTING.md
 "Releasing" is the maintainer's checklist. `.github/workflows/companion.yml` covers `companion/**`,
 and the same tag publishes the Companion image under that version.

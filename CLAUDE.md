@@ -72,7 +72,7 @@ tools/jvm-source-tests.sh   # the data/ schema tests, which read source as text
   shows the checks from its head commit, so there is no `pull_request` trigger).
   `.github/workflows/companion.yml` runs on `companion/**`. `.github/workflows/release.yml` fires on
   a pushed version tag, with or without `v`, or by `workflow_dispatch` naming a tag; it publishes the
-  release-key-signed `foss` APK and its `.sha256`, as a pre-release for any 0.x version, and refuses
+  release-key-signed `foss` APK and its `.sha256`, as a pre-release only for a labelled version such as `-beta.1`, and refuses
   rather than falls back when a signing secret is missing.
 
 ## 4. Rules that keep recurring
