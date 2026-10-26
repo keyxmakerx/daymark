@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "The release tag to build and publish, like 0.4.1"
+        description: "An existing release tag to publish again, like 0.4.1 (a new version starts on the Releases page)"
         required: true
 
 permissions:
@@ -20,6 +20,19 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      # Run workflow only publishes a tag that already exists. A tag it created itself would not
+      # start companion.yml, so a new version is made on the Releases page, which builds both.
+      - name: Check the tag exists
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if ! gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --silent 2>/dev/null; then
+            echo "::error::there is no tag ${TAG}. To release a new version, create a release with that tag on the Releases page; that builds the APK and the Companion image. Run workflow only publishes again a tag that already exists."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
