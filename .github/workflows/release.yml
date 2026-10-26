@@ -59,8 +59,8 @@ jobs:
       # One version tag releases the APK here and the Companion image in companion.yml, both
       # under the tag minus any leading `v`. The version comes from the tag and nothing else: it is
       # handed to the build below, so the release page, the image and Settings ▸ About always name
-      # the same version. A 0.x version, or one with a label (`-beta.1`), is published as a
-      # pre-release: before 1.0 every release is a beta.
+      # the same version. A version with a label (`-beta.1`) is always published as a pre-release;
+      # any other keeps what the release page was given, so a 0.x version can be a full release.
       - name: Read the version from the tag
         id: version
         env:
@@ -74,7 +74,7 @@ jobs:
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "value=$version" >> "$GITHUB_OUTPUT"
-          case "$version" in 0.*|*-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;; *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;; esac
+          case "$version" in *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;; *) echo "prerelease=" >> "$GITHUB_OUTPUT" ;; esac
           echo "Releasing version $version"
 
       # A release is signed with the release key or it is not published (#224). The app's build
@@ -178,4 +178,5 @@ jobs:
           body_path: ${{ runner.temp }}/release-notes.md
           tag_name: ${{ steps.version.outputs.tag }}
           generate_release_notes: true
-          prerelease: ${{ steps.version.outputs.prerelease == 'true' }}
+          # Empty leaves the release's own pre-release box as it was ticked on the release page.
+          prerelease: ${{ steps.version.outputs.prerelease }}

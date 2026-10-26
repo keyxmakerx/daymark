@@ -97,8 +97,8 @@ release builds stopped before an APK was published.
 ### Changed
 - **A release takes its version from its tag.** Create a release tagged `0.4.1` or `v0.4.1` and
   the app and the Companion image are both built and published as 0.4.1; nothing else needs
-  changing first. Every 0.x release, or one with a label such as `-beta.1`, is published as a
-  pre-release.
+  changing first. A version with a label such as `-beta.1` is published as a pre-release; any
+  other is a full release unless "Set as a pre-release" is ticked when it is created.
 
 ### Fixed
 - **Publishing a good Companion image no longer fails** after the push.
