@@ -53,6 +53,20 @@ docker compose up -d --build
 # then open http://localhost:8080
 ```
 
+Then, before anyone else can reach the address:
+
+1. **Claim the server console.** A new server prints a one-time setup code to its log:
+   `docker compose logs companion | grep 'Setup code'`. Open `http://localhost:8080/admin.html`, enter
+   the code, choose a name, and add the key it shows to an authenticator app. Whoever enters the code
+   first is the administrator; a new code is printed each hour until the server is claimed.
+2. **Put your reverse proxy in front** so the server is reached over `https://` at `DAYMARK_DOMAIN`
+   (docs/alternatives/ has worked configurations). A phone pairs only over https.
+3. **Open the owner's page** at that address, under **Connect to your sync server** type the access
+   token from `secrets/auth_token`, and press **Connect**. From there you pair your phone.
+
+The full first-install checklist, with health checks and backups, is
+[COMPANION_DEPLOYMENT.md](../docs/COMPANION_DEPLOYMENT.md) §9.
+
 Set `DAYMARK_SETUP_MODE` in `.env` to what this machine is for: `solo` for one person and their own
 backup (the example's value), `paired` if clinicians you invite will use it, `practice` if a clinic
 runs it. Each switches on only what it needs: in `solo` every clinician, pairing and practice route
@@ -174,14 +188,15 @@ lineage and the passphrase. The snapshot is fetched and decrypted in your browse
 
 CI publishes to GHCR **after** the image has passed every gate in `.github/workflows/companion.yml`
 — it serves `/healthz` and `/readyz` under the real hardening, both compose topologies boot, egress
-is dead on the app network, and the no-egress override really does remove the host binding. The
-push is the last step of that job rather than a separate one, so what ships is the exact artefact
-that was tested, not a rebuild of the same source.
+is dead on the app network, and the no-egress override really does remove the host binding. The image
+is built and tested for linux/amd64 and linux/arm64, each on its own hardware; each job pushes only
+the image it tested, and a final job joins the two into the published tags by digest, rebuilding
+nothing. So what ships is the exact artefact that was tested, not a rebuild of the same source.
 
 ```
 ghcr.io/keyxmakerx/daymark-companion@sha256:<digest>  # immutable AND verifiable — the safest pin
-ghcr.io/keyxmakerx/daymark-companion:0.4.1            # a release: published when tag v0.4.1 is pushed
-ghcr.io/keyxmakerx/daymark-companion:sha-<commit>     # immutable, but a tag can be force-pushed
+ghcr.io/keyxmakerx/daymark-companion:0.4.2            # a release: published when tag 0.4.2 (or v0.4.2) is pushed
+ghcr.io/keyxmakerx/daymark-companion:sha-<commit>     # first 12 hex of the commit; a tag can be force-pushed
 ghcr.io/keyxmakerx/daymark-companion:latest           # moves with main — for auto-updating setups
 ghcr.io/keyxmakerx/daymark-companion:main             # identical to :latest, same image
 ```
@@ -200,8 +215,8 @@ earlier release refuses a database a later one changed until the copy is put bac
 for any build is printed in that run's summary on the Actions tab.
 
 Only builds from `main` move `:latest` and `:main`. A manually dispatched build of a branch
-publishes its `sha-` tag and nothing else. A release tag `v<major>.<minor>.<patch>[-label]`, the same
-tag the app is released under, publishes its `sha-` tag and the version without its `v`, and moves
+publishes its `sha-` tag and nothing else. A release tag `[v]<major>.<minor>.<patch>[-label]` (the project
+tags `0.4.2`), the same tag the app is released under, publishes its `sha-` tag and the version without its `v`, and moves
 nothing.
 
 **One-time setup:** GHCR packages are created private even for a public repository. After the first

@@ -1,8 +1,9 @@
 package com.daymark.app.sky
 
 /**
- * Every star's own rhythm: a scintillation that comes and goes, and on some a rare quarter-second
- * glint. All decoration, all derived from the star's identity, none of it a reading of anyone.
+ * Every star's own rhythm: a scintillation that comes and goes, on the brighter stars a flash of red
+ * and blue while it does, and on some a rare quarter-second glint. All decoration, all derived from
+ * the star's identity, none of it a reading of anyone.
  *
  * Import-free, like the rest of `sky/`. **No clock and no random source**: every function here is
  * pure, and time arrives as an elapsed-millisecond count the renderer passes in. That is what makes
@@ -18,9 +19,11 @@ package com.daymark.app.sky
  *
  * So the inputs are the star's kind and its anchor record id — the same pair [Sky.layout] hashes
  * for position ([identityIdAt] hands the renderer the right id so it cannot pick a different one)
- * — and the elapsed time. Kind enters twice and only twice: as part of the identity hash, where it
- * is an ordinal being mixed and carries no ranking; and in [glints], where a landmark always
- * glints because the person placed it to be found. **No function here takes a mood level or a
+ * — and the elapsed time. Kind enters in two ways and only two: as part of the identity hash, where
+ * it is an ordinal being mixed and carries no ranking; and in [glints] and [shimmers], where a
+ * landmark always glints and shimmers because the person placed it to be found. [shimmers] also
+ * asks the star's magnitude, which is its identity too (`SkyGlyph.magnitudeIndex`) and means
+ * nothing. **No function here takes a mood level or a
  * record count, and none can be given one.** A star that twinkled faster on a good day would be a
  * score with a heartbeat.
  *
@@ -30,7 +33,8 @@ package com.daymark.app.sky
  * the renderer:
  *
  *  - **Everything stops under the motion switch.** [lightAt] and [alphaAt] return exactly `1`, and
- *    [glintEnvelopeAt] exactly `0`, whenever `options.motionEnabled` is false. The switch is a
+ *    [glintEnvelopeAt], [shimmerRedAt] and [shimmerBlueAt] exactly `0`, whenever
+ *    `options.motionEnabled` is false. The switch is a
  *    parameter of every time-dependent function, so a renderer cannot forget to consult it without
  *    deleting an argument. Motion carries no meaning, so a still sky loses nothing.
  *  - **At any moment only a few stars are glinting.** About one star in five ever glints
@@ -38,6 +42,9 @@ package com.daymark.app.sky
  *    [GLINT_PERIOD_MAX_MS] cycle — a duty cycle near 2%, so roughly four stars in a thousand are
  *    glinting at any instant. `SkyTwinkleTest` counts them over a realistic population.
  *  - **A glint is under a third of a second.** [GLINT_MS] is 280.
+ *  - **A shimmer is faint and no faster than the flicker.** It rides the star's fastest flicker
+ *    sine, so each colour comes round under 2.3 times a second, at no more than [SHIMMER_ALPHA] of a
+ *    fringe, and only while the star is flickering.
  *  - **Nothing is ever in step with anything else.** Every rate and every phase is drawn from its
  *    own salted hash, so two stars share a beat only by a 1-in-16-million coincidence in each of
  *    four independent values.
@@ -50,9 +57,9 @@ package com.daymark.app.sky
  * the light never moves by more than [FLICKER_DEPTH] × [FLICKER_SWING], under a quarter either way.
  * It is centred on the star's own light and gives back as much as it takes, so over any few
  * seconds every star is as bright as its age makes it. `docs/SKY.md` §3.6 makes twinkle
- * *"decoration only"*. A star's tint never changes at all: the glint is a coloured fringe added
- * over the star and taken away again, which is why its colours live here as separate values rather
- * than as a shift applied to [SkyAge.tintFor].
+ * *"decoration only"*. A star's tint never changes at all: the glint and the shimmer are coloured
+ * light added over the star and taken away again, which is why their colours live here as separate
+ * values rather than as a shift applied to [SkyAge.tintFor].
  *
  * ## A note on the salts, which is a real trap and not a style preference
  *
@@ -94,6 +101,7 @@ object SkyTwinkle {
     private const val GLINT_SALT = 0x4B6D8FA1L
     private const val GLINT_PERIOD_SALT = 0x5678A0B2L
     private const val GLINT_OFFSET_SALT = 0x6183B1C3L
+    private const val SHIMMER_PHASE_SALT = 0x6C8EC2D4L
 
     private fun hash(kind: SkyKind, id: Long, salt: Long): Float =
         SkyRandom.unit(SkyRandom.mix(kind.ordinal.toLong() * KIND_SALT + salt, id))
@@ -104,8 +112,9 @@ object SkyTwinkle {
 
     /**
      * How much of the flicker reaches the star at the height of an episode. The approved sky's
-     * `0.6 + 0.4 × smoothstep(0.6, 2, lum)` at its ordinary star's light, which is [SkyStarLight.LIGHT]
-     * for every star here, so one depth for every star.
+     * `0.6 + 0.4 × smoothstep(0.6, 2, lum)` at its ordinary star's light, [SkyStarLight.LIGHT]. One
+     * depth for every star whatever its magnitude (`SkyGlyph.magnitudeAlpha`): the twinkle is a
+     * share of a star's own light, so a faint star wavers as much as a bright one, never more.
      */
     const val FLICKER_DEPTH = 0.6f
 
@@ -191,8 +200,36 @@ object SkyTwinkle {
         hash(kind, id, GLINT_OFFSET_SALT) * glintPeriodMs(kind, id)
 
     // -------------------------------------------------------------------------------------------
+    // The shimmer. The brighter stars, and every landmark, flash red and blue while they flicker.
+    // -------------------------------------------------------------------------------------------
+
+    /**
+     * The faintest magnitude that shimmers (`SkyGlyph.magnitudeIndex`): the full and the bright,
+     * about three ordinary stars in ten. In a real sky colour shows in the twinkle of the brighter
+     * stars, so the faint ones keep a plain flicker.
+     */
+    const val SHIMMER_FROM_MAGNITUDE = 2
+
+    /** The most red or blue light a shimmer adds: the alpha of a glint's fringe over the star. */
+    const val SHIMMER_ALPHA = 0.2f
+
+    /** Whether this star's flicker ever carries colour. Every landmark's does. */
+    fun shimmers(kind: SkyKind, id: Long): Boolean =
+        kind == SkyKind.LIFE_EVENT || SkyGlyph.magnitudeIndex(kind, id) >= SHIMMER_FROM_MAGNITUDE
+
+    /** Where in its shimmer this star starts, in radians: its own, so colour and dimming are not one beat. */
+    fun shimmerPhase(kind: SkyKind, id: Long): Float = hash(kind, id, SHIMMER_PHASE_SALT) * TAU_F
+
+    // -------------------------------------------------------------------------------------------
     // What the renderer asks for.
     // -------------------------------------------------------------------------------------------
+
+    /** How far into a flicker episode this star is, `0` holding still to `1` fully flickering. */
+    private fun episodeAt(kind: SkyKind, id: Long, seconds: Double): Double = smoothstep(
+        EPISODE_ON,
+        EPISODE_FULL,
+        0.5 + 0.5 * Math.sin(seconds * episodeRate(kind, id) + episodePhase(kind, id)),
+    )
 
     /**
      * How much of its own light this star gives at this instant, between `1 - FLICKER_DEPTH ×
@@ -207,11 +244,7 @@ object SkyTwinkle {
     fun lightAt(kind: SkyKind, id: Long, elapsedMs: Long, options: SkyOptions): Float {
         if (!options.motionEnabled) return 1f
         val seconds = elapsedMs / 1000.0
-        val episode = smoothstep(
-            EPISODE_ON,
-            EPISODE_FULL,
-            0.5 + 0.5 * Math.sin(seconds * episodeRate(kind, id) + episodePhase(kind, id)),
-        )
+        val episode = episodeAt(kind, id, seconds)
         if (episode == 0.0) return 1f
         val speed = flickerSpeed(kind, id)
         val phase = flickerPhase(kind, id).toDouble()
@@ -256,13 +289,43 @@ object SkyTwinkle {
         return Math.sin(Math.PI * within / GLINT_MS).toFloat()
     }
 
+    /**
+     * How much red light ([GLINT_RED]) this star's shimmer adds at this instant, `0..1` of
+     * [SHIMMER_ALPHA]; [shimmerBlueAt] is the other half of the same wave, so a shimmering star
+     * flashes red, then blue, and is never both at once, the way starlight breaks into colour
+     * through air.
+     *
+     * It rides the star's fastest flicker sine, at its own phase, and only while the star is
+     * flickering. Zero for a star that does not shimmer, under the motion switch, and in the quiet
+     * sky, which loses it for the reason it loses the glint.
+     */
+    fun shimmerRedAt(kind: SkyKind, id: Long, elapsedMs: Long, options: SkyOptions): Float =
+        shimmerAt(kind, id, elapsedMs, options, 1.0)
+
+    /** The blue half of [shimmerRedAt]'s wave ([GLINT_BLUE]). */
+    fun shimmerBlueAt(kind: SkyKind, id: Long, elapsedMs: Long, options: SkyOptions): Float =
+        shimmerAt(kind, id, elapsedMs, options, -1.0)
+
+    private fun shimmerAt(kind: SkyKind, id: Long, elapsedMs: Long, options: SkyOptions, half: Double): Float {
+        if (!options.motionEnabled || options.highContrast) return 0f
+        if (!shimmers(kind, id)) return 0f
+        val seconds = elapsedMs / 1000.0
+        val episode = episodeAt(kind, id, seconds)
+        if (episode == 0.0) return 0f
+        val fastest = FLICKER_RATE_RAD_PER_S.size - 1
+        val rate = FLICKER_RATE_RAD_PER_S[fastest] + FLICKER_RATE_SPREAD_RAD_PER_S[fastest] * flickerSpeed(kind, id)
+        val wave = half * Math.sin(seconds * rate + shimmerPhase(kind, id))
+        if (wave <= 0.0) return 0f
+        return (episode * wave * wave).toFloat()
+    }
+
     // -------------------------------------------------------------------------------------------
     // The prism, as amounts rather than as decisions the renderer makes.
     // -------------------------------------------------------------------------------------------
 
     /**
      * The two halves of the prism flash: a red fringe and a blue one, drawn *added* on either side
-     * of the star and gone again.
+     * of the star and gone again. The shimmer adds the same two colours over the star itself.
      *
      * Added and not blended, which is the reason a glint never changes what colour a star is.
      * `docs/SKY.md` §3.6: *"The star's own tint never changes."* A star that shifted hue as

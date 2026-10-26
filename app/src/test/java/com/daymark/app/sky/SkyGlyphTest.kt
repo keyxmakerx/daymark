@@ -490,8 +490,8 @@ class SkyGlyphTest {
         }
         assertEquals("the widest and the tightest halo emit different light",
             emitted.min().toDouble(), emitted.max().toDouble(), 1e-3)
-        assertEquals("the profile area moved; SkyGlyph's header quotes 0.0831",
-            0.0831, SkyGlyph.PROFILE_AREA.toDouble(), 1e-4)
+        assertEquals("the profile area moved; SkyGlyph's header quotes 0.0236",
+            0.0236, SkyGlyph.PROFILE_AREA.toDouble(), 1e-4)
 
         // Positive control. Every level emitting the same number would also be true of a function
         // that ignored its argument, so the radius and the peak really do move underneath it.
@@ -540,6 +540,103 @@ class SkyGlyphTest {
             SkyGlyph.haloStopAlpha(SkyKind.CHECK_IN, 3, 99).toDouble(),
             1e-6,
         )
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Magnitude: a star's own brightness, from its identity, meaning nothing (#474).
+    // -------------------------------------------------------------------------------------------
+
+    private val ordinaryKinds = SkyKind.entries.filter { it != SkyKind.LIFE_EVENT }
+
+    @Test
+    fun `a star's magnitude is its identity's, fixed, and drawn alike for every kind`() {
+        val n = 20_000
+        for (kind in ordinaryKinds) {
+            val counts = IntArray(SkyGlyph.MAGNITUDE_COUNT)
+            for (id in 1L..n) {
+                val drawn = SkyGlyph.magnitudeIndex(kind, id)
+                assertEquals("a star's magnitude changed between two asks", drawn, SkyGlyph.magnitudeIndex(kind, id))
+                counts[drawn]++
+            }
+            // Every kind gets the same shares, so no kind of memory is a brighter kind.
+            for (i in counts.indices) {
+                assertEquals(
+                    "$kind drew magnitude $i ${counts[i]} times in $n",
+                    SkyGlyph.magnitudeShare(i).toDouble(),
+                    counts[i].toDouble() / n,
+                    0.015,
+                )
+            }
+        }
+        assertEquals(1.0, (0 until SkyGlyph.MAGNITUDE_COUNT).sumOf { SkyGlyph.magnitudeShare(it).toDouble() }, 1e-6)
+        // Most stars faint and a few bright, as a real sky: the brightest is the rarest.
+        for (i in 1 until SkyGlyph.MAGNITUDE_COUNT) {
+            assertTrue("magnitude $i is not brighter than ${i - 1}", SkyGlyph.magnitudeLight(i) > SkyGlyph.magnitudeLight(i - 1))
+        }
+        assertTrue(SkyGlyph.magnitudeShare(SkyGlyph.MAGNITUDE_COUNT - 1) < SkyGlyph.magnitudeShare(0))
+    }
+
+    @Test
+    fun `a star's magnitude cannot be handed a mood, a count or a date`() {
+        // The rule held at the signature, as the core's is: what is not a parameter cannot reach it.
+        fun parameters(name: String) = SkyGlyph::class.java.methods.single { it.name == name }.parameterTypes.toList()
+        assertEquals(listOf(SkyKind::class.java, java.lang.Long.TYPE), parameters("magnitudeIndex"))
+        assertEquals(
+            listOf(SkyKind::class.java, java.lang.Long.TYPE, java.lang.Boolean.TYPE, java.lang.Float.TYPE),
+            parameters("magnitudeAlpha"),
+        )
+        // The control: the reader sees a mood level where one is taken.
+        assertTrue(java.lang.Integer.TYPE in parameters("starTint"))
+    }
+
+    @Test
+    fun `a star's magnitude says nothing about its temperature or its rhythm`() {
+        // Its own hash, so being bright tells you nothing about a star's warmth or its beat.
+        val ids = 1L..40_000L
+        val magnitude = ids.map { SkyGlyph.magnitudeIndex(SkyKind.CHECK_IN, it).toDouble() }
+        val temperature = ids.map { SkyGlyph.temperatureIndex(SkyKind.CHECK_IN, it).toDouble() }
+        val speed = ids.map { SkyTwinkle.flickerSpeed(SkyKind.CHECK_IN, it).toDouble() }
+        val episode = ids.map { SkyTwinkle.episodeRate(SkyKind.CHECK_IN, it).toDouble() }
+        for ((name, other) in listOf("temperature" to temperature, "flicker speed" to speed, "episode rate" to episode)) {
+            val r = correlation(magnitude, other)
+            println("  magnitude vs $name: r = ${"%.4f".format(r)}")
+            assertTrue("magnitude follows $name: r = $r", Math.abs(r) < 0.03)
+        }
+        // The control: two values drawn from one hash are seen.
+        assertTrue(correlation(magnitude, magnitude.map { it * 2 + 1 }) > 0.99)
+    }
+
+    @Test
+    fun `the landmark is still the one bright star, and the quiet sky draws every star alike`() {
+        val brightest = SkyGlyph.magnitudeLight(SkyGlyph.MAGNITUDE_COUNT - 1)
+        assertTrue(
+            "the brightest ordinary star outshines a life event",
+            brightest * SkyStarLight.LIGHT < SkyStarLight.LANDMARK_LIGHT,
+        )
+        for (id in 1L..500L) {
+            assertEquals(1f, SkyGlyph.magnitudeAlpha(SkyKind.LIFE_EVENT, id, quiet = false, sun = 0f), 0f)
+            assertEquals(1f, SkyGlyph.magnitudeAlpha(SkyKind.CHECK_IN, id, quiet = true, sun = 0f), 0f)
+            // Close enough to be a sun, no star is faint any more.
+            assertEquals(1f, SkyGlyph.magnitudeAlpha(SkyKind.CHECK_IN, id, quiet = false, sun = 1f), 1e-6f)
+        }
+        // The control: out of the quiet sky and far off, the stars do differ, all four ways.
+        val far = (1L..500L).map { SkyGlyph.magnitudeAlpha(SkyKind.CHECK_IN, it, quiet = false, sun = 0f) }.toSet()
+        assertEquals(SkyGlyph.MAGNITUDE_COUNT, far.size)
+        assertTrue(far.min() < 0.7f && far.max() > 1.3f)
+    }
+
+    private fun correlation(a: List<Double>, b: List<Double>): Double {
+        val ma = a.average()
+        val mb = b.average()
+        var ab = 0.0
+        var aa = 0.0
+        var bb = 0.0
+        for (i in a.indices) {
+            ab += (a[i] - ma) * (b[i] - mb)
+            aa += (a[i] - ma) * (a[i] - ma)
+            bb += (b[i] - mb) * (b[i] - mb)
+        }
+        return ab / Math.sqrt(aa * bb)
     }
 
     @Test

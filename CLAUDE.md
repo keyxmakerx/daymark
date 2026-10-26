@@ -60,9 +60,10 @@ tools/jvm-source-tests.sh   # the data/ schema tests, which read source as text
   the Kotlin compiler already inside Gradle's own distribution. Seconds instead of a twelve-minute
   round trip. It names every file it had to skip rather than covering less in silence. Green there
   means the package is internally consistent, never that the app builds.
-- **So do the schema tests, even though they live in `data/`.** `PeopleSchemaTest` and
-  `TimedOfferSchemaTest` read source as text and import no Room type, so `tools/jvm-source-tests.sh`
-  runs them from a hand-listed set of files. Its header says what that bought: the obvious repair to
+- **So do the source-reading tests, even though they live in `data/` and `ui/`.** The schema tests
+  (`PeopleSchemaTest`, `TimedOfferSchemaTest` and others) and the copy and colour rules read source
+  as text and import no Room or Android type, so `tools/jvm-source-tests.sh` runs them from a
+  hand-listed set of files. Its header says what that bought: the obvious repair to
   a merged migration made the test named for a forbidden back-fill blind to the back-fill, and CI
   would have gone green over it.
 - **Sum the XML results; never trust a Gradle banner.** "BUILD SUCCESSFUL" has been printed over a
@@ -70,7 +71,9 @@ tools/jvm-source-tests.sh   # the data/ schema tests, which read source as text
 - CI: `.github/workflows/build.yml` builds Android on every push to every branch (push-only — a PR
   shows the checks from its head commit, so there is no `pull_request` trigger).
   `.github/workflows/companion.yml` runs on `companion/**`. `.github/workflows/release.yml` fires on
-  a pushed `v*` tag and *creates* the GitHub Release with the signed `foss` APK attached.
+  a pushed version tag, with or without `v`, or by `workflow_dispatch` naming a tag; it publishes the
+  release-key-signed `foss` APK and its `.sha256`, as a pre-release for any 0.x version, and refuses
+  rather than falls back when a signing secret is missing.
 
 ## 4. Rules that keep recurring
 

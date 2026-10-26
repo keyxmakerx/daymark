@@ -19,8 +19,7 @@ the issue.
   a row ("12 of the last 30") and is left out entirely at zero. A gap in someone's data is never
   drawn as a failure ([DECISIONS.md](DECISIONS.md) §D6).
 - **A person's own views describe what was logged and never mark it.** No mood average as a
-  headline or "out of 5", and no period judged better or worse than another (#203). Not built: the
-  Insights views and suggestion cards that still do (§1.5, §3): #354, #358, #360.
+  headline or "out of 5", and no period judged better or worse than another (#203).
 - **Offers, not demands.** An offer the person can ignore for free is an offer. Anything that moves
   them somewhere they did not ask to go is a demand, and the app makes offers. The one exception is
   one the person switches on themselves (§7.2).
@@ -52,8 +51,8 @@ Home is the daily loop, not an archive. It asks one question, "How are you, righ
 of faces; tapping one opens the editor with that mood chosen. Below that: the number of entries and
 the last seven days, oldest on the left, each day a slot holding one dot per entry in its own mood
 colour, newest at the top, at most three (a fuller day keeps one dot for each of the three moods
-logged most recently), and a day with no entry an empty slot, which a screen reader hears as the
-month says it; at most one suggestion card (§1.5); and today's entries. **More for you** holds the other suggestions and On this day.
+logged most recently), and a day with no entry a faint stub, the same for every empty day, which a screen
+reader hears as the month says it; each day carries its weekday's initial; at most one suggestion card (§1.5); and today's entries. **More for you** holds the other suggestions and On this day.
 **All entries** is the whole history, newest first. Home shows no count of consecutive days: it is
 the screen someone lands on after time away. Home's search button searches entry notes; the journal
 has its own search (§2).
@@ -312,7 +311,8 @@ recommending, never setting, how often the support space is offered: #172.
   The screen says Daymark never places a call and is not a crisis service, and to call the local
   emergency number in immediate danger.
 - **Always reachable.** First on More ("If things feel like too much"), never behind an opt-in;
-  last in every support menu, never dismissible, untouched by suggestion settings.
+  in every support menu, after the ways to cope and the safety plan, never dismissible, untouched
+  by suggestion settings.
 - **Tiered, not a cliff.** The support menu offers ways to cope first, then the person's own plan
   and the people in it, then the crisis resource, which is always one tap away. The handoff is warm,
   never an abrupt list of numbers.
@@ -343,7 +343,8 @@ recommending, never setting, how often the support space is offered: #172.
   tier's shareable output) makes the omission a house rule. The person can write anything; the app
   does not prompt for it.
 - **Stored one row per line**, never as a comma-separated column, because a person's line can
-  contain a comma. It is in backups and never synced. If sharing it ever ships, it is an
+  contain a comma. It is in backups, and so in the encrypted copy the `sync` build sends to
+  the person's own server; no clinician receives it. If sharing it ever ships, it is an
   owner-created, time-boxed, revocable share and never automatic
   ([COMPANION_ACCESS_CONTROL.md](COMPANION_ACCESS_CONTROL.md)).
 - Not built: a quiet link to the plan from the crisis screen, once the plan has something in it
@@ -549,15 +550,18 @@ decisions rather than a reading of the current moment: #162.
 
 - **Backup** (Settings → Export backup) writes one JSON file: entries with their activities and
   people, the journal, goals and project steps, sleep logs, treatments, trackers and their values,
-  reminders, check-in scores, thought records, the safety plan, life events, people and the notes
-  about them, group sharing defaults, custom mood names and colours, the crisis line the person
+  reminders, check-in scores, thought records, the safety plan, life events (with their *hard*
+  mark), the sky's seed, colour choice, constellations and put-away memories, each tracker's *Show
+  in my sky*, people and the notes about them, group sharing defaults, custom mood names and colours, the crisis line the person
   set (#370), and photos embedded in the file. "Replace all" takes the file's crisis line; "Merge"
   takes it only while the phone still shows the default; a file without one leaves the phone's.
   The crisis line's number travels with it (#482), and so does the reminders' answer to "ease off
   or keep", on the same terms (#484).
 - **Not in a backup:** the reception ledger, by design (§13.2); suggestion settings (#191); the
   latest sleep self-check results; app settings and
-  the PIN.
+  the PIN; and, in the `sync` build, the game plans and suggestions accepted from a clinician, their
+  progress and results, which "Replace all" empties. #386 decided they belong in the backup; until
+  that is built (#478) they do not travel.
 - **Restore** (Settings → Restore backup) either replaces everything or merges the file alongside
   what is there, with fresh ids. An older backup still reads. A backup from a newer version of the
   app is refused. A replace that fails part-way leaves what was there: the database rolls back in
@@ -612,7 +616,7 @@ mood opens a new entry with it chosen; nothing is saved until the person saves.
   screenshots and the recent-apps thumbnail are blocked.
 - **The PIN guards the screen, not the file.** No key is made from it. But the lock screen has no
   way past a forgotten PIN except biometrics: without them, the way back today is to reinstall,
-  which erases the app's storage, and restore a backup. Settings says a forgotten PIN "does not lose"
-  the entries, which is true of the file and not of the person's experience: #146. The designed way
+  which erases the app's storage, and restore a backup. Settings says so beside the switch: there is
+  no reset, and the way back is to reinstall and restore the latest backup (#146). The designed way
   back, a PIN-wrapped key and a written-down recovery code, is built and tested but not switched on:
   #109.

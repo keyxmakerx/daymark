@@ -41,9 +41,9 @@ is a side effect.
   sentence above stands.
 - **One copy, on one disk.** The server keeps what it is sent and copies it nowhere. The phone keeps
   its own local copy, which stays the primary one.
-- **Getting a copy there.** The phone cannot send one yet: #168. Today a snapshot is pushed from an
-  exported backup file with the command-line writer (`pnpm push` in `companion/web`), and read back in
-  the browser.
+- **Getting a copy there.** The phone's `sync` build sends one, signed, and can fetch the newest copy
+  back (COMPANION_PHONE.md §2). The command-line writer (`pnpm push` in `companion/web`) can still
+  push an exported backup file, which is read back in the browser.
 
 ## 2. Three shapes: Solo, Paired, Practice
 
@@ -167,8 +167,9 @@ console" (#158).
 
 The Android app has two build flavours. `foss`, the default and the one released, declares no
 `INTERNET` permission, and CI fails if it ever does. `sync` adds the permission and the Kotlin port of
-the sync and pairing cryptography (`sync-crypto/`, tested on a plain JVM). Nothing in `sync` talks to a
-server yet; COMPANION_PHONE.md lists what remains, starting with #168.
+the sync and pairing cryptography (`sync-crypto/`, tested on a plain JVM). It carries Settings → Sync with
+your server: pairing, sending and fetching the journal's encrypted copy, Clinicians (invite, pair,
+approve) and From your clinicians (the inbox). COMPANION_PHONE.md lists what remains.
 
 ## 5. The cryptography
 
@@ -221,7 +222,7 @@ rather than left to be discovered.
 | --- | --- | --- |
 | **Metadata is visible** | Rounded snapshot sizes, timing, how often someone syncs, how many relationships exist and how active each is, and the addresses requests come from. "Journalled daily for eight months, then nothing for nine days" is readable without decrypting anything | Disclosed; sizes rounded. Every encrypted item (snapshots, shares, game plans and assignments) is padded on the device, so the server learns only a rounded size (#214, #315). Timing, how often someone syncs and the order of items stay visible. Grants are signed, not encrypted, and are not padded |
 | **It can deny service** | Refuse writes, withhold or truncate the audit log, serve an older snapshot | Readers verify each blob, not freshness: #179 |
-| **It serves the web pages** | A compromised server can ship JavaScript that keeps a passphrase or a pairing code. Browser-delivered encryption is only as strong as the delivery of the code. The installed phone app does not have this weakness | Stated on every console. The owner's half of pairing moves to the phone with #174. Not built: a clinician client the server cannot change, which a Practice deployment needs before it holds a real patient's data (#222): #319 |
+| **It serves the web pages** | A compromised server can ship JavaScript that keeps a passphrase or a pairing code. Browser-delivered encryption is only as strong as the delivery of the code. The installed phone app does not have this weakness | Stated on every console. The owner's half of pairing also runs on the phone (Settings → Sync with your server → Clinicians); grants and shares from the phone are #174. Not built: a clinician client the server cannot change, which a Practice deployment needs before it holds a real patient's data (#222): #319 |
 | **It writes the audit log about itself** | The hash chain shows internal consistency, never completeness: whoever can rewrite the entries can recompute the chain, and withholding an event is undetectable | The chain head is evidence only when anchored outside the server — a person's note today, the phone later: #182. Signed clinician attestations are not planned (#217): a console the server serves would only report what an honest one did |
 | **No forward secrecy for sealed items** | Anyone who later obtains a clinician's long-term key can open every share ever sealed to it that is still stored | Nothing the owner and a clinician send each other is served past 90 days, a newer share ends the one before it, and within the hour after an item ends the server deletes its bytes (#228, #332, #338). Grants, which are signed and not sealed, have no end. What a colluding server chose to keep is beyond any software's reach (R3) |
 | **Revocation binds an honest server** | Expiry and withdrawal stop future fetches on an honest server. They do not un-send what was read, and a colluding server can keep serving what it holds | A permanent, stated limit (#222); re-pairing with new keys protects what is sent afterwards |

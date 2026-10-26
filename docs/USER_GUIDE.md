@@ -6,7 +6,8 @@ Daymark helps you notice how your days feel. You log a mood, tag what you did an
 with, write a little about *why*, and over time see patterns appear in Insights and in your sky.
 Everything stays **on your device**: there are no accounts, no servers and no tracking. Nothing
 leaves your phone unless *you* export it. The separate **Daymark Sync** app can also send an encrypted
-copy to a server you run yourself, and only when you ask (see *Sync with your own server*).
+copy to a server you run yourself, get it back, and connect you with a clinician, only when you ask
+(see *Sync with your own server*).
 
 This guide walks through what the app can do, one task at a time. Daymark is not a medical device:
 its self-checks, sleep and breathing features and support are for your own reflection, not a
@@ -16,9 +17,15 @@ diagnosis or treatment.
 
 ## Getting started
 
-1. Install Daymark (see the [FAQ](FAQ.md) if you get an "unknown app" warning).
-2. The first time you open it, a short setup offers a daily reminder and a PIN. Both are optional,
-   and both can be changed later.
+1. Install Daymark. On your phone, open the project's
+   [releases page](https://github.com/keyxmakerx/daymark/releases), and under the newest release's
+   **Assets** tap `app-foss-release.apk` to download it. Open the downloaded file. Android asks
+   whether your browser or file app may install apps: allow it for this one install, then tap
+   **Install**. A warning that the app is unknown is normal for anything not from the Play Store
+   (see the [FAQ](FAQ.md)). Later versions install the same way, over the top, keeping your data.
+2. The first time you open it, a short setup offers a daily reminder, shows the crisis line Daymark
+   will offer you in a hard moment (988 in the US to start) so you can change it, and offers a PIN.
+   All of it is optional, and all of it can be changed later.
 3. You land on **Home**, which asks *"How are you, right now?"* Tap a face to start your first entry.
 
 The bar at the bottom has five places: **Insights**, **Journal**, **Home** (the round button in the
@@ -50,8 +57,9 @@ Home is for today, not an archive. From the top:
 
 - **The check-in row**: *"How are you, right now?"* Tap a face to start an entry with that mood.
 - **A glance**: how many entries you've written, and the last seven days, each day a small dot for
-  each entry in that mood's colour, newest at the top (up to three). A day you didn't log is simply
-  empty; a week is allowed to have holes in it. Home doesn't count how many days in a row you've been
+  each entry in that mood's colour, newest at the top (up to three), each day labelled with its
+  weekday's initial. A day you didn't log holds a small faint mark, the same for every empty day; a week is allowed
+  to have holes in it. Home doesn't count how many days in a row you've been
   here.
 - **One suggestion**, at most. The rest are under **More for you**, with your *On this day*
   memories.
@@ -209,8 +217,16 @@ dark, never drawn as missing.
 
 - Pinch to zoom, and tap a star to see what it was. **Fit the whole sky** brings everything back
   into view. **List** shows the same things as a list, which also works with a screen reader.
-- **Quiet sky**, **Field** and **Motion** change how it's drawn. Motion starts switched off if your
-  phone's "Remove animations" setting is on.
+- Along the bottom: **Constellations**, **Today** (goes to your newest star), **Key** (what the
+  colours and shapes mean) and, for your sky's first 30 days, **Colours**. The **Motion** and **Quiet
+  sky** switches change how it's drawn. Motion starts switched off if your phone's "Remove
+  animations" setting is on.
+- Tap a star and choose **Put away** to take it out of the sky. Nothing is deleted: the List keeps
+  it under *Put away*, with **Bring back**.
+- **Draw a new constellation** joins stars you pick, under a name you give it.
+- **Reset my sky**, in the Key, grows your sky again from a new seed with a new shape and colours.
+  Every memory, name and constellation stays.
+- A tracker can appear in your sky too: switch on **Show in my sky** on its page.
 
 **Life events** are your own marks on your history, such as a move or a new job: one day and a few
 words. Add one from **Life events** on the sky, or with **Mark this day** on an entry's page.
@@ -244,6 +260,12 @@ anything.
 **More → Trackers** lets you track anything next to your mood: a **scale** (like energy from 1 to
 5), a **number** with a unit (like glasses of water), or **yes / no** (like "took my meds"). Tap a
 tracker to log a value and see its history. Do one thing and Move keep their own trackers for you.
+
+On a tracker's page, **Check-ins** sets whether Daymark asks you about it: **When it happens** (no
+reminders), **Once a day** at a time you pick, **A few times a day** between hours you set, or
+**Don't ask**. Under *If check-ins go unanswered* you choose whether they ease off. You can also
+switch on a **Quick-log notification**, a quiet one that stays so logging is one tap away, and
+**Show in my sky**, which gives the tracker its own place in your sky.
 
 ---
 
@@ -411,8 +433,13 @@ its own time and label.
 
 Each reminder has its own **on/off switch**, and you can change or delete it any time. Daymark aims
 to deliver each at the exact time you picked, and sets them all again after your phone restarts.
-Tapping a reminder, or its **Log now** button, opens a new entry. Daymark never quietens a reminder
-you set because you didn't answer it.
+Tapping a reminder, or its **Log now** button, opens a new entry. A reminder's notification also has
+**Try later** (one more nudge, an hour from now) and **Stop asking** (switches that reminder off).
+
+When you set up reminders, Daymark asks *"What if these go unanswered?"*: **Ease off if I'm not
+answering**, or **Keep reminding me at these times**. You can change your answer in **Settings →
+Reminders**. If it eases off, it tells you ("Daymark will check in less often for now") and offers
+**Put it back**. It never switches a reminder off by itself; only you do.
 
 ---
 
@@ -476,10 +503,11 @@ safe** and how you move to a new phone. You choose where each file goes.
 
 **Settings → Export backup** writes one file with your entries, activities and people, your
 journal, goals and project steps, sleep logs and treatments, trackers, reminders, check-in scores,
-thought records, your safety plan, life events, your notes about people, your custom moods, and
+thought records, your safety plan, life events, your sky (its layout, colours, constellations and
+anything you put away), your notes about people, your custom moods, the crisis line you set, and
 your photos (inside the file).
 
-A backup does not include: your suggestion settings, your crisis line, your sleep
+A backup does not include: your suggestion settings, your sleep
 self-check results, your other settings, or your PIN. It also leaves out Daymark's own record of
 when it asked you things, which never leaves your phone.
 
@@ -489,6 +517,9 @@ when it asked you things, which never leaves your phone.
 2. Choose:
    - **Replace all**: wipes what's on this phone, then loads the backup. Use this on a new phone.
    - **Merge**: keeps what you have and adds the backup's entries alongside.
+
+The backup's crisis line comes with it: **Replace all** takes it, and **Merge** takes it only if this
+phone still shows the default line, so a line you changed here is never replaced.
 
 A backup made by a **newer** version of Daymark can't be restored into an older one. Update first.
 
@@ -521,7 +552,8 @@ show that what you logged was accurate.
 2. Choose **Widgets**, find **Daymark**, and drag the widget out.
 
 The widget asks *"How are you?"* and shows the five moods. Tap one and Daymark opens a new entry
-with that mood chosen.
+with that mood chosen. There is also a **Trackers** widget, which lists your trackers so you can
+log one from the home screen.
 
 ---
 
@@ -531,6 +563,9 @@ Daymark's "modern paper" look comes in **light** and **dark**, and follows your 
 On Android 12 and later, **Settings → Dynamic color** tints the app with colours from your
 wallpaper instead. It starts switched off; if you switched it on before, it stays on. Your mood
 colours never change either way.
+
+**Settings → Version** shows which version of Daymark you have. Please include it when you report a
+problem.
 
 ---
 
@@ -543,9 +578,8 @@ anything. Daymark Sync keeps its own journal: to send the one in Daymark, export
 restore it in Daymark Sync first.
 
 **Pair (once):**
-1. On a computer, open your server's page, choose **Connect to your sync server**, type your access
-   token and your sync passphrase, and press **Fetch & decrypt latest**. A **Phones** section appears
-   at the bottom of the card.
+1. On a computer, open your server's page, and under **Connect to your sync server** type your
+   access token and press **Connect**. A **Phones** section appears at the bottom of the card.
 2. Press **Pair a phone**. It shows your server's address and a code like `K7M4R-D96QA`, which works
    once, for two minutes.
 3. In Daymark Sync, open **Settings → Sync with your server**. Type the address exactly as the page
@@ -561,6 +595,24 @@ tap **Forget this server**, then press **Disconnect** beside the phone on the pa
 stay. The phone pairs only with an `https://` address whose certificate Android trusts
 ([COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md) §3.4), and its clock must be right to within five
 minutes.
+
+**Get your copy back:** tap **Get the newest copy from your server**, for example on a new phone.
+Daymark shows the date inside the copy and what it holds beside what this phone holds, and changes
+nothing until you choose: **Replace this phone's journal with the copy**, **Add the copy's entries
+beside this phone's** (an entry on both shows twice), or **Keep this phone as it is**.
+
+**Add a clinician** (needs a server set up for clinicians, and the key opened): **Settings → Sync
+with your server → Clinicians → Add a clinician**. Type their name as you want to see it. You then
+give them three things, one at a time: a **sign-in key** (shown once), a **link** you can send any
+way you like, and a short **code** you say some other way, out loud or by text. When they have typed
+the code, tap **Check for a reply**, check the name they entered, and tap **Approve**. **Take the
+approval back** undoes it. A clinician added here is kept on this phone; sharing with them is still
+done on your server's page.
+
+**From your clinicians:** game plans and suggestions your approved clinicians send you wait here
+until you tap **Accept** or **Decline**. Nothing is added until you accept. Declining is not told to
+your clinician; this phone just stops showing it. **Replace this phone's journal** and a backup
+restore with **Replace all** remove what you accepted, because a backup does not carry it yet.
 
 ## Privacy
 

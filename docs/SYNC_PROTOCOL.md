@@ -422,10 +422,10 @@ Replacing a recovery code writes the next version the same way, with the new rec
 
 Sync is single-writer and last-snapshot-wins: the newest full snapshot is authoritative, and rows are
 never merged, because the app's schema has no per-row ids or timestamps. That is settled (#200): the
-phone is the journal's one writer (until it syncs, the command-line tool uploads its exported
-backup), and other devices read it. What the web console creates travels as new records, each with a
+phone is the journal's one writer (its `sync` build, or the command-line tool uploading an
+exported backup), and other devices read it. What the web console creates travels as new records, each with a
 random id, in the web console's lanes (§1.4), and the phone takes each record in exactly once. The
-owner console keeps its accept or decline of an assignment there. No device silently replaces a copy
+owner console keeps its accept or decline of an assignment or a game plan there. No device silently replaces a copy
 it has not seen. Not built: the phone taking records in (#346), and the refusal to replace a copy it
 has not seen (#344).
 

@@ -73,6 +73,7 @@ class SkyTwinkleTest {
         if (SkyTwinkle.glints(kind, id)) 1f else 0f,
         SkyTwinkle.glintPeriodMs(kind, id),
         SkyTwinkle.glintOffsetMs(kind, id),
+        SkyTwinkle.shimmerPhase(kind, id),
     ).joinToString(":") { it.toRawBits().toString() }
 
     // -------------------------------------------------------------------------------------------
@@ -226,6 +227,7 @@ class SkyTwinkleTest {
                 (SkyTwinkle.glintOffsetMs(it.first, it.second) /
                     SkyTwinkle.glintPeriodMs(it.first, it.second)).toDouble()
             },
+            "shimmer phase" to population.map { SkyTwinkle.shimmerPhase(it.first, it.second).toDouble() },
         )
         val names = draws.keys.toList()
         for (i in names.indices) {
@@ -527,6 +529,128 @@ class SkyTwinkleTest {
             assertTrue("${entry.first} ${entry.second} never holds still", stillSeen)
             assertTrue("${entry.first} ${entry.second} never flickers", flickerSeen)
         }
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // The shimmer: colour in the brighter stars' flicker.
+    // -------------------------------------------------------------------------------------------
+
+    private val shimmering = population.filter { SkyTwinkle.shimmers(it.first, it.second) }
+
+    @Test
+    fun `the brighter stars and every landmark shimmer, and the faint ones do not`() {
+        val ordinary = population.filter { it.first != SkyKind.LIFE_EVENT }
+        val share = ordinary.count { SkyTwinkle.shimmers(it.first, it.second) }.toDouble() / ordinary.size
+        println("  ${"%.1f".format(share * 100)}% of ordinary stars shimmer")
+        // The full and the bright magnitudes, 22% and 8%.
+        assertTrue("about three stars in ten do not shimmer: $share", share > 0.25 && share < 0.35)
+        for (entry in ordinary) {
+            assertEquals(
+                "whether a star shimmers is not its magnitude",
+                SkyGlyph.magnitudeIndex(entry.first, entry.second) >= SkyTwinkle.SHIMMER_FROM_MAGNITUDE,
+                SkyTwinkle.shimmers(entry.first, entry.second),
+            )
+        }
+        for (entry in population.filter { it.first == SkyKind.LIFE_EVENT }) {
+            assertTrue("a landmark that never shimmers", SkyTwinkle.shimmers(entry.first, entry.second))
+        }
+        // The control: the faintest stars are in the population and are left plain.
+        assertTrue(ordinary.any { SkyGlyph.magnitudeIndex(it.first, it.second) == 0 && !SkyTwinkle.shimmers(it.first, it.second) })
+    }
+
+    @Test
+    fun `a shimmer flashes red then blue, never both, and only while the star flickers`() {
+        var redSeen = false
+        var blueSeen = false
+        for (entry in shimmering.take(60)) {
+            var t = 0L
+            while (t <= 200_000L) {
+                val red = SkyTwinkle.shimmerRedAt(entry.first, entry.second, t, moving)
+                val blue = SkyTwinkle.shimmerBlueAt(entry.first, entry.second, t, moving)
+                assertTrue("red and blue at once: $red, $blue", red == 0f || blue == 0f)
+                assertTrue("a shimmer past its strength: $red, $blue", red <= 1f && blue <= 1f && red >= 0f && blue >= 0f)
+                // A flicker too small to move the light off 1 in a float is holding still; a shimmer
+                // there must be too small to move a pixel, under half a level at full strength.
+                if (SkyTwinkle.lightAt(entry.first, entry.second, t, moving) == 1f) {
+                    assertTrue("a star shimmers while it holds still: ${red + blue}", red + blue < 0.01f)
+                }
+                if (red > 0.5f) redSeen = true
+                if (blue > 0.5f) blueSeen = true
+                t += 7L
+            }
+        }
+        // The control: both colours do show, plainly.
+        assertTrue("no star flashes red", redSeen)
+        assertTrue("no star flashes blue", blueSeen)
+        // And a star that does not shimmer never does.
+        val plain = population.first { !SkyTwinkle.shimmers(it.first, it.second) }
+        var t = 0L
+        while (t <= 200_000L) {
+            assertEquals(0f, SkyTwinkle.shimmerRedAt(plain.first, plain.second, t, moving), 0f)
+            assertEquals(0f, SkyTwinkle.shimmerBlueAt(plain.first, plain.second, t, moving), 0f)
+            t += 13L
+        }
+    }
+
+    /** How many times a second [lit] turns on, over the seconds [active] says it could. */
+    private fun onsetsPerSecond(lit: (Long) -> Boolean, active: (Long) -> Boolean): Double {
+        var onsets = 0
+        var activeMs = 0L
+        var was = false
+        var t = 0L
+        while (t <= 400_000L) {
+            val now = lit(t)
+            if (now && !was) onsets++
+            was = now
+            if (active(t)) activeMs++
+            t += 1L
+        }
+        return onsets / (activeMs / 1000.0)
+    }
+
+    @Test
+    fun `the flash counter can fail`() {
+        // Run first: a colour flashing four times a second must be counted as faster than three.
+        val planted = onsetsPerSecond({ t -> Math.sin(2 * Math.PI * 4.0 * t / 1000.0) > 0 }, { true })
+        assertTrue("the counter cannot see four flashes a second: $planted", planted > 3.0)
+    }
+
+    @Test
+    fun `a shimmer's colours come round no faster than the flicker`() {
+        // The quickest star's: each colour may flash no more than three times a second (§7.4).
+        val quickest = shimmering.maxBy { SkyTwinkle.flickerSpeed(it.first, it.second) }
+        val (kind, id) = quickest
+        for (red in listOf(true, false)) {
+            val rate = onsetsPerSecond(
+                { t ->
+                    if (red) SkyTwinkle.shimmerRedAt(kind, id, t, moving) > 0f
+                    else SkyTwinkle.shimmerBlueAt(kind, id, t, moving) > 0f
+                },
+                { t -> SkyTwinkle.lightAt(kind, id, t, moving) != 1f },
+            )
+            println("  the quickest star's ${if (red) "red" else "blue"}: ${"%.2f".format(rate)} a second")
+            assertTrue("a shimmer flashes ${if (red) "red" else "blue"} $rate times a second", rate < 3.0)
+            // The control: it does flash, more than once a second, while it flickers.
+            assertTrue("the quickest star barely shimmers: $rate", rate > 1.0)
+        }
+    }
+
+    @Test
+    fun `the shimmer stops under the motion switch and in the quiet sky`() {
+        var lit = 0
+        for (entry in shimmering.take(40)) {
+            var t = 0L
+            while (t <= 200_000L) {
+                for (options in listOf(still, quiet)) {
+                    assertEquals(0f, SkyTwinkle.shimmerRedAt(entry.first, entry.second, t, options), 0f)
+                    assertEquals(0f, SkyTwinkle.shimmerBlueAt(entry.first, entry.second, t, options), 0f)
+                }
+                // The control: the same stars, the same instants, in the ordinary sky.
+                if (SkyTwinkle.shimmerRedAt(entry.first, entry.second, t, moving) > 0f) lit++
+                t += 29L
+            }
+        }
+        assertTrue("these stars never shimmer anywhere, so the check proves nothing", lit > 0)
     }
 
     // -------------------------------------------------------------------------------------------

@@ -38,7 +38,8 @@ project's releases. Android shows an "unknown app" or Play Protect warning for *
 outside the Play Store. It's a normal precaution, not a sign that something is wrong, and you can
 allow the install to continue.
 
-Publishing a checksum with each release, so you can verify a download, is tracked in #226.
+Each release lists the SHA-256 of its APK in its notes and in a `.sha256` file beside it. To check a
+download, run `sha256sum app-foss-release.apk`; the two must match exactly.
 
 ---
 

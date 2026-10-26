@@ -180,6 +180,8 @@ your home network still needs a certificate the phone trusts:
   address on your home network, and set `DAYMARK_PUBLIC_BASE_URL` to `https://` and that hostname.
   Some routers refuse a public DNS answer that points at a home-network address; if the name does not
   resolve at home, add it to the router's own DNS instead.
+- **A Tailscale (or similar) name with the certificate it issues**, for a server reachable only on
+  your tailnet. Tailscale's certificates come from a public authority, so the phone trusts them.
 - **Not a certificate authority of your own.** The Android app trusts only the certificate
   authorities Android ships with, so a certificate from one you made is refused, however it was
   installed on the phone.
@@ -252,7 +254,7 @@ read from a file named by `NAME_FILE`, which wins.
 | `DAYMARK_TOTP_LOCKOUT_FAILS`, `_SECONDS` | `5`, `300` | Bad sign-in codes before a credential is locked, and for how long, for clinicians and server administrators alike; also the backoff for wrong invitation secrets |
 | `DAYMARK_INVITE_TTL_SECONDS` | `259200` (72 h) | Invitation lifetime |
 | `DAYMARK_SESSION_IDLE_SECONDS`, `_ABSOLUTE_SECONDS` | `900`, `28800` | Clinician and server-administrator session lifetimes on the server. The clinician console also drops its keys after 15 minutes without activity, and at the server's absolute expiry or 8 hours after sign-in, whichever is sooner, as its sign-in contract says: a shorter value here applies, a longer one does not extend what the page holds |
-| `DAYMARK_ADMIN_RESET` | off | `1` or `true`: for a server that has lost every administrator. Each start with it on prints a new setup code to the log and writes one audit row, and that code makes one more administrator (§9). Turn it off again once you are signed in |
+| `DAYMARK_ADMIN_RESET` | off | Set in `.env`, which compose passes through. `1` or `true`: for a server that has lost every administrator. Each start with it on prints a new setup code to the log and writes one audit row, and that code makes one more administrator (§9). Turn it off again once you are signed in |
 | `DAYMARK_COOKIE_INSECURE` | off | Plain-HTTP testing only: drops `Secure` from the session cookie. Refused at start with an `https` public address (§5.3) |
 | `DAYMARK_ACCESS_LOG_RETENTION_DAYS` | `90` | Audit-log retention (COMPANION_SECURITY.md §9) |
 | `DAYMARK_ACCESS_LOG_SOURCE_IP` | off | Records the client address in audit entries |
@@ -420,7 +422,9 @@ newer audit-chain head will see the chain fall behind it (COMPANION_SECURITY.md 
 2. Build from source with `git pull` then `docker compose up -d --build`; or run the image CI
    published: set `DAYMARK_IMAGE` to `ghcr.io/…/daymark-companion@sha256:…`, then `docker compose pull`
    and `docker compose up -d`. Pin a digest, never `:latest`, in production: a moving tag lets a
-   registry swap the code that holds people's keys.
+   registry swap the code that holds people's keys. The published image runs on linux/amd64 and
+   linux/arm64, and each release also has a version tag such as `:0.4.2`; pin the digest it resolves
+   to (companion/README.md, Published image).
 3. Watch it come up: `docker compose ps` should reach `healthy`; then run the checks in
    COMPANION_OBSERVABILITY.md §6.4. If it restarts instead, `docker compose logs companion | grep
    'Refusing to start'` names the setting to change (§5.3), or the database that could not be
@@ -575,8 +579,9 @@ check that a real email arrives (#207).
    `admin.html`, enter the code, choose a name, add the key it shows to an authenticator app and
    type the six digits. The code works once and for an hour; a new one is printed each hour and at
    each start until the server is claimed, and never after. Do this before anyone else can reach
-   the address: whoever enters the code first is the administrator. Lost every administrator? Start
-   once with `DAYMARK_ADMIN_RESET=1` (§5.1).
+   the address: whoever enters the code first is the administrator. Lost every administrator? Set
+   `DAYMARK_ADMIN_RESET=1` in `.env`, run `docker compose up -d`, read the new code from the log the
+   same way, and remove the line again once you are signed in (§5.1).
 6. Run the checks in COMPANION_OBSERVABILITY.md §6.4, including the lockout-isolation test.
 7. Schedule backups (§6.2) and keep them off the host, encrypted.
 
