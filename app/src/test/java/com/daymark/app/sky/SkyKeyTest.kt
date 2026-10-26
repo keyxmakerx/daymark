@@ -63,6 +63,34 @@ class SkyKeyTest {
     }
 
     @Test
+    fun `colour is the one time key, and every form is chance`() {
+        val times = listOf("oldest", "newest", "at the top", "then the next", "earliest", "latest")
+        for (form in SkyForm.Form.entries) {
+            val key = SkyKey.entries(Sky.layout(everyOtherDay(10), seedOf(form)), 0)
+            val line = key.first { it.title in setOf("River", "Galaxies", "Open sky") }.text
+            for (t in times) assertFalse("$form's line tells time: \"$t\"", line.lowercase().contains(t))
+            assertTrue("$form's line does not say the shape is chance: $line", line.contains("The shape is chance"))
+        }
+        // The colour line still tells it.
+        assertTrue(SkyKey.COLOUR.startsWith("Colour is age."))
+        // The control: the line that told time twice is caught.
+        val old = "Your memories fill one galaxy, then the next, oldest at the top."
+        assertTrue(times.any { old.lowercase().contains(it) })
+    }
+
+    @Test
+    fun `the river is the course the stars follow, because no river is drawn`() {
+        val river = SkyKey.entries(Sky.layout(everyOtherDay(10), seedOf(SkyForm.Form.RIVER)), 0)
+            .first { it.title == "River" }.text
+        assertTrue(river, river.contains("like a river"))
+        val promises = listOf("along a river", "the river", "a river of")
+        for (p in promises) assertFalse("the river line promises a drawn river: \"$p\"", river.contains(p))
+        // The control: the line that promised one is caught.
+        val old = "Your memories run along a river, oldest at the top."
+        assertTrue(promises.any { old.contains(it) })
+    }
+
+    @Test
     fun `the Key lists only what is in the sky`() {
         // Every other day: singles only. No band, cluster, stream, life event or constellation.
         val sparse = SkyKey.entries(Sky.layout(everyOtherDay(40), 7L), constellations = 0).map { it.title }

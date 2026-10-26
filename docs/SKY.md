@@ -324,8 +324,10 @@ days into kinds of act at exactly the zoom where they see a stretch of their lif
   the hairline joining steps of one project is not built, as it needs a project identity the layout
   deliberately does not carry: #152.
 - **The Key**, one tap away, says in fixed words what is in this person's sky and nothing else
-  (`SkyKey`, #154): it leads with colour, *red only means old, never bad*; then the sky's form; then
-  bands, clusters, streams, life events and constellations, each only when the sky has one. Not
+  (`SkyKey`, #154): it leads with colour, *red only means old, never bad*; then that brightness
+  means nothing; then the sky's form, as chance and never as a line of time, because colour is its
+  one time key; then bands, clusters, streams, life events and constellations, each only when the
+  sky has one. Not
   built: the Key's lines for the spread of the glow and the six kind forms, each drawn beside its
   introduction line (§5.1), #362.
 
