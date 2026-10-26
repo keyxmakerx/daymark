@@ -6,8 +6,10 @@ This document is its security reference, as built. Where it and the code disagre
 this document has a bug.
 
 The flagship phone app (the `foss` build) has no network access at all; see
-[SECURITY.md](../SECURITY.md) and [PRIVACY.md](../PRIVACY.md). The phone's `sync` build does not
-talk to the Companion yet (Not built: #138), so today the owner uses the browser console.
+[SECURITY.md](../SECURITY.md) and [PRIVACY.md](../PRIVACY.md). The phone's opt-in `sync` build pairs
+with the Companion, sends and fetches an encrypted copy of the journal, invites and approves
+clinicians, and receives their game plans and suggestions (COMPANION_PHONE.md). Grants and shares are
+still made in the browser console (#174).
 
 Related: pairing is specified in [COMPANION_PAIRING.md](COMPANION_PAIRING.md); running a server in
 [COMPANION_DEPLOYMENT.md](COMPANION_DEPLOYMENT.md) and
@@ -535,7 +537,7 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
 - The only real anti-rollback is an Ed25519-signed, hash-chained manifest (signed with subkey 2),
   checked against a local watermark the client refuses to go back past. The key and the sign and
   verify functions exist (`lib/sync/crypto.ts`); no client signs or checks a manifest yet, and the
-  server stores none. Not built: #138.
+  server stores none. Not built: #179.
 - **The manifest public key never changes** — not on upgrade, not when a recovery code is added. It is
   the trust anchor, and a change is indistinguishable from a server swapping the signing identity.
 - **Sync is single-writer, last-snapshot-wins (R11).** The newest full snapshot is authoritative.
@@ -575,7 +577,7 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
   holds for tampering, not for withholding, and every surface that shows a verdict says so (the owner's
   audit caveat; `CHAIN_CAVEAT` in the admin console). What outlives a lying server is the head hash,
   written down somewhere it cannot reach. Signed clinician attestations were weighed and not adopted
-  (#217). The phone keeping its own copy of the head: #138.
+  (#217). The phone keeping its own copy of the head: #182.
 - **Missing events:** a refused read of an expired or withdrawn share (`SHARE_DENIED` is declared and
   never written: #164); the token re-issue, invitations minted or expired, reads of the log itself,
   bulk reads, and changes to logging policy (#187).
@@ -630,12 +632,14 @@ leave "signed out, not ended", which looks like a completed exit and is not one.
 - The web bundle is built from the lockfile and ships inside the image; nothing is fetched from a CDN
   at run time.
 - CI validates the Gradle wrapper, fails if the resolved Netty is below the request-smuggling fixes,
-  boots both compose topologies and proves egress fails. The image it pushes to GHCR is the image it
-  tested, tagged `sha-<commit>`. The CI egress test covers the shipped topologies, not an operator's
+  boots both compose topologies and proves egress fails. The image is built and tested for linux/amd64 and
+  linux/arm64, each on its own hardware, and the tag it publishes to GHCR is a manifest list of
+  exactly those two tested images: `sha-<first 12 hex of the commit>`, plus `:<version>` from a
+  release tag, and `:main` and `:latest` from main only. The CI egress test covers the shipped topologies, not an operator's
   own compose changes (R7).
 - The server is built with the validated wrapper (`./gradlew`), not the builder image's Gradle.
-- Not built: an SBOM, provenance and a signature for the image, a published hash of the web bundle, and
-  an arm64 image (#241); a checksum for the Gradle wrapper, dependency verification, pnpm's minimum
+- Not built: an SBOM, provenance and a signature for the image, and a published hash of the web bundle
+  (#241); a checksum for the Gradle wrapper, dependency verification, pnpm's minimum
   release age and actions pinned by commit (#244); dependency audits and lints in CI (#257).
 
 ## 11. Out of scope and honest limits
@@ -683,6 +687,6 @@ leave "signed out, not ended", which looks like a completed exit and is not one.
 | R7 | `internal: true` enforced "no egress" in the original topology | False then: the app shared an egress-capable network with the proxy. What holds now is in §6. |
 | R8 | "No server, so no server-side surface" | False for the `sync` build and the Companion. |
 | R9 | Trust `172.16.0.0/12` as the default proxy range | Removed: the default trusts nothing (§7). |
-| R10 | Game plans land in the phone's `treatments` table | Removed: `treatments` is owner-authored and non-evaluative. Game plans get their own table when the phone side is built (#138). |
+| R10 | Game plans land in the phone's `treatments` table | Removed: `treatments` is owner-authored and non-evaluative. Game plans have their own insert-only tables (`game_plans`, `game_plan_items`, schema v19), and `CompanionSchemaTest` holds that none lands in `treatments`. |
 | R11 | A three-way, row-level merge with per-row timestamps | Not implementable: sync is single-writer, last-snapshot-wins (§8). |
 | R12 | Clinician-signed attestations make access impossible to hide | Partly retracted: a server-computed chain makes tampering detectable, not withholding (§9). Signed clinician attestations were weighed and not adopted (#217). |

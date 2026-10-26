@@ -19,7 +19,7 @@ The app has one flavour dimension, `network`:
 | Flavour | Application id | Network | What it is |
 |---|---|---|---|
 | `foss` | `io.github.keyxmakerx.daymark` (#232, #369); the Kotlin package stays `com.daymark.app` | none | The released app. No `INTERNET` permission; CI checks the built APK for it. |
-| `sync` | `io.github.keyxmakerx.daymark.sync` | `INTERNET` | Opt-in and unreleased. Adds `:sync-crypto` and lazysodium. Today it carries Settings → Sync with your server, which pairs with a Companion and sends an encrypted copy of the journal (docs/COMPANION_PHONE.md §2); the rest of the phone's half is #138. |
+| `sync` | `io.github.keyxmakerx.daymark.sync` | `INTERNET` | Opt-in and unreleased. Adds `:sync-crypto` and lazysodium. Today it carries Settings → Sync with your server, which pairs with a Companion, sends and fetches an encrypted copy of the journal, invites and approves clinicians, and receives their game plans and suggestions for the person to accept (docs/COMPANION_PHONE.md); what remains is under #138. |
 
 Network code may live only under `app/src/sync/`, and `INTERNET` is declared only in that source
 set's manifest. Gradle source sets enforce this: `foss` cannot reference that code at all.
@@ -63,7 +63,7 @@ through `util/DateUtils.kt` before handing plain values to `stats/`.
 
 ### 3.1 The database
 
-Room, schema **v19**, 26 entities:
+Room, schema **v23**, 28 entities:
 
 - entries: `MoodEntry`, `ActivityEntity`, `EntryActivityCrossRef`, `JournalEntry`;
 - goals: `Goal`, `GoalStep`;
@@ -80,7 +80,9 @@ treatments · v7 trackers · v8 entry photos · v9 reminders · v10 check-in sco
 if-then plan · v12 thought records · v13 the safety plan · v14 the reception ledger · v15 goal kinds
 and project steps (the first foreign key) · v16 life events · v17 when a goal was marked reached ·
 v18 people and communities, and the ledger's hour, weekday and "responded" columns · v19 the
-Companion's game plans, assignments and results.
+Companion's game plans, assignments and results · v20 a tracker's check-in rhythm · v21 a tracker's
+"keep reminding" choice · v22 the sky's constellations · v23 a life event's *hard* mark, a tracker's
+*Show in my sky*, and the sky's put-away memories.
 
 Rules the code and tests hold:
 
@@ -94,7 +96,7 @@ Rules the code and tests hold:
 - **A clinician's game plan never lands in `treatments`**, and the signed tables are insert-only;
   `CompanionSchemaTest` checks both.
 - **"Replace all current data" empties the Companion's tables** and restores nothing into them.
-  Whether the backup should carry them is #386.
+  By decision (#386) the backup should carry them; not built yet: #478.
 - `entry_people` has no foreign key, like `entry_activity`: a restore writes these rows from an
   untrusted file, and one dangling pair must not abort the whole import. `person_notes` cascades from
   `people`, and deletes also clear children by hand, because a raw database need not have foreign
@@ -116,7 +118,7 @@ Rules the code and tests hold:
 Every schema version is exported to `app/schemas/` and committed in the same change that bumps the
 version. Migrations are additive and preserve existing data; destructive fallback is never used. A
 migration's SQL is written in Room's own generated form, because the migration test compares wording
-as well as meaning. The next schema version is **v20**. `MigrationSchemaExportTest` compares every
+as well as meaning. The next schema version is **v24**. `MigrationSchemaExportTest` compares every
 `CREATE` a migration runs with the `createSql` Room exported for its version, and checks each hop
 creates exactly what its version adds.
 
@@ -131,7 +133,7 @@ androidTest assets, wired by hand in `app/build.gradle.kts`.
 
 ### 3.4 The backup format
 
-`backup/BackupManager.kt` writes a versioned JSON file (format v17) that round-trips every table a
+`backup/BackupManager.kt` writes a versioned JSON file (format v20) that round-trips every table a
 person would miss, with photos embedded. Every field added since v1 has a default, so an older file
 always reads; a file from a newer format is refused. Adding a field means bumping the version, so
 that an older app refuses the file instead of silently dropping what it cannot read. The reception
@@ -189,7 +191,7 @@ model.
 
 Home shows only the top card; More for you shows the rest; Insights has its own strip. The "what
 might help" menu (`Signals.supportMenu`) is separate and always complete: move, breathe, a thought
-record, journal, and crisis resources last, never dismissible. Working out the cards writes
+record, journal, and crisis resources, never dismissible. Working out the cards writes
 nothing; the only write is a control the person taps.
 
 **Suggestion controls** (what the person sees: [FEATURES.md](FEATURES.md) §1.5) are pure rules in
@@ -224,8 +226,9 @@ reads the store directly; a new self-drawn card must do the same.
 - **`tools/jvm-tests.sh <package>`** compiles and runs one Android-free package's tests on a plain
   JVM in seconds: `sky`, `stats`, `goals` and `sensing` all work. It names every file it skipped.
   Green there means the package is consistent, not that the app builds.
-- **`tools/jvm-source-tests.sh`** runs `PeopleSchemaTest` and `TimedOfferSchemaTest`, which live in
-  `data/` but read source as text and import no Room type. The list of files is kept by hand.
+- **`tools/jvm-source-tests.sh`** runs the tests that read source as text (schema, copy, colour and
+  notification-privacy rules) and import no Android or Room type, `PeopleSchemaTest` and
+  `TimedOfferSchemaTest` among them. The list of files is kept by hand in the script.
 - Several tests read source as text to hold a rule, among them `EntryViewCopySourceTest` (no
   commentary on the entry page), `PeopleUiSourceTest` (no mood on people's screens) and
   `SkySurfaceSourceTest`.
@@ -240,7 +243,10 @@ it differs from the committed file. It uploads the regenerated schemas and both 
 
 It does **not** run the instrumented tests or Android lint (#220).
 
-`.github/workflows/release.yml` runs on a pushed `v*` tag. It builds the signed `foss` release APK,
-checks it for `INTERNET`, and creates the GitHub release with the APK attached. Without the signing
-secrets it falls back to debug signing instead of failing: #224. Publishing the APK's SHA-256 is
-#226. `.github/workflows/companion.yml` covers `companion/**`.
+`.github/workflows/release.yml` runs on a pushed version tag, with or without the `v` (`0.4.2` or
+`v0.4.2`), or by hand from Actions naming an existing tag. The version comes from the tag. It stops
+before building if a signing secret is missing, refuses an APK that declares `INTERNET` or is signed
+with the committed testing key, and publishes the signed `foss` APK with its SHA-256 (in the notes
+and as a `.sha256` file). Every 0.x or labelled version is a pre-release. CONTRIBUTING.md
+"Releasing" is the maintainer's checklist. `.github/workflows/companion.yml` covers `companion/**`,
+and the same tag publishes the Companion image under that version.

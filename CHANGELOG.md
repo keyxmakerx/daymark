@@ -6,6 +6,64 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+- **Stars look like stars.** Each one is a sharp point of light: a white-hot heart in its own
+  colour, paled toward white, with a tight wing of light round it the way a star's light spreads in
+  the eye, and no rays, spikes, hard edge or grey disc round it. A life event is still the one
+  bright star: brighter, with a wider wing (#474).
+- **Stars differ in brightness, the way a real sky's do, and it means nothing.** Most are faint, a
+  few burn bright, and each keeps its own brightness forever; nothing about a day, its mood or how
+  much was written changes it, and the Key says so. Even the faintest, oldest star stays plainly
+  visible. A life event is still the brightest, and the quiet sky draws every star alike (#474).
+- **The brighter stars flash red and blue as they twinkle**, the way starlight breaks into colour
+  through air: quick and faint, only while a star is flickering, never green, and never changing
+  what colour the star is. The faint stars keep a plain flicker. It stops with Motion off and in
+  the quiet sky (#474).
+- **The sky has depth behind its stars.** Behind them is space close to black, touched with your
+  sky's own colours, with lanes of dust and clouds of gas, there from the whole sky and gathering as
+  you zoom in, lit by the stars nearest them. Each layer moves a little less than the stars as you
+  pan and zoom, so the sky reads as deep. It draws no stars of its own: every star is still a
+  memory. On phones older than Android 13 the space is the soft glows of colour it was before
+  (#474).
+- **Zoomed right in, a star is a sun.** You can zoom ten times closer than before, and a star there
+  is a sphere in its own colour, with a slowly boiling surface, a few dark spots, a darker edge and
+  a corona of streamers round it. A life event is a giant sun. While Motion is off, nothing moves
+  (#474).
+- **A young sky fills the screen.** "Fit the whole sky" frames the stars you have, not all the space
+  your sky will grow into, so a few weeks of memories spread across the screen instead of sitting in
+  one corner. The view widens as your sky grows, and no star moves (#476).
+
+### Fixed
+- **Home's week strip no longer looks like an empty button.** Each day carries its weekday's
+  initial, and a day with no entry shows a faint stub, so a week with one entry reads as seven days
+  rather than a lone dot (#398).
+
+## [0.4.2] - 2026-10-24
+
+The first beta with the app attached to its release. 0.4.0 and 0.4.1 were tagged, but their
+release builds stopped before an APK was published.
+
+### Added
+- **A release whose build failed can be published again** from Actions → Release → Run workflow,
+  naming its tag, without deleting or recreating the release.
+
+### Fixed
+- **A release signed with the release key publishes.** The signing check reads the signer from
+  apksigner's output correctly, so it no longer refuses the real key.
+
+## [0.4.1] - 2026-10-24
+
+### Changed
+- **A release takes its version from its tag.** Create a release tagged `0.4.1` or `v0.4.1` and
+  the app and the Companion image are both built and published as 0.4.1; nothing else needs
+  changing first. Every 0.x release, or one with a label such as `-beta.1`, is published as a
+  pre-release.
+
+### Fixed
+- **Publishing a good Companion image no longer fails** after the push.
+
+## [0.4.0] - 2026-10-16
+
 ### If you are testing Daymark today, read this first
 The app has its permanent id now, `io.github.keyxmakerx.daymark` (#369). Android treats it as a
 different app from the one you have, so this build installs beside it, empty, and cannot read the
@@ -14,8 +72,9 @@ old one's journal. To bring your entries across:
 1. Before installing the new build, open the Daymark you use now and go to **Settings → Export
    backup**. Keep the file on your phone and do not send or upload it. It is not encrypted: every
    entry, journal page, the safety plan, the people and notes, and your photos are in it (#236).
-2. Write down what a backup does not carry: your crisis line if you changed it (**More → Gentle
-   support → Crisis resources**) and your settings. Your PIN does not carry over either.
+2. Write down what a backup does not carry: your settings. Your PIN does not carry over either.
+   A build from before the 0.4 beta also leaves out your crisis line, so if you changed it (**More →
+   Gentle support → Crisis resources**), write that down too.
 3. Install the new build. It arrives as a second app, also called Daymark, and starts empty. The old
    one keeps everything.
 4. In the new one, finish setup, then **Settings → Restore backup**, choose the file, then **Replace
@@ -48,108 +107,10 @@ a new phone?", done on one phone.
 - **A backup carries the crisis line you set**, and a restore brings it back. "Merge" never
   replaces a line you changed on this phone, and no restore ever puts the default back over yours
   (#370).
-- **A release takes its version from its tag.** Create a release tagged `0.4.1` or `v0.4.1` and
-  the app and the Companion image are both built and published as 0.4.1; nothing else needs
-  changing first. Every 0.x release, or one with a label such as `-beta.1`, is published as a
+- **One tag releases the app and the Companion image under the same version.** The release stops if
+  the tag is not the app's own version, and a tag with a label such as `-beta.1` is published as a
   pre-release.
-- **A release whose build failed can be published again** from Actions → Release → Run workflow,
-  naming its tag, without deleting or recreating the release.
 - **Each release lists its APK's SHA-256**, in the notes and as a `.sha256` file beside it (#226).
-
-### Fixed
-- **Home's week strip no longer looks like an empty button.** Each day carries its weekday's
-  initial, and a day with no entry shows a faint stub, so a week with one entry reads as seven days
-  rather than a lone dot (#398).
-- **A release can no longer be signed with the testing key.** The release stops before building
-  when a signing secret is missing, and refuses to publish an APK signed with a debug key (#224).
-- **Settings tells the truth about a forgotten PIN**: without biometrics the way back is to
-  reinstall and restore a backup, as the FAQ and privacy statement already said (#146).
-
-### Changed
-- **Stars look like stars.** Each one is a sharp point of light: a white-hot heart in its own
-  colour, paled toward white, with a tight wing of light round it the way a star's light spreads in
-  the eye, and no rays, spikes, hard edge or grey disc round it. A life event is still the one
-  bright star: brighter, with a wider wing (#474).
-- **Stars differ in brightness, the way a real sky's do, and it means nothing.** Most are faint, a
-  few burn bright, and each keeps its own brightness forever; nothing about a day, its mood or how
-  much was written changes it, and the Key says so. Even the faintest, oldest star stays plainly
-  visible. A life event is still the brightest, and the quiet sky draws every star alike (#474).
-- **The brighter stars flash red and blue as they twinkle**, the way starlight breaks into colour
-  through air: quick and faint, only while a star is flickering, never green, and never changing
-  what colour the star is. The faint stars keep a plain flicker. It stops with Motion off and in
-  the quiet sky (#474).
-- **The sky has depth behind its stars.** Behind them is space close to black, touched with your
-  sky's own colours, with lanes of dust and clouds of gas, there from the whole sky and gathering as
-  you zoom in, lit by the stars nearest them. Each layer moves a little less than the stars as you
-  pan and zoom, so the sky reads as deep. It draws no stars of its own: every star is still a
-  memory. On phones older than Android 13 the space is the soft glows of colour it was before
-  (#474).
-- **Zoomed right in, a star is a sun.** You can zoom ten times closer than before, and a star there
-  is a sphere in its own colour, with a slowly boiling surface, a few dark spots, a darker edge and
-  a corona of streamers round it. A life event is a giant sun. While Motion is off, nothing moves
-  (#474).
-- **A young sky fills the screen.** "Fit the whole sky" frames the stars you have, not all the space
-  your sky will grow into, so a few weeks of memories spread across the screen instead of sitting in
-  one corner. The view widens as your sky grows, and no star moves (#476).
-- **On/off switches can be told apart.** Every switch in the app now draws its off state with a
-  visible outline and thumb in the soft ink, where before the track was the colour of the page. On
-  is unchanged: a dark track with a light thumb. The "Undo" on a deleted entry and the chosen AM or
-  PM in a time picker now use the app's own paper colours instead of Material's lavender and pink.
-  The safety plan's lines name their ink rather than relying on Material to pick it.
-- **A goal's bar looks the same met or not.** It used to turn the "Good" mood colour once the week's
-  target was reached, which borrowed a person's own mood colour as a reward. The words
-  ("3 of 3 done") say where the goal stands.
-- **No check marks remain.** Saving a journal entry or a thought record is a "Save" text button, and
-  an activity already in your list says "Added" in words.
-- **Insights → Week is titled "Last seven days"**, which is what it shows, and the mood legend's
-  swatches carry the same ring as the dots they key.
-
-### Removed
-- **The sleep setup is gone, and so are its answers.** It asked about a bed partner, pets, noise,
-  where your phone sits and how you sleep, for sleep sensing Daymark will not build, so nothing ever
-  read the answers. They are deleted from your phone the first time the updated app opens (#356).
-- **Insights no longer marks what you logged.** The "Avg mood" card, the "this week against last"
-  card with its up and down arrows, the "In review" summary and the "Logging consistency" grid are
-  gone. An average of a mood scale reads as a grade, a week set against the last reads as a verdict,
-  and a grid of empty squares is exactly what a hard stretch looks like. "Days with an entry" stays.
-  The lists under "What goes with your mood" are now headed "Logged alongside higher moods" and
-  "Logged alongside lower moods", in plain ink, because an activity showing up alongside a mood does
-  not mean it caused it (#354, #358, #203).
-- **The "steadier stretch" and "harder stretch lately" cards are gone**, along with their switch
-  under suggestions. Both scored this month against the last by your average mood. Support after a
-  hard day is unchanged: it comes from what you log that day, and the support space is always one
-  tap away (#360).
-- **The old Stats screen**, which nothing opened and which still drew daily averages, is gone.
-- **"Review my year" ends on two plain facts, and no longer offers to save a picture of your
-  year.** The last page used to show three numbers: your average mood, your brightest month, and
-  your longest streak. Each was a way of marking a year of your life out of something — an average
-  of a mood scale is a grade, and naming your brightest month tells anyone reading it that one of
-  the others was your darkest. They are replaced by two things that rank nothing: **Most often**,
-  the mood you chose on more days than any other, in your own word for it, and **First entry**, the
-  day you started. The heading is now just the year. The same two claims appeared as a small note
-  on the quarter pages, and that note has gone with them.
-  **"Save keepsake" is removed.** It wrote your year — every mood, and the timing of everything you
-  logged — into a single image in your gallery, which is the folder most likely to be quietly
-  backed up somewhere by software you have forgotten about; and it made the unlogged stretches
-  permanent. In its place the last page says: *This stays on your phone. You can come back to it
-  any time.* Nothing you have already saved is affected.
-- **Streaks are gone, and the Achievements screen with them.** A streak is a number you can lose:
-  miss one day and it goes back to nothing, which means it is at its lowest exactly when someone
-  has been away and has just come back. Every continuity number in Daymark is now the same one —
-  **days with an entry, "12 of the last 30"** — counted without needing the days to be in a row, so
-  a missed day costs one day and nothing else. It reads the same on your phone and in the companion
-  web console. On **Stats** it is a single card labelled *Days with an entry*; on **Home** there is
-  now nothing of the sort at all, because Home is the screen you land on after time away and a
-  count there is a mark on you however gently it is phrased. If there are no entries in the last
-  thirty days the card is simply not drawn — an empty stretch is not a nought to be shown.
-  The **Achievements** screen is deleted: the screen, the nine badges, the badge art, the stored
-  record of what you had earned, and the "Streaks and milestones" switch in Settings that used to
-  turn the notices off. The app says nothing about this to anyone who had earned badges — the only
-  sentence available would be one asking you to feel something about a thing we decided was bad for
-  you, which is the same move again. Nothing else in your data is touched, and an older backup that
-  still contains unlock times restores normally; the badges in it are just not brought back.
-
-### Added
 - **The owner's browser console receives game plans.** Under Inbox, each plan from a clinician you
   have paired with is opened and checked against the key you recorded for them, then shown as a
   proposal you can accept or decline. A plan that fails a check says so and cannot be accepted, and a
@@ -479,6 +440,18 @@ a new phone?", done on one phone.
   both jobs.
 
 ### Changed
+- **On/off switches can be told apart.** Every switch in the app now draws its off state with a
+  visible outline and thumb in the soft ink, where before the track was the colour of the page. On
+  is unchanged: a dark track with a light thumb. The "Undo" on a deleted entry and the chosen AM or
+  PM in a time picker now use the app's own paper colours instead of Material's lavender and pink.
+  The safety plan's lines name their ink rather than relying on Material to pick it.
+- **A goal's bar looks the same met or not.** It used to turn the "Good" mood colour once the week's
+  target was reached, which borrowed a person's own mood colour as a reward. The words
+  ("3 of 3 done") say where the goal stands.
+- **No check marks remain.** Saving a journal entry or a thought record is a "Save" text button, and
+  an activity already in your list says "Added" in words.
+- **Insights → Week is titled "Last seven days"**, which is what it shows, and the mood legend's
+  swatches carry the same ring as the dots they key.
 - **Opening your key now has a limit on the work it takes, as well as a minimum.** Before the owner
   console, the clinician console or the phone turn your passphrase or recovery code into a key, they
   check the settings stored with it. They already refused settings weaker than the agreed strength;
@@ -652,8 +625,131 @@ a new phone?", done on one phone.
   tells nobody. There is no pop-up notification, because this half of the product runs in a browser
   tab and a closed tab cannot raise one reliably; the phone version, when it arrives, will raise one
   quiet notice that names nobody and counts nothing.
+- **"Update" is now a real word — 0.2.0.** Every CI build used to sign with a throwaway key, so
+  every install was an uninstall-and-reinstall on an app where uninstalling deletes the data. A
+  committed testing keystore (its password beside it in the clear, because this key is a channel,
+  not an identity) makes every artifact from here on update in place. One last migration is
+  required and stated honestly: export a backup, uninstall, install 0.2.0, import. Real releases
+  keep signing with the secrets-based key that never enters the repo.
+- **`DAYMARK_THERAPIST_AUTH` is now in the deployment files it always needed to be in.** It gates
+  the entire relationship surface and defaulted off — right for Solo, fatal for the other two
+  shapes — while existing only in `Config.kt`, so operators met it as a 503 at the last step of a
+  ceremony that had appeared to work. It is in `docker-compose.yml` and `.env.example` with the
+  reasoning at the call site.
+- **One place now decides whether the app may interrupt you.** Each feature used to ration its own
+  interruptions, which meant nothing could see the total: three features each politely limiting
+  themselves to "twice a week" is six. The interruption budget is asked a single question —
+  *may I interrupt, right now* — and it is deliberately **not told what about**. It has no access to
+  your mood, your writing, or which feature is asking, so it cannot become a thing that infers a
+  clinical state from your behaviour and then acts on it. It answers from how previous offers landed
+  and nothing else.
+  - **Reminders are not rationed by it**, and that is a reversal of the first implementation. A
+    reminder at 9am is one you asked for at 9am; an alarm clock that decides you have been ignoring
+    it and drops to weekly is broken, not considerate. The first cut let two unanswered firings
+    silently collapse a three-a-day schedule to one a week, with no setting anywhere to put it back.
+    Reminders now record how they landed — the budget learns from them — and fire exactly when you
+    said.
+  - Outcomes live in a new local `offer_record` table (schema **v13 → v14**, migration included).
+    It stores that the app asked and how that went. It does not store what was asked about.
+- **Companion web visuals rebuilt on a two-tier token layer.** Raw values are declared once and
+  referenced by role, so the three theme states (light, `prefers-color-scheme`, explicit toggle)
+  cannot silently disagree — a colour defined only inside a media query was previously possible and
+  is now a test failure. Four tokens that failed WCAG AA contrast were found this way and corrected,
+  including the amber used on the badge that appears on every row of the client list (3.53:1).
+  - **The mood ramp is data and only data.** Those five colours mean "this is what the person
+    logged". Using one for a button, a chart series, or a status pill makes the interface look like
+    it is agreeing or disagreeing with them, so the ramp is now unavailable outside the places that
+    render mood, enforced tree-wide rather than by convention.
+- **Dependabot now knows which upgrades this project cannot take**, so it stops reopening
+  un-mergeable PRs every week. Five of them were failing CI on repeat: Hilt 2.60.1 (Dagger ≥2.59
+  hard-requires AGP 9), Kotlin 2.4.0 (Kotlin and KSP are version-locked and bumped in separate PRs;
+  plus a KSP defect around `internal` Hilt providers), lazysodium 5.2.0 (JVM-21-only, which
+  `libs.versions.toml` had already documented in detail), and a grouped androidx PR carrying Compose
+  BOM 2024.12.01 → 2026.06.01 past the AGP 8.8.2 lint floor. Every ignore rule carries its reason
+  and its unblock condition inline, and the full constraint graph is written up in
+  [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md). GitHub Actions updates are left unconstrained — those
+  aren't failing.
+- **Room schemas are now exported through Room's own Gradle plugin** (`room { schemaDirectory(…) }`)
+  instead of the raw `ksp { arg("room.schemaLocation", …) }`, so the directory is a declared Gradle
+  task input/output rather than a path the processor writes to blind. CI additionally fails if the
+  exported schemas drift from what is committed — Room's own equality check compares only entities
+  and views, so a wrong `identityHash` in a committed schema would otherwise go unnoticed. No
+  dependency versions changed, and the existing flat schema layout is unchanged. Build-only; no
+  behaviour change in the app.
+- **Deleting an entry now asks first.** The swipe itself never deletes — a confirmation dialog
+  does, with the 5-second **Undo** snackbar still behind it. A steady drag has to cross most of the
+  row before the background turns from "Keep swiping" to "Release to delete", so a stray thumb
+  costs a tap on "Keep it" rather than a day's log. The entry editor's delete button also confirms
+  now (and says plainly that there's no undo behind that one).
+- The **"on this day" memories** card and the extra suggestion cards moved off Home to the new
+  **For you** screen, and the day-grouped timeline moved to **All entries** — Home was doing too
+  many jobs at once.
+- Renamed the app from "Daylie" to **Daymark** (package `com.daymark.app`).
+- Adopted the "modern paper" design system: paper palette, serif/sans type, and original
+  hand-drawn mood + activity icons (replacing emoji and Material icons).
+- Consolidated navigation around the unified Insights tab.
+- Snappier, directional navigation transitions; larger mood-picker tap targets.
+- Database schema is now **v12** with Room migrations, adding `assessment_results` (v10, check-in
+  scores), `cue`/`routine` on goals (v11, implementation intentions), and `thought_records` (v12,
+  CBT). The backup format is now **v12**: check-in score history, achievement unlock times,
+  goal cue/routine, and thought records all round-trip (replace **and** merge). Older backups
+  still import, and an existing single reminder is migrated automatically on upgrade.
+- The bundled wellbeing check-ins use the **exact wording** of PHQ-9, GAD-7 (free to reproduce,
+  Pfizer) and WHO-5 (© WHO, free for non-commercial use, attributed in-app). No licensed
+  instruments are bundled — see [docs/INSTRUMENTS.md](docs/INSTRUMENTS.md) for the full ledger.
+- **No new permission** was added for any of these features — the app still has no `INTERNET`
+  permission and makes no network connections.
+
+### Removed
+- **The sleep setup is gone, and so are its answers.** It asked about a bed partner, pets, noise,
+  where your phone sits and how you sleep, for sleep sensing Daymark will not build, so nothing ever
+  read the answers. They are deleted from your phone the first time the updated app opens (#356).
+- **Insights no longer marks what you logged.** The "Avg mood" card, the "this week against last"
+  card with its up and down arrows, the "In review" summary and the "Logging consistency" grid are
+  gone. An average of a mood scale reads as a grade, a week set against the last reads as a verdict,
+  and a grid of empty squares is exactly what a hard stretch looks like. "Days with an entry" stays.
+  The lists under "What goes with your mood" are now headed "Logged alongside higher moods" and
+  "Logged alongside lower moods", in plain ink, because an activity showing up alongside a mood does
+  not mean it caused it (#354, #358, #203).
+- **The "steadier stretch" and "harder stretch lately" cards are gone**, along with their switch
+  under suggestions. Both scored this month against the last by your average mood. Support after a
+  hard day is unchanged: it comes from what you log that day, and the support space is always one
+  tap away (#360).
+- **The old Stats screen**, which nothing opened and which still drew daily averages, is gone.
+- **"Review my year" ends on two plain facts, and no longer offers to save a picture of your
+  year.** The last page used to show three numbers: your average mood, your brightest month, and
+  your longest streak. Each was a way of marking a year of your life out of something — an average
+  of a mood scale is a grade, and naming your brightest month tells anyone reading it that one of
+  the others was your darkest. They are replaced by two things that rank nothing: **Most often**,
+  the mood you chose on more days than any other, in your own word for it, and **First entry**, the
+  day you started. The heading is now just the year. The same two claims appeared as a small note
+  on the quarter pages, and that note has gone with them.
+  **"Save keepsake" is removed.** It wrote your year — every mood, and the timing of everything you
+  logged — into a single image in your gallery, which is the folder most likely to be quietly
+  backed up somewhere by software you have forgotten about; and it made the unlogged stretches
+  permanent. In its place the last page says: *This stays on your phone. You can come back to it
+  any time.* Nothing you have already saved is affected.
+- **Streaks are gone, and the Achievements screen with them.** A streak is a number you can lose:
+  miss one day and it goes back to nothing, which means it is at its lowest exactly when someone
+  has been away and has just come back. Every continuity number in Daymark is now the same one —
+  **days with an entry, "12 of the last 30"** — counted without needing the days to be in a row, so
+  a missed day costs one day and nothing else. It reads the same on your phone and in the companion
+  web console. On **Stats** it is a single card labelled *Days with an entry*; on **Home** there is
+  now nothing of the sort at all, because Home is the screen you land on after time away and a
+  count there is a mark on you however gently it is phrased. If there are no entries in the last
+  thirty days the card is simply not drawn — an empty stretch is not a nought to be shown.
+  The **Achievements** screen is deleted: the screen, the nine badges, the badge art, the stored
+  record of what you had earned, and the "Streaks and milestones" switch in Settings that used to
+  turn the notices off. The app says nothing about this to anyone who had earned badges — the only
+  sentence available would be one asking you to feel something about a thing we decided was bad for
+  you, which is the same move again. Nothing else in your data is touched, and an older backup that
+  still contains unlock times restores normally; the badges in it are just not brought back.
 
 ### Fixed
+- **A release can no longer be signed with the testing key.** The release stops before building
+  when a signing secret is missing, and refuses to publish an APK signed with a debug key (#224).
+- **Settings tells the truth about a forgotten PIN**: without biometrics the way back is to
+  reinstall and restore a backup, as the FAQ and privacy statement already said (#146).
 - **A clinician no longer reads the person's own second-person band words.** The self-checks'
   bands say "your own usual" because the person takes them. On the clinician's Record page,
   Calendar, Today strip and dashboard they now read "this person's own usual". Only the display
@@ -1095,84 +1191,6 @@ a new phone?", done on one phone.
 - **Home-screen widget** (Glance) to quick-log a mood.
 - **Export PDF report** — a printable report with a SHA-256 + QR authenticity stamp.
 - **First-run onboarding wizard** (skippable): daily-reminder setup, optional PIN lock.
-
-### Changed
-- **"Update" is now a real word — 0.2.0.** Every CI build used to sign with a throwaway key, so
-  every install was an uninstall-and-reinstall on an app where uninstalling deletes the data. A
-  committed testing keystore (its password beside it in the clear, because this key is a channel,
-  not an identity) makes every artifact from here on update in place. One last migration is
-  required and stated honestly: export a backup, uninstall, install 0.2.0, import. Real releases
-  keep signing with the secrets-based key that never enters the repo.
-- **`DAYMARK_THERAPIST_AUTH` is now in the deployment files it always needed to be in.** It gates
-  the entire relationship surface and defaulted off — right for Solo, fatal for the other two
-  shapes — while existing only in `Config.kt`, so operators met it as a 503 at the last step of a
-  ceremony that had appeared to work. It is in `docker-compose.yml` and `.env.example` with the
-  reasoning at the call site.
-- **One place now decides whether the app may interrupt you.** Each feature used to ration its own
-  interruptions, which meant nothing could see the total: three features each politely limiting
-  themselves to "twice a week" is six. The interruption budget is asked a single question —
-  *may I interrupt, right now* — and it is deliberately **not told what about**. It has no access to
-  your mood, your writing, or which feature is asking, so it cannot become a thing that infers a
-  clinical state from your behaviour and then acts on it. It answers from how previous offers landed
-  and nothing else.
-  - **Reminders are not rationed by it**, and that is a reversal of the first implementation. A
-    reminder at 9am is one you asked for at 9am; an alarm clock that decides you have been ignoring
-    it and drops to weekly is broken, not considerate. The first cut let two unanswered firings
-    silently collapse a three-a-day schedule to one a week, with no setting anywhere to put it back.
-    Reminders now record how they landed — the budget learns from them — and fire exactly when you
-    said.
-  - Outcomes live in a new local `offer_record` table (schema **v13 → v14**, migration included).
-    It stores that the app asked and how that went. It does not store what was asked about.
-- **Companion web visuals rebuilt on a two-tier token layer.** Raw values are declared once and
-  referenced by role, so the three theme states (light, `prefers-color-scheme`, explicit toggle)
-  cannot silently disagree — a colour defined only inside a media query was previously possible and
-  is now a test failure. Four tokens that failed WCAG AA contrast were found this way and corrected,
-  including the amber used on the badge that appears on every row of the client list (3.53:1).
-  - **The mood ramp is data and only data.** Those five colours mean "this is what the person
-    logged". Using one for a button, a chart series, or a status pill makes the interface look like
-    it is agreeing or disagreeing with them, so the ramp is now unavailable outside the places that
-    render mood, enforced tree-wide rather than by convention.
-- **Dependabot now knows which upgrades this project cannot take**, so it stops reopening
-  un-mergeable PRs every week. Five of them were failing CI on repeat: Hilt 2.60.1 (Dagger ≥2.59
-  hard-requires AGP 9), Kotlin 2.4.0 (Kotlin and KSP are version-locked and bumped in separate PRs;
-  plus a KSP defect around `internal` Hilt providers), lazysodium 5.2.0 (JVM-21-only, which
-  `libs.versions.toml` had already documented in detail), and a grouped androidx PR carrying Compose
-  BOM 2024.12.01 → 2026.06.01 past the AGP 8.8.2 lint floor. Every ignore rule carries its reason
-  and its unblock condition inline, and the full constraint graph is written up in
-  [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md). GitHub Actions updates are left unconstrained — those
-  aren't failing.
-- **Room schemas are now exported through Room's own Gradle plugin** (`room { schemaDirectory(…) }`)
-  instead of the raw `ksp { arg("room.schemaLocation", …) }`, so the directory is a declared Gradle
-  task input/output rather than a path the processor writes to blind. CI additionally fails if the
-  exported schemas drift from what is committed — Room's own equality check compares only entities
-  and views, so a wrong `identityHash` in a committed schema would otherwise go unnoticed. No
-  dependency versions changed, and the existing flat schema layout is unchanged. Build-only; no
-  behaviour change in the app.
-- **Deleting an entry now asks first.** The swipe itself never deletes — a confirmation dialog
-  does, with the 5-second **Undo** snackbar still behind it. A steady drag has to cross most of the
-  row before the background turns from "Keep swiping" to "Release to delete", so a stray thumb
-  costs a tap on "Keep it" rather than a day's log. The entry editor's delete button also confirms
-  now (and says plainly that there's no undo behind that one).
-- The **"on this day" memories** card and the extra suggestion cards moved off Home to the new
-  **For you** screen, and the day-grouped timeline moved to **All entries** — Home was doing too
-  many jobs at once.
-- Renamed the app from "Daylie" to **Daymark** (package `com.daymark.app`).
-- Adopted the "modern paper" design system: paper palette, serif/sans type, and original
-  hand-drawn mood + activity icons (replacing emoji and Material icons).
-- Consolidated navigation around the unified Insights tab.
-- Snappier, directional navigation transitions; larger mood-picker tap targets.
-- Database schema is now **v12** with Room migrations, adding `assessment_results` (v10, check-in
-  scores), `cue`/`routine` on goals (v11, implementation intentions), and `thought_records` (v12,
-  CBT). The backup format is now **v12**: check-in score history, achievement unlock times,
-  goal cue/routine, and thought records all round-trip (replace **and** merge). Older backups
-  still import, and an existing single reminder is migrated automatically on upgrade.
-- The bundled wellbeing check-ins use the **exact wording** of PHQ-9, GAD-7 (free to reproduce,
-  Pfizer) and WHO-5 (© WHO, free for non-commercial use, attributed in-app). No licensed
-  instruments are bundled — see [docs/INSTRUMENTS.md](docs/INSTRUMENTS.md) for the full ledger.
-- **No new permission** was added for any of these features — the app still has no `INTERNET`
-  permission and makes no network connections.
-
-### Fixed
 - **Companion — withdrawing a share now says when a copy could not be removed.** The store used
   to mark the rows and swallow every failure to delete the ciphertext files, so "withdrawn" read
   as complete while the bytes stayed on the volume. The count of copies that would not delete now

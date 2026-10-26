@@ -463,5 +463,10 @@ Smaller decisions were made in GitHub issues and are recorded there:
 - **#301:** the one group smaller than a practice is a person's own care team.
 - **#305:** a report is a copy you hand over, and a share is access you can end.
 - **#310:** it stays Daymark Companion, with each page named for who uses it.
+- **#386:** a clinician's accepted plans, the person's progress on them and their results go into
+  the backup and the synced copy. Not built yet: #478.
+- **#413:** the sync app trusts only the certificate authorities Android ships with, never one a
+  person installed; a home-only server uses a real hostname with a Let's Encrypt (DNS-01) or
+  Tailscale certificate.
 
 How pairing works, including the pairing rules above, is in `docs/COMPANION_PAIRING.md`.

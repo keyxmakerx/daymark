@@ -32,6 +32,15 @@ class SetupModeDeploymentTest {
     }
 
     @Test
+    fun `compose passes the administrator reset from dot-env, off when unset`() {
+        // Config reads DAYMARK_ADMIN_RESET; without this line a reset written in .env did nothing.
+        val compose = deploymentFile("docker-compose.yml")
+        assertEquals(listOf("\${DAYMARK_ADMIN_RESET:-}"), composeValues(compose, "DAYMARK_ADMIN_RESET"))
+        assertEquals(false, Config.fromEnv(mapOf("DAYMARK_ADMIN_RESET" to "")).adminReset)
+        assertEquals(true, Config.fromEnv(mapOf("DAYMARK_ADMIN_RESET" to "1")).adminReset)
+    }
+
+    @Test
     fun `the example environment starts, and chooses solo`() {
         val example = envValues(deploymentFile(".env.example"))
         // What the container sees: each setting compose passes through, empty when .env leaves it out.

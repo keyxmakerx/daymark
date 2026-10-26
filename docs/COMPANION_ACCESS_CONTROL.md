@@ -104,8 +104,8 @@ of its own ([Cross‑provider sharing & referrals](#cross-provider-sharing--refe
 
 On a server that runs one practice, one person may hold the platform sysadmin role and the org admin
 role, as two separate roles (#208). That is not the god admin: neither role carries a key, and
-content still needs a patient's grant. Not built: #314 and #322, which give an administrator an
-account of their own.
+content still needs a patient's grant. The server administrator's own account is built (#322).
+Not built: a practice administrator's, #314.
 
 ## Consent model
 
@@ -219,7 +219,7 @@ compliant when they run it right.
   expiry, shipped), encryption/decryption (E2E, shipped).
 - **Audit controls** — the hash‑chained, metadata‑only audit log (shipped), per
   relationship and, separately, per practice for the org admin's review (shipped).
-- **Integrity** — signed grants (shipped); signed snapshot manifests (not built: #138);
+- **Integrity** — signed grants (shipped); signed snapshot manifests (not built: #179);
   clinician notes append‑only/amendable (not built: #300).
 - **Person/entity authentication** — a six‑digit code at sign‑in (shipped);
   passkey sign‑in for every account, with codes kept as the fallback (#205; not

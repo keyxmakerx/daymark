@@ -25,12 +25,13 @@ connect to. Its surface is on-device:
 - Handling of backup/export files and imported data.
 - Local data-at-rest protections and exported Android components (activity, receivers, widget).
 
-**The `sync` build and the Companion are in scope, and are unreleased.** The `sync` flavor is a
-separate, opt-in build with its own application id (`.sync` suffix); a `foss` install can never
-be updated into it. It is meant to talk to a Companion server (`companion/server`), whose web
-consoles (`companion/web`) already work on their own; the phone's half is not built yet (#138). No
-`sync` build has been tagged, so fixes for this surface target `main` only, and reports against it
-are welcome now. The design assumes the server is untrusted: it must never see journal content, its
+**The `sync` build and the Companion are in scope.** The `sync` flavor is a separate, opt-in build
+with its own application id (`.sync` suffix); a `foss` install can never be updated into it. It
+talks to a Companion server (`companion/server`), whose web consoles (`companion/web`) also work on
+their own: it pairs, sends and fetches an encrypted copy, pairs with clinicians and receives their
+game plans; the rest of the phone's half is #138. No `sync` APK has been released, so fixes to it
+target `main`. The Companion image is published with every release tag, so fixes to the server and
+consoles target `main` and ship in the next release. Reports against either are welcome now. The design assumes the server is untrusted: it must never see journal content, its
 logs must never carry content, and it vouches for no key it relays. A report showing any of those
 does not hold is the one we most want. The Companion's threat model is
 [docs/COMPANION_SECURITY.md](docs/COMPANION_SECURITY.md).

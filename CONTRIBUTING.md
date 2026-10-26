@@ -98,8 +98,35 @@ example. Break anything load-bearing on purpose and confirm the test that names 
   someone who was not there.
 - One focused change per pull request. Say what and why, include screenshots for UI changes, update
   `CHANGELOG.md` under *Unreleased*, and name the issue it closes.
-- Automated agents work on `claude/*` branches, never push to `main`, and never add a
-  `Signed-off-by` line (see below).
+- Automated agents work on `claude/*` branches, never push to `main`, open a pull request only
+  when the maintainer asks, and never add a `Signed-off-by` line (see below).
+
+## Releasing
+
+For the maintainer. One tag releases both the app and the Companion image under the same version.
+
+**Once:** in GitHub → Settings → Secrets and variables → Actions, add `KEYSTORE_BASE64` (the
+release keystore as one line of base64, from `base64 -w0 daymark-release.keystore`),
+`KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD`. After the first image is published, make the
+`daymark-companion` package public (companion/README.md, Published image).
+
+**Each release:**
+1. Move what is under *Unreleased* in `CHANGELOG.md` into a section named for the version and date,
+   and merge it to `main`.
+2. Create a GitHub release with a new tag such as `0.4.3` (a leading `v` is fine). The version comes
+   from the tag; no file needs changing. Every 0.x version, or one with a label such as `-beta.1`, is
+   published as a pre-release.
+3. Watch Actions → Release. It stops before building if a signing secret is missing, and refuses an
+   APK that declares `INTERNET` or is signed with the testing key. When it passes, the release has
+   `app-foss-release.apk` and its `.sha256` attached, and the SHA-256 in its notes.
+4. Actions → Companion publishes `ghcr.io/keyxmakerx/daymark-companion:<version>` for amd64 and arm64
+   from the same tag.
+
+**If a run fails:** fix the cause on `main`, then Actions → Release → Run workflow, typing the same
+tag. Nothing needs deleting or re-tagging. For the image, Actions → Companion → Run workflow with the
+tag chosen as the ref.
+
+Only the `foss` APK is published; the `sync` build has no release path yet (#342).
 
 ## Developer Certificate of Origin
 
