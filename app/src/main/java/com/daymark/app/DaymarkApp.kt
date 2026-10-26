@@ -31,8 +31,14 @@ class DaymarkApp : Application() {
     override fun onCreate() {
         super.onCreate()
         reminderScheduler.createChannel()
-        // One-time import of the legacy single reminder for upgrading users.
-        scope.launch { reminderRepository.migrateLegacyReminderIfNeeded() }
+        // One-time import of the legacy single reminder for upgrading users, then every reminder
+        // re-armed: a force-stop, an update or a swallowed error can clear an alarm, and the boot
+        // receiver alone left it dead until the phone restarted (#484). Arming sets only the next
+        // time the person chose; the engine's easing lives elsewhere and is not touched.
+        scope.launch {
+            runCatching { reminderRepository.migrateLegacyReminderIfNeeded() }
+            runCatching { reminderRepository.rescheduleAll() }
+        }
         // The old sleep setup's answers, which nothing reads (#356).
         scope.launch { RetiredSleepSetup.forget(prefs) }
         trackerCheckIns.createChannels()

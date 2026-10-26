@@ -78,12 +78,19 @@ entry with its activities and people. The swipe on its own never deletes anythin
 delete button also asks, and says there is no undo behind it. [ARCHITECTURE.md](ARCHITECTURE.md) §6
 has the rules for changing any of this.
 
+Leaving an editor never loses writing silently (#486). In the entry and goal editors the back arrow
+and the system Back gesture both ask "Save your changes?" when something changed, with **Save**
+(when the form can be saved) and **Leave without saving**. In the journal and thought-record editors
+both save, as the arrow always did. The bin in the journal, thought-record and goal editors asks
+before deleting. Turning the phone no longer brings back the PIN screen, and an app the system
+restarted in the background starts locked.
+
 ### 1.5 Suggestions
 
 Suggestion cards are chosen by fixed rules over the person's own data
 ([ARCHITECTURE.md](ARCHITECTURE.md) §5): an offer to take a moment after a hard day, a self-check
-that is due, what tends to go with their mood, and On this day. No card sets one stretch of time against
-another (#203).
+that is due, and On this day. No card sets one stretch of time against another (#203), and no card
+pairs an activity with a mood or names one of the person's activities (#483, [DECISIONS.md](DECISIONS.md) §D6).
 Every card has a menu:
 
 - *Not right now*: gone for this visit only. Nothing is stored.
@@ -127,10 +134,10 @@ entries are stars in the Sky (§4), and reach the PDF report only when the perso
   September: Good, Meh"), or "nothing recorded". Tapping a day opens its entries. **Year** is either a
   night-card of stars or a grid of coloured squares (Year in Pixels, also under More), and leads to
   **Review my year**.
-- **What goes with your mood** ranks activities that appear in at least 5 entries into "Logged
-  alongside higher moods" and "Logged alongside lower moods", both in ink, and lists trackers that have values on at least 14 days with a mood.
-  It is computed on the phone and always labelled "association, not cause". People and communities
-  never reach it (§11.2).
+- **Average mood by activity** sets each of the eight most-logged activities beside the average
+  mood of the entries that carry it, listed by name and never best-first. Nothing ranks activities
+  or trackers by mood, and no `r` is shown: the person reads the table and draws their own
+  conclusion ([DECISIONS.md](DECISIONS.md) §D6, #483). People and communities never reach it (§11.2).
 - **By day of week** and **by time of day**.
 - Nothing on the tab grades what it shows: no average mood as a headline, no period set against
   the one before it, no recap and no grid of how consistently someone logs. "Days with an entry"
@@ -179,9 +186,8 @@ changed for 30 days, and **Reset my sky** grows it again. Every rule the Sky kee
 ## 6. Trackers
 
 Custom trackers record anything next to mood, as a **scale**, a **number** with a unit, or **yes /
-no**. Each has a history and an average. A tracker with values on at least 14 days that also have a
-mood appears in "What goes with your mood" (§3). Do one thing and Move keep their own trackers
-(Enjoyment, Mastery, Movement minutes), so those show up against mood too. **Show in my sky**, off
+no**. Each has a history and an average. Do one thing and Move keep their own trackers
+(Enjoyment, Mastery, Movement minutes). **Show in my sky**, off
 until the person switches it on, makes a tracker an object of its own in their sky
 ([SKY.md](SKY.md) §3.9).
 
@@ -242,7 +248,10 @@ All under More. None of them is treatment.
 
 A calm screen for a hard moment. It opens with an acknowledgement, then offers a menu: move a
 little, breathe, untangle a thought, write it out, do one small thing, the person's safety plan
-(only once one has something in it, §8), crisis resources, and "Not right now".
+(only once one has something in it, §8), crisis resources, and "Not right now". The menu is the same
+for everyone. "Do one small thing" offers three steps from the Do one thing list (a shower, a warm
+drink, stepping outside), and "Move a little" offers a short stretch; neither ever names one of the
+person's own activities (#483).
 
 It is reached from the "Want to take a moment?" suggestion after a low-mood entry that day, and
 through **Gentle support** (More → Gentle support), which can preview it and is otherwise off until
@@ -290,11 +299,20 @@ recommending, never setting, how often the support space is offered: #172.
   with "Use a different number" on the crisis screen. Onboarding asks about it straight after the
   welcome ("If things get hard"): the line is shown with **This one is right**, **Use a different
   line** and **Not now**. It is never guessed from the phone's region or location, and a blank name
-  or number is never saved. The screen says Daymark cannot call for anyone
-  and is not a crisis service, and to call the local emergency number in immediate danger.
-- **Always reachable.** In every support menu, after the ways to cope and the safety plan, never
-  dismissible, untouched by suggestion
-  settings.
+  or contact is never saved. Someone who set Daymark up before onboarding asked is asked once, on
+  Home, with the same three answers; any answer ends it (#482).
+- **Call and Text.** The line has a number of its own, apart from the free-text contact, and once
+  the person has confirmed the line (kept it when asked, or typed their own) the crisis screen shows
+  **Call** and, where the line takes texts, **Text**. Each opens the phone's own dialer or messages
+  app with the number filled in (`ACTION_DIAL`, `ACTION_SENDTO`), which needs no permission: Daymark
+  never places a call or sends a message, and the person presses call themselves. Until the line is
+  confirmed it is shown as text with **This one is right**. A backup carries the number with the
+  line, and an older backup without one restores the line as text.
+  The screen says Daymark never places a call and is not a crisis service, and to call the local
+  emergency number in immediate danger.
+- **Always reachable.** First on More ("If things feel like too much"), never behind an opt-in;
+  in every support menu, after the ways to cope and the safety plan, never dismissible, untouched
+  by suggestion settings.
 - **Tiered, not a cliff.** The support menu offers ways to cope first, then the person's own plan
   and the people in it, then the crisis resource, which is always one tap away. The handoff is warm,
   never an abrupt list of numbers.
@@ -440,12 +458,19 @@ times and has no page, so offer once. Not built: #156.
 
 - Settings → Reminders holds as many as the person likes, each with a time, an optional label and
   an on/off switch. First-run setup offers one. Android 13 and later ask for notification permission
-  the first time. Reminders fire at the exact time where Android allows it, and are re-armed after a
-  restart.
+  the first time. Reminders fire at the exact time where Android allows it; where it does not (the
+  exact-alarm permission is off by default on Android 14), they fall back to an alarm Doze still
+  lets fire, as do Try later and tracker check-ins. Every reminder is re-armed whenever the app
+  starts and after a restart, and a fired reminder is re-armed before its notification is shown,
+  so nothing that goes wrong showing it can stop tomorrow's (#484). Re-arming sets the next time the
+  person chose and leaves the engine's easing as it was.
 - A reminder's notification, or its **Log now** action, opens a fresh entry. Its line is one of the
   fixed, human-written openers (§13.3), in turn.
 - **Try later** sends one more nudge for that reminder an hour later. **Stop asking** switches that
-  reminder off; switching it back on in Settings → Reminders undoes it (#195).
+  reminder off; switching it back on in Settings → Reminders undoes it (#195). Home then says, in
+  one quiet line, that the reminder is off and that it was switched off from a notification, with a
+  link to Settings → Reminders and **Hide this**. It never offers to turn the reminder back on
+  (§D1b), and it goes once the reminder is on again (#484).
 - **The rules engine decides which firings are posted** (`stats/CheckInEngine.kt`,
   [DECISIONS.md](DECISIONS.md) §D1, §D1a). The alarms always fire at the times the person set; the
   engine only lets some of them through. While reminders are answered, every one is posted. Every
@@ -459,7 +484,12 @@ times and has no page, so offer once. Not built: #156.
   own state is kept in the app's preferences (`data/CheckInStateStore.kt`).
 - **Easing off is the person's choice.** Setting the first reminder, in onboarding or in Settings →
   Reminders, asks *"Ease off if I'm not answering"* or *"Keep reminding me at these times"*, with
-  nothing chosen until the person picks. Kept, reminders come at every time set, never fewer and
+  nothing chosen until the person picks. In onboarding the two answers are the buttons that switch
+  the reminder on. "Keep" says it suits medication, forgetting, or wanting a steady record. Anyone
+  whose reminder or tracker check-ins were set up before the question existed is asked once on
+  Home, for the reminder and each such tracker; until they answer, and after **Not now**, nothing
+  changes. A tracker restored from a backup under a new id is asked once more. A backup carries the
+  reminders' answer, as it carries each tracker's (#484). Kept, reminders come at every time set, never fewer and
   never more, and no longer wait is tried. Settings → Reminders shows the answer and changes it;
   a change starts the engine over from the person's schedule (§D1a).
 
@@ -525,6 +555,8 @@ decisions rather than a reading of the current moment: #162.
   in my sky*, people and the notes about them, group sharing defaults, custom mood names and colours, the crisis line the person
   set (#370), and photos embedded in the file. "Replace all" takes the file's crisis line; "Merge"
   takes it only while the phone still shows the default; a file without one leaves the phone's.
+  The crisis line's number travels with it (#482), and so does the reminders' answer to "ease off
+  or keep", on the same terms (#484).
 - **Not in a backup:** the reception ledger, by design (§13.2); suggestion settings (#191); the
   latest sleep self-check results; app settings and
   the PIN; and, in the `sync` build, the game plans and suggestions accepted from a clinician, their
@@ -532,7 +564,10 @@ decisions rather than a reading of the current moment: #162.
   that is built (#478) they do not travel.
 - **Restore** (Settings → Restore backup) either replaces everything or merges the file alongside
   what is there, with fresh ids. An older backup still reads. A backup from a newer version of the
-  app is refused.
+  app is refused. A replace that fails part-way leaves what was there: the database rolls back in
+  one transaction, the file's photos are written to a staging folder and swapped in only after it
+  commits, and every reminder and tracker check-in is re-armed whether the restore succeeded or
+  not (#487).
 - **CSV** (Settings → Export as CSV): date, time, mood, activities and note for every entry.
 - **PDF report** (Settings → Export a PDF report, "A printable copy to hand to a clinician. Not
   encrypted.") has four sides, each with one job ([DECISIONS.md](DECISIONS.md) §D8): the glance, the
@@ -542,8 +577,9 @@ decisions rather than a reading of the current moment: #162.
   inference about the person. It carries no tick: a finished project step says "done". Every word is
   printed in dark ink or the soft ink, at least 5.77:1 on the white page. The dialog opens with "A report is a copy. Once handed over, it cannot
   be taken back." — the report's own fixed copy, not a second wording — then offers a date range (90
-  days by default), check-in notes (off by default), charts (on), and "Choose journal entries to
-  include", off by default. With check-in notes off, side 2 says "Check-in notes were
+  days by default), check-in notes (off by default), charts (on), "Include mood beside each
+  activity" (off by default; when on, side 2 lists each activity's average mood by name, never
+  best-first, #483), and "Choose journal entries to include", off by default. With check-in notes off, side 2 says "Check-in notes were
   switched off for this export." and neither of its tables has a note column; the daily check-ins
   keep their activity tags under a head of their own. "Next" leads to one flow
   (`ui/export/ReportExportScreen.kt`). With journal entries switched on, it opens the picker first

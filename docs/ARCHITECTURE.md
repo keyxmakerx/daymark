@@ -182,22 +182,20 @@ model.
 
 | Kind | Rank | Where | When |
 |---|---|---|---|
-| `support_offer` | 100 | Home | A mood of Awful or Bad today |
+| `support_offer` | 100 | Home | Any entry today logged Awful or Bad (the lowest, never the average: #482) |
 | `prompt_log_today` | 85 | Home | Nothing logged today; drawn as Home's check-in row, not a card |
 | `checkin_due` | 54 | Home, Insights | A PHQ-9, GAD-7 or WHO-5 check-in is due |
 | `on_this_day` | 44 | Home | Entries on this date in earlier years; drawn by the memories card |
-| `lift_factor` | 40 and up | Home, Insights | An activity that goes with better moods; offers to make a goal |
-| `drag_factor` | 35 and up | Insights only | An activity that goes with lower moods |
 
 Home shows only the top card; More for you shows the rest; Insights has its own strip. The "what
-might help" menu (`Signals.supportMenu`) is separate and always complete: move, breathe, a thought
-record, journal, and crisis resources, never dismissible. Working out the cards writes
+might help" menu (`Signals.supportMenu`) is separate, always complete and the same for everyone:
+breathe, move, a thought record, journal, and crisis resources last, never dismissible. No rule is
+given an activity, so no card can pair one with a mood or name one (§D6, #483). Working out the cards writes
 nothing; the only write is a control the person taps.
 
 **Suggestion controls** (what the person sees: [FEATURES.md](FEATURES.md) §1.5) are pure rules in
 `stats/SuggestionControls.kt`, stored by `data/SuggestionControlsStore.kt`. They apply per group, so
-a switch reads as plain English: support offers, self-check reminders, what goes with your mood,
-and On this day. "Show less" subtracts a fixed 12 from the rank, at most
+a switch reads as plain English: support offers, self-check reminders and On this day. "Show less" subtracts a fixed 12 from the rank, at most
 three times. Turning a group on clears the switch, the snooze and the damping together, so nothing
 can be on and still invisible. A group exists only if its switch visibly does something, and a unit
 test asserts that every dismissible kind has one. On this day draws its own card, so its screen

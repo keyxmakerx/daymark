@@ -116,7 +116,10 @@ class MainActivity : FragmentActivity() {
                 journalState = withContext(Dispatchers.IO) { journalEncryption.prepare() }
             }
 
-            var unlocked by remember { mutableStateOf(false) }
+            // Held in a ViewModel: it survives a rotation, which used to drop the person back on
+            // the PIN screen mid-entry, and never survives the process, so a restored app starts
+            // locked (#486). rememberSaveable would have carried "unlocked" through process death.
+            val unlockState: UnlockState = androidx.lifecycle.viewmodel.compose.viewModel()
             // Local state so finishing the wizard advances immediately (the prefs-change
             // flow re-emits the same instance, which doesn't trigger recomposition).
             var onboarded by remember { mutableStateOf(settings.onboardingComplete) }
@@ -131,7 +134,7 @@ class MainActivity : FragmentActivity() {
                             Lifecycle.Event.ON_STOP -> autoLock.onBackgrounded()
                             Lifecycle.Event.ON_START -> {
                                 if (autoLock.shouldLockOnForeground(settings.autoLockTimeoutMinutes)) {
-                                    unlocked = false
+                                    unlockState.unlocked = false
                                 }
                             }
                             else -> {}
@@ -168,12 +171,17 @@ class MainActivity : FragmentActivity() {
                                 }
                             },
                         )
-                        !onboarded -> OnboardingScreen(onFinish = { unlocked = true; onboarded = true })
-                        lockEnabled && !unlocked -> LockScreen(onUnlocked = { unlocked = true })
+                        !onboarded -> OnboardingScreen(onFinish = { unlockState.unlocked = true; onboarded = true })
+                        lockEnabled && !unlockState.unlocked -> LockScreen(onUnlocked = { unlockState.unlocked = true })
                         else -> DaymarkAppScaffold(initialMood = initialMood, openEditor = openEditor, openTracker = openTracker)
                     }
                 }
             }
         }
     }
+}
+
+/** Whether the lock has been passed in this process. Survives a rotation; dies with the process. */
+class UnlockState : androidx.lifecycle.ViewModel() {
+    var unlocked by mutableStateOf(false)
 }

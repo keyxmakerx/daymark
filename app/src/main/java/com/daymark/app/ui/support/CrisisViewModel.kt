@@ -16,8 +16,22 @@ class CrisisViewModel @Inject constructor(
     private val _resource = MutableStateFlow(store.get())
     val resource: StateFlow<CrisisStore.Resource> = _resource.asStateFlow()
 
-    fun save(label: String, contact: String) {
-        store.save(label, contact)
+    /** Whether the person has said the line is right for them; the Call button waits on it (#482). */
+    private val _confirmed = MutableStateFlow(store.confirmed)
+    val confirmed: StateFlow<Boolean> = _confirmed.asStateFlow()
+
+    fun save(label: String, contact: String, number: String?, takesTexts: Boolean) {
+        store.save(label, contact, number, takesTexts)
+        refresh()
+    }
+
+    fun confirm() {
+        store.confirm()
+        refresh()
+    }
+
+    private fun refresh() {
         _resource.value = store.get()
+        _confirmed.value = store.confirmed
     }
 }

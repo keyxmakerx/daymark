@@ -255,7 +255,6 @@ private val CONTROL_ITEMS: List<Pair<SuggestionControls.Action?, String>> = list
 
 /** Fixed button labels per action (no generated text). Null = no action button. */
 private fun actionLabel(action: Signals.Action?): String? = when (action) {
-    is Signals.Action.CreateGoalFromFactor -> "Make it a goal"
     is Signals.Action.TakeCheckin -> "Take the check-in"
     Signals.Action.OpenSupport -> "Take a moment"
     Signals.Action.OpenBreathing -> "Breathe"

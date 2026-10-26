@@ -225,36 +225,11 @@ fun InsightsScreen(
             }
         }
 
-        // --- Correlations & patterns (associations, not causes) ---
+        // --- Patterns (association, not cause) ---
         // No period is set against another, and no view grades how consistently someone logs (#203).
-        if (extras.topUp.isNotEmpty() || extras.topDown.isNotEmpty()) {
-            SectionCard("What goes with your mood") {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        "Things logged alongside higher or lower moods. This shows association, not cause.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (extras.topUp.isNotEmpty()) {
-                        FactorList("Logged alongside higher moods", extras.topUp)
-                    }
-                    if (extras.topDown.isNotEmpty()) {
-                        FactorList("Logged alongside lower moods", extras.topDown)
-                    }
-                    extras.trackerCorrelations.takeIf { it.isNotEmpty() }?.let { corrs ->
-                        Text("Trackers", style = MaterialTheme.typography.labelLarge)
-                        corrs.forEach { c ->
-                            val dir = if (c.r >= 0) "higher mood" else "lower mood"
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("${c.name} (${c.n}d)")
-                                Text("$dir  r=${String.format(Locale.getDefault(), "%+.2f", c.r)}")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
+        // Nothing here ranks activities or trackers by the moods logged beside them: that ranking
+        // is the generated insight DECISIONS.md §D6 does not build (#483). The table above sets each
+        // activity beside its average, by name, and the person draws their own conclusion.
         if (extras.dayOfWeek.isNotEmpty()) {
             SectionCard("By day of week") {
                 LabeledMoodBars(
@@ -274,21 +249,6 @@ fun InsightsScreen(
                         extras.timeOfDay[b]?.let { b.label to it }
                     },
                 )
-            }
-        }
-    }
-}
-
-@Composable
-// Drawn in ink: the headings describe association, and a mood colour on them would mark one list
-// as the good one (#358).
-private fun FactorList(title: String, rows: List<FactorRow>) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title, style = MaterialTheme.typography.labelLarge)
-        rows.forEach { r ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("${r.name} (${r.n})")
-                Text(String.format(Locale.getDefault(), "%+.1f", r.delta))
             }
         }
     }

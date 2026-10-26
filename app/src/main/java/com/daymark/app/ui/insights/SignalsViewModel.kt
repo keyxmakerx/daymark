@@ -7,22 +7,20 @@ import com.daymark.app.data.EntryRepository
 import com.daymark.app.data.SuggestionControlsStore
 import com.daymark.app.data.entity.AssessmentResult
 import com.daymark.app.data.entity.EntryWithActivities
-import com.daymark.app.stats.MoodCorrelations
 import com.daymark.app.stats.Signals
 import com.daymark.app.stats.SuggestionControls
 import com.daymark.app.ui.assessments.Assessments
 import com.daymark.app.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.time.LocalDate
 import javax.inject.Inject
-import kotlin.math.roundToInt
 
 /**
  * Derives [Signals.Inputs] from locally-stored data and runs the [Signals] rules engine, exposing
@@ -66,28 +64,11 @@ class SignalsViewModel @Inject constructor(
     }
 
     /**
-     * The "what might help" support menu, ordered & lightly personalised (movement rises when it's
-     * a known lift). Deliberately separate from [signals]: it is always available even with no
-     * history, so the support space is never empty.
+     * The "what might help" support menu, fixed and the same for everyone (#483). Deliberately
+     * separate from [signals]: it is always available even with no history, so the support space
+     * is never empty.
      */
-    val supportSignals: StateFlow<List<Signals.Signal>> = entryRepository.observeAll()
-        .map { entries -> Signals.supportMenu(topFactors(entries).first) }
-        .flowOn(Dispatchers.Default)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    /** Strongest positive and negative factor associations past the sample gate (lift to drag). */
-    private fun topFactors(
-        entries: List<EntryWithActivities>,
-    ): Pair<Signals.FactorLift?, Signals.FactorLift?> {
-        val pairs = entries.map { it.entry.moodLevel to it.activities.map { a -> MoodCorrelations.FactorId.ofActivity(a.id) } }
-        val nameById = entries.flatMap { it.activities }.associate { MoodCorrelations.FactorId.ofActivity(it.id) to it.name }
-        val (up, down) = MoodCorrelations.rankLifts(
-            MoodCorrelations.factorDeltas(pairs, MIN_OCCURRENCES), topN = 1,
-        )
-        fun lift(d: MoodCorrelations.FactorDelta?) =
-            d?.let { nameById[it.id]?.let { name -> Signals.FactorLift(name, it.delta, it.n) } }
-        return lift(up.firstOrNull()) to lift(down.firstOrNull())
-    }
+    val supportSignals: StateFlow<List<Signals.Signal>> = MutableStateFlow(Signals.supportMenu())
 
     private fun buildInputs(
         entries: List<EntryWithActivities>,
@@ -96,8 +77,7 @@ class SignalsViewModel @Inject constructor(
     ): Signals.Inputs {
         if (entries.isEmpty()) {
             return Signals.Inputs(
-                totalEntries = 0, avgMood = null, moodTodayLevel = null, loggedToday = false,
-                topLift = null, topDrag = null,
+                totalEntries = 0, avgMood = null, lowestMoodToday = null, loggedToday = false,
                 dueCheckin = null, onThisDayNote = null,
             )
         }
@@ -106,19 +86,14 @@ class SignalsViewModel @Inject constructor(
         val byDay = entries.groupBy { DateUtils.toLocalDate(it.entry.dateTime) }
         val days = byDay.keys
 
-        val todayLevels = byDay[today]?.map { it.entry.moodLevel }
-        val moodTodayLevel = todayLevels?.average()?.roundToInt()?.coerceIn(1, 5)
-
-        // Strongest positive / negative factor associations (past the sample gate).
-        val (topLift, topDrag) = topFactors(entries)
+        // The lowest entry today, never the average, so a mixed day keeps its offer (#482).
+        val lowestMoodToday = Signals.lowestMoodToday(byDay[today].orEmpty().map { it.entry.moodLevel })
 
         return Signals.Inputs(
             totalEntries = entries.size,
             avgMood = levels.average(),
-            moodTodayLevel = moodTodayLevel,
+            lowestMoodToday = lowestMoodToday,
             loggedToday = days.contains(today),
-            topLift = topLift,
-            topDrag = topDrag,
             dueCheckin = dueCheckin(entries.size, assessments, nowMillis),
             onThisDayNote = onThisDayNote(byDay, today),
         )
@@ -144,7 +119,6 @@ class SignalsViewModel @Inject constructor(
     }
 
     private companion object {
-        const val MIN_OCCURRENCES = 5
         const val MIN_ENTRIES_FOR_CHECKIN = 14
         const val WEEK_MS = 7L * 24 * 60 * 60 * 1000
     }

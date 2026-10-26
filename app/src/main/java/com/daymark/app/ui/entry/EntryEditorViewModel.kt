@@ -98,6 +98,19 @@ class EntryEditorViewModel @Inject constructor(
     )
     val uiState: StateFlow<EntryEditorUiState> = _uiState.asStateFlow()
 
+    /** What the person can change, without the lists the screen draws from. */
+    private fun EntryEditorUiState.content() =
+        listOf(moodLevel, note, dateTime, selectedActivityIds, selectedPersonIds, photoPath)
+
+    /** The content as opened: a new entry as it arrived, an existing one as loaded. */
+    private var baseline: List<Any?> = _uiState.value.content()
+
+    /**
+     * Whether leaving now would lose something the person changed (#486). A face tapped to open the
+     * editor is how it arrived, not a change, so backing straight out asks nothing.
+     */
+    fun hasUnsavedChanges(): Boolean = !_uiState.value.saved && _uiState.value.content() != baseline
+
     init {
         viewModelScope.launch {
             activityRepository.observeActive().collect { list ->
@@ -136,6 +149,7 @@ class EntryEditorViewModel @Inject constructor(
             // Two reads on one screen is the price of that, and it is a small one.
             val withIds: List<Long> = peopleRepository.personIdsForEntry(id)
             _uiState.update { it.copy(selectedPersonIds = withIds.toSet()) }
+            baseline = _uiState.value.content()
         }
     }
 

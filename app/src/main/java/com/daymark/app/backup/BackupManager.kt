@@ -388,11 +388,26 @@ data class BackupData(
      * showed the default — and a restore then leaves this phone's line as it is (#370).
      */
     val crisisLine: BackupCrisisLine? = null,
+    /**
+     * The reminders' "Keep reminding me at these times", as each tracker's `keepAsSet` already
+     * travels with it (#484). Null when the file predates it, or the person never answered; a
+     * restore then leaves this phone's answer as it is.
+     */
+    val remindersKeepAsSet: Boolean? = null,
 )
 
-/** The person's own crisis line: its name and how to reach it (`data/CrisisStore.kt`). Added in v20. */
+/**
+ * The person's own crisis line: its name and how to reach it (`data/CrisisStore.kt`). Added in v20.
+ * [number] and [takesTexts] came later (#482) and are defaulted, so a file without them still reads
+ * and restores the line as text, with no Call button until a number is added.
+ */
 @Serializable
-data class BackupCrisisLine(val label: String, val contact: String)
+data class BackupCrisisLine(
+    val label: String,
+    val contact: String,
+    val number: String? = null,
+    val takesTexts: Boolean = false,
+)
 
 /**
  * The backup's steps rebound to the goal ids an import actually used, dropping any whose goal is
@@ -511,6 +526,9 @@ class BackupManager @Inject constructor(
     // The person's own crisis line, which a backup carries so a new phone's crisis screen does not
     // fall back to a number that may not work where they are (#370).
     private val crisisStore: com.daymark.app.data.CrisisStore,
+    // The reminders' keep-or-ease answer, which lives in settings rather than in a row (#484).
+    private val settings: com.daymark.app.data.SettingsRepository,
+    private val reminderScheduler: com.daymark.app.notifications.ReminderScheduler,
     private val database: com.daymark.app.data.AppDatabase,
 ) {
     /**
@@ -605,7 +623,8 @@ class BackupManager @Inject constructor(
                 BackupPersonGroupShare(it.groupKey, it.shared)
             },
             skySeed = skyRepository.storedSeed(),
-            crisisLine = crisisStore.own()?.let { BackupCrisisLine(it.label, it.contact) },
+            remindersKeepAsSet = settings.remindersKeepAsSet.takeIf { settings.remindersKeepAnswered },
+            crisisLine = crisisStore.own()?.let { BackupCrisisLine(it.label, it.contact, it.number, it.takesTexts) },
             constellations = constellationDao.getAll().map {
                 BackupConstellation(it.id, it.name, it.madeEpochDay, it.points, it.createdAt)
             },
@@ -665,6 +684,10 @@ class BackupManager @Inject constructor(
             // The sky's seed and colours are preferences, outside the transaction, so they are set
             // first and put back if the restore fails: the restored memories are then drawn in the
             // sky they were drawn in, and a failed restore leaves the sky as it was.
+            //
+            // Photos are files, also outside the transaction, so the backup's are written to a
+            // staging area first and swapped in only once the database has committed. A restore
+            // that fails part-way used to have emptied the photo folder already (#487).
             ImportMode.REPLACE -> {
                 val seedBefore = skyRepository.storedSeed()
                 val choiceBefore = skyRepository.colourChoice()
@@ -672,19 +695,28 @@ class BackupManager @Inject constructor(
                 skyRepository.restoreSeed(data.skySeed)
                 skyRepository.restoreColours(data.skyColourChoice, data.skyColourUntil)
                 try {
+                    photoStore.beginStagedRestore()
+                    data.photos.forEach { (name, b64) ->
+                        runCatching { photoStore.writeBytes(name, decodeBase64(b64), staged = true) }
+                    }
                     database.withTransaction { importReplace(data) }
+                    photoStore.commitStagedRestore()
                 } catch (e: Throwable) {
+                    photoStore.discardStagedRestore()
                     skyRepository.restoreSeed(seedBefore)
                     skyRepository.restoreColours(choiceBefore, untilBefore)
+                    rearm()
                     throw e
                 }
             }
-            ImportMode.MERGE -> importMerge(data)
+            ImportMode.MERGE -> try {
+                importMerge(data)
+            } catch (e: Throwable) {
+                rearm()
+                throw e
+            }
         }
-        // Re-arm alarms for whatever reminder set we now hold.
-        reminderRepository.rescheduleAll()
-        // And each tracker's check-ins and quick-log notification, as the restored rows say.
-        trackerCheckIns.refreshAll()
+        rearm()
         // Restore mood label/colour overrides. REPLACE starts clean; MERGE overlays.
         if (mode == ImportMode.REPLACE) moodCustomization.reset()
         data.moodLabels.forEach { (lvl, label) -> moodCustomization.setLabel(lvl, label) }
@@ -694,8 +726,24 @@ class BackupManager @Inject constructor(
         // REPLACE takes the file's; MERGE takes it only while this phone still shows the default.
         // A file without one leaves this phone's line as it is. Blank fields are refused by save().
         data.crisisLine?.let { line ->
-            if (mode == ImportMode.REPLACE || crisisStore.own() == null) crisisStore.save(line.label, line.contact)
+            if (mode == ImportMode.REPLACE || crisisStore.own() == null) crisisStore.save(line.label, line.contact, line.number, line.takesTexts)
         }
+        // The reminders' keep-or-ease answer, on the same terms: REPLACE takes the file's, MERGE
+        // only while this phone has none, and a file without one changes nothing.
+        data.remindersKeepAsSet?.let { keep ->
+            if (mode == ImportMode.REPLACE || !settings.remindersKeepAnswered) reminderScheduler.setKeepAsSet(keep)
+        }
+    }
+
+    /**
+     * Re-arms every reminder and tracker check-in for whatever the database now holds: the restored
+     * rows after a success, the person's own after a failure, which rolled back the rows but not
+     * the alarms importReplace had cancelled (#487). Each half is tried on its own, so one that
+     * cannot run never stops the other.
+     */
+    private suspend fun rearm() {
+        runCatching { reminderRepository.rescheduleAll() }
+        runCatching { trackerCheckIns.refreshAll() }
     }
 
     private suspend fun importReplace(data: BackupData) {
@@ -716,9 +764,8 @@ class BackupManager @Inject constructor(
         sleepLogDao.deleteAll()
         treatmentDao.deleteAll()
 
-        // Restore photos under their original filenames (entries reference them by name).
-        photoStore.clearAll()
-        data.photos.forEach { (name, b64) -> runCatching { photoStore.writeBytes(name, decodeBase64(b64)) } }
+        // Photos are restored under their original filenames (entries reference them by name),
+        // staged by importFromJson and swapped in only after this transaction commits.
 
         activityDao.insertAll(
             data.activities.map { ActivityEntity(it.id, it.name, it.iconKey, it.sortOrder, it.archived) },

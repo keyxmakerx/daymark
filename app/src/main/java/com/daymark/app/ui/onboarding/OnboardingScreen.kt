@@ -56,9 +56,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.daymark.app.data.CrisisStore
 import com.daymark.app.notifications.NotificationPermission
-import com.daymark.app.ui.components.KeepTimesChoice
+import com.daymark.app.ui.components.EASE_DETAIL
+import com.daymark.app.ui.components.EASE_TITLE
+import com.daymark.app.ui.components.KEEP_DETAIL
+import com.daymark.app.ui.components.KEEP_TITLE
 import com.daymark.app.ui.components.PaperSurface
-import com.daymark.app.ui.components.SentenceCaps
 import com.daymark.app.ui.components.MoodFaceIcon
 import com.daymark.app.util.DateUtils
 import java.time.LocalDateTime
@@ -151,9 +153,12 @@ fun OnboardingScreen(
                         // elsewhere must not find that out at the worst moment.
                         1 -> CrisisStep(
                             current = remember { viewModel.crisisLine() },
-                            onKeep = { step = 2 },
-                            onSave = { label, contact -> viewModel.saveCrisisLine(label, contact); step = 2 },
-                            onSkip = { step = 2 },
+                            onKeep = { viewModel.confirmCrisisLine(); step = 2 },
+                            onSave = { d ->
+                                viewModel.saveCrisisLine(d.label, d.contact, d.number, d.takesTexts)
+                                step = 2
+                            },
+                            onSkip = { viewModel.skipCrisisLine(); step = 2 },
                         )
                         2 -> ReminderStep(
                             onEnable = { h, m, keep ->
@@ -215,10 +220,19 @@ private fun Welcome() {
 @Composable
 private fun ReminderStep(onEnable: (Int, Int, Boolean) -> Unit, onSkip: () -> Unit) {
     val tpState = rememberTimePickerState(initialHour = 21, initialMinute = 0, is24Hour = false)
-    // Unanswered until the person picks; the reminder waits for the answer.
+    // The answer the person pressed, held across the permission prompt. Each answer is itself the
+    // way to switch the reminder on, so there is no button that waits, greyed out, for it (#484).
     var keep by remember { mutableStateOf<Boolean?>(null) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         keep?.let { onEnable(tpState.hour, tpState.minute, it) }
+    }
+    fun enable(answer: Boolean) {
+        keep = answer
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            onEnable(tpState.hour, tpState.minute, answer)
+        }
     }
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Text("A gentle daily nudge", style = MaterialTheme.typography.headlineSmall)
@@ -231,21 +245,18 @@ private fun ReminderStep(onEnable: (Int, Int, Boolean) -> Unit, onSkip: () -> Un
         Spacer(20.dp)
         TimePicker(state = tpState)
         Spacer(8.dp)
-        Text("If reminders go unanswered", style = MaterialTheme.typography.titleSmall, modifier = Modifier.fillMaxWidth())
-        KeepTimesChoice(keep = keep, onChange = { keep = it })
-        Spacer(16.dp)
-        Button(
-            onClick = {
-                val answer = keep ?: return@Button
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    permission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                } else {
-                    onEnable(tpState.hour, tpState.minute, answer)
-                }
-            },
-            enabled = keep != null,
+        Text(
+            "Switch it on, and choose what happens if reminders go unanswered:",
+            style = MaterialTheme.typography.titleSmall,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("Enable reminder") }
+        )
+        Spacer(8.dp)
+        Button(onClick = { enable(true) }, modifier = Modifier.fillMaxWidth()) { Text(KEEP_TITLE) }
+        Text(KEEP_DETAIL, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(8.dp)
+        Button(onClick = { enable(false) }, modifier = Modifier.fillMaxWidth()) { Text(EASE_TITLE) }
+        Text(EASE_DETAIL, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(8.dp)
         TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth()) { Text("Not now") }
     }
 }
@@ -258,12 +269,11 @@ private fun ReminderStep(onEnable: (Int, Int, Boolean) -> Unit, onSkip: () -> Un
 private fun CrisisStep(
     current: CrisisStore.Resource,
     onKeep: () -> Unit,
-    onSave: (String, String) -> Unit,
+    onSave: (com.daymark.app.ui.support.CrisisLineDraft) -> Unit,
     onSkip: () -> Unit,
 ) {
     var changing by remember { mutableStateOf(false) }
-    var label by remember { mutableStateOf("") }
-    var contact by remember { mutableStateOf("") }
+    val draft = com.daymark.app.ui.support.rememberCrisisLineDraft(null)
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Text("If things get hard", style = MaterialTheme.typography.headlineSmall)
         Spacer(8.dp)
@@ -282,26 +292,11 @@ private fun CrisisStep(
         }
         Spacer(16.dp)
         if (changing) {
-            OutlinedTextField(
-                value = label,
-                onValueChange = { label = it },
-                label = { Text("Name") },
-                keyboardOptions = SentenceCaps,
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(8.dp)
-            OutlinedTextField(
-                value = contact,
-                onValueChange = { contact = it },
-                label = { Text("How to reach them") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            com.daymark.app.ui.support.CrisisLineFields(draft)
             Spacer(16.dp)
             Button(
-                onClick = { onSave(label, contact) },
-                enabled = label.isNotBlank() && contact.isNotBlank(),
+                onClick = { onSave(draft) },
+                enabled = draft.complete,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Save and continue") }
         } else {

@@ -86,7 +86,10 @@ ANNOT=$(find_jar org.jetbrains/annotations "annotations-13.0.jar")
 # `codeOnly` and `withoutComments` from its own package; `ReportInkSourceTest` imports `repoFile`,
 # `codeOnly` and JUnit only; `ServerSyncSeamSourceTest` imports `repoFile`, `codeOnly`, `java.io.File`
 # and JUnit only, and reads the `foss` and `sync` source sets as text. `NotificationPrivacySourceTest`
-# imports `repoFile`, `codeOnly`, `java.io.File` and JUnit only.
+# imports `repoFile`, `codeOnly`, `java.io.File` and JUnit only, and so does `CrisisLineSourceTest`,
+# which also uses `replaceOnce`, and `ReminderReliabilitySourceTest`, which also uses
+# `functionBodyRange`. `EditorGuardsSourceTest` imports `repoFile`, `codeOnly` and JUnit only, and so does
+# `RestoreFailureSourceTest`.
 TESTS="com.daymark.app.data.PeopleSchemaTest com.daymark.app.data.TimedOfferSchemaTest
 com.daymark.app.data.CompanionSchemaTest com.daymark.app.data.TrackerRhythmSchemaTest
 com.daymark.app.data.MigrationSchemaExportTest
@@ -106,7 +109,11 @@ com.daymark.app.notifications.NotificationPrivacySourceTest
 com.daymark.app.data.LifeEventSchemaTest
 com.daymark.app.data.ConstellationSchemaTest
 com.daymark.app.data.SkyPutAwaySchemaTest
-com.daymark.app.data.SkyProjectionSourceTest"
+com.daymark.app.data.SkyProjectionSourceTest
+com.daymark.app.ui.support.CrisisLineSourceTest
+com.daymark.app.notifications.ReminderReliabilitySourceTest
+com.daymark.app.ui.components.EditorGuardsSourceTest
+com.daymark.app.backup.RestoreFailureSourceTest"
 SOURCES="$REPO/app/src/test/java/com/daymark/app/data/PeopleSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/TimedOfferSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/CompanionSchemaTest.kt
@@ -133,6 +140,10 @@ $REPO/app/src/test/java/com/daymark/app/data/LifeEventSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/ConstellationSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/SkyPutAwaySchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/SkyProjectionSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/ui/support/CrisisLineSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/notifications/ReminderReliabilitySourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/ui/components/EditorGuardsSourceTest.kt
+$REPO/app/src/test/java/com/daymark/app/backup/RestoreFailureSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/backup/RepoFile.kt
 $REPO/app/src/test/java/com/daymark/app/ui/SourceText.kt"
 

@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **You can call your crisis line from the app.** Once you've said the line is right for you, the
+  crisis screen has a **Call** button, and **Text** where the line takes texts. Each opens your
+  phone's own dialer or messages app with the number filled in; Daymark never places a call. The
+  line now has a number field of its own, and a backup carries it. If you set Daymark up before
+  onboarding asked about the crisis line, Home asks you once. **More** now starts with **If things
+  feel like too much**, which always leads to the crisis screen (#482).
+
 ### Changed
 - **Stars look like stars.** Each one is a sharp point of light: a white-hot heart in its own
   colour, paled toward white, with a tight wing of light round it the way a star's light spreads in
@@ -34,9 +42,42 @@ All notable changes to this project are documented here. The format is based on
   one corner. The view widens as your sky grows, and no star moves (#476).
 
 ### Fixed
+- **A restore that fails part-way keeps your photos and reminders.** "Replace all" used to empty
+  the photo folder and switch reminders off before it knew the restore would work. The file's
+  photos now wait in a staging folder until the restore has succeeded, and reminders and tracker
+  check-ins are switched back on either way (#487).
+- **Back no longer throws away what you wrote.** In a check-in or a goal, the back arrow and the
+  Back gesture both ask "Save your changes?" when something changed. In the journal and a thought
+  record, the Back gesture now saves, as the arrow always did; it used to discard. The bin in the
+  journal, thought records and goals asks before deleting. Turning the phone no longer sends you
+  back to the PIN screen (#486).
+- **Reminders no longer stop without a word.** Every reminder is re-armed whenever the app starts,
+  and a reminder is re-armed before its notification is shown, so one that failed to show still
+  comes tomorrow. On phones that don't allow exact alarms (Android 14 by default), reminders, Try
+  later and tracker check-ins now use an alarm battery saving lets through. After **Stop asking**,
+  Home says the reminder is off and links to Settings → Reminders (#484).
+- **You're asked whether reminders should ease off.** If your daily reminder or a tracker's
+  check-ins were set up before Daymark asked, Home asks once; until you answer, nothing changes. In
+  setup the two answers now switch the reminder on themselves, and "Keep reminding me" says it also
+  suits forgetting or wanting a steady record. A backup carries the reminders' answer (#484).
+- **A mixed day still offers a moment.** The "Want to take a moment?" card reads the lowest mood you
+  logged today. An Awful morning followed by a Good evening used to average to Meh, and the card
+  stayed away on exactly that kind of day (#482).
 - **Home's week strip no longer looks like an empty button.** Each day carries its weekday's
   initial, and a day with no entry shows a faint stub, so a week with one entry reads as seven days
   rather than a lone dot (#398).
+
+### Removed
+- **Nothing ranks your activities by mood, and nothing names one on a hard day.** The cards
+  "'X' goes with your better days … make it a gentle goal?" and "'X' tends to go with lower days"
+  are gone, with their switch under Settings → Suggestions, and so are the Insights lists of what was
+  "logged alongside higher or lower moods" and their `r=` numbers. A pattern like that cannot tell
+  what caused what, and a wrong one is easy to blame yourself for. **Average mood by activity** stays
+  on Insights, listed by name. In the PDF report it is now a switch, "Include mood beside each
+  activity", off until you turn it on, and listed by name. On Take a moment, "Do one small thing"
+  offers a shower, a warm drink or stepping outside instead of a random one of your activities,
+  and "Move a little" no longer names an activity. Logging how a Do one thing step felt says
+  "Logged." (#483).
 
 ## [0.4.2] - 2026-10-24
 

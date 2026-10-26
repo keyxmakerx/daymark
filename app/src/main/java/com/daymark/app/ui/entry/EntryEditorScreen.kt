@@ -2,7 +2,9 @@ package com.daymark.app.ui.entry
 
 import com.daymark.app.ui.components.SentenceCaps
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import com.daymark.app.ui.components.UnsavedChangesDialog
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -90,6 +92,18 @@ fun EntryEditorScreen(
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var confirmingDelete by remember { mutableStateOf(false) }
+    // The back arrow and the system Back gesture are one way out, and both ask before anything the
+    // person changed is lost (#486).
+    var confirmingLeave by remember { mutableStateOf(false) }
+    fun leave() { if (viewModel.hasUnsavedChanges()) confirmingLeave = true else onDone() }
+    BackHandler(enabled = !confirmingLeave) { leave() }
+    if (confirmingLeave) {
+        UnsavedChangesDialog(
+            onSave = { confirmingLeave = false; viewModel.save() },
+            onDiscard = { confirmingLeave = false; onDone() },
+            onKeepEditing = { confirmingLeave = false },
+        )
+    }
 
     if (confirmingDelete) {
         // Deleting from the editor is permanent — there's no undo snackbar behind this one — so
@@ -123,7 +137,7 @@ fun EntryEditorScreen(
             TopAppBar(
                 title = { Text(if (state.isEditing) "Edit entry" else "Add entry") },
                 navigationIcon = {
-                    IconButton(onClick = onDone) {
+                    IconButton(onClick = { leave() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },

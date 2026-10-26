@@ -29,8 +29,8 @@ mood-tracking app.**
 - **Your sky.** Each check-in, journal entry, thought record, project step, reached goal and life
   event you mark becomes a star in a sky that fills as you go. It never marks a missing day as a
   failure. See [docs/SKY.md](docs/SKY.md).
-- **Insights.** Mood over time, by weekday and time of day, what goes with your mood (always
-  "association, not cause"), a calendar, and a PDF report you can choose to give a clinician.
+- **Insights.** Mood over time, by weekday and time of day, average mood by activity (listed by
+  name, never ranked), a calendar, and a PDF report you can choose to give a clinician.
 - **Goals and projects.** Weekly habits, and projects made of concrete steps. There are no streaks,
   scores or badges: continuity is shown as "12 of the last 30 days", with nothing to break.
 - **Sleep, skills and support.** A sleep diary and non-diagnostic self-checks, the PHQ-9, GAD-7 and

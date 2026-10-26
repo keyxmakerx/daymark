@@ -81,6 +81,13 @@ data class PdfExportOptions(
      * some people will want their numbers to arrive without one.
      */
     val includeDiscussionPrompts: Boolean = true,
+    /**
+     * Whether side 2 carries the per-activity mood table. Default off, and listed by name when on,
+     * never best-first: a ranking of activities by mood is the generated insight DECISIONS.md §D6
+     * does not build, and the table is something the person chooses to show, side by side, for the
+     * two people in the room to read (#483).
+     */
+    val includeActivityTable: Boolean = false,
     val paperSize: PaperSize = PaperSize.A4,
     val patientName: String = "",
 )

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import com.daymark.app.data.CheckInStateStore
 import com.daymark.app.data.ReminderRepository
+import com.daymark.app.data.SettingsRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,7 +20,7 @@ import javax.inject.Inject
  * Each does exactly what the person said and nothing is inferred from it:
  *  - **Try later**: one more nudge for this reminder, an hour from now.
  *  - **Stop asking**: this reminder is switched off. Switching it back on in Settings → Reminders
- *    undoes it.
+ *    undoes it. Home says it is off, and where that switch is, so one tap is never silent (#484).
  *  - **Put it back**: the reminders return to the times the person set, at once.
  */
 @AndroidEntryPoint
@@ -28,6 +29,7 @@ class ReminderActionReceiver : BroadcastReceiver() {
     @Inject lateinit var repository: ReminderRepository
     @Inject lateinit var scheduler: ReminderScheduler
     @Inject lateinit var checkInState: CheckInStateStore
+    @Inject lateinit var settings: SettingsRepository
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -41,6 +43,7 @@ class ReminderActionReceiver : BroadcastReceiver() {
                     ACTION_TRY_LATER -> if (reminderId >= 0) scheduler.scheduleLater(reminderId)
                     ACTION_STOP_ASKING -> repository.get(reminderId)?.let { reminder ->
                         repository.update(reminder.copy(enabled = false))
+                        settings.stoppedReminderIds = settings.stoppedReminderIds + reminder.id
                     }
                     ACTION_PUT_BACK -> {
                         checkInState.putBack(System.currentTimeMillis())

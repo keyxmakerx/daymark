@@ -66,6 +66,15 @@ class GoalEditorViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(GoalEditorUiState())
     val uiState: StateFlow<GoalEditorUiState> = _uiState.asStateFlow()
 
+    /** What the person can change, without the activity list the screen draws from. */
+    private fun GoalEditorUiState.content() = copy(activities = emptyList(), saved = false)
+
+    /** The goal as opened: a blank one, or as loaded. */
+    private var baseline: GoalEditorUiState = _uiState.value.content()
+
+    /** Whether leaving now would lose something the person changed (#486). */
+    fun hasUnsavedChanges(): Boolean = !_uiState.value.saved && _uiState.value.content() != baseline
+
     /**
      * Ids for steps typed but never saved.
      *
@@ -94,6 +103,7 @@ class GoalEditorViewModel @Inject constructor(
                             isEditing = true,
                         )
                     }
+                    baseline = _uiState.value.content()
                 }
             }
         }

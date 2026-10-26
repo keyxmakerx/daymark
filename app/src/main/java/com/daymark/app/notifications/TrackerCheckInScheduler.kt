@@ -328,7 +328,9 @@ class TrackerCheckInScheduler @Inject constructor(
         try {
             alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending)
         } catch (_: SecurityException) {
-            alarmManager.set(AlarmManager.RTC_WAKEUP, at, pending)
+            // Doze-permitted, as for the daily reminder: a medication check-in must not wait for
+            // the phone to be picked up (#484).
+            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending)
         }
     }
 

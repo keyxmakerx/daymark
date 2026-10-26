@@ -450,6 +450,8 @@ private fun PdfOptionsDialog(
     // Off until switched on (#336): a check-in note is the person's own words. Charts carry none.
     var notes by remember { mutableStateOf(false) }
     var charts by remember { mutableStateOf(true) }
+    // Off until switched on, and listed by name when on (#483).
+    var activities by remember { mutableStateOf(false) }
     // Off until switched on: the journal is the person's own writing. On, it opens the picker next,
     // where nothing is ticked to begin with (ui/export/JournalPickerScreen.kt, #303).
     var journal by remember { mutableStateOf(false) }
@@ -482,6 +484,7 @@ private fun PdfOptionsDialog(
                 Spacer(Modifier.height(8.dp))
                 ToggleRow("Include check-in notes", notes) { notes = it }
                 ToggleRow("Include charts", charts) { charts = it }
+                ToggleRow("Include mood beside each activity", activities) { activities = it }
                 ToggleRow("Choose journal entries to include", journal) { journal = it }
             }
         },
@@ -497,6 +500,7 @@ private fun PdfOptionsDialog(
                         rangeLabel = label,
                         includeNotes = notes,
                         includeCharts = charts,
+                        includeActivityTable = activities,
                     ),
                     journal,
                 )

@@ -52,6 +52,7 @@ fun MoreHubScreen(
     onThoughtRecords: () -> Unit,
     onMovement: () -> Unit,
     onSafetyPlan: () -> Unit,
+    onCrisis: () -> Unit,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -61,6 +62,15 @@ fun MoreHubScreen(
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
     ) {
+        // First, full width, and never behind an opt-in: the one door here that matters most on the
+        // worst night, named for what it is rather than as a setting (#482).
+        HubCard(
+            icon = R.drawable.ic_act_love,
+            title = "If things feel like too much",
+            subtitle = "Your crisis line",
+            onClick = onCrisis,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
+        )
         SectionLabel("Track")
         // Full width and first, because it is a place rather than a tool — and one card rather than
         // a tab, as `docs/SKY.md` §11 item 1 settles it, cautiously: the Sky is the most

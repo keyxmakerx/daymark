@@ -25,7 +25,7 @@ object SuggestionControls {
     )
 
     /**
-     * Every controllable suggestion. Three things are deliberately absent, and a switch is only
+     * Every controllable suggestion. Some things are deliberately absent, and a switch is only
      * listed here if flipping it visibly changes something — a dial that does nothing is worse
      * than no dial:
      *
@@ -41,6 +41,9 @@ object SuggestionControls {
      *  - **"Month-to-month changes"**, which governed `month_up` and `month_down`. Both set one
      *    month's average mood against the last, a verdict on a period (#360, #203), so they are
      *    gone and so is their switch. A stored state under its old key is never read.
+     *  - **"What goes with your mood"**, which governed `lift_factor` and `drag_factor`. Both
+     *    cards paired mood with activities, the generated insight §D6 does not build (#483), so
+     *    they are gone and so is their switch. A stored or restored `patterns` key is never read.
      */
     val GROUPS: List<Group> = listOf(
         Group(
@@ -54,12 +57,6 @@ object SuggestionControls {
             title = "Self-check reminders",
             subtitle = "PHQ-9, GAD-7, WHO-5",
             kinds = setOf("checkin_due"),
-        ),
-        Group(
-            key = "patterns",
-            title = "What goes with your mood",
-            subtitle = "association, not cause",
-            kinds = setOf("lift_factor", "drag_factor"),
         ),
         Group(
             key = "memories",

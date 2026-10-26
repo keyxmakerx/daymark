@@ -2,9 +2,7 @@ package com.daymark.app.ui.insights
 
 import com.daymark.app.backup.repoFile
 import com.daymark.app.ui.codeOnly
-import com.daymark.app.ui.functionBodyRange
 import com.daymark.app.ui.plantAfter
-import com.daymark.app.ui.replaceOnce
 import com.daymark.app.ui.stringLiteralsIn
 import com.daymark.app.ui.withoutComments
 import org.junit.Assert.assertEquals
@@ -14,8 +12,8 @@ import org.junit.Test
 /**
  * The Insights tab describes what was logged and never marks it (#203): no average mood as a
  * headline, no period set against the one before it, no grid of how consistently someone logs, no
- * summary that opens with a mark, and headings over the "what goes with your mood" lists that claim
- * association rather than cause, drawn in ink rather than the Rad and Awful colours (#354, #358).
+ * summary that opens with a mark (#354, #358), and no list ranking activities or trackers by the moods
+ * logged beside them, with or without an `r` (§D6, #483). The per-activity table stays, by name.
  *
  * Read as text, because this module cannot compose the screen: the copy through the string literals
  * of the comment-free source, so a comment may name what is gone; the calls through [codeOnly], so a
@@ -30,12 +28,11 @@ class InsightsVerdictSourceTest {
         /** Copy that marks the person's data, lower-cased. */
         val VERDICT_COPY = listOf(
             "avg mood", "lifts you up", "weighs you down", "in review", "logging consistency", " vs last",
+            "logged alongside", "what goes with your mood", "r=",
         )
 
         /** The views that went, by the names that drew them. */
-        val GONE_CALLS = Regex("""\b(?:ConsistencyHeatmap|PeriodCompareCard|periodCompare|weekCompare|monthCompare|yearCompare|stats\.averageMood)\b""")
-
-        val MOOD_COLOUR = Regex("""\b(?:moodColors|LocalMoodColors|MoodColors)\b""")
+        val GONE_CALLS = Regex("""\b(?:ConsistencyHeatmap|PeriodCompareCard|periodCompare|weekCompare|monthCompare|yearCompare|stats\.averageMood|FactorList|topUp|topDown|trackerCorrelations)\b""")
     }
 
     private fun findings(source: String): List<String> {
@@ -44,15 +41,6 @@ class InsightsVerdictSourceTest {
         for (phrase in VERDICT_COPY) if (strings.any { phrase in it }) out += "copy: $phrase"
         val code = codeOnly(source)
         GONE_CALLS.findAll(code).forEach { out += "call: ${it.value}" }
-        val body = functionBodyRange(code, "FactorList")
-        if (body == null) {
-            out += "FactorList: not found"
-        } else if (MOOD_COLOUR.containsMatchIn(code.substring(body))) {
-            out += "FactorList: mood colour"
-        }
-        Regex("""\bFactorList\s*\(([^\n]*)""").findAll(code)
-            .filter { MOOD_COLOUR.containsMatchIn(it.groupValues[1]) }
-            .forEach { _ -> out += "FactorList call: mood colour" }
         return out
     }
 
@@ -67,8 +55,8 @@ class InsightsVerdictSourceTest {
     fun the_kept_views_are_still_there() {
         val strings = stringLiteralsIn(withoutComments(real))
         for (kept in listOf(
-            "Entries", "Days with an entry", "Mood distribution", "Logged alongside higher moods",
-            "Logged alongside lower moods", "By day of week", "By time of day",
+            "Entries", "Days with an entry", "Mood distribution", "Average mood by activity",
+            "By day of week", "By time of day",
         )) {
             assertTrue("\"$kept\" is gone", strings.any { kept in it })
         }
@@ -76,7 +64,7 @@ class InsightsVerdictSourceTest {
 
     @Test
     fun each_check_sees_a_planted_example() {
-        val anchor = "        // --- Correlations & patterns (associations, not causes) ---\n"
+        val anchor = "        // --- Patterns (association, not cause) ---\n"
         val plants = mapOf(
             "copy: avg mood" to "        StatCard(\"Avg mood\", \"3.4\", Modifier)\n",
             "copy: logging consistency" to "        SectionCard(\"Logging consistency\") {}\n",
@@ -84,30 +72,16 @@ class InsightsVerdictSourceTest {
             "call: ConsistencyHeatmap" to "        ConsistencyHeatmap(emptyMap())\n",
             "call: weekCompare" to "        val c = extras.weekCompare\n",
             "call: stats.averageMood" to "        val a = stats.averageMood\n",
+            "copy: what goes with your mood" to "        SectionCard(\"What goes with your mood\") {}\n",
+            "copy: logged alongside" to "        Text(\"Logged alongside higher moods\")\n",
+            "copy: r=" to "        Text(\"higher mood  r=+0.32\")\n",
+            "call: FactorList" to "        FactorList(\"Up\", rows)\n",
+            "call: topUp" to "        val up = extras.topUp\n",
+            "call: trackerCorrelations" to "        val t = extras.trackerCorrelations\n",
         )
         for ((expected, plant) in plants) {
             val found = findings(plantAfter(real, anchor, plant))
             assertTrue("$expected not seen in $found", expected in found)
         }
-        val heading = findings(
-            replaceOnce(real, "FactorList(\"Logged alongside higher moods\"", "FactorList(\"Lifts you up\""),
-        )
-        assertTrue("copy: lifts you up" in heading)
-        val coloured = findings(
-            replaceOnce(
-                real,
-                "FactorList(\"Logged alongside lower moods\", extras.topDown)",
-                "FactorList(\"Logged alongside lower moods\", extras.topDown, MaterialTheme.moodColors.forLevel(1))",
-            ),
-        )
-        assertTrue("FactorList call: mood colour" in coloured)
-        val inBody = findings(
-            replaceOnce(
-                real,
-                "Text(title, style = MaterialTheme.typography.labelLarge)",
-                "Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.moodColors.forLevel(5))",
-            ),
-        )
-        assertTrue("FactorList: mood colour" in inBody)
     }
 }

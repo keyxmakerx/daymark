@@ -166,7 +166,7 @@ fun RemindersScreen(
 
     editing?.let { target ->
         // Setting the first reminder asks whether reminders may ease off; Save waits for the answer.
-        val asks = target.id == 0L && reminders.none { it.enabled }
+        val asks = target.id == 0L && (reminders.none { it.enabled } || keepAsSet == null)
         ReminderDialog(
             initial = target,
             asksKeep = asks,
