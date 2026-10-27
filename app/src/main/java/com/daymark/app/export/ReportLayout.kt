@@ -256,6 +256,74 @@ object ReportLayout {
     const val JOURNAL_SEPARATOR_H = 20f
 
     // -----------------------------------------------------------------------------------------
+    // Bookends: the optional cover and back page, and the blank pages that give each a sheet of
+    // its own when the report is printed on both sides.
+    // -----------------------------------------------------------------------------------------
+
+    /**
+     * Blank pages after the cover. Printed on both sides, the cover's own reverse is left blank so
+     * side 1 opens on a right-hand page and nothing of the person's data is printed behind the
+     * cover. Printed on one side, the next sheet is already a sheet of its own.
+     */
+    fun blanksAfterCover(twoSided: Boolean): Int = if (twoSided) 1 else 0
+
+    /**
+     * Blank pages before the back page, given the physical pages already emitted.
+     *
+     * Printed on both sides, the back page is the reverse of the last sheet, so it is the outside of
+     * the stack and lands on an even page; the front of that sheet is blank, so it shares a sheet
+     * with nothing. When the content ended on a right-hand (odd) page, one more blank finishes that
+     * sheet first.
+     */
+    fun blanksBeforeBack(pagesSoFar: Int, twoSided: Boolean): Int = when {
+        !twoSided -> 0
+        pagesSoFar % 2 == 0 -> 1
+        else -> 2
+    }
+
+    /** What each physical page of the document is. */
+    enum class PageKind { COVER, BLANK, CONTENT, BACK }
+
+    /**
+     * The whole document's page sequence for [contentPages] pages of sides, built from the same two
+     * rules the renderer follows. The renderer does not call this — it learns its content length
+     * only as it draws — so this is the model the rules are checked against.
+     */
+    fun documentPages(contentPages: Int, cover: Boolean, back: Boolean, twoSided: Boolean): List<PageKind> {
+        val pages = ArrayList<PageKind>()
+        if (cover) {
+            pages.add(PageKind.COVER)
+            repeat(blanksAfterCover(twoSided)) { pages.add(PageKind.BLANK) }
+        }
+        repeat(contentPages) { pages.add(PageKind.CONTENT) }
+        if (back) {
+            repeat(blanksBeforeBack(pages.size, twoSided)) { pages.add(PageKind.BLANK) }
+            pages.add(PageKind.BACK)
+        }
+        return pages
+    }
+
+    /** The cover's title block starts this far down the page, so the page reads as a cover. */
+    fun coverTitleTop(pageH: Float): Float = pageH * 0.34f
+
+    /** The back page's ruled lines are this far apart: a comfortable handwriting line. */
+    const val NOTES_RULE_STEP = 24f
+
+    /**
+     * Where the back page's rules fall, below [top] and never into the footer band, which on the
+     * back page holds its one line of fixed copy.
+     */
+    fun notesRules(top: Float, pageH: Float): List<Float> {
+        val out = ArrayList<Float>()
+        var ry = top + NOTES_RULE_STEP
+        while (ry <= contentLimit(pageH)) {
+            out.add(ry)
+            ry += NOTES_RULE_STEP
+        }
+        return out
+    }
+
+    // -----------------------------------------------------------------------------------------
     // Pagination — the pure model of the renderer's flow.
     // -----------------------------------------------------------------------------------------
 

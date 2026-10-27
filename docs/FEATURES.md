@@ -579,7 +579,14 @@ decisions rather than a reading of the current moment: #162.
   be taken back." — the report's own fixed copy, not a second wording — then offers a date range (90
   days by default), check-in notes (off by default), charts (on), "Include mood beside each
   activity" (off by default; when on, side 2 lists each activity's average mood by name, never
-  best-first, #483), and "Choose journal entries to include", off by default. With check-in notes off, side 2 says "Check-in notes were
+  best-first, #483), "Choose journal entries to include", off by default, and two more off by
+  default: "Add a cover page" and "Add a back page for notes". The cover says what the document is,
+  the range and the date; the back page is ruled lines for writing on by hand; neither carries a
+  score or an entry, so a printed report shows none of the person's data on its outside. With either
+  on, "Printing on both sides" appears: the cover's reverse is left blank so side 1 opens on a
+  right-hand page, and the back page becomes the reverse of a sheet of its own, with as many blank
+  pages as that takes, each saying "This page is left blank for printing on both sides."
+  (`export/ReportLayout.kt`). With check-in notes off, side 2 says "Check-in notes were
   switched off for this export." and neither of its tables has a note column; the daily check-ins
   keep their activity tags under a head of their own. "Next" leads to one flow
   (`ui/export/ReportExportScreen.kt`). With journal entries switched on, it opens the picker first
