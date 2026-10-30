@@ -136,6 +136,24 @@ updates:
       - dependency-name: "com.goterl:lazysodium-android"
         versions: [">=5.2.0"]
 
+      # --- SQLCipher --------------------------------------------------------------------------
+      # 4.18.0 added kotlin-stdlib 2.2.10 to its POM and started shipping Kotlin classes; the app
+      # compiles with Kotlin 2.0.21, which refuses class files carrying 2.2 metadata. PR #509
+      # (4.17.0 -> 4.19.1) failed exactly there, in the Kotlin compile step. The full reasoning
+      # sits on the `sqlcipher` line of gradle/libs.versions.toml.
+      # Unblocked by: the Kotlin + KSP move above reaching 2.2 or later.
+      - dependency-name: "net.zetetic:sqlcipher-android"
+        versions: [">=4.18.0"]
+
+      # --- Gradle wrapper ---------------------------------------------------------------------
+      # Gradle 9.6.0 removed org.gradle.api.problems.internal.InternalProblems, an internal API
+      # AGP 8.x relies on, so AGP 8.13 cannot even apply its plugin on 9.6 or later. PR #510
+      # (9.3.1 -> 9.8.2) failed with Gradle's own message: "a Gradle internal API that was
+      # removed in Gradle 9.6.0 ... or use Gradle 9.5". Up to 9.5.x still flows.
+      # Unblocked by: the AGP 9 migration (Move B in docs/TOOLCHAIN.md).
+      - dependency-name: "gradle-wrapper"
+        versions: [">=9.6.0"]
+
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
@@ -152,6 +170,14 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # The serialization compiler plugin must be the same version as the Kotlin compiler it
+      # runs inside. Dependabot proposes it ALONE, without kotlin("jvm") beside it (#58, #98,
+      # #511), so every such PR is a mismatched pair even when CI happens to stay green. Kotlin
+      # here sits at 2.3.21 because Ktor 3.5.2 is built with it (see build.gradle.kts).
+      # Unblocked by: a hand-made PR moving kotlin("jvm") and plugin.serialization together.
+      - dependency-name: "plugin.serialization"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   # The companion web bundle is vendored into the image at build time and served to the browser
   # that performs the client-side crypto. A compromised or vulnerable dependency here reaches the
