@@ -43,7 +43,7 @@ securityCrypto = "1.1.0"
 # Size, stated because it is real and nothing else in this app costs this much: the AAR is ~4 MB
 # and carries libsqlcipher.so for all four ABIs. There are no ABI splits configured, so every APK
 # grows by roughly that. That is the price of the journal not being a plaintext file.
-sqlcipher = "4.17.0"
+sqlcipher = "4.19.1"
 kotlinxSerialization = "1.7.3"
 glance = "1.1.0"
 qrcodegen = "1.8.0"
