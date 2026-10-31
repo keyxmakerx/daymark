@@ -26,9 +26,12 @@
    */
   let {
     open = true,
+    heading = true,
     presets = PRESETS,
   }: {
     open?: boolean
+    /** False when the host's frame already titles the page. */
+    heading?: boolean
     /** The presets in the order this clinician reaches for them (therapist/discipline.ts). */
     presets?: readonly { label: string; minutes: number; nudgeMin: number }[]
   } = $props()
@@ -140,7 +143,7 @@
 {/if}
 
 <div hidden={!open}>
-<PageHeader title="Timers" />
+{#if heading}<PageHeader title="Timers" />{/if}
 <p class="lede">For sessions, breaks and the time between. Each one can chime, buzz, tap your watch, or just show here.</p>
 
 {#if timers.length}

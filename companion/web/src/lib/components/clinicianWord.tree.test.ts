@@ -241,7 +241,7 @@ describe('no word a person reads says "therapist"', () => {
  * a value that is stored, sent or routed; every other string is a word a person reads.
  */
 const PORTAL = /\bportal\b/i
-const PORTAL_IDENTIFIERS = new Set(['/portal/invite', 'portal'])  // 'portal': a CSS class name
+const PORTAL_IDENTIFIERS = new Set(['/portal/invite'])
 
 describe('no word a person reads says "portal"', () => {
   it('the detector sees the word in a planted sentence, and lets an identifier through', () => {
@@ -277,7 +277,7 @@ const NOW: Record<string, string[]> = {
   'practice.html': ['Daymark Companion — practice console'],
   'src/lib/components/therapist/SignInScreen.svelte': ['Clinician console'],
   'src/lib/components/therapist/LoginGate.svelte': ['Clinician console — sign in'],
-  'src/lib/components/therapist/TherapistPortal.svelte': ['Clinician console section'],
+  'src/lib/components/therapist/TherapistPortal.svelte': ['Clinician console'],
   'src/lib/onboarding/audience.ts': ['the clinician console'],
   'src/lib/components/owner/AssignmentInbox.svelte': ['Refresh to fetch assignments from your clinicians.'],
   'src/lib/components/owner/AuditList.svelte': [

@@ -31,7 +31,7 @@
   } from '../../therapist/discipline'
   import type { BackupData } from '../../backup'
   import LowerAssuranceBanner from './LowerAssuranceBanner.svelte'
-  import { Callout } from '../ui'
+  import { AppShell, Callout, NavRail, PageHeader, type NavGroup, type NavItem } from '../ui'
 
   type Tab = 'allowed' | 'today' | 'calendar' | 'record' | 'assign' | 'gameplan' | 'shared' | 'timers'
 
@@ -50,6 +50,48 @@
     discipline = d
     saveDiscipline(disciplineStore, d)
   }
+
+  /*
+   * THE RAIL (the calmer layout from the signed-off design). The console sits in the same frame as
+   * the practice and admin consoles: a rail of places, the page's own title above, one thing on the
+   * screen at a time. What the rail offers is still decided only by the verified grant: a section
+   * the grant does not reach is left off, because a tab that can only ever be empty for this
+   * clinician would advertise a surface they do not have.
+   */
+  const TITLES: Record<Tab, string> = {
+    allowed: 'What you are allowed',
+    today: 'Today',
+    calendar: 'Calendar',
+    record: 'Record',
+    shared: 'Shared data',
+    assign: 'Assign',
+    gameplan: 'Game plan',
+    timers: 'Timers',
+  }
+  const READ_LABEL: Record<'today' | 'calendar' | 'record' | 'shared', string> = {
+    today: 'Today',
+    calendar: 'Calendar',
+    record: 'Record',
+    shared: 'Shared data',
+  }
+  const nav = $derived.by((): NavGroup[] => {
+    const groups: NavGroup[] = []
+    if (grant && hasCapability(grant, 'read.share')) {
+      // All four read the same bundle, so all four sit behind the same capability.
+      groups.push({ label: 'Their share', items: profile.tabOrder.map((id) => ({ id, label: READ_LABEL[id] })) })
+    }
+    const send: NavItem[] = []
+    if (canAssign) send.push({ id: 'assign', label: 'Assign' })
+    if (grant && hasCapability(grant, 'authorGamePlan')) send.push({ id: 'gameplan', label: 'Game plan' })
+    if (send.length) groups.push({ label: 'Send', items: send })
+    // Not behind any capability: a timer reads nothing of the client's and stays in this browser.
+    groups.push({ label: 'Tools', items: [{ id: 'timers', label: 'Timers' }] })
+    groups.push({ label: 'This browser', items: [{ id: 'allowed', label: 'Allowed' }] })
+    return groups
+  })
+  /* Changing place only changes what is drawn. It never fetches: opening a share is a deliberate
+     act on the Shared data page. */
+  const go = (id: string) => (tab = id as Tab)
 
   /*
    * The opened share, held HERE rather than fetched per tab.
@@ -252,89 +294,69 @@
     {/snippet}
   </SignInScreen>
 {:else}
-  <section class="portal">
-    <LowerAssuranceBanner />
-    <div class="topline">
-      <nav class="tabs" aria-label="Clinician console section">
-        <button class:active={tab === 'allowed'} aria-pressed={tab === 'allowed'} onclick={() => (tab = 'allowed')}>Allowed</button>
-        {#if canAssign}
-          <button class:active={tab === 'assign'} aria-pressed={tab === 'assign'} onclick={() => (tab = 'assign')}>Assign</button>
-        {/if}
-        {#if grant && hasCapability(grant, 'authorGamePlan')}
-          <button class:active={tab === 'gameplan'} aria-pressed={tab === 'gameplan'} onclick={() => (tab = 'gameplan')}>Game plan</button>
-        {/if}
-        {#if grant && hasCapability(grant, 'read.share')}
-          <!--
-            All four read the same bundle, so all four sit behind the same capability. Showing a
-            Calendar tab to someone with no read.share would advertise a surface that can only ever
-            be empty for them.
-          -->
-          {#each profile.tabOrder as t (t)}
-            {#if t === 'today'}
-              <button class:active={tab === 'today'} aria-pressed={tab === 'today'} onclick={() => (tab = 'today')}>Today</button>
-            {:else if t === 'calendar'}
-              <button class:active={tab === 'calendar'} aria-pressed={tab === 'calendar'} onclick={() => (tab = 'calendar')}>Calendar</button>
-            {:else if t === 'record'}
-              <button class:active={tab === 'record'} aria-pressed={tab === 'record'} onclick={() => (tab = 'record')}>Record</button>
-            {:else}
-              <button class:active={tab === 'shared'} aria-pressed={tab === 'shared'} onclick={() => (tab = 'shared')}>Shared data</button>
-            {/if}
-          {/each}
-        {/if}
-        <!--
-          Not behind any capability: a timer reads nothing of the client's and is kept in this
-          browser only, so the grant has no say over it.
-        -->
-        <button class:active={tab === 'timers'} aria-pressed={tab === 'timers'} onclick={() => (tab = 'timers')}>Timers</button>
-      </nav>
-      <button class="lock" onclick={logout}>Log out</button>
-    </div>
+  <AppShell>
+    {#snippet rail()}
+      <NavRail groups={nav} active={tab} onselect={go} title="Daymark" subtitle="Clinician console">
+        {#snippet footer()}
+          <div class="discipline">
+            <label class="d-label" for="discipline">I work as a</label>
+            <select id="discipline" value={discipline} onchange={(e) => chooseDiscipline(e.currentTarget.value as Discipline)} aria-describedby="discipline-note">
+              {#each DISCIPLINES as d (d)}
+                <option value={d}>{PROFILES[d].label}</option>
+              {/each}
+            </select>
+            <span class="d-note" id="discipline-note">{profile.leadsWith} It arranges this console and never changes what you can read.</span>
+          </div>
+          <div class="topline">
+            <button class="lock" onclick={logout}>Log out</button>
+          </div>
+        {/snippet}
+      </NavRail>
+    {/snippet}
 
-    <div class="discipline">
-      <span class="d-label" id="discipline-l">I work as a</span>
-      <div class="seg" role="radiogroup" aria-labelledby="discipline-l">
-        {#each DISCIPLINES as d (d)}
-          <button type="button" role="radio" aria-checked={discipline === d} onclick={() => chooseDiscipline(d)}>{PROFILES[d].label}</button>
-        {/each}
-      </div>
-      <span class="d-note">{profile.leadsWith} It changes how this console is arranged, never what you can read.</span>
-    </div>
+    {#snippet header()}
+      <PageHeader title={TITLES[tab]} />
+    {/snippet}
 
-    {#if grantError}
-      <Callout tone="critical">{grantError}</Callout>
-    {/if}
+    <div class="page">
+      <LowerAssuranceBanner />
 
-    <!--
-      Kept mounted while the console is signed in, and only hidden on other tabs, so a running
-      session timer still ends on time, and its banner still shows, while the clinician reads the
-      record.
-    -->
-    <TimersScreen open={tab === 'timers'} presets={presetsFor(discipline, PRESETS)} />
-
-    {#if grant && tab !== 'timers'}
-      {#if tab === 'allowed'}
-        <AllowedPanel {grant} ownerSigningFp={ctx.pinnedOwnerSigningFp} therapistFp={ctx.therapistFp} />
-        <!--
-          At the FOOT of this tab, and deliberately not up in the topline beside Log out: two
-          adjacent controls that both end a session, one of them permanently, is a misclick with no
-          recovery. See LeaveRelationship.svelte for the rest of the reasoning.
-        -->
-        <LeaveRelationship {ctx} onleft={onLeft} />
-      {:else if tab === 'assign'}
-        <AssignSurface {ctx} {grant} ownerBoxPub={ctx.ownerBoxPub} />
-      {:else if tab === 'gameplan'}
-        <GamePlanAuthor {ctx} ownerBoxPub={ctx.ownerBoxPub} />
-      {:else if tab === 'today'}
-        {#if shared}<TodayScreen data={shared} {now} />{:else}{@render needShare()}{/if}
-      {:else if tab === 'calendar'}
-        {#if shared}<CalendarScreen data={shared} {now} />{:else}{@render needShare()}{/if}
-      {:else if tab === 'record'}
-        {#if shared}<ClientRecordScreen data={shared} {now} />{:else}{@render needShare()}{/if}
-      {:else if tab === 'shared'}
-        <SharedDataView {ctx} onopen={(d) => (shared = d)} onended={lock} />
+      {#if grantError}
+        <Callout tone="critical">{grantError}</Callout>
       {/if}
-    {/if}
-  </section>
+
+      <!--
+        Kept mounted while the console is signed in, and only hidden on other pages, so a running
+        session timer still ends on time, and its banner still shows, while the clinician reads the
+        record.
+      -->
+      <TimersScreen open={tab === 'timers'} heading={false} presets={presetsFor(discipline, PRESETS)} />
+
+      {#if grant && tab !== 'timers'}
+        {#if tab === 'allowed'}
+          <AllowedPanel {grant} ownerSigningFp={ctx.pinnedOwnerSigningFp} therapistFp={ctx.therapistFp} />
+          <!--
+            At the FOOT of this page, and deliberately not in the rail beside Log out: two
+            adjacent controls that both end a session, one of them permanently, is a misclick with
+            no recovery. See LeaveRelationship.svelte for the rest of the reasoning.
+          -->
+          <LeaveRelationship {ctx} onleft={onLeft} />
+        {:else if tab === 'assign'}
+          <AssignSurface {ctx} {grant} ownerBoxPub={ctx.ownerBoxPub} />
+        {:else if tab === 'gameplan'}
+          <GamePlanAuthor {ctx} ownerBoxPub={ctx.ownerBoxPub} />
+        {:else if tab === 'today'}
+          {#if shared}<TodayScreen data={shared} {now} />{:else}{@render needShare()}{/if}
+        {:else if tab === 'calendar'}
+          {#if shared}<CalendarScreen data={shared} {now} />{:else}{@render needShare()}{/if}
+        {:else if tab === 'record'}
+          {#if shared}<ClientRecordScreen data={shared} {now} />{:else}{@render needShare()}{/if}
+        {:else if tab === 'shared'}
+          <SharedDataView {ctx} onopen={(d) => (shared = d)} onended={lock} />
+        {/if}
+      {/if}
+    </div>
+  </AppShell>
 {/if}
 
 {#snippet needShare()}
@@ -345,22 +367,20 @@
   -->
   <Callout title="No shared data open">
     <p>
-      Open the share on the <strong>Shared data</strong> tab and this surface will have something to
-      draw. Nothing is fetched by moving between tabs.
+      Open the share on the <strong>Shared data</strong> page and this one will have something to
+      draw. Nothing is fetched by moving between pages.
     </p>
   </Callout>
 {/snippet}
 
 <style>
-  /* The same measure and centring the sign-in screen uses, so unlocking does not snap the page
-     to the left edge. */
-  .portal {
+  /* One column, capped at the reading measure, inside the shell's body. */
+  .page {
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
     max-width: var(--maxw);
-    margin: 0 auto;
-    padding: var(--space-5) var(--space-4) var(--space-8);
+    padding-top: var(--space-4);
   }
   .left-notice {
     max-width: var(--maxw);
@@ -370,24 +390,11 @@
     font-size: 0.9rem;
     line-height: 1.55;
   }
-  .topline { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
-  .tabs { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-  .discipline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
-  .d-label { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
-  .d-note { flex-basis: 100%; font-size: 0.86rem; color: var(--ink-soft); }
-  .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden; background: var(--paper-sheet); }
-  .seg button { border: 0; border-radius: 0; background: transparent; padding: 0.35rem 0.75rem; font-size: 0.88rem; min-height: 2.25rem; }
-  .seg button + button { border-left: 1px solid var(--hairline); }
-  .seg button[aria-checked='true'] { background: var(--indigo); color: var(--on-accent); }
-
-  /*
-   * The selected section is STRUCTURE — where you are in the interface — so it takes the
-   * structural accent rather than solid ink. Ink stays reserved for the primary ACTION on a
-   * screen (the publish buttons), which keeps "where am I" and "what will this do" visually
-   * distinct instead of both shouting in the same black. aria-pressed carries the same fact
-   * without colour.
-   */
-  .tabs button.active { background: var(--indigo); color: var(--on-accent); border-color: var(--indigo); }
+  .topline { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+  .discipline { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); margin-bottom: var(--space-3); }
+  .d-label { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--chrome-soft); }
+  .d-note { font-family: var(--font-text); font-size: 0.8rem; color: var(--chrome-soft); line-height: 1.4; }
+  .discipline select { align-self: stretch; font: inherit; font-family: var(--font-text); font-size: 0.9rem; min-height: 2.25rem; padding: 0 var(--space-2); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-sheet); color: var(--ink-text); }
 
   /*
    * The grant-failure slot used to be washed in --mood-2 / --mood-2-wash — a person's

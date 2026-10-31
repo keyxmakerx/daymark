@@ -90,9 +90,9 @@ describe('the edge of the client record says only true things about a share (#39
   })
 
   it('names only tabs the clinician can actually open', () => {
-    // The note sends the reader to two other tabs by name, so a renamed tab would make it false.
-    // One line per tab button; its handler holds an arrow, so `[^>]*` cannot span its attributes.
-    const tab = (label: string) => new RegExp(`<button\\b[^\\n]*>${label}</button>`)
+    // The note sends the reader to two other places by name, so a renamed place would make it
+    // false. The rail's read places take their labels from one table in the portal.
+    const tab = (label: string) => new RegExp(`^\\s+[a-z]+: '${label}',$`, 'm')
     // Control: the pattern finds a tab the portal has, and misses one it has not.
     expect(PORTAL).toMatch(tab('Record'))
     expect(PORTAL).not.toMatch(tab('Journal notes'))

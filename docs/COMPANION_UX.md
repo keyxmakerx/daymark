@@ -74,7 +74,7 @@ range, leaving out single records and previewing it before it goes: #225.
 The mirror of §7.6, and deliberately not its twin: the two acts differ in what they reach, and so in
 what they may claim.
 
-1. **Allowed tab → foot of the panel → "Leave this relationship"** — a plain hairline control on
+1. **Allowed page → foot of the panel → "Leave this relationship"** — a plain hairline control on
    chrome. Not beside **Log out**: two adjacent controls that both end a session, one of them
    permanently, is a misclick with no recovery. No passphrase re-entry: the passphrase protects the
    key record, and the record is exactly what is being put down.
