@@ -93,6 +93,7 @@ export {
   PracticeClient,
   failureSentence,
   formatInstant,
+  formatAuditInstant,
   isMemberId,
   isPracticeId,
   isPracticeName,

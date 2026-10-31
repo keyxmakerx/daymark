@@ -313,7 +313,7 @@ export class SyncClient {
   }
 
   private async req(path: string, init: RequestInit = {}): Promise<Response> {
-    const res = await this.doFetch(this.base + path, { ...init, headers: { ...this.headers(), ...(init.headers as Record<string, string>) } })
+    const res = await (0, this.doFetch)(this.base + path, { ...init, headers: { ...this.headers(), ...(init.headers as Record<string, string>) } })
     return res
   }
 
