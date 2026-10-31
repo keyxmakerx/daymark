@@ -94,6 +94,11 @@ export interface Removal {
 /** One line of the practice's own control-plane history. Metadata, never content. */
 export interface OrgAuditEvent {
   seq: number
+  /**
+   * SECONDS since the epoch, as the audit store writes every row (AuditStore.kt), unlike the
+   * roster's milliseconds. Render it with [formatAuditInstant], never [formatInstant] (#495). The
+   * stored unit is not changed here: the chain is hash-linked over it.
+   */
   ts: number
   actor: string
   action: string
@@ -127,6 +132,16 @@ export function formatInstant(ts: number | null | undefined): string {
   if (typeof ts !== 'number' || !Number.isFinite(ts) || ts <= 0) return 'not recorded'
   const iso = new Date(ts).toISOString()
   return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`
+}
+
+/**
+ * An audit row's timestamp, rendered. The audit store writes seconds; every other timestamp on
+ * this surface is milliseconds. Read as milliseconds, a row written today renders as January 1970
+ * (#495). Zero and missing still say "not recorded".
+ */
+export function formatAuditInstant(tsSeconds: number | null | undefined): string {
+  if (typeof tsSeconds !== 'number') return formatInstant(tsSeconds)
+  return formatInstant(tsSeconds * 1000)
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════
@@ -559,7 +574,7 @@ export class PracticeClient {
     let res: Response
     try {
       // credentials:'include' so the HttpOnly session cookie rides every call on this surface.
-      res = await this.doFetch(this.base + path, { credentials: 'include', ...init })
+      res = await (0, this.doFetch)(this.base + path, { credentials: 'include', ...init })
     } catch (e) {
       // A rejected fetch cannot distinguish "never left this machine" from "was carried out and the
       // answer was lost". Reported as the second, because only that reading is safe for a write.

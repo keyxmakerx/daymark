@@ -63,7 +63,7 @@ function shellEnv(extra: Record<string, string>): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [k, v] of Object.entries(process.env)) {
     if (v === undefined || k.startsWith('VITEST') || k === 'TEST' || k === 'NODE_ENV') continue
-    if (k === 'DAYMARK_SYNC_PASSPHRASE' || k === 'DAYMARK_AUTH_TOKEN') continue
+    if (k === 'DAYMARK_SYNC_PASSPHRASE' || k === 'DAYMARK_AUTH_TOKEN' || k === 'DAYMARK_CLI_TOKEN') continue
     env[k] = v
   }
   return { ...env, ...extra }
@@ -192,6 +192,17 @@ describe('pnpm push refuses a snapshot too large once padded, and sends nothing 
     // The token that reached the server is the one from the environment (#384).
     expect(auth).toEqual([`Bearer ${TOKEN}`, `Bearer ${TOKEN}`])
   }, 120_000)
+
+  it('DAYMARK_CLI_TOKEN wins over DAYMARK_AUTH_TOKEN when both are set (#324)', async () => {
+    seen.length = 0
+    auth.length = 0
+    const CLI = 'dmcli_spawn-test-credential'
+    const run = await push(args([]), { ...env, DAYMARK_CLI_TOKEN: CLI })
+    expect(run.status).toBe(1)
+    // Positive control for the assertion below: requests did reach the listener.
+    expect(seen).toEqual(['GET /v1/snapshots/cli-test', 'GET /v1/keydoc'])
+    expect(auth).toEqual([`Bearer ${CLI}`, `Bearer ${CLI}`])
+  }, 120_000)
 })
 
 describe('pnpm push takes the access token from the environment, never the command line (#384)', () => {
@@ -229,17 +240,19 @@ describe('pnpm push takes the access token from the environment, never the comma
     })
     expect(run.status).toBe(1)
     expect(run.stderr).toContain(
-      'push failed: the access token is read from DAYMARK_AUTH_TOKEN, never from the command line, where other users of this machine could read it. Nothing was sent.',
+      'push failed: the credential is read from DAYMARK_CLI_TOKEN (or DAYMARK_AUTH_TOKEN), never from the command line, where other users of this machine could read it. Nothing was sent.',
     )
     expect(run.stdout + run.stderr).not.toContain(ARG_TOKEN)
     expect(seen).toEqual([])
   }, 120_000)
 
-  it('with no DAYMARK_AUTH_TOKEN, it says so and sends nothing', async () => {
+  it('with neither DAYMARK_CLI_TOKEN nor DAYMARK_AUTH_TOKEN, it says so and sends nothing', async () => {
     seen.length = 0
     const run = await push(['--server', base, '--lineage', 'cli-test', '--backup', backup()], passphraseOnly)
     expect(run.status).toBe(1)
-    expect(run.stderr).toContain('push failed: set DAYMARK_AUTH_TOKEN in the environment (the server access token)')
+    expect(run.stderr).toContain(
+      'push failed: set DAYMARK_CLI_TOKEN in the environment (the command-line credential from your owner console), or DAYMARK_AUTH_TOKEN on a server that still uses its shared access token',
+    )
     expect(seen).toEqual([])
   }, 120_000)
 })

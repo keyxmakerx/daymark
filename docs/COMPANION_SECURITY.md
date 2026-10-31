@@ -268,8 +268,9 @@ nothing that decrypts a record or authors content.
 
 Each person who uses a server signs in with an account of their own — the owner, an administrator,
 each clinician and each member of the front desk — and the shared `DAYMARK_AUTH_TOKEN` is nobody's
-sign-in (#208). Not built: #314 for staff, #324 for owners. As built, a clinician signs in with a
-code per relationship (§5.2), and the owner presents the bearer token (§6).
+sign-in (#208). Not built: #314 for staff. As built, a clinician signs in with a code per
+relationship (§5.2), and the owner signs in with an account of their own (§5.9), made once with the
+bearer token, which then signs nobody in.
 
 ### 5.1 Passkeys (WebAuthn)
 
@@ -414,6 +415,29 @@ owner's pairing identity. The properties the rest of this document relies on:
   revoked, and one when a lockout arms, at most one a minute across the server, so addresses without
   number cannot fill it.
 
+### 5.9 The owner's own account
+
+- **Made once, with the token.** `POST /v1/owner/account` takes the bearer token, a name, an
+  authenticator seed and six digits from it; a wrong code makes nothing, and a second attempt is
+  refused. The account takes the owner's existing id, so stored copies and paired phones stay theirs.
+  It writes `owner.account_created` to the owner's log.
+- **The token then signs nobody in.** A token request answers exactly as a wrong token does, so
+  nothing says the token was once right. Email recovery answers 404, since it would hand out a new
+  token (#325 is recovery by key). Changing `DAYMARK_AUTH_TOKEN` and restarting moves only the
+  stored digest: it disconnects no phone.
+- **Sign-in** is the same TOTP path as the administrator's and the clinician's (§5.2): one replay
+  window per step, every refusal the same sentence, and one audit row per lockout, on arming.
+- **The session** is the cookie `daymark_owner`, `HttpOnly; SameSite=Strict`, with §5.4's lifetimes;
+  the server stores its digest only. Every request that changes something needs `X-CSRF-Token`.
+  A session cookie is never counted toward the bearer lockout. Admin and clinician cookies open
+  nothing here.
+- **Command-line writer credentials** (`dmcli_…`) are made and revoked only from the signed-in
+  account, stored as digests, and limited to the snapshot routes (`routes/OwnerCredentials.kt`,
+  `CLI_ROUTES`): they cannot pair a phone, enrol a clinician or change the owner's key. Making and
+  revoking each writes an audit row (`cli.issued`, `cli.revoked`).
+- Not built: claiming an owner account with a setup code on a fresh server, with no token at all
+  (#208), and passkeys for the owner (#326).
+
 ## 6. Server hardening defaults
 
 ### Container and runtime
@@ -488,7 +512,8 @@ stack trace; the server's own log line for an unhandled error does not yet meet 
   page's "Recover access" card, with the token a sync pull proved on that page. Setting it keeps the
   chosen notifications, and both fields say it is stored in plaintext.
 - **The owner bearer token is stored as a BLAKE2b digest** in `owner-account.db`, never as the token.
-  (`DAYMARK_AUTH_TOKEN` itself remains the operator's secret file.) The token alone can approve a
+  (`DAYMARK_AUTH_TOKEN` itself remains the operator's secret file.) Once the owner has an account
+  (§5.9), the token signs nobody in. The token alone can approve a
   pairing and so enrol a clinician, which is why it may not sit in the clear. Content routes also
   demand the relationship's inbox token, whose digest is all the server holds.
 - **Access comes back by proving the owner's own key, never by email** (#208): a key derived from

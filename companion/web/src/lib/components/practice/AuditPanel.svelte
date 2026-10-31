@@ -28,7 +28,7 @@
   import {
     PracticeClient,
     failureSentence,
-    formatInstant,
+    formatAuditInstant,
     type OrgAuditEvent,
     type PracticeFailure,
   } from '../../practice/client'
@@ -121,7 +121,7 @@
         <li class="entry">
           <p class="entry-head">
             <span class="seq">#{event.seq}</span>
-            <span class="when">{formatInstant(event.ts)}</span>
+            <span class="when">{formatAuditInstant(event.ts)}</span>
             <span class="action">{orgAuditActionLabel(event.action)}</span>
           </p>
           <p class="actor">{orgAuditActorLabel(event.actor)}</p>

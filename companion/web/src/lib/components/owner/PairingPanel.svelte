@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ownerAuthHeaders, type OwnerCredential } from '../../owner/account'
   /*
    * The owner's pairing screen: one invitation, one code, one decision.
    *
@@ -68,7 +69,7 @@
     others?: PinnedTherapist[]
     client: PortalClient | null
     baseUrl: string
-    token: string
+    token: OwnerCredential
     smtpEnabled: boolean
     scope: string[]
     /**
@@ -120,7 +121,7 @@
     },
     async listInvites(): Promise<InviteSummary[]> {
       const res = await fetch(`${baseUrl.replace(/\/+$/, '')}/v1/relations/${encodeURIComponent(await relRef())}/invites`, {
-        headers: { authorization: `Bearer ${token}` },
+        headers: ownerAuthHeaders(token),
       })
       if (!res.ok) return []
       return (await res.json()) as InviteSummary[]

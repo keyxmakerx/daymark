@@ -14,6 +14,7 @@ import com.daymark.companion.org.OrgStore
 import com.daymark.companion.routes.DEVICE_REVOKED_BY_REISSUE
 import com.daymark.companion.routes.SERVER_AUDIT_REF
 import com.daymark.companion.routes.adminRoutes
+import com.daymark.companion.routes.ownerAccountRoutes
 import com.daymark.companion.routes.ErrorDto
 import com.daymark.companion.routes.PHONE_REFUSED_ROUTES
 import com.daymark.companion.routes.auditChainRoutes
@@ -258,7 +259,10 @@ fun Application.module(
     // id. Every owner route below takes this, never the token's digest.
     val ownerAuth = if (account != null && guard != null && ownerAudit != null) {
         // One row when a lockout is armed, never per probe; OwnerAuth spaces them out server-wide.
-        OwnerAuth(guard, account.devices, config.maxRequestBytes, phoneRefusedRoutes) { source, credential ->
+        OwnerAuth(
+            guard, account.devices, config.maxRequestBytes, phoneRefusedRoutes,
+            signIn = account.signIn, sessionIdleSeconds = config.sessionIdleSeconds,
+        ) { source, credential ->
             auditLockout(ownerAudit, account.devices.ownerId, credential, source.takeIf { config.auditSourceIpEnabled })
         }
     } else {
@@ -424,6 +428,19 @@ fun Application.module(
 
         if (store != null && keyDocuments != null && ownerAuth != null && ownerAudit != null) {
             syncRoutes(store, keyDocuments, ownerAuth, config.maxRequestBytes)
+            // The owner's own account (#324): made once with the token, which it then retires.
+            ownerAccountRoutes(
+                auth = ownerAuth,
+                signIn = ownerAuth.signIn!!,
+                ownerAudit = ownerAudit,
+                createBudget = TokenBucketLimiter(burst = ADMIN_ATTEMPT_BURST, refillIntervalMs = ADMIN_ATTEMPT_REFILL_MS),
+                signInBudget = TokenBucketLimiter(burst = ADMIN_ATTEMPT_BURST, refillIntervalMs = ADMIN_ATTEMPT_REFILL_MS),
+                sessionAbsoluteSeconds = config.sessionAbsoluteSeconds,
+                lockoutFails = config.totpLockoutFails,
+                lockoutSeconds = config.totpLockoutSeconds,
+                cookieSecure = config.cookieSecure,
+                auditSourceIp = config.auditSourceIpEnabled,
+            )
             // Pairing a phone and the phones paired (#186, #189): part of the sync API, since a phone
             // pairs to sync, so on in every shape with it.
             deviceRoutes(
@@ -448,6 +465,9 @@ fun Application.module(
             get("/v1/devices/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
             post("/v1/devices/{...}") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
             get("/v1/owner/audit") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
+            get("/v1/owner/account") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
+            post("/v1/owner/account") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
+            post("/v1/owner/session") { call.respond(HttpStatusCode.ServiceUnavailable, ErrorDto("sync API not configured")) }
         }
 
         // The clinician group (#330): on in paired and practice. Fail-closed: when it is off, every

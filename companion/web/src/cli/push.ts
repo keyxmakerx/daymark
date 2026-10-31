@@ -4,11 +4,14 @@
  * Companion as the next append-only version. The server only ever sees ciphertext.
  *
  * Usage:
- *   DAYMARK_SYNC_PASSPHRASE='…' DAYMARK_AUTH_TOKEN='…' pnpm --silent push -- \
+ *   DAYMARK_SYNC_PASSPHRASE='…' DAYMARK_CLI_TOKEN='…' pnpm --silent push -- \
  *     --server http://localhost:8080 --lineage laptop --backup backup.json
  *
  * THE SECRETS COME FROM THE ENVIRONMENT, NEVER THE COMMAND LINE. The passphrase is read from
- * DAYMARK_SYNC_PASSPHRASE and the server's access token from DAYMARK_AUTH_TOKEN. A process's
+ * DAYMARK_SYNC_PASSPHRASE and the credential from DAYMARK_CLI_TOKEN: the command-line writer
+ * credential the owner console makes once the owner has a sign-in of their own (#324), which can
+ * read and write snapshots and nothing else. A server still on its shared access token takes that
+ * token from DAYMARK_AUTH_TOKEN instead; DAYMARK_CLI_TOKEN wins when both are set. A process's
  * arguments can be read by other users of the same machine while it runs (`ps`, /proc), and pnpm
  * prints them unless `--silent` is given, so a `--token` argument is refused before anything is
  * sent, and the refusal never repeats it (#384).
@@ -31,12 +34,13 @@ import { isLaneLineage } from '../lib/lane/lineage'
 
 const USAGE = [
   'Usage:',
-  "  DAYMARK_SYNC_PASSPHRASE='…' DAYMARK_AUTH_TOKEN='…' pnpm --silent push -- --server <url> --lineage <name> --backup <file.json>",
+  "  DAYMARK_SYNC_PASSPHRASE='…' DAYMARK_CLI_TOKEN='…' pnpm --silent push -- --server <url> --lineage <name> --backup <file.json>",
   '',
   'Encrypts a Daymark backup export with your sync passphrase and uploads it to your Companion as the',
   'next version. The server only ever receives ciphertext. The passphrase is read from',
-  'DAYMARK_SYNC_PASSPHRASE and the server access token from DAYMARK_AUTH_TOKEN, never from the',
-  'command line, where other users of this machine could read them.',
+  'DAYMARK_SYNC_PASSPHRASE and the credential from DAYMARK_CLI_TOKEN (made in your owner console),',
+  'never from the command line, where other users of this machine could read them. A server that',
+  'still uses its shared access token takes it from DAYMARK_AUTH_TOKEN instead.',
   '',
   '  --server <url>          your Companion (default http://localhost:8080)',
   '  --lineage <name>        the name this copy is filed under, 1 to 64 of A-Z a-z 0-9 _ - (default laptop),',
@@ -58,19 +62,24 @@ async function main() {
   }
   if (process.argv.includes('--token')) {
     throw new Error(
-      'the access token is read from DAYMARK_AUTH_TOKEN, never from the command line, where other ' +
-        'users of this machine could read it. Nothing was sent.',
+      'the credential is read from DAYMARK_CLI_TOKEN (or DAYMARK_AUTH_TOKEN), never from the command ' +
+        'line, where other users of this machine could read it. Nothing was sent.',
     )
   }
   const server = arg('server') ?? 'http://localhost:8080'
-  const token = process.env.DAYMARK_AUTH_TOKEN
+  const token = process.env.DAYMARK_CLI_TOKEN || process.env.DAYMARK_AUTH_TOKEN
   const lineage = arg('lineage') ?? 'laptop'
   const backupPath = arg('backup')
   const passphrase = process.env.DAYMARK_SYNC_PASSPHRASE
 
   const maxBlobArg = arg('max-blob-bytes')
 
-  if (!token) throw new Error('set DAYMARK_AUTH_TOKEN in the environment (the server access token)')
+  if (!token) {
+    throw new Error(
+      'set DAYMARK_CLI_TOKEN in the environment (the command-line credential from your owner console), ' +
+        'or DAYMARK_AUTH_TOKEN on a server that still uses its shared access token',
+    )
+  }
   if (!backupPath) throw new Error('missing --backup <path to a Daymark backup .json>')
   if (!passphrase) throw new Error('set DAYMARK_SYNC_PASSPHRASE in the environment')
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(lineage)) throw new Error('--lineage must be 1–64 chars of [A-Za-z0-9_-]')

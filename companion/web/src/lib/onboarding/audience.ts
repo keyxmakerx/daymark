@@ -22,10 +22,9 @@
  * THE DISCLOSURE RULE, AND WHY THIS FILE IS SO QUIET ABOUT CONFIGURATION
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  *
- * index.html is served to ANYONE who can reach the server, with no authentication. admin.html is
- * also unauthenticated on this build — src/admin.ts mounts AdminConsole with no credential, and
- * Config.kt defines no administrator identity for it to present. So "put the sensitive detail on
- * the admin page" is not an available answer, and a setup screen that listed what this server has
+ * index.html is served to ANYONE who can reach the server, with no authentication. admin.html asks
+ * for the administrator sign-in (#322), but the probes it reads (/healthz, /readyz, /v1/config) are
+ * public. So "put the sensitive detail on the admin page" is not an available answer, and a setup screen that listed what this server has
  * and has not been configured with would be reading an attacker their checklist of which
  * protections are off.
  *
@@ -141,9 +140,9 @@ export const AUDIENCES: readonly Audience[] = [
     page: null,
     linkLabel: 'the server console',
     entryCondition:
-      'Operational health only. On this build that console asks for no credential of its own, ' +
-      'because this build defines no administrator identity for it to present — so anyone who can ' +
-      'reach it can open it. Serve it where you would serve a shell, not where you serve this page.',
+      'Operational health only. That console asks for this server\'s administrator sign-in, a ' +
+      'name and an authenticator code, before it opens. The health readings it shows come from ' +
+      'public endpoints that answer anyone who can reach the server.',
   },
 ]
 
@@ -153,11 +152,9 @@ export const AUDIENCES: readonly Audience[] = [
  *
  * AN ENTRY IS WITHHELD WHOLE, NOT JUST ITS LINK, for two different reasons.
  *
- *   The operator's, unless `adminLink` is set. admin.html asks for no credential on this build, and
- *   the card's own condition says so: anyone who can reach it can open it. Withholding the anchor
- *   while printing that sentence withholds nothing — the filename is a vite entry in the public
- *   source, one request away — so a deployment has to choose to advertise an unguarded ops console
- *   from a public page, and the default is closed.
+ *   The operator's, unless `adminLink` is set. Withholding only the anchor would withhold nothing —
+ *   the filename is a vite entry in the public source, one request away — so a deployment has to
+ *   choose to advertise its ops console from a public page, and the default is closed.
  *
  *   The clinician's, when the server published a shape that does not serve the clinician's page
  *   (#330). That page answers 403 there, and the card would be telling a clinician their portal is

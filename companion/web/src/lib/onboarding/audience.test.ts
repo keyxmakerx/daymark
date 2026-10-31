@@ -162,13 +162,13 @@ describe('the three audiences', () => {
     expect(clinician.entryCondition).toContain('no sign-up')
   })
 
-  it('the operator is told the console holds no credential, in as many words', () => {
+  it('the operator is told what the sign-in guards and that the readings are public (#496)', () => {
     const operator = AUDIENCES.find((a) => a.id === 'operator')!
-    // admin.html mounts AdminConsole with no credential (src/admin.ts) and this build defines no
-    // administrator identity (Config.kt). Papering over that on a page anyone can open would be
-    // the worst available combination: a link, plus the impression it is guarded.
-    expect(operator.entryCondition).toContain('no credential')
-    expect(operator.entryCondition).toContain('anyone who can reach it can open it')
+    // admin.html mounts AdminGate (src/admin.ts), which asks for the administrator sign-in (#322).
+    // The probes the console reads stay public, and the card must not imply they are guarded.
+    expect(operator.entryCondition).toContain('administrator sign-in')
+    expect(operator.entryCondition).toContain('answer anyone who can reach the server')
+    expect(operator.entryCondition).not.toMatch(/no credential|defines no administrator identity/)
     // And it must not imply the console shows anyone's data, because it shows none.
     expect(operator.who).toContain('no names')
   })

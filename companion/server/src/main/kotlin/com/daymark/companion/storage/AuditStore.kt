@@ -254,6 +254,18 @@ enum class AuditAction(val wire: String) {
     SERVER_CLAIMED("server.claimed"),
 
     /**
+     * The owner's own account was made (#324), and from this row on the shared access token signs
+     * nobody in. Carries the credential it was made with (`token`), never the name or the code.
+     */
+    OWNER_ACCOUNT_CREATED("owner.account_created"),
+
+    /** The owner minted a credential for the command-line writer (#324). Its objectRef is the credential's id. */
+    CLI_CREDENTIAL_ISSUED("cli.issued"),
+
+    /** The owner revoked a credential of the command-line writer (#324). Its objectRef is the credential's id. */
+    CLI_CREDENTIAL_REVOKED("cli.revoked"),
+
+    /**
      * The server started printing a setup code although it has an administrator, because the
      * operator asked for one at start-up (`DAYMARK_ADMIN_RESET`). One row per start that does so.
      */

@@ -2,6 +2,7 @@
   import type { BackupData } from '../../backup'
   import Dashboard from '../Dashboard.svelte'
   import OwnerUnlock from './OwnerUnlock.svelte'
+  import OwnerAccountPanel from './OwnerAccountPanel.svelte'
   import GrantManager from './GrantManager.svelte'
   import AssignmentInbox from './AssignmentInbox.svelte'
   import PlanInbox from './PlanInbox.svelte'
@@ -25,6 +26,7 @@
   import type { Grant } from '../../assignments/types'
   import type { OwnerLane } from '../../lane/lane'
   import { CONSOLE_POINTER } from '../../phones/copy'
+  import { isSession, type AccountSession, type OwnerCredential } from '../../owner/account'
 
   let { data }: { data: BackupData | null } = $props()
 
@@ -53,7 +55,13 @@
 
   // Server connection for the portal blob/invite calls (owner bearer token).
   let serverUrl = $state('')
-  let token = $state('')
+  /**
+   * What every owner call authenticates with: the signed-in session the door handed over, or the
+   * shared token while the server still takes one (owner/account.ts, #324). [typedToken] is only
+   * the connection panel's field, for a server that still takes a token.
+   */
+  let token = $state.raw<OwnerCredential>('')
+  let typedToken = $state('')
   let smtpEnabled = $state(false)
   let client = $state<PortalClient | null>(null)
   /*
@@ -83,6 +91,14 @@
     selectedId = s.pinned[0]?.id ?? null
     serverUrl = connection.serverUrl
     token = connection.token
+    typedToken = ''
+    void connect()
+  }
+
+  /** The account is made: the session replaces the token on every call, which reconnects. */
+  function signedIn(s: AccountSession) {
+    token = s
+    typedToken = ''
     void connect()
   }
 
@@ -98,6 +114,7 @@
 
   async function connect() {
     connectStatus = ''
+    if (typedToken) token = typedToken
     if (!token) { connectStatus = 'Enter your owner access token.'; return }
     const c = new PortalClient(serverUrl, token)
     const e: OwnerEndpoint = { baseUrl: serverUrl, token }
@@ -117,7 +134,7 @@
   }
 
   /** The owner's lane over the sync API, loaded when the console connects. */
-  async function laneOn(url: string, tok: string, s: OwnerSession): Promise<OwnerLane> {
+  async function laneOn(url: string, tok: OwnerCredential, s: OwnerSession): Promise<OwnerLane> {
     const [{ SyncClient }, { ownerLane }, { takenInIds }] = await Promise.all([
       import('../../sync/client'),
       import('../../lane/lane'),
@@ -189,9 +206,18 @@
       <summary>Server connection {client ? '· connected' : '· not connected'}</summary>
       <div class="conn-body">
         <label><span>Server URL <em>(blank = this server)</em></span><input type="url" bind:value={serverUrl} placeholder="https://daymark.example.com" autocomplete="off" /></label>
-        <label><span>Owner access token</span><input type="password" bind:value={token} autocomplete="off" /></label>
+        {#if !isSession(token)}
+          <label><span>Owner access token</span><input type="password" bind:value={typedToken} autocomplete="off" /></label>
+        {/if}
         <button onclick={connect}>Connect</button>
         {#if connectStatus}<span class="cstatus">{connectStatus}</span>{/if}
+        <!--
+          The owner's own sign-in (#324). Only on the server that serves this console: the session
+          is a same-origin cookie, which a console pointed at another server would never send.
+        -->
+        {#if client && serverUrl.trim() === ''}
+          <OwnerAccountPanel credential={token} onsignedin={signedIn} onsignedout={lock} />
+        {/if}
         <!-- Phones pair on every kind of server, so from the sync card, not from here (#431). -->
         <p class="cpointer">{CONSOLE_POINTER}</p>
       </div>

@@ -22,6 +22,13 @@ All notable changes to this project are documented here. The format is based on
   you choose: a soft chime, a buzz on a phone, a notification your watch can show as a tap, or a
   quiet banner. The banner always shows, on every tab, and says so when the device couldn't chime,
   buzz or notify. Timers stay in the browser and never name a client.
+- **Companion: you can sign in as yourself instead of with the server's shared access token.**
+  Connect the owner console with the token once and choose **Make your own sign-in**: a name and an
+  authenticator app. Everything already on the server stays yours and your paired phones keep
+  working; after that the token opens nothing, and the owner page asks for your name and six digits.
+  The command-line writer gets a credential of its own from the console, set as `DAYMARK_CLI_TOKEN`,
+  which can only read and write backups and can be revoked there. Email recovery is switched off
+  once your sign-in is made (#324).
 - **You can call your crisis line from the app.** Once you've said the line is right for you, the
   crisis screen has a **Call** button, and **Text** where the line takes texts. Each opens your
   phone's own dialer or messages app with the number filled in; Daymark never places a call. The
@@ -61,6 +68,14 @@ All notable changes to this project are documented here. The format is based on
   one corner. The view widens as your sky grows, and no star moves (#476).
 
 ### Fixed
+- **Signing in to the practice console works in a real browser.** Every browser answered "No
+  answer from the server (… Illegal invocation)"; now Sign in reaches the server (#494).
+- **The practice log shows the date each change happened**, not January 1970 (#495).
+- **The server console says what its sign-in protects**: the sign-in opens the console, and the
+  health readings come from public endpoints. It no longer says it holds no credential right under
+  "Signed in as" (#496).
+- **A practice role's duties that have no screen yet say "Not built"** where the role is chosen,
+  so a front desk is no longer offered a calendar that does not exist.
 - **A restore that fails part-way keeps your photos and reminders.** "Replace all" used to empty
   the photo folder and switch reminders off before it knew the restore would work. The file's
   photos now wait in a staging folder until the restore has succeeded, and reminders and tracker

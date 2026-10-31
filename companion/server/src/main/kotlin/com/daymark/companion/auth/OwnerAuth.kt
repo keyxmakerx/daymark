@@ -12,13 +12,22 @@ import org.bouncycastle.math.ec.rfc8032.Ed25519
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
 
-/** The kinds of credential an owner request can carry today (#186). Owner accounts add `account` and `cli` (#324). */
+/** The kinds of credential an owner request can carry (#186, #324). */
 enum class CredentialKind(val wire: String) {
-    /** The shared bearer token: the owner console's, until #324 gives it an account session. */
+    /**
+     * The shared bearer token, accepted only until the owner's account is made (#324). It is how the
+     * account is made on an install that predates accounts, and is refused everywhere from then on.
+     */
     TOKEN("token"),
 
     /** A phone's key, registered through the owner console, signing each request (#186, #189). */
     DEVICE("device"),
+
+    /** The owner console's session after signing in to the owner's account (#324): a cookie, with CSRF. */
+    ACCOUNT("account"),
+
+    /** A credential the owner minted for the command-line writer, and can revoke (#324). */
+    CLI("cli"),
 }
 
 /**
@@ -28,9 +37,19 @@ enum class CredentialKind(val wire: String) {
  */
 data class OwnerPrincipal(val ownerId: String, val kind: CredentialKind, val credentialId: String)
 
+/** The owner console's session cookie (#324). Distinct from the administrator's and the clinician's, so none stands in for another. */
+const val OWNER_COOKIE = "daymark_owner"
+
 /**
- * The one gate every owner route shares (#186): the bearer token, or a registered device's signature
- * (DeviceSignature says what one is), resolved to an [OwnerPrincipal].
+ * The one gate every owner route shares (#186): a registered device's signature (DeviceSignature says
+ * what one is), the owner console's account session, a CLI credential, or the shared bearer token,
+ * resolved to an [OwnerPrincipal].
+ *
+ * - THE ACCOUNT RETIRES THE TOKEN (#324). Once [OwnerSignIn.exists], the token is still compared, so it
+ *   costs the work a wrong one does, and is refused with the same 401. A CLI credential is a bearer
+ *   that begins with [OwnerSignIn.CLI_TOKEN_PREFIX] and is looked up by its digest. The account's
+ *   session is read only from [OWNER_COOKIE], only when the request carries no signature header and no
+ *   `Authorization`, and a request that changes anything must carry its anti-CSRF token.
  *
  * - A REQUEST CARRYING ANY OF THE SIGNATURE'S HEADERS is judged by its signature alone, and its
  *   `Authorization` header is not read. Otherwise it is judged by its bearer token.
@@ -84,6 +103,13 @@ class OwnerAuth(
      * `routes/OwnerCredentials.kt`, the one list. A parameter so a test can plant a route in it.
      */
     val phoneRefusedRoutes: Set<String>,
+    /**
+     * The owner's account (#324). Null only in tests that build a gate from a device store alone;
+     * a running server always passes OwnerAccountStore's.
+     */
+    val signIn: OwnerSignIn? = null,
+    /** How long an owner session may sit unused: `DAYMARK_SESSION_IDLE_SECONDS`, as every session. */
+    private val sessionIdleSeconds: Long = 900L,
     /** Called when a failure from [source] arms a lockout; [credential] names what was tried. */
     private val onLockoutArmed: (source: String, credential: String) -> Unit = { _, _ -> },
 ) {
@@ -110,9 +136,12 @@ class OwnerAuth(
         data class Refused(val outcome: Outcome) : Registration
     }
 
-    /** Whether [call] carries any owner credential: a bearer token, or any of the signature's headers. */
+    /** Whether [call] carries any owner credential: a bearer token, the owner's session cookie, or any of the signature's headers. */
     fun presentsCredential(call: ApplicationCall): Boolean =
-        call.request.headers[HttpHeaders.Authorization] != null || isSigned(call)
+        call.request.headers[HttpHeaders.Authorization] != null || call.request.cookies[OWNER_COOKIE] != null || isSigned(call)
+
+    /** Whether the shared token is still a credential: only until the owner's account is made (#324). */
+    fun tokenAccepted(): Boolean = signIn?.exists() != true
 
     /** Whether [call] is a signed request: it carries at least one of the signature's headers. */
     fun isSigned(call: ApplicationCall): Boolean = DeviceSignature.HEADERS.any { call.request.headers[it] != null }
@@ -130,8 +159,36 @@ class OwnerAuth(
             }
         }
         val bearer = call.request.headers[HttpHeaders.Authorization]?.removePrefix("Bearer ")?.trim()
-        val principal = if (guard.tokenMatches(bearer)) OwnerPrincipal(ownerId, CredentialKind.TOKEN, TOKEN_CREDENTIAL_ID) else null
+        if (bearer == null) {
+            call.request.cookies[OWNER_COOKIE]?.let { return checkSession(call, it) }
+        }
+        val account = signIn
+        if (account != null && bearer != null && bearer.startsWith(OwnerSignIn.CLI_TOKEN_PREFIX)) {
+            val principal = account.cliCredentialFor(bearer)?.let { OwnerPrincipal(ownerId, CredentialKind.CLI, it) }
+            return settle(source, principal?.let { Outcome.Ok(it) }, CredentialKind.CLI.wire)
+        }
+        // The token is compared even once it is retired, so a retired token costs the same work as a
+        // wrong one, and is answered the same 401 (#324).
+        val matches = guard.tokenMatches(bearer)
+        val principal = if (matches && tokenAccepted()) OwnerPrincipal(ownerId, CredentialKind.TOKEN, TOKEN_CREDENTIAL_ID) else null
         return settle(source, principal?.let { Outcome.Ok(it) }, CredentialKind.TOKEN.wire)
+    }
+
+    /**
+     * The owner console's session (#324). A request that changes anything must also carry the
+     * session's anti-CSRF token in `X-CSRF-Token`; a missing or wrong one is the same 401.
+     *
+     * A session that has lapsed is NOT counted toward the source's lockout. Session ids are 256 random
+     * bits, so nothing is guessed by presenting them, and a console left open past its idle limit
+     * would otherwise lock its own address out with its next few refreshes.
+     */
+    private fun checkSession(call: ApplicationCall, sessionId: String): Outcome {
+        val account = signIn ?: return Outcome.Unauthorized
+        val changes = call.request.httpMethod.value !in SAFE_METHODS
+        val csrf = if (changes) call.request.headers[CSRF_HEADER] ?: return Outcome.Unauthorized else null
+        if (!account.validateSession(sessionId, sessionIdleSeconds, requireCsrf = csrf)) return Outcome.Unauthorized
+        guard.recordSuccess(call.clientAddress())
+        return Outcome.Ok(OwnerPrincipal(ownerId, CredentialKind.ACCOUNT, ACCOUNT_CREDENTIAL_ID))
     }
 
     /**
@@ -272,6 +329,15 @@ class OwnerAuth(
     companion object {
         /** The bearer token's credential id: there is one token, and its digest is never an id. */
         const val TOKEN_CREDENTIAL_ID = "token"
+
+        /** The owner console's credential id: one account, and a session id is never an id. */
+        const val ACCOUNT_CREDENTIAL_ID = "account"
+
+        /** The header a session's state-changing request carries its anti-CSRF token in. */
+        const val CSRF_HEADER = "X-CSRF-Token"
+
+        /** The methods that change nothing, and so need no anti-CSRF token. */
+        private val SAFE_METHODS = setOf("GET", "HEAD", "OPTIONS")
 
         /**
          * The key a signature is checked against when the key the request names is not live. What that

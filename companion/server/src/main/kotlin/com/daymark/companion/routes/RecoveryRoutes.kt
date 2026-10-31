@@ -89,6 +89,12 @@ fun Route.recoveryRoutes(
         // doesn't.
         post("/recovery/request") {
             call.response.header("Referrer-Policy", "no-referrer")
+            // Once the owner's account exists the token signs nobody in (#324), and a re-issue would
+            // only disconnect every phone at the word of whoever holds the mailbox. So the path is gone.
+            if (accountStore.signIn.exists()) {
+                call.respond(HttpStatusCode.NotFound)
+                return@post
+            }
             // Budget FIRST, body second. This route takes no credential, so anyone can reach it;
             // reading the body before consulting the limiter meant an attacker could commit heap
             // on every request and never be told no. Over-budget callers now cost nothing to
@@ -127,6 +133,10 @@ fun Route.recoveryRoutes(
 
         post("/recovery/confirm") {
             call.response.header("Referrer-Policy", "no-referrer")
+            if (accountStore.signIn.exists()) {
+                call.respond(HttpStatusCode.NotFound)
+                return@post
+            }
             val req = call.receiveCappedJson<RecoveryConfirmBody>() ?: return@post
             // The rotation is applied to the live guard from *inside* confirmReissue's own lock,
             // atomically with persisting it — see OwnerAccountStore.confirmReissue's kdoc for why

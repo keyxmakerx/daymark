@@ -62,6 +62,33 @@ internal val PHONE_REFUSED_ROUTES: Set<String> = setOf(
     "PUT /v1/keyparams",
     "POST /v1/keydoc",
     "PUT /v1/keydoc/{version}",
+    // The owner's account (#324): a phone neither makes it nor manages its sessions or the CLI's credentials.
+    "POST /v1/owner/account",
+    "GET /v1/owner/session",
+    "POST /v1/owner/session/logout",
+    "POST /v1/owner/cli",
+    "GET /v1/owner/cli",
+    "POST /v1/owner/cli/{credentialId}/revoke",
+)
+
+/** The one answer, 403, the command-line writer's credential gets on every route not in [CLI_ROUTES] (#324). */
+const val CLI_REFUSED_MESSAGE = "the command-line writer cannot do this"
+
+/**
+ * The routes the command-line writer's credential reaches (#324): reading the key documents and the
+ * snapshots, and writing a snapshot, which is everything `pnpm push` does and nothing else. An
+ * allowlist, unlike the phone's list, because the writer is the narrowest credential the owner holds:
+ * it cannot pair or disconnect a phone, mint an invitation, approve a pairing, write the key documents
+ * or the notification address, or mint or revoke another CLI credential. A route added anywhere is
+ * refused to it until it is put here.
+ */
+internal val CLI_ROUTES: Set<String> = setOf(
+    "GET /v1/keyparams",
+    "GET /v1/keydoc",
+    "GET /v1/snapshots",
+    "GET /v1/snapshots/{lineage}",
+    "GET /v1/snapshots/{lineage}/{version}",
+    "PUT /v1/snapshots/{lineage}/{version}",
 )
 
 /**
@@ -85,8 +112,9 @@ internal suspend fun ApplicationCall.owner(auth: OwnerAuth): OwnerPrincipal? {
 
 /**
  * THE RULE FOR WHICH ROUTES A DEVICE REACHES: whether [principal], whose credential has passed, may use
- * the route this call is on; false once the one 403 [PHONE_REFUSED_MESSAGE] has been answered. The
- * token may use every owner route; a registered phone every one but those in the gate's
+ * the route this call is on; false once the one 403 has been answered. The token, while it is still
+ * accepted, and the owner's account session may use every owner route; the command-line writer only
+ * those in [CLI_ROUTES], answered [CLI_REFUSED_MESSAGE] elsewhere; a registered phone every one but those in the gate's
  * [OwnerAuth.phoneRefusedRoutes] ([PHONE_REFUSED_ROUTES] in a running server). A route whose name
  * cannot be read is refused to a phone, never opened to one. A revoked or pending key never gets this
  * far: it is answered the 401 every route gives it.
@@ -96,6 +124,12 @@ internal suspend fun ApplicationCall.owner(auth: OwnerAuth): OwnerPrincipal? {
  * a phone wherever it is mounted.
  */
 internal suspend fun ApplicationCall.mayUseRoute(principal: OwnerPrincipal, auth: OwnerAuth): Boolean {
+    if (principal.kind == CredentialKind.CLI) {
+        val route = (this as? RoutingCall)?.route?.let(::routeKey)
+        if (route != null && route in CLI_ROUTES) return true
+        respond(HttpStatusCode.Forbidden, ErrorDto(CLI_REFUSED_MESSAGE))
+        return false
+    }
     if (principal.kind != CredentialKind.DEVICE) return true
     val route = (this as? RoutingCall)?.route?.let(::routeKey)
     if (route != null && route !in auth.phoneRefusedRoutes) return true

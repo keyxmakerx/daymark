@@ -68,6 +68,7 @@
     CONSOLE_COVERS,
     CONSOLE_WITHHELD,
     CREDENTIAL_POSTURE,
+    CREDENTIAL_POSTURE_TITLE,
     ENDPOINTS,
     NO_SINGLE_FIGURE,
     PROBE_STATE_WORD,
@@ -465,7 +466,7 @@
               </li>
             {/each}
           </ul>
-          <Callout tone="warn" title="This console holds no credential">
+          <Callout tone="warn" title={CREDENTIAL_POSTURE_TITLE}>
             {CREDENTIAL_POSTURE}
           </Callout>
         </Card>
