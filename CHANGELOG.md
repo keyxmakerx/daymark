@@ -7,6 +7,9 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **A Quick Settings tile that opens your safety plan.** Add the **Daymark** tile to Quick
+  Settings and it opens your plan, after your phone's unlock and your Daymark PIN. It says only
+  "Daymark", so nothing on your lock screen names the plan (#522).
 - **Pick your crisis line from a list.** Where you set your crisis line, **Pick from a list of
   national lines** offers lines for ten countries. Picking one fills in the fields for you to check
   and save; you can still change anything. Daymark never looks at where you are to choose for you,

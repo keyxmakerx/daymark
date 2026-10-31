@@ -342,6 +342,10 @@ recommending, never setting, how often the support space is offered: #172.
   never places a call. The footer says "A plan is not a person — reaching one is the point."
 - **Where it appears:** under More, and as a quiet row in "Take a moment" once it has something in
   it. Never as a suggestion card: nothing infers from mood that someone needs it.
+- **A Quick Settings tile**, there only once the person adds it to Quick Settings themselves. It is
+  labelled "Daymark" and nothing else, because Quick Settings is drawn on the lock screen, and its
+  mark is a plain ring. Tapping it asks for the phone's unlock, then the app's PIN when one is set,
+  and then opens the plan (`app/src/main/java/com/daymark/app/tile/SafetyPlanTileService.kt`, #522).
 - **Not the Stanley–Brown form.** That form needs its authors' written permission to be programmed
   into an electronic record. This is the app's own wording, drawing on the general method of safety
   planning, and is labelled **Adapted**: "A plain safety plan in our own words... not a validated or

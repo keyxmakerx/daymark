@@ -91,6 +91,7 @@ ANNOT=$(find_jar org.jetbrains/annotations "annotations-13.0.jar")
 # `functionBodyRange`. `EditorGuardsSourceTest` imports `repoFile`, `codeOnly` and JUnit only, and so does
 # `RestoreFailureSourceTest`. `CrisisLineDirectoryTest` imports `repoFile`, `codeOnly`, `replaceOnce`
 # and JUnit, and the one main file it needs, `data/CrisisLineDirectory.kt`, imports nothing at all.
+# `SafetyPlanTileSourceTest` imports `repoFile`, `codeOnly`, `replaceOnce` and JUnit only.
 TESTS="com.daymark.app.data.PeopleSchemaTest com.daymark.app.data.TimedOfferSchemaTest
 com.daymark.app.data.CompanionSchemaTest com.daymark.app.data.TrackerRhythmSchemaTest
 com.daymark.app.data.MigrationSchemaExportTest
@@ -115,7 +116,8 @@ com.daymark.app.ui.support.CrisisLineSourceTest
 com.daymark.app.notifications.ReminderReliabilitySourceTest
 com.daymark.app.ui.components.EditorGuardsSourceTest
 com.daymark.app.backup.RestoreFailureSourceTest
-com.daymark.app.data.CrisisLineDirectoryTest"
+com.daymark.app.data.CrisisLineDirectoryTest
+com.daymark.app.tile.SafetyPlanTileSourceTest"
 SOURCES="$REPO/app/src/test/java/com/daymark/app/data/PeopleSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/TimedOfferSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/CompanionSchemaTest.kt
@@ -148,6 +150,7 @@ $REPO/app/src/test/java/com/daymark/app/ui/components/EditorGuardsSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/backup/RestoreFailureSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/CrisisLineDirectoryTest.kt
 $REPO/app/src/main/java/com/daymark/app/data/CrisisLineDirectory.kt
+$REPO/app/src/test/java/com/daymark/app/tile/SafetyPlanTileSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/backup/RepoFile.kt
 $REPO/app/src/test/java/com/daymark/app/ui/SourceText.kt"
 
