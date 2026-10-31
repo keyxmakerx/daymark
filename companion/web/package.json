@@ -17,6 +17,7 @@
     "test:integration": "vitest run src/lib/sync/integration.test.ts",
     "e2e:paired": "vitest run --config e2e/vitest.paired.config.mts",
     "e2e:phones": "vitest run --config e2e/vitest.phones.config.mts",
+    "e2e:practice": "vitest run --config e2e/vitest.practice.config.mts",
     "push": "vite-node src/cli/push.ts"
   },
   "dependencies": {

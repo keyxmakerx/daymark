@@ -559,7 +559,7 @@ export class PracticeClient {
     let res: Response
     try {
       // credentials:'include' so the HttpOnly session cookie rides every call on this surface.
-      res = await this.doFetch(this.base + path, { credentials: 'include', ...init })
+      res = await (0, this.doFetch)(this.base + path, { credentials: 'include', ...init })
     } catch (e) {
       // A rejected fetch cannot distinguish "never left this machine" from "was carried out and the
       // answer was lost". Reported as the second, because only that reading is safe for a write.

@@ -117,7 +117,7 @@ export class PortalClient {
    */
   private async req(path: string, init: RequestInit = {}): Promise<Response> {
     const send = () =>
-      this.doFetch(this.base + path, {
+      (0, this.doFetch)(this.base + path, {
         ...init,
         headers: { ...this.headers(), ...(init.headers as Record<string, string>) },
       })
@@ -135,7 +135,7 @@ export class PortalClient {
    * first-run screen reads instead (lib/setup/configProbe.ts).
    */
   async getConfig(): Promise<ServerConfig> {
-    const res = await this.doFetch(this.base + '/v1/config')
+    const res = await (0, this.doFetch)(this.base + '/v1/config')
     if (!res.ok) return { smtpEnabled: false }
     return (await res.json()) as ServerConfig
   }
