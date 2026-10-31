@@ -162,7 +162,9 @@ own words, added from the Sky's life-events list or with Mark this day (§1.3); 
 offers **Mark as hard**, which only its supernova in the sky reads. Any star can be **put away**
 from the sky alone and brought back from its list. A star's card can also give it a name of the
 person's own, put its memory in a place they name (a ringed planet in the sky), or give its day a
-meteor shower each year; a weekly habit with **At a set time** is a pulsar. Each sky has its own colours, which can be
+meteor shower each year; a weekly habit with **At a set time** is a pulsar. **Background** makes
+a picture for the phone's lock or home screen, of space only or with the person's stars, set
+through Android's own wallpaper picker. Each sky has its own colours, which can be
 changed for 30 days, and **Reset my sky** grows it again. Every rule the Sky keeps is in
 [SKY.md](SKY.md).
 

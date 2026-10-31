@@ -47,10 +47,11 @@ decides nothing.
 | `sky/SkyTrackers.kt` | tracker objects: their looks, where they sit, their grains (§3.9) |
 | `sky/SkyStars.kt` | the person's choices for each star: its name, its shower, its place, and which day a shower falls on (§3.9) |
 | `sky/SkyObjects.kt` | pulsars, planets and meteors: where they sit and how they move (§3.9) |
+| `sky/SkyWallpaper.kt` | a background for the phone's screen: space only from the seed, the one-time note (§6.4) |
 | `sky/SkyHoles.kt` | the black and white holes' timing (§2.4) |
 | `sky/SkyRandom.kt`, `sky/SkyCalendar.kt` | the hash and the sky's seed; date arithmetic |
 | `sky/SkyField.kt` | the decorative field the year review still draws (§9); the Sky draws none |
-| `ui/sky/` | `SkyScreen` (controls, sheets, detail strip, list, the opening), `SkySurface` (drawing, gestures, the photo), `SkyCamera` (where the sky is seen from), `SkySprite`, `SkyShading` (the shaders on screen, Android 13 and later), `SkyPresentation` (zoom, hit-testing, every word a screen reader hears), `SkyViewModel` |
+| `ui/sky/` | `SkyScreen` (controls, sheets, detail strip, list, the opening), `SkySurface` (drawing, gestures, the photo), `SkyCamera` (where the sky is seen from), `SkySprite`, `SkyShading` (the shaders on screen, Android 13 and later), `SkyWallpaperScreen` (making a background, §6.4), `SkyPresentation` (zoom, hit-testing, every word a screen reader hears), `SkyViewModel` |
 | `data/SkyRepository.kt`, `data/entity/Constellation.kt`, `data/entity/SkyPutAway.kt`, `data/entity/SkyStar.kt` | the six projections, the trackers shown and the habits with a set time, dates converted, the seed, colours, constellations, put-away memories, star choices and places stored |
 
 `tools/jvm-tests.sh sky` and `tools/jvm-tests.sh ui/sky sky` run `sky/`, `SkyPresentation` and the
@@ -658,6 +659,16 @@ list structure, "March 2024, 6 items", because a list without it is unnavigable:
 - **No share button and no export** (§11 question 2). An export, if ever built, uses the system
   document picker and carries a one-time note, worded from existing privacy copy, that the image is
   unusually identifying (§6.5): a gallery is what a forgotten cloud-photo app copies.
+- **A background is the one way a picture of it leaves the app** (#534). **Background** on the
+  sky's controls makes one for the phone's lock or home screen, as **Space only** or **With my
+  stars**. Space only is drawn by the space shader from the seed and a view number alone
+  (`SkyWallpaper`), lit by a few points the seed places, so no star, date or count is in it. With
+  my stars draws the stars and their gas as they are today, with no constellation names, cards or
+  selection, and before the first one is set says once, in `SkyWallpaper.STARS_NOTE`, that anyone
+  who sees the screen sees the shape of the person's record. The person frames it by dragging or
+  with **Another view**, and it goes to Android's own wallpaper picker through a content link to
+  one file in the app's cache (`res/xml/background_paths.xml`), never to shared storage or a
+  gallery. Nothing needs the network.
 - **Behind the app lock**, like the journal. With the lock on, the window is marked secure, so
   screenshots and the recent-apps thumbnail do not show it.
 
@@ -856,7 +867,8 @@ check is first shown to catch a planted violation (`CLAUDE.md` §5).
 
 1. **Where the Sky lives:** the More hub, not a tab. It is the most identifying surface in the
    product (§6.5), so reaching it is a deliberate act.
-2. **An export:** none. The year review's "Save keepsake" was removed; §6.4 governs any future one.
+2. **An export:** none, beyond a background for the phone's screen (§6.4). The year review's
+   "Save keepsake" was removed; §6.4 governs any future one.
 3. **Life events spanning dates:** none. A life event is one day (§2.2, #155).
 4. **Mood colours in a custom palette:** equalised (§7.1).
 5. **The year review against these rules:** it changed; its finale shows two facts that rank nothing,

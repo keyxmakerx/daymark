@@ -185,6 +185,11 @@ class SkyViewModel @Inject constructor(
         viewModelScope.launch { repository.bringAllBack() }
     }
 
+    /** Whether the one-time note before a background with stars has been read (#534). */
+    fun wallpaperNoteSeen(): Boolean = repository.wallpaperNoteSeen()
+
+    fun markWallpaperNoteSeen() = repository.markWallpaperNoteSeen()
+
     /** The next of the sky's other colours, while the window is open. */
     fun tryOtherColours() {
         repository.setColourChoice(repository.colourChoice() + 1)

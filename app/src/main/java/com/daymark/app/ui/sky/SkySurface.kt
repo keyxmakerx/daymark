@@ -873,7 +873,7 @@ private const val TRACKER_GRAINS_FROM_DP = 6f
  * glows of colour anchored to the sky ([SkyColours.glows]). Every tone is near black, so the stars
  * keep their contrast.
  */
-private fun DrawScope.drawSpace(
+internal fun DrawScope.drawSpace(
     look: SkyColours.Look,
     glows: List<SkyColours.Glow>,
     origin: Offset,
@@ -1327,7 +1327,7 @@ private fun DrawScope.drawBirth(centre: Offset, progress: Float, radius: Float) 
 }
 
 /** A soft round glow, brightest in the middle and gone at [radius]. Added, the way light is. */
-private fun DrawScope.drawGlow(centre: Offset, radius: Float, colour: Color, alpha: Float) {
+internal fun DrawScope.drawGlow(centre: Offset, radius: Float, colour: Color, alpha: Float) {
     if (radius <= 0f || alpha <= 0f) return
     drawCircle(
         brush = Brush.radialGradient(

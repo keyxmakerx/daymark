@@ -211,6 +211,13 @@ class SkyRepository @Inject constructor(
     /** Shows a tracker in the sky, or takes it out: the person's choice, per tracker. */
     suspend fun setTrackerShown(trackerId: Long, shown: Boolean) = trackerDao.setShowInSky(trackerId, shown)
 
+    /** Whether the person has read the one-time note before a background with stars (#534). */
+    fun wallpaperNoteSeen(): Boolean = prefs.getBoolean(KEY_WALLPAPER_NOTE, false)
+
+    fun markWallpaperNoteSeen() {
+        prefs.edit().putBoolean(KEY_WALLPAPER_NOTE, true).apply()
+    }
+
     /** The person's choice of colours: 0 for the sky's own, one more for each "Try other colours". */
     fun colourChoice(): Int = prefs.getInt(KEY_COLOUR_CHOICE, 0)
 
@@ -353,6 +360,7 @@ class SkyRepository @Inject constructor(
         const val KEY_BORN = "sky_born_identity"
         const val KEY_COLOUR_CHOICE = "sky_colour_choice"
         const val KEY_COLOUR_UNTIL = "sky_colour_until"
+        const val KEY_WALLPAPER_NOTE = "sky_wallpaper_note_seen"
     }
 }
 

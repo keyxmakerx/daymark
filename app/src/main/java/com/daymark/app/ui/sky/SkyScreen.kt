@@ -163,6 +163,7 @@ fun SkyScreen(
     var placingStar by remember { mutableStateOf(NO_SELECTION) }
     var renamingPlace by remember { mutableStateOf(NO_CONSTELLATION) }
     var removingPlace by remember { mutableStateOf(NO_CONSTELLATION) }
+    var makingBackground by rememberSaveable { mutableStateOf(false) }
     var planetCard by rememberSaveable { mutableStateOf(NO_CONSTELLATION) }
     var pulsarCard by rememberSaveable { mutableStateOf(NO_CONSTELLATION) }
     var seenSeed by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -478,6 +479,22 @@ fun SkyScreen(
         }
     }
 
+    // A background for the phone's screen (#534): in place of the whole screen while it is made.
+    if (makingBackground && state.loaded) {
+        SkyWallpaperScreen(
+            layout = layout,
+            positions = positions,
+            look = state.look,
+            seed = state.seed,
+            nebulae = state.nebulae,
+            todayEpochDay = todayEpochDay,
+            noteSeen = viewModel.wallpaperNoteSeen(),
+            onNoteSeen = { viewModel.markWallpaperNoteSeen() },
+            onClose = { makingBackground = false },
+        )
+        return
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -541,6 +558,11 @@ fun SkyScreen(
                     // glyph at maximum contrast with no halos.
                     onQuietSky = { highContrast = it },
                     onLifeEvents = onOpenLifeEvents,
+                    onBackground = {
+                        skipOpening()
+                        sheet = SkySheet.NONE
+                        makingBackground = true
+                    },
                 )
             }
         },
@@ -969,6 +991,7 @@ private fun SkyControls(
     onMotion: (Boolean) -> Unit,
     onQuietSky: (Boolean) -> Unit,
     onLifeEvents: () -> Unit,
+    onBackground: () -> Unit,
 ) {
     Surface(color = MaterialTheme.colorScheme.surface) {
         Row(
@@ -990,6 +1013,7 @@ private fun SkyControls(
                     TextButton(onClick = onKey) { Text("Key") }
                 }
                 if (colours) TextButton(onClick = onColours) { Text("Colours") }
+                TextButton(onClick = onBackground) { Text("Background") }
                 FilterChip(
                     selected = motionEnabled,
                     onClick = { onMotion(!motionEnabled) },

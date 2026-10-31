@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **A background for your phone, made from your sky.** **Background** on your sky makes a picture
+  for your lock or home screen: **Space only**, your sky's colours and gas with none of your stars,
+  or **With my stars**. Drag it or tap **Another view** to frame it, then your phone's own picker
+  asks where it goes. The first time you choose your stars, Daymark says once that anyone who sees
+  your screen sees the shape of your record (#534).
 - **Name a star, give a day a meteor shower, put memories in a place.** A star's card in your sky
   now has **Name**, for a name of your own, and **Place**, to put that memory in a place you name,
   such as home. Each place you use becomes a ringed planet among its memories; its size never says
