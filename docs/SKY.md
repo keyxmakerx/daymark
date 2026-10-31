@@ -306,7 +306,8 @@ today is drawn as new.
 
 Kind marks appear only at **CLOSE** (§4). Further out, every kind is just a star, and the list always
 names it. Marks scattered across a whole life would turn the sky into a legend and sort a person's
-days into kinds of act at exactly the zoom where they see a stretch of their life at once.
+days into kinds of act at exactly the zoom where they see a stretch of their life at once. The marks
+are to go at every zoom, leaving every kind just a star ([§D11](DECISIONS.md)). Not built: #536.
 
 | Kind | Form at CLOSE, around the shared core | In a word |
 |---|---|---|

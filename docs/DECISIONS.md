@@ -357,7 +357,7 @@ clusters, the opening and a new star's birth, zoom down to suns, constellations 
 Key, the supernova, putting memories away and bringing them back with black and white holes,
 nebulae, the sky's own colours and changing them, "Reset my sky", and tracker objects. Not built:
 dark matter (#450) and the other objects, #449; the sky in the owner's web console, #440;
-backgrounds made from the sky, #534. Where the prototype and this decision disagree, this decision
+backgrounds made from the sky, #534; taking the kind marks out, #536. Where the prototype and this decision disagree, this decision
 governs the build.
 
 **Decision.**
@@ -393,6 +393,8 @@ governs the build.
 - **The Key stays, and leads with "red only means old".** It lists only what is in that person's
   sky.
 - **Any tap skips the opening.** With reduced motion, the sky opens still, on today.
+- **No kind marks.** At every zoom, every kind of memory is drawn as a star and nothing more; its
+  card and the list name what it was. A life event stands out by its light, never by a mark.
 - **On the web the sky is to look at, and every change to it stays on the phone.** The owner's own
   web console shows the sky full screen, laid out wide, with its panels beside it; drawing a
   constellation, naming a star and putting memories away or bringing them back happen only on the
@@ -412,7 +414,9 @@ maintainer chose varied brightness on 2026-10-25: a sky in which every star burn
 pattern of dots rather than a sky, and brightness drawn from identity ranks no day. The maintainer
 chose the web sky and backgrounds on 2026-10-31: a browser cannot hold the app lock or keep a
 screenshot from being taken, so changes to the sky stay where those protections hold, and a
-background with stars is the person's to choose once they have been told what it shows.
+background with stars is the person's to choose once they have been told what it shows. The same
+day the maintainer took the kind marks out: a ring, an underline and a few rays round a star read as
+distracting scribbles rather than as a kind.
 
 ---
 
