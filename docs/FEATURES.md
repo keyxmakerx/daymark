@@ -584,6 +584,12 @@ decisions rather than a reading of the current moment: #162.
   one transaction, the file's photos are written to a staging folder and swapped in only after it
   commits, and every reminder and tracker check-in is re-armed whether the restore succeeded or
   not (#487).
+- **Check a backup opens** (Settings → Check a backup opens) reads a chosen backup file the way a
+  restore would and changes nothing. It says "This backup opens" with the day and time the file was
+  made and how many mood entries and journal pages it holds; a file from a newer version says it
+  can be restored once Daymark is updated; anything else says "This file can't be restored", never
+  a guessed cause. Every answer ends "Nothing on this phone was changed." It reads the plain JSON
+  backup; encrypted backups are #236 (#524).
 - **CSV** (Settings → Export as CSV): date, time, mood, activities and note for every entry.
 - **PDF report** (Settings → Export a PDF report, "A printable copy to hand to a clinician. Not
   encrypted.") has four sides, each with one job ([DECISIONS.md](DECISIONS.md) §D8): the glance, the

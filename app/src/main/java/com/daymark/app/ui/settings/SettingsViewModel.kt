@@ -149,6 +149,31 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    private val _backupCheck = MutableStateFlow<BackupManager.Reading?>(null)
+
+    /** What "Check a backup opens" found in the file the person chose, until they close it (#524). */
+    val backupCheck: StateFlow<BackupManager.Reading?> = _backupCheck.asStateFlow()
+
+    /**
+     * Reads the chosen file the way a restore would, and changes nothing: [BackupManager.read]
+     * neither reads nor writes the database, and no restore path is called from here
+     * (`BackupCheckSourceTest`). A file that cannot even be opened reads as one that cannot be
+     * restored, because to the person that is the same consequence.
+     */
+    fun checkBackup(uri: Uri) {
+        viewModelScope.launch {
+            val text = withContext(Dispatchers.IO) {
+                runCatching { context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } }.getOrNull()
+            }
+            _backupCheck.value = text?.let { withContext(Dispatchers.Default) { backupManager.read(it) } }
+                ?: BackupManager.Reading.Unreadable
+        }
+    }
+
+    fun dismissBackupCheck() {
+        _backupCheck.value = null
+    }
+
     fun importFrom(uri: Uri, mode: BackupManager.ImportMode) {
         viewModelScope.launch {
             runCatching {

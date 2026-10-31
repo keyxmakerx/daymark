@@ -86,6 +86,11 @@ fun SettingsScreen(
         ActivityResultContracts.OpenDocument(),
     ) { uri -> pendingImport = uri }
 
+    val checkLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri -> uri?.let(viewModel::checkBackup) }
+    val backupCheck by viewModel.backupCheck.collectAsStateWithLifecycle()
+
     val csvLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/csv"),
     ) { uri -> uri?.let(viewModel::exportCsvTo) }
@@ -283,6 +288,13 @@ fun SettingsScreen(
             },
         )
         ListItem(
+            headlineContent = { Text("Check a backup opens") },
+            supportingContent = { Text("Reads a backup file without restoring it") },
+            modifier = Modifier.clickable {
+                viewModel.prepareForFilePicker(); checkLauncher.launch(arrayOf("application/json", "text/*"))
+            },
+        )
+        ListItem(
             headlineContent = { Text("Export as CSV") },
             supportingContent = { Text("Unencrypted spreadsheet of all entries") },
             modifier = Modifier.clickable {
@@ -373,6 +385,10 @@ fun SettingsScreen(
                 onExportReport(options, pickWriting)
             },
         )
+    }
+
+    backupCheck?.let { reading ->
+        BackupCheckDialog(reading = reading, onDismiss = viewModel::dismissBackupCheck)
     }
 
     pendingImport?.let { uri ->
@@ -536,3 +552,35 @@ private fun autoLockLabel(minutes: Int): String = when (minutes) {
     1 -> "After 1 minute"
     else -> "After $minutes minutes"
 }
+
+/**
+ * What "Check a backup opens" found (#524). It states what the file holds and what can be done with
+ * it; a file that does not open is named by its consequence, never by a guessed cause, and every
+ * answer says the phone was left as it was, because nothing was changed.
+ */
+@Composable
+private fun BackupCheckDialog(reading: com.daymark.app.backup.BackupManager.Reading, onDismiss: () -> Unit) {
+    val (title, body) = when (reading) {
+        is com.daymark.app.backup.BackupManager.Reading.Readable -> {
+            val c = reading.contents
+            "This backup opens" to (
+                "Made on ${DateUtils.formatDate(c.exportedAt)} at ${DateUtils.formatTime(c.exportedAt)}. " +
+                    "It holds ${countOf(c.entries, "mood entry", "mood entries")} and " +
+                    "${countOf(c.journalPages, "journal page", "journal pages")}."
+                )
+        }
+        com.daymark.app.backup.BackupManager.Reading.FromNewerApp ->
+            "This file can't be restored here" to
+                "It was made by a newer version of Daymark. Once this phone's Daymark is updated, it can restore it."
+        com.daymark.app.backup.BackupManager.Reading.Unreadable ->
+            "This file can't be restored" to "Daymark could not read it as a backup."
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text("$body Nothing on this phone was changed.") },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+private fun countOf(n: Int, one: String, many: String): String = if (n == 1) "1 $one" else "$n $many"

@@ -7,6 +7,9 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Check a backup opens.** Settings has **Check a backup opens**, which reads a backup file
+  without restoring it and tells you when it was made and how many entries and journal pages it
+  holds, or that it can't be restored. It never changes anything on your phone (#524).
 - **"Signs of a high" and "Signs of a low" in your safety plan.** Two optional lists in your own
   words, offered together after your warning signs. Nothing in Daymark reads them or acts on them;
   they are there for you (#523).
