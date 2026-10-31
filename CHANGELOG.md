@@ -83,6 +83,8 @@ All notable changes to this project are documented here. The format is based on
   feel like too much**, which always leads to the crisis screen (#482).
 
 ### Changed
+- **Your own console's tabs are grouped.** The eight tabs above your console sit in three named
+  groups: Sharing, Your records, and Keys and alerts. The tab you are on is underlined.
 - **The clinician console is calmer.** Once you sign in, it uses the same side rail as the practice
   and admin consoles. Places are grouped as Their share, Send, Tools and This browser, with one
   thing on the screen at a time. Your discipline and Log out sit at the foot of the rail. On a phone
