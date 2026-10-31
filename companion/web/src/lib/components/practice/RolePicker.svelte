@@ -50,6 +50,7 @@
   import type { OrgRoleWire } from '../../practice/orgRoles'
   import { READ_POSTURE_CHIP, UNSEATABLE, seatableRoleFacts } from '../../practice/orgRoles'
   import { MEMBERSHIP_IS_NOT_READ_ACCESS } from '../../practice/copy'
+  import { NOT_BUILT_CHIP, NOT_BUILT_MEANS } from '../../practice/built'
 
   let {
     value,
@@ -130,11 +131,16 @@
             <span class="action-head">
               <span class="action-title">{action.title}</span>
               <Chip tone="neutral">{action.planeLabel}</Chip>
+              {#if !action.built}<Chip tone="neutral">{NOT_BUILT_CHIP}</Chip>{/if}
             </span>
             <span class="action-desc">{action.description}</span>
           </li>
         {/each}
       </ul>
+
+      {#if selected.actions.some((a) => !a.built)}
+        <p class="derived">{NOT_BUILT_MEANS}</p>
+      {/if}
 
       {#if selected.clinicalReadActions.length === 0}
         <p class="derived">

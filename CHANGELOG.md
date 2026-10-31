@@ -42,6 +42,14 @@ All notable changes to this project are documented here. The format is based on
   one corner. The view widens as your sky grows, and no star moves (#476).
 
 ### Fixed
+- **Signing in to the practice console works in a real browser.** Every browser answered "No
+  answer from the server (… Illegal invocation)"; now Sign in reaches the server (#494).
+- **The practice log shows the date each change happened**, not January 1970 (#495).
+- **The server console says what its sign-in protects**: the sign-in opens the console, and the
+  health readings come from public endpoints. It no longer says it holds no credential right under
+  "Signed in as" (#496).
+- **A practice role's duties that have no screen yet say "Not built"** where the role is chosen,
+  so a front desk is no longer offered a calendar that does not exist.
 - **A restore that fails part-way keeps your photos and reminders.** "Replace all" used to empty
   the photo folder and switch reminders off before it knew the restore would work. The file's
   photos now wait in a staging folder until the restore has succeeded, and reminders and tracker
