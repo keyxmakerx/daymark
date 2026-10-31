@@ -611,6 +611,13 @@ decisions rather than a reading of the current moment: #162.
   Save then copies to the place the person picks, so what was checked is what is saved (#198). Back
   returns to the picker or to Settings. The file is made in the app's own cache and deleted when the
   flow ends.
+- **Long gaps beside the person's own.** Side 2 names every stretch of 5 or more days with no
+  entry. Under them, one fixed line gives the person's own longest stretch without entries in the 6
+  months before the report: "The longest stretch without entries in the 6 months before this report
+  was 4 days." Two numbers and nothing else: no word compares them, and no cause is given. The line
+  is left out when the person's entries do not reach back the whole 6 months, and it is read from
+  entry times alone (`app/src/main/java/com/daymark/app/stats/PriorGap.kt`). The preview offers
+  **Compare long gaps** to leave it out before saving (#520).
 - Every export is a plain, unencrypted file, made by the person's own act. Not built: encrypted
   backups and exports: #236.
 

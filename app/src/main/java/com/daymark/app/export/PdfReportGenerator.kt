@@ -6,6 +6,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import com.daymark.app.model.Mood
+import com.daymark.app.stats.PriorGap
 import com.daymark.app.ui.assessments.Assessments
 import com.daymark.app.ui.components.ProvenanceTier
 import com.daymark.app.util.DateUtils
@@ -351,7 +352,7 @@ private object Plot {
     const val FLAG_MIN_OUTSIDE = 3
 
     /** A gap has to be this long before it is named individually on side 2. */
-    const val GAP_MIN_DAYS = 5
+    const val GAP_MIN_DAYS = ReportCoverageGap.NAMED_MIN_DAYS
 
     /**
      * This person's usual range: the middle 50% of their own values across the period. It is a
@@ -993,7 +994,7 @@ private class PageCtx(
 
         if (options.includeActivityTable && data.activityStats.isNotEmpty()) activityTable(data)
 
-        coverage(data)
+        coverage(data, options)
     }
 
     /** Every self-check result behind the plots, newest first. */
@@ -1215,7 +1216,7 @@ private class PageCtx(
     }
 
     /** Coverage, stated as coverage. Nothing here is filled in, smoothed, or averaged over a gap. */
-    private fun coverage(data: ReportData) {
+    private fun coverage(data: ReportData, options: PdfExportOptions) {
         sectionLabel("Coverage")
         paragraph(
             "${data.daysLogged} of ${data.daysInRange} days have an entry. ${Copy.COVERAGE_FIXED}",
@@ -1243,6 +1244,13 @@ private class PageCtx(
                     margin + 10f, y + 8f, gp,
                 )
                 y += ReportLayout.COVERAGE_GAP_ROW_H
+            }
+            // Beside the gaps, the person's own longest one in the six months before, as a number
+            // and nothing else (#520). Absent when the history does not reach back that far.
+            val prior = data.priorLongestGapDays
+            if (options.includeGapComparison && prior != null) {
+                y += 2f
+                paragraph(PriorGap.line(prior), paint(9f, SOFT))
             }
         }
         y += 8f

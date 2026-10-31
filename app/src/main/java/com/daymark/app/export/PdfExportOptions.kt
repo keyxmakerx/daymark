@@ -88,6 +88,13 @@ data class PdfExportOptions(
      * two people in the room to read (#483).
      */
     val includeActivityTable: Boolean = false,
+    /**
+     * Whether side 2 sets its long gaps beside the person's own longest gap in the six months
+     * before the report, as two numbers (#520). On by default, and switched off on the preview
+     * before saving. Only ever printed when the report names a long gap and the person's entries
+     * reach back the whole six months.
+     */
+    val includeGapComparison: Boolean = true,
     val paperSize: PaperSize = PaperSize.A4,
     val patientName: String = "",
 )

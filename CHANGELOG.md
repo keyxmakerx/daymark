@@ -7,6 +7,10 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **The PDF report sets a long gap beside your own longest one.** Where side 2 lists stretches of
+  5 or more days without entries, it now adds your longest stretch in the 6 months before the
+  report, as a number and nothing else. It is left out if your entries don't go back that far, and
+  **Compare long gaps** on the preview leaves it out before you save (#520).
 - **Check a backup opens.** Settings has **Check a backup opens**, which reads a backup file
   without restoring it and tells you when it was made and how many entries and journal pages it
   holds, or that it can't be restored. It never changes anything on your phone (#524).
