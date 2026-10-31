@@ -379,7 +379,8 @@ class GoalReachedSchemaTest {
     }
 
     /**
-     * `reachedAt` is the **last** parameter of both `Goal` and `BackupGoal`.
+     * `reachedAt` is appended after every field before it on both `Goal` and `BackupGoal`, and only
+     * `atMinute` (#519), appended the same way, comes after it.
      *
      * `BackupManager` builds both positionally, in three places between them. `Goal.kind`'s KDoc
      * records what a mid-constructor insert did once: it shifted `archived` into `targetPerWeek`, and
@@ -387,8 +388,9 @@ class GoalReachedSchemaTest {
      */
     @Test
     fun `the new field is appended, not inserted, on both sides of the backup`() {
-        assertEquals("reachedAt", goalParams().last().substringAfter("val ").substringBefore(":"))
-        assertEquals("reachedAt", backupGoalParams().last().substringAfter("val ").substringBefore(":"))
+        fun lastTwo(params: List<String>) = params.takeLast(2).map { it.substringAfter("val ").substringBefore(":") }
+        assertEquals(listOf("reachedAt", "atMinute"), lastTwo(goalParams()))
+        assertEquals(listOf("reachedAt", "atMinute"), lastTwo(backupGoalParams()))
 
         // Positive control: the parsers read whole constructors, not one line each.
         assertTrue("Goal's constructor did not parse", goalParams().size >= 9)

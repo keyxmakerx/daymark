@@ -42,7 +42,8 @@ class SkyStarBackupTest {
     @Test
     fun `a v20 file still reads, with no star named, no place and no set time`() {
         val v20 = """{"version": 20, "exportedAt": 1, "entries": [], "activities": [], "refs": [],
-            "goals": [{"id": 1, "title": "Walk", "targetPerWeek": 3, "createdAt": 1}]}"""
+            "goals": [{"id": 1, "title": "Walk", "activityId": null, "targetPerWeek": 3, "createdAt": 1,
+              "archived": false}]}"""
         val data = json.decodeFromString(BackupData.serializer(), v20)
         assertEquals(emptyList<BackupSkyStar>(), data.skyStars)
         assertEquals(emptyList<BackupSkyPlace>(), data.skyPlaces)
