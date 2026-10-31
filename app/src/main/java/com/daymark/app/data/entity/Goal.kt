@@ -62,4 +62,10 @@ data class Goal(
      * been asked yet.
      */
     val reachedAt: Long? = null,
+    /**
+     * A habit's set time, as minutes after midnight, or null when it has none (#519). Only a habit
+     * with a set time is drawn as a pulsar in the sky, and only the person sets one. Appended, as
+     * [kind] says every field after it must be.
+     */
+    val atMinute: Int? = null,
 )

@@ -41,6 +41,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import java.time.format.FormatStyle
+import java.time.format.DateTimeFormatter
+import java.time.LocalTime
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import android.text.format.DateFormat
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -165,6 +174,8 @@ fun GoalEditorScreen(
                     )
                     OutlinedButton(onClick = { viewModel.setTarget(state.targetPerWeek + 1) }) { Text("+") }
                 }
+
+                HabitSetTime(atMinute = state.atMinute, onChange = viewModel::setAtMinute)
             }
 
             Text("If-then plan (optional)", style = MaterialTheme.typography.titleMedium)
@@ -301,4 +312,60 @@ private fun ProjectSteps(state: GoalEditorUiState, viewModel: GoalEditorViewMode
         onRemove = viewModel::removeStep,
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+/**
+ * A habit's set time (#519): off unless the person turns it on, and then the time they pick. It
+ * sets no reminder and nothing here notices whether the habit was done at that time; in the sky a
+ * habit with a set time is drawn as a pulsar, which turns at one beat whatever the record says.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HabitSetTime(atMinute: Int?, onChange: (Int?) -> Unit) {
+    var picking by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    Row(
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("At a set time", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Shown in your sky as a pulsar. It sets no reminder.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        DaymarkSwitch(
+            checked = atMinute != null,
+            onCheckedChange = { on -> if (on) picking = true else onChange(null) },
+        )
+    }
+    if (atMinute != null) {
+        OutlinedButton(onClick = { picking = true }) {
+            Text(
+                LocalTime.of(atMinute / 60, atMinute % 60)
+                    .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)),
+            )
+        }
+    }
+    if (picking) {
+        val start = atMinute ?: (8 * 60)
+        val picker = rememberTimePickerState(
+            initialHour = start / 60,
+            initialMinute = start % 60,
+            is24Hour = DateFormat.is24HourFormat(context),
+        )
+        AlertDialog(
+            onDismissRequest = { picking = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    onChange(picker.hour * 60 + picker.minute)
+                    picking = false
+                }) { Text("Set") }
+            },
+            dismissButton = { TextButton(onClick = { picking = false }) { Text("Back") } },
+            text = { TimePicker(state = picker) },
+        )
+    }
 }

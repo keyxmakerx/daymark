@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Name a star, give a day a meteor shower, put memories in a place.** A star's card in your sky
+  now has **Name**, for a name of your own, and **Place**, to put that memory in a place you name,
+  such as home. Each place you use becomes a ringed planet among its memories; its size never says
+  how many. **Meteor shower each year** sends meteors from that star on its day every year, while
+  Motion is on. A memory you delete takes its name, shower and place with it, and a backup carries
+  them (#516, #517, #518).
+- **Pulsars for habits with a set time.** A weekly habit can now have **At a set time**. It sets no
+  reminder; in your sky the habit becomes a pulsar that turns at the same beat every day, whatever
+  you did (#519).
 - **The PDF report sets a long gap beside your own longest one.** Where side 2 lists stretches of
   5 or more days without entries, it now adds your longest stretch in the 6 months before the
   report, as a number and nothing else. It is left out if your entries don't go back that far, and

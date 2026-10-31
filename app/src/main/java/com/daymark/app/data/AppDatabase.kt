@@ -46,8 +46,10 @@ import com.daymark.app.data.entity.Treatment
         com.daymark.app.data.entity.TaskResult::class,
         com.daymark.app.data.entity.Constellation::class,
         com.daymark.app.data.entity.SkyPutAway::class,
+        com.daymark.app.data.entity.SkyStar::class,
+        com.daymark.app.data.entity.SkyPlace::class,
     ],
-    version = 23,
+    version = 24,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -72,11 +74,15 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun companionDao(): com.daymark.app.data.dao.CompanionDao
     abstract fun constellationDao(): com.daymark.app.data.dao.ConstellationDao
     abstract fun skyPutAwayDao(): com.daymark.app.data.dao.SkyPutAwayDao
+    abstract fun skyStarDao(): com.daymark.app.data.dao.SkyStarDao
 
     /** Seeds a sensible set of starter activities on first install. */
     class SeedCallback : Callback() {
         override fun onCreate(db: SupportSQLiteDatabase) {
             super.onCreate(db)
+            // Room creates the tables from the entities but knows nothing of triggers, so a new
+            // install gets the same ones the v24 migration adds.
+            SKY_STAR_TRIGGERS.forEach(db::execSQL)
             DEFAULT_ACTIVITIES.forEachIndexed { index, (name, icon) ->
                 db.execSQL(
                     "INSERT INTO activities (name, iconKey, sortOrder, archived) VALUES (?, ?, ?, 0)",
@@ -88,6 +94,24 @@ abstract class AppDatabase : RoomDatabase() {
 
     companion object {
         const val NAME = "daymark.db"
+
+        /**
+         * Deleting a memory deletes what the person chose for its star (#517): its name leaves no
+         * trace. One trigger per table a star is drawn from, keyed by that kind's `SkyKind.key`.
+         * Putting a memory away is not deleting it, and leaves its name where it is.
+         */
+        val SKY_STAR_TRIGGERS: List<String> = listOf(
+            "check_in" to "mood_entries",
+            "practice" to "thought_records",
+            "journal" to "journal_entries",
+            "goal_reached" to "goals",
+            "project_step" to "goal_steps",
+            "life_event" to "life_events",
+        ).map { (kind, table) ->
+            "CREATE TRIGGER IF NOT EXISTS `sky_star_forget_$kind` AFTER DELETE ON `$table` " +
+                "BEGIN DELETE FROM `sky_stars` WHERE `kind` = '$kind' AND `recordId` = OLD.`id`; END"
+        }
+
 
         /** v2 adds the standalone journal table; existing data is preserved. */
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -763,6 +787,36 @@ abstract class AppDatabase : RoomDatabase() {
                         "`putAwayEpochDay` INTEGER NOT NULL, " +
                         "PRIMARY KEY(`kind`, `recordId`))",
                 )
+            }
+        }
+
+        /**
+         * v23 -> v24: the sky's third batch (`DECISIONS.md` §D11). What the person chose for a star
+         * (its name, a meteor shower on its day, a place), the places they named, and a habit's
+         * set time (#516, #517, #518, #519).
+         *
+         * Nothing is back-filled: no star is named, no day gets a shower, no memory is put in a
+         * place and no habit gets a time, because each is the person's own act.
+         */
+        val MIGRATION_23_24 = object : Migration(23, 24) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `sky_stars` (" +
+                        "`kind` TEXT NOT NULL, " +
+                        "`recordId` INTEGER NOT NULL, " +
+                        "`name` TEXT, " +
+                        "`shower` INTEGER NOT NULL, " +
+                        "`placeId` INTEGER, " +
+                        "PRIMARY KEY(`kind`, `recordId`))",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `sky_places` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL)",
+                )
+                db.execSQL("ALTER TABLE `goals` ADD COLUMN `atMinute` INTEGER")
+                SKY_STAR_TRIGGERS.forEach(db::execSQL)
             }
         }
 

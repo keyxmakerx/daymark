@@ -9,6 +9,8 @@ import com.daymark.app.sky.SkyColours
 import com.daymark.app.sky.SkyConstellation
 import com.daymark.app.sky.SkyLayout
 import com.daymark.app.sky.SkyNebula
+import com.daymark.app.sky.SkyObjects
+import com.daymark.app.sky.SkyStars
 import com.daymark.app.sky.SkySeed
 import com.daymark.app.sky.SkyRecord
 import com.daymark.app.sky.SkyTrackers
@@ -64,7 +66,25 @@ class SkyViewModel @Inject constructor(
         val nebulae: List<SkyNebula.Nebula> = emptyList(),
         /** The trackers the person shows, placed by the screen beside today's stars. */
         val trackers: List<SkyTrackers.Source> = emptyList(),
+        /** What the person chose for each star: its name, its shower and its place (#516–#518). */
+        val choices: SkyStars.Resolved = SkyStars.Resolved.EMPTY,
+        /** The places the person named, by name. */
+        val places: List<SkyStars.Place> = emptyList(),
+        /** The habits with a set time, placed by the screen as pulsars (#519). */
+        val habits: List<SkyObjects.Habit> = emptyList(),
     )
+
+    private class Own(
+        val choices: List<SkyStars.Choice>,
+        val places: List<SkyStars.Place>,
+        val habits: List<SkyObjects.Habit>,
+    )
+
+    private val own = combine(
+        repository.observeStarChoices(),
+        repository.observePlaces(),
+        repository.observeTimedHabits(),
+    ) { choices, places, habits -> Own(choices, places, habits) }
 
     /**
      * One constellation, ready to draw: its points as drawn, and where each point's star is in
@@ -105,7 +125,8 @@ class SkyViewModel @Inject constructor(
         repository.observeConstellations(),
         repository.observeTrackerSources(),
         colourChanges,
-    ) { sky, rows, trackers, _ ->
+        own,
+    ) { sky, rows, trackers, _, own ->
         val layout = sky.layout
         val choice = repository.colourChoice()
         UiState(
@@ -124,6 +145,9 @@ class SkyViewModel @Inject constructor(
             },
             nebulae = SkyNebula.find(layout),
             trackers = trackers,
+            choices = SkyStars.resolve(layout, own.choices),
+            places = own.places,
+            habits = own.habits,
         )
     }
         .flowOn(Dispatchers.Default)
@@ -180,6 +204,50 @@ class SkyViewModel @Inject constructor(
     }
 
     /** Takes a tracker out of the sky; its own screen can put it back. */
+    /**
+     * Names a star, or takes its name away when [raw] is blank (#517). The person's own words,
+     * made safe to keep; nothing suggests one.
+     */
+    fun nameStar(layout: SkyLayout, index: Int, raw: String) = updateStar(layout, index) { it.copy(name = SkyStars.cleanName(raw)) }
+
+    /** A meteor shower on this star's day each year, or none (#516). Never offered for a hard day. */
+    fun setShower(layout: SkyLayout, index: Int, on: Boolean) {
+        if (on && !SkyStars.showerAllowed(layout, index)) return
+        updateStar(layout, index) { it.copy(shower = on) }
+    }
+
+    /** Puts this memory in a place the person named, or in none (#518). */
+    fun setPlace(layout: SkyLayout, index: Int, placeId: Long?) = updateStar(layout, index) { it.copy(placeId = placeId) }
+
+    /** Names a new place and puts this memory in it. */
+    fun addPlaceFor(layout: SkyLayout, index: Int, raw: String) {
+        val name = SkyStars.cleanName(raw) ?: return
+        if (index !in 0 until layout.starCount) return
+        val kind = layout.kindAt(index)
+        val record = layout.recordIds[layout.idStart[index]]
+        viewModelScope.launch {
+            val id = repository.addPlace(name)
+            repository.updateStar(kind, record) { it.copy(placeId = id) }
+        }
+    }
+
+    fun renamePlace(id: Long, raw: String) {
+        val name = SkyStars.cleanName(raw) ?: return
+        viewModelScope.launch { repository.renamePlace(id, name) }
+    }
+
+    /** A place goes; its memories stay where they are and belong to no place. */
+    fun deletePlace(id: Long) {
+        viewModelScope.launch { repository.deletePlace(id) }
+    }
+
+    private fun updateStar(layout: SkyLayout, index: Int, change: (com.daymark.app.data.entity.SkyStar) -> com.daymark.app.data.entity.SkyStar) {
+        if (index !in 0 until layout.starCount) return
+        val kind = layout.kindAt(index)
+        val record = layout.recordIds[layout.idStart[index]]
+        viewModelScope.launch { repository.updateStar(kind, record, change) }
+    }
+
     fun takeTrackerOut(trackerId: Long) {
         viewModelScope.launch { repository.setTrackerShown(trackerId, false) }
     }

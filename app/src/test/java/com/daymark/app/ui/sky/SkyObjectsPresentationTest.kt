@@ -103,4 +103,31 @@ class SkyObjectsPresentationTest {
         assertTrue(close > 0f)
         assertTrue(SkyPresentation.nebulaAlpha(40f) in close..1f)
     }
+
+    @Test
+    fun `a star's card adds only the choices the person made`() {
+        assertEquals("", SkyPresentation.starChoices(null, false))
+        assertEquals(" In Home.", SkyPresentation.starChoices("Home", false))
+        assertEquals(
+            " In Home. A meteor shower crosses the sky on this day each year.",
+            SkyPresentation.starChoices("Home", true),
+        )
+        assertEquals("Lighthouse. Check-in.", SkyPresentation.namedRow("Lighthouse", "Check-in."))
+        assertEquals("Check-in.", SkyPresentation.namedRow(null, "Check-in."))
+        assertEquals("Check-in.", SkyPresentation.namedRow("  ", "Check-in."))
+    }
+
+    /** A pulsar's and a planet's cards never speak of a record or a count (DECISIONS.md §D6). */
+    @Test
+    fun `a pulsar names its time and a planet its place, and neither keeps score`() {
+        val pulsar = SkyPresentation.pulsarDescription(7 * 60 + 30, uk)
+        assertTrue(pulsar, pulsar.startsWith("A habit you set for 07:30."))
+        val planet = SkyPresentation.planetDescription("Home")
+        val scoring = Regex("""(?i)\b(done|missed|streak|times|in a row|\d+ memor)""")
+        assertFalse(scoring.containsMatchIn(pulsar))
+        assertFalse(scoring.containsMatchIn(planet))
+        // The control: the same check sees a card that counts.
+        assertTrue(scoring.containsMatchIn("A habit you set for 07:30. Done 4 days in a row."))
+        assertEquals("11:59 pm", SkyPresentation.timeLabel(23 * 60 + 59, Locale.US).lowercase().replace('\u202f', ' '))
+    }
 }

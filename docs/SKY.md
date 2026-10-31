@@ -10,7 +10,9 @@ run along it from oldest to newest, counted in memories and never in days. A sta
 brightness say how long ago it was; the spread of its glow is the mood recorded with it, if any; up
 close, its form says what kind of act it was; a bigger white star is a life event the person
 marked, and a dim shell round one is a day they marked as hard. Behind the stars are the sky's own
-colours, gas round weeks with a lot of writing, and any trackers the person chose to show. The rules
+colours, gas round weeks with a lot of writing, any trackers the person chose to show, a ringed
+planet for each place they named, a pulsar for each habit they gave a set time, and on a day they
+chose, a meteor shower. The rules
 are `docs/DECISIONS.md` §D11 and the look is `docs/prototypes/sky-phone.html`,
 which opens in any browser.
 
@@ -43,11 +45,13 @@ decides nothing.
 | `sky/SkyColours.kt` | the sky's own colours and the space's glows (§3.8) |
 | `sky/SkyNebula.kt` | nebulae: which weeks, where, and their gas (§3.9) |
 | `sky/SkyTrackers.kt` | tracker objects: their looks, where they sit, their grains (§3.9) |
+| `sky/SkyStars.kt` | the person's choices for each star: its name, its shower, its place, and which day a shower falls on (§3.9) |
+| `sky/SkyObjects.kt` | pulsars, planets and meteors: where they sit and how they move (§3.9) |
 | `sky/SkyHoles.kt` | the black and white holes' timing (§2.4) |
 | `sky/SkyRandom.kt`, `sky/SkyCalendar.kt` | the hash and the sky's seed; date arithmetic |
 | `sky/SkyField.kt` | the decorative field the year review still draws (§9); the Sky draws none |
 | `ui/sky/` | `SkyScreen` (controls, sheets, detail strip, list, the opening), `SkySurface` (drawing, gestures, the photo), `SkyCamera` (where the sky is seen from), `SkySprite`, `SkyShading` (the shaders on screen, Android 13 and later), `SkyPresentation` (zoom, hit-testing, every word a screen reader hears), `SkyViewModel` |
-| `data/SkyRepository.kt`, `data/entity/Constellation.kt`, `data/entity/SkyPutAway.kt` | the six projections and the trackers shown, dates converted, the seed, colours, constellations and put-away memories stored |
+| `data/SkyRepository.kt`, `data/entity/Constellation.kt`, `data/entity/SkyPutAway.kt`, `data/entity/SkyStar.kt` | the six projections, the trackers shown and the habits with a set time, dates converted, the seed, colours, constellations, put-away memories, star choices and places stored |
 
 `tools/jvm-tests.sh sky` and `tools/jvm-tests.sh ui/sky sky` run `sky/`, `SkyPresentation` and the
 renderer's source tests on a plain JVM in seconds; the other Sky tests run in CI.
@@ -496,6 +500,29 @@ the phone's own.
   (`SkyTrackers`). Every log is one grain, spread by order and never by date, and the object's total
   light stays the same however many there are, so more logs make it denser, never brighter. Tracker
   logs never shape the rest of the sky. Its card opens the tracker or takes it out of the sky.
+- **Planets.** A place is a name the person typed, from a star's card (**Place**), and nothing else:
+  no device location is read for it (`DECISIONS.md` §D11). Each place with a memory in sight is a
+  ringed planet among those memories, at the middle of where they sit and nudged a little by the
+  seed so it covers none of them (`SkyObjects.placePlanets`). No star moves to it. Its size, ring
+  and which of the sky's colours it takes come from the seed alone, so it never says how many
+  memories it holds. Its card renames the place or removes it; removing it leaves every memory where
+  it is, in no place.
+- **Pulsars.** A habit the person gave a set time (**At a set time** on the goal, off until they
+  turn it on) is a pulsar beside the star nearest the day the goal was made: a point and two jets
+  turning on a slope, flashing as each sweeps toward the viewer. It turns at one beat,
+  `SkyObjects.PULSAR_BEAT_SECONDS`, for every habit and every day, and is handed nothing about
+  whether the habit was done. From the whole sky it beats quietly with short jets; followed in, it
+  flashes fully. With Motion off it stands still. A habit without a set time has no pulsar.
+- **Meteor showers.** On a star's card the person can choose **Meteor shower each year** for that
+  memory, but not for one put away or one marked hard. On that day each year, while Motion is on,
+  meteors leave its star one at a time (`SkyObjects.meteor`, `SkyStars.showerToday`); a 29 February
+  memory has its shower on 28 February in other years. If two chosen memories share a day, the
+  older one's star is the shower's. No day is chosen for the person.
+- **Names.** A star's card can give it a name of the person's own (**Name**), shown on its card and
+  leading its row in the list. Nothing suggests one. Deleting the memory deletes its name, its
+  shower and its place, by a trigger on the memory's own table (`AppDatabase.SKY_STAR_TRIGGERS`);
+  putting it away keeps them. A backup carries them all; a merge does not, since it renumbers
+  memories.
 
 ---
 

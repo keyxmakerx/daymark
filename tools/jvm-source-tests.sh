@@ -123,7 +123,8 @@ com.daymark.app.data.CrisisLineDirectoryTest
 com.daymark.app.tile.SafetyPlanTileSourceTest
 com.daymark.app.ui.safety.SafetyPlanSignsSourceTest
 com.daymark.app.ui.settings.BackupCheckSourceTest
-com.daymark.app.export.GapComparisonSourceTest"
+com.daymark.app.export.GapComparisonSourceTest
+com.daymark.app.data.SkyStarSchemaTest"
 SOURCES="$REPO/app/src/test/java/com/daymark/app/data/PeopleSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/TimedOfferSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/CompanionSchemaTest.kt
@@ -149,6 +150,7 @@ $REPO/app/src/test/java/com/daymark/app/notifications/NotificationPrivacySourceT
 $REPO/app/src/test/java/com/daymark/app/data/LifeEventSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/ConstellationSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/SkyPutAwaySchemaTest.kt
+$REPO/app/src/test/java/com/daymark/app/data/SkyStarSchemaTest.kt
 $REPO/app/src/test/java/com/daymark/app/data/SkyProjectionSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/ui/support/CrisisLineSourceTest.kt
 $REPO/app/src/test/java/com/daymark/app/notifications/ReminderReliabilitySourceTest.kt

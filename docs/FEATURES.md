@@ -160,7 +160,9 @@ project steps done, goals marked reached, and life events. A star's colour is it
 only its halo; a missing day is never drawn. A **life event** is a mark on one day in the person's
 own words, added from the Sky's life-events list or with Mark this day (§1.3); tapping one there
 offers **Mark as hard**, which only its supernova in the sky reads. Any star can be **put away**
-from the sky alone and brought back from its list. Each sky has its own colours, which can be
+from the sky alone and brought back from its list. A star's card can also give it a name of the
+person's own, put its memory in a place they name (a ringed planet in the sky), or give its day a
+meteor shower each year; a weekly habit with **At a set time** is a pulsar. Each sky has its own colours, which can be
 changed for 30 days, and **Reset my sky** grows it again. Every rule the Sky keeps is in
 [SKY.md](SKY.md).
 
@@ -170,6 +172,8 @@ changed for 30 days, and **Reset my sky** grows it again. Every rule the Sky kee
   days this week with an entry tagged with its activity ("3× per week · 2 of 3 done"). A **project**
   holds concrete steps on a three-column board, To do, Doing and Done, and states its progress as
   "3 of 7 steps done". A project needs at least one step.
+- A weekly habit can have **At a set time**, off until the person turns it on and picks a time. It
+  sets no reminder; in the sky it is a pulsar, which turns at one beat whatever the record says.
 - Any goal can carry an optional if-then plan: "When… (cue)", "I will… (routine)".
 - **Reached is the person's to say.** A **Reached** switch in the goal editor ("Yours to say, and
   yours to take back.") records the day; the goals list then says "You marked this reached." and the
@@ -567,8 +571,8 @@ decisions rather than a reading of the current moment: #162.
 - **Backup** (Settings → Export backup) writes one JSON file: entries with their activities and
   people, the journal, goals and project steps, sleep logs, treatments, trackers and their values,
   reminders, check-in scores, thought records, the safety plan, life events (with their *hard*
-  mark), the sky's seed, colour choice, constellations and put-away memories, each tracker's *Show
-  in my sky*, people and the notes about them, group sharing defaults, custom mood names and colours, the crisis line the person
+  mark), the sky's seed, colour choice, constellations, put-away memories, star names, showers
+  and places, each habit's set time, each tracker's *Show in my sky*, people and the notes about them, group sharing defaults, custom mood names and colours, the crisis line the person
   set (#370), and photos embedded in the file. "Replace all" takes the file's crisis line; "Merge"
   takes it only while the phone still shows the default; a file without one leaves the phone's.
   The crisis line's number travels with it (#482), and so does the reminders' answer to "ease off

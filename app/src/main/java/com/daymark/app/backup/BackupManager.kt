@@ -25,7 +25,9 @@ import com.daymark.app.data.entity.PersonNote
 import com.daymark.app.data.entity.ThoughtRecord
 import com.daymark.app.data.entity.Reminder
 import com.daymark.app.data.entity.SafetyPlanItem
+import com.daymark.app.data.entity.SkyPlace
 import com.daymark.app.data.entity.SkyPutAway
+import com.daymark.app.data.entity.SkyStar
 import com.daymark.app.data.entity.SleepLog
 import com.daymark.app.data.entity.Tracker
 import com.daymark.app.data.entity.TrackerLog
@@ -104,6 +106,8 @@ data class BackupGoal(
      * looking wrong — the same way `BackupLifeEvent.createdAt` could have.
      */
     val reachedAt: Long? = null,
+    /** A habit's set time, minutes after midnight, or null (#519). Added in v21. */
+    val atMinute: Int? = null,
 )
 
 /**
@@ -211,6 +215,24 @@ data class BackupSkyPutAway(
     val recordId: Long,
     val putAwayEpochDay: Long,
 )
+
+/**
+ * One `sky_stars` row: what the person chose for one star, its name, its shower and its place
+ * (#516, #517, #518). Added in v21. Keyed like [BackupSkyPutAway], so only a full restore carries
+ * it.
+ */
+@Serializable
+data class BackupSkyStar(
+    val kind: String,
+    val recordId: Long,
+    val name: String? = null,
+    val shower: Boolean = false,
+    val placeId: Long? = null,
+)
+
+/** One `sky_places` row: a place the person named (#518). Added in v21. */
+@Serializable
+data class BackupSkyPlace(val id: Long, val name: String, val createdAt: Long = 0)
 
 /**
  * One `sky_constellations` row: a constellation the person drew and named. Added in v18.
@@ -383,6 +405,12 @@ data class BackupData(
     val skyColourChoice: Int = 0,
     val skyColourUntil: Long = 0L,
     /**
+     * What the person chose for their stars and the places they named (#516, #517, #518). Added in
+     * v21, defaulted so a v20 file still reads, with no star named and no place.
+     */
+    val skyStars: List<BackupSkyStar> = emptyList(),
+    val skyPlaces: List<BackupSkyPlace> = emptyList(),
+    /**
      * The crisis line the person set themselves. Added in v20, defaulted so an older file still
      * reads. Null means the file has none of the person's own — an older file, or a phone that still
      * showed the default — and a restore then leaves this phone's line as it is (#370).
@@ -511,6 +539,7 @@ class BackupManager @Inject constructor(
     private val skyRepository: com.daymark.app.data.SkyRepository,
     private val constellationDao: com.daymark.app.data.dao.ConstellationDao,
     private val skyPutAwayDao: com.daymark.app.data.dao.SkyPutAwayDao,
+    private val skyStarDao: com.daymark.app.data.dao.SkyStarDao,
     private val personDao: com.daymark.app.data.dao.PersonDao,
     private val personNoteDao: com.daymark.app.data.dao.PersonNoteDao,
     // The entry -> person link, through its own DAO rather than EntryDao. That separation is the
@@ -581,7 +610,7 @@ class BackupManager @Inject constructor(
             refs = entryDao.getAllCrossRefs().map { BackupRef(it.entryId, it.activityId) },
             journal = journalDao.getAll().map { BackupJournal(it.id, it.dateTime, it.title, it.body) },
             goals = goalDao.getAll().map {
-                BackupGoal(it.id, it.title, it.activityId, it.targetPerWeek, it.createdAt, it.archived, it.cue, it.routine, it.kind, it.reachedAt)
+                BackupGoal(it.id, it.title, it.activityId, it.targetPerWeek, it.createdAt, it.archived, it.cue, it.routine, it.kind, it.reachedAt, it.atMinute)
             },
             goalSteps = goalStepDao.getAll().map {
                 BackupGoalStep(it.id, it.goalId, it.title, it.state, it.position, it.createdAt, it.completedAt)
@@ -629,6 +658,8 @@ class BackupManager @Inject constructor(
                 BackupConstellation(it.id, it.name, it.madeEpochDay, it.points, it.createdAt)
             },
             skyPutAway = skyPutAwayDao.getAll().map { BackupSkyPutAway(it.kind, it.recordId, it.putAwayEpochDay) },
+            skyStars = skyStarDao.getAllStars().map { BackupSkyStar(it.kind, it.recordId, it.name, it.shower, it.placeId) },
+            skyPlaces = skyStarDao.getAllPlaces().map { BackupSkyPlace(it.id, it.name, it.createdAt) },
             skyColourChoice = skyRepository.colourChoice(),
             skyColourUntil = skyRepository.colourUntil(),
         )
@@ -776,7 +807,7 @@ class BackupManager @Inject constructor(
         entryDao.insertCrossRefs(data.refs.map { EntryActivityCrossRef(it.entryId, it.activityId) })
         data.journal.forEach { journalDao.insert(JournalEntry(it.id, it.dateTime, it.title, it.body)) }
         data.goals.forEach {
-            goalDao.insert(Goal(it.id, it.title, it.activityId, it.targetPerWeek, it.createdAt, it.archived, it.cue, it.routine, it.kind, it.reachedAt))
+            goalDao.insert(Goal(it.id, it.title, it.activityId, it.targetPerWeek, it.createdAt, it.archived, it.cue, it.routine, it.kind, it.reachedAt, it.atMinute))
         }
         // After the goals, never before: `goal_steps.goalId` references `goals(id)` and the pragma
         // is on, so a step written ahead of its goal throws and aborts the restore.
@@ -826,6 +857,12 @@ class BackupManager @Inject constructor(
         // The memories put away, named by the record ids restored above, which REPLACE keeps.
         skyPutAwayDao.deleteAll()
         skyPutAwayDao.insertAll(data.skyPutAway.map { SkyPutAway(it.kind, it.recordId, it.putAwayEpochDay) })
+        // What the person chose for their stars, named by the record ids restored above. Written
+        // after every memory, because deleting the memories above deleted these rows with them.
+        skyStarDao.deleteAllStars()
+        skyStarDao.deleteAllPlaces()
+        skyStarDao.insertPlaces(data.skyPlaces.map { SkyPlace(it.id, it.name, it.createdAt) })
+        skyStarDao.insertStars(data.skyStars.map { SkyStar(it.kind, it.recordId, it.name, it.shower, it.placeId) })
 
         /*
          * People, their notes, their entry links, and the per-group sharing defaults.
@@ -960,7 +997,7 @@ class BackupManager @Inject constructor(
         // with the import time would silently move every star on the Sky to the day of the merge.
         data.goals.forEach { g ->
             val newId = goalDao.insert(
-                Goal(0, g.title, g.activityId?.let { activityIdMap[it] }, g.targetPerWeek, g.createdAt, g.archived, g.cue, g.routine, g.kind, g.reachedAt),
+                Goal(0, g.title, g.activityId?.let { activityIdMap[it] }, g.targetPerWeek, g.createdAt, g.archived, g.cue, g.routine, g.kind, g.reachedAt, g.atMinute),
             )
             goalIdMap[g.id] = newId
         }
@@ -1014,7 +1051,9 @@ class BackupManager @Inject constructor(
         // file's constellations were drawn in another sky, against that sky's positions and that
         // file's record ids, so they are not carried into this one; REPLACE restores them whole.
         // Nor is what the file had put away, or its colours: the put-away rows name the file's
-        // record ids, which a merge renumbers, so its memories arrive in sight (#455).
+        // record ids, which a merge renumbers, so its memories arrive in sight (#455). The file's
+        // star names, showers and places are left out for the same reason: they name the file's
+        // record ids, so a merge would hang them on the wrong memories.
 
         /*
          * People take fresh row ids, like every other MERGE insert, and their notes follow through
@@ -1101,6 +1140,8 @@ class BackupManager @Inject constructor(
         // reads. The bump stops a v18 reader accepting a file whose hard marks it would drop.
         // v20 adds `crisisLine`, defaulted to none, so a v19 file still reads and leaves the phone's
         // line alone. The bump stops a v19 reader accepting a file whose crisis line it would drop.
-        const val CURRENT_VERSION = 20
+        // v21 adds `skyStars`, `skyPlaces` and `BackupGoal.atMinute`, all defaulted, so a v20 file
+        // still reads. The bump stops a v20 reader accepting a file whose star names it would drop.
+        const val CURRENT_VERSION = 21
     }
 }

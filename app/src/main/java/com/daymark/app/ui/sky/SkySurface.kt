@@ -77,11 +77,13 @@ import com.daymark.app.sky.SkyHoles
 import com.daymark.app.sky.SkyKind
 import com.daymark.app.sky.SkyLayout
 import com.daymark.app.sky.SkyNebula
+import com.daymark.app.sky.SkyObjects
 import com.daymark.app.sky.SkyOpening
 import com.daymark.app.sky.SkyOptions
 import com.daymark.app.sky.SkyPalette
 import com.daymark.app.sky.SkyRandom
 import com.daymark.app.sky.SkyShaders
+import com.daymark.app.sky.SkyStars
 import com.daymark.app.sky.SkyTrackers
 import com.daymark.app.sky.SkyTwinkle
 import kotlinx.coroutines.Dispatchers
@@ -193,11 +195,22 @@ internal fun SkySurface(
     nebulae: List<SkyNebula.Nebula>,
     /** The trackers the person shows, placed beside today's stars ([SkyTrackers.place]). */
     trackers: List<SkyTrackers.Placed>,
+    /** A pulsar for each habit with a set time ([SkyObjects.placePulsars]). */
+    pulsars: List<SkyObjects.Pulsar>,
+    /** A ringed planet for each place with a memory in sight ([SkyObjects.placePlanets]). */
+    planets: List<SkyObjects.Planet>,
+    /**
+     * The star a meteor shower leaves from today ([SkyStars.showerToday]), or a negative number for
+     * none. The screen hands none in with motion off, so a still sky has no meteor in it.
+     */
+    showerFrom: Int,
     /** A black or white hole as it plays, or null. */
     event: SkyHoleEvent?,
     onStarTapped: (Int) -> Unit,
     onTrackerTapped: (Int) -> Unit,
     onNebulaTapped: (Int) -> Unit,
+    onPlanetTapped: (Int) -> Unit,
+    onPulsarTapped: (Int) -> Unit,
     onSkipOpening: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -262,6 +275,10 @@ internal fun SkySurface(
     val tapped by rememberUpdatedState(onStarTapped)
     val trackerTapped by rememberUpdatedState(onTrackerTapped)
     val nebulaTapped by rememberUpdatedState(onNebulaTapped)
+    val planetTapped by rememberUpdatedState(onPlanetTapped)
+    val pulsarTapped by rememberUpdatedState(onPulsarTapped)
+    val worlds by rememberUpdatedState(planets)
+    val beacons by rememberUpdatedState(pulsars)
     val skip by rememberUpdatedState(onSkipOpening)
     val tappable by rememberUpdatedState(hidden)
     val objects by rememberUpdatedState(trackers)
@@ -295,7 +312,29 @@ internal fun SkySurface(
                             skyX,
                             skyY,
                         )
-                        val star = if (tracker >= 0) {
+                        val planet = if (tracker >= 0) {
+                            -1
+                        } else {
+                            SkyPresentation.objectAt(
+                                FloatArray(worlds.size) { worlds[it].x },
+                                FloatArray(worlds.size) { worlds[it].y },
+                                FloatArray(worlds.size) { max(worlds[it].radius * PLANET_RING_REACH, reach) },
+                                skyX,
+                                skyY,
+                            )
+                        }
+                        val pulsar = if (tracker >= 0 || planet >= 0) {
+                            -1
+                        } else {
+                            SkyPresentation.objectAt(
+                                FloatArray(beacons.size) { beacons[it].x },
+                                FloatArray(beacons.size) { beacons[it].y },
+                                FloatArray(beacons.size) { reach },
+                                skyX,
+                                skyY,
+                            )
+                        }
+                        val star = if (tracker >= 0 || planet >= 0 || pulsar >= 0) {
                             -1
                         } else {
                             SkyPresentation.nearestStar(
@@ -312,7 +351,7 @@ internal fun SkySurface(
                             )
                         }
                         // A star wins over the gas round it; the gas is reached between stars.
-                        val nebula = if (tracker >= 0 || star >= 0) {
+                        val nebula = if (tracker >= 0 || planet >= 0 || pulsar >= 0 || star >= 0) {
                             -1
                         } else {
                             SkyPresentation.objectAt(
@@ -325,6 +364,8 @@ internal fun SkySurface(
                         }
                         when {
                             tracker >= 0 -> trackerTapped(tracker)
+                            planet >= 0 -> planetTapped(planet)
+                            pulsar >= 0 -> pulsarTapped(pulsar)
                             nebula >= 0 -> nebulaTapped(nebula)
                             else -> tapped(star)
                         }
@@ -386,6 +427,20 @@ internal fun SkySurface(
                 }
             }
             for (t in trackers) drawTracker(t, origin, scale, pan, seconds, backdrop)
+            for (p in planets) drawPlanet(p, look, origin, scale, pan, backdrop, options.highContrast)
+            val near = SkyObjects.nearness(across)
+            for (p in pulsars) drawPulsar(p, origin, scale, pan, seconds, near, backdrop)
+            if (showerFrom in 0 until layout.starCount && !hidden[showerFrom]) {
+                drawMeteor(
+                    Offset(
+                        SkyPresentation.toScreen(xs[showerFrom], origin.x, scale, pan.x),
+                        SkyPresentation.toScreen(ys[showerFrom], origin.y, scale, pan.y),
+                    ),
+                    seconds,
+                    seed xor layout.epochDay[showerFrom],
+                    backdrop,
+                )
+            }
 
             if (born in 0 until layout.starCount && birth > 0f && birth < 1f) {
                 drawBirth(
@@ -902,6 +957,136 @@ private fun DrawScope.drawTracker(
         strokeWidth = 1.4.dp.toPx(),
         cap = StrokeCap.Round,
         alpha = (SkyTrackers.grainAlpha(placed.logs) * strength).coerceIn(0f, 1f),
+        blendMode = BlendMode.Plus,
+    )
+}
+
+/** How far out a planet's ring reaches, against its body's radius; a tap anywhere on it opens it. */
+private const val PLANET_RING_REACH = 2.4f
+
+/**
+ * A ringed planet for a place the person named (#518): a disc and its ring in the sky's own
+ * colours, the far half of the ring behind the body and the near half in front. Its size is the
+ * seed's alone and nothing about it is counted.
+ */
+private fun DrawScope.drawPlanet(
+    planet: SkyObjects.Planet,
+    look: SkyColours.Look,
+    origin: Offset,
+    scale: Float,
+    pan: Offset,
+    strength: Float,
+    highContrast: Boolean,
+) {
+    if (strength <= 0f) return
+    val centre = Offset(
+        SkyPresentation.toScreen(planet.x, origin.x, scale, pan.x),
+        SkyPresentation.toScreen(planet.y, origin.y, scale, pan.y),
+    )
+    val radius = max(planet.radius * scale, 2.5.dp.toPx())
+    val ring = radius * PLANET_RING_REACH
+    if (!SkyPresentation.isOnScreen(centre.x, centre.y, size.width, size.height, ring + 4.dp.toPx())) return
+    val tones = look.nebulae[planet.tone.coerceIn(0, look.nebulae.size - 1)]
+    val body = if (highContrast) SkyNightInk else skyColor(tones[0])
+    val ringColour = if (highContrast) SkyNightInk else skyColor(tones[2])
+    val ringSize = Size(ring * 2f, ring * 2f * planet.open)
+    val ringTopLeft = Offset(centre.x - ring, centre.y - ring * planet.open)
+    val stroke = Stroke(width = max(radius * 0.22f, 1.dp.toPx()))
+    val degrees = planet.tilt * 180f / PI.toFloat()
+    rotate(degrees, centre) {
+        drawArc(ringColour, 180f, 180f, false, ringTopLeft, ringSize, alpha = 0.55f * strength, style = stroke)
+    }
+    drawCircle(body, radius, centre, alpha = strength)
+    // Its night side, in the sky's own darkest tone, away from a light up and to the left.
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(Color.Transparent, skyColor(look.space[0])),
+            center = centre - Offset(radius * 0.45f, radius * 0.45f),
+            radius = radius * 2f,
+        ),
+        radius = radius,
+        center = centre,
+        alpha = 0.7f * strength,
+    )
+    rotate(degrees, centre) {
+        drawArc(ringColour, 0f, 180f, false, ringTopLeft, ringSize, alpha = 0.8f * strength, style = stroke)
+    }
+}
+
+/** A pulsar's point and its jets' full length on the screen, in dp. */
+private const val PULSAR_POINT_DP = 2.2f
+private const val PULSAR_JET_DP = 26f
+
+/**
+ * A pulsar for a habit with a set time (#519): a bright point and two jets turning on a slope,
+ * flashing as each sweeps toward the viewer, at the one beat [SkyObjects.PULSAR_BEAT_SECONDS] for
+ * every habit. With motion off [seconds] is held at 0, so it stands still. From far away it beats
+ * quietly and its jets are short ([SkyObjects.nearness]).
+ */
+private fun DrawScope.drawPulsar(
+    pulsar: SkyObjects.Pulsar,
+    origin: Offset,
+    scale: Float,
+    pan: Offset,
+    seconds: Float,
+    nearness: Float,
+    strength: Float,
+) {
+    if (strength <= 0f) return
+    val centre = Offset(
+        SkyPresentation.toScreen(pulsar.x, origin.x, scale, pan.x),
+        SkyPresentation.toScreen(pulsar.y, origin.y, scale, pan.y),
+    )
+    val jet = PULSAR_JET_DP.dp.toPx() * SkyObjects.jetLength(nearness)
+    if (!SkyPresentation.isOnScreen(centre.x, centre.y, size.width, size.height, jet + 4.dp.toPx())) return
+    val angle = SkyObjects.jetAngle(pulsar, seconds)
+    val flash = SkyObjects.flash(angle)
+    val light = SkyObjects.pulsarLight(flash, nearness)
+    // The jets turn round an axis leaning at the pulsar's slope; seen from here, each traces an
+    // ellipse, short as it points at the viewer and long as it points across.
+    val along = cos(angle)
+    val dx = cos(pulsar.slope) * along * jet
+    val dy = sin(pulsar.slope) * along * jet + sin(angle) * jet * 0.25f
+    val jetAlpha = (0.25f + 0.35f * nearness) * strength
+    for (sign in intArrayOf(-1, 1)) {
+        drawLine(
+            color = SkyNightInk,
+            start = centre,
+            end = Offset(centre.x + sign * dx, centre.y + sign * dy),
+            strokeWidth = 1.dp.toPx(),
+            cap = StrokeCap.Round,
+            alpha = jetAlpha,
+            blendMode = BlendMode.Plus,
+        )
+    }
+    val point = PULSAR_POINT_DP.dp.toPx()
+    drawGlow(centre, point * 3f * light, SkyNightInk, (0.35f * light / SkyObjects.PULSAR_NEAR_PEAK) * strength)
+    drawCircle(SkyNightInk, point, centre, alpha = strength)
+}
+
+/** How far a meteor runs, and how far from its star it starts, in dp. */
+private const val METEOR_RUN_DP = 90f
+private const val METEOR_START_DP = 14f
+
+/**
+ * A meteor shower's meteor (#517), leaving the star it marks: one streak at a time, outward,
+ * fading as it goes. Only ever handed a star on its day and with motion on.
+ */
+private fun DrawScope.drawMeteor(radiant: Offset, seconds: Float, seed: Long, strength: Float) {
+    if (strength <= 0f) return
+    val flight = FloatArray(3)
+    if (!SkyObjects.meteor(seconds, seed, flight)) return
+    val dir = Offset(cos(flight[0]), sin(flight[0]))
+    val run = METEOR_RUN_DP.dp.toPx()
+    val head = radiant + dir * (METEOR_START_DP.dp.toPx() + run * flight[1])
+    val tail = head - dir * (run * 0.35f)
+    drawLine(
+        brush = Brush.linearGradient(listOf(Color.Transparent, SkyNightInk), start = tail, end = head),
+        start = tail,
+        end = head,
+        strokeWidth = 1.4.dp.toPx(),
+        cap = StrokeCap.Round,
+        alpha = flight[2] * strength,
         blendMode = BlendMode.Plus,
     )
 }
