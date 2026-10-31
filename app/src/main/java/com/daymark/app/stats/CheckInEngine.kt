@@ -247,4 +247,20 @@ object CheckInEngine {
      */
     fun changeBetween(announced: Pace, now: Pace): Change? =
         if (announced == now || now == Pace.Off) null else Change(announced, now)
+
+    /**
+     * The pace a check-in is posted at while the person has said they are having a hard time
+     * (#537): at least one step quieter than their own schedule, and never louder than [pace].
+     *
+     * The person said it, so nothing is inferred (§D1a rule 1), and the response is still only to
+     * ask less. It applies at the moment of posting and never to [changeBetween]'s notices: the
+     * person already knows, because they flipped the switch, and a notice with **Put it back** would
+     * offer to undo a choice that is theirs to undo where they made it. A check-in kept at its times
+     * ([keepAsSet], a medication) is left exactly as set, and [Pace.Off] stays off.
+     */
+    fun duringHardTime(pace: Pace, setSpacingMillis: Long, keepAsSet: Boolean): Pace {
+        if (keepAsSet || pace == Pace.Off) return pace
+        val quieter = paceAfter(1 + stepsAlreadyMet(setSpacingMillis))
+        return if (quieter.quieterThan(pace)) quieter else pace
+    }
 }

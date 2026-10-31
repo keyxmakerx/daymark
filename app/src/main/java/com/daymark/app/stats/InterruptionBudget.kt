@@ -83,6 +83,12 @@ object InterruptionBudget {
 
         /** A tracker's own check-in, at a rhythm the person switched on for that tracker. */
         TRACKER("tracker"),
+
+        /**
+         * One extra question inside a check-in the person is already doing: a tracker they put in
+         * their check-in, or last night's sleep ([CheckInQuestions]). It never posts anything.
+         */
+        QUESTION("question"),
         ;
 
         companion object {
@@ -227,6 +233,7 @@ object InterruptionBudget {
         Kind.ASSIGNMENT -> SupportOfferFrequency.OncePerDay
         Kind.SUPPORT -> SupportOfferFrequency.DEFAULT
         Kind.TRACKER -> SupportOfferFrequency.EveryTime
+        Kind.QUESTION -> SupportOfferFrequency.EveryTime
     }
 
     /** When this kind last asked, or 0 if it never has. Rows of other kinds are ignored. */

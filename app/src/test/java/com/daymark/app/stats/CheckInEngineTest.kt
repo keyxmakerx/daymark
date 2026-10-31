@@ -362,4 +362,26 @@ class CheckInEngineTest {
             assertTrue(mayTry(answers(len)))
         }
     }
+
+    // ---- The hard-time switch (#537): only ever quieter, and a kept check-in is untouched ----
+
+    @Test
+    fun `the hard-time switch never makes any check-in more frequent or louder`() {
+        val spacings = listOf(0L, 4 * hour, 12 * hour, day, 7 * day)
+        for (pace in paces) for (spacing in spacings) for (keep in listOf(false, true)) {
+            val during = CheckInEngine.duringHardTime(pace, spacing, keep)
+            assertFalse("$pace at spacing $spacing, keep $keep became $during", louder(during, pace))
+            if (keep) assertEquals(pace, during)
+            if (pace == Pace.Off) assertEquals(Pace.Off, during)
+        }
+        // Positive control: a daily reminder that eases off asks less while the switch is on, and
+        // one already quieter than that is left where it is.
+        val daily = CheckInEngine.duringHardTime(Pace.AsSet, day, keepAsSet = false)
+        assertTrue(daily.quieterThan(Pace.AsSet))
+        assertTrue(daily.gapMillis >= day)
+        val far = CheckInEngine.paceAfter(8)
+        assertEquals(far, CheckInEngine.duringHardTime(far, day, keepAsSet = false))
+        // And a medication kept at its times is posted exactly as set.
+        assertEquals(Pace.AsSet, CheckInEngine.duringHardTime(Pace.AsSet, day, keepAsSet = true))
+    }
 }
