@@ -32,7 +32,11 @@ import javax.inject.Inject
 /** Where the preview stands. */
 sealed interface ReportPreviewState {
     data object Building : ReportPreviewState
-    data class Ready(val pageCount: Int) : ReportPreviewState
+    /**
+     * [gapComparable] is true when side 2 can set a long gap beside the person's own longest gap
+     * before the report (#520), so the preview offers its switch whether or not it is on now.
+     */
+    data class Ready(val pageCount: Int, val gapComparable: Boolean = false, val build: Int = 0) : ReportPreviewState
     data object Failed : ReportPreviewState
 }
 
@@ -76,15 +80,23 @@ class ReportPreviewViewModel @Inject constructor(
 
     private var built: PdfExportOptions? = null
 
+    /** Counts builds, so a page drawn from an earlier file is never shown as this one's. */
+    private var builds = 0
+
     /** Builds the report for [options] once; a recomposition asking again changes nothing. */
     fun preview(options: PdfExportOptions) {
         if (built == options) return
         built = options
         _state.value = ReportPreviewState.Building
+        var comparable = false
+        val build = ++builds
         viewModelScope.launch {
             val result = runCatching {
                 withContext(Dispatchers.IO) {
                     pages.withLock {
+                        // A later build has been asked for: leave the file to it, so the one on
+                        // the phone is always the one the latest switches describe.
+                        if (build != builds) return@withLock null
                         close()
                         val dir = File(context.cacheDir, PREVIEW_DIR)
                         dir.deleteRecursively()
@@ -92,6 +104,7 @@ class ReportPreviewViewModel @Inject constructor(
                         val out = File(dir, "report.pdf")
                         val data = reportDataBuilder.build(options, System.currentTimeMillis())
                         out.outputStream().use { pdfReportGenerator.generate(data, options, it) }
+                        comparable = data.priorLongestGapDays != null
                         file = out
                         val fd = ParcelFileDescriptor.open(out, ParcelFileDescriptor.MODE_READ_ONLY)
                         descriptor = fd
@@ -99,7 +112,12 @@ class ReportPreviewViewModel @Inject constructor(
                     }
                 }
             }
-            _state.value = result.fold({ ReportPreviewState.Ready(it) }, { ReportPreviewState.Failed })
+            // A later build has started: its state is the one to show, whichever finishes first.
+            if (build != builds) return@launch
+            _state.value = result.fold(
+                { count -> count?.let { ReportPreviewState.Ready(it, comparable, build) } ?: ReportPreviewState.Failed },
+                { ReportPreviewState.Failed },
+            )
         }
     }
 

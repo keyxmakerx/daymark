@@ -29,6 +29,37 @@ All notable changes to this project are documented here. The format is based on
   The command-line writer gets a credential of its own from the console, set as `DAYMARK_CLI_TOKEN`,
   which can only read and write backups and can be revoked there. Email recovery is switched off
   once your sign-in is made (#324).
+- **A background for your phone, made from your sky.** **Background** on your sky makes a picture
+  for your lock or home screen: **Space only**, your sky's colours and gas with none of your stars,
+  or **With my stars**. Drag it or tap **Another view** to frame it, then your phone's own picker
+  asks where it goes. The first time you choose your stars, Daymark says once that anyone who sees
+  your screen sees the shape of your record (#534).
+- **Name a star, give a day a meteor shower, put memories in a place.** A star's card in your sky
+  now has **Name**, for a name of your own, and **Place**, to put that memory in a place you name,
+  such as home. Each place you use becomes a ringed planet among its memories; its size never says
+  how many. **Meteor shower each year** sends meteors from that star on its day every year, while
+  Motion is on. A memory you delete takes its name, shower and place with it, and a backup carries
+  them (#516, #517, #518).
+- **Pulsars for habits with a set time.** A weekly habit can now have **At a set time**. It sets no
+  reminder; in your sky the habit becomes a pulsar that turns at the same beat every day, whatever
+  you did (#519).
+- **The PDF report sets a long gap beside your own longest one.** Where side 2 lists stretches of
+  5 or more days without entries, it now adds your longest stretch in the 6 months before the
+  report, as a number and nothing else. It is left out if your entries don't go back that far, and
+  **Compare long gaps** on the preview leaves it out before you save (#520).
+- **Check a backup opens.** Settings has **Check a backup opens**, which reads a backup file
+  without restoring it and tells you when it was made and how many entries and journal pages it
+  holds, or that it can't be restored. It never changes anything on your phone (#524).
+- **"Signs of a high" and "Signs of a low" in your safety plan.** Two optional lists in your own
+  words, offered together after your warning signs. Nothing in Daymark reads them or acts on them;
+  they are there for you (#523).
+- **A Quick Settings tile that opens your safety plan.** Add the **Daymark** tile to Quick
+  Settings and it opens your plan, after your phone's unlock and your Daymark PIN. It says only
+  "Daymark", so nothing on your lock screen names the plan (#522).
+- **Pick your crisis line from a list.** Where you set your crisis line, **Pick from a list of
+  national lines** offers lines for ten countries. Picking one fills in the fields for you to check
+  and save; you can still change anything. Daymark never looks at where you are to choose for you,
+  and the list shows the date it was last checked (#521).
 - **You can call your crisis line from the app.** Once you've said the line is right for you, the
   crisis screen has a **Call** button, and **Text** where the line takes texts. Each opens your
   phone's own dialer or messages app with the number filled in; Daymark never places a call. The
@@ -41,6 +72,10 @@ All notable changes to this project are documented here. The format is based on
   month's name in large type, an open grid, and today's date filled in. Pressing a day opens its card
   right from that day, and the rest of the month fades back. Escape, the × or a click anywhere else
   closes it. Changing month fades gently, or not at all if you've asked your device for less motion.
+- **The sky's gas has depth.** A star now lights only the gas close to it, by its own size and
+  brightness; thick gas is darker inside than at its rim, and clouds have a lit side and a shadowed
+  one. Where two stars' light meets there is no longer a hard edge, and the gas has no holes or
+  hard blue patches on phones that drew them (#535).
 - **Stars look like stars.** Each one is a sharp point of light: a white-hot heart in its own
   colour, paled toward white, with a tight wing of light round it the way a star's light spreads in
   the eye, and no rays, spikes, hard edge or grey disc round it. A life event is still the one

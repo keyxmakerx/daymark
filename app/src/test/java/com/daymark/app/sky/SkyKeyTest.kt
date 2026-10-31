@@ -98,4 +98,16 @@ class SkyKeyTest {
         assertTrue(lines > 10)
         assertTrue(words.any { "Keep it up: a seven-day streak!".lowercase().contains(it) })
     }
+
+    @Test
+    fun `the Key names planets, pulsars and showers only when the sky has them`() {
+        val layout = Sky.layout(everyOtherDay(10), 7L)
+        val none = SkyKey.entries(layout, 0).map { it.title }
+        assertFalse(none.any { it in setOf("Planets", "Pulsars", "Meteor showers") })
+        val all = SkyKey.entries(layout, 0, planets = 1, pulsars = 2, showers = true)
+        assertEquals(listOf("Planets", "Pulsars", "Meteor showers"), all.map { it.title }.filter { it in setOf("Planets", "Pulsars", "Meteor showers") })
+        // A pulsar says it never follows the record, and a planet that its size counts nothing.
+        assertTrue(all.single { it.title == "Pulsars" }.text.contains("whatever you did"))
+        assertTrue(all.single { it.title == "Planets" }.text.contains("never says how many"))
+    }
 }

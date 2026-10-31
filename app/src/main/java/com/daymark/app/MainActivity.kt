@@ -68,6 +68,8 @@ class MainActivity : FragmentActivity() {
         const val EXTRA_OPEN_EDITOR = "open_editor"
         /** A tracker's check-in or quick-log notification: open that tracker. */
         const val EXTRA_OPEN_TRACKER = "open_tracker"
+        /** The Quick Settings tile: open the safety plan, once the lock has been passed (#522). */
+        const val EXTRA_OPEN_SAFETY_PLAN = "open_safety_plan"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -76,6 +78,7 @@ class MainActivity : FragmentActivity() {
         val initialMood = intent?.getIntExtra(EXTRA_PREFILL_MOOD, -1) ?: -1
         val openEditor = intent?.getBooleanExtra(EXTRA_OPEN_EDITOR, false) ?: false
         val openTracker = intent?.getLongExtra(EXTRA_OPEN_TRACKER, -1L) ?: -1L
+        val openSafetyPlan = intent?.getBooleanExtra(EXTRA_OPEN_SAFETY_PLAN, false) ?: false
         setContent {
             // Map the prefs-change flow to a *content-based* snapshot. SettingsRepository.changes()
             // re-emits the same SharedPreferences instance, which collectAsState would dedup — so a
@@ -173,7 +176,12 @@ class MainActivity : FragmentActivity() {
                         )
                         !onboarded -> OnboardingScreen(onFinish = { unlockState.unlocked = true; onboarded = true })
                         lockEnabled && !unlockState.unlocked -> LockScreen(onUnlocked = { unlockState.unlocked = true })
-                        else -> DaymarkAppScaffold(initialMood = initialMood, openEditor = openEditor, openTracker = openTracker)
+                        else -> DaymarkAppScaffold(
+                            initialMood = initialMood,
+                            openEditor = openEditor,
+                            openTracker = openTracker,
+                            openSafetyPlan = openSafetyPlan,
+                        )
                     }
                 }
             }

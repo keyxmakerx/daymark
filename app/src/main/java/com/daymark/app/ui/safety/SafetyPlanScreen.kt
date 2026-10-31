@@ -74,6 +74,9 @@ fun SafetyPlanScreen(
     // The optional fourth section stays absent until wanted, so an empty one never sits there
     // reading as a reproach on a bad day. Once offered, it stays for this visit.
     var reasonsOffered by remember { mutableStateOf(false) }
+    // The signs of a high and of a low work the same way: offered together, and once either has a
+    // line in it, that one stays (#523).
+    var signsOffered by remember { mutableStateOf(false) }
     var addingPerson by remember { mutableStateOf(false) }
     val isEmpty = plan.values.all { it.isEmpty() }
 
@@ -135,6 +138,29 @@ fun SafetyPlanScreen(
                     onAddPerson = { addingPerson = true },
                     onRemove = viewModel::remove,
                 )
+                if (section == SafetyPlanSection.WARNING_SIGNS) {
+                    val shown = SafetyPlanSection.signs.filter { signsOffered || plan[it].orEmpty().isNotEmpty() }
+                    shown.forEach { signs ->
+                        SectionCard(
+                            section = signs,
+                            items = plan[signs].orEmpty(),
+                            onAdd = { viewModel.add(signs, it) },
+                            onAddPerson = {},
+                            onRemove = viewModel::remove,
+                        )
+                    }
+                    if (shown.size < SafetyPlanSection.signs.size) {
+                        OfferCard(
+                            title = if (shown.isEmpty()) {
+                                "Add “Signs of a high” and “Signs of a low”?"
+                            } else {
+                                "Add “${(SafetyPlanSection.signs - shown.toSet()).single().title}”?"
+                            },
+                            line = "Optional. In your own words, for you to read.",
+                            onAccept = { signsOffered = true },
+                        )
+                    }
+                }
             }
 
             val reasons = plan[SafetyPlanSection.REASONS].orEmpty()
@@ -147,7 +173,11 @@ fun SafetyPlanScreen(
                     onRemove = viewModel::remove,
                 )
             } else {
-                OfferReasonsCard(onAccept = { reasonsOffered = true })
+                OfferCard(
+                    title = "Add “Reasons I want to stay”?",
+                    line = "Optional. Only if you'd want it there.",
+                    onAccept = { reasonsOffered = true },
+                )
             }
 
             // The crisis row: label and contact both come from CrisisStore, never hardcoded here.
@@ -298,11 +328,12 @@ private fun AddLineField(placeholder: String, onAdd: (String) -> Unit) {
 }
 
 /**
- * The optional fourth section, offered rather than assumed. It is the heaviest thing on the screen
- * to write, so it is never pre-placed as an empty prompt.
+ * An optional section, offered rather than assumed. "Reasons I want to stay" is the heaviest thing
+ * on the screen to write, and the signs of a high and a low are not everyone's, so none of them is
+ * ever pre-placed as an empty prompt.
  */
 @Composable
-private fun OfferReasonsCard(onAccept: () -> Unit) {
+private fun OfferCard(title: String, line: String, onAccept: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth().clickable { onAccept() },
         shape = CardShape,
@@ -310,9 +341,9 @@ private fun OfferReasonsCard(onAccept: () -> Unit) {
         border = BorderStroke(HairlineWidth, MaterialTheme.colorScheme.outline),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Add “Reasons I want to stay”?", style = MaterialTheme.typography.titleSmall)
+            Text(title, style = MaterialTheme.typography.titleSmall)
             Text(
-                "Optional. Only if you'd want it there.",
+                line,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -392,6 +392,10 @@ disagree, this decision governs the build.
 - **The Key stays, and leads with "red only means old".** It lists only what is in that person's
   sky.
 - **Any tap skips the opening.** With reduced motion, the sky opens still, on today.
+- **A background for the phone can be made from the sky** (maintainer, 2026-10-31), as space only
+  or with the person's stars. Space only comes from the seed alone, so a lock screen says nothing
+  about the person; with stars says once, before the first, that anyone who sees the screen sees
+  the shape of the record. It is set through Android's own wallpaper picker and needs no network.
 - **Never**: a moon or land; anything framed as depression or as memories being eaten; a meteor
   shower on a day the person did not choose; a pulsar for a habit without a set time; device location
   for a place.

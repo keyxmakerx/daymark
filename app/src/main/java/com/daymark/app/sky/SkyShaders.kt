@@ -170,7 +170,7 @@ half4 main(float2 p) {
         // edge, and the edge darker, the way a real star's limb is
         float3 tilt = hue * mix(float3(1.0), float3(1.0, 0.9, 0.75), 1.0 - mu);
         tilt /= max(tilt.r, max(tilt.g, tilt.b));
-        float3 deep = pow(tilt, float3(1.0 + 0.9 * (1.0 - mu)));
+        float3 deep = pow(max(tilt, float3(0.0)), float3(1.0 + 0.9 * (1.0 - mu)));
         float3 surf = mix(deep, float3(1.0), 0.35 * mu * mu);
         c += surf * 2.6 * limb * gran * (1.0 - spot) * disc;
         c += hue * facula * 0.6 * disc;
@@ -189,7 +189,7 @@ half4 main(float2 p) {
     float s1 = gn(dir * 1.9 + uSeed * 20.0 + float2(t * 0.02, 0.0));
     float s2 = gn(dir * 5.7 + uSeed * 7.0 + float2(0.0, h * 1.5 - t * 0.03));
     float streams = 0.45 + 0.9 * s1 * s1 + 0.5 * s2;
-    float cor = exp(-h * mix(5.0, 3.25, giant)) * pow(streams, 1.6) * 0.18;
+    float cor = exp(-h * mix(5.0, 3.25, giant)) * pow(max(streams, 0.0), 1.6) * 0.18;
     float3 air = mix(hue, float3(1.0), 0.25);
     c += air * ((glow + rim) * res + cor * res + (1.0 - res) * 0.5 * exp(-h * 4.0)) * (1.0 - disc);
 
@@ -200,7 +200,7 @@ half4 main(float2 p) {
     float3 byChannel = 1.0 - exp(-c);
     float3 byPeak = c * ((1.0 - exp(-peak)) / max(peak, 1e-4));
     c = mix(byChannel, byPeak, 0.3);
-    c = pow(c, float3(1.0 / 2.2));
+    c = pow(max(c, float3(0.0)), float3(1.0 / 2.2));
     // seen, not computed: the turn of the sphere read across the whole face, each channel darkening
     // by how little of it the star's colour holds, so the edge deepens into its own colour
     float3 edgeHue = hue * float3(1.0, 0.9, 0.75);
@@ -252,6 +252,10 @@ uniform float3 uLightTint5;
 uniform float3 uLightTint6;
 uniform float3 uLightTint7;
 
+// The most light the stars together give any point of gas, so a crowd lights it little more than a
+// bright star does.
+const float LIGHT_CAP = 1.2;
+
 // Where a pixel lands on a layer that far behind the stars: the further back, the less it
 // grows as the view closes in and the less it slides as the sky is panned.
 float2 at(float2 p, float depth) {
@@ -260,9 +264,12 @@ float2 at(float2 p, float depth) {
 }
 
 // One level of the gas: clouds about [freq] to a unit of the sky, in patches with dark space between
-// them, lit along the edges that face [light] and shadowed in their thick parts. The rgb is the
-// light it gives; the alpha is how much dust in front of it dims what is behind.
-float4 clouds(float2 w, float freq, float level, float oct, float t) {
+// them, lit along the edges that face the light and shadowed in their thick parts. The rgb is the
+// light it gives; the alpha is how much dust in front of it dims what is behind. [ld] is the way
+// the stars' light comes from at this pixel, and [facing] is set to how much of it reaches here
+// past the gas in between, so a cloud has a lit side and a shadowed one (#535).
+float4 clouds(float2 w, float freq, float level, float oct, float t, float2 ld, out float facing) {
+    facing = 1.0;
     float2 o = float2(h12(float2(level, 1.7)), h12(float2(level, 9.3))) * 61.0;
     float2 q = w * freq + o;
     float region = smoothstep(0.44, 0.7, fbm(q * 0.16 + 11.0, 3.0));
@@ -272,20 +279,39 @@ float4 clouds(float2 w, float freq, float level, float oct, float t) {
     float lit = fbm(q + wp * 1.7 + float2(0.05, 0.08), oct - 1.0);
     float shade = clamp((n - lit) * 10.0, -1.0, 1.0);
     float dens = smoothstep(0.4, 0.82, n) * region;
-    float fil = pow(1.0 - abs(fbm(q * 2.1 + wp * 2.3 + 3.3, oct) * 2.0 - 1.0), 10.0) * smoothstep(0.38, 0.62, n) * region;
+    // Noise can stray a little past 0 and 1, and pow of a negative base is undefined: phone GPUs
+    // answer it with holes. Every base here is held at zero or above.
+    float fil = pow(max(0.0, 1.0 - abs(fbm(q * 2.1 + wp * 2.3 + 3.3, oct) * 2.0 - 1.0)), 10.0) * smoothstep(0.38, 0.62, n) * region;
     float thick = smoothstep(0.66, 0.92, n);
     float ct = fbm(q * 0.35 + 2.0, 3.0);
     float3 col = mix(mix(uGasA, uGasB, smoothstep(0.32, 0.52, ct)), uGasC, smoothstep(0.55, 0.75, ct));
-    float glow = dens * 0.075 * (0.6 + 0.8 * shade) * (1.0 - 0.45 * thick) + fil * 0.035;
-    float knot = smoothstep(0.6, 0.8, fbm(q * 1.4 + 9.1 + wp, oct - 1.0)) * region;
+    // Depth: the same field drawn coarse says how much gas surrounds a point, and the inside of a
+    // thick mass gets less light than its rim, so a mass reads as a volume and not a flat glow.
+    float occ = smoothstep(0.42, 0.85, fbm(q + wp * 1.7, 2.0)) * region;
+    // Gas lying between this point and the light shades it from that light.
+    facing = 1.0 - 0.6 * smoothstep(-0.08, 0.3, fbm(q + wp * 1.7 + ld * 0.45, max(oct - 2.0, 2.0)) - n);
+    // The relief never goes below zero: negative light showed as a hard blue patch with a red rim.
+    float glow = dens * 0.075 * max(0.0, 0.6 + 0.8 * shade) * (1.0 - 0.45 * thick) * (1.0 - 0.45 * occ) +
+        fil * 0.035 * (1.0 - 0.35 * occ);
+    float knot = max(smoothstep(0.6, 0.8, fbm(q * 1.4 + 9.1 + wp, oct - 1.0)) * region, occ * dens * 0.55);
     return float4(col * glow, knot);
 }
 
-// How one star lights the gas round it: its colour, and how strongly at this pixel.
+// How one star lights the gas round it: its colour, and how strongly at this pixel. [l].z is its
+// reach, from its own size on screen and its brightness (SkyShaders.gasLightReach), and the light
+// falls away about as the square of the distance, so a small star lights only the gas near it.
 float4 starlight(float2 p, float4 l, float3 tint) {
     float2 d = (p - l.xy) / max(l.z, 1e-3);
-    float k = l.w * (exp(-dot(d, d) * 1.6) * 0.55 + 0.6 / (1.0 + dot(d, d) * 900.0));
-    return float4(tint, k);
+    float dd = dot(d, d);
+    return float4(tint, l.w * 0.8 / (1.0 + dd * 8.0) * exp(-dd * 0.9));
+}
+
+// Adds one star's light into the running sums: colour, amount, and the way it comes from.
+void addLight(float2 p, float4 l, float3 tint, inout float3 lc, inout float la, inout float2 lw) {
+    float4 s = starlight(p, l, tint);
+    lc += s.rgb * s.a;
+    la += s.a;
+    lw += (l.xy - p) / max(length(l.xy - p), 1.0) * s.a;
 }
 
 half4 main(float2 p) {
@@ -325,32 +351,44 @@ half4 main(float2 p) {
         float f = smoothstep(0.0, 1.0, lv - k);
         float2 w3 = at(p, depth) + uSeed * 2.3;
         float oct = 5.0;
-        float4 g0 = clouds(w3, 2.5 * exp2(k), k, oct, t);
-        float4 g1 = clouds(w3, 2.5 * exp2(k + 1.0), k + 1.0, oct, t);
+        // The stars light the gas near them, each in its own colour. Every nearby star's light is
+        // added, its colour and the way it comes from weighted by how much of it arrives, and the
+        // total is capped: picking the brightest one instead drew a hard edge through the gas
+        // wherever one star's light handed over to the next (#535).
+        float3 lc = float3(0.0);
+        float la = 0.0;
+        float2 lw = float2(0.0);
+        addLight(p, uLight0, uLightTint0, lc, la, lw);
+        addLight(p, uLight1, uLightTint1, lc, la, lw);
+        addLight(p, uLight2, uLightTint2, lc, la, lw);
+        addLight(p, uLight3, uLightTint3, lc, la, lw);
+        addLight(p, uLight4, uLightTint4, lc, la, lw);
+        addLight(p, uLight5, uLightTint5, lc, la, lw);
+        addLight(p, uLight6, uLightTint6, lc, la, lw);
+        addLight(p, uLight7, uLightTint7, lc, la, lw);
+        float3 tint = lc / max(la, 1e-4);
+        float amount = min(la, LIGHT_CAP);
+        float2 ld = lw / max(length(lw), 1e-4);
+        float fa;
+        float fb;
+        float4 g0 = clouds(w3, 2.5 * exp2(k), k, oct, t, ld, fa);
+        float4 g1 = clouds(w3, 2.5 * exp2(k + 1.0), k + 1.0, oct, t, ld, fb);
         float4 g = g0 * (1.0 - f) + g1 * f;
-        // The stars light the gas near them, each in its own colour. The brightest light at a
-        // point wins rather than all of them adding up, so a crowd of stars lights it no more
-        // than one does.
-        float4 best = starlight(p, uLight0, uLightTint0);
-        float4 l = starlight(p, uLight1, uLightTint1); if (l.a > best.a) best = l;
-        l = starlight(p, uLight2, uLightTint2); if (l.a > best.a) best = l;
-        l = starlight(p, uLight3, uLightTint3); if (l.a > best.a) best = l;
-        l = starlight(p, uLight4, uLightTint4); if (l.a > best.a) best = l;
-        l = starlight(p, uLight5, uLightTint5); if (l.a > best.a) best = l;
-        l = starlight(p, uLight6, uLightTint6); if (l.a > best.a) best = l;
-        l = starlight(p, uLight7, uLightTint7); if (l.a > best.a) best = l;
+        float facing = mix(fa, fb, f);
         float lum = max(g.r, max(g.g, g.b));
         c += g.rgb * gasShow;
-        c += best.rgb * best.a * lum * 1.8 * gasShow;
-        c *= 1.0 - 0.5 * g.a * gasShow;
+        c += tint * amount * lum * 2.2 * facing * gasShow;
+        c *= 1.0 - 0.55 * g.a * gasShow;
     }
 
     // 4. A little darker toward the corners, the way an eye looking up sees the sky.
     float2 uv = p / uSize - 0.5;
     c *= 1.0 - 0.22 * pow(clamp(length(uv * float2(1.0, uSize.y / uSize.x)) * 0.9, 0.0, 1.5), 2.2);
 
+    // No negative light reaches the tone map, whose pow it would leave undefined.
+    c = max(c, float3(0.0));
     c = 1.0 - exp(-c * 1.05);
-    c = pow(c, float3(1.0 / 2.2));
+    c = pow(max(c, float3(0.0)), float3(1.0 / 2.2));
     // dither, so the darkest gradients never band
     c += (h12(p + fract(t) * 91.0) - h12(p.yx + 17.3)) / 255.0;
     // Never green: two colours that are each allowed can mix to one that is not, a sky blue and a
@@ -369,20 +407,26 @@ half4 main(float2 p) {
     /** How many stars light the gas at once. */
     const val LIGHTS = 8
 
-    /** How far a star's light reaches into the gas, in the sky's units: a few memories' steps. */
-    const val GAS_LIGHT_REACH = 0.012f
+    /** How far a star's light reaches into the gas, in widths of the star as it is drawn. */
+    const val GAS_LIGHT_WIDTHS = 16f
+
+    /** The least a star's light reaches, in dp, so the faintest point still lights a wisp. */
+    const val GAS_LIGHT_LEAST_DP = 4f
 
     /** The farthest a star's light reaches into the gas, as a share of the screen's width. */
-    const val GAS_LIGHT_MOST = 0.5f
+    const val GAS_LIGHT_MOST = 0.3f
 
     /**
-     * How far a star's light reaches into the gas, in pixels, at [scale] pixels to a unit of the
-     * sky on a screen [width] pixels across: [GAS_LIGHT_REACH] of the sky, and never more than
-     * [GAS_LIGHT_MOST] of the screen. Close in, a star's few memories' steps are wider than the
-     * screen many times over, and a light that wide would wash the whole screen's gas one even
-     * grey; held to half the screen, a sun lights the gas round it and the rest keeps its colour.
+     * How far a star's light reaches into the gas, in pixels (#535): [GAS_LIGHT_WIDTHS] of its own
+     * radius as drawn, [radiusPx], a little further for a bright star ([brightness], `0..2`), never
+     * under [GAS_LIGHT_LEAST_DP] and never more than [GAS_LIGHT_MOST] of a screen [width] pixels
+     * across. It used to be a fixed share of the sky, so a small star made a whole cloud glow.
+     * Only the star's size and brightness reach it, and neither carries a mood or a count.
      */
-    fun gasLightReach(scale: Float, width: Float): Float = minOf(GAS_LIGHT_REACH * scale, GAS_LIGHT_MOST * width)
+    fun gasLightReach(radiusPx: Float, brightness: Float, pxPerDp: Float, width: Float): Float {
+        val wide = radiusPx * GAS_LIGHT_WIDTHS * (0.7f + 0.3f * brightness.coerceIn(0f, 2f))
+        return wide.coerceIn(GAS_LIGHT_LEAST_DP * pxPerDp, maxOf(GAS_LIGHT_MOST * width, GAS_LIGHT_LEAST_DP * pxPerDp))
+    }
 
     /** Where the farthest of the lights starts to ease out, as a share of the next star's distance. */
     const val LIGHT_EASE_FROM = 0.75f

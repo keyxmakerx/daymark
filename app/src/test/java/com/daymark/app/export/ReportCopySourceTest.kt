@@ -298,7 +298,7 @@ class ReportCopySourceTest {
     fun `side 2 and both of its tables were found whole`() {
         val side = bodyOf(generator, "fun sideTwoDetail(")
         assertNotNull("sideTwoDetail is gone", side)
-        assertTrue("sideTwoDetail was cut short", side!!.contains("coverage(data)"))
+        assertTrue("sideTwoDetail was cut short", side!!.contains("coverage(data, options)"))
         assertTrue(
             "resultsTable was not found whole",
             bodyOf(generator, "private fun resultsTable(")?.contains("Self-check results") == true,

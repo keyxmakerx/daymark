@@ -10,6 +10,7 @@ import com.daymark.app.sky.SkyLayout
 import com.daymark.app.sky.SkyListItem
 import com.daymark.app.sky.SkyTrackers
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.Month
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -489,6 +490,35 @@ object SkyPresentation {
         val counted = if (entries == 1) "1 journal entry" else "$entries journal entries"
         return "Weeks with a lot of writing: $counted, ${dayRange(firstDay, lastDay, locale)}."
     }
+
+    /**
+     * What a star's card adds for the person's own choices about it (#516, #517, #518): the place
+     * they put it in, and whether it has a meteor shower. Empty when they chose neither.
+     */
+    fun starChoices(placeName: String?, shower: Boolean): String = buildString {
+        if (!placeName.isNullOrBlank()) append(" In $placeName.")
+        if (shower) append(" A meteor shower crosses the sky on this day each year.")
+    }
+
+    /** A star's row in the list: the name the person gave it first, when they gave one. */
+    fun namedRow(name: String?, description: String): String =
+        if (name.isNullOrBlank()) description else "$name. $description"
+
+    /** A planet's card: the place it stands for. Never how many memories it holds. */
+    fun planetDescription(name: String): String =
+        "A planet for $name. Each memory you put in this place sits near it."
+
+    /**
+     * A pulsar's card: the habit's set time, and that the beat is the same every day. Never whether
+     * the habit was done (`DECISIONS.md` §D6).
+     */
+    fun pulsarDescription(atMinute: Int, locale: Locale): String =
+        "A habit you set for ${timeLabel(atMinute, locale)}. It turns at the same beat every day."
+
+    /** A set time, minutes after midnight, in the locale's short form: "7:30 AM", "07:30". */
+    fun timeLabel(atMinute: Int, locale: Locale): String =
+        LocalTime.of((atMinute / 60).coerceIn(0, 23), atMinute.mod(60))
+            .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))
 
     /** A tracker's object's card: its look, and what each star in it is. Never a count or a rate. */
     fun trackerDescription(look: SkyTrackers.Look): String =

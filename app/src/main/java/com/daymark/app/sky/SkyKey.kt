@@ -36,6 +36,9 @@ object SkyKey {
         nebulae: Int = 0,
         trackers: Int = 0,
         quiet: Boolean = false,
+        planets: Int = 0,
+        pulsars: Int = 0,
+        showers: Boolean = false,
     ): List<Entry> {
         if (layout.shownCount == 0) return emptyList()
         val out = ArrayList<Entry>()
@@ -123,6 +126,32 @@ object SkyKey {
                     "Trackers you chose to show, each beside the day it was started. Each time you log " +
                         "one is a star in it, so more logs make it denser, never brighter. Every tracker " +
                         "has its own Show in my sky switch.",
+                ),
+            )
+        }
+        if (planets > 0) {
+            out.add(
+                Entry(
+                    "Planets",
+                    "A ringed planet for each place you named, among the memories you put in it. " +
+                        "Its size is its own and never says how many there are.",
+                ),
+            )
+        }
+        if (pulsars > 0) {
+            out.add(
+                Entry(
+                    "Pulsars",
+                    "A habit you gave a set time. It turns at one steady beat, the same every day, " +
+                        "whatever you did that day.",
+                ),
+            )
+        }
+        if (showers) {
+            out.add(
+                Entry(
+                    "Meteor showers",
+                    "On the day of a memory you chose, once a year, meteors cross the sky from its star.",
                 ),
             )
         }
