@@ -2,6 +2,7 @@ package com.daymark.app.ui.sky
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.daymark.app.data.SettingsRepository
 import com.daymark.app.data.SkyRepository
 import com.daymark.app.data.entity.Constellation
 import com.daymark.app.sky.Sky
@@ -37,7 +38,15 @@ import javax.inject.Inject
 @HiltViewModel
 class SkyViewModel @Inject constructor(
     private val repository: SkyRepository,
+    settings: SettingsRepository,
 ) : ViewModel() {
+
+    /**
+     * The person's own "I'm having a hard time" is on (#537): the sky opens quiet, on today, and
+     * never flies anywhere. Read once as the screen opens; the Quiet sky toggle still shows the
+     * full sky at once.
+     */
+    val hardTime: Boolean = settings.hardTimeOn()
 
     /**
      * @param loaded false until the first read comes back.

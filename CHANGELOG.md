@@ -7,6 +7,21 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **A check-in can ask one more thing, about something you set up.** After the mood, Daymark may ask
+  about a tracker you set to **In my check-in** (a yes/no tracker called "Did I get outside today?"
+  is a question of your own), or in the morning about last night's sleep if you keep a sleep diary.
+  One question by default; Settings → Reminders → Your check-in sets none to three. Every question
+  can be skipped, explains itself, and can be stopped, and **Done for today** ends it. After Awful
+  or Bad nothing more is asked. A question you skip twice rests for a while instead of repeating.
+- **A closing screen after a check-in**, with **Mark this day**, your safety plan, and, when they
+  fit, **See it land** (your new star arriving in the sky, then back) and **Your sky**. Both sky
+  links are left off after Awful or Bad, and while your reminders have eased off (#538).
+- **Having a hard time** (More): a switch you turn on for a day, a week or until you turn it off.
+  Daymark then reminds you less often, a check-in asks nothing extra, and your sky opens quiet.
+  Anything you keep at its times, like a medication, still comes as set (#537).
+- **Start evening check-ins in your sky**, off unless you turn it on: the evening reminder opens on
+  the night sky and your new star lands there. The notification looks exactly as before (#540).
+- **A tracker in your sky opens its check-in settings** from its card (#539).
 - **You can call your crisis line from the app.** Once you've said the line is right for you, the
   crisis screen has a **Call** button, and **Text** where the line takes texts. Each opens your
   phone's own dialer or messages app with the number filled in; Daymark never places a call. The

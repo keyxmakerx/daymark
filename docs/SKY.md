@@ -491,7 +491,9 @@ the phone's own.
   star nearest its first log's day: a globular cluster, an asteroid belt or a ring, from the seed
   (`SkyTrackers`). Every log is one grain, spread by order and never by date, and the object's total
   light stays the same however many there are, so more logs make it denser, never brighter. Tracker
-  logs never shape the rest of the sky. Its card opens the tracker or takes it out of the sky.
+  logs never shape the rest of the sky. Its card opens the tracker, opens its **Check-in settings**
+  (the times, easing and Stop asking, with no log, average or count: #539), or takes it out of the
+  sky.
 
 ---
 
@@ -567,6 +569,12 @@ was written.
   says "Born just now". The identity of the last star born is kept under `sky_born_identity`.
 - **Any tap skips all of it**, straight to today. With motion off there is no opening and no birth:
   the sky opens still, on today (§D11).
+- **See it land**, from a check-in's closing screen (#538), skips the opening and the flight: the sky
+  is on today at once, the new star is born if it is new, and a couple of seconds later the screen
+  returns by itself. A tap in that moment keeps the person in the sky. With motion off it is shown
+  still. The evening check-in begun in the sky (#540) ends the same way.
+- **While the person says they are having a hard time** (#537) the sky opens quiet, still, on today,
+  with no opening and no flight; the Quiet sky toggle shows the full sky at once.
 
 ---
 
@@ -643,7 +651,9 @@ screenshot will exist.
 
 No notification about the Sky: not "your sky has grown", not "you haven't visited in a while"
 (lapse-referencing, banned in [§D6](DECISIONS.md)), no badge, dot or widget. A place you are summoned
-to is not a place you own. No congratulation, milestone stars, anniversary effects or unlocks.
+to is not a place you own. No congratulation, milestone stars, anniversary effects or unlocks. The
+evening check-in the person can choose to start in the sky (#540) arrives as the ordinary reminder,
+worded exactly the same; nothing in it names or shows the Sky.
 
 ### 6.7 Never model, never predict, never explain
 

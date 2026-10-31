@@ -1,6 +1,7 @@
 package com.daymark.app.data
 
 import android.content.SharedPreferences
+import com.daymark.app.stats.CheckInQuestions
 import com.daymark.app.stats.SupportOfferFrequency
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -135,6 +136,36 @@ class SettingsRepository @Inject constructor(
         get() = prefs.getLong(KEY_SUPPORT_OFFER_LAST, 0L)
         set(value) = prefs.edit().putLong(KEY_SUPPORT_OFFER_LAST, value).apply()
 
+    // --- The check-in's extra questions and its closing screen (stats/CheckInQuestions.kt) ---
+    /** How many extra questions a check-in may ask, 0..3; one until the person says otherwise. */
+    var checkInQuestionsAllowed: Int
+        get() = prefs.getInt(KEY_CHECKIN_QUESTIONS, CheckInQuestions.DEFAULT_ALLOWED).coerceIn(CheckInQuestions.ALLOWED)
+        set(value) = prefs.edit().putInt(KEY_CHECKIN_QUESTIONS, value.coerceIn(CheckInQuestions.ALLOWED)).apply()
+
+    /** Whether a morning check-in may ask about last night, for someone who uses the sleep diary. */
+    var sleepQuestionOn: Boolean
+        get() = prefs.getBoolean(KEY_SLEEP_QUESTION, true)
+        set(value) = prefs.edit().putBoolean(KEY_SLEEP_QUESTION, value).apply()
+
+    /**
+     * "I'm having a hard time" (#537): until when the person said so, in epoch millis. 0 is off and
+     * [HARD_TIME_UNTIL_OFF] is until they turn it off. Only the person writes this.
+     */
+    var hardTimeUntil: Long
+        get() = prefs.getLong(KEY_HARD_TIME_UNTIL, 0L)
+        set(value) = prefs.edit().putLong(KEY_HARD_TIME_UNTIL, value).apply()
+
+    /** Whether the hard-time switch is on at [nowMillis]. */
+    fun hardTimeOn(nowMillis: Long = System.currentTimeMillis()): Boolean = nowMillis < hardTimeUntil
+
+    /**
+     * The evening check-in starts in the night sky (#540). Off until the person turns it on, and
+     * the notification reads the same either way.
+     */
+    var eveningFromSky: Boolean
+        get() = prefs.getBoolean(KEY_EVENING_FROM_SKY, false)
+        set(value) = prefs.edit().putBoolean(KEY_EVENING_FROM_SKY, value).apply()
+
     /** Emits the current preferences object whenever any value changes. */
     fun changes(): Flow<SharedPreferences> = callbackFlow {
         trySend(prefs)
@@ -161,5 +192,12 @@ class SettingsRepository @Inject constructor(
         private const val KEY_GENTLE_SUPPORT = "gentle_support_enabled"
         private const val KEY_SUPPORT_OFFER_FREQ = "support_offer_frequency"
         private const val KEY_SUPPORT_OFFER_LAST = "support_offer_last_shown_at"
+        private const val KEY_CHECKIN_QUESTIONS = "checkin_questions_allowed"
+        private const val KEY_SLEEP_QUESTION = "checkin_sleep_question"
+        private const val KEY_HARD_TIME_UNTIL = "hard_time_until"
+        private const val KEY_EVENING_FROM_SKY = "evening_from_sky"
+
+        /** [hardTimeUntil] for "until I turn it off". */
+        const val HARD_TIME_UNTIL_OFF = Long.MAX_VALUE
     }
 }

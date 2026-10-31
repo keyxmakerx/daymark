@@ -61,6 +61,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -79,6 +80,8 @@ import com.daymark.app.sky.SkyTrackers
 import com.daymark.app.sky.SkyTwinkle
 import com.daymark.app.ui.theme.moodColors
 import com.daymark.app.ui.theme.moodLabels
+import com.daymark.app.model.Mood
+import com.daymark.app.ui.components.MoodFaceIcon
 import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.util.Locale
@@ -127,6 +130,17 @@ fun SkyScreen(
     onOpenRecord: (SkyKind, Long) -> Unit,
     onOpenLifeEvents: () -> Unit,
     onOpenTracker: (Long) -> Unit,
+    /** A tracker object's check-in settings, and nothing else about it (#539). */
+    onOpenTrackerCheckIns: (Long) -> Unit = onOpenTracker,
+    /**
+     * "See it land" (#538): the newest star's birth, on today with no flight, then [onLanded].
+     * With motion off it is shown still. A tap keeps the person in the sky instead.
+     */
+    landing: Boolean = false,
+    onLanded: () -> Unit = onBack,
+    /** The evening check-in begun in the night sky (#540): the faces sit over the sky until tapped. */
+    checkIn: Boolean = false,
+    onCheckInMood: (Int) -> Unit = {},
     viewModel: SkyViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -140,7 +154,8 @@ fun SkyScreen(
     val platformHighContrast = remember(context) { prefersHighContrast(context) }
 
     var motionEnabled by rememberSaveable { mutableStateOf(!platformReducedMotion) }
-    var highContrast by rememberSaveable { mutableStateOf(platformHighContrast) }
+    // A hard time the person declared opens the quiet sky, which its own toggle still lifts (#537).
+    var highContrast by rememberSaveable { mutableStateOf(platformHighContrast || viewModel.hardTime) }
     var showList by rememberSaveable { mutableStateOf(false) }
     var selected by rememberSaveable { mutableStateOf(NO_SELECTION) }
     var opened by rememberSaveable { mutableStateOf(false) }
@@ -164,7 +179,10 @@ fun SkyScreen(
 
     val options = SkyOptions(motionEnabled = motionEnabled, highContrast = highContrast)
     val camera = remember { SkyCamera() }
-    val opening = remember { SkyOpeningState(playing = !opened && motionEnabled) }
+    // During a hard time there is no opening: the sky opens still, on today, and flies nowhere.
+    val opening = remember { SkyOpeningState(playing = !opened && motionEnabled && !viewModel.hardTime) }
+    var checkInAsked by rememberSaveable { mutableStateOf(checkIn) }
+    var landed by remember { mutableStateOf(false) }
 
     val moods = MaterialTheme.moodColors
     val labels = MaterialTheme.moodLabels
@@ -277,6 +295,29 @@ fun SkyScreen(
             return@LaunchedEffect
         }
         val identity = newestIdentity()
+        if (landing) {
+            // Straight to today, no twinkle and no flight: only the new star arriving, if it is new.
+            goToday(motion = false)
+            opening.reveal = 1f
+            if (motionEnabled && identity != state.bornIdentity) {
+                opening.bornIndex = newest
+                opening.birth = 0f
+                delay(BIRTH_PAUSE_MILLIS)
+                val from = withFrameMillis { it }
+                while (opening.birth < 1f) {
+                    withFrameMillis {
+                        opening.birth = ((it - from).toFloat() / SkyOpening.BIRTH_MILLIS).coerceAtMost(1f)
+                    }
+                }
+                bornJustNow = newest
+            }
+            viewModel.markBorn(identity)
+            opening.finish()
+            selected = newest
+            landed = true
+            opened = true
+            return@LaunchedEffect
+        }
         if (!opening.playing) {
             // With motion off there is no opening at all: the sky opens still, on today.
             goToday(motion = false)
@@ -312,6 +353,16 @@ fun SkyScreen(
         opening.finish()
         selected = newest
         opened = true
+    }
+
+    // "See it land" returns on its own a moment after the star is in place (#538). A tap on the
+    // sky in that moment selects or clears a star, which keeps the person here instead.
+    LaunchedEffect(landed) {
+        if (!landed) return@LaunchedEffect
+        val star = selected
+        delay(LAND_LINGER_MILLIS)
+        if (selected == star) onLanded()
+        landed = false
     }
 
     // Every journey across the sky, a frame at a time, for as long as it lasts and no longer.
@@ -601,6 +652,14 @@ fun SkyScreen(
 
                     when {
                         drawing -> Unit
+                        checkInAsked && opened -> SkyCheckInPanel(
+                            onMood = { level ->
+                                checkInAsked = false
+                                onCheckInMood(level)
+                            },
+                            onNotNow = { checkInAsked = false },
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                        )
                         card != null -> SkyConstellationCard(
                             name = card.name,
                             summary = SkyPresentation.constellationSummary(
@@ -631,6 +690,7 @@ fun SkyScreen(
                             modifier = Modifier.align(Alignment.BottomCenter),
                         ) {
                             OutlinedButton(onClick = { onOpenTracker(tracker.trackerId) }) { Text("Open tracker") }
+                            OutlinedButton(onClick = { onOpenTrackerCheckIns(tracker.trackerId) }) { Text("Check-in settings") }
                             TextButton(
                                 onClick = {
                                     viewModel.takeTrackerOut(tracker.trackerId)
@@ -808,6 +868,34 @@ private const val NO_CONSTELLATION = -1L
 
 /** How many screen widths across the sky must be before stars can be joined one by one. */
 private const val DRAW_FROM_WIDTHS = 6f
+
+/** How long a landed star stays in view before "See it land" returns. */
+private const val LAND_LINGER_MILLIS = 2_200L
+
+/**
+ * The evening check-in's first question, over the night sky (#540): the same five faces as Home,
+ * and Not now. Nothing about the sky is said, and nothing here is asked again once dismissed.
+ */
+@Composable
+private fun SkyCheckInPanel(onMood: (Int) -> Unit, onNotNow: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(color = MaterialTheme.colorScheme.surface, modifier = modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("How are you, right now?", style = MaterialTheme.typography.titleMedium)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                Mood.ascending.forEach { mood ->
+                    val label = MaterialTheme.moodLabels.forLevel(mood.level)
+                    IconButton(
+                        onClick = { onMood(mood.level) },
+                        modifier = Modifier.size(56.dp).semantics { contentDescription = "Check in: $label" },
+                    ) {
+                        MoodFaceIcon(level = mood.level, size = 44.dp)
+                    }
+                }
+            }
+            TextButton(onClick = onNotNow) { Text("Not now") }
+        }
+    }
+}
 
 /** The pause between the camera arriving and a new star starting to be born. */
 private const val BIRTH_PAUSE_MILLIS = 300L
