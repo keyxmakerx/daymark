@@ -1,6 +1,7 @@
 package com.daymark.companion.mail
 
 import com.daymark.companion.auth.DeviceKeyStore
+import com.daymark.companion.auth.OwnerSignIn
 import com.daymark.companion.auth.Secrets
 import com.daymark.companion.auth.inTransaction
 import com.daymark.companion.storage.Schema
@@ -73,6 +74,12 @@ class OwnerAccountStore(
     val devices: DeviceKeyStore
 
     /**
+     * The owner's own account and the CLI's credentials (#324), on this database's connection and under
+     * its lock, so the account's creation and the token's retirement are one transaction.
+     */
+    val signIn: OwnerSignIn
+
+    /**
      * The device keys this start revoked because `DAYMARK_AUTH_TOKEN` changed since the last one — the
      * operator's way of re-issuing the token. Each is owed one audit row, written once the owner's log
      * is open.
@@ -86,6 +93,7 @@ class OwnerAccountStore(
         // the memory of seen nonces has to outlast a power cut as well as a restart (#186).
         conn.createStatement().use { st -> st.execute("PRAGMA synchronous=FULL") }
         devices = DeviceKeyStore(conn, lock, clock)
+        signIn = OwnerSignIn(conn, lock, clock, devices.ownerId)
         revokedAtStart = synchronized(lock) { bootstrapToken(envToken) }
     }
 
@@ -119,6 +127,15 @@ class OwnerAccountStore(
             ps.executeQuery().use { rs -> if (rs.next()) rs.getString(1) to rs.getString(2) else null }
         }
         if (existing != null && existing.second == envHash) return emptyList()
+        // Once the owner's account exists the token signs nobody in (#324), so changing it re-issues
+        // nothing and disconnects no phone. The watermark is still moved, so a later start reads it as
+        // unchanged.
+        if (existing != null && signIn.exists()) {
+            conn.prepareStatement("UPDATE owner_token SET token=?, bootstrap_token=?, updated_at=? WHERE id=1").use { ps ->
+                ps.setString(1, envHash); ps.setString(2, envHash); ps.setLong(3, clock()); ps.executeUpdate()
+            }
+            return emptyList()
+        }
         // A token the operator sets is a re-issue like the emailed one, and disconnects every paired
         // phone in the same transaction (#186). A first start has none to disconnect.
         return conn.inTransaction {
@@ -353,6 +370,8 @@ class OwnerAccountStore(
                 // Version 2: the owner's id, the phones registered to it, the codes that pair them, and
                 // the nonces signed requests have used (#186, #189). DeviceKeyStore says what each holds.
                 DeviceKeyStore.TABLES,
+                // Version 3: the owner's own account, its sessions and the CLI's credentials (#324).
+                OwnerSignIn.TABLES,
             ),
         )
     }

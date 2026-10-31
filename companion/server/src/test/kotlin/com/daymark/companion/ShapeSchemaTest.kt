@@ -1,5 +1,7 @@
 package com.daymark.companion
 
+import com.daymark.companion.mail.OwnerAccountStore
+
 import com.daymark.companion.storage.Schema
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
@@ -41,8 +43,11 @@ class ShapeSchemaTest {
         SetupMode.PRACTICE to every,
     )
 
-    /** The version each database is brought to: owner-account.db's second holds the phones (#186, #189). */
-    private val versionOf = every.associateWith { if (it == "owner-account.db") 2 else 1 }
+    /**
+     * The version each database is brought to: owner-account.db's second holds the phones (#186, #189),
+     * its third the owner's account (#324).
+     */
+    private val versionOf = every.associateWith { if (it == "owner-account.db") OwnerAccountStore.SCHEMA.current else 1 }
 
     private fun sha256(file: File): String =
         MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }

@@ -511,6 +511,10 @@ class ShapeRoutingTest {
             "POST /v1/devices/redeem", "GET /v1/devices/registration",
             // The owner's own log: phones paired and revoked, and lockouts (#189).
             "GET /v1/owner/audit",
+            // The owner's own account, its session and the CLI's credentials (#324): every server has an owner.
+            "GET /v1/owner/account", "POST /v1/owner/account",
+            "POST /v1/owner/session", "GET /v1/owner/session", "POST /v1/owner/session/logout",
+            "POST /v1/owner/cli", "GET /v1/owner/cli", "POST /v1/owner/cli/{credentialId}/revoke",
             // The server console (#322): every server is claimed and run by an administrator.
             "GET /v1/admin/status", "POST /v1/admin/claim", "POST /v1/admin/session",
             "POST /v1/admin/session/logout", "GET /v1/admin/overview",
