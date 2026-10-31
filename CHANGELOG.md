@@ -30,6 +30,10 @@ All notable changes to this project are documented here. The format is based on
   feel like too much**, which always leads to the crisis screen (#482).
 
 ### Changed
+- **The clinician console is calmer.** Once you sign in, it uses the same side rail as the practice
+  and admin consoles. Places are grouped as Their share, Send, Tools and This browser, with one
+  thing on the screen at a time. Your discipline and Log out sit at the foot of the rail. On a phone
+  the rail runs across the top.
 - **Your month in the Companion is the calmer Chronicle calendar.** It's one soft card with the
   month's name in large type, an open grid, and today's date filled in. Pressing a day opens its card
   right from that day, and the rest of the month fades back. Escape, the × or a click anywhere else
