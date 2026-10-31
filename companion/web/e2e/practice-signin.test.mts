@@ -74,7 +74,7 @@ function chromiumPath(): string {
     ? readdirSync(base)
         .filter((d) => /^chromium-\d+$/.test(d))
         .sort((a, b) => (a === `chromium-${pinned}` ? -1 : b === `chromium-${pinned}` ? 1 : Number(b.slice(9)) - Number(a.slice(9))))
-        .map((d) => join(base, d, 'chrome-linux', 'chrome'))
+        .flatMap((d) => [join(base, d, 'chrome-linux', 'chrome'), join(base, d, 'chrome-linux64', 'chrome')])
         .filter((p) => existsSync(p))
     : []
   if (!candidates.length) throw new Error(`No Chromium under ${base}. Set CHROMIUM_PATH to a chrome binary; nothing is downloaded.`)
@@ -174,16 +174,22 @@ it('pressing Sign in reaches the server, and the page reports its refusal', asyn
   await p.locator('#practice-member-id').fill('e2e_nobody')
   await p.locator('#practice-totp').fill('123456')
   answered.length = 0
+  // With the bug, the request never left the page, so no answer arrives and this times out.
+  const reply = p.waitForResponse((r) => new URL(r.url()).pathname === '/v1/totp/verify', { timeout: 15_000 })
   await p.getByRole('button', { name: 'Sign in', exact: true }).click()
+  const status = (await reply).status()
+  log(`the server answered the sign-in with ${status}`)
 
-  const callout = p.locator('text=Not signed in').first()
-  await callout.waitFor()
+  // The press is over when the button says Sign in again; the refusal is then on the page.
+  await p.getByRole('button', { name: 'Sign in', exact: true }).waitFor()
   const said = (await p.locator('body').innerText()).replace(/\s+/g, ' ')
-  log(`the server answered: ${answered.filter((a) => a.includes('/v1/')).join(', ') || 'nothing'}`)
 
+  expect(status).toBeGreaterThanOrEqual(400)
+  expect(status).toBeLessThan(500)
   expect(said).not.toContain('Illegal invocation')
   expect(said).not.toContain('No answer from the server')
-  // The refusal came from the server, so the request left the page.
-  expect(answered.some((a) => /^POST \/v1\/totp\/verify -> 4\d\d$/.test(a))).toBe(true)
+  // The refusal callout, and the server's refusal in it.
+  expect(said).toContain('Needs attention: Not signed in')
+  expect(said).toContain('Code not accepted.')
   expect(pageErrors).toEqual([])
 })
