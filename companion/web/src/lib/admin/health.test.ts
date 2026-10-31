@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import * as admin from './health'
 import {
   ENDPOINTS,
@@ -11,6 +12,7 @@ import {
   CONSOLE_COVERS,
   CONSOLE_WITHHELD,
   CREDENTIAL_POSTURE,
+  CREDENTIAL_POSTURE_TITLE,
   NO_SINGLE_FIGURE,
   STANDING_FACTS,
   STANDING_FACTS_HEADLINE,
@@ -909,16 +911,24 @@ describe('auth pressure is reported as absent rather than approximated', () => {
    Credential posture.
    ═══════════════════════════════════════════════════════════════════════════════════════════ */
 
-describe('the console is honest about having no credential of its own', () => {
-  it('says there is no administrator identity on this build', () => {
-    expect(CREDENTIAL_POSTURE).toMatch(/no administrator identity/i)
-    expect(CREDENTIAL_POSTURE).toMatch(/unauthenticated/i)
-    // It must not be mistaken for a control surface: it grants nothing.
-    expect(CREDENTIAL_POSTURE).toMatch(/holds no authority/i)
-    // And the operational instruction that follows from that.
-    expect(CREDENTIAL_POSTURE).toMatch(/where you would serve a shell/i)
+describe('the console says what its sign-in protects, and what it does not (#496)', () => {
+  it('names the sign-in that exists and what it guards', () => {
+    expect(CREDENTIAL_POSTURE_TITLE).toBe('What signing in protects')
+    expect(CREDENTIAL_POSTURE).toMatch(/authenticator code/)
+  })
+  it('says the readings above are public whatever the sign-in', () => {
+    expect(CREDENTIAL_POSTURE).toMatch(/public endpoints that answer anyone/)
     // Pasted runs stay local — the operator is told before they paste, not after.
     expect(CREDENTIAL_POSTURE).toMatch(/browser tab/i)
+  })
+  it('no longer says the console holds no credential, under "Signed in as"', () => {
+    const page = readFileSync(new URL('../components/admin/AdminConsole.svelte', import.meta.url), 'utf8')
+    // Positive control: the scan reads the page that renders the posture.
+    expect(page).toContain('{CREDENTIAL_POSTURE}')
+    for (const text of [CREDENTIAL_POSTURE_TITLE, CREDENTIAL_POSTURE, page]) {
+      expect(text).not.toMatch(/holds no credential/i)
+      expect(text).not.toMatch(/defines no administrator identity/i)
+    }
   })
 })
 

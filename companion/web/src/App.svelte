@@ -364,8 +364,8 @@
           added between a returning person and the thing they came to do — after the first visit it
           collapses to a compact header with the routes still in place.
 
-          `adminLink` is left at its default of false: admin.html holds no credential on this
-          build, and a deployment should have to choose to advertise it from a public page.
+          `adminLink` is left at its default of false: a deployment should have to choose to
+          advertise its ops console from a public page.
         -->
         <!--
           `selected` is one of the owner's six; the practice surface is not among them and passes
