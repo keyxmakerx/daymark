@@ -2,6 +2,7 @@
   import { PortalClient, relRefOf, type InviteResponse } from '../../sync/portal'
   import type { PinnedTherapist } from './session'
   import { Card, Callout } from '../ui'
+  import QrTile from '../phones/QrTile.svelte'
 
   let {
     therapist,
@@ -20,6 +21,8 @@
   let busy = $state(false)
   let error = $state('')
   let copied = $state(false)
+  /** The link drawn as a QR code, for a clinician in the room to open on their phone's camera. */
+  let showCode = $state(false)
   /** Set once the owner has ended the invitation shown; the link above it is then dead. */
   let stopped = $state(false)
 
@@ -47,6 +50,7 @@
     invite = null
     stopped = false
     copied = false
+    showCode = false
   }
 
   async function mint(sendEmail: boolean) {
@@ -106,7 +110,18 @@
       </label>
       <div class="row">
         <button onclick={copyLink}>{copied ? 'Copied' : 'Copy link'}</button>
+        <button onclick={() => (showCode = !showCode)} aria-expanded={showCode}>{showCode ? 'Hide the code' : 'Show as a code'}</button>
       </div>
+      {#if showCode}
+        <div class="code">
+          <QrTile text={invite.link} />
+          <p>
+            For a clinician in the room: their phone's camera opens the link. The code is the link
+            itself, so anyone who can see this screen can open it too. Show it only to them, then
+            hide it. The fingerprint words above are still what proves it is them.
+          </p>
+        </div>
+      {/if}
       <div class="stop">
         <p>
           Sent this to the wrong person, or no longer want it used? Ending it stops the link
@@ -136,6 +151,8 @@
   .sas { font-family: var(--font-mono); background: var(--paper-bg); padding: 0.1rem var(--space-2); border-radius: 4px; }
   .linkbox { display: flex; flex-direction: column; gap: var(--space-1); font-size: 0.85rem; }
   .linkbox span { color: var(--ink-soft); }
+  .code { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: flex-start; }
+  .code p { margin: 0; flex: 1 1 16rem; font-size: 0.88rem; color: var(--ink-soft); }
   input { font: inherit; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper-bg); color: var(--ink-text); }
   input[readonly] { font-family: var(--font-mono); font-size: 0.8rem; }
   .row { display: flex; gap: var(--space-2); }

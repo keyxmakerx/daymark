@@ -7,6 +7,10 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **An invitation can be shown as a code.** After you create an invite link for a clinician, **Show
+  as a code** draws it as a QR code, so a clinician in the room can open it with their phone's
+  camera instead of being sent the link. The screen says that anyone who can see it can open it,
+  and the fingerprint words are still what prove it's them.
 - **The clinician console knows whether you're a therapist, a psychologist or a psychiatrist.**
   Pick one under **I work as a**, and the tabs lead with what that work reaches for first: today
   and the calendar, the record of self-checks, or today with sleep beside mood. Timers lead with
