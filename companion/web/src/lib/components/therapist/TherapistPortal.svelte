@@ -23,11 +23,12 @@
   import TodayScreen from './TodayScreen.svelte'
   import CalendarScreen from './CalendarScreen.svelte'
   import ClientRecordScreen from './ClientRecordScreen.svelte'
+  import TimersScreen from '../timers/TimersScreen.svelte'
   import type { BackupData } from '../../backup'
   import LowerAssuranceBanner from './LowerAssuranceBanner.svelte'
   import { Callout } from '../ui'
 
-  type Tab = 'allowed' | 'today' | 'calendar' | 'record' | 'assign' | 'gameplan' | 'shared'
+  type Tab = 'allowed' | 'today' | 'calendar' | 'record' | 'assign' | 'gameplan' | 'shared' | 'timers'
 
   let ctx = $state<UnlockedContext | null>(null)
   let grant = $state<Grant | null>(null)
@@ -257,6 +258,11 @@
           <button class:active={tab === 'record'} aria-pressed={tab === 'record'} onclick={() => (tab = 'record')}>Record</button>
           <button class:active={tab === 'shared'} aria-pressed={tab === 'shared'} onclick={() => (tab = 'shared')}>Shared data</button>
         {/if}
+        <!--
+          Not behind any capability: a timer reads nothing of the client's and is kept in this
+          browser only, so the grant has no say over it.
+        -->
+        <button class:active={tab === 'timers'} aria-pressed={tab === 'timers'} onclick={() => (tab = 'timers')}>Timers</button>
       </nav>
       <button class="lock" onclick={logout}>Log out</button>
     </div>
@@ -265,7 +271,14 @@
       <Callout tone="critical">{grantError}</Callout>
     {/if}
 
-    {#if grant}
+    <!--
+      Kept mounted while the console is signed in, and only hidden on other tabs, so a running
+      session timer still ends on time, and its banner still shows, while the clinician reads the
+      record.
+    -->
+    <TimersScreen open={tab === 'timers'} />
+
+    {#if grant && tab !== 'timers'}
       {#if tab === 'allowed'}
         <AllowedPanel {grant} ownerSigningFp={ctx.pinnedOwnerSigningFp} therapistFp={ctx.therapistFp} />
         <!--
